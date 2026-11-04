@@ -1,4 +1,5 @@
 import type { AstNode } from "../interpreter/model.js"
+import type { Value } from "../interpreter/objects.js"
 import type { ScopeStack } from "../interpreter/scope.js"
 import type { Completion } from "../interpreter/signals.js"
 import type { MachineTask } from "./task.js"
@@ -32,6 +33,11 @@ export type Kind = {
    * the frames from this one up are parked on the awaited promise, or undefined when the frame is no boundary.
    */
   cut?(frame: Frame): Completion | undefined
+  /**
+   * Whether the frame is a generator boundary, where a `yield` above cuts the stack: what the top frame continues with
+   * once the boundary at `index` took the yielded `value` (splitting its frames off the stack, or not).
+   */
+  yielded?(task: MachineTask, index: number, value: Value): Completion
   /** Whether the frame counts toward the call-depth limit while it is on the stack. */
   counts?(frame: Frame): boolean
   /** A frame of this kind holds a host generator (a built-in that calls program code), so it cannot be saved. */
@@ -58,7 +64,7 @@ export class Frame {
 export const kind = (
   name: string,
   step: Kind["step"],
-  options?: Pick<Kind, "unwind" | "cut" | "counts" | "opaque">,
+  options?: Pick<Kind, "unwind" | "cut" | "yielded" | "counts" | "opaque">,
 ): Kind => ({
   name,
   step,

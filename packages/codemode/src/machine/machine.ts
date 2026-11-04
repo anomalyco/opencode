@@ -22,6 +22,7 @@ import {
 import type { Source } from "../interpreter/source.js"
 import { nativeFrame } from "./calls.js"
 import { Frame } from "./frame.js"
+import { adapterSettled } from "./generators.js"
 import { HostCall, type HostRequest, type Job, type Reaction, Resolving, type Stop } from "./scheduler.js"
 import { ProgramKind } from "./statements.js"
 import { MachineTask } from "./task.js"
@@ -189,11 +190,6 @@ export class Machine {
     return record
   }
 
-  /** A native frame that runs `body` as a job of its own. */
-  job(body: Eval<void>): Frame {
-    return nativeFrame(this.root.scopes, body, undefined, true)
-  }
-
   /** Parks frames cut off the stack at an `await` on the awaited promise; they resume as a job once it settles. */
   park(frames: Array<Frame>, promise: PromiseObj, node: AstNode | undefined, result: Value): void {
     this.parked.set(frames, { promise, node, result })
@@ -278,12 +274,17 @@ export class Machine {
 
   // --- Jobs ---
 
-  // Starts a job on the root stack: parked frames resume with how their promise settled, and a reaction or thenable
-  // that calls program code runs its work in a native frame. One that finishes at once leaves the stack empty.
+  // Starts a job on the root stack: parked frames resume with how their promise settled, an async-from-sync iterator
+  // closing its iterator runs as a frame, and a reaction or thenable that calls program code runs its work in a native
+  // frame. One that finishes at once leaves the stack empty.
   private begin(job: Job): void {
-    if (job.kind === "resume") return this.resume(job.frames, job.input)
     if (job.kind === "thenable") return this.work(adoptThenable(this.ctx, job.promise, job.thenable, job.then))
     const reaction = job.reaction
+    if (reaction.kind === "asyncFromSync") {
+      const frame = adapterSettled(this.ctx, reaction, job.settled, this.root.scopes)
+      if (frame !== undefined) this.resume([frame], normal(undefined))
+      return
+    }
     if (reaction.kind !== "await") return this.work(react(this.ctx, reaction, job.settled))
     this.parked.delete(reaction.frames)
     this.resume(reaction.frames, job.settled)
@@ -296,7 +297,7 @@ export class Machine {
 
   private work(body: Eval<void> | void): void {
     if (body === undefined) return
-    this.root.enter([this.job(body)])
+    this.root.enter([nativeFrame(this.root.scopes, body, undefined, true)])
     this.input = normal(undefined)
   }
 

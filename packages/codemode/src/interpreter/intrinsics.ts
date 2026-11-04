@@ -41,6 +41,7 @@ const builtins = [
   "AsyncIterator",
   "Generator",
   "AsyncGenerator",
+  "AsyncFromSyncIterator",
 ] as const
 
 /**
@@ -106,6 +107,8 @@ export const createBuiltins = (): Builtins => {
     AsyncIterator: asyncIterator,
     Generator: new Obj(iterator),
     AsyncGenerator: new Obj(asyncIterator),
+    /** CreateAsyncFromSyncIterator's objects; programs never see them. */
+    AsyncFromSyncIterator: new Obj(asyncIterator),
     Error: error,
     TypeError: derived("TypeError"),
     RangeError: derived("RangeError"),

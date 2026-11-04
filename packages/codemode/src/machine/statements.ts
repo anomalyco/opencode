@@ -52,6 +52,7 @@ import { describeValue } from "../interpreter/references.js"
 import { abrupt, Await, Interruption, normal } from "../interpreter/signals.js"
 import { type Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev, named } from "./expressions.js"
+import { asyncFromSync } from "./generators.js"
 import { type Iter, iteratorClose, iteratorStep, openIterator } from "./iteration.js"
 import { assigning, bind, declaring } from "./patterns.js"
 import type { MachineTask } from "./task.js"
@@ -648,10 +649,8 @@ function forOfStatement(task: MachineTask, frame: Frame, node: ForOfStatement, i
       )
     }
     // `for await` over a synchronous iterator drives it through CreateAsyncFromSyncIterator, as JS does.
-    slots[3] =
-      awaiting && !custom?.asynchronous
-        ? task.ctx.asyncFromSync(custom ? undefined : (builtin as Exclude<Iter, CustomIterator>), custom, node)
-        : (custom ?? builtin)
+    const iterator = (custom ?? builtin)!
+    slots[3] = awaiting && !custom?.asynchronous ? asyncFromSync(task, iterator, node) : iterator
     if (left.type === "RestElement" || left.type === "AssignmentPattern") {
       throw typeError("Unsupported for...of binding.", left)
     }

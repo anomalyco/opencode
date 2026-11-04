@@ -93,7 +93,7 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
           const step = yield* cursor.next()
           if (step.done) return Math.sumPrecise(numbers)
           if (typeof step.value !== "number") {
-            yield* preserveConsumerError(cursor.close, rejectNonNumber())
+            yield* preserveConsumerError(cursor, rejectNonNumber())
           }
           numbers.push(step.value as number)
         }

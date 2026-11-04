@@ -10,7 +10,6 @@ import {
   coerceToNumber,
   coerceToString,
   type Cursor,
-  type NativeResult,
   type Value,
 } from "./objects.js"
 import { isOpaque, typeofValue } from "./references.js"
@@ -18,13 +17,13 @@ import { type Eval, Interruption, isEval } from "./signals.js"
 
 /** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
  * return() is a return completion, so a failing close wins over it, as after `break`. */
-export function* preserveConsumerError<A>(close: Cursor["close"], body: Eval<A>): Eval<A> {
+export function* preserveConsumerError<A>(cursor: Cursor, body: Eval<A>): Eval<A> {
   try {
     return yield* body
   } catch (error) {
     if (error instanceof Interruption) throw error
     try {
-      yield* close()
+      yield* cursor.close()
     } catch (closed) {
       if (error instanceof GeneratorReturn) throw closed
     }
@@ -74,8 +73,8 @@ export const withPrimitives = <R>(
   ctx: Interpreter<R>,
   hints: Hint | ReadonlyArray<Hint>,
   values: Array<Value>,
-  body: (primitives: Array<Value>) => NativeResult,
-): NativeResult => {
+  body: (primitives: Array<Value>) => Value | Eval<Value>,
+): Value | Eval<Value> => {
   if (!values.some((value) => value instanceof Obj)) return body(values)
   return (function* () {
     const primitives: Array<Value> = []

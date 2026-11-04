@@ -12,7 +12,7 @@ import {
   Throw,
   typeError,
 } from "./model.js"
-import type { Eval, GeneratorRequest } from "./signals.js"
+import type { Enter, Eval, GeneratorRequest, Push } from "./signals.js"
 import type { Frame } from "../machine/frame.js"
 import type { Reaction, Resolving } from "../machine/scheduler.js"
 import { OrderedTable, type TableCursor } from "./table.js"
@@ -205,11 +205,18 @@ export class Arguments extends Obj {
   }
 }
 
-/** A native function body: a value, or interpreter work for bodies that call program code or the host. */
-export type NativeResult = Value | Eval<Value>
+/**
+ * A native function body: a value, interpreter work for bodies that call program code or the host, or machine frames
+ * that run as the call: saved ones put back on the stack (`Enter`, a generator's body) or a fresh one (`Push`).
+ */
+export type NativeResult = Value | Eval<Value> | Enter | Push
 /** `site` is the call running the built-in, where a failure it reports later (a rejection) is located. */
 export type NativeCall = (thisValue: Value, args: Array<Value>, site: AstNode | undefined) => NativeResult
-export type NativeConstruct = (args: Array<Value>, newTarget: Callable, site: AstNode | undefined) => NativeResult
+export type NativeConstruct = (
+  args: Array<Value>,
+  newTarget: Callable,
+  site: AstNode | undefined,
+) => Value | Eval<Value>
 
 export type NativeOptions = {
   /**
@@ -227,7 +234,7 @@ export type NativeOptions = {
 }
 
 /** The natives still made at run time, each holding state in a host closure that cannot be saved yet. */
-export type RuntimeNative = "iterator-helper" | "async-from-sync" | "extension"
+export type RuntimeNative = "extension"
 
 /**
  * Natives are made only with the intrinsics, so each one has an intrinsic name and run state never holds a host
@@ -349,15 +356,16 @@ export type GeneratorState =
 export class GeneratorObj extends Opaque {
   override readonly tag = "Generator"
   state: GeneratorState = "suspendedStart"
-  /** The suspended body's frames, kept while it waits for the next request. */
-  frames: Array<Frame> | undefined
-  /** An async generator's requests, oldest first, each with the functions that settle its promise. */
+  /**
+   * The suspended body's frames, from its generator boundary up, kept while it waits for the next request: before the
+   * first one, the boundary and the body's call frame. A request puts them back on the stack that makes it.
+   */
+  frames: Array<Frame> = []
+  /** An async generator's requests, oldest first, each with what settles its promise. */
   readonly queue: Array<{ readonly request: GeneratorRequest; readonly resolving: Resolving }> = []
   constructor(
     proto: Obj,
     readonly asynchronous: boolean,
-    /** The body, started by the first `next()`. */
-    readonly body: Eval<Value>,
   ) {
     super(proto)
   }

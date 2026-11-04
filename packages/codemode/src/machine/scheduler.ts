@@ -2,8 +2,9 @@ import type { Json } from "../data.js"
 import { locate } from "../interpreter/errors.js"
 import type { AstNode } from "../interpreter/model.js"
 import type { Callable, GeneratorObj, Obj, PromiseObj, Value } from "../interpreter/objects.js"
-import type { Completion, Eval } from "../interpreter/signals.js"
+import type { Completion } from "../interpreter/signals.js"
 import type { Frame } from "./frame.js"
+import type { Iter } from "./iteration.js"
 
 // The scheduler's records: jobs, reactions, resolvers, and host calls. All of them are data the machine keeps, so a
 // run's queue and the work it waits on can be read (and later saved) at any step boundary.
@@ -30,7 +31,8 @@ export type Combination = {
  * - `combinator`: one member of a `Promise` combinator.
  * - `finally`, `finallyCleaned`, `finallyOutcome`: the steps of `Promise.prototype.finally` with a cleanup.
  * - `awaitReturn`: an async generator's `return(value)` once `value` settles.
- * - `callback`: a host closure, still used by the async-from-sync iterator adapter.
+ * - `asyncFromSync`: an async-from-sync iterator method's result value settled: answer `made` with it, closing the
+ *   synchronous iterator `close` first on a rejection when one is given.
  */
 export type Reaction =
   | { readonly kind: "await"; readonly frames: Array<Frame> }
@@ -51,12 +53,17 @@ export type Reaction =
   | { readonly kind: "finallyCleaned"; readonly target: Resolving }
   | { readonly kind: "finallyOutcome"; readonly target: Resolving; readonly outcome: Completion }
   | { readonly kind: "awaitReturn"; readonly generator: GeneratorObj }
-  | { readonly kind: "callback"; readonly run: (settled: Completion) => Eval<void> | void }
+  | {
+      readonly kind: "asyncFromSync"
+      readonly made: Resolving
+      readonly done: boolean
+      readonly close: Iter | undefined
+      readonly site: AstNode
+    }
 
-/** One queued job, as data: run a settled promise's reaction, resume parked frames, or adopt a thenable. */
+/** One queued job, as data: run a settled promise's reaction (resuming parked frames, say), or adopt a thenable. */
 export type Job =
   | { readonly kind: "reaction"; readonly reaction: Reaction; readonly settled: Completion }
-  | { readonly kind: "resume"; readonly frames: Array<Frame>; readonly input: Completion }
   | { readonly kind: "thenable"; readonly promise: PromiseObj; readonly thenable: Obj; readonly then: Value }
 
 /**

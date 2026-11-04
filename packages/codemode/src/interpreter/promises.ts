@@ -7,7 +7,7 @@ import { isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
 import { type Completion, type Eval, Interruption } from "./signals.js"
 import type { Combination, Reaction, Resolving } from "../machine/scheduler.js"
-import { finishAwaitReturn } from "./generators.js"
+import { finishAwaitReturn } from "../machine/generators.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
@@ -29,7 +29,7 @@ const settleWith = (resolving: Resolving, completion: Completion) =>
 /** Runs a settled promise's reaction as a job: it finishes at once, or returns the work that calls program code. */
 export const react = <R>(
   ctx: Interpreter<R>,
-  reaction: Exclude<Reaction, { readonly kind: "await" }>,
+  reaction: Exclude<Reaction, { readonly kind: "await" | "asyncFromSync" }>,
   settled: Completion,
 ): Eval<void> | void => {
   switch (reaction.kind) {
@@ -47,8 +47,6 @@ export const react = <R>(
       return settleWith(reaction.target, settled.ok ? reaction.outcome : settled)
     case "awaitReturn":
       return finishAwaitReturn(ctx, reaction.generator, settled)
-    case "callback":
-      return reaction.run(settled)
   }
 }
 

@@ -11,26 +11,26 @@ import {
   Enter,
   type Eval,
   normal,
+  Push,
   type Signal,
   Slice,
   Yield,
 } from "../interpreter/signals.js"
 import { Frame, type Kind, PASS, PENDING, type Pending } from "./frame.js"
-import { boundaryOf, dispatch, native, nativeFrame } from "./calls.js"
+import { dispatch, native, nativeFrame } from "./calls.js"
 import type { Machine } from "./machine.js"
 
 /** Steps run by every machine task in this process, so tests can see that a program ran on the machine. */
 export const stats = { steps: 0 }
 
 /**
- * A stack of machine frames and the loop that steps it. The machine runs every job on its root task. A generator's
- * body is a task of its own for now, run by a native frame on the stack that resumes it; to that frame it answers
- * `next` and `throw` like interpreter work.
+ * A stack of machine frames and the loop that steps it. The machine runs every job on its root task.
  *
  * The loop answers what frames ask for on the stack itself: an `await` cuts the stack at the innermost async boundary
- * and parks the frames it cut on the promise, a `yield` splits it at the innermost generator body, and a body a
- * built-in starts (`Call`) or a generator resumes (`Enter`) is pushed. What it cannot answer (host work, a slice, or an
- * `await` or `yield` with no boundary on this stack) it hands to whoever runs it.
+ * and parks the frames it cut on the promise, a `yield` cuts it at the innermost generator boundary and keeps the
+ * frames on the generator, and a body a built-in starts (`Call`, `Push`) or a generator resumes (`Enter`) is pushed.
+ * What it cannot answer (host work, a slice, or an `await` or `yield` with no boundary on this stack) it hands to
+ * whoever runs it.
  */
 export class MachineTask {
   readonly stack: Array<Frame> = []
@@ -51,24 +51,8 @@ export class MachineTask {
     this.scopes = scopes
   }
 
-  [Symbol.iterator]() {
-    return this
-  }
-
-  next(input?: unknown): IteratorResult<Signal, Value> {
-    return this.drive(true, input)
-  }
-
-  throw(error: unknown): IteratorResult<Signal, Value> {
-    return this.drive(false, error)
-  }
-
-  return(value?: Value): IteratorResult<Signal, Value> {
-    return { done: true, value }
-  }
-
   /** Pushes a fresh frame, which runs next from phase 0. */
-  push(kind: Kind, node: AstNode, slots: Array<unknown> = []): Pending {
+  push(kind: Kind, node: AstNode | undefined, slots: Array<unknown> = []): Pending {
     this.stack.push(new Frame(kind, node, 0, this.scopes, slots))
     return PENDING
   }
@@ -216,12 +200,16 @@ export class MachineTask {
       if (machine.tick()) this.slice = true
       return signal.input
     }
+    if (signal instanceof Push) {
+      this.stack.push(new Frame(signal.kind, undefined, 0, this.scopes, signal.slots))
+      return normal(undefined)
+    }
     if (signal instanceof Await) return this.await(signal)
     if (signal instanceof Yield) {
       const stack = this.stack
       for (let index = stack.length - 1; index >= 0; index--) {
-        const boundary = boundaryOf(stack[index]!)
-        if (boundary?.generator) return boundary.yielded(signal.value, () => this.split(index))
+        const frame = stack[index]!
+        if (frame.kind.yielded !== undefined) return frame.kind.yielded(this, index, signal.value)
       }
     }
     return undefined
@@ -247,8 +235,8 @@ export class MachineTask {
     return undefined
   }
 
-  // Takes the frames from `index` up off the stack; their calls no longer count toward its depth.
-  private split(index: number): Array<Frame> {
+  /** Takes the frames from `index` up off the stack; their calls no longer count toward its depth. */
+  split(index: number): Array<Frame> {
     const frames = this.stack.splice(index)
     for (const frame of frames) if (frame.kind.counts?.(frame)) this.machine.depth--
     return frames

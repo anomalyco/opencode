@@ -75,7 +75,7 @@ function* objectFromEntries<R>(ctx: Interpreter<R>, source: Value): Eval<Obj> {
   while (true) {
     const step = yield* cursor.next()
     if (step.done) return out
-    yield* preserveConsumerError(cursor.close, defineEntry(out, step.value))
+    yield* preserveConsumerError(cursor, defineEntry(out, step.value))
   }
 }
 

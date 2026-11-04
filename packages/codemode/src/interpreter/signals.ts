@@ -1,7 +1,7 @@
 import type { Cause } from "effect"
-import type { Frame } from "../machine/frame.js"
+import type { Frame, Kind } from "../machine/frame.js"
 import type { HostRequest, Resolving } from "../machine/scheduler.js"
-import { type AstNode, GeneratorReturn, type GeneratorRequestKind, typeError } from "./model.js"
+import type { AstNode, GeneratorRequestKind } from "./model.js"
 import type { Value } from "./objects.js"
 
 // The signals interpreter work (a built-in's host generator) sends the machine. Nothing here needs Effect at run time.
@@ -20,16 +20,10 @@ export type Completion =
 export const normal = (value: unknown): Completion => ({ ok: true, value })
 export const abrupt = (error: unknown): Completion => ({ ok: false, error })
 
-/** What a native frame runs: interpreter work, or a machine task (a generator's body), which answers the same calls. */
-export interface Body {
-  next(input?: unknown): IteratorResult<Signal, unknown>
-  throw(error: unknown): IteratorResult<Signal, unknown>
-}
-
 /** Run `body` in a native frame of its own; a boundary marks where the stack splits when the body above suspends. */
 export class Call {
   constructor(
-    readonly body: Body,
+    readonly body: Eval<unknown>,
     readonly boundary?: Boundary,
   ) {}
 }
@@ -39,6 +33,14 @@ export class Enter {
   constructor(
     readonly frames: Array<Frame>,
     readonly input: Completion,
+  ) {}
+}
+
+/** Push a fresh frame of `kind` with `slots`, located at the call that asks; its result is the call's. */
+export class Push {
+  constructor(
+    readonly kind: Kind,
+    readonly slots: Array<unknown>,
   ) {}
 }
 
@@ -82,23 +84,17 @@ export class Invoke {
   ) {}
 }
 
-export type Signal = Call | Enter | Await | Yield | Host | Invoke | typeof Slice
+export type Signal = Call | Enter | Push | Await | Yield | Host | Invoke | typeof Slice
 
 /** What a generator body continues with: the `next`, `return`, or `throw` call that resumed it. */
 export type GeneratorRequest = { readonly kind: GeneratorRequestKind; readonly value: Value }
 
-/** Where the stack splits when the body above suspends, and what the activation below receives. */
+/** Where the stack splits when the body above suspends at an `await`, and what the activation below receives. */
 export interface Boundary {
-  /** An `await` above suspends here: an async function, an async generator, or the program. */
-  readonly async: boolean
-  /** A `yield` above suspends here. */
-  readonly generator: boolean
   /** The body above returned or threw. */
   finish(completion: Completion): Completion
   /** The body above suspended at an `await`; its frames are parked on the awaited promise. */
   suspended(): Completion
-  /** The body above yielded; `split` takes its frames off the stack when it suspends. */
-  yielded(value: Value, split: () => Array<Frame>): Completion
 }
 
 /**
@@ -106,8 +102,6 @@ export interface Boundary {
  * at once, and a failure while crossing rejects it. Once the work starts, its outcome settles the promise.
  */
 export class AsyncBoundary implements Boundary {
-  readonly async = true
-  readonly generator = false
   constructor(readonly resolving: Resolving) {}
   finish(completion: Completion): Completion {
     if (!completion.ok) this.resolving.reject(completion.error)
@@ -115,9 +109,6 @@ export class AsyncBoundary implements Boundary {
   }
   suspended(): Completion {
     return normal(this.resolving.promise)
-  }
-  yielded(): Completion {
-    return abrupt(typeError("yield is only valid inside a generator."))
   }
 }
 
@@ -127,13 +118,3 @@ export const MAX_CALL_DEPTH = 10_000
 // Program values never have a `next` method of their own: an object's properties live in its property map.
 export const isEval = <A>(value: A | Eval<A>): value is Eval<A> =>
   typeof value === "object" && value !== null && typeof (value as { readonly next?: unknown }).next === "function"
-
-/** The body a generator object resumes: a `return()` request ends it with the returned value. */
-export function* generatorBody(body: Iterable<Signal, Value, unknown>): Eval<Value> {
-  try {
-    return yield* body
-  } catch (error) {
-    if (error instanceof GeneratorReturn) return error.value
-    throw error
-  }
-}

@@ -44,7 +44,7 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>) => {
 
   // A lazy helper: `pull` advances it once. Once it reports done, throws, or is closed, it stays done. A callback
   // that re-enters its own helper is a TypeError, as for a running generator.
-  const helper = (source: Cursor, pull: () => Eval<Step>, close = source.close) => {
+  const helper = (source: Cursor, pull: () => Eval<Step>, close = () => source.close()) => {
     let done = false
     let running = false
     const enter = () => {

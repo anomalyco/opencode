@@ -31,15 +31,15 @@ import { isOpaque } from "../interpreter/references.js"
 import { ScopeStack } from "../interpreter/scope.js"
 import {
   abrupt,
-  type Body,
   type Boundary,
   type Completion,
+  Enter,
   type Eval,
-  generatorBody,
   Invoke,
   isEval,
   MAX_CALL_DEPTH,
   normal,
+  Push,
   type Signal,
 } from "../interpreter/signals.js"
 import type { Resolving } from "./scheduler.js"
@@ -47,8 +47,9 @@ import type { StatementResult } from "../interpreter/model.js"
 import { Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev } from "./expressions.js"
 import { bind, declaring } from "./patterns.js"
+import { generatorFrames } from "./generators.js"
 import { blockStatement } from "./statements.js"
-import { MachineTask } from "./task.js"
+import type { MachineTask } from "./task.js"
 
 /** The single dispatch for every call the machine makes: call expressions, callbacks, and conversions share it. */
 export function dispatch(
@@ -73,6 +74,11 @@ export function dispatch(
     } catch (error) {
       throw locate(error, node)
     }
+    if (result instanceof Enter) {
+      task.signal = result
+      return PENDING
+    }
+    if (result instanceof Push) return task.push(result.kind, node, result.slots)
     return isEval(result) ? native(task, result, node, true) : result
   }
   if (callable instanceof ToolReference) {
@@ -96,7 +102,7 @@ function invoke(task: MachineTask, fn: Fn, thisValue: Value, args: Array<Value>,
 }
 
 // The phases of a `Call` frame: bind the parameters (resuming at the slot index after a pattern finishes), make the
-// generator or start the body, and receive the body's result. A generator's own body task starts at `RUN`. An async
+// generator or start the body, and receive the body's result. A generator's own body frame starts at `RUN`. An async
 // function's frame that took a throw has `SETTLED` its promise with it.
 const ENTER = 0
 const BIND = 1
@@ -209,21 +215,26 @@ function bindParameters(task: MachineTask, frame: Frame): Out<undefined> {
   return undefined
 }
 
-// A generator call returns the generator once its parameters are bound; the body is a task of its own that starts
-// with the first `next()`. The prototype is read after the parameters bind, since a default may replace it.
+// A generator call returns the generator once its parameters are bound; its body's frames wait on it, behind a
+// generator boundary, for the first `next()`. The prototype is read after the parameters bind, since a default may
+// replace it.
 const generator = (task: MachineTask, fn: Fn, frame: Frame): GeneratorObj => {
   const builtins = task.ctx.builtins
-  const scopes = frame.scope
-  const body = new MachineTask(task.machine, scopes)
-  body.stack.push(
-    new Frame(CallKind, fn.body, RUN, scopes, [fn, undefined, undefined, undefined, false, frame.slots[5]]),
-  )
   const proto = get(fn, "prototype")
-  return new GeneratorObj(
+  const made = new GeneratorObj(
     proto instanceof Obj ? proto : fn.async ? builtins.AsyncGenerator : builtins.Generator,
     fn.async,
-    generatorBody(body),
   )
+  const body = new Frame(CallKind, fn.body, RUN, frame.scope, [
+    fn,
+    undefined,
+    undefined,
+    undefined,
+    false,
+    frame.slots[5],
+  ])
+  made.frames = generatorFrames(made, body)
+  return made
 }
 
 export const CallKind = kind("Call", callStep, {
@@ -269,18 +280,18 @@ export function native<A>(task: MachineTask, work: Eval<A>, site: AstNode | unde
  * A native frame for a body that runs as an activation of its own: a job's work, or a body a built-in starts behind a
  * boundary (`Call`). It counts toward the depth limit; the boundary decides what its completion gives the frame below.
  */
-export const nativeFrame = (scopes: ScopeStack, body: Body, boundary: Boundary | undefined, counted: boolean): Frame =>
-  new Frame(Native, undefined, RUNNING, scopes, [body, false, undefined, boundary, counted])
-
-/** The boundary a native frame's body runs behind, if any. */
-export const boundaryOf = (frame: Frame): Boundary | undefined =>
-  frame.kind === Native ? (frame.slots[3] as Boundary | undefined) : undefined
+export const nativeFrame = (
+  scopes: ScopeStack,
+  body: Eval<unknown>,
+  boundary: Boundary | undefined,
+  counted: boolean,
+): Frame => new Frame(Native, undefined, RUNNING, scopes, [body, false, undefined, boundary, counted])
 
 // Slots: the work, whether its failures are located at the call site, a failure to throw into it, the boundary it
 // runs behind, and whether it counts toward the depth limit.
 function nativeStep(task: MachineTask, frame: Frame, site: AstNode | undefined, input: unknown): Out<Value> {
   const slots = frame.slots
-  const work = slots[0] as Body
+  const work = slots[0] as Eval<unknown>
   let ok = frame.phase !== THROWING
   let value = ok ? input : slots[2]
   slots[2] = undefined
@@ -333,10 +344,7 @@ export const Native = kind("Native", nativeStep, {
     frame.slots[2] = error
     return true
   },
-  cut: (frame) => {
-    const boundary = frame.slots[3] as Boundary | undefined
-    return boundary?.async ? boundary.suspended() : undefined
-  },
+  cut: (frame) => (frame.slots[3] as Boundary | undefined)?.suspended(),
   counts: (frame) => frame.slots[4] === true,
 })
 

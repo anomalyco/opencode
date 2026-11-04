@@ -1,5 +1,5 @@
 import type { Eval } from "../interpreter/signals.js"
-import { constructor, fn, type Impl, type Method, methods } from "../interpreter/native.js"
+import { constructor, fn, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
 import {
@@ -150,7 +150,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const simple = (
     name: string,
     length: number,
-    op: (value: string, args: Array<Value>) => ReturnType<Impl>,
+    op: (value: string, args: Array<Value>) => Value | Eval<Value>,
     hints: ReadonlyArray<Hint> = [],
   ): Method => [
     name,

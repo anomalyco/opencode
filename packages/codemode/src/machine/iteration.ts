@@ -15,7 +15,7 @@ import type { MachineTask } from "./task.js"
 /** An iterator the machine drives: a built-in cursor, or a program object with its own `next`. */
 export type Iter = Cursor | CustomIterator
 
-const isCustom = (iterator: Iter): iterator is CustomIterator => "iterator" in iterator
+export const isCustom = (iterator: Iter): iterator is CustomIterator => "iterator" in iterator
 
 /** GetIterator for synchronous iteration: a built-in cursor, or a program iterator from `[Symbol.iterator]()`. */
 export const iterate = (task: MachineTask, value: Value, node: AstNode): Out<Iter | undefined> =>

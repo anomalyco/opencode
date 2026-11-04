@@ -1,20 +1,14 @@
 import { fn, type Method, methods, receiver } from "./native.js"
-import { AsyncIteratorSymbol, type GeneratorRequestKind, IteratorSymbol, Throw, typeError } from "./model.js"
-import { define, hidden, GeneratorObj, iteratorResult, type Value } from "./objects.js"
+import { AsyncIteratorSymbol, type GeneratorRequestKind, IteratorSymbol, typeError } from "./model.js"
+import { define, hidden, GeneratorObj } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
-import {
-  abrupt,
-  type Boundary,
-  Call,
-  type Completion,
-  Enter,
-  type Eval,
-  type GeneratorRequest,
-  normal,
-} from "./signals.js"
-import type { Frame } from "../machine/frame.js"
+import { Push } from "./signals.js"
+import { Adapter, AsyncFromSyncIterator, generatorRequest, generatorStep } from "../machine/generators.js"
 
-/** `next`/`return`/`throw` on the generator prototypes; async generators answer with promises. */
+/**
+ * `next`/`return`/`throw` on the generator prototypes (async generators answer with promises) and on the
+ * async-from-sync iterator. Each runs as frames on the caller's stack: a generator's suspended body, or the adapter's.
+ */
 export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
   const builtins = ctx.builtins
   const sync = (kind: GeneratorRequestKind): Method => [
@@ -24,16 +18,23 @@ export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
       const method = `Generator.prototype.${kind}`
       const generator = receiver(GeneratorObj, thisValue, method)
       if (generator.asynchronous) throw typeError(`${method} called on incompatible receiver an async generator.`)
-      return step(ctx, generator, kind, args[0])
+      return generatorStep(ctx, generator, kind, args[0])
     },
   ]
   const async = (kind: GeneratorRequestKind): Method => [
     kind,
     1,
-    (thisValue, args) => request(ctx, thisValue, kind, args[0]),
+    (thisValue, args) => generatorRequest(ctx, thisValue, kind, args[0]),
+  ]
+  const adapter = (kind: GeneratorRequestKind): Method => [
+    kind,
+    1,
+    (thisValue, args) =>
+      new Push(Adapter, [receiver(AsyncFromSyncIterator, thisValue, `AsyncFromSyncIterator.${kind}`), kind, args]),
   ]
   methods(builtins, builtins.Generator, [sync("next"), sync("return"), sync("throw")])
   methods(builtins, builtins.AsyncGenerator, [async("next"), async("return"), async("throw")])
+  methods(builtins, builtins.AsyncFromSyncIterator, [adapter("next"), adapter("return"), adapter("throw")])
   define(
     builtins.Iterator,
     IteratorSymbol,
@@ -46,151 +47,4 @@ export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
     fn(builtins, "[Symbol.asyncIterator]", 0, (thisValue) => thisValue),
     hidden,
   )
-}
-
-const result = <R>(ctx: Interpreter<R>, value: Value, done: boolean) => iteratorResult(ctx.builtins.Object, value, done)
-
-// Starts the body behind its boundary, or puts the suspended body's frames back on the stack and continues it with
-// `request`; the boundary answers the caller when the body next yields or ends.
-const resume = <R>(ctx: Interpreter<R>, generator: GeneratorObj, request: GeneratorRequest): Call | Enter => {
-  const started = generator.state !== "suspendedStart"
-  generator.state = "executing"
-  if (!started) return new Call(generator.body, new GeneratorBoundary(ctx, generator))
-  const frames = generator.frames!
-  generator.frames = undefined
-  return new Enter(frames, normal(request))
-}
-
-// A synchronous generator step: the body runs on the caller's stack until it yields, returns, or throws.
-function* step<R>(ctx: Interpreter<R>, generator: GeneratorObj, kind: GeneratorRequestKind, value: Value): Eval<Value> {
-  if (generator.state === "executing") throw typeError("Generator is already running.")
-  if (generator.state === "suspendedStart" && kind !== "next") generator.state = "completed"
-  if (generator.state === "completed") {
-    if (kind === "throw") throw new Throw(value)
-    return result(ctx, kind === "return" ? value : undefined, true)
-  }
-  return (yield resume(ctx, generator, { kind, value })) as Value
-}
-
-// AsyncGenerator.prototype.next/return/throw: queue the request with its promise, and run the body now if it is
-// waiting for one. A request that arrives while the body runs is answered when the body reaches it.
-function* request<R>(ctx: Interpreter<R>, thisValue: Value, kind: GeneratorRequestKind, value: Value): Eval<Value> {
-  const machine = ctx.machine
-  const promise = machine.newPromise()
-  const resolving = machine.resolving(promise)
-  if (!(thisValue instanceof GeneratorObj) || !thisValue.asynchronous) {
-    resolving.reject(typeError(`AsyncGenerator.prototype.${kind} called on incompatible receiver.`))
-    return promise
-  }
-  const generator = thisValue
-  const state = generator.state
-  if (kind === "next" && state === "completed") {
-    resolving.resolve(result(ctx, undefined, true))
-    return promise
-  }
-  if (kind === "throw") {
-    if (state === "suspendedStart") generator.state = "completed"
-    if (generator.state === "completed") {
-      resolving.reject(new Throw(value))
-      return promise
-    }
-  }
-  const queued = { kind, value }
-  generator.queue.push({ request: queued, resolving })
-  if (kind === "return" && (state === "suspendedStart" || state === "completed")) {
-    generator.state = "awaiting-return"
-    awaitReturn(ctx, generator)
-    return promise
-  }
-  if (state === "suspendedStart" || state === "suspendedYield") yield resume(ctx, generator, queued)
-  return promise
-}
-
-// AsyncGeneratorCompleteStep: answer the oldest request.
-const completeStep = <R>(ctx: Interpreter<R>, generator: GeneratorObj, completion: Completion, done: boolean) => {
-  const next = generator.queue.shift()!
-  if (completion.ok) next.resolving.resolve(result(ctx, completion.value as Value, done))
-  else next.resolving.reject(completion.error)
-}
-
-// AsyncGeneratorDrainQueue: once the body has ended, answer the remaining requests in order.
-const drainQueue = <R>(ctx: Interpreter<R>, generator: GeneratorObj) => {
-  generator.state = "draining"
-  while (true) {
-    const next = generator.queue[0]
-    if (next === undefined) {
-      generator.state = "completed"
-      return
-    }
-    if (next.request.kind === "return") {
-      generator.state = "awaiting-return"
-      return awaitReturn(ctx, generator)
-    }
-    completeStep(
-      ctx,
-      generator,
-      next.request.kind === "throw" ? abrupt(new Throw(next.request.value)) : normal(undefined),
-      true,
-    )
-  }
-}
-
-// AsyncGeneratorAwaitReturn: a `return(value)` on an ended or unstarted generator settles once `value` does.
-const awaitReturn = <R>(ctx: Interpreter<R>, generator: GeneratorObj) => {
-  const machine = ctx.machine
-  try {
-    machine.then(machine.promiseResolve(generator.queue[0]!.request.value), { kind: "awaitReturn", generator })
-  } catch (error) {
-    finishAwaitReturn(ctx, generator, abrupt(error))
-  }
-}
-
-/** The `awaitReturn` reaction: answers the `return` request with how its value settled, then drains the queue. */
-export const finishAwaitReturn = <R>(ctx: Interpreter<R>, generator: GeneratorObj, completion: Completion) => {
-  completeStep(ctx, generator, completion, true)
-  drainQueue(ctx, generator)
-}
-
-/** Where a generator body splits off the stack when it yields, and how its end answers the request that ran it. */
-class GeneratorBoundary<R> implements Boundary {
-  readonly generator = true
-  readonly async: boolean
-
-  constructor(
-    private readonly ctx: Interpreter<R>,
-    private readonly target: GeneratorObj,
-  ) {
-    this.async = target.asynchronous
-  }
-
-  finish(completion: Completion): Completion {
-    const generator = this.target
-    if (!generator.asynchronous) {
-      generator.state = "completed"
-      return completion.ok ? normal(result(this.ctx, completion.value as Value, true)) : completion
-    }
-    completeStep(this.ctx, generator, completion, true)
-    drainQueue(this.ctx, generator)
-    return normal(undefined)
-  }
-
-  suspended(): Completion {
-    return normal(undefined)
-  }
-
-  yielded(value: Value, split: () => Array<Frame>): Completion {
-    const generator = this.target
-    if (!generator.asynchronous) {
-      generator.frames = split()
-      generator.state = "suspendedYield"
-      return normal(result(this.ctx, value, false))
-    }
-    // AsyncGeneratorYield: answer the oldest request, and keep running if another is already waiting.
-    completeStep(this.ctx, generator, normal(value), false)
-    const next = generator.queue[0]
-    if (next !== undefined) return normal(next.request)
-    generator.frames = split()
-    generator.state = "suspendedYield"
-    return normal(undefined)
-  }
 }

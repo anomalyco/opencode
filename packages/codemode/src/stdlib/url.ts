@@ -126,7 +126,7 @@ function* readPair<R>(ctx: Interpreter<R>, value: Value, label: string): Eval<Ar
   while (true) {
     const step = yield* cursor.next()
     if (step.done) return items
-    items.push(yield* preserveConsumerError(cursor.close, pairString(step.value)))
+    items.push(yield* preserveConsumerError(cursor, pairString(step.value)))
   }
 }
 
@@ -153,7 +153,7 @@ export function* readPairs<R>(
       if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
       return pairs as Array<[string, string]>
     }
-    pairs.push(yield* preserveConsumerError(cursor.close, readPair(ctx, step.value, label)))
+    pairs.push(yield* preserveConsumerError(cursor, readPair(ctx, step.value, label)))
   }
 }
 

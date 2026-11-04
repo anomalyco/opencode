@@ -69,6 +69,7 @@ import { isOpaque, typeofValue } from "../interpreter/references.js"
 import { Await, type GeneratorRequest, isEval, Yield } from "../interpreter/signals.js"
 import { type Frame, kind, type Out, PENDING } from "./frame.js"
 import { operate, toPrimitive, toPropertyKey } from "./calls.js"
+import { delegate } from "./generators.js"
 import { spread } from "./iteration.js"
 import { assigning, bind } from "./patterns.js"
 import type { MachineTask } from "./task.js"
@@ -839,7 +840,7 @@ function yieldExpression(task: MachineTask, frame: Frame | undefined, node: Yiel
   }
   if (phase === 1) {
     if (node.delegate) {
-      return task.tail(frame, task.native(task.ctx.delegateYield(input as Value, node, asynchronous), node, false))
+      return task.tail(frame, delegate(task, input as Value, node, asynchronous))
     }
     if (asynchronous) {
       task.request(new Await(input as Value, node), node)

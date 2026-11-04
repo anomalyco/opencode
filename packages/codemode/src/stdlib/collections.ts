@@ -58,7 +58,7 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
         const step = yield* cursor.next()
         if (step.done) return result
         const item = step.value
-        const key = yield* preserveConsumerError(cursor.close, apply([item, index]))
+        const key = yield* preserveConsumerError(cursor, apply([item, index]))
         const group = result.map.get(key)
         if (group === undefined) result.map.set(key, new Arr(builtins.Array, [item]))
         else (group as Arr).items.push(item)
@@ -73,7 +73,7 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
       const step = yield* cursor.next()
       if (step.done) return result
       const item = step.value
-      const key = yield* preserveConsumerError(cursor.close, coerceGroupByPropertyKey(ctx, apply([item, index])))
+      const key = yield* preserveConsumerError(cursor, coerceGroupByPropertyKey(ctx, apply([item, index])))
       const group = getOwn(result, key)
       if (group === undefined) define(result, key, new Arr(builtins.Array, [item]))
       else (group as Arr).items.push(item)
@@ -91,7 +91,7 @@ function* constructMap<R>(ctx: Interpreter<R>, init: Value, proto: Obj): Eval<Ma
   while (true) {
     const step = yield* cursor.next()
     if (step.done) return target
-    yield* preserveConsumerError(cursor.close, addMapEntry(target, step.value))
+    yield* preserveConsumerError(cursor, addMapEntry(target, step.value))
   }
 }
 
@@ -402,7 +402,7 @@ export const weakMapGlobal = <R>(ctx: Interpreter<R>) => {
       while (true) {
         const step = yield* cursor.next()
         if (step.done) return target
-        yield* preserveConsumerError(cursor.close, addWeakMapEntry(target, step.value))
+        yield* preserveConsumerError(cursor, addWeakMapEntry(target, step.value))
       }
     },
   })
@@ -478,7 +478,7 @@ export const weakSetGlobal = <R>(ctx: Interpreter<R>) => {
       while (true) {
         const step = yield* cursor.next()
         if (step.done) return target
-        yield* preserveConsumerError(cursor.close, addWeakSetValue(target, step.value))
+        yield* preserveConsumerError(cursor, addWeakSetValue(target, step.value))
       }
     },
   })

@@ -8,8 +8,7 @@ import type { Builtins } from "./intrinsics.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
 import { type AstNode, type Binding, PendingThrow } from "./model.js"
 import { moduleName, resolveModule } from "./modules.js"
-import { type Arr, type Cursor, define, entries, nativeRule, Obj, type Value } from "./objects.js"
-import type { CustomIterator } from "./operations.js"
+import { type Arr, define, entries, nativeRule, Obj, type Value } from "./objects.js"
 import { promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
 import { AsyncBoundary, Call, type Eval, Host } from "./signals.js"
@@ -114,16 +113,6 @@ export class Interpreter<R> {
       machine.host({ kind: "tool", path, args: json }, { label: path.join("."), result: "json", resolving, site })
     }
     return (yield new Call(body(), new AsyncBoundary(resolving))) as Value
-  }
-
-  /** `yield*` in a generator body, as interpreter work; the machine runs it as a native frame for now. */
-  delegateYield(value: Value, node: AstNode, asynchronous: boolean): Eval<Value> {
-    return this.bridge.delegateYield(value, node, asynchronous)
-  }
-
-  /** CreateAsyncFromSyncIterator, for `for await` over a synchronous iterable. */
-  asyncFromSync(builtin: Cursor | undefined, custom: CustomIterator | undefined, node: AstNode | undefined) {
-    return this.bridge.asyncFromSync(builtin, custom, node)
   }
 
   /** The node a `NodeId` names, in one of this execution's sources. */

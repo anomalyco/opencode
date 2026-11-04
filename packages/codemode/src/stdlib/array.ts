@@ -58,9 +58,7 @@ function* arrayFrom<R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> {
     const step = yield* cursor.next()
     if (step.done) return new Arr(proto, values)
     values.push(
-      apply === undefined
-        ? step.value
-        : yield* preserveConsumerError(cursor.close, apply([step.value, index], args[2])),
+      apply === undefined ? step.value : yield* preserveConsumerError(cursor, apply([step.value, index], args[2])),
     )
     index += 1
   }
