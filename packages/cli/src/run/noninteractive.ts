@@ -91,6 +91,7 @@ export async function runNonInteractivePrompt(input: Input) {
   let submitted = false
   let promoted = false
   let emittedError = false
+  let executionSettled = false
   let permissionRejected = false
   let formCancelled = false
   let interrupted = false
@@ -205,8 +206,16 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!formAlreadySettled(error)) throw error
     }
     if (continuing) return
+    if (input.compatibility !== "v1" && !formCancelled) {
+      const error = {
+        type: "aborted",
+        message: "This non-interactive run cannot complete a form; the form was cancelled.",
+      }
+      emittedError = true
+      process.exitCode = 1
+      if (!emit("error", Date.now(), { error })) UI.error(error.message)
+    }
     formCancelled = true
-    if (input.compatibility !== "v1") process.exitCode = 1
   }
 
   const consume = async () => {
@@ -251,6 +260,7 @@ export async function runNonInteractivePrompt(input: Input) {
         event.data.reason === "user" &&
         (interrupted || permissionRejected || formCancelled)
       ) {
+        executionSettled = true
         return
       }
       if (!promoted && event.type === "session.execution.failed") {
@@ -519,12 +529,15 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         if (interrupted || permissionRejected || formCancelled) continue
         flushStep()
+        // A failed step can still continue inside the same execution. Only its terminal outcome is fatal.
+        if (input.compatibility !== "v1") continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.execution.failed") {
+        executionSettled = true
         if (input.compatibility === "v1" && (v1InvalidOutput || permissionRejected || formCancelled)) return
         flushStep()
         if (!emittedError && !formCancelled) {
@@ -535,6 +548,7 @@ export async function runNonInteractivePrompt(input: Input) {
         return
       }
       if (event.type === "session.execution.interrupted") {
+        executionSettled = true
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
         // A declined tool call ends the step with an interruption; it was already reported above.
@@ -546,7 +560,10 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         return
       }
-      if (event.type === "session.execution.succeeded") return
+      if (event.type === "session.execution.succeeded") {
+        executionSettled = true
+        return
+      }
     }
   }
 
@@ -691,18 +708,27 @@ export async function runNonInteractivePrompt(input: Input) {
           },
         })
       }
-
-      // A declined tool call ends its step with an interrupted-step error that is
-      // only a consequence of our own rejection; it was already reported above.
-      if (message.error && !emittedError && !permissionRejected && !formCancelled) {
-        emittedError = true
-        process.exitCode = 1
-        if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)
-      }
+    }
+    // session.wait is an idle barrier, not a success result. The marker carries the execution
+    // failure even when its last assistant is clean, and ignores recovered errors in earlier steps.
+    const terminal = projected.messages.findLast((message) => message.type === "idle")
+    if (
+      terminal &&
+      terminal.outcome !== "succeeded" &&
+      !executionSettled &&
+      !emittedError &&
+      !interrupted &&
+      !permissionRejected &&
+      !formCancelled
+    ) {
+      const error = terminal.error ?? { type: "aborted", message: `Session ${terminal.outcome}` }
+      emittedError = true
+      process.exitCode = 1
+      if (!emit("error", terminal.time.created, { error })) UI.error(error.message)
     }
     return {
       found: projected.found,
-      responded: projected.messages.some((message) => message.type === "assistant"),
+      terminal,
     }
   }
 
@@ -795,7 +821,7 @@ export async function runNonInteractivePrompt(input: Input) {
     finalizing = true
     const projected = await reconcile()
     if (
-      !projected.responded &&
+      !projected.terminal &&
       !interrupted &&
       !permissionRejected &&
       !formCancelled &&
