@@ -48,9 +48,12 @@ pub async fn prepare(
     {
         Ok(Ok(output)) => match output.handoff {
             None => Ok(Value::Null),
-            Some(handoff) if handoff.expires_at > now_ms() => {
-                Ok(serde_json::to_value(handoff).unwrap_or(Value::Null))
-            }
+            Some(handoff) if handoff.expires_at > now_ms() => Ok(json!({
+                "directory": handoff.directory,
+                "instanceID": handoff.instance_id,
+                "ticket": handoff.ticket,
+                "expiresAt": number(handoff.expires_at),
+            })),
             Some(_) => Err("Invalid or expired persistent terminal handoff".to_owned()),
         },
         Ok(Err(error)) => Err(error.to_string()),
@@ -87,7 +90,11 @@ pub fn environment(file: &Path) -> (String, Option<String>) {
         .and_then(|text| serde_json::from_str(&text).ok());
     let handoff = read(file)
         .filter(|record| record.current())
-        .filter(|record| current.as_ref().is_none_or(|current| record.matches(current)))
+        .filter(|record| {
+            current
+                .as_ref()
+                .is_none_or(|current| record.matches(current))
+        })
         .map(|record| record.handoff)
         .filter(|handoff| !handoff.is_null())
         .map(|handoff| handoff.to_string());
@@ -174,7 +181,8 @@ fn publish(file: &Path, info: &Registration, handoff: Value) -> std::io::Result<
     }
     source.insert("pid".to_owned(), json!(info.pid));
     source.insert("url".to_owned(), json!(info.url));
-    let text = json!({ "source": source, "handoff": handoff, "expiresAt": expires_at }).to_string();
+    let text = json!({ "source": source, "handoff": handoff, "expiresAt": number(expires_at) })
+        .to_string();
     let mut temporary = sidecar(file).into_os_string();
     temporary.push(format!(".{}.tmp", uuid::Uuid::new_v4()));
     let temporary = PathBuf::from(temporary);
@@ -186,6 +194,14 @@ fn publish(file: &Path, info: &Registration, handoff: Value) -> std::io::Result<
         .and_then(|()| std::fs::rename(&temporary, sidecar(file)));
     let _ = std::fs::remove_file(&temporary);
     result
+}
+
+// A whole number as JSON.stringify writes it, without `.0`.
+fn number(value: f64) -> Value {
+    if value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
+        return json!(value as i64);
+    }
+    json!(value)
 }
 
 fn now_ms() -> f64 {
@@ -225,7 +241,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("service.json");
         std::fs::write(&file, serde_json::to_string(&info(9)).unwrap()).unwrap();
-        let server = Arc::new(Server::default().reply(HANDOFF_URL, Reply::json(200, handoff_body())));
+        let server =
+            Arc::new(Server::default().reply(HANDOFF_URL, Reply::json(200, handoff_body())));
         prepare(server.clone(), &file, &info(9), Duration::from_secs(1)).await;
         assert!(server.requests()[0].1.is_some(), "Basic auth sent");
         // The old service is still registered: the handoff is for its successor.
