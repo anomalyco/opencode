@@ -6,9 +6,10 @@
 
 use crate::dialog::{
     DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, Dialogs, FocusId, FooterAction, FooterProps,
-    HeaderProps, header, layout_with,
+    HeaderProps, header, layout_view,
 };
 use crate::keymap::{Bind, KeymapLayer, TuiCommand};
+use crate::theme::Surface;
 use opentui::prelude::*;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -37,6 +38,26 @@ pub type ActionDisabled<T> = Rc<dyn Fn(Option<&SelectOption<T>>) -> bool>;
 /// Draws a row's gutter in the row's text color (TS `gutter`).
 pub type Gutter = Rc<dyn Fn(&App, Color) -> AnyWidget>;
 
+/// What shows below the list while an option is selected (TS `detail`).
+#[derive(Clone)]
+pub enum Detail {
+    /// Muted text that wraps by word.
+    Text(String),
+    /// Built each time the option becomes selected.
+    View(Rc<dyn Fn(&DialogCx) -> AnyWidget>),
+}
+
+/// `DialogSelectChoice`: the trailing value of a row that can be changed. The selected row shows how: `‹ dark ›`
+/// cycles with ←/→, `opencode ↵` opens a picker. Other rows pad the value to the same width so it does not shift
+/// as the selection moves. The value extends two cells into the row's right padding, so it ends where plain
+/// footers do.
+#[derive(Clone, Debug)]
+pub struct Choice {
+    pub value: String,
+    /// Enter opens a picker instead of cycling.
+    pub open: bool,
+}
+
 /// `DialogSelectOption`.
 #[derive(Clone)]
 pub struct SelectOption<T> {
@@ -50,6 +71,10 @@ pub struct SelectOption<T> {
     pub details: Vec<String>,
     pub footer: Option<String>,
     pub footer_color: Option<Color>,
+    /// The footer's own color, kept on the highlighted row too (a styled span in TS, such as the favorite marker).
+    pub footer_fg: Option<Color>,
+    /// Cells the footer extends into the row's right padding, such as 2 for a `DialogSelectChoice` value.
+    pub footer_overhang: u32,
     pub title_width: Option<usize>,
     pub truncate: Truncate,
     pub category: Option<String>,
@@ -59,6 +84,10 @@ pub struct SelectOption<T> {
     /// The row text color while selected.
     pub fg: Option<Color>,
     pub gutter: Option<Gutter>,
+    /// Shown below the list while this option is selected.
+    pub detail: Option<Detail>,
+    /// Replaces the footer with a value that can be changed.
+    pub choice: Option<Choice>,
     pub on_select: Option<OnDialog>,
 }
 
@@ -73,6 +102,8 @@ impl<T> SelectOption<T> {
             details: Vec::new(),
             footer: None,
             footer_color: None,
+            footer_fg: None,
+            footer_overhang: 0,
             title_width: None,
             truncate: Truncate::Right,
             category: None,
@@ -80,6 +111,8 @@ impl<T> SelectOption<T> {
             bg: None,
             fg: None,
             gutter: None,
+            detail: None,
+            choice: None,
             on_select: None,
         }
     }
@@ -110,14 +143,7 @@ impl<T> SelectOption<T> {
     }
 }
 
-/// Where an action sits in the footer: `side` without `new-designs`, `group` with it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Side {
-    #[default]
-    Left,
-    Right,
-}
-
+/// The footer group an action sits in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
     Primary,
@@ -150,7 +176,6 @@ pub struct SelectAction<T> {
     pub title: ActionTitle<T>,
     /// The binding when the config has none.
     pub bind: Option<String>,
-    pub side: Side,
     pub group: Option<Group>,
     pub hidden: bool,
     pub disabled: Option<ActionDisabled<T>>,
@@ -163,7 +188,6 @@ impl<T> Clone for SelectAction<T> {
             command: self.command.clone(),
             title: self.title.clone(),
             bind: self.bind.clone(),
-            side: self.side,
             group: self.group,
             hidden: self.hidden,
             disabled: self.disabled.clone(),
@@ -183,7 +207,6 @@ impl<T: 'static> SelectAction<T> {
             command: command.into(),
             title: Rc::new(move |_| title.clone()),
             bind: None,
-            side: Side::Left,
             group: None,
             hidden: false,
             disabled: None,
@@ -197,7 +220,6 @@ impl<T: 'static> SelectAction<T> {
 pub struct FooterHint {
     pub title: String,
     pub label: String,
-    pub side: Side,
     pub group: Option<Group>,
 }
 
@@ -209,7 +231,15 @@ pub type Options<T> = Rc<dyn Fn(&str) -> Vec<SelectOption<T>>>;
 /// `DialogSelectProps`.
 pub struct SelectProps<T> {
     pub title: String,
+    /// Muted line below the title.
+    pub description: Option<String>,
+    /// Blank rows above the footer; 1 by default.
+    pub footer_gap: u32,
     pub placeholder: Option<String>,
+    /// Puts the search input in the header row in place of the title.
+    pub search_in_title: bool,
+    /// The search input's placeholder while it replaces the title, such as `Search models`.
+    pub title_placeholder: Option<String>,
     pub options: Options<T>,
     pub flat: bool,
     /// `fuzzysort`'s normalized threshold; 0 keeps every match.
@@ -236,6 +266,8 @@ pub struct SelectProps<T> {
     /// More commands for the dialog's layer (TS `bindings`).
     pub bindings: Vec<TuiCommand>,
     pub current: Option<T>,
+    /// Selected when the dialog opens, like `current` but without its marker.
+    pub focus_target: Option<T>,
     pub focus_current: bool,
     pub section_navigation: bool,
     /// Content before the footer's secondary actions.
@@ -250,7 +282,11 @@ impl<T: Clone + 'static> SelectProps<T> {
     pub fn dynamic(title: impl Into<String>, options: Options<T>) -> Self {
         Self {
             title: title.into(),
+            description: None,
+            footer_gap: 1,
             placeholder: None,
+            search_in_title: false,
+            title_placeholder: None,
             options,
             flat: false,
             filter_threshold: 0.0,
@@ -271,6 +307,7 @@ impl<T: Clone + 'static> SelectProps<T> {
             no_match_view: None,
             bindings: Vec::new(),
             current: None,
+            focus_target: None,
             focus_current: true,
             section_navigation: false,
             footer: None,
@@ -292,6 +329,8 @@ struct State<T> {
     grouped: Vec<(String, Vec<usize>)>,
     flat: Vec<usize>,
     filtered: Vec<SelectOption<T>>,
+    /// Whether the last row is the `…` that says more rows are below.
+    ellipsis: bool,
 }
 
 struct Inner<T> {
@@ -321,27 +360,24 @@ pub fn select<T: Clone + PartialEq + 'static>(
 ) -> (View, Select<T>) {
     let app = &cx.app;
     let theme = &cx.theme;
+    let search_in_title = props.search_in_title && props.render_filter;
+    let placeholder = props
+        .title_placeholder
+        .as_deref()
+        .filter(|_| search_in_title)
+        .or(props.placeholder.as_deref())
+        .unwrap_or("Search");
     let input = props.render_filter.then(|| {
         Input::new(app)
             .grow(1.0)
             .basis(Length::Auto)
-            .placeholder(props.placeholder.as_deref().unwrap_or("Search"))
+            .placeholder(placeholder)
             .placeholder_color(theme.text.muted)
             .colors(theme.text.formfield.focused, Color::TRANSPARENT)
-            .focused_colors(
-                if cx.new_designs {
-                    theme.text.formfield.base
-                } else {
-                    theme.text.formfield.focused
-                },
-                theme.background.formfield.focused,
-            )
-            .cursor_color(theme.text.formfield.focused)
+            .focused_colors(theme.text.formfield.base, theme.background.formfield.focused)
+            .cursor_color(search_cursor(theme, ""))
     });
     let scroll = ScrollBox::new(app).scrollbars(false);
-    if !cx.new_designs {
-        scroll.padding_x(1);
-    }
     let body = View::new(app)
         .margin_edge(Edge::Left, -(DIALOG_INSET as i32))
         .margin_edge(Edge::Right, -(DIALOG_INSET as i32));
@@ -358,6 +394,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
             grouped: Vec::new(),
             flat: Vec::new(),
             filtered: Vec::new(),
+            ellipsis: false,
         }),
         input: input.clone(),
         body,
@@ -371,23 +408,55 @@ pub fn select<T: Clone + PartialEq + 'static>(
     let handle = Select(inner);
     handle.0.state.borrow_mut().options = (handle.0.props.options)("");
     handle.recompute();
+    handle.update_overflow();
     handle.focus_initial();
     handle.register_layer();
+    let weak = Rc::downgrade(&handle.0);
+    handle.0.scroll.on_mouse(move |cx, event| {
+        if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+            return;
+        }
+        let weak = weak.clone();
+        cx.app().defer(move |_cx| {
+            if let Some(inner) = weak.upgrade() {
+                Select(inner).wheeled();
+            }
+        });
+    });
 
     let props = &handle.0.props;
     let on_close: Option<Rc<dyn Fn()>> = props.on_cancel.clone();
+    // Rows reserve a gutter, so the header and footer line up with the list's inset rather than the layout's.
     let head = View::new(app).padding_x(DIALOG_LIST_INSET - DIALOG_INSET);
-    head.add(&header(
-        cx,
-        HeaderProps {
-            title: props.title.clone(),
-            title_view: props.title_view.clone(),
-            on_close,
-            ..HeaderProps::default()
-        },
-    ));
+    match input.as_ref().filter(|_| search_in_title) {
+        Some(input) => {
+            head.add(&header(
+                cx,
+                HeaderProps {
+                    title_view: Some(input.as_any()),
+                    gap: Some(2),
+                    on_close,
+                    ..HeaderProps::default()
+                },
+            ));
+        }
+        None => {
+            head.add(&header(
+                cx,
+                HeaderProps {
+                    title: props.title.clone(),
+                    title_view: props.title_view.clone(),
+                    description: props.description.clone(),
+                    on_close,
+                    ..HeaderProps::default()
+                },
+            ));
+            if let Some(input) = &input {
+                head.add(&View::new(app).padding_edge(Edge::Top, 1).child(input));
+            }
+        }
+    }
     if let Some(input) = &input {
-        head.add(&View::new(app).padding_edge(Edge::Top, 1).child(input));
         let weak = Rc::downgrade(&handle.0);
         input.on_change(move |_cx, value| {
             let Some(inner) = weak.upgrade() else { return };
@@ -417,16 +486,25 @@ pub fn select<T: Clone + PartialEq + 'static>(
         cx.focus(input);
     }
     handle.render();
-    let root = layout_with(
+    let root = layout_view(
         cx,
         &head,
         &handle.0.body,
-        None,
-        Some(handle.0.footer_slot.clone()),
+        Some(&handle.0.footer_slot),
         DIALOG_INSET,
-        1,
+        handle.0.props.footer_gap,
     );
     (root, handle)
+}
+
+/// Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
+/// placeholder's first letter. Until the user types, the cursor matches the highlighted row so that letter shows.
+fn search_cursor(theme: &crate::theme::Theme, filter: &str) -> Color {
+    if filter.is_empty() {
+        theme.background.action.primary.focused
+    } else {
+        theme.text.base
+    }
 }
 
 impl<T: Clone + PartialEq + 'static> Select<T> {
@@ -458,6 +536,18 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             return;
         }
         self.filter_changed(value.to_owned());
+    }
+
+    /// Draws the footer again, after the `footer` content was shown or hidden.
+    pub fn refresh_footer(&self) {
+        self.render_footer();
+    }
+
+    /// Replaces the search input's placeholder, as a changed `titlePlaceholder` does.
+    pub fn set_placeholder(&self, text: &str) {
+        if let Some(input) = &self.0.input {
+            input.placeholder(text);
+        }
     }
 
     /// Selects the option with `value`, centering it.
@@ -561,10 +651,12 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     // `focusTarget ?? current` with `focusCurrent`, used at mount and when the filter clears.
     fn current(&self) -> Option<T> {
-        self.props()
-            .current
+        let props = self.props();
+        props
+            .focus_target
             .clone()
-            .filter(|_| self.props().focus_current)
+            .or_else(|| props.current.clone())
+            .filter(|_| props.focus_current)
     }
 
     fn focus_initial(&self) {
@@ -592,6 +684,9 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     }
 
     fn filter_changed(&self, value: String) {
+        if let Some(input) = &self.0.input {
+            input.cursor_color(search_cursor(&self.0.cx.theme, &value));
+        }
         let options = (self.props().options)(&value);
         {
             let mut state = self.0.state.borrow_mut();
@@ -905,10 +1000,30 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         });
     }
 
-    // The list height: `min(rows, floor(height / 2) - 6)`.
+    // The list height: `min(rows, floor(height / 2) - 6)`, less the row the `…` takes.
     fn list_height(&self) -> u32 {
         let (rows, limit) = self.list_rows();
-        rows.min(limit)
+        rows.min(limit) - u32::from(self.0.state.borrow().ellipsis)
+    }
+
+    // An overflowing list gives its last row to a `…` while rows are below the view. At the bottom the `…` hands
+    // its row back to the list, so the dialog keeps its height. The scroll position is the one the moves made so
+    // far land on; with the `…` the view is one row shorter, so a list scrolled one row past the end loses it.
+    fn update_overflow(&self) {
+        let (rows, limit) = self.list_rows();
+        let top = self.0.scroll.scroll_position().1;
+        let mut state = self.0.state.borrow_mut();
+        let view = f64::from(limit) - if state.ellipsis { 1.0 } else { 0.0 };
+        state.ellipsis = rows > limit && top + view < f64::from(rows);
+    }
+
+    // A wheel scroll moved the list.
+    fn wheeled(&self) {
+        let before = self.0.state.borrow().ellipsis;
+        self.update_overflow();
+        if self.0.state.borrow().ellipsis != before {
+            self.render();
+        }
     }
 
     // The rows of the whole list and the most it shows.
@@ -955,8 +1070,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     // OpenTUI's does.
     fn scroll_to_selection(&self, center: bool) {
         let Some(y) = self.selected_y() else { return };
-        let (rows, limit) = self.list_rows();
-        let height = f64::from(rows.min(limit));
+        let height = f64::from(self.list_height());
         let scroll = &self.0.scroll;
         let y = f64::from(y) - scroll.scroll_position().1;
         if center {
@@ -1037,7 +1151,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     for detail in &option.details {
                         row.add(
                             &View::new(app)
-                                .padding_x(DIALOG_LIST_INSET - if cx.new_designs { 0 } else { 1 })
+                                .padding_x(DIALOG_LIST_INSET)
                                 .child(
                                     &Text::new(app, truncate_middle(detail, width.max(1) as usize))
                                         .fg(theme.text.muted)
@@ -1050,9 +1164,45 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     rows.push(row);
                 }
             }
+            // Reserved whenever any option has a detail, so the dialog does not resize as the selection moves.
+            let detail = state
+                .flat
+                .iter()
+                .any(|&index| state.filtered[index].detail.is_some())
+                .then(|| selected.and_then(|index| state.filtered[index].detail.clone()));
             drop(state);
+            self.update_overflow();
             scroll.height(self.list_height());
             body.add(scroll);
+            if self.0.state.borrow().ellipsis {
+                body.add(
+                    &View::new(app)
+                        .padding_edge(Edge::Left, DIALOG_LIST_INSET)
+                        .shrink(0.0)
+                        .child(&Text::new(app, "…").fg(theme.text.muted)),
+                );
+            }
+            if let Some(detail) = detail {
+                let area = View::new(app)
+                    .padding_edge(Edge::Top, 1)
+                    .padding_x(DIALOG_LIST_INSET)
+                    .shrink(0.0);
+                match detail {
+                    Some(Detail::View(build)) => area.add(&build(cx)),
+                    text => area.add(
+                        &Text::new(
+                            app,
+                            match text {
+                                Some(Detail::Text(text)) if !text.is_empty() => text,
+                                _ => " ".to_owned(),
+                            },
+                        )
+                        .fg(theme.surface(Surface::DialogFooter).text.muted)
+                        .wrap(WrapMode::Word),
+                    ),
+                };
+                body.add(&area);
+            }
         }
         *self.0.rows.borrow_mut() = rows;
         self.render_footer();
@@ -1106,7 +1256,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         slot.clear();
         let props = self.props();
         let selected = self.selected();
-        let mut items: Vec<(Side, Group, FooterAction)> = Vec::new();
+        let mut items: Vec<(Group, FooterAction)> = Vec::new();
         for action in props.actions.iter().filter(|action| !action.hidden) {
             let Some(label) = cx
                 .keymap
@@ -1122,7 +1272,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             let weak = Rc::downgrade(&self.0);
             let run = action.clone();
             items.push((
-                action.side,
                 group,
                 FooterAction::new((action.title)(selected.as_ref()))
                     .key(label)
@@ -1137,32 +1286,18 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let dynamic = props.dynamic_hints.as_ref().map(|hints| hints());
         for hint in props.footer_hints.iter().chain(dynamic.iter().flatten()) {
             items.push((
-                hint.side,
                 hint.group.unwrap_or(Group::Secondary),
                 FooterAction::new(hint.title.clone()).key(hint.label.clone()),
             ));
         }
-        if props.footer.is_none() && items.is_empty() && !cx.new_designs {
-            return;
-        }
-        let pick = |test: &dyn Fn(Side, Group) -> bool| -> Vec<FooterAction> {
+        let pick = |group: Group| -> Vec<FooterAction> {
             items
                 .iter()
-                .filter(|(side, group, _)| test(*side, *group))
-                .map(|(_, _, action)| action.clone())
+                .filter(|(of, _)| *of == group)
+                .map(|(_, action)| action.clone())
                 .collect()
         };
-        let (secondary, primary) = if cx.new_designs {
-            (
-                pick(&|_, group| group == Group::Secondary),
-                pick(&|_, group| group == Group::Primary),
-            )
-        } else {
-            (
-                pick(&|side, _| side != Side::Right),
-                pick(&|side, _| side == Side::Right),
-            )
-        };
+        let (secondary, primary) = (pick(Group::Secondary), pick(Group::Primary));
         slot.add(&crate::dialog::footer(
             cx,
             FooterProps {
@@ -1176,25 +1311,13 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 }
 
 fn category_row(cx: &DialogCx, title: &str, first: bool) -> View {
-    let theme = &cx.theme;
     View::new(&cx.app)
         .padding_edge(Edge::Top, if first { 0 } else { 1 })
-        .padding_edge(
-            Edge::Left,
-            DIALOG_LIST_INSET - if cx.new_designs { 0 } else { 1 },
-        )
-        .child(
-            &Text::new(&cx.app, title)
-                .fg(if cx.new_designs {
-                    theme.text.muted
-                } else {
-                    theme.accent().step(200)
-                })
-                .bold(),
-        )
+        .padding_edge(Edge::Left, DIALOG_LIST_INSET)
+        .child(&Text::new(&cx.app, title).fg(cx.theme.text.muted).bold())
 }
 
-// `DialogSelectRow`, as the TUI draws it without `new-designs`.
+// `DialogSelectRow`: rows run edge to edge, and a 1-cell gutter holds the selection bar on the left.
 fn option_row<T>(
     cx: &DialogCx,
     option: &SelectOption<T>,
@@ -1205,22 +1328,24 @@ fn option_row<T>(
 ) -> View {
     let app = &cx.app;
     let theme = &cx.theme;
-    let new_designs = cx.new_designs;
     let text = if active {
         option.fg.unwrap_or(theme.text.action.primary.focused)
-    } else if current && !new_designs {
-        theme.text.formfield.selected
     } else {
         theme.text.base
     };
-    let secondary = match (new_designs, active) {
-        (false, true) => text,
-        (false, false) | (true, false) => theme.text.muted,
-        (true, true) => theme.text.action.secondary.focused,
+    // Secondary text: the description and the footer.
+    let secondary = if active {
+        theme.text.action.secondary.focused
+    } else {
+        theme.text.muted
     };
+    // A marker or gutter takes its cell plus the row gap out of the left padding, so titles line up with unmarked
+    // rows.
     let marked = current || option.gutter.is_some();
     let row = View::new(app)
         .row()
+        .grow(1.0)
+        .basis(Length::Auto)
         .padding_edge(
             Edge::Left,
             if marked {
@@ -1229,28 +1354,18 @@ fn option_row<T>(
                 DIALOG_LIST_INSET - 1
             },
         )
-        .padding_edge(
-            Edge::Right,
-            DIALOG_LIST_INSET - if new_designs { 0 } else { 1 },
-        )
+        .padding_edge(Edge::Right, DIALOG_LIST_INSET)
         .gap(1)
         .bg(if active {
             option.bg.unwrap_or(theme.background.action.primary.focused)
         } else {
             Color::TRANSPARENT
         });
-    if new_designs {
-        row.grow(1.0).basis(Length::Auto);
-    }
     if current && option.gutter.is_none() {
         row.add(
-            &Text::new(app, if new_designs { "▪" } else { "●" })
+            &Text::new(app, "▪")
                 .shrink(0.0)
-                .fg(if new_designs {
-                    theme.text.formfield.selected
-                } else {
-                    text
-                }),
+                .fg(theme.text.formfield.selected),
         );
     }
     if let Some(gutter) = &option.gutter {
@@ -1265,30 +1380,46 @@ fn option_row<T>(
     if let Some(description) = description {
         spans.push(format!(" {description}").fg(secondary));
     }
-    let title = Text::new(app, spans)
-        .grow(1.0)
-        .basis(Length::Auto)
-        .fg(text)
-        .overflow(Overflow::Hidden)
-        .wrap(WrapMode::None)
-        .padding_edge(Edge::Left, 3);
-    if active && !new_designs {
-        title.bold();
-    }
-    row.add(&title);
-    if let Some(footer) = footer {
-        row.add(
-            &View::new(app).shrink(0.0).child(&Text::new(app, footer).fg(
-                if active || option.footer_color.is_none() {
-                    secondary
-                } else {
-                    option.footer_color.unwrap_or(secondary)
-                },
-            )),
-        );
-    }
-    if !new_designs {
-        return row;
+    row.add(
+        &Text::new(app, spans)
+            .grow(1.0)
+            .basis(Length::Auto)
+            .fg(text)
+            .overflow(Overflow::Hidden)
+            .wrap(WrapMode::None)
+            .padding_edge(Edge::Left, 3),
+    );
+    let footer = match &option.choice {
+        Some(choice) => {
+            let text = match (active, choice.open) {
+                (false, _) => format!("  {}  ", choice.value),
+                (true, true) => format!("  {} ↵", choice.value),
+                (true, false) => format!("‹ {} ›", choice.value),
+            };
+            let color = if active {
+                theme.text.action.primary.focused
+            } else {
+                theme.text.muted
+            };
+            Some((text, color, 2))
+        }
+        None => footer.map(|footer| {
+            let color = match (option.footer_fg, option.footer_color) {
+                (Some(color), _) => color,
+                (None, Some(color)) if !active => color,
+                _ => secondary,
+            };
+            (footer, color, option.footer_overhang)
+        }),
+    };
+    if let Some((footer, color, overhang)) = footer {
+        let cell = View::new(app)
+            .shrink(0.0)
+            .child(&Text::new(app, footer).fg(color));
+        if overhang > 0 {
+            cell.margin_edge(Edge::Right, -(overhang as i32));
+        }
+        row.add(&cell);
     }
     View::new(app)
         .row()
