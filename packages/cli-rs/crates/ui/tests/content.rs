@@ -1,9 +1,6 @@
 //! U.4a proofs. P-ORACLE: `code::syntax_theme` against the TypeScript `generateSyntax` for a few themes
 //! (`parity/oracle/U.4a-syntax.ts`). P-COMP: the Markdown, code, and diff wrappers against the TypeScript renders of
 //! the same corpus (`parity/component/U.4a-*.tsx`). Regenerate both with `bun run fixtures`.
-//!
-//! Rows where the current opentui-rust widgets differ from Core are listed per test with the deviation file that
-//! explains them. A listed row must still differ, so a fix upstream fails here until its deviation is removed.
 
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::theme::{Catalog, Theme, ThemeMode};
@@ -13,11 +10,9 @@ use opentui::prelude::*;
 use opentui::style::Attributes;
 use opentui::testing::TestApp;
 use opentui::widget::DiffView;
-use std::ops::RangeInclusive;
 
 const CORPUS: &str = include_str!("../../../parity/fixtures/U.4a/corpus.json");
 const SYNTAX: &str = include_str!("../../../parity/fixtures/U.4a/syntax.json");
-const H06: &str = "H06-highlight-queries";
 
 fn corpus(name: &str) -> String {
     let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
@@ -65,37 +60,12 @@ fn syntax_theme_matches_generate_syntax() {
     }
 }
 
-/// What a deviation lets differ in its rows.
-#[derive(Clone, Copy, PartialEq)]
-enum Allow {
-    /// Any cell.
-    Anything,
-    /// Foreground and attributes of cells whose symbol and background match: highlighting only.
-    Highlight,
-}
-
-/// Compares a capture with `parity/fixtures/<name>.json`. Each deviation lets its rows differ as `Allow` says, and
-/// must be needed: some row in it differs.
+/// Compares a capture with `parity/fixtures/<name>.json`, every cell.
 #[track_caller]
-fn assert_parity(capture: &Capture, name: &str, deviations: &[(RangeInclusive<u32>, Allow, &str)]) {
+fn assert_parity(capture: &Capture, name: &str) {
     let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
     let actual = Fixture::from_capture(capture);
-    let differing = compare(&expected, &actual).differences;
-    let mut masked = actual.clone();
-    for (rows, allow, file) in deviations {
-        assert!(
-            differing.iter().any(|(_, y)| rows.contains(y)),
-            "{name}: rows {rows:?} match now; remove the {file} exception"
-        );
-        for (x, y) in differing.iter().filter(|(_, y)| rows.contains(y)) {
-            let want = expected.cell(*x, *y).unwrap();
-            let cell = masked.cell_mut(*x, *y).unwrap();
-            if *allow == Allow::Anything || (cell.symbol == want.symbol && cell.bg == want.bg) {
-                *cell = want.clone();
-            }
-        }
-    }
-    let comparison = compare(&expected, &masked);
+    let comparison = compare(&expected, &actual);
     if !comparison.is_equal() {
         let path = std::env::temp_dir()
             .join("opencode-parity")
@@ -103,7 +73,7 @@ fn assert_parity(capture: &Capture, name: &str, deviations: &[(RangeInclusive<u3
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual.to_json()).unwrap();
         panic!(
-            "P-COMP {name}, outside its deviations: {comparison}\nactual cells: {}",
+            "P-COMP {name}: {comparison}\nactual cells: {}",
             path.display()
         );
     }
@@ -146,7 +116,6 @@ fn markdown_prose_matches_typescript() {
     assert_parity(
         &markdown_app(&corpus("prose"), true).render(),
         "U.4a/markdown-prose",
-        &[],
     );
 }
 
@@ -155,7 +124,6 @@ fn markdown_fences_match_typescript() {
     assert_parity(
         &markdown_app(&corpus("fences"), true).render(),
         "U.4a/markdown-fences",
-        &[(2..=3, Allow::Highlight, H06)],
     );
 }
 
@@ -165,7 +133,6 @@ fn raw_markdown_matches_typescript() {
     assert_parity(
         &markdown_app(&corpus("prose"), false).render(),
         "U.4c/markdown-raw",
-        &[],
     );
 }
 
@@ -177,7 +144,6 @@ fn markdown_table_matches_typescript() {
     assert_parity(
         &markdown_app(corpus["table"].as_str().unwrap(), true).render(),
         "U.4c/markdown-table",
-        &[],
     );
 }
 
@@ -218,11 +184,7 @@ fn numbered_code_matches_typescript() {
     let syntax = code::syntax_theme(&theme);
     let view = code::view(&app, &theme, &syntax, Some("typescript"), &corpus("code"));
     app.root().add(&code::numbered(&app, &theme, &view));
-    assert_parity(
-        &app.render(),
-        "U.4a/code",
-        &[(0..=6, Allow::Highlight, H06)],
-    );
+    assert_parity(&app.render(), "U.4a/code");
 }
 
 #[test]
@@ -245,12 +207,5 @@ fn patch_matches_typescript() {
             .padding_edge(Edge::Right, 3)
             .child(&patch),
     );
-    assert_parity(
-        &app.render(),
-        "U.4a/diff",
-        &[
-            (0..=0, Allow::Highlight, H06),
-            (6..=9, Allow::Highlight, H06),
-        ],
-    );
+    assert_parity(&app.render(), "U.4a/diff");
 }
