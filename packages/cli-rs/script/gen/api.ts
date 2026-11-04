@@ -25,24 +25,39 @@ const add = (ast: SchemaAST.AST) => {
 const plans = contract.groups.flatMap((group) =>
   group.endpoints.map((endpoint) => {
     const opaque = endpoint.payloads[0] !== undefined && !flattenable(endpoint.payloads[0])
-    const binaryBody = endpoint.payloads[0] !== undefined && resolveEncoding(endpoint.payloads[0].ast)?._tag === "Uint8Array"
-    const sources = { params: endpoint.params, query: endpoint.query, headers: endpoint.headers, payload: endpoint.payloads[0] }
+    const binaryBody =
+      endpoint.payloads[0] !== undefined && resolveEncoding(endpoint.payloads[0].ast)?._tag === "Uint8Array"
+    const sources = {
+      params: endpoint.params,
+      query: endpoint.query,
+      headers: endpoint.headers,
+      payload: endpoint.payloads[0],
+    }
     const fields = endpoint.input.map((field) => {
       const schema = sources[field.source]!
-      if (opaque && field.source === "payload") return { ...field, root: binaryBody ? undefined : add(Schema.toEncoded(schema).ast) }
+      if (opaque && field.source === "payload")
+        return { ...field, root: binaryBody ? undefined : add(Schema.toEncoded(schema).ast) }
       const ast = (field.source === "query" ? Schema.toType(schema) : Schema.toEncoded(schema)).ast
       if (!SchemaAST.isObjects(ast)) throw new Error(`Input schema must be a struct: ${endpoint.operation.name}`)
       const property = ast.propertySignatures.find((item) => item.name === field.name)!
       return { ...field, root: add(property.type) }
     })
     const wildcard = endpoint.endpoint.path.endsWith("*")
-      ? [{ name: endpoint.input.some((field) => field.name === "path") ? "wildcard" : "path", source: "wildcard" as const, optional: false, root: undefined }]
+      ? [
+          {
+            name: endpoint.input.some((field) => field.name === "path") ? "wildcard" : "path",
+            source: "wildcard" as const,
+            optional: false,
+            root: undefined,
+          },
+        ]
       : []
     const success = endpoint.successes[0]
     const kind = streamKind(success)
     const output = (() => {
       if (kind === "sse") return add(sseData(success))
-      if (HttpApiSchema.isNoContent(success.ast) || resolveEncoding(success.ast)?._tag === "Uint8Array") return undefined
+      if (HttpApiSchema.isNoContent(success.ast) || resolveEncoding(success.ast)?._tag === "Uint8Array")
+        return undefined
       const ast = Schema.toEncoded(success).ast
       if (!endpoint.unwrapData) return add(ast)
       if (!SchemaAST.isObjects(ast)) throw new Error(`Invalid data envelope: ${endpoint.operation.name}`)
@@ -108,7 +123,10 @@ await Bun.write(
   `${directory}/mod.rs`,
   `${header}//! Types and methods generated from \`ClientApi\` by \`script/gen/api.ts\` (F.2).\n\nmod methods;\npub mod types;\n\npub use types::*;\n\n/// Endpoints in the generated client.\npub const ENDPOINTS: usize = ${plans.length};\n`,
 )
-const format = Bun.spawnSync(["rustfmt", "--edition", "2024", `${directory}/mod.rs`], { stdout: "inherit", stderr: "inherit" })
+const format = Bun.spawnSync(["rustfmt", "--edition", "2024", `${directory}/mod.rs`], {
+  stdout: "inherit",
+  stderr: "inherit",
+})
 if (format.exitCode !== 0) process.exit(format.exitCode ?? 1)
 console.log(`api: ${plans.length} endpoints, ${types.items.length} items`)
 
@@ -130,7 +148,10 @@ function sseData(schema: Endpoint["successes"][number]) {
   if (!SchemaAST.isObjects(events)) throw new Error("Invalid SSE data schema")
   const data = events.propertySignatures.find((field) => field.name === "data")!.type
   // oxlint-disable-next-line no-restricted-globals -- Effect exposes this runtime helper without a public type.
-  const replaceEncoding = Reflect.get(SchemaAST, "replaceEncoding") as (ast: SchemaAST.AST, encoding: undefined) => SchemaAST.AST
+  const replaceEncoding = Reflect.get(SchemaAST, "replaceEncoding") as (
+    ast: SchemaAST.AST,
+    encoding: undefined,
+  ) => SchemaAST.AST
   return Schema.toEncoded(Schema.make<Schema.Top>(replaceEncoding(data, undefined))).ast
 }
 
@@ -160,7 +181,12 @@ function normalize(input: ReadonlyArray<SchemaAST.AST>) {
   const step = (ast: SchemaAST.AST): SchemaAST.AST => {
     if (SchemaAST.isDeclaration(ast) && ast.annotations?.toCode === undefined) {
       const representation = ast.annotations?.representation
-      if (typeof representation === "object" && representation !== null && "id" in representation && representation.id === "effect/schema/Json") {
+      if (
+        typeof representation === "object" &&
+        representation !== null &&
+        "id" in representation &&
+        representation.id === "effect/schema/Json"
+      ) {
         return Schema.Json.ast
       }
       if (ast.annotations?.["~constructor"] !== undefined && ast.typeParameters[0] !== undefined) {
