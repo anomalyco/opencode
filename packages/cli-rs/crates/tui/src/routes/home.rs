@@ -21,6 +21,7 @@ pub struct Home {
     empty: Text,
     ids: Rc<RefCell<Vec<SessionID>>>,
     prompt: crate::prompt::editor::Prompt,
+    forms: crate::features::home_forms::HomeForms,
 }
 
 impl Home {
@@ -90,7 +91,7 @@ impl Home {
             .basis(Length::Auto)
             .child(&body);
         crate::features::update_notification::mount(tui, &root);
-        crate::features::home_forms::mount(tui, &root);
+        let forms = crate::features::home_forms::mount(tui, &root);
         crate::plugins::home_footer::mount(tui, &root);
         load(tui, &empty, prompt.textarea());
         Self {
@@ -99,6 +100,7 @@ impl Home {
             empty,
             ids,
             prompt,
+            forms,
         }
     }
 }
@@ -110,6 +112,9 @@ impl RouteView for Home {
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
         self.prompt.sync(tui, changes);
+        if self.forms.sync(tui) && !tui.dialogs.is_open() {
+            self.prompt.focus(tui);
+        }
         if !changes.sessions() {
             return;
         }
@@ -136,6 +141,9 @@ impl RouteView for Home {
     }
 
     fn focus(&self, _tui: &Tui) {
+        if self.forms.active() {
+            return;
+        }
         self.list.focus();
     }
 }
