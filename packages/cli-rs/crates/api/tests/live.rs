@@ -479,6 +479,50 @@ async fn live_reads_decode() {
         );
     }
 
+    // The session log of the newest sessions from the start, without following: durable events and the
+    // `log.synced` marker, none of them unknown (carbon-1).
+    let (mut durable, mut synced, mut unknown) = (0, 0, 0);
+    for session in sessions.iter().take(sessions_wanted) {
+        let input = ExperimentalSessionLogInput {
+            session_id: session.id.clone(),
+            after: Some(0),
+            follow: Some(false),
+        };
+        let Some(log) = report.check(
+            "experimental.session.log",
+            client.experimental_session_log(&input, &none).await,
+            |_| String::new(),
+        ) else {
+            continue;
+        };
+        let items: Vec<_> =
+            tokio::time::timeout(Duration::from_secs(30), log.events(|| {}).collect())
+                .await
+                .unwrap_or_default();
+        for item in items {
+            match item {
+                Ok(SessionLogItem::LogSynced(_)) => synced += 1,
+                Ok(
+                    SessionLogItem::Durable(SessionEventDurable::Unknown(_))
+                    | SessionLogItem::Unknown(_),
+                ) => unknown += 1,
+                Ok(SessionLogItem::Durable(_)) => durable += 1,
+                Err(error) => report
+                    .failures
+                    .push(format!("experimental.session.log {}: {error}", session.id)),
+            }
+        }
+    }
+    if unknown > 0 {
+        report
+            .failures
+            .push(format!("experimental.session.log: {unknown} unknown items"));
+    }
+    report.rows.push((
+        "experimental.session.log items".to_owned(),
+        format!("ok {durable} durable, {synced} log.synced, {unknown} unknown"),
+    ));
+
     // The event stream starts with `server.connected`.
     let stream = report.check(
         "event.subscribe",
