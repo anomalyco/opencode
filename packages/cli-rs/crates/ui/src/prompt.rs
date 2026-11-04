@@ -6,7 +6,7 @@
 
 use crate::dialog::{
     DialogCx, DialogSize, FocusId, FooterAction, FooterProps, HeaderProps, footer, header,
-    layout_with,
+    layout_view,
 };
 use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
@@ -32,7 +32,7 @@ pub struct PromptAction {
 pub struct PromptProps {
     pub title: String,
     pub size: DialogSize,
-    /// Muted line below the title, under `new-designs`.
+    /// Muted line below the title.
     pub subtitle: Option<String>,
     /// Content above the field.
     pub description: Option<Description>,
@@ -123,12 +123,11 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     if !prompt.busy() {
         cx.focus(&prompt.0.field);
     }
-    let root = layout_with(
+    let root = layout_view(
         cx,
         &head,
         &body,
-        None,
-        Some(prompt.0.footer_slot.clone()),
+        Some(&prompt.0.footer_slot),
         crate::dialog::DIALOG_INSET,
         2,
     );
@@ -149,7 +148,7 @@ impl Prompt {
         self.0.busy.get()
     }
 
-    /// Turns the busy state on or off: the field blurs and greys out, and the footer shows `processing…`.
+    /// Turns the busy state on or off: the field blurs and greys out, and the footer actions disable.
     pub fn set_busy(&self, busy: bool) {
         self.0.busy.set(busy);
         self.apply_busy();
@@ -303,28 +302,12 @@ impl Prompt {
                     })
             })
             .collect();
-        if cx.new_designs {
-            let mut primary = extra;
-            primary.push(submit.disabled(inner.busy.get()));
-            slot.add(&footer(
-                cx,
-                FooterProps {
-                    primary,
-                    ..FooterProps::default()
-                },
-            ));
-            return;
-        }
-        if inner.busy.get() {
-            slot.add(&Text::new(&cx.app, "processing…").fg(cx.theme.text.muted));
-            return;
-        }
-        let mut secondary = vec![submit];
-        secondary.extend(extra);
+        let mut primary = extra;
+        primary.push(submit.disabled(inner.busy.get()));
         slot.add(&footer(
             cx,
             FooterProps {
-                secondary,
+                primary,
                 ..FooterProps::default()
             },
         ));
