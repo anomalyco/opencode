@@ -13,6 +13,7 @@ import { usePathFormatter } from "../../../tui/src/context/path-format"
 import { useThemes } from "../../../tui/src/context/theme"
 import { DialogHighlights } from "../../../tui/src/component/dialog-highlights"
 import { DialogPair } from "../../../tui/src/component/dialog-pair"
+import { DialogUpdate } from "../../../tui/src/component/dialog-update"
 import { DialogStatus } from "../../../tui/src/component/dialog-status"
 import { DialogThemeList } from "../../../tui/src/component/dialog-theme-list"
 import { ConfigProvider } from "../../../tui/src/config"
@@ -215,6 +216,28 @@ await render("E.18b/highlights-scroll", () => <DialogHighlights version="2.0.27"
     await Bun.sleep(50)
   },
 })
+
+// Update: one fixture per state the dialog shows.
+type UpdateState = Parameters<typeof DialogUpdate>[0]["state"] extends () => infer S ? S : never
+const update = (state: UpdateState, check?: (signal: AbortSignal) => Promise<string | undefined>) => () => (
+  <DialogUpdate check={check} state={() => state} skip={() => {}} install={async () => {}} restart={() => {}} />
+)
+const updated = (f: string) => f.includes("Update") || f.includes("Updating")
+await render("E.18b/update-available", update({ type: "available", version: "2.0.28" }), updated)
+await render("E.18b/update-installing", update({ type: "installing", version: "2.0.28" }), updated)
+await render("E.18b/update-installed", update({ type: "installed", version: "2.0.28" }), updated)
+await render("E.18b/update-failed", update({ type: "failed", message: "npm exited with code 1" }), updated)
+await render("E.18b/update-current", update(undefined), updated)
+await render(
+  "E.18b/update-unavailable",
+  update(undefined, async () => "OpenCode was installed with Homebrew. Run `brew upgrade opencode` to update."),
+  (f) => f.includes("Homebrew"),
+)
+await render(
+  "E.18b/update-checking",
+  update(undefined, () => new Promise(() => {})),
+  (f) => f.includes("Checking"),
+)
 
 // Plugins: TUI rows first, then the server rows; built-ins show after ctrl+a.
 const plugins = () => <Plugins />

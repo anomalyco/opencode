@@ -193,7 +193,9 @@ impl Manager {
                 }));
                 props.actions = manager.actions();
                 let (view, handle) = select(cx, props);
-                *manager.select.borrow_mut() = Some(handle);
+                *manager.select.borrow_mut() = Some(handle.clone());
+                // The first footer was drawn before the hints could see the selection.
+                handle.refresh_footer();
                 manager.open.set(true);
                 let closed = manager.clone();
                 cx.on_close(opentui::keymap::Disposer::new(move || {
