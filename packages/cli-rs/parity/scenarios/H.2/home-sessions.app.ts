@@ -28,20 +28,20 @@ export default defineApp({
       checkpoint: "home",
       until: "Ask anything",
       masks: [placeholder],
-      deviation: ["T17-home-session-list", "T04-connection-footer"],
+      deviation: ["T17-home-prompt"],
     },
     { keys: ["ctrl+x", "l"] },
     {
       checkpoint: "list",
       until: "Write docs",
-      // The dialog panel itself matches (E.11a/session-list); the home and the footer around it differ.
-      deviation: ["T17-home-session-list", "T04-connection-footer"],
+      // The dialog panel itself matches (E.11a/session-list); the home's prompt behind it differs.
+      deviation: ["T17-home-prompt"],
     },
     { keys: ["enter"] },
     {
       checkpoint: "session",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt", "T04-connection-footer"],
+      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
     },
   ],
 })
