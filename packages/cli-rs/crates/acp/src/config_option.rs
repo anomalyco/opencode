@@ -1,7 +1,4 @@
 //! Session config options: model, effort, and mode (`packages/cli/src/acp/config-option.ts`).
-//!
-//! Owned by C.12 (`rs-acp-rest`). C.11 filled it because the session lifecycle reports and changes
-//! these options; C.12 ports its tests (`config-option.test.ts`).
 
 use std::cmp::Ordering;
 
