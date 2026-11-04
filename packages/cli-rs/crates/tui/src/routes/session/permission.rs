@@ -186,18 +186,17 @@ impl Drop for Permission {
 }
 
 /// `useToolPermission`: whether the tool call `part` waits on the session's first pending request, so the
-/// transcript draws it in the warning color.
-pub fn tool_pending(tui: &Tui, session: &SessionID, part: &str) -> bool {
+/// transcript draws it in the warning color. It takes the store's state, since the transcript asks while
+/// it reads the store.
+pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -> bool {
     if tui.config.permissions == Permissions::Autoaccept {
         return false;
     }
-    tui.data.read(|state| {
-        state
-            .permissions(session)
-            .and_then(<[_]>::first)
-            .and_then(|request| request.source.as_ref())
-            .is_some_and(|source| source.r#type == "tool" && source.id == part)
-    })
+    state
+        .permissions(session)
+        .and_then(<[_]>::first)
+        .and_then(|request| request.source.as_ref())
+        .is_some_and(|source| source.r#type == "tool" && source.id == part)
 }
 
 /// The sessions whose requests a session prompts for: a root and its descendants, a child none.

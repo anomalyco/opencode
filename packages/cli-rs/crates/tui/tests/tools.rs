@@ -10,7 +10,7 @@ use bytes::Bytes;
 use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
+use opencode_local::cli_config::{Grouping, Info, Resolved, Session};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::Color;
 use opentui::testing::TestApp;
@@ -120,8 +120,13 @@ fn open(width: u16, height: u16, messages: Vec<Value>, permissions: Vec<Value>) 
     });
     let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
     let app = TestApp::new(width, height);
+    // Each call in its own row: grouping is E.8's.
     let info = Info {
         animations: Some(false),
+        session: Some(Session {
+            grouping: Some(Grouping::None),
+            ..Session::default()
+        }),
         ..Info::default()
     };
     let tui = opencode_tui::mount(
@@ -147,7 +152,11 @@ impl Harness {
             .app
             .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
+        let log = self.fixture.log.lock().unwrap().clone();
+        assert!(
+            found,
+            "{text:?} never showed:\n{screen}\nrequests: {log:#?}"
+        );
         screen
     }
 
@@ -216,14 +225,25 @@ fn inline_tools_show_pending_running_and_finished_lines() {
         tool(
             "call_5",
             "grep",
-            completed(json!({ "pattern": "TODO" }), "a.rs:1", json!({ "matches": 1 })),
+            completed(
+                json!({ "pattern": "TODO" }),
+                "a.rs:1",
+                json!({ "matches": 1 }),
+            ),
         ),
         tool(
             "call_6",
             "grep",
-            failed(json!({ "pattern": "secret" }), "The user rejected permission to use this tool"),
+            failed(
+                json!({ "pattern": "secret" }),
+                "The user rejected permission to use this tool",
+            ),
         ),
-        tool("call_7", "write", running(json!({ "path": "/project/new.rs" }), json!({}))),
+        tool(
+            "call_7",
+            "write",
+            running(json!({ "path": "/project/new.rs" }), json!({})),
+        ),
         tool("call_8", "bash", streaming("")),
     ]);
     let h = open(100, 40, messages, Vec::new());
@@ -240,7 +260,10 @@ fn inline_tools_show_pending_running_and_finished_lines() {
         screen.contains("   ✱ Glob \"**/*.rs\" in src (3 matches)\n"),
         "{screen}"
     );
-    assert!(screen.contains("   ✱ Grep \"TODO\" (1 match)\n"), "{screen}");
+    assert!(
+        screen.contains("   ✱ Grep \"TODO\" (1 match)\n"),
+        "{screen}"
+    );
     assert!(screen.contains("   ← Write new.rs\n"), "{screen}");
     // A legacy name maps to its view: `bash` is the shell, here before its command arrives.
     assert!(screen.contains("Writing command…"), "{screen}");
@@ -264,7 +287,10 @@ fn a_failed_call_shows_its_error_on_click() {
     let messages = turn(vec![tool(
         "call_1",
         "glob",
-        failed(json!({ "pattern": "*.md" }), "\u{1b}[31mNo such directory\u{1b}[0m"),
+        failed(
+            json!({ "pattern": "*.md" }),
+            "\u{1b}[31mNo such directory\u{1b}[0m",
+        ),
     )]);
     let h = open(100, 30, messages, Vec::new());
     h.wait_for("Glob \"*.md\"");
@@ -275,8 +301,13 @@ fn a_failed_call_shows_its_error_on_click() {
     // The ANSI codes are stripped; the error sits under the text, past the icon.
     let screen = h.wait_for("No such directory");
     assert!(screen.contains("     No such directory\n"), "{screen}");
+    // Apart from the first click, so the two are not a double click that selects a word.
+    h.app.advance(Duration::from_secs(1));
     h.click("Glob \"*.md\"");
-    assert!(!h.app.text().contains("No such directory"));
+    let gone = h.app.wait_until(Duration::from_secs(2), || {
+        !h.app.text().contains("No such directory")
+    });
+    assert!(gone, "{}", h.app.text());
 }
 
 #[test]
@@ -349,7 +380,7 @@ fn shell_blocks_collapse_their_output_and_read_a_named_shell_on_click() {
         .collect();
     assert_eq!(
         reads,
-        ["GET /api/shell/sh_1/output?cursor=0&limit=1048576&location%5Bdirectory%5D=%2Fproject"],
+        ["GET /api/shell/sh_1/output?location%5Bdirectory%5D=%2Fproject&cursor=0&limit=1048576"],
         "{log:?}"
     );
 }
@@ -408,7 +439,8 @@ fn write_and_edit_blocks_show_the_file_and_the_diff() {
 
 #[test]
 fn the_edit_diff_splits_above_120_columns() {
-    let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n";
+    let patch =
+        "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n";
     let messages = turn(vec![tool(
         "call_1",
         "edit",
@@ -435,9 +467,17 @@ fn the_generic_tool_lists_its_inputs_and_output_on_click() {
         tool(
             "call_1",
             "mcp_fetch",
-            completed(input.clone(), "\u{1b}[1mfetched\u{1b}[0m 3 pages", json!({})),
+            completed(
+                input.clone(),
+                "\u{1b}[1mfetched\u{1b}[0m 3 pages",
+                json!({}),
+            ),
         ),
-        tool("call_2", "mcp_scan", running(json!({ "target": "a b" }), json!({}))),
+        tool(
+            "call_2",
+            "mcp_scan",
+            running(json!({ "target": "a b" }), json!({})),
+        ),
         tool("call_3", "mcp_drop", failed(json!({}), "Tool not found")),
     ]);
     let h = open(100, 40, messages, Vec::new());
@@ -459,7 +499,10 @@ fn the_generic_tool_lists_its_inputs_and_output_on_click() {
 
     h.click("mcp_fetch");
     let screen = h.wait_for("output: fetched 3 pages");
-    assert!(screen.contains("     url: https://example.com\n"), "{screen}");
+    assert!(
+        screen.contains("     url: https://example.com\n"),
+        "{screen}"
+    );
     assert!(screen.contains("     depth: 2\n"), "{screen}");
     assert!(screen.contains("     options: {\n"), "{screen}");
     assert!(screen.contains("\"deep\": true"), "{screen}");
@@ -468,7 +511,11 @@ fn the_generic_tool_lists_its_inputs_and_output_on_click() {
 #[test]
 fn a_call_waiting_on_permission_takes_the_warning_color() {
     let messages = turn(vec![
-        tool("call_1", "grep", running(json!({ "pattern": "TODO" }), json!({}))),
+        tool(
+            "call_1",
+            "grep",
+            running(json!({ "pattern": "TODO" }), json!({})),
+        ),
         tool(
             "call_2",
             "shell",
@@ -492,4 +539,64 @@ fn a_call_waiting_on_permission_takes_the_warning_color() {
         "{screen}"
     );
     assert_eq!(h.fg("Grep \"TODO\""), theme.text.muted);
+}
+
+#[test]
+fn a_running_shell_the_store_lists_reads_its_output_every_second() {
+    let messages = turn(vec![tool(
+        "call_1",
+        "shell",
+        running(
+            json!({ "command": "npm run dev" }),
+            json!({ "shellID": "sh_1" }),
+        ),
+    )]);
+    let h = open(100, 30, messages, Vec::new());
+    h.wait_for("npm run dev");
+    let reads = || {
+        h.fixture
+            .log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|line| line.contains("/api/shell/sh_1/output"))
+            .count()
+    };
+    // Not listed yet: nothing to read.
+    h.app.advance(Duration::from_secs(2));
+    assert_eq!(reads(), 0);
+
+    let event = |kind: &str, data: Value| {
+        let event = json!({
+            "id": format!("evt_{kind}"), "created": 1, "type": kind,
+            "location": { "directory": "/project" }, "data": data,
+        });
+        serde_json::from_value::<opencode_api::generated::V2Event>(event).unwrap()
+    };
+    h.tui.data.apply(&[event(
+        "shell.created",
+        json!({ "info": {
+            "id": "sh_1", "status": "running", "command": "npm run dev", "cwd": "/project",
+            "shell": "/bin/sh", "file": "/shell-output", "metadata": {}, "time": { "started": 1 },
+        } }),
+    )]);
+    h.wait_for("hi from the shell");
+    let first = reads();
+    assert!(first >= 1);
+    h.app.advance(Duration::from_millis(1100));
+    let polled = h.app.wait_until(Duration::from_secs(2), || reads() > first);
+    assert!(polled, "no second read");
+
+    // Once the shell exits, one last read drains it and the polling stops.
+    h.tui.data.apply(&[event(
+        "shell.exited",
+        json!({ "id": "sh_1", "exit": 0, "status": "completed" }),
+    )]);
+    h.app.advance(Duration::from_millis(10));
+    h.app.wait_until(Duration::from_millis(300), || false);
+    let stopped = reads();
+    h.app.advance(Duration::from_secs(3));
+    h.app.wait_until(Duration::from_millis(300), || false);
+    assert_eq!(reads(), stopped);
+    assert!(h.app.text().contains("hi from the shell"));
 }

@@ -125,7 +125,10 @@ fn first_file(files: Option<&Value>) -> Option<File> {
     files?.as_array()?.iter().find_map(|item| {
         let file = item.as_object()?;
         let text = |key: &str| file.get(key).and_then(Value::as_str);
-        let number = |key: &str| file.get(key).and_then(opencode_ui::tool_info::finite_number);
+        let number = |key: &str| {
+            file.get(key)
+                .and_then(opencode_ui::tool_info::finite_number)
+        };
         let kind = text("type").or(match text("status") {
             Some("added") => Some("add"),
             Some("deleted") => Some("delete"),
@@ -159,7 +162,10 @@ mod tests {
             { "relativePath": "b.rs", "status": "modified", "patch": "@@ -1 +1 @@", "additions": 1, "deletions": 1 },
         ]);
         let file = first_file(Some(&files)).unwrap();
-        assert_eq!((file.path.as_str(), file.patch.as_str()), ("b.rs", "@@ -1 +1 @@"));
+        assert_eq!(
+            (file.path.as_str(), file.patch.as_str()),
+            ("b.rs", "@@ -1 +1 @@")
+        );
         assert!(first_file(Some(&json!([{ "file": "c.rs", "status": "renamed", "patch": "", "additions": 0, "deletions": 0 }]))).is_none());
         assert!(first_file(Some(&json!({}))).is_none());
     }
