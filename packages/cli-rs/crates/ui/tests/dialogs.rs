@@ -5,9 +5,10 @@
 use opencode_parity::assert_fixture;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
 use opencode_ui::keymap::{Keybinds, Options};
+use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::select::{self, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::{Catalog, Theme, ThemeError, ThemeMode};
-use opencode_ui::{alert, confirm, toast};
+use opencode_ui::{alert, confirm, help, palette, toast};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use std::cell::RefCell;
@@ -358,4 +359,57 @@ fn fuzzy_order_matches_fuzzysort() {
         failures.len(),
         failures.join("\n")
     );
+}
+
+// The global layer of parity/component/U.3-palette.tsx; returns the commands that ran.
+fn palette_commands(kit: &Kit) -> Rc<RefCell<Vec<String>>> {
+    let ran = Rc::new(RefCell::new(Vec::new()));
+    let command = |id: &str, title: &str, group: &str| {
+        let ran = ran.clone();
+        let name = id.to_owned();
+        TuiCommand::new(id, move |_, _| ran.borrow_mut().push(name.clone()))
+            .title(title)
+            .group(group)
+    };
+    let layer = kit.keymap.layer(KeymapLayer {
+        mode: Some("global".into()),
+        commands: vec![
+            command("command.palette.show", "Show command palette", "System"),
+            command("session.new", "New session", "Session")
+                .palette()
+                .suggested(true),
+            command("session.list", "Switch session", "Session").palette(),
+            command("session.rename", "Rename session", "Session")
+                .description("Give the session a name")
+                .palette(),
+            command("theme.switch", "Switch theme", "System").palette(),
+            command("app.exit", "Exit the app", "System").palette(),
+        ],
+        ..KeymapLayer::default()
+    });
+    std::mem::forget(layer);
+    ran
+}
+
+#[test]
+fn palette_matches_typescript_and_runs_the_chosen_command() {
+    let kit = kit(80, 36);
+    let ran = palette_commands(&kit);
+    palette::show(&kit.dialogs, Vec::new());
+    assert_fixture(&kit.app.render(), "U.3/palette");
+    kit.app.type_text("rename");
+    assert!(kit.app.render().text().contains("Rename session"));
+    kit.app.press("return");
+    assert!(!kit.dialogs.is_open());
+    assert_eq!(*ran.borrow(), ["session.rename"]);
+}
+
+#[test]
+fn help_matches_typescript() {
+    let kit = kit(80, 14);
+    palette_commands(&kit);
+    help::show(&kit.dialogs);
+    assert_fixture(&kit.app.render(), "U.3/help");
+    kit.app.press("return");
+    assert!(!kit.dialogs.is_open());
 }
