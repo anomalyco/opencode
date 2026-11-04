@@ -56,8 +56,8 @@ impl Frame {
             .child(&strip)
             .child(&main);
         let rail = rail::new(app, tui.clone());
-        let tabs_resize = PaneResize::new(tabs_rules(), SESSION_SIDEBAR_WIDTH);
-        let pane_resize = PaneResize::new(pane_rules(), 0);
+        let tabs_resize = PaneResize::new(tabs_rules());
+        let pane_resize = PaneResize::new(pane_rules());
         let rail_handle = resize::handle(app, tui, tabs_resize.clone(), false);
         let body = View::new(app)
             .row()
@@ -161,14 +161,10 @@ pub fn reload(tui: &Tui, storage: &Storage) {
             .and_then(Value::as_u64)
             .map(|width| width as u16)
     };
+    tui.frame.tabs_resize.set_value(width("verticalTabsWidth"));
     tui.frame
-        .tabs_resize
-        .set_value(width("verticalTabsWidth").unwrap_or(SESSION_SIDEBAR_WIDTH));
-    tui.frame.pane_resize.set_value(
-        width("paneWidth")
-            .or_else(|| width("terminalWidth"))
-            .unwrap_or(0),
-    );
+        .pane_resize
+        .set_value(width("paneWidth").or_else(|| width("terminalWidth")));
     *tui.frame.layout.borrow_mut() = value;
     refresh(tui);
 }
