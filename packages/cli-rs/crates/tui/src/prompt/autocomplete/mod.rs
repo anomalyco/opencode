@@ -72,11 +72,8 @@ impl Shared {
         let Some(state) = tui.state_dir() else {
             return;
         };
-        let (frecency, recents, storage) = (
-            self.frecency.clone(),
-            self.recents.clone(),
-            tui.storage(),
-        );
+        let (frecency, recents, storage) =
+            (self.frecency.clone(), self.recents.clone(), tui.storage());
         // `paths.cwd`: the directory the TUI started in.
         let cwd = std::path::PathBuf::from(&tui.directory);
         tui.app.runtime().spawn_blocking(move || {
@@ -84,7 +81,8 @@ impl Shared {
             if let Ok(mut slot) = frecency.lock() {
                 *slot = Some(loaded);
             }
-            let stored = storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
+            let stored =
+                storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
             if let Ok(mut slot) = recents.lock() {
                 *slot = stored;
             }
@@ -96,7 +94,10 @@ impl Shared {
         self.frecency
             .lock()
             .ok()
-            .and_then(|slot| slot.as_ref().map(|frecency| frecency.score(path, jsonl::now_ms())))
+            .and_then(|slot| {
+                slot.as_ref()
+                    .map(|frecency| frecency.score(path, jsonl::now_ms()))
+            })
             .unwrap_or(0.0)
     }
 
@@ -134,7 +135,10 @@ impl Shared {
         let directory = directory.to_owned();
         self.update_recents(tui, project, move |list| {
             list.retain(|item| item["directory"].as_str() != Some(&directory));
-            list.insert(0, json!({ "directory": directory, "usedAt": jsonl::now_ms() }));
+            list.insert(
+                0,
+                json!({ "directory": directory, "usedAt": jsonl::now_ms() }),
+            );
             list.truncate(10);
         });
     }
@@ -479,9 +483,11 @@ impl State {
 
     /// Recomputes the search, starts a file or directory search if it changed, and redraws.
     fn refresh(&self) {
-        let (Some(tui), Some(prompt), Some(mode)) =
-            (self.tui.upgrade(), self.prompt.upgrade(), self.visible.get())
-        else {
+        let (Some(tui), Some(prompt), Some(mode)) = (
+            self.tui.upgrade(),
+            self.prompt.upgrade(),
+            self.visible.get(),
+        ) else {
             return;
         };
         let start = match mode {
@@ -625,7 +631,9 @@ impl State {
                         items: output
                             .data
                             .iter()
-                            .map(|entry| file_item(&root, &entry.path.0, &entry.r#type, range, width))
+                            .map(|entry| {
+                                file_item(&root, &entry.path.0, &entry.r#type, range, width)
+                            })
                             .collect(),
                         failed: false,
                         mode: Some(Mode::Reference),
@@ -638,7 +646,14 @@ impl State {
     }
 
     /// The options to show (`options` memo).
-    fn compute(&self, tui: &Tui, prompt: &Inner, location: &Location, mode: Mode, search: &str) -> Vec<Item> {
+    fn compute(
+        &self,
+        tui: &Tui,
+        prompt: &Inner,
+        location: &Location,
+        mode: Mode,
+        search: &str,
+    ) -> Vec<Item> {
         let results = {
             let results = self.results.borrow();
             if results.mode == Some(mode) {
@@ -654,10 +669,18 @@ impl State {
             } else {
                 Vec::new()
             };
-            let seen: Vec<Option<String>> = supplemental.iter().map(|item| item.absolute.clone()).collect();
+            let seen: Vec<Option<String>> = supplemental
+                .iter()
+                .map(|item| item.absolute.clone())
+                .collect();
             return supplemental
                 .into_iter()
-                .chain(results.items.into_iter().filter(|item| !seen.contains(&item.absolute)))
+                .chain(
+                    results
+                        .items
+                        .into_iter()
+                        .filter(|item| !seen.contains(&item.absolute)),
+                )
                 .collect();
         }
         let references = reference_items(tui, location);
@@ -684,50 +707,27 @@ impl State {
         if search.is_empty() {
             return others.into_iter().chain(files).collect();
         }
-        let prefix = match mode {
-            Mode::Reference => "@",
-            Mode::Command => "/",
-            Mode::Directory => "",
-        };
-        let needle = parse::file_line_range(search).0;
-        let starts = format!("{prefix}{search}");
-        let keys: Vec<String> = others
+        let complete = &tui.prompt.complete;
+        let targets: Vec<(&str, Option<&str>)> = others
             .iter()
             .map(|item| {
-                let key = item.value.as_deref().unwrap_or(&item.display).trim_end();
-                parse::file_line_range(key).0.to_owned()
+                (
+                    item.value.as_deref().unwrap_or(&item.display),
+                    item.description.as_deref(),
+                )
             })
             .collect();
-        let complete = &tui.prompt.complete;
-        // Descriptions count for slash commands only; for `@` they surfaced unrelated items.
-        let targets: Vec<[Option<&str>; 2]> = others
-            .iter()
-            .zip(&keys)
-            .map(|(item, key)| {
-                [
-                    Some(key.as_str()),
-                    item.description.as_deref().filter(|_| mode == Mode::Command),
-                ]
-            })
-            .collect();
-        let matched = fuzzy::go_scored(
-            needle,
-            &targets,
-            |target| *target,
-            |_, score, index| {
-                let bonus = if keys[index].starts_with(&starts) { 2.0 } else { 1.0 };
-                let frecency = others[index].path.as_deref().map_or(0.0, |path| complete.score(path));
-                score * bonus * (1.0 + frecency)
-            },
-            if mode == Mode::Reference { 0.5 } else { 0.0 },
-        );
-        matched
-            .into_iter()
-            .take(ROWS)
-            .map(|index| others[index].clone())
-            .chain(files)
-            .take(ROWS)
-            .collect()
+        rank(mode, search, &targets, |index| {
+            others[index]
+                .path
+                .as_deref()
+                .map_or(0.0, |path| complete.score(path))
+        })
+        .into_iter()
+        .map(|index| others[index].clone())
+        .chain(files)
+        .take(ROWS)
+        .collect()
     }
 
     /// The anchor's width less the borders and padding (`anchor.width - 4`).
@@ -783,7 +783,10 @@ impl State {
         let offset = (self.offset.get() as i64 + delta).clamp(0, max) as usize;
         self.offset.set(offset);
         let last = (count.saturating_sub(1)).min(offset + limit.max(1) - 1);
-        let selected = self.selected.get().clamp(offset.min(count.saturating_sub(1)), last);
+        let selected = self
+            .selected
+            .get()
+            .clamp(offset.min(count.saturating_sub(1)), last);
         if selected != self.selected.get() {
             self.confirming.replace(None);
             self.selected.set(selected);
@@ -898,7 +901,9 @@ impl State {
             self.render(&tui);
             return;
         }
-        tui.prompt.complete.remove(&tui, &action.project, &action.id);
+        tui.prompt
+            .complete
+            .remove(&tui, &action.project, &action.id);
         let count = self.options.borrow().len();
         self.selected
             .set(self.selected.get().min(count.saturating_sub(2)));
@@ -945,7 +950,9 @@ impl State {
             let message = match mode {
                 Mode::Command => "No matching commands",
                 Mode::Directory if loading => "Searching…",
-                Mode::Directory if failed => "Could not search directories. Keep typing to try again.",
+                Mode::Directory if failed => {
+                    "Could not search directories. Keep typing to try again."
+                }
                 Mode::Directory => "No matching directories",
                 _ if loading => "Searching…",
                 _ if failed => "Could not search files. Keep typing to try again.",
@@ -1001,9 +1008,16 @@ impl State {
             } else {
                 (row_bg, theme.text.base, theme.text.muted)
             };
-            let label_width = item.label.filter(|_| !confirm).map_or(0, |label| label.width() + 2);
+            let label_width = item
+                .label
+                .filter(|_| !confirm)
+                .map_or(0, |label| label.width() + 2);
             let content = width.saturating_sub(4 + label_width).max(1);
-            let shown = if confirm { "Press ctrl+d to confirm" } else { item.display.as_str() };
+            let shown = if confirm {
+                "Press ctrl+d to confirm"
+            } else {
+                item.display.as_str()
+            };
             let row = View::new(app)
                 .row()
                 .padding_edge(Edge::Left, 1)
@@ -1061,10 +1075,53 @@ impl State {
             } else {
                 None
             };
-            self.list.child(&rail(app, &theme, new_designs, color, &row));
+            self.list
+                .child(&rail(app, &theme, new_designs, color, &row));
         }
         self.request_redraw();
     }
+}
+
+/// The fuzzy order of options shown as `targets` (their value or display, and description) for `search`,
+/// at most ten (`fuzzysort.go` in the `options` memo). Prefix matches score double, and frecency raises a
+/// path's score.
+fn rank(
+    mode: Mode,
+    search: &str,
+    targets: &[(&str, Option<&str>)],
+    frecency: impl Fn(usize) -> f64,
+) -> Vec<usize> {
+    let prefix = match mode {
+        Mode::Reference => "@",
+        Mode::Command => "/",
+        Mode::Directory => "",
+    };
+    let starts = format!("{prefix}{search}");
+    let keys: Vec<&str> = targets
+        .iter()
+        .map(|(key, _)| parse::file_line_range(key.trim_end()).0)
+        .collect();
+    // Descriptions count for slash commands only; for `@` they surfaced unrelated items.
+    let fields: Vec<[Option<&str>; 2]> = targets
+        .iter()
+        .zip(&keys)
+        .map(|((_, description), key)| [Some(*key), description.filter(|_| mode == Mode::Command)])
+        .collect();
+    fuzzy::go_scored(
+        parse::file_line_range(search).0,
+        &fields,
+        |fields| *fields,
+        |_, score, index| {
+            let bonus = if keys[index].starts_with(&starts) {
+                2.0
+            } else {
+                1.0
+            };
+            score * bonus * (1.0 + frecency(index))
+        },
+        if mode == Mode::Reference { 0.5 } else { 0.0 },
+        ROWS,
+    )
 }
 
 /// `SplitBorder`'s `┃` sides.
@@ -1073,7 +1130,13 @@ fn split_border() -> [char; 11] {
 }
 
 /// `AutocompleteRail`: under new designs, each row draws its own left rail.
-fn rail(app: &App, theme: &opencode_ui::theme::Theme, enabled: bool, color: Option<Color>, row: &View) -> View {
+fn rail(
+    app: &App,
+    theme: &opencode_ui::theme::Theme,
+    enabled: bool,
+    color: Option<Color>,
+    row: &View,
+) -> View {
     if !enabled {
         return row.clone();
     }
@@ -1104,7 +1167,10 @@ fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
     };
     let visible = {
         let weak = weak.clone();
-        Condition::when(move || weak.upgrade().is_some_and(|state| state.visible.get().is_some()))
+        Condition::when(move || {
+            weak.upgrade()
+                .is_some_and(|state| state.visible.get().is_some())
+        })
     };
     let layer = KeymapLayer {
         mode: Some(MODE.to_owned()),
@@ -1112,17 +1178,27 @@ fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
         enabled: visible,
         bindings: vec!["prompt.queue".to_owned()],
         commands: vec![
-            command("prompt.autocomplete.prev", "Previous autocomplete item", |state| {
-                state.move_by(-1)
-            }),
-            command("prompt.autocomplete.next", "Next autocomplete item", |state| {
-                state.move_by(1)
-            }),
+            command(
+                "prompt.autocomplete.prev",
+                "Previous autocomplete item",
+                |state| state.move_by(-1),
+            ),
+            command(
+                "prompt.autocomplete.next",
+                "Next autocomplete item",
+                |state| state.move_by(1),
+            ),
             command("prompt.autocomplete.hide", "Hide autocomplete", |state| {
                 state.hide(false)
             }),
-            command("prompt.clear", "Dismiss autocomplete", |state| state.hide(true)),
-            command("prompt.autocomplete.select", "Select autocomplete item", State::select),
+            command("prompt.clear", "Dismiss autocomplete", |state| {
+                state.hide(true)
+            }),
+            command(
+                "prompt.autocomplete.select",
+                "Select autocomplete item",
+                State::select,
+            ),
             command(
                 "prompt.autocomplete.complete",
                 "Complete autocomplete item",
@@ -1153,7 +1229,8 @@ fn directory_argument(tui: &Tui, before: &str) -> Option<u32> {
     }
     let command = tui.keymap.commands().into_iter().find(|command| {
         command.slash.as_ref().is_some_and(|slash| {
-            slash.arguments && (slash.name == name || slash.aliases.iter().any(|alias| alias == name))
+            slash.arguments
+                && (slash.name == name || slash.aliases.iter().any(|alias| alias == name))
         })
     })?;
     if command.id != cd::COMMAND {
@@ -1235,9 +1312,7 @@ fn locale_compare(a: &str, b: &str) -> Ordering {
             })
             .collect()
     };
-    key(a)
-        .cmp(&key(b))
-        .then_with(|| b.cmp(a))
+    key(a).cmp(&key(b)).then_with(|| b.cmp(a))
 }
 
 /// Visible subagents (`agents` memo).
@@ -1379,7 +1454,8 @@ fn directory_items(
     output: opencode_api::generated::FileListOutput,
     width: usize,
 ) -> Vec<Item> {
-    let exact = parse::directory_exact(query, search).map(|value| (value, search.directory.clone()));
+    let exact =
+        parse::directory_exact(query, search).map(|value| (value, search.directory.clone()));
     let root = output.location.directory.0.clone();
     let listed = output
         .data
@@ -1440,6 +1516,43 @@ fn home() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P-ORACLE: `parity/oracle/E.3-fuzzy.ts` ran fuzzysort as the `options` memo does; the order must be the
+    /// same, ties and the limit of ten included.
+    #[test]
+    fn rank_matches_fuzzysort() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../parity/fixtures/E.3/fuzzy.json"
+        );
+        let fixture: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let cases = fixture["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), 28);
+        for case in cases {
+            let (mode, key) = match case["mode"].as_str().unwrap() {
+                "command" => (Mode::Command, "command"),
+                _ => (Mode::Reference, "reference"),
+            };
+            let targets: Vec<(&str, Option<&str>)> = fixture["corpus"][key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|option| {
+                    (
+                        option["display"].as_str().unwrap(),
+                        option["description"].as_str(),
+                    )
+                })
+                .collect();
+            let query = case["query"].as_str().unwrap();
+            let expected: Vec<usize> = serde_json::from_value(case["results"].clone()).unwrap();
+            assert_eq!(
+                rank(mode, query, &targets, |_| 0.0),
+                expected,
+                "{key} {query:?}"
+            );
+        }
+    }
 
     #[test]
     fn commands_sort_as_locale_compare_does() {

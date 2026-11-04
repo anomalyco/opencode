@@ -111,7 +111,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     // Snapshot, then clear before any request: text typed meanwhile survives, and history records
     // exactly what was sent.
     let entry = prompt.snapshot();
-    let (files, agents, skills) = (parts::files(&entry), parts::agents(&entry), parts::skills(&entry));
+    let (files, agents, skills) = (
+        parts::files(&entry),
+        parts::agents(&entry),
+        parts::skills(&entry),
+    );
     if !trimmed.is_empty() {
         prompt.reset();
     }
@@ -197,7 +201,6 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 agents,
                 skills,
                 delivery: Some(Some(delivery)),
-                ..SessionCommandInput::default()
             };
             tui.app.spawn(
                 async move {

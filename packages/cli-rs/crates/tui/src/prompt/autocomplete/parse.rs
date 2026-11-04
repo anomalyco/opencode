@@ -28,7 +28,8 @@ pub fn index_at(text: &str, offset: u32) -> usize {
 pub fn mention_trigger(text: &str) -> Option<u32> {
     let index = text.rfind('@')?;
     let before = text[..index].chars().next_back();
-    let open = before.is_none_or(char::is_whitespace) && !text[index..].contains(char::is_whitespace);
+    let open =
+        before.is_none_or(char::is_whitespace) && !text[index..].contains(char::is_whitespace);
     open.then(|| measure(&text[..index]))
 }
 
@@ -246,10 +247,22 @@ mod tests {
     #[test]
     fn line_ranges_and_slash_heads() {
         let range = |start, end| Some(LineRange { start, end });
-        assert_eq!(file_line_range("src/a.ts#12"), ("src/a.ts", range(12, None)));
-        assert_eq!(file_line_range("src/a.ts#12-20"), ("src/a.ts", range(12, Some(20))));
-        assert_eq!(file_line_range("src/a.ts#12-"), ("src/a.ts", range(12, None)));
-        assert_eq!(file_line_range("src/a.ts#20-12"), ("src/a.ts", range(20, None)));
+        assert_eq!(
+            file_line_range("src/a.ts#12"),
+            ("src/a.ts", range(12, None))
+        );
+        assert_eq!(
+            file_line_range("src/a.ts#12-20"),
+            ("src/a.ts", range(12, Some(20)))
+        );
+        assert_eq!(
+            file_line_range("src/a.ts#12-"),
+            ("src/a.ts", range(12, None))
+        );
+        assert_eq!(
+            file_line_range("src/a.ts#20-12"),
+            ("src/a.ts", range(20, None))
+        );
         assert_eq!(file_line_range("#12"), ("#12", None));
         assert_eq!(file_line_range("a#x"), ("a#x", None));
         assert_eq!(slash_head("/cd ../x"), Some(("cd", "../x", 3)));
@@ -270,7 +283,10 @@ mod tests {
         assert_eq!(search("../.."), dir("/", "../../", ""));
         assert_eq!(search("/usr/lo"), dir("/usr", "/usr/", "lo"));
         assert_eq!(search("pack"), dir("/p/app", "", "pack"));
-        assert_eq!(search("packages/t"), dir("/p/app/packages", "packages/", "t"));
+        assert_eq!(
+            search("packages/t"),
+            dir("/p/app/packages", "packages/", "t")
+        );
         let found = search("~/src/");
         assert_eq!(directory_exact("~/src/", &found).as_deref(), Some("~/src/"));
         assert_eq!(directory_exact("pack", &search("pack")), None);
@@ -279,7 +295,10 @@ mod tests {
         assert!(!directory_matches(".git", ""));
         assert!(directory_matches(".git", ".g"));
         assert_eq!(directory_recent_value("/home/u", "/home/u"), "~");
-        assert_eq!(directory_recent_value("/home/u/src/x", "/home/u"), "~/src/x");
+        assert_eq!(
+            directory_recent_value("/home/u/src/x", "/home/u"),
+            "~/src/x"
+        );
         assert_eq!(directory_recent_value("/srv/x", "/home/u"), "/srv/x");
     }
 
