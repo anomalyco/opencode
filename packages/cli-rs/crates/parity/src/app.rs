@@ -51,6 +51,9 @@ pub struct Args {
     pub agent: Option<String>,
     #[serde(rename = "newSessionID")]
     pub new_session_id: Option<String>,
+    /// `--auto`.
+    #[serde(default)]
+    pub auto: bool,
 }
 
 /// A scenario route, in H.3's shape (`parity/lib/fake-server.ts`).
@@ -292,27 +295,42 @@ pub fn is_read(method: &str, path: &str) -> bool {
             .is_some_and(|plugin| !plugin.is_empty() && !plugin.contains('/'))
 }
 
-/// `actual` holds every Rust request in order; `unmatched` the ones no route answered.
+/// `actual` holds every Rust request in order; `unmatched` the ones no route answered. Bodies are compared
+/// with client-minted IDs normalized (plan 7.5).
 pub fn compare_requests(
     recording: &Recording,
     actual: &[Sent],
     unmatched: &[Sent],
 ) -> RequestComparison {
-    let writes: Vec<(&str, &str, Option<&Value>)> = actual
+    let writes: Vec<(&str, &str, Option<Value>)> = actual
         .iter()
         .filter(|sent| !is_read(&sent.method, &sent.path))
-        .map(|sent| (sent.method.as_str(), sent.path.as_str(), sent.body.as_ref()))
+        .map(|sent| {
+            (
+                sent.method.as_str(),
+                sent.path.as_str(),
+                sent.body.as_ref().map(minted),
+            )
+        })
         .collect();
-    let expected: Vec<(&str, &str, Option<&Value>)> = recording
+    let expected: Vec<(&str, &str, Option<Value>)> = recording
         .requests
         .writes
         .iter()
-        .map(|sent| (sent.method.as_str(), sent.path.as_str(), sent.body.as_ref()))
+        .map(|sent| {
+            (
+                sent.method.as_str(),
+                sent.path.as_str(),
+                sent.body.as_ref().map(minted),
+            )
+        })
         .collect();
-    let line = |(method, path, body): &(&str, &str, Option<&Value>)| {
+    let line = |(method, path, body): &(&str, &str, Option<Value>)| {
         format!(
             "{method} {path}{}",
-            body.map(|body| format!(" {body}")).unwrap_or_default()
+            body.as_ref()
+                .map(|body| format!(" {body}"))
+                .unwrap_or_default()
         )
     };
     let writes_differ = (writes != expected).then(|| {
@@ -344,6 +362,32 @@ pub fn compare_requests(
             .map(|sent| format!("{} {}", sent.method, sent.path))
             .collect(),
         not_sent,
+    }
+}
+
+/// `value` with every ID the client mints (a prefix, `_`, and at least 20 letters and digits, such as
+/// `msg_1a849dc25001uU3OEwVPj4ND1G`) replaced by `<prefix>`. Fixed scenario IDs such as `ses_new` stay.
+fn minted(value: &Value) -> Value {
+    match value {
+        Value::String(text) => match text.split_once('_') {
+            Some((prefix, rest))
+                if !prefix.is_empty()
+                    && prefix.chars().all(|c| c.is_ascii_lowercase())
+                    && rest.len() >= 20
+                    && rest.chars().all(|c| c.is_ascii_alphanumeric()) =>
+            {
+                Value::String(format!("<{prefix}>"))
+            }
+            _ => value.clone(),
+        },
+        Value::Array(items) => Value::Array(items.iter().map(minted).collect()),
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| (key.clone(), minted(value)))
+                .collect(),
+        ),
+        _ => value.clone(),
     }
 }
 
@@ -426,6 +470,12 @@ mod tests {
         let same = [sent("POST", "/api/a", Some(serde_json::json!({ "n": 1 })))];
         let result = compare_requests(&recording, &same, &[]);
         assert!(result.is_equal());
+        assert_eq!(
+            minted(
+                &serde_json::json!({ "id": "msg_1a849dc25001uU3OEwVPj4ND1G", "s": ["ses_new", "a_b"] })
+            ),
+            serde_json::json!({ "id": "<msg>", "s": ["ses_new", "a_b"] })
+        );
         assert_eq!(result.not_sent, ["GET /api/vcs"]);
 
         let other = [sent("POST", "/api/a", Some(serde_json::json!({ "n": 2 })))];
