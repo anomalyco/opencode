@@ -13,28 +13,32 @@ export type RouteTabSnapshot = {
   readonly tab: Tab | undefined
   readonly preview: SessionTab | undefined
   readonly recentKey: string | undefined
-  /** The routed session's cached info, absent while its draft promotion is pending. */
+  /** The routed session's draft promotion is still pending, so the server does not know it yet. */
+  readonly pending: boolean
+  /** The routed session's cached info, absent while it is pending. */
   readonly session: RouteSession | undefined
   /** The root to open a tab for: the routed session while it is pending, or a root confirmed by the cache. */
   readonly rootID: string | undefined
   readonly serverReady: boolean
 }
 
-// Follows the routed session until it shows in a tab. Only a session route can need a new tab.
+// Where the routed session stands in the tab strip. `closed` means its tab closed while the route still showed it; it
+// is not added again until the route changes.
+export type RouteTabPresence = "shown" | "adding" | "missing" | "closed"
+
+// The lookup that refreshes the routed session and finds its root. `held` waits for the server, or for a pending
+// promotion to settle.
+export type RouteLookup = "held" | "resolving" | "resolved" | "failed"
+
 export type RouteTabState =
   | { readonly status: "idle"; readonly attempt: number }
-  | { readonly status: "shown"; readonly attempt: number; readonly target: RouteTarget }
-  | { readonly status: "adding"; readonly attempt: number; readonly target: RouteTarget }
-  | { readonly status: "resolving"; readonly attempt: number; readonly target: RouteTarget }
-  // The root is unknown: the server is not connected yet, or fetching the session's ancestors failed.
   | {
-      readonly status: "unresolved"
+      readonly status: "session"
       readonly attempt: number
       readonly target: RouteTarget
-      readonly reason: "server" | "failed"
+      readonly tab: RouteTabPresence
+      readonly lookup: RouteLookup
     }
-  // The route's tab closed while the route still showed it. It is not added again until the route changes.
-  | { readonly status: "closed"; readonly attempt: number; readonly target: RouteTarget }
   | { readonly status: "disposed" }
 
 export type RouteTabEvent =
@@ -60,6 +64,8 @@ export type RouteTabTransition = {
   readonly effects: readonly RouteTabEffect[]
 }
 
+type SessionState = Extract<RouteTabState, { status: "session" }>
+
 export const INITIAL_ROUTE_TAB_STATE: RouteTabState = Object.freeze({ status: "idle", attempt: 0 })
 
 const DISPOSED_ROUTE_TAB_STATE: RouteTabState = Object.freeze({ status: "disposed" })
@@ -71,12 +77,20 @@ export function transitionRouteTab(state: RouteTabState, event: RouteTabEvent): 
 
   if (event.type === "sync") return sync(state, event.snapshot)
 
-  if (state.status !== "resolving" || state.attempt !== event.attempt || !sameTarget(state.target, event.target))
+  if (
+    state.status !== "session" ||
+    state.lookup !== "resolving" ||
+    state.attempt !== event.attempt ||
+    !sameTarget(state.target, event.target)
+  )
     return unchanged(state)
 
-  if (event.type === "resolve.failed") return changed({ ...state, status: "unresolved", reason: "failed" })
+  if (event.type === "resolve.failed") return changed({ ...state, lookup: "failed" })
 
-  return changed({ ...state, status: "adding" }, [
+  // Only a route without a tab opens its root's; a child whose lookup failed never opens one of its own.
+  if (state.tab !== "missing") return changed({ ...state, lookup: "resolved" })
+
+  return changed({ ...state, tab: "adding", lookup: "resolved" }, [
     { type: "tab.add", server: state.target.server, sessionID: event.rootID },
   ])
 }
@@ -106,41 +120,41 @@ function sync(state: Exclude<RouteTabState, { status: "disposed" }>, snapshot: R
   }
 
   const target = { server: route.server, sessionID: route.sessionId }
-  const current = "target" in state && sameTarget(state.target, target) ? state : undefined
+  const current = state.status === "session" && sameTarget(state.target, target) ? state : undefined
+  const tab = presence(current, snapshot)
+  const lookup = current?.lookup ?? "held"
+  const start = lookup === "held" && !snapshot.pending && snapshot.serverReady
+  const attempt = start ? state.attempt + 1 : state.attempt
 
-  if (snapshot.tab) {
-    const next = current?.status === "shown" ? current : { status: "shown" as const, attempt: state.attempt, target }
-
-    return changed(next, [...abort(state), ...routeTab(snapshot, snapshot.tab), ...remember(snapshot)])
+  const next: SessionState = {
+    status: "session",
+    attempt,
+    target,
+    tab: tab === "missing" && snapshot.rootID ? "adding" : tab,
+    lookup: start ? "resolving" : lookup,
   }
 
-  if (current?.status === "closed") return unchanged(state)
+  const effects = [
+    ...(current ? [] : abort(state)),
+    ...(start ? [{ type: "session.resolve" as const, attempt, target }] : []),
+    ...(next.tab === "adding" && current?.tab !== "adding" && snapshot.rootID
+      ? [{ type: "tab.add" as const, server: route.server, sessionID: snapshot.rootID }]
+      : []),
+    ...(snapshot.tab ? [...routeTab(snapshot, snapshot.tab), ...remember(snapshot)] : []),
+  ]
 
-  if (current?.status === "shown") return changed({ ...current, status: "closed" })
+  if (current && current.tab === next.tab && current.lookup === next.lookup && current.attempt === next.attempt)
+    return changed(current, effects)
 
-  if (snapshot.rootID) {
-    if (current?.status === "adding") return unchanged(state)
+  return changed(next, effects)
+}
 
-    return changed({ status: "adding", attempt: state.attempt, target }, [
-      ...abort(state),
-      { type: "tab.add", server: route.server, sessionID: snapshot.rootID },
-    ])
-  }
+function presence(current: SessionState | undefined, snapshot: RouteTabSnapshot): RouteTabPresence {
+  if (snapshot.tab) return "shown"
 
-  if (!snapshot.serverReady) {
-    if (current?.status === "unresolved" && current.reason === "server") return unchanged(state)
+  if (current?.tab === "shown" || current?.tab === "closed") return "closed"
 
-    return changed({ status: "unresolved", attempt: state.attempt, target, reason: "server" }, abort(state))
-  }
-
-  if (current?.status === "resolving" || (current?.status === "unresolved" && current.reason === "failed"))
-    return unchanged(state)
-  const attempt = state.attempt + 1
-
-  return changed({ status: "resolving", attempt, target }, [
-    ...abort(state),
-    { type: "session.resolve", attempt, target },
-  ])
+  return current?.tab === "adding" ? "adding" : "missing"
 }
 
 // Keeps a session tab's href on the child session it shows. A child is recorded only once its parent is known.
@@ -174,7 +188,9 @@ function remember(snapshot: RouteTabSnapshot): RouteTabEffect[] {
 }
 
 function abort(state: RouteTabState): RouteTabEffect[] {
-  return state.status === "resolving" ? [{ type: "attempt.abort", attempt: state.attempt }] : []
+  return state.status === "session" && state.lookup === "resolving"
+    ? [{ type: "attempt.abort", attempt: state.attempt }]
+    : []
 }
 
 function sameTarget(a: RouteTarget, b: RouteTarget) {

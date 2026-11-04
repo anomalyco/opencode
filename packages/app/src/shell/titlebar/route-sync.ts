@@ -107,17 +107,23 @@ export function createRouteTabSync() {
 
       if (!ctx) throw new Error("Server is not connected")
 
-      const get = async (sessionID: string) => {
-        const cached = ctx.data.session.get(sessionID)
-
-        if (cached) return cached
+      const fetch = async (sessionID: string) => {
         const info = await ctx.sdk.api.session.get({ sessionID }, { signal: controller.signal })
         ctx.data.session.remember(info)
 
         return info
       }
 
-      return rootSession(await get(target.sessionID), get)
+      // The routed session is always refreshed; its ancestors come from the cache when they are there.
+      const info = await fetch(target.sessionID).catch(() => ctx.data.session.get(target.sessionID))
+
+      if (!info) throw new Error("Session not found")
+
+      return rootSession(info, (sessionID) => {
+        const cached = ctx.data.session.get(sessionID)
+
+        return cached ? Promise.resolve(cached) : fetch(sessionID)
+      })
     }
 
     // A stale or aborted attempt's result is rejected by the machine.
@@ -145,6 +151,7 @@ export function createRouteTabSync() {
         tab: currentTab(),
         preview: tabs.preview(),
         recentKey: tabs.recentKey(),
+        pending: preparing(),
         session: session(),
         rootID:
           route.type !== "session"

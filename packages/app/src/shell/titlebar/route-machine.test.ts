@@ -15,6 +15,7 @@ const server = ServerKey.make("server")
 
 const rootTab: SessionTab = { type: "session", server, sessionId: "ses_root" }
 
+// Without a server the lookup holds, so a snapshot exercises only the tab strip unless it says otherwise.
 function snapshot(sessionID: string, input: Partial<RouteTabSnapshot> = {}): RouteTabSnapshot {
   return {
     route: { type: "session", server, sessionId: sessionID },
@@ -22,9 +23,10 @@ function snapshot(sessionID: string, input: Partial<RouteTabSnapshot> = {}): Rou
     tab: undefined,
     preview: undefined,
     recentKey: undefined,
+    pending: false,
     session: undefined,
     rootID: undefined,
-    serverReady: true,
+    serverReady: false,
     ...input,
   }
 }
@@ -46,6 +48,8 @@ function replay(events: RouteTabEvent[], state: RouteTabState = INITIAL_ROUTE_TA
 
 const remembered = { tab: rootTab, recentKey: tabKey(rootTab) }
 
+const child = { server, sessionID: "ses_child" }
+
 describe("route tab sync", () => {
   test("a tab that closes under its route without navigating is not added again until the route changes", () => {
     const result = replay([
@@ -65,47 +69,64 @@ describe("route tab sync", () => {
     ])
   })
 
-  test("a closed route takes its tab again when the user reopens it", () => {
+  test("a closed route takes its tab again when the user reopens it, but not when its lookup resolves", () => {
     const closed = replay([
-      sync(snapshot("ses_root", { ...remembered, rootID: "ses_root" })),
-      sync(snapshot("ses_root", { rootID: "ses_root" })),
-    ]).state
+      sync(snapshot("ses_root", { ...remembered, serverReady: true })),
+      sync(snapshot("ses_root", { serverReady: true })),
+    ])
 
-    expect(closed.status).toBe("closed")
-    expect(transitionRouteTab(closed, sync(snapshot("ses_root", remembered))).state.status).toBe("shown")
+    expect(closed.state).toMatchObject({ tab: "closed", lookup: "resolving" })
+    expect(
+      transitionRouteTab(closed.state, {
+        type: "resolve.succeeded",
+        attempt: 1,
+        target: { server, sessionID: "ses_root" },
+        rootID: "ses_root",
+      }).effects,
+    ).toEqual([])
+    expect(transitionRouteTab(closed.state, sync(snapshot("ses_root", remembered))).state).toMatchObject({
+      tab: "shown",
+    })
   })
 
   test("a child whose root cannot be fetched gets no tab of its own", () => {
-    const child = { id: "ses_child", parentID: "ses_parent" }
+    const session = { id: "ses_child", parentID: "ses_parent" }
 
     const result = replay([
-      sync(snapshot("ses_child", { session: child })),
-      { type: "resolve.failed", attempt: 1, target: { server, sessionID: "ses_child" } },
-      sync(snapshot("ses_child", { session: child })),
+      sync(snapshot("ses_child", { session, serverReady: true })),
+      { type: "resolve.failed", attempt: 1, target: child },
+      sync(snapshot("ses_child", { session, serverReady: true })),
     ])
 
-    expect(result.effects).toEqual([
-      [{ type: "session.resolve", attempt: 1, target: { server, sessionID: "ses_child" } }],
-      [],
-      [],
-    ])
-    expect(result.state).toMatchObject({ status: "unresolved", reason: "failed" })
+    expect(result.effects).toEqual([[{ type: "session.resolve", attempt: 1, target: child }], [], []])
+    expect(result.state).toMatchObject({ tab: "missing", lookup: "failed" })
   })
 
   test("a resolved child opens its root's tab", () => {
     const result = replay([
-      sync(snapshot("ses_child", { session: { id: "ses_child", parentID: "ses_root" } })),
-      { type: "resolve.succeeded", attempt: 1, target: { server, sessionID: "ses_child" }, rootID: "ses_root" },
+      sync(snapshot("ses_child", { session: { id: "ses_child", parentID: "ses_root" }, serverReady: true })),
+      { type: "resolve.succeeded", attempt: 1, target: child, rootID: "ses_root" },
     ])
 
     expect(result.effects.at(-1)).toEqual([{ type: "tab.add", server, sessionID: "ses_root" }])
-    expect(result.state.status).toBe("adding")
+    expect(result.state).toMatchObject({ tab: "adding", lookup: "resolved" })
+  })
+
+  test("a routed session with a tab is still refreshed once", () => {
+    const result = replay([
+      sync(snapshot("ses_child", { ...remembered, serverReady: true })),
+      sync(snapshot("ses_child", { ...remembered, serverReady: true })),
+      { type: "resolve.succeeded", attempt: 1, target: child, rootID: "ses_root" },
+      sync(snapshot("ses_child", { ...remembered, serverReady: true })),
+    ])
+
+    expect(result.effects).toEqual([[{ type: "session.resolve", attempt: 1, target: child }], [], [], []])
   })
 
   test("leaving a route aborts its lookup and ignores the late result", () => {
     const result = replay([
-      sync(snapshot("ses_first")),
-      sync(snapshot("ses_second")),
+      sync(snapshot("ses_first", { serverReady: true })),
+      sync(snapshot("ses_second", { serverReady: true })),
       { type: "resolve.succeeded", attempt: 1, target: { server, sessionID: "ses_first" }, rootID: "ses_first" },
     ])
 
@@ -121,36 +142,39 @@ describe("route tab sync", () => {
 
   test("a lookup waits for the server, then starts once", () => {
     const result = replay([
-      sync(snapshot("ses_child", { serverReady: false })),
-      sync(snapshot("ses_child", { serverReady: false })),
       sync(snapshot("ses_child")),
       sync(snapshot("ses_child")),
+      sync(snapshot("ses_child", { serverReady: true })),
+      sync(snapshot("ses_child", { serverReady: true })),
+    ])
+
+    expect(result.effects).toEqual([[], [], [{ type: "session.resolve", attempt: 1, target: child }], []])
+  })
+
+  test("a pending session adds its own tab once and is looked up only after its promotion settles", () => {
+    const result = replay([
+      sync(snapshot("ses_pending", { pending: true, rootID: "ses_pending", serverReady: true })),
+      sync(snapshot("ses_pending", { pending: true, rootID: "ses_pending", serverReady: true })),
+      sync(snapshot("ses_pending", { tab: { ...rootTab, sessionId: "ses_pending" }, serverReady: true })),
     ])
 
     expect(result.effects).toEqual([
+      [{ type: "tab.add", server, sessionID: "ses_pending" }],
       [],
-      [],
-      [{ type: "session.resolve", attempt: 1, target: { server, sessionID: "ses_child" } }],
-      [],
+      [
+        { type: "session.resolve", attempt: 1, target: { server, sessionID: "ses_pending" } },
+        { type: "tab.remember", tab: { ...rootTab, sessionId: "ses_pending" } },
+      ],
     ])
-  })
-
-  test("a pending session adds its own tab once", () => {
-    const result = replay([
-      sync(snapshot("ses_pending", { rootID: "ses_pending", serverReady: false })),
-      sync(snapshot("ses_pending", { rootID: "ses_pending", serverReady: false })),
-    ])
-
-    expect(result.effects).toEqual([[{ type: "tab.add", server, sessionID: "ses_pending" }], []])
   })
 
   test("a child route is recorded on its root tab only once the child's parent is known", () => {
-    const child: RouteSession = { id: "ses_child", parentID: "ses_parent" }
+    const session: RouteSession = { id: "ses_child", parentID: "ses_parent" }
     const routed = { ...rootTab, routeSessionId: "ses_child", routeParentId: "ses_parent" }
 
     const result = replay([
-      sync(snapshot("ses_child", { tab: rootTab, recentKey: tabKey(rootTab) })),
-      sync(snapshot("ses_child", { tab: rootTab, recentKey: tabKey(rootTab), session: child })),
+      sync(snapshot("ses_child", remembered)),
+      sync(snapshot("ses_child", { ...remembered, session })),
     ])
 
     expect(result.effects).toEqual([
@@ -160,7 +184,7 @@ describe("route tab sync", () => {
 
     const settled = transitionRouteTab(
       result.state,
-      sync(snapshot("ses_child", { tab: routed, recentKey: tabKey(rootTab), session: child })),
+      sync(snapshot("ses_child", { tab: routed, recentKey: tabKey(rootTab), session })),
     )
 
     expect(settled.state).toBe(result.state)
@@ -200,9 +224,9 @@ describe("route tab sync", () => {
 
   test("disposing aborts the lookup and ignores later events", () => {
     const result = replay([
-      sync(snapshot("ses_child")),
+      sync(snapshot("ses_child", { serverReady: true })),
       { type: "dispose" },
-      { type: "resolve.succeeded", attempt: 1, target: { server, sessionID: "ses_child" }, rootID: "ses_root" },
+      { type: "resolve.succeeded", attempt: 1, target: child, rootID: "ses_root" },
       sync(snapshot("ses_root", { rootID: "ses_root" })),
     ])
 
