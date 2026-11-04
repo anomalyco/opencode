@@ -24,6 +24,7 @@ chrono.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
 log.workspace = true
+qrcode.workspace = true
 regex.workspace = true
 rusqlite.workspace = true
 serde.workspace = true

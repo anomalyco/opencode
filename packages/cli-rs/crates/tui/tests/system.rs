@@ -16,7 +16,7 @@ use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Info, Resolved, merge};
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_plugin::{Definition, Setup};
-use opencode_tui::dialogs::{settings, status, theme_list};
+use opencode_tui::dialogs::{pair, settings, status, theme_list};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -480,4 +480,74 @@ fn a_configured_typescript_plugin_is_listed_as_skipped_with_its_reason() {
     app.press("enter");
     let screen = wait_for(&app, "TUI plugin error");
     assert!(screen.contains(opencode_plugin::SKIPPED), "{screen}");
+}
+
+// Pair --------------------------------------------------------------------------------------------------------
+
+/// `GET /api/info` and `POST /api/pair`, or a 503 for the pairing.
+fn pair_server(fails: bool) -> Answer {
+    Box::new(move |_, path, _| match path {
+        "/api/location" => Some((200, location())),
+        "/api/info" => Some((
+            200,
+            json!({
+                "version": "0.0.0-test", "pid": 4242,
+                "urls": ["http://127.0.0.1:4096/", "http://192.168.1.20:4096/"], "paths": { "tmp": "/tmp" },
+            }),
+        )),
+        "/api/pair" if fails => Some((
+            503,
+            json!({ "_tag": "ServiceUnavailable", "message": "Pairing is disabled" }),
+        )),
+        "/api/pair" => Some((200, json!({ "code": "XK7Q2M", "expires_in": 600 }))),
+        _ => None,
+    })
+}
+
+#[test]
+fn pair_matches_typescript() {
+    let app = TestApp::new(100, 40);
+    let mounted = mount_with(&app, info(json!({})), pair_server(false));
+    mounted.tui.keymap.dispatch("server.pair", None);
+    wait_for(&app, "expire in");
+    assert_dialog(&app, "E.18b/pair", "Pair");
+    // One info read and one pairing code; the test transport stands in for the service.
+    assert_eq!(mounted.requests("/api/pair"), ["POST /api/pair"]);
+    assert_eq!(mounted.requests("/api/info"), ["GET /api/info"]);
+
+    let app = TestApp::new(80, 30);
+    let tui = mount_with(&app, info(json!({})), pair_server(false)).tui;
+    pair::show(&tui);
+    wait_for(&app, "expire in");
+    assert_dialog(&app, "E.18b/pair-narrow", "Pair");
+
+    let app = TestApp::new(100, 40);
+    let tui = mount_with(&app, info(json!({})), pair_server(true)).tui;
+    pair::show(&tui);
+    wait_for(&app, "Could not load");
+    assert_dialog(&app, "E.18b/pair-error", "Pair");
+}
+
+#[test]
+fn pair_links_follow_the_server_urls() {
+    let server = serde_json::from_value(json!({
+        "version": "1", "pid": 1, "urls": ["http://[::1]:4096", "https://box.example:443/"], "paths": { "tmp": "/tmp" },
+    }))
+    .unwrap();
+    let code = serde_json::from_value(json!({ "code": "AB", "expires_in": 90 })).unwrap();
+    let value = pair::pairing(&server, &code);
+    assert_eq!(
+        value.links,
+        [
+            "http://[::1]:4096/auth/connect/AB",
+            "https://box.example/auth/connect/AB"
+        ]
+    );
+    assert_eq!(
+        value.localhost.as_deref(),
+        Some("http://localhost:4096/auth/connect/AB")
+    );
+    // `Math.round(90 / 60)`.
+    assert_eq!(value.minutes, 2);
+    assert!(value.loopback);
 }
