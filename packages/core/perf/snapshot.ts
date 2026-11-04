@@ -8,7 +8,7 @@
 // snapshot store is a fresh folder per block.
 import { $ } from "bun"
 import fs from "fs/promises"
-import { rmSync } from "fs"
+import { mkdirSync, realpathSync, rmSync } from "fs"
 import os from "os"
 import path from "path"
 import type { LLMEvent } from "@opencode/ai/effect"
@@ -21,7 +21,11 @@ import { Location } from "../src/location"
 import { AbsolutePath, RelativePath } from "../src/schema"
 import { Snapshot } from "../src/snapshot"
 
-const root = path.join(process.env.SNAPSHOT_BENCH_ROOT ?? os.tmpdir(), "opencode-snapshot-bench")
+// The real path: Snapshot compares a location with its worktree's real path, and macOS's temp folder is a symlink
+// (/var/folders/… is /private/var/folders/…), so a fixture under it would read as outside its own project.
+const base = process.env.SNAPSHOT_BENCH_ROOT ?? os.tmpdir()
+mkdirSync(base, { recursive: true })
+const root = path.join(realpathSync(base), "opencode-snapshot-bench")
 
 const fixtures: Record<string, { tracked: number; ignored: number; dirs: number }> = {
   small: { tracked: 1_000, ignored: 0, dirs: 20 },
