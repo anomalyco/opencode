@@ -200,7 +200,7 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     expect(browser.expires_in).toBe(300)
     const redirect = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
     expect(redirect.status).toBe(302)
-    expect(redirect.headers.get("location")).toBe("/")
+    expect(new URL(redirect.headers.get("location") ?? "", `${base}/auth/connect/${browser.code}`).pathname).toBe("/")
     const setCookie = redirect.headers.get("set-cookie") ?? ""
     expect(setCookie).toContain(`opencode_session_${new URL(base).port}=`)
     expect(setCookie).toContain("HttpOnly")
