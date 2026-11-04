@@ -572,6 +572,9 @@ impl Open {
             .min(DialogSize::Large.width());
         let content = select::content_width(width) as i64;
         let now = now_ms();
+        // Read before the store lock: the tabs read the store themselves.
+        let tabs: HashSet<String> = tui.tabs.open_ids(&tui).into_iter().collect();
+        let current = tui.tabs.current(&tui);
         let mut options: Vec<SelectOption<Target>> = tui.data.read(|store| {
             let mut seen = HashSet::new();
             let matched = state.matched.as_ref();
@@ -600,13 +603,23 @@ impl Open {
                 );
                 y.cmp(&x).then(b.time.updated.total_cmp(&a.time.updated))
             });
-            // Open tabs (E.12) would leave the recents here; until then every session is a candidate.
-            let attention_count = sessions
+            // With an empty query the recents leave out open tabs, which the strip shows, unless a
+            // background tab awaits input; typing searches every session.
+            let candidates: Vec<&SessionInfo> = sessions
+                .iter()
+                .copied()
+                .filter(|session| {
+                    !tabs.contains(&session.id.0)
+                        || (attention(store, &session.id).is_some()
+                            && current.as_deref() != Some(session.id.0.as_str()))
+                })
+                .collect();
+            let attention_count = candidates
                 .iter()
                 .filter(|session| attention(store, &session.id).is_some())
                 .count();
             let recent: Vec<&SessionInfo> = if state.filter.trim().is_empty() {
-                sessions
+                candidates
                     .into_iter()
                     .take(RECENT_LIMIT.max(attention_count))
                     .collect()
@@ -650,11 +663,16 @@ impl Open {
                                 },
                                 time_ago(now, session.time.updated)
                             ));
+                    let accent = theme.accent().step(200);
+                    let tab: Option<Gutter> = tabs.contains(&session.id.0).then(|| {
+                        Rc::new(move |app: &App, _: Color| Text::new(app, "▪").fg(accent).as_any())
+                            as Gutter
+                    });
                     option.gutter = status_gutter(
                         &theme,
                         mark,
                         mark.is_none() && running(store, &session.id),
-                        None,
+                        tab,
                     );
                     option
                 })

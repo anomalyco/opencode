@@ -452,7 +452,8 @@ impl Component for Rail {
             let previous = index.checked_sub(1).and_then(|before| items.get(before));
             let previous_status = previous.map_or_else(Status::default, |item| item.status);
             let previous_glows = previous.is_some_and(|item| item.glows);
-            let previous_hue = super::strip::feedback(&previous_status, &theme).unwrap_or(unread_color);
+            let previous_hue =
+                super::strip::feedback(&previous_status, &theme).unwrap_or(unread_color);
             let previous_level = if previous.is_some_and(|item| item.selected)
                 && previous_status.attention.is_some()
             {
@@ -822,6 +823,10 @@ impl Component for Rail {
 }
 
 /// Draws a pulse row across the rail.
-fn paint_cells(painter: &mut Painter<'_>, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
+fn paint_cells(
+    painter: &mut Painter<'_>,
+    y: i32,
+    cells: Option<Vec<(Option<char>, Color, Color)>>,
+) {
     paint_pulse(painter, 0, y, cells);
 }
