@@ -63,6 +63,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         };
     }
     let exit = matches!(trimmed, "exit" | "quit" | ":q");
+    // What is sent: compact pastes expanded (`inputText`, E.4).
+    let text = super::paste::expanded_text(prompt);
     let slash = argument_slash(tui, &text);
     if queue && (mode == Mode::Shell || exit || slash.is_some()) {
         warn(tui, "This prompt cannot be queued");
@@ -125,7 +127,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     // exactly what was sent.
     let entry = prompt.snapshot();
     let (files, agents, skills) = (
-        parts::files(&entry),
+        serde_json::from_value(super::attach::files_for_server(
+            &entry,
+            tui.startup.args.local,
+        ))
+        .ok(),
         parts::agents(&entry),
         parts::skills(&entry),
     );

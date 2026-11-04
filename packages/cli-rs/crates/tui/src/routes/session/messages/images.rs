@@ -25,6 +25,8 @@ const VISIBLE: usize = 3;
 pub struct Images {
     app: App,
     data: Data,
+    /// A click on an image opens the preview dialog (E.4).
+    tui: std::rc::Weak<crate::app::Tui>,
     root: View,
     /// The URIs on screen and the height they were laid out for.
     rendered: RefCell<Option<(Vec<String>, u16)>>,
@@ -47,6 +49,7 @@ impl Images {
         Self {
             app: cx.app.clone(),
             data: cx.tui.data.clone(),
+            tui: cx.tui.weak(),
             root,
             rendered: RefCell::default(),
             media: Rc::default(),
@@ -68,7 +71,7 @@ impl Images {
         let (uris, height) = &next;
         self.root.clear();
         self.root.visible(!uris.is_empty());
-        for uri in uris.iter().take(VISIBLE) {
+        for (index, uri) in uris.iter().take(VISIBLE).enumerate() {
             let cell = View::new(&self.app)
                 .width(height * 2)
                 .height(*height)
@@ -77,6 +80,21 @@ impl Images {
                 .align_items(Align::Center)
                 .justify(Justify::Center);
             self.show(&cell, uri);
+            let (tui, images) = (
+                self.tui.clone(),
+                uris.iter()
+                    .map(|uri| (uri.clone(), None))
+                    .collect::<Vec<_>>(),
+            );
+            cell.on_mouse(move |cx, event| {
+                if event.kind != MouseEventKind::Up(MouseButton::Left) {
+                    return;
+                }
+                cx.stop_propagation();
+                if let Some(tui) = tui.upgrade() {
+                    crate::dialogs::image_preview::show(&tui, images.clone(), index);
+                }
+            });
             self.root.add(&cell);
         }
         if uris.len() > VISIBLE {
@@ -198,7 +216,7 @@ pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
 }
 
 /// `mediaHashFromUri`: the 64 hex digits of `media:<hash>`.
-fn media_hash(uri: &str) -> Option<&str> {
+pub(crate) fn media_hash(uri: &str) -> Option<&str> {
     let hash = uri.strip_prefix("media:")?;
     (hash.len() == 64
         && hash
@@ -208,7 +226,7 @@ fn media_hash(uri: &str) -> Option<&str> {
 }
 
 /// The bytes of a base64 `data:` URI.
-fn data_uri(uri: &str) -> Option<Vec<u8>> {
+pub(crate) fn data_uri(uri: &str) -> Option<Vec<u8>> {
     let rest = uri.strip_prefix("data:")?;
     let (meta, payload) = rest.split_once(',')?;
     if !meta.ends_with(";base64") {

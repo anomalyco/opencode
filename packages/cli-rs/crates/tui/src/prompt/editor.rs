@@ -65,6 +65,8 @@ pub struct Shared {
     pub complete: autocomplete::Shared,
     /// The IDE's file and selection (E.5).
     pub editor: editor_context::Context,
+    /// Stashed prompts (E.4).
+    pub stash: super::stash::Stash,
 }
 
 impl Shared {
@@ -72,6 +74,7 @@ impl Shared {
         Self {
             history: History::load(app, state.clone()),
             drafts: Drafts::default(),
+            stash: super::stash::Stash::load(app, state.clone()),
             preferences: Preferences::load(app, state),
             complete: autocomplete::Shared::default(),
             editor: editor_context::Context::default(),
@@ -126,6 +129,10 @@ pub struct Inner {
     /// The mentions' extmarks and the parts they stand for (E.3).
     pub(crate) parts: parts::Parts,
     pub(crate) autocomplete: OnceCell<Autocomplete>,
+    /// Pastes waiting for files or the clipboard (E.4).
+    pub(crate) paste: super::paste::Queue,
+    /// The image previews above the textarea (E.4).
+    previews: super::attach::Previews,
     /// `--prompt`, until it is submitted (`home.tsx:68-79`, `session/index.tsx:623-630`).
     startup: RefCell<Option<String>>,
     /// The worktree staged from `/worktrees` and its progress row (E.11b).
@@ -233,6 +240,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .max_height((height / 3).max(6))
         .grow(1.0)
         .basis(Length::Auto);
+    let previews = super::attach::Previews::new(app);
     let metadata = Row::new(app);
     let meta = View::new(app)
         .row()
@@ -248,6 +256,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .padding_edge(Edge::Right, padding)
         .padding_edge(Edge::Top, 1)
         .bg(background)
+        .child(previews.root())
         .child(&textarea)
         .child(&meta);
     // `border={["left"]}` with `SplitBorder`'s `┃` and a `╹` corner.
@@ -345,6 +354,8 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         layers: RefCell::new(Vec::new()),
         parts: parts::Parts::default(),
         autocomplete: OnceCell::new(),
+        paste: super::paste::Queue::default(),
+        previews,
         startup: RefCell::new(None),
         staging,
         this: this.clone(),
@@ -432,6 +443,7 @@ impl Inner {
         *self.prompt.borrow_mut() = prompt;
         parts::restore(self);
         self.set_mode(mode);
+        self.parts_changed();
     }
 
     /// `resetComposer`.
@@ -439,6 +451,14 @@ impl Inner {
         *self.prompt.borrow_mut() = empty_prompt();
         self.parts.clear();
         self.textarea.set_text("");
+        self.parts_changed();
+    }
+
+    /// Shows the attachments the prompt now has (E.4).
+    pub(crate) fn parts_changed(&self) {
+        if let Some(tui) = self.tui.upgrade() {
+            self.previews.update(&tui, self);
+        }
     }
 
     /// `clearPrompt`: long or rich prompts go to history first.
@@ -855,11 +875,13 @@ fn connect(inner: &Rc<Inner>) {
         if let Some(prompt) = weak.upgrade() {
             prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
             parts::sync(&prompt);
+            prompt.parts_changed();
             if let Some(complete) = prompt.autocomplete.get() {
                 complete.on_input(text);
             }
         }
     });
+    super::paste::connect(inner);
     let weak = Rc::downgrade(inner);
     inner.textarea.on_submit(move |_, _| {
         if let Some(prompt) = weak.upgrade() {
@@ -1060,9 +1082,27 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     aliases: Vec::new(),
                     arguments: false,
                 }),
+                command("prompt.paste", "Paste", "Prompt", |prompt, _| {
+                    if let Some(prompt) = prompt.rc() {
+                        super::paste::from_clipboard(&prompt);
+                    }
+                    true
+                }),
+                command(
+                    "prompt.images.view",
+                    "View image attachments",
+                    "Prompt",
+                    |prompt, tui| {
+                        super::attach::view(tui, prompt);
+                        true
+                    },
+                )
+                .palette()
+                .enabled(when(|prompt, _| super::attach::has_images(prompt))),
             ],
             ..KeymapLayer::default()
         },
+        super::stash::layer(inner),
         KeymapLayer {
             priority: 1,
             bindings: bindings(&["prompt.queue"]),
@@ -1073,11 +1113,20 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 "prompt.submit",
                 "prompt.editor",
                 "prompt.editor_context.clear",
+                "prompt.images.view",
+                "prompt.stash",
+                "prompt.stash.pop",
+                "prompt.stash.list",
                 "prompt.skills",
                 "session.interrupt",
                 "session.background",
                 super::r#move::COMMAND,
             ]),
+            ..KeymapLayer::default()
+        },
+        KeymapLayer {
+            target: Some(target),
+            bindings: bindings(&["prompt.paste"]),
             ..KeymapLayer::default()
         },
         // Ctrl+C clears a prompt with text; on an empty one it reaches `app.exit`.
