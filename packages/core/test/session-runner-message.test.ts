@@ -524,6 +524,38 @@ Earlier work
     ])
   })
 
+  test("lowers video attachments as provider media after their local source path", () => {
+    const data = Base64.make("AAAAGGZ0eXBtcDQy")
+    const location = path.resolve("/project/clip.mov")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-video"),
+          type: "user",
+          text: "What happens in these clips?",
+          files: [
+            FileAttachment.make({ data, mime: "video/mp4", source: { type: "inline" }, name: "clip.mp4" }),
+            FileAttachment.make({
+              data,
+              mime: "video/quicktime",
+              source: { type: "uri", uri: pathToFileURL(location).href },
+              name: "clip.mov",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "What happens in these clips?" },
+      { type: "media", media: Media.base64(data, "video/mp4"), filename: "clip.mp4" },
+      { type: "text", text: `Attached file: ${location}` },
+      { type: "media", media: Media.base64(data, "video/quicktime"), filename: "clip.mov" },
+    ])
+  })
+
   test("exposes admitted local image source paths before provider media", () => {
     const data = Base64.make("AAECAw==")
     const location = path.resolve("/project/IMG_3480.JPG")

@@ -111,6 +111,8 @@ import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
 import { ClientMcp } from "./context/client-mcp"
 import { PanelProvider, usePanel } from "./context/panel"
+import { MediaHost, MediaProvider } from "./context/media"
+import "./component/media/viewer"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
@@ -229,6 +231,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   )
   const directory = location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
+  const mediaDirectory = path.join(global.cache, "media")
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
   const service = managed
@@ -431,12 +434,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                             updater={input.updater}
                                                                           >
                                                                             <PanelProvider>
-                                                                              <PluginProvider
-                                                                                packages={input.packages}
-                                                                                directories={pluginDirectories}
-                                                                              >
-                                                                                <App />
-                                                                              </PluginProvider>
+                                                                              <MediaProvider directory={mediaDirectory}>
+                                                                                <PluginProvider
+                                                                                  packages={input.packages}
+                                                                                  directories={pluginDirectories}
+                                                                                >
+                                                                                  <App />
+                                                                                </PluginProvider>
+                                                                              </MediaProvider>
                                                                             </PanelProvider>
                                                                           </UpdateNotificationProvider>
                                                                         </AttentionProvider>
@@ -1478,6 +1483,7 @@ function App() {
       <Show when={showReconnecting()}>
         <Reconnecting managed={client.restart !== undefined} />
       </Show>
+      <MediaHost />
       <MigrationOverlay />
       <Toast />
     </box>

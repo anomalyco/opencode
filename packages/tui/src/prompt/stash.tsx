@@ -4,7 +4,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
-import { parsePromptInfo, type PromptInfo } from "./history"
+import { parsePromptInfo, persistablePrompt, type PromptInfo } from "./history"
 
 export type StashEntry = {
   prompt: PromptInfo
@@ -52,7 +52,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         return store.entries
       },
       push(entry: Omit<StashEntry, "timestamp">) {
-        const stash = structuredClone(unwrap({ ...entry, timestamp: Date.now() }))
+        const stash = structuredClone({ prompt: persistablePrompt(unwrap(entry.prompt)), timestamp: Date.now() })
         let trimmed = false
         setStore(
           produce((draft) => {

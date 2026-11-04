@@ -15,7 +15,13 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
-import { toolImageCommits, userImageCommits, type ImageCommit } from "./stream-v2.image"
+import {
+  toolImageCommits,
+  toolVideoCommits,
+  userImageCommits,
+  userVideoCommits,
+  type MediaCommit,
+} from "./stream-v2.image"
 import { messagePrompt } from "./session.shared"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
@@ -49,6 +55,8 @@ type StreamInput = {
   sessionID: string
   thinking: boolean
   tools?: boolean
+  /** The rich media experiment: caption video attachments and tool videos. */
+  richMedia?: boolean
   replay?: boolean
   replayLimit?: number
   footer: FooterApi
@@ -590,7 +598,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     input.footer.event({ type: "queued.prompts", prompts })
   }
 
-  const freshImages = (commits: ImageCommit[], render = true) =>
+  const freshImages = (commits: MediaCommit[], render = true) =>
     commits.filter((commit) => {
       const key = streamPartKey(commit.messageID, commit.partID)
       if (state.imageIDs.has(key)) return false
@@ -607,7 +615,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   ) => {
     const visible = state.messageIDs.has(messageID)
     state.messageIDs.add(messageID)
-    const images = freshImages(userImageCommits(messageID, files), render)
+    const images = freshImages(
+      [...userImageCommits(messageID, files), ...(input.richMedia ? userVideoCommits(messageID, files) : [])],
+      render,
+    )
     if (!render) return
     write([
       ...(!visible && showTools() ? skillCommits(messageID, skills) : []),
@@ -756,7 +767,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.finishedTools.add(key)
     state.tools.delete(key)
     if (!sourcePending(key)) state.toolSources.delete(key)
-    const images = freshImages(toolImageCommits(part, messageID), render)
+    const images = freshImages(
+      [...toolImageCommits(part, messageID), ...(input.richMedia ? toolVideoCommits(part, messageID) : [])],
+      render,
+    )
     if (!render) return
     const phase = toolFinalPhase(part)
     if (part.state.status === "error" && delta)
@@ -1698,7 +1712,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     try {
       if (reset) {
         for (const row of localRows) {
-          if (row.commit.image && row.commit.messageID && row.commit.partID) {
+          if ((row.commit.image || row.commit.video) && row.commit.messageID && row.commit.partID) {
             const key = streamPartKey(row.commit.messageID, row.commit.partID)
             if (state.imageIDs.has(key)) continue
             state.imageIDs.add(key)

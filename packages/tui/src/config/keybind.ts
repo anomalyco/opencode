@@ -119,6 +119,7 @@ export const Definitions = {
   "session.tab.close": keybind("<leader>w", "Close current session tab"),
   "session.tab.reopen": keybind("ctrl+shift+t", "Reopen last closed session tab"),
   "session.timeline": keybind("<leader>g", "Show session timeline"),
+  "session.media.view": keybind("<leader>v", "View session media"),
   "session.fork": keybind("none", "Fork session from message"),
   "session.rename": keybind("ctrl+r", "Rename session"),
   "session.delete": keybind("ctrl+d", "Delete session"),
@@ -301,6 +302,10 @@ export const Definitions = {
   "which-key.page.down": keybind("ctrl+alt+pagedown", "Page which-key down"),
   "which-key.home": keybind("ctrl+alt+home", "Jump to first which-key binding"),
   "which-key.end": keybind("ctrl+alt+end", "Jump to last which-key binding"),
+
+  "media.pip.toggle": keybind("<leader>p", "Play or pause the picture-in-picture video"),
+  "media.pip.expand": keybind("<leader>o", "Open the picture-in-picture video in the media viewer"),
+  "media.pip.close": keybind("none", "Close the picture-in-picture video"),
 } satisfies Record<string, Definition>
 
 type KeybindName = keyof typeof Definitions

@@ -63,7 +63,7 @@ const directoryAttachment = (file: FileAttachment): TextPart => ({
 const attachmentContent = (file: FileAttachment): Array<TextPart | MediaPart> => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
-  if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
+  if (imageMimes.has(file.mime) || file.mime === "application/pdf" || file.mime.startsWith("video/")) {
     const location = attachmentLocation(file)
     return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
   }

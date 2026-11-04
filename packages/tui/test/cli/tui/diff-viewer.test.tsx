@@ -30,6 +30,7 @@ import { TuiAppProvider } from "../../../src/context/runtime"
 import { ConfigProvider, type Info } from "../../../src/config"
 import type { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
+import { MediaProvider } from "../../../src/context/media"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -1662,6 +1663,22 @@ test("image previews use the diff session's filesystem location", async () => {
   }
 })
 
+test("rich media defers reading a remote working-tree video until it is opened", async () => {
+  const viewer = await renderDiffViewer([{ file: "assets/clip.mp4", status: "modified", additions: 0, deletions: 0 }], {
+    richMedia: true,
+    height: 30,
+  })
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes("Loads when opened"))
+    const frame = viewer.app.captureCharFrame()
+    expect(frame).toContain("Video")
+    expect(frame).toContain("video · clip.mp4")
+    expect(viewer.imageReadInput()).toBeUndefined()
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 test("single-file images load once per file and cancel reads when their preview is removed", async () => {
   const reads: { file: string; signal: AbortSignal }[] = []
   const viewer = await renderDiffViewer(
@@ -1777,8 +1794,12 @@ test.each(["patch", "image"] as const)(
 test.each([
   { file: "bun.lock", status: "modified" as const, message: "No patch available for this file." },
   { file: "assets/old.png", status: "deleted" as const, message: "Deleted image." },
+  { file: "assets/clip.mp4", status: "modified" as const, message: "No patch available for this file." },
+  { file: "assets/old.mp4", status: "deleted" as const, message: "Deleted video.", richMedia: true },
 ])("pads $file fallback messages inside the card without reading images", async (input) => {
-  const viewer = await renderDiffViewer([{ file: input.file, status: input.status, additions: 0, deletions: 0 }])
+  const viewer = await renderDiffViewer([{ file: input.file, status: input.status, additions: 0, deletions: 0 }], {
+    richMedia: input.richMedia,
+  })
   try {
     await viewer.app.waitForFrame((frame) => frame.includes(input.message))
     expect(viewer.imageReadInput()).toBeUndefined()
@@ -1958,6 +1979,7 @@ async function renderDiffViewer(
     mode?: "dark" | "light"
     single?: boolean
     readImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
+    richMedia?: boolean
     onSessionTab?: () => void
     keybinds?: TuiKeybind.KeybindOverrides
     kittyKeyboard?: boolean
@@ -1983,7 +2005,11 @@ async function renderDiffViewer(
   let imageReadInput: unknown
   let shortcut: (command: string) => string | undefined = () => undefined
   const stored: { info: Info } = {
-    info: { keybinds: options.keybinds, diffs: { source: options.source, single: options.single } },
+    info: {
+      keybinds: options.keybinds,
+      diffs: { source: options.source, single: options.single },
+      ...(options.richMedia ? { experimental: { "rich-media": true } } : {}),
+    },
   }
   const writes: Info[] = []
   const baseRequests: URL[] = []
@@ -2141,7 +2167,9 @@ async function renderDiffViewer(
                 <ToastProvider>
                   <ThemeProvider mode={options.mode ?? "dark"} source={emptyThemeSource}>
                     <DialogProvider>
-                      <Content />
+                      <MediaProvider directory={path.join(state, "media")}>
+                        <Content />
+                      </MediaProvider>
                     </DialogProvider>
                   </ThemeProvider>
                 </ToastProvider>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { boundImages, boundVideos, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -12,6 +12,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
           Message.text("Describe these files"),
           { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" },
           { type: "media", media: Media.base64("JVBERg==", "application/pdf"), filename: "document.pdf" },
+          { type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", "video/mp4"), filename: "clip.mp4" },
         ]),
       ],
       capabilities(["text"]),
@@ -21,6 +22,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
       Message.text("Describe these files"),
       Message.text('ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.'),
       Message.text('ERROR: Cannot read "document.pdf" (this model does not support pdf input). Inform the user.'),
+      Message.text('ERROR: Cannot read "clip.mp4" (this model does not support video input). Inform the user.'),
     ])
   })
 
@@ -244,5 +246,64 @@ describe("SessionModelRequest.boundImages", () => {
         value: [{ type: "text" }, { type: "file", name: "second.png" }],
       },
     })
+  })
+})
+
+describe("SessionModelRequest.boundVideos", () => {
+  const video = (name: string) => ({
+    type: "media" as const,
+    media: Media.base64("AAAAGGZ0eXBtcDQy", "video/mp4"),
+    filename: name,
+  })
+
+  test("keeps only the newest video across the request", () => {
+    const image = { type: "media" as const, media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" }
+    const pdf = { type: "media" as const, media: Media.base64("JVBERg==", "application/pdf"), filename: "doc.pdf" }
+    const first = Message.user([video("first.mp4"), image, pdf])
+    const text = Message.assistant("plain")
+    const tool = Message.tool(
+      ToolResultPart.make({
+        id: "call_1",
+        name: "read",
+        result: {
+          type: "content",
+          value: [{ type: "file", uri: "data:video/mp4;base64,AAAA", mime: "video/mp4", name: "tool.mp4" }],
+        },
+      }),
+    )
+    const newest = video("newest.mp4")
+    const result = boundVideos([
+      first,
+      text,
+      tool,
+      Message.user([video("older.mp4"), newest]),
+      Message.assistant("after"),
+    ])
+    const unchanged = [first, text]
+    expect(boundVideos(unchanged)).toBe(unchanged)
+
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("video was removed")), image, pdf])
+    expect(result[1]).toBe(text)
+    expect(result[2]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: { type: "content", value: [{ type: "text", text: expect.stringContaining("video was removed") }] },
+    })
+    expect(result[3]?.content).toEqual([Message.text(expect.stringContaining("video was removed")), newest])
+  })
+
+  test.each([
+    { name: "keeps a video at the inline cap", size: 18 * 1024 * 1024, kept: true },
+    { name: "replaces a video over the inline cap", size: 18 * 1024 * 1024 + 4, kept: false },
+  ])("$name", (input) => {
+    const messages = [Message.user({ type: "media", media: Media.base64("a".repeat(input.size), "video/mp4") })]
+    const result = boundVideos(messages)
+    if (input.kept) return expect(result).toBe(messages)
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("shorter or smaller clip"))])
+  })
+
+  test("does not count videos toward the image budget", () => {
+    const large = Media.base64("a".repeat(13 * 1024 * 1024), "video/mp4")
+    const messages = [Message.user({ type: "media", media: large }), Message.user({ type: "media", media: large })]
+    expect(boundImages(messages)).toBe(messages)
   })
 })

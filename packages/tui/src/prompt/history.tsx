@@ -1,4 +1,5 @@
 import path from "path"
+import { pathToFileURL } from "node:url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -61,6 +62,22 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
   }
 }
 
+/**
+ * The prompt as history and the stash save it. A video with a local file keeps it as a `file://` uri instead of its
+ * bytes, which can be many megabytes; the composer reads the file again when the prompt is sent. A video with no local
+ * file keeps its bytes.
+ */
+export function persistablePrompt(prompt: PromptInfo): PromptInfo {
+  const video = (file: PromptFile) => file.uri.startsWith("data:video/") && file.path !== undefined
+  if (!prompt.files?.some(video)) return prompt
+  return {
+    ...prompt,
+    files: prompt.files.map((file) =>
+      file.path && video(file) ? { ...file, uri: pathToFileURL(file.path).href } : file,
+    ),
+  }
+}
+
 export const MAX_HISTORY_ENTRIES = 50
 
 export function parsePromptHistory(text: string) {
@@ -119,7 +136,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         return store.history.at(next)
       },
       append(item: PromptInfo) {
-        const entry = structuredClone(unwrap(item))
+        const entry = structuredClone(persistablePrompt(unwrap(item)))
         if (isDuplicateEntry(store.history.at(-1), entry)) {
           setStore("index", 0)
           return

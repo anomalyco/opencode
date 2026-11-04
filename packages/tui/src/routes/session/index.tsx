@@ -92,7 +92,10 @@ import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
-import { useConfig, useNewDesigns } from "../../config"
+import { useConfig, useNewDesigns, useRichMedia } from "../../config"
+import { useMedia } from "../../context/media"
+import { collectSessionMedia, type MediaItem } from "../../component/media/model"
+import { keepMediaItems, MediaStrip } from "../../component/media/strip"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -129,7 +132,7 @@ import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
-import { SessionGroupView } from "./group-view"
+import { SessionGroupView, type ToolRef } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
@@ -193,6 +196,8 @@ export function Session(props: {
   }
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
+  const richMedia = useRichMedia()
+  const media = useMedia()
 
   createEffect(() => currentLocation.set(location()))
 
@@ -228,6 +233,15 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
+  // The transcript's media, without reverted and queued messages, which it hides. An item showing the same file keeps
+  // its object, so the strips that read the gallery keep their tiles as messages arrive.
+  const gallery = createMemo<readonly MediaItem[]>((previous) => {
+    if (!richMedia()) return []
+    const boundary = session()?.revert?.messageID
+    const queued = new Set(queuedPrompts().map((item) => item.id))
+    const visible = messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
+    return keepMediaItems(previous, collectSessionMedia(visible, session()?.location))
+  }, [])
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -1408,6 +1422,16 @@ export function Session(props: {
       },
     },
     {
+      title: "View media",
+      id: "session.media.view",
+      group: "Session",
+      enabled: gallery().length > 0,
+      run: () => {
+        dialog.clear()
+        media.openViewer(gallery(), gallery().length - 1)
+      },
+    },
+    {
       title: "View queued prompts",
       id: "session.queued_prompts",
       group: "Prompt",
@@ -1511,6 +1535,7 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
+        media: gallery,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1690,7 +1715,7 @@ function SessionRowView(props: SessionRowViewProps) {
               row={row()}
               message={props.message}
               entry={(entry, images) => <SessionEntryView row={entry} message={props.message} images={images} />}
-              images={(parts) => <ToolImages parts={parts} />}
+              images={(tools) => <ToolImages tools={tools} />}
             />
           )}
         </Match>
@@ -2004,7 +2029,11 @@ function SessionPartView(props: {
             />
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            <ToolPart
+              part={item() as SessionMessageAssistantTool}
+              messageID={props.partRef.messageID}
+              images={props.images}
+            />
           </Match>
         </Switch>
       )}
@@ -2107,6 +2136,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const { navigate } = useRoute()
+  const richMedia = useRichMedia()
   const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
@@ -2137,9 +2167,19 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow icon={source() === "goal" ? "◎" : "◈"} color={theme.text.muted} pending="Notice" complete={true}>
-          {text()}
-        </InlineToolRow>
+        <>
+          <InlineToolRow
+            icon={source() === "goal" ? "◎" : "◈"}
+            color={theme.text.muted}
+            pending="Notice"
+            complete={true}
+          >
+            {text()}
+          </InlineToolRow>
+          <Show when={richMedia() && source() === "experimental_image_generate"}>
+            <SessionMedia match={(item) => item.id === `${props.message.id}:generated`} />
+          </Show>
+        </>
       }
     >
       <box
@@ -2357,6 +2397,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
 function UserMessage(props: { message: SessionMessageUser }) {
   const ctx = use()
   const newDesigns = useNewDesigns()
+  const richMedia = useRichMedia()
   const data = useData()
   const local = useLocal()
   // Opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type omits.
@@ -2390,7 +2431,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
         customBorderChars={SplitBorder.customBorderChars}
         backgroundColor={theme.background.raised.base}
       >
-        <SessionImages images={images()} paddingLeft={2} />
+        <Show when={richMedia()} fallback={<SessionImages images={images()} paddingLeft={2} />}>
+          <SessionMedia match={(item) => item.id.startsWith(`${props.message.id}:file:`)} paddingLeft={2} />
+        </Show>
         <box
           onMouseOver={() => {
             setHover(true)
@@ -2571,7 +2614,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+function ToolPart(props: { part: SessionMessageAssistantTool; messageID: string; images?: boolean }) {
   const display = createMemo(() => toolDisplay(props.part.name))
 
   const toolprops = {
@@ -2647,14 +2690,54 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
   return [
     content,
     <Show when={props.images !== false}>
-      <ToolImages parts={[props.part]} />
+      <ToolImages tools={[{ messageID: props.messageID, part: props.part }]} />
     </Show>,
   ]
 }
 
-function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
-  const images = createMemo(() => props.parts.flatMap(inlineToolImages))
-  return <SessionImages images={images()} />
+function ToolImages(props: { tools: readonly ToolRef[] }) {
+  const richMedia = useRichMedia()
+  const images = createMemo(() => props.tools.flatMap((tool) => inlineToolImages(tool.part)))
+  return (
+    <Show when={richMedia()} fallback={<SessionImages images={images()} />}>
+      <SessionMedia
+        match={(item) => props.tools.some((tool) => item.id.startsWith(`${tool.messageID}:tool:${tool.part.id}:`))}
+      />
+    </Show>
+  )
+}
+
+/**
+ * The transcript's media tiles for the gallery items `match` selects. A tile opens the viewer over the whole session's
+ * gallery at that item.
+ */
+function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
+  const ctx = use()
+  const media = useMedia()
+  const gallery = () => ctx.media?.() ?? []
+  const items = createMemo(() => gallery().filter(props.match))
+  const height = createMemo(() => Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4))))
+  const paddingLeft = () => props.paddingLeft ?? 3
+
+  return (
+    <Show when={items().length > 0}>
+      <box flexShrink={0} paddingTop={1} paddingLeft={paddingLeft()} paddingRight={2} paddingBottom={1}>
+        <MediaStrip
+          items={items()}
+          // The left border of a user message takes one more cell.
+          width={ctx.width - paddingLeft() - 3}
+          height={height()}
+          onOpen={(index) => {
+            const id = items()[index]?.id
+            media.openViewer(
+              gallery(),
+              gallery().findIndex((item) => item.id === id),
+            )
+          }}
+        />
+      </box>
+    </Show>
+  )
 }
 
 function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?: number }) {

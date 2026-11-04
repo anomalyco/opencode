@@ -800,6 +800,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         sessionID: state.sessionID,
         thinking: thinking(),
         tools: configState.current.tools === "show",
+        richMedia: (await tuiConfigTask).experimental?.["rich-media"] === true,
         replay: input.replay,
         replayLimit: input.replayLimit,
         footer,

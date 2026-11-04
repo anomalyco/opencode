@@ -5,8 +5,10 @@ import {
   MAX_LOCAL_ATTACHMENT_BYTES,
   parsePastedFilepaths,
   promptFilesForServer,
+  readKeptAttachments,
   readLocalAttachmentWith,
   resolvePastedAttachments,
+  resolvePastedFiles,
 } from "../../src/component/prompt/local-attachment"
 import type { LocalFiles } from "../../src/component/prompt/local-attachment"
 import type { PromptFile } from "../../src/prompt/history"
@@ -169,6 +171,67 @@ describe("prompt local attachments", () => {
 
     await Bun.write(image, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1))
     expect(await resolvePastedAttachments(image, process.platform)).toBeUndefined()
+  })
+
+  test("reads MP4, MOV, and M4V paths as videos only when asked", async () => {
+    await using tmp = await tmpdir()
+    const clips = ["clip.mp4", "clip.MOV", "clip.m4v"].map((name) => path.join(tmp.path, name))
+    await Promise.all(clips.map((clip) => Bun.write(clip, new Uint8Array([1, 2, 3]))))
+
+    expect(await resolvePastedAttachments(clips.join(" "), process.platform, { video: true })).toEqual([
+      { type: "file", uri: "data:video/mp4;base64,AQID", filename: "clip.mp4", path: clips[0] },
+      { type: "file", uri: "data:video/quicktime;base64,AQID", filename: "clip.MOV", path: clips[1] },
+      { type: "file", uri: "data:video/x-m4v;base64,AQID", filename: "clip.m4v", path: clips[2] },
+    ])
+    expect(await resolvePastedAttachments(clips[0]!, process.platform)).toBeUndefined()
+    expect((await resolvePastedFiles(clips.join(" "), process.platform, { video: true })).oversized).toBeUndefined()
+  })
+
+  test("names the pasted video that takes an attachable paste over the shared budget", async () => {
+    await using tmp = await tmpdir()
+    const image = path.join(tmp.path, "shot.png")
+    const clip = path.join(tmp.path, "my clip.mp4")
+    await Promise.all([
+      Bun.write(image, new Uint8Array(2)),
+      Bun.write(clip, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES - 1)),
+    ])
+    const resolve = (text: string) => resolvePastedFiles(text, process.platform, { video: true })
+
+    expect((await resolve(clip)).oversized).toBeUndefined()
+    expect(await resolve(`${image} '${clip}'`)).toEqual({ oversized: clip })
+    expect(await resolvePastedAttachments(`${image} '${clip}'`, process.platform, { video: true })).toBeUndefined()
+    expect(await resolve(`'${clip}' ${image}`)).toEqual({})
+    // Prose that mentions a video, or paths that do not all exist, is not a paste of attachments.
+    expect(await resolve(`${image} '${clip}' is too big`)).toEqual({})
+    expect(await resolve(`see ${image} '${clip}'`)).toEqual({})
+    await Bun.write(clip, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1))
+    expect(await resolve(clip)).toEqual({ oversized: clip })
+    expect(await resolvePastedFiles(clip, process.platform)).toEqual({})
+  })
+
+  test("reads any paste as text when it cannot name a file", async () => {
+    const long = `${"a".repeat(8192)}.mp4`
+    expect(await resolvePastedFiles(long, process.platform, { video: true })).toEqual({})
+    expect(await resolvePastedFiles(`${long} ${long}`, process.platform, { video: true })).toEqual({})
+    expect(await resolvePastedFiles("clip\0.mp4 b.mp4", process.platform, { video: true })).toEqual({})
+  })
+
+  test("reads attachments kept as local files again and names the ones that are gone", async () => {
+    await using tmp = await tmpdir()
+    const clip = path.join(tmp.path, "clip.mp4")
+    const gone = path.join(tmp.path, "gone.mov")
+    const large = path.join(tmp.path, "large.m4v")
+    await Promise.all([
+      Bun.write(clip, new Uint8Array([1, 2, 3])),
+      Bun.write(large, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1)),
+    ])
+    const image = { uri: "data:image/png;base64,AAAA", path: path.join(tmp.path, "missing.png") }
+    const kept = (file: string) => ({ uri: pathToFileURL(file).href, path: file, name: path.basename(file) })
+
+    expect(await readKeptAttachments([image, kept(clip), kept(gone), kept(large)])).toEqual({
+      files: [image, { ...kept(clip), uri: "data:video/mp4;base64,AQID" }],
+      unreadable: ["gone.mov", "large.m4v"],
+    })
   })
 
   test("bounds the number of resolved paths", async () => {

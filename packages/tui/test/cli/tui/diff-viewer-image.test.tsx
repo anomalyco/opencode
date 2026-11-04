@@ -1,16 +1,20 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { ImageRenderable, type Renderable } from "@opentui/core"
+import { ImageRenderable, VideoRenderable, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
+import path from "node:path"
 import { createSignal, Show, type JSX } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
+import { MediaProvider, useMedia, type MediaContext } from "../../../src/context/media"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Keymap } from "../../../src/context/keymap"
+import { TuiTerminalEnvironmentProvider } from "../../../src/context/runtime"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
-import { DiffViewerImage, isDiffImageFile } from "../../../src/feature-plugins/system/diff-viewer-image"
+import { DiffViewerImage, diffMediaKind, isDiffImageFile } from "../../../src/feature-plugins/system/diff-viewer-image"
 import { diffImageFixture } from "../../fixture/diff-image"
-import { emptyThemeSource } from "../../fixture/fixture"
+import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
+import { videoFixture } from "../../fixture/media"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -20,6 +24,117 @@ test("recognizes only supported image file extensions", () => {
   }
   for (const file of ["assets/preview.svg", "preview.avif", "image.png.ts", "png", "image.png/file"]) {
     expect(isDiffImageFile(file)).toBe(false)
+  }
+})
+
+test("previews videos only with the rich media experiment", () => {
+  for (const file of ["clip.mp4", "clip.MOV", "clip.m4v"]) {
+    expect(diffMediaKind(file, true)).toBe("video")
+    expect(diffMediaKind(file, false)).toBeUndefined()
+  }
+  for (const richMedia of [true, false]) {
+    expect(diffMediaKind("preview.png", richMedia)).toBe("image")
+    expect(diffMediaKind("clip.webm", richMedia)).toBeUndefined()
+    expect(diffMediaKind("clip.mp4.ts", richMedia)).toBeUndefined()
+  }
+})
+
+test("plays a working-tree video in place from a local server and opens the viewer", async () => {
+  await using temporary = await tmpdir()
+  await Bun.write(path.join(temporary.path, "assets", "clip.mov"), Bun.file(videoFixture))
+  let loads = 0
+  const app = await renderImage(
+    () => (
+      <TuiTerminalEnvironmentProvider value={{ platform: "linux", localServer: true }}>
+        <MediaProvider directory={path.join(temporary.path, "media")}>
+          <Probe />
+          <DiffViewerImage
+            file="assets/clip.mov"
+            location={{ directory: temporary.path }}
+            load={async () => {
+              loads++
+              return new Uint8Array()
+            }}
+          />
+        </MediaProvider>
+      </TuiTerminalEnvironmentProvider>
+    ),
+    undefined,
+    true,
+  )
+  // Playback follows the wall clock, so poll with short sleeps between frames.
+  const until = async (condition: () => boolean) => {
+    const deadline = Date.now() + 5_000
+    while (!condition() && Date.now() < deadline) {
+      await Bun.sleep(5)
+      await app.renderOnce()
+    }
+    expect(condition()).toBe(true)
+  }
+  const player = () => descendants(app.renderer.root).find((node) => node instanceof VideoRenderable)
+  try {
+    await until(() => app.captureCharFrame().includes("▶ 0:02"))
+    const video = player() as VideoRenderable
+    expect(video.source).toBe(path.join(temporary.path, "assets", "clip.mov"))
+    expect(loads).toBe(0)
+    expect(video.audio).toBe(false)
+    expect(video.paused).toBe(true)
+    expect(app.captureCharFrame()).toContain("Click to open")
+
+    await app.mockMouse.moveTo(video.x + 2, video.y + 1)
+    await until(() => video.playing)
+
+    await app.mockMouse.click(video.x + 2, video.y + 1)
+    expect(media!.viewer()?.index).toBe(0)
+    expect(media!.viewer()?.items).toMatchObject([
+      { kind: "video", mime: "video/quicktime", name: "clip.mov", location: { directory: temporary.path } },
+    ])
+    await until(() => video.paused)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("defers reading a remote working-tree video until the viewer opens it", async () => {
+  await using temporary = await tmpdir()
+  let loads = 0
+  const app = await renderImage(
+    () => (
+      <MediaProvider directory={path.join(temporary.path, "media")}>
+        <Probe />
+        <DiffViewerImage
+          file="assets/my clip#1.mp4"
+          location={{ directory: "C:\\repo" }}
+          load={async () => {
+            loads++
+            return new Uint8Array()
+          }}
+        />
+      </MediaProvider>
+    ),
+    undefined,
+    true,
+  )
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("video · my clip#1.mp4")
+    expect(frame).toContain("Loads when opened")
+    expect(descendants(app.renderer.root).some((node) => node instanceof VideoRenderable)).toBe(false)
+
+    const [line, column] = position(frame, "Click to open")
+    await app.mockMouse.click(column, line)
+    expect(media!.viewer()?.items).toMatchObject([
+      {
+        kind: "video",
+        mime: "video/mp4",
+        uri: "file:///C:/repo/assets/my%20clip%231.mp4",
+        location: { directory: "C:\\repo" },
+      },
+    ])
+    expect(loads).toBe(0)
+  } finally {
+    app.renderer.destroy()
   }
 })
 
@@ -147,11 +262,12 @@ test.each(["fetch", "decode"])("recovers from a %s error when the file changes",
 function renderImage(
   component: () => JSX.Element,
   options = { width: 80, height: 24, mode: "dark" as "dark" | "light" },
+  richMedia = false,
 ) {
   return testRender(
     () => (
       <TestTuiContexts>
-        <ConfigProvider config={createTuiResolvedConfig()}>
+        <ConfigProvider config={createTuiResolvedConfig({ experimental: { "rich-media": richMedia } })}>
           <Keymap.Provider>
             <ThemeProvider mode={options.mode} source={emptyThemeSource}>
               <ToastProvider>
@@ -169,4 +285,20 @@ function renderImage(
 function findImage(root: Renderable): ImageRenderable | undefined {
   if (root instanceof ImageRenderable) return root
   return root.getChildren().map(findImage).find(Boolean)
+}
+
+let media: MediaContext | undefined
+function Probe() {
+  media = useMedia()
+  return null
+}
+
+function descendants(node: Renderable): Renderable[] {
+  return node.getChildren().flatMap((child) => [child, ...descendants(child as Renderable)])
+}
+
+function position(frame: string, text: string) {
+  const lines = frame.split("\n")
+  const line = lines.findIndex((row) => row.includes(text))
+  return [line, lines[line]!.indexOf(text)] as const
 }

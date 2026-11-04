@@ -4,6 +4,7 @@ import type { ModelInfo } from "@opencode/client"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
+import type { MediaItem } from "../../component/media/model"
 import type { createTimelineAnchors } from "./anchors"
 import type { GroupKind } from "./grouping/session"
 
@@ -35,6 +36,8 @@ export const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
+  /** Every image and video in the loaded transcript, in order, while the rich media experiment is on. */
+  media?: () => readonly MediaItem[]
 }>()
 
 export function use() {

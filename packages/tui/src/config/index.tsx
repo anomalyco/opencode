@@ -396,6 +396,12 @@ export function useNewDesigns() {
   return () => config.data.experimental?.["new-designs"] === true
 }
 
+/** Reactive accessor for the temporary "rich-media" experiment. */
+export function useRichMedia() {
+  const config = useConfig()
+  return () => config.data.experimental?.["rich-media"] === true
+}
+
 /** Reactive accessor for the temporary "client-mcp" experiment. */
 export function useClientMcpExperiment() {
   const config = useConfig()
