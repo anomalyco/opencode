@@ -508,11 +508,18 @@ const TypedAnthropicEvent = Schema.StructWithRest(
 const AnthropicEvent = withUntypedFrames(TypedAnthropicEvent)
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
+// One entry per open content block index. Reasoning signatures live on the
+// lifecycle's open block, so the reasoning entry only records the kind.
+type Block =
+  | { readonly kind: "text" }
+  | { readonly kind: "reasoning" }
+  | { readonly kind: "tool"; readonly tool: ToolStream.PendingTool }
+  | { readonly kind: "compaction"; readonly content: string | null }
+
 interface ParserState {
   readonly provider: LLMRequest["model"]["provider"]
-  readonly compactions: Readonly<Record<number, string | null>>
   readonly providerMetadataKey: string
-  readonly tools: ToolStream.State<number>
+  readonly blocks: Readonly<Partial<Record<number, Block>>>
   readonly usage?: Usage
   readonly pendingFinish?: {
     readonly reason: FinishReasonDetails
@@ -1147,15 +1154,22 @@ const onContentBlockStart = (
       {
         ...state,
         lifecycle,
-        tools: ToolStream.start(state.tools, event.index, {
-          id: block.id,
-          name: block.name ?? "",
-          input:
-            block.input !== undefined && (!ProviderShared.isRecord(block.input) || Object.keys(block.input).length > 0)
-              ? ProviderShared.encodeJson(block.input)
-              : undefined,
-          providerExecuted: block.type === "server_tool_use",
-        }),
+        blocks: {
+          ...state.blocks,
+          [event.index]: {
+            kind: "tool",
+            tool: {
+              id: block.id,
+              name: block.name ?? "",
+              input:
+                block.input !== undefined &&
+                (!ProviderShared.isRecord(block.input) || Object.keys(block.input).length > 0)
+                  ? ProviderShared.encodeJson(block.input)
+                  : "",
+              providerExecuted: block.type === "server_tool_use",
+            },
+          },
+        },
       },
       [
         ...events,
@@ -1173,7 +1187,11 @@ const onContentBlockStart = (
     const id = `text-${event.index ?? 0}`
     const lifecycle = Lifecycle.textStart(state.lifecycle, events, id)
     return [
-      { ...state, lifecycle: block.text ? Lifecycle.textDelta(lifecycle, events, id, block.text) : lifecycle },
+      {
+        ...state,
+        blocks: { ...state.blocks, [event.index ?? 0]: { kind: "text" } },
+        lifecycle: block.text ? Lifecycle.textDelta(lifecycle, events, id, block.text) : lifecycle,
+      },
       events,
     ]
   }
@@ -1194,6 +1212,7 @@ const onContentBlockStart = (
     return [
       {
         ...state,
+        blocks: { ...state.blocks, [event.index ?? 0]: { kind: "reasoning" } },
         lifecycle: block.thinking
           ? Lifecycle.reasoningDelta(lifecycle, events, id, block.thinking, metadata)
           : lifecycle,
@@ -1210,6 +1229,7 @@ const onContentBlockStart = (
     return [
       {
         ...state,
+        blocks: { ...state.blocks, [event.index ?? 0]: { kind: "reasoning" } },
         lifecycle: Lifecycle.reasoningStart(
           state.lifecycle,
           events,
@@ -1227,54 +1247,53 @@ const onContentBlockStart = (
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
 }
 
+// Anthropic always opens a block with content_block_start, so a text, thinking,
+// signature, or tool delta for an index that has no matching block is dropped.
+// Bedrock has no start event for text or reasoning and opens them on demand.
 const onContentBlockDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: AnthropicEvent & { readonly delta: AnthropicStreamDelta },
 ) {
   const delta = event.delta
+  const index = event.index ?? 0
+  const block = state.blocks[index]
 
   if (delta.type === "compaction_delta") {
-    if (event.index === undefined || !(event.index in state.compactions) || delta.content === undefined)
+    if (event.index === undefined || block?.kind !== "compaction" || delta.content === undefined)
       return yield* ProviderShared.eventError(ADAPTER, "Compaction delta is missing its block or content")
     return [
-      { ...state, compactions: { ...state.compactions, [event.index]: delta.content } },
+      { ...state, blocks: { ...state.blocks, [index]: { kind: "compaction", content: delta.content } } },
       NO_EVENTS,
     ] satisfies StepResult
   }
 
   if (delta.type === "text_delta" && delta.text) {
-    if (!Lifecycle.isOpen(state.lifecycle, "text", `text-${event.index ?? 0}`))
-      return [state, NO_EVENTS] satisfies StepResult
+    if (block?.kind !== "text") return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
-      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${event.index ?? 0}`, delta.text) },
+      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${index}`, delta.text) },
       events,
     ] satisfies StepResult
   }
 
   if (delta.type === "thinking_delta" && delta.thinking) {
-    if (!Lifecycle.isOpen(state.lifecycle, "reasoning", `reasoning-${event.index ?? 0}`))
-      return [state, NO_EVENTS] satisfies StepResult
+    if (block?.kind !== "reasoning") return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
-      {
-        ...state,
-        lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${event.index ?? 0}`, delta.thinking),
-      },
+      { ...state, lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, delta.thinking) },
       events,
     ] satisfies StepResult
   }
 
   if (delta.type === "signature_delta" && delta.signature) {
-    const id = `reasoning-${event.index ?? 0}`
-    if (!Lifecycle.isOpen(state.lifecycle, "reasoning", id)) return [state, NO_EVENTS] satisfies StepResult
+    if (block?.kind !== "reasoning") return [state, NO_EVENTS] satisfies StepResult
     return [
       {
         ...state,
         lifecycle: Lifecycle.setMetadata(
           state.lifecycle,
           "reasoning",
-          id,
+          `reasoning-${index}`,
           providerMetadata(state.providerMetadataKey, { signature: delta.signature }),
         ),
       },
@@ -1283,20 +1302,16 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   }
 
   if (delta.type === "input_json_delta" && event.index !== undefined) {
-    if (!delta.partial_json) return [state, NO_EVENTS] satisfies StepResult
-    if (!state.tools[event.index]) return [state, NO_EVENTS] satisfies StepResult
-    const result = ToolStream.appendExisting(
-      ADAPTER,
-      state.tools,
-      event.index,
-      delta.partial_json,
-      "Anthropic Messages tool argument delta is missing its tool call",
-    )
-    if (ToolStream.isError(result)) return yield* result
+    if (!delta.partial_json || block?.kind !== "tool") return [state, NO_EVENTS] satisfies StepResult
+    const result = ToolStream.append({ [index]: block.tool }, index, delta.partial_json)
+    if (!result) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...result.events)
-    return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
+    return [
+      { ...state, lifecycle, blocks: { ...state.blocks, [index]: { kind: "tool", tool: result.tool } } },
+      events,
+    ] satisfies StepResult
   }
 
   return [state, NO_EVENTS] satisfies StepResult
@@ -1304,30 +1319,25 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
 
 const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
-  if (event.index in state.compactions) {
-    const { [event.index]: content, ...compactions } = state.compactions
-    const events: LLMEvent[] = []
-    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
-    events.push(
-      LLMEvent.compaction({
-        provider: state.provider,
-        text: content,
-      }),
-    )
-    return [{ ...state, compactions, lifecycle }, events] satisfies StepResult
-  }
-  const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
+  const { [event.index]: block, ...blocks } = state.blocks
+  if (!block) return [state, NO_EVENTS] satisfies StepResult
   const events: LLMEvent[] = []
-  const resultEvents = result.events ?? []
-  const lifecycle = resultEvents.length
-    ? Lifecycle.stepStart(state.lifecycle, events)
-    : Lifecycle.reasoningEnd(
-        Lifecycle.textEnd(state.lifecycle, events, `text-${event.index}`),
-        events,
-        `reasoning-${event.index}`,
-      )
-  events.push(...resultEvents)
-  return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
+  if (block.kind === "compaction") {
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(LLMEvent.compaction({ provider: state.provider, text: block.content }))
+    return [{ ...state, blocks, lifecycle }, events] satisfies StepResult
+  }
+  if (block.kind === "tool") {
+    const result = yield* ToolStream.finish(ADAPTER, { [event.index]: block.tool }, event.index)
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(...(result.events ?? []))
+    return [{ ...state, blocks, lifecycle }, events] satisfies StepResult
+  }
+  const lifecycle =
+    block.kind === "text"
+      ? Lifecycle.textEnd(state.lifecycle, events, `text-${event.index}`)
+      : Lifecycle.reasoningEnd(state.lifecycle, events, `reasoning-${event.index}`)
+  return [{ ...state, blocks, lifecycle }, events] satisfies StepResult
 })
 
 const onMessageDelta = (
@@ -1367,9 +1377,13 @@ const onMessageDelta = (
 }
 
 const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
-  if (Object.keys(state.compactions).length)
+  const blocks = Object.values(state.blocks)
+  if (blocks.some((block) => block?.kind === "compaction"))
     return yield* ProviderShared.eventError(ADAPTER, "Response ended with an incomplete compaction block")
-  const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
+  const result = yield* ToolStream.finishAll<number>(
+    ADAPTER,
+    blocks.flatMap((block) => (block?.kind === "tool" ? [block.tool] : [])),
+  )
   const events: LLMEvent[] = []
   const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
   events.push(...result.events)
@@ -1381,7 +1395,7 @@ const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
     usage: state.usage,
     providerMetadata: state.pendingFinish?.providerMetadata,
   })
-  return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
+  return [{ ...state, lifecycle: finished, blocks: {} }, events] satisfies StepResult
 })
 
 // Prefix `error.type` so overloads, rate limits, and quota errors are visible
@@ -1450,7 +1464,10 @@ const step = (state: ParserState, event: AnthropicEvent) => {
       const decoded = Schema.decodeUnknownOption(AnthropicCompactionBlock)(event.content_block)
       if (event.index === undefined || Option.isNone(decoded)) return invalidStreamEvent(event)
       return Effect.succeed<StepResult>([
-        { ...state, compactions: { ...state.compactions, [event.index]: decoded.value.content } },
+        {
+          ...state,
+          blocks: { ...state.blocks, [event.index]: { kind: "compaction", content: decoded.value.content } },
+        },
         NO_EVENTS,
       ])
     }
@@ -1504,9 +1521,8 @@ export const protocol = Protocol.make({
     event: Protocol.jsonEvent(AnthropicEvent),
     initial: (request) => ({
       provider: request.model.provider,
-      compactions: {},
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
-      tools: ToolStream.empty<number>(),
+      blocks: {},
       lifecycle: Lifecycle.initial(),
     }),
     step,

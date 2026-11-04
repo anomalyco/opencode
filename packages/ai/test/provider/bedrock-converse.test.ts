@@ -21,6 +21,7 @@ import {
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
+import { BedrockConverse } from "../../src/protocols/bedrock-converse.js"
 import { it } from "../lib/effect.js"
 import { withProcessEnv } from "../lib/env.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -1556,6 +1557,22 @@ describe("Bedrock Converse route", () => {
         { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQI=" } } },
         { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AwQ=" } } },
       ])
+    }),
+  )
+
+  it.effect("leaves the previous parser state untouched when a redacted chunk arrives", () =>
+    Effect.gen(function* () {
+      const stream = BedrockConverse.protocol.stream
+      const chunk = (redactedContent: string) => ({
+        contentBlockDelta: { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent } } },
+      })
+      const [first] = yield* stream.step(stream.initial(baseRequest), chunk("AQ=="))
+      yield* stream.step(first, chunk("AgM="))
+      const [, events] = yield* stream.step(first, { contentBlockStop: { contentBlockIndex: 0 } })
+
+      expect(events.find((event) => event.type === "reasoning-end")?.providerMetadata).toEqual({
+        bedrock: { redactedData: "AQ==" },
+      })
     }),
   )
 
