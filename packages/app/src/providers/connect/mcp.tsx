@@ -5,6 +5,9 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { usePlatform } from "@/runtime/platform/platform"
 import { showToast } from "@/shell/notifications/toast"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { uuid } from "@opencode/util/uuid"
+import { DialogMcpSignIn } from "./mcp-sign-in"
 
 export type McpControls = {
   readonly preview: boolean
@@ -18,6 +21,7 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
   const serverSDK = useServerSDK()
   const platform = usePlatform()
   const language = useLanguage()
+  const dialog = useDialog()
 
   const location = () => {
     const value = directory ? directory() : data.location.default().directory
@@ -62,6 +66,35 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
         })
 
         platform.openExternal(attempt.data.url)
+
+        if (attempt.data.paste) {
+          const integrationID = current.integrationID
+          const dialogID = uuid()
+          void dialog.push(
+            () => (
+              <DialogMcpSignIn
+                name={name}
+                integrationID={integrationID}
+                attemptID={attempt.data.attemptID}
+                url={attempt.data.url}
+                lifetime={attempt.data.time.expires - attempt.data.time.created}
+                location={ref}
+                onDone={async () => {
+                  data.location.mcp.server.invalidate(ref)
+                  data.location.mcp.resource.invalidate(ref)
+                  await Promise.all([
+                    data.location.mcp.server.sync(ref),
+                    data.location.mcp.resource.sync(ref),
+                    onSuccess?.(),
+                  ])
+                  dialog.close(dialogID)
+                }}
+              />
+            ),
+            undefined,
+            dialogID,
+          )
+        }
       }
 
       data.location.mcp.resource.invalidate(ref)
