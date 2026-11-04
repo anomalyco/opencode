@@ -107,7 +107,6 @@ fn run(recording: &Recording) -> (bool, String) {
             Step::Click { click } => app.click(click[0], click[1]),
             Step::Event { event } => memory.emit(event),
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
-            Step::Click { click } => app.click(click[0], click[1]),
             Step::Checkpoint(checkpoint) => {
                 let capture = settle(&app, &memory, checkpoint.until.as_deref());
                 let result = match app::compare_checkpoint(checkpoint, capture) {

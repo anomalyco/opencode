@@ -87,10 +87,6 @@ pub enum Step {
     Drag {
         drag: [[u16; 2]; 2],
     },
-    /// A left click at a cell (E.12).
-    Click {
-        click: [u16; 2],
-    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
