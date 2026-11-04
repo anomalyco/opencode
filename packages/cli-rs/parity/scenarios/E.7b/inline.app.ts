@@ -93,9 +93,5 @@ export default defineApp({
     { path: "/api/session/ses_tools/message", json: { data: messages.toReversed(), cursor: {} } },
     { path: "/api/session/ses_tools/inbox", json: { data: [] } },
   ],
-  steps: [
-    { checkpoint: "open", until: "glob" },
-    { click: [6, 30] },
-    { checkpoint: "dialog", until: "Completed" },
-  ],
+  steps: [{ checkpoint: "open", until: "glob" }, { click: [6, 30] }, { checkpoint: "dialog", until: "Completed" }],
 })
