@@ -116,6 +116,8 @@ export type BackgroundAllInput = {
 
 export interface Interface {
   readonly get: (id: string) => Effect.Effect<Info | undefined>
+  // Recovery data stays out of Info so job snapshots (JobList, the server map) cannot leak it.
+  readonly recovery: (id: string) => Effect.Effect<Recovery | undefined>
   // True only while a foreground caller holds a block registration for this job. Settlement,
   // cancellation and backgrounding clear it, so read it before awaiting anything else.
   readonly isBlocked: (id: string) => Effect.Effect<boolean>
@@ -287,6 +289,10 @@ export const make = Effect.gen(function* () {
   const isBlocked: Interface["isBlocked"] = Effect.fn("Job.isBlocked")(function* (id) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(id)
     return job !== undefined && job.blockingSessions.size > 0
+  })
+
+  const recovery: Interface["recovery"] = Effect.fn("Job.recovery")(function* (id) {
+    return (yield* SynchronizedRef.get(state.jobs)).get(id)?.recovery
   })
 
   const start: Interface["start"] = Effect.fnUntraced(function* (input) {
@@ -543,6 +549,7 @@ export const make = Effect.gen(function* () {
 
   return Service.of({
     get,
+    recovery,
     isBlocked,
     start,
     wait,

@@ -13,6 +13,7 @@ import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 import { SessionInbox } from "./inbox.js"
+import { SubagentReport } from "./execution/subagent-report.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -58,6 +59,7 @@ export const layer = Layer.effect(
     const instances = yield* Instance.Service
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
+    const inbox = yield* SessionInbox.Service
     const db = (yield* Database.Service).db
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
@@ -106,11 +108,21 @@ export const layer = Layer.effect(
         Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
       })
     })
+    const reports = SubagentReport.make({
+      store,
+      jobs,
+      inbox,
+      // The coordinator is created below; a report only runs after a busy period has settled.
+      wake: (sessionID) => coordinator.wake(sessionID),
+    })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+          Effect.gen(function* () {
+            yield* reports.started(sessionID).pipe(Effect.ignoreCause)
+            yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID))
+          }),
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
@@ -119,11 +131,12 @@ export const layer = Layer.effect(
           sessionID,
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
+            // Read before cancel and before the terminal publish: cancellation, job settlement and
+            // backgrounding all clear the blocking registrations this decision depends on.
+            const snap = yield* reports.snapshot(sessionID)
             if (outcome.type === "succeeded") {
               yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
-              return
-            }
-            if (outcome.type === "interrupted") {
+            } else if (outcome.type === "interrupted") {
               // Deliberate stops release the claim; shutdown keeps it for restart continuity.
               if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
               yield* bus.publish(
@@ -131,16 +144,22 @@ export const layer = Layer.effect(
                 { sessionID, reason: outcome.reason },
                 outcome.reason === "shutdown" ? undefined : releaseOnCommit(sessionID),
               )
-              return
+            } else {
+              yield* bus.publish(
+                SessionEvent.Execution.Failed,
+                {
+                  sessionID,
+                  error: outcome.error,
+                },
+                releaseOnCommit(sessionID),
+              )
             }
-            yield* bus.publish(
-              SessionEvent.Execution.Failed,
-              {
-                sessionID,
-                error: outcome.error,
-              },
-              releaseOnCommit(sessionID),
-            )
+            // The claim is released above, so the parent observes this child's terminal first. The
+            // report must never fail: a settled hook that dies takes the busy period down for every
+            // waiter, including the subagent job draining this child.
+            yield* reports
+              .report(sessionID, outcome, snap)
+              .pipe(Effect.ignoreCause({ log: "Error", message: "Failed to report subagent completion" }))
           }),
         ),
     })
@@ -176,7 +195,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionInbox.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */

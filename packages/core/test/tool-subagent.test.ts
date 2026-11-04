@@ -237,8 +237,10 @@ describe("SubagentTool", () => {
               if (event.data.sessionID !== parent.id || event.data.item.type !== "synthetic") return
               notifications.push(event.data.inboxID)
               const marker = (yield* jobs.pendingBackground).find((job) => job.notificationID === event.data.inboxID)
-              // The marker must survive until admission commits, not merely until delivery starts.
-              expect(marker?.status).toBe("completed")
+              // The durable marker must survive until admission commits, not merely until delivery
+              // starts. Settlement now admits while the job is still running, so the marker is not
+              // yet terminal here; the job's own observer clears it with the same ID afterwards.
+              expect(marker).toBeDefined()
               if (marker) yield* Deferred.succeed(admitted, marker)
             }),
           )
@@ -271,7 +273,9 @@ describe("SubagentTool", () => {
             }),
           ])
 
-          // Reproduce a crash after admission but before acknowledgment using the real persisted row.
+          // Reproduce a crash after the job persisted its completed marker but before it was
+          // acknowledged. Admission now happens while the job is still running, so the marker
+          // captured at enqueue is not yet terminal: replay the durable row the job leaves behind.
           const database = yield* Database.Service
           yield* database.db
             .insert(JobTable)
@@ -282,9 +286,9 @@ describe("SubagentTool", () => {
               child_session_id: outputSessionID(result.metadata),
               kind: marker.recovery.kind,
               title: "background review",
-              status: marker.status,
-              output: marker.output ?? null,
-              error: marker.error ?? null,
+              status: "completed",
+              output: childText,
+              error: null,
               recovery: marker.recovery,
             })
             .run()
