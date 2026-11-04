@@ -466,9 +466,10 @@ export const layer = (options?: Options) =>
 
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
         const previous = entries.get(name)
-        if (previous) yield* disposeServer(previous)
         const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)
+        // Readers that arrive while the previous connection closes wait for this one instead of using that one.
         entries.set(name, entry)
+        if (previous) yield* disposeServer(previous)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
           if (serverConfig.disabled) {

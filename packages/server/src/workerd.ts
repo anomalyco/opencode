@@ -48,6 +48,8 @@ export interface Options {
   readonly models?: ServerOptions["models"]
   /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
   readonly fetch?: ServerOptions["fetch"]
+  /** Console config refresh. `poll` defaults to `false` here, so an idle Durable Object can hibernate. */
+  readonly console?: ServerOptions["console"]
 }
 
 /**
@@ -74,6 +76,7 @@ export function serverOptions(options: Options): ServerOptions {
     config: { content: options.config?.content },
     models: options.models,
     fetch: options.fetch,
+    console: { poll: false, ...options.console },
   }
 }
 

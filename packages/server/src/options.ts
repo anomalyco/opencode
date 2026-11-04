@@ -31,6 +31,12 @@ export const ServerOptions = Schema.Struct({
    * example, a Cloudflare Worker can route requests through a Service Binding.
    */
   fetch: Schema.optional(Schema.declare((input): input is LayerNodePlatform.Fetch => typeof input === "function")),
+  /**
+   * How a connected OpenCode Console's config stays fresh. `poll` (default `true`) re-checks it every minute in the
+   * background. With `poll: false` it refreshes only when a prompt starts, so a host that suspends between prompts,
+   * such as a Durable Object, can stay idle.
+   */
+  console: Schema.optional(Schema.Struct({ poll: Schema.optional(Schema.Boolean) })),
   config: Schema.optional(
     Schema.Struct({
       directory: Schema.optional(Schema.String),
