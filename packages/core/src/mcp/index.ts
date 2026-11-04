@@ -8,7 +8,9 @@ import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Clock, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -189,6 +191,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
+      const fetch = yield* FetchHttpClient.Fetch
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -245,6 +248,7 @@ export const layer = (options?: Options) =>
                   const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
                   return yield* McpOAuth.authorize({ name, config: remote, integrationID, methodID }).pipe(
                     Effect.provideService(Credential.Service, credentials),
+                    Effect.provideService(FetchHttpClient.Fetch, fetch),
                   )
                 }),
             })
@@ -267,6 +271,7 @@ export const layer = (options?: Options) =>
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
         return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
           Effect.provideService(Credential.Service, credentials),
+          Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
       })
 
@@ -357,6 +362,7 @@ export const layer = (options?: Options) =>
             authProvider: Effect.suspend(() => connectProvider(entry)),
             elicitation,
             environment,
+            fetch,
             scope: servers,
             lock: locks.withLock(name),
             handshake: (effect) => (config.type === "remote" ? endpointLoads.withLock(config.url)(effect) : effect),
@@ -856,7 +862,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node, httpFetch],
   })
 }
 
