@@ -70,10 +70,16 @@ export type SelectProps<T> = Omit<
   onHighlight?: (value: T | undefined) => void | (() => void)
   invalid?: boolean
   numeric?: boolean
+  /** `inline` is the borderless settings trigger; `small`, `base` and `large` are 24px, 28px and 32px input fields. */
+  appearance?: "inline" | "small" | "base" | "large"
+  /** Background surface of an input field; invisible gains a fill on hover. */
+  surface?: "base" | "layer-1" | "invisible"
   children?: (item: T) => JSX.Element
   valueClass?: string
   contentClass?: string
 }
+
+type HighlightState = { key?: string; cleanup?: void | (() => void) }
 
 export function Select<T>(props: SelectProps<T>) {
   const [local, others] = splitProps(props, [
@@ -91,6 +97,8 @@ export function Select<T>(props: SelectProps<T>) {
     "children",
     "invalid",
     "numeric",
+    "appearance",
+    "surface",
     "disabled",
     "valueClass",
     "contentClass",
@@ -102,7 +110,7 @@ export function Select<T>(props: SelectProps<T>) {
     "fitViewport",
   ])
 
-  const state: { key?: string; cleanup?: void | (() => void) } = {}
+  const state: HighlightState = {}
 
   const stop = () => {
     state.cleanup?.()
@@ -110,7 +118,7 @@ export function Select<T>(props: SelectProps<T>) {
     state.key = undefined
   }
 
-  const keyFor = (item: T) => (local.value ? local.value(item) : String(item as string))
+  const keyFor = (item: T) => (local.value ? local.value(item) : String(item))
 
   const move = (item: T | undefined) => {
     if (!local.onHighlight) return
@@ -148,8 +156,8 @@ export function Select<T>(props: SelectProps<T>) {
       fitViewport={local.fitViewport ?? false}
       value={local.current}
       options={grouped()}
-      optionValue={(x) => (local.value ? local.value(x) : String(x as string))}
-      optionTextValue={(x) => (local.label ? local.label(x) : String(x as string))}
+      optionValue={(x) => (local.value ? local.value(x) : String(x))}
+      optionTextValue={(x) => (local.label ? local.label(x) : String(x))}
       optionGroupChildren="options"
       placeholder={local.placeholder}
       sectionComponent={(sectionProps) => (
@@ -172,7 +180,7 @@ export function Select<T>(props: SelectProps<T>) {
               ? local.children(itemProps.item.rawValue)
               : local.label
                 ? local.label(itemProps.item.rawValue)
-                : String(itemProps.item.rawValue as string)}
+                : String(itemProps.item.rawValue)}
           </ItemLabel>
           <ItemIndicator data-slot="menu-v2-item-indicator" forceMount>
             <CheckSmall />
@@ -180,7 +188,7 @@ export function Select<T>(props: SelectProps<T>) {
         </Item>
       )}
       onChange={(next) => {
-        const v = next == null ? null : Array.isArray(next) ? ((next[0] as T) ?? null) : (next as T)
+        const v = next == null ? null : Array.isArray(next) ? (next[0] ?? null) : next
         local.onSelect?.(v)
         stop()
       }}
@@ -195,7 +203,8 @@ export function Select<T>(props: SelectProps<T>) {
         aria-label={props["aria-label"]}
         aria-labelledby={props["aria-labelledby"]}
         data-component="select-v2"
-        data-appearance="inline"
+        data-appearance={local.appearance ?? "inline"}
+        data-surface={local.appearance && local.appearance !== "inline" ? (local.surface ?? "base") : undefined}
         data-invalid={local.invalid ? "" : undefined}
         data-numeric={local.numeric ? "" : undefined}
         disabled={local.disabled}
@@ -212,7 +221,7 @@ export function Select<T>(props: SelectProps<T>) {
 
               if (local.label && selected != null) return local.label(selected)
 
-              return selected != null ? (selected as string) : ""
+              return selected != null ? String(selected) : ""
             }}
           </Value>
         </div>

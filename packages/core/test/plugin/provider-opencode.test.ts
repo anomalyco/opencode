@@ -744,7 +744,8 @@ describe("OpencodePlugin", () => {
           state.failing = true
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(state.requests).toBe(4)
+          // The failed fetch and its 3 retries.
+          expect(state.requests).toBe(7)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
@@ -752,7 +753,7 @@ describe("OpencodePlugin", () => {
           state.advertised = false
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(state.requests).toBe(5)
+          expect(state.requests).toBe(8)
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
           expect(yield* websearch.providers()).toEqual([])
         }),
@@ -1025,9 +1026,12 @@ describe("OpencodePlugin", () => {
       state.status = 503
       yield* TestClock.adjust("1 minute")
       yield* drain
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
 
       // An unreleased response is only aborted when garbage collected, which fails outside a request on workerd.
-      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
+      // The 404, then the 503 and its 3 retries.
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true, true, true])
     }),
   )
 

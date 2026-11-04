@@ -123,6 +123,11 @@ export const dict = {
   "tui.animations": "Анимация",
   "tui.sidebar": "Боковая панель",
   "tui.scrollbar": "Полоса прокрутки",
+  "tui.scrollOnSend": "Прокрутка при отправке",
+  "tui.interface.whetherSendingAPromptJumpsToTheLatestMessage":
+    "Переходить ли к последнему сообщению при отправке запроса",
+  "tui.jumpToLatest": "к последнему сообщению",
+  "tui.keepPosition": "сохранить позицию",
   "settings.timeline.category.thinking": "Размышление",
   "tui.markdown": "Markdown",
   "tui.toolGrouping": "Группировка инструментов",

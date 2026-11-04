@@ -9,7 +9,7 @@ import { PluginHostProvider, usePluginHost } from "./host"
 import { createIpcClients } from "./ipc"
 import { createPluginAttachment, createHostApis, PluginAttachmentProvider, type HostApis } from "./host-apis"
 import { PluginCommands } from "./commands"
-import { PluginStyles } from "./render"
+import { PluginStyles, PluginThemes } from "./render"
 import { PluginServersProvider } from "./servers"
 import { PluginServerEndpoints } from "./server-shell"
 import { createContext, useContext } from "solid-js"
@@ -54,15 +54,16 @@ export function PluginRoot(props: ParentProps) {
 
   const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
 
-  // The GUIs of the plugins on the app's own server, as main sends them.
-  const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
+  // The GUIs of the plugins on the app's own server, as main sends them; undefined until main first sends them. The web
+  // runs built-ins only.
+  const [plugins, setPlugins] = createSignal<readonly PluginGui[] | undefined>(bridge ? undefined : [])
   // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Extensions › Plugins shows
   // them.
   const [reserved, setReserved] = createSignal<readonly string[]>([])
 
   // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.
   const definitions = createMemo<readonly Entry[]>(
-    () => [...localBuiltins, ...plugins().map((plugin) => plugin.definition)],
+    () => [...localBuiltins, ...(plugins() ?? []).map((plugin) => plugin.definition)],
     [],
     {
       equals: (a, b) => a.length === b.length && a.every((definition, index) => definition === b[index]),
@@ -107,11 +108,12 @@ export function PluginRoot(props: ParentProps) {
           apis={apis.apis}
           whenMounted={apis.whenMounted}
           ipc={bridge ? (token) => ipcs.client(token) : undefined}
-          plugin={(id) => plugins().find((plugin) => plugin.definition.id === id)}
+          plugin={(id) => plugins()?.find((plugin) => plugin.definition.id === id)}
           generation={ipcs.generation}
           failed={failed}
         >
           <PluginStyles />
+          <PluginThemes loaded={() => plugins() !== undefined} />
           {PluginHotReload && (
             <Suspense>
               <PluginHotReload />

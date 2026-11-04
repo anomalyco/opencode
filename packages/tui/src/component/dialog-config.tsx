@@ -90,6 +90,16 @@ export const settings: Setting[] = [
     keywords: ["scroll bar"],
   },
   {
+    title: "tui.scrollOnSend",
+    category: "command.category.session",
+    path: ["session", "submit_scroll"],
+    description: "tui.interface.whetherSendingAPromptJumpsToTheLatestMessage",
+    default: "bottom",
+    values: ["bottom", "keep"],
+    labels: ["tui.jumpToLatest", "tui.keepPosition"],
+    keywords: ["submit", "scroll position", "jump to latest", "follow"],
+  },
+  {
     title: "settings.timeline.category.thinking",
     category: "command.category.session",
     path: ["session", "thinking"],
