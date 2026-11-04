@@ -1,4 +1,4 @@
-# V03: Markdown on opentui-rust's current widget
+# V03: Markdown colors on opentui-rust's widget
 
 TypeScript: `TextPart` (`packages/tui/src/routes/session/message-parts.tsx:173-200`) renders assistant text with
 Core's `MarkdownRenderable`: the `marked` parser, `conceal` from `session.markdown` (markers hidden in `rendered`
@@ -6,23 +6,24 @@ mode, shown otherwise), every span styled through the syntax style (`markup.*` s
 fences (LaTeX, Mermaid), `streaming`, `internalBlockMode: "top-level"`, and grid tables with `cellPaddingX: 1`.
 
 Rust: `opencode_ui::markdown::view` wraps opentui-rust's `Markdown` widget
-(`rust:crates/opentui/src/widget/markdown.rs`), which has its own parser and layout and styles spans through
-`MarkdownColors`. Seen in `parity/fixtures/U.4a/markdown-*.json` (`crates/ui/tests/content.rs`):
+(`rust:crates/opentui/src/widget/markdown.rs`), which has its own parser and lays out like Core's top-level mode
+(G.3). Conceal, streaming, the code-block renderer hook, and grid tables are set as in TypeScript. The widget styles
+spans through `MarkdownColors`, not `markup.*` scopes, so some colors differ. Seen in
+`parity/fixtures/U.4a/markdown-prose.json` (`crates/ui/tests/content.rs`), foreground and attributes only:
 
-- Markers are always concealed. `session.markdown = "raw"` (markers shown) has no effect.
-- A link shows only its label. Core also shows ` (url)` after the label in rendered mode.
-- Bullets are `•`, `◦`, `▪` by depth. Core uses `-` at every depth.
+- A link's ` (url)` is all in the link color, and the `(` is underlined. Core shows the parentheses in the text
+  color and the URL in `markdown.link`.
 - Only `#` and `##` headings take `markdown.heading`. Core colors every level; deeper levels show in the text
   color here, still bold.
 - Italic text keeps the text color. Core colors it `markdown.emphasis`.
-- Code blocks are padded by one column on each side. Core starts them at the paragraph's column.
-- No code-fence hook, so LaTeX and Mermaid fences show as code. No table options: tables use the widget's layout.
-- The block background (`bg={theme.background.base}`) is not set; the widget has no background. The transcript
-  background shows through, which is the same color.
 
-Matching cells: paragraphs, bold, inline code, link labels, list markers' color and indentation, ordered lists,
-headings' text and position, and the spacing between blocks.
+Not in the corpus, documented by G.3 (`rust:crates/opentui/docs/markdown.md`): task items keep their checkbox,
+concealed escapes drop the backslash, quotes hold rendered blocks, and setext headings show as ATX headings in
+source mode.
 
-Reason: an opentui-rust difference not yet aligned. G.3 (`markdown-parity`) adds conceal, the code-block hook,
-streaming, and table options to the widget; U.4c moves the wrapper onto them and removes this file. The rows the
-test exempts are listed in `crates/ui/tests/content.rs`, which fails once a row matches.
+The block background (`bg={theme.background.base}`) is not set; the widget has no background. The transcript
+background shows through, which is the same color.
+
+Reason: an opentui-rust difference not yet aligned. Styling spans through scopes, or more `MarkdownColors` fields,
+would remove the color rows. The rows the test exempts are listed in `crates/ui/tests/content.rs`, which fails once
+a row matches.
