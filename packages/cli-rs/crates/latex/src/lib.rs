@@ -41,19 +41,20 @@ pub fn render_with(source: &str, options: &Options) -> Result<Layout, ParseError
 }
 
 /// The Markdown code-block renderer (TS `createLatexCodeBlockRenderer`): the formula in a horizontally scrolling
-/// row, or `None` so Markdown shows the source when it does not parse. While the document streams, a block whose
-/// text extends the last formula that rendered keeps showing that formula.
+/// row, or `None` so Markdown shows the source when it does not parse. While the document streams and the fence is
+/// open, a block whose text extends the last formula that rendered keeps showing that formula.
 pub fn renderer() -> impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> {
     // The source of each formula shown while streaming, by widget ID, so its block can keep it.
     let shown: RefCell<HashMap<u32, String>> = RefCell::default();
     move |block, theme| {
+        let streaming = block.streaming && !block.closed;
         let layout = render(block.code).ok();
         let previous = block.previous.map(Widget::id);
         let mut shown = shown.borrow_mut();
         let retained = previous
             .and_then(|id| shown.get(&id))
             .is_some_and(|source| block.code.starts_with(source));
-        if layout.is_none() && block.streaming && retained {
+        if layout.is_none() && streaming && retained {
             return block.previous.cloned();
         }
         if let Some(id) = previous {
@@ -61,7 +62,7 @@ pub fn renderer() -> impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> {
         }
         let layout = layout?;
         let widget = formula(block.app, &layout, theme);
-        if block.streaming {
+        if streaming {
             shown.insert(widget.id(), block.code.to_owned());
         }
         Some(widget)
