@@ -50,8 +50,6 @@ pub struct SelectOption<T> {
     pub details: Vec<String>,
     pub footer: Option<String>,
     pub footer_color: Option<Color>,
-    /// Draws the footer bold, as a `<span>` with `BOLD` in a JSX footer.
-    pub footer_bold: bool,
     pub title_width: Option<usize>,
     pub truncate: Truncate,
     pub category: Option<String>,
@@ -75,7 +73,6 @@ impl<T> SelectOption<T> {
             details: Vec::new(),
             footer: None,
             footer_color: None,
-            footer_bold: false,
             title_width: None,
             truncate: Truncate::Right,
             category: None,
@@ -1288,15 +1285,15 @@ fn option_row<T>(
     }
     row.add(&title);
     if let Some(footer) = footer {
-        let footer = Text::new(app, footer).fg(if active || option.footer_color.is_none() {
-            secondary
-        } else {
-            option.footer_color.unwrap_or(secondary)
-        });
-        if option.footer_bold {
-            footer.bold();
-        }
-        row.add(&View::new(app).shrink(0.0).child(&footer));
+        row.add(
+            &View::new(app).shrink(0.0).child(&Text::new(app, footer).fg(
+                if active || option.footer_color.is_none() {
+                    secondary
+                } else {
+                    option.footer_color.unwrap_or(secondary)
+                },
+            )),
+        );
     }
     if !new_designs {
         return row;
