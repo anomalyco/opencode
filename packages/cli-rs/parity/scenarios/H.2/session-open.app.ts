@@ -18,7 +18,7 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt", "T04-connection-footer"],
+      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
     },
     {
       event: {
@@ -32,7 +32,7 @@ export default defineApp({
     {
       checkpoint: "streamed",
       until: "Fixed.",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt", "T04-connection-footer"],
+      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
     },
   ],
 })
