@@ -66,6 +66,12 @@ impl std::fmt::Debug for Response {
 pub trait Transport: Send + Sync {
     /// Sends `request`. An error is a transport failure (no response), described as text.
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>>;
+
+    /// Where a request to `url` would go now. A transport that follows a restarted service maps it to the
+    /// service's current address; sockets opened beside the transport use this.
+    fn route(&self, url: url::Url) -> url::Url {
+        url
+    }
 }
 
 /// The checked response of a server-sent events endpoint: status and content type are verified, and
