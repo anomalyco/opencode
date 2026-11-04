@@ -24,7 +24,8 @@
     "pack": "bun run script/pack.ts",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test && bun run test:machine",
+    "test:machine": "CODEMODE_EVALUATOR=machine bun test"
   },
   "dependencies": {
     "acorn": "8.15.0",
