@@ -31,7 +31,7 @@ import { SettingsProjectGeneral } from "./workspaces/project"
 import { ProjectSettingsExtensions } from "./workspaces/project-extensions"
 import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
-import { pageIcons } from "./pages"
+import { pageIcons, pageLabels } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
 import { PluginSettingsPages } from "@/runtime/plugin/settings-page-view"
 import "@/settings/settings.css"
@@ -248,7 +248,7 @@ function RootSettings() {
         {
           value: "servers",
           icon: pageIcons.servers,
-          label: language.t("settings.tab.servers"),
+          label: language.t(multiple() ? "settings.tab.servers" : pageLabels.servers),
         },
       ],
     },
