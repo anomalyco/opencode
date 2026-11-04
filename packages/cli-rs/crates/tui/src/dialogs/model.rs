@@ -1678,13 +1678,18 @@ pub fn prompt_selection(
     Some(crate::prompt::metadata::Selection { agent, model })
 }
 
-/// The [`LocationFn`] of the TUI: the current location, else the default one.
+/// The [`LocationFn`] of the TUI: home's `/cd` directory on home, else the current location, else the
+/// default one. TS `/cd` sets the location itself; here it sets the prompt's home directory.
 pub fn location_fn(tui: Weak<Tui>) -> LocationFn {
     Rc::new(move || {
         let Some(tui) = tui.upgrade() else {
             return Location::default();
         };
-        crate::features::location::current(&tui)
+        let home = matches!(tui.route(), Route::Home)
+            .then(|| tui.prompt.complete.home.borrow().clone())
+            .flatten();
+        home.map(Location::new)
+            .or_else(|| crate::features::location::current(&tui))
             .unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
     })
 }
