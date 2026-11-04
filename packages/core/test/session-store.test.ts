@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { asc, eq } from "drizzle-orm"
 import { Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -10,6 +11,8 @@ import { SessionHistory } from "@opencode/core/session/history"
 import { SessionMessageTable, SessionPartTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Agent } from "@opencode/schema/agent"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/schema/model"
 import { Project } from "@opencode/schema/project"
@@ -26,6 +29,12 @@ const it = testEffect(
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
+const partRows = Config.testLayer([
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ part_rows: true }) }),
+  }),
+])
 
 const seedSessions = (rows: { id: string; updated: number }[]) =>
   Effect.gen(function* () {
@@ -371,6 +380,6 @@ describe("SessionStore", () => {
         .orderBy(asc(SessionMessageTable.seq))
         .all()
       expect(yield* SessionHistory.decodeMessageRows(database.db, rows)).toEqual(hydrated)
-    }),
+    }).pipe(Effect.provide(partRows)),
   )
 })

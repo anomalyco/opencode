@@ -83,10 +83,13 @@ const layer = Layer.effect(
           path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
         )
         const settled = input.data.messages.filter(isSettled)
+        const destination = { ...input.data.info, projectID: project.id, location: input.location, subpath }
+        const hasParts = (message: SessionMessage.Info): message is SessionMessage.Assistant =>
+          message.type === "assistant" && message.content.length > 0
+        // With experimental.part_rows off at the destination, assistant content stays inline as before.
+        const partRows = settled.some(hasParts) && (yield* SessionProjector.partRowsEnabledFor(instances, destination))
         const messages = settled.map((message, index) => {
-          const encoded = encodeMessage(
-            message.type === "assistant" && message.content.length > 0 ? { ...message, content: [] } : message,
-          )
+          const encoded = encodeMessage(partRows && hasParts(message) ? { ...message, content: [] } : message)
           const { id: _, type, ...data } = encoded
           return {
             id: message.id,
@@ -98,7 +101,7 @@ const layer = Layer.effect(
           }
         })
         const parts = settled.flatMap((message) => {
-          if (message.type !== "assistant" || message.content.length === 0) return []
+          if (!partRows || !hasParts(message)) return []
           const timeCreated = DateTime.toEpochMillis(message.time.created)
           return message.content.map((part, ordinal) => ({
             message_id: message.id,
@@ -117,12 +120,7 @@ const layer = Layer.effect(
         const splitParts = parts.map((part) => SessionBlob.split(part.data))
         const media =
           (split.some((row) => row.moved) || splitParts.some((row) => row.moved)) &&
-          (yield* SessionBlob.enabledFor(instances, {
-            ...input.data.info,
-            projectID: project.id,
-            location: input.location,
-            subpath,
-          }))
+          (yield* SessionBlob.enabledFor(instances, destination))
         yield* bus
           .publish(
             SessionEvent.Created,

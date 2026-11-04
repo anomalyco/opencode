@@ -64,13 +64,7 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import {
-  InstructionStateTable,
-  SessionInboxTable,
-  SessionMessageTable,
-  SessionPartTable,
-  SessionTable,
-} from "@opencode/core/session/sql"
+import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -4915,15 +4909,15 @@ describe("SessionRunnerLLM", () => {
       executed: false,
     })
     yield* s.db
-      .update(SessionPartTable)
+      .update(SessionMessageTable)
       .set({
         data: sql`json_set(
-          ${SessionPartTable.data},
-          '$.state.metadata',
+          ${SessionMessageTable.data},
+          '$.content[0].state.metadata',
           json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
         )`,
       })
-      .where(eq(SessionPartTable.message_id, assistantMessageID))
+      .where(eq(SessionMessageTable.id, assistantMessageID))
       .run()
       .pipe(Effect.orDie)
     s.requests.length = 0
@@ -5000,11 +4994,11 @@ describe("SessionRunnerLLM", () => {
     })
     yield* callTool(crashed, "call-running", "subagent")
     yield* s.db
-      .update(SessionPartTable)
+      .update(SessionMessageTable)
       .set({
-        data: sql`json_set(${SessionPartTable.data}, '$.state.metadata', json('{"sessionID":"ses_child"}'))`,
+        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
       })
-      .where(and(eq(SessionPartTable.message_id, crashed), eq(SessionPartTable.ordinal, 1)))
+      .where(eq(SessionMessageTable.id, crashed))
       .run()
       .pipe(Effect.orDie)
     // An unfinished assistant behind the checkpoint is outside the history the runner settles.

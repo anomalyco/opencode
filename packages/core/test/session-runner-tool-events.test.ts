@@ -13,7 +13,6 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
 import { SessionProjector } from "@opencode/core/session/projector"
-import { SessionHistory } from "@opencode/core/session/history"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -215,7 +214,7 @@ testEffect(
       .from(SessionMessageTable)
       .where(eq(SessionMessageTable.id, assistantMessageID))
       .get()
-    expect(yield* SessionHistory.loadMessageRow(database.db, message!)).toMatchObject({
+    expect(message?.data).toMatchObject({
       content: [{ type: "tool", id: call.id, executed: true, state: { status: "completed" } }],
     })
   }),

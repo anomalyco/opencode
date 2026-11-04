@@ -16664,6 +16664,9 @@
               "media_blob": {
                 "type": "boolean"
               },
+              "part_rows": {
+                "type": "boolean"
+              },
               "image_generate": {
                 "anyOf": [
                   {

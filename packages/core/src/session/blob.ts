@@ -36,7 +36,8 @@ type Refs = MessageRow["data"] | InboxRow["payload"] | Part | { readonly content
 function collect(data: Refs, hashes: Set<string>) {
   if ("files" in data)
     for (const file of data.files ?? []) if (isFileRef(file)) hashes.add(SessionStored.refHash(file.uri))
-  if ("content" in data)
+  // A corrupt row's non-array content is left for decoding to reject.
+  if ("content" in data && Array.isArray(data.content))
     for (const part of data.content)
       for (const item of toolItems(part)) if (isToolFileRef(item)) hashes.add(SessionStored.refHash(item.uri))
   if ("type" in data && data.type === "tool")

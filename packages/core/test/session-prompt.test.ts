@@ -30,7 +30,6 @@ import {
   SessionMessageTable,
   SessionTable,
 } from "@opencode/core/session/sql"
-import { SessionHistory } from "@opencode/core/session/history"
 import { SessionStore } from "@opencode/core/session/store"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
@@ -714,16 +713,13 @@ describe("Session.prompt", () => {
           location: { directory: AbsolutePath.make(directory) },
         })
       const rows = (id: Session.ID) =>
-        Effect.gen(function* () {
-          const stored = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(eq(SessionMessageTable.session_id, id))
-            .orderBy(SessionMessageTable.seq)
-            .all()
-            .pipe(Effect.orDie)
-          return yield* SessionHistory.withParts(db, stored)
-        })
+        db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, id))
+          .orderBy(SessionMessageTable.seq)
+          .all()
+          .pipe(Effect.orDie)
 
       const media = yield* imported("ses_import_media", mediaDirectory)
       const plain = yield* imported("ses_import_plain", "/project")
