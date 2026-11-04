@@ -94,6 +94,7 @@ impl Palette {
 }
 
 fn is_light(color: Color) -> bool {
-    let luminance = 0.2126 * f64::from(color.r) + 0.7152 * f64::from(color.g) + 0.0722 * f64::from(color.b);
+    let luminance =
+        0.2126 * f64::from(color.r) + 0.7152 * f64::from(color.g) + 0.0722 * f64::from(color.b);
     luminance > 127.5
 }

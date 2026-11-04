@@ -53,10 +53,12 @@ pub struct Diagram {
     pub commits: Vec<Commit>,
 }
 
-static HEADER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^gitGraph(?:\s+(LR|TB|BT))?\s*:?$").expect("header"));
+static HEADER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^gitGraph(?:\s+(LR|TB|BT))?\s*:?$").expect("header"));
 static ACCESSIBILITY: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^acc(?:Title|Descr)(?::|\s|$)").expect("accessibility"));
-static ACC_BLOCK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^accDescr\s*\{$").expect("accDescr"));
+static ACC_BLOCK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^accDescr\s*\{$").expect("accDescr"));
 static TITLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^title(?:\s|$)").expect("title"));
 
 pub fn is_gitgraph(content: &str) -> bool {
@@ -74,7 +76,11 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     if !HEADER.is_match(first) {
         return Err(error(1, first, "GitGraph header is required"));
     }
-    let mut branches = vec![Branch { name: "main".to_string(), order: Some(0), head: None }];
+    let mut branches = vec![Branch {
+        name: "main".to_string(),
+        order: Some(0),
+        head: None,
+    }];
     let mut commits: Vec<Commit> = Vec::new();
     let mut heads: IndexMap<String, Option<String>> = IndexMap::from([("main".to_string(), None)]);
     let mut ids: HashSet<String> = HashSet::new();
@@ -106,13 +112,19 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             continue;
         }
         let mut rest = tokenize(line);
-        let command = if rest.is_empty() { String::new() } else { rest.remove(0) };
+        let command = if rest.is_empty() {
+            String::new()
+        } else {
+            rest.remove(0)
+        };
         let operation = command.to_lowercase();
         let single = |attributes: &Attributes, key: &str| -> Result<Option<String>, SyntaxError> {
             match attributes.get(key) {
-                Some(values) if values.len() > 1 => {
-                    Err(error(n, line, &format!("GitGraph attribute \"{key}\" cannot repeat")))
-                }
+                Some(values) if values.len() > 1 => Err(error(
+                    n,
+                    line,
+                    &format!("GitGraph attribute \"{key}\" cannot repeat"),
+                )),
                 Some(values) => Ok(values.first().cloned()),
                 None => Ok(None),
             }
@@ -170,23 +182,43 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
                     None => None,
                     Some(value) => {
                         let trimmed = js_trim(&value);
-                        let number = if trimmed.is_empty() { Some(0.0) } else { trimmed.parse::<f64>().ok() };
+                        let number = if trimmed.is_empty() {
+                            Some(0.0)
+                        } else {
+                            trimmed.parse::<f64>().ok()
+                        };
                         match number {
-                            Some(number) if number.fract() == 0.0 && number >= 0.0 && number.is_finite() => {
+                            Some(number)
+                                if number.fract() == 0.0 && number >= 0.0 && number.is_finite() =>
+                            {
                                 Some(number as i64)
                             }
-                            _ => return Err(error(n, line, "GitGraph branch order must be a non-negative integer")),
+                            _ => {
+                                return Err(error(
+                                    n,
+                                    line,
+                                    "GitGraph branch order must be a non-negative integer",
+                                ));
+                            }
                         }
                     }
                 };
-                branches.push(Branch { name: name.clone(), order, head: None });
+                branches.push(Branch {
+                    name: name.clone(),
+                    order,
+                    head: None,
+                });
                 let head = heads.get(&current).cloned().flatten();
                 heads.insert(name.clone(), head);
                 current = name;
             }
             "checkout" | "switch" => {
                 if rest.len() != 1 {
-                    return Err(error(n, line, &format!("GitGraph {operation} requires one branch")));
+                    return Err(error(
+                        n,
+                        line,
+                        &format!("GitGraph {operation} requires one branch"),
+                    ));
                 }
                 let name = strip_quotes(&rest[0]);
                 if !heads.contains_key(&name) {
@@ -206,13 +238,25 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
                     return Err(error(n, line, "GitGraph cannot merge a branch into itself"));
                 }
                 let Some(current_head) = heads.get(&current).cloned().flatten() else {
-                    return Err(error(n, line, &format!("Branch \"{current}\" has no commits")));
+                    return Err(error(
+                        n,
+                        line,
+                        &format!("Branch \"{current}\" has no commits"),
+                    ));
                 };
                 let Some(merged_head) = heads.get(&branch).cloned().flatten() else {
-                    return Err(error(n, line, &format!("Branch \"{branch}\" has no commits")));
+                    return Err(error(
+                        n,
+                        line,
+                        &format!("Branch \"{branch}\" has no commits"),
+                    ));
                 };
                 if current_head == merged_head {
-                    return Err(error(n, line, &format!("Branches already share head \"{merged_head}\"")));
+                    return Err(error(
+                        n,
+                        line,
+                        &format!("Branches already share head \"{merged_head}\""),
+                    ));
                 }
                 let attributes = parse_attributes(&rest[1..], n, line, &["id", "tag", "type"])?;
                 let id = match single(&attributes, "id")? {
@@ -256,7 +300,10 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         }
     });
     ordered.sort_by(|a, b| a.1.order.cmp(&b.1.order).then(a.0.cmp(&b.0)));
-    let branches = std::iter::once(main).chain(rest.into_iter().map(|e| e.1)).chain(ordered.into_iter().map(|e| e.1)).collect();
+    let branches = std::iter::once(main)
+        .chain(rest.into_iter().map(|e| e.1))
+        .chain(ordered.into_iter().map(|e| e.1))
+        .collect();
     Ok(Diagram { branches, commits })
 }
 
@@ -287,15 +334,26 @@ fn tokenize(line: &str) -> Vec<String> {
     tokens
 }
 
-fn parse_attributes(tokens: &[String], n: usize, line: &str, allowed: &[&str]) -> Result<Attributes, SyntaxError> {
+fn parse_attributes(
+    tokens: &[String],
+    n: usize,
+    line: &str,
+    allowed: &[&str],
+) -> Result<Attributes, SyntaxError> {
     let mut result = Attributes::new();
     let mut index = 0;
     while index < tokens.len() {
         let key_token = &tokens[index];
         let separator = key_token.find(':');
-        let key = separator.map_or(key_token.as_str(), |s| &key_token[..s]).to_lowercase();
+        let key = separator
+            .map_or(key_token.as_str(), |s| &key_token[..s])
+            .to_lowercase();
         if !allowed.contains(&key.as_str()) {
-            return Err(error(n, line, &format!("Unsupported GitGraph attribute \"{key}\"")));
+            return Err(error(
+                n,
+                line,
+                &format!("Unsupported GitGraph attribute \"{key}\""),
+            ));
         }
         let inline = separator.map_or("", |s| &key_token[s + 1..]);
         let value = if inline.is_empty() {
@@ -305,7 +363,11 @@ fn parse_attributes(tokens: &[String], n: usize, line: &str, allowed: &[&str]) -
             Some(inline)
         };
         let Some(value) = value else {
-            return Err(error(n, line, &format!("GitGraph attribute \"{key}\" requires a value")));
+            return Err(error(
+                n,
+                line,
+                &format!("GitGraph attribute \"{key}\" requires a value"),
+            ));
         };
         result.entry(key).or_default().push(strip_quotes(value));
         index += 1;
@@ -321,7 +383,11 @@ fn commit_type(value: Option<String>, n: usize, line: &str) -> Result<CommitType
         "NORMAL" => Ok(CommitType::Normal),
         "REVERSE" => Ok(CommitType::Reverse),
         "HIGHLIGHT" => Ok(CommitType::Highlight),
-        _ => Err(error(n, line, &format!("Unknown GitGraph commit type \"{value}\""))),
+        _ => Err(error(
+            n,
+            line,
+            &format!("Unknown GitGraph commit type \"{value}\""),
+        )),
     }
 }
 
@@ -386,7 +452,13 @@ fn true_or_none(value: bool) -> Option<bool> {
     value.then_some(true)
 }
 
-fn connect_horizontal(cells: &mut Cells, source_lane: i32, target_lane: i32, vertical: [bool; 4], style: Style) {
+fn connect_horizontal(
+    cells: &mut Cells,
+    source_lane: i32,
+    target_lane: i32,
+    vertical: [bool; 4],
+    style: Style,
+) {
     if source_lane == target_lane {
         return;
     }
@@ -396,34 +468,66 @@ fn connect_horizontal(cells: &mut Cells, source_lane: i32, target_lane: i32, ver
     let [source_up, source_down, target_up, target_down] = vertical;
     let side = |forward: bool| {
         if forward {
-            Additions { right: Some(true), ..Default::default() }
+            Additions {
+                right: Some(true),
+                ..Default::default()
+            }
         } else {
-            Additions { left: Some(true), ..Default::default() }
+            Additions {
+                left: Some(true),
+                ..Default::default()
+            }
         }
     };
     connect(
         cells,
         source,
-        Additions { up: true_or_none(source_up), down: true_or_none(source_down), ..side(direction > 0) },
+        Additions {
+            up: true_or_none(source_up),
+            down: true_or_none(source_down),
+            ..side(direction > 0)
+        },
         style,
     );
     let mut x = source + direction;
     while x != target {
-        connect(cells, x, Additions { left: Some(true), right: Some(true), ..Default::default() }, style);
+        connect(
+            cells,
+            x,
+            Additions {
+                left: Some(true),
+                right: Some(true),
+                ..Default::default()
+            },
+            style,
+        );
         x += direction;
     }
     connect(
         cells,
         target,
-        Additions { up: true_or_none(target_up), down: true_or_none(target_down), ..side(direction < 0) },
+        Additions {
+            up: true_or_none(target_up),
+            down: true_or_none(target_down),
+            ..side(direction < 0)
+        },
         style,
     );
 }
 
 fn glyph(connections: &Connections) -> &'static str {
-    match (connections.up, connections.down, connections.left, connections.right) {
-        (true, true, false, false) | (true, false, false, false) | (false, true, false, false) => "│",
-        (false, false, true, true) | (false, false, true, false) | (false, false, false, true) => "─",
+    match (
+        connections.up,
+        connections.down,
+        connections.left,
+        connections.right,
+    ) {
+        (true, true, false, false) | (true, false, false, false) | (false, true, false, false) => {
+            "│"
+        }
+        (false, false, true, true) | (false, false, true, false) | (false, false, false, true) => {
+            "─"
+        }
         (false, true, false, true) => "╭",
         (false, true, true, false) => "╮",
         (true, false, false, true) => "╰",
@@ -451,9 +555,17 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
     if diagram.commits.is_empty() {
         return Grid::new(0, 0, None);
     }
-    let lane_of: HashMap<&str, i32> =
-        diagram.branches.iter().enumerate().map(|(index, branch)| (branch.name.as_str(), index as i32)).collect();
-    let by_id: HashMap<&str, &Commit> = diagram.commits.iter().map(|commit| (commit.id.as_str(), commit)).collect();
+    let lane_of: HashMap<&str, i32> = diagram
+        .branches
+        .iter()
+        .enumerate()
+        .map(|(index, branch)| (branch.name.as_str(), index as i32))
+        .collect();
+    let by_id: HashMap<&str, &Commit> = diagram
+        .commits
+        .iter()
+        .map(|commit| (commit.id.as_str(), commit))
+        .collect();
     let mut spans: IndexMap<&str, (usize, usize)> = IndexMap::new();
     for (index, commit) in diagram.commits.iter().enumerate() {
         match spans.get_mut(commit.branch.as_str()) {
@@ -490,17 +602,33 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
             .chain(commit.tags.iter().cloned())
             .map(|value| format!("[{value}]"))
             .collect();
-        if decorations.is_empty() { subject } else { format!("{subject}  {}", decorations.join(" ")) }
+        if decorations.is_empty() {
+            subject
+        } else {
+            format!("{subject}  {}", decorations.join(" "))
+        }
     };
     let graph_width = (diagram.branches.len() as i32 - 1) * LANE_WIDTH + 1;
-    let label_width = diagram.commits.iter().map(|commit| width(&label(commit))).max().unwrap_or(0).max(0);
-    let first_parent = |commit: &Commit| commit.parents.first().and_then(|id| by_id.get(id.as_str()).copied());
+    let label_width = diagram
+        .commits
+        .iter()
+        .map(|commit| width(&label(commit)))
+        .max()
+        .unwrap_or(0)
+        .max(0);
+    let first_parent = |commit: &Commit| {
+        commit
+            .parents
+            .first()
+            .and_then(|id| by_id.get(id.as_str()).copied())
+    };
     let forks: Vec<bool> = diagram
         .commits
         .iter()
         .map(|commit| {
-            first_parent(commit)
-                .is_some_and(|parent| lane_of.get(parent.branch.as_str()) != lane_of.get(commit.branch.as_str()))
+            first_parent(commit).is_some_and(|parent| {
+                lane_of.get(parent.branch.as_str()) != lane_of.get(commit.branch.as_str())
+            })
         })
         .collect();
     let height = (diagram.commits.len() + forks.iter().filter(|&&fork| fork).count()) as i32;
@@ -518,7 +646,11 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
                 connect(
                     &mut cells,
                     branch_lane * LANE_WIDTH,
-                    Additions { up: Some(true), down: Some(true), ..Default::default() },
+                    Additions {
+                        up: Some(true),
+                        down: Some(true),
+                        ..Default::default()
+                    },
                     branch_style(branch_lane),
                 );
             }
@@ -526,7 +658,13 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
                 && parent.branch != commit.branch
             {
                 let parent_lane = lane_of[parent.branch.as_str()];
-                connect_horizontal(&mut cells, parent_lane, lane, [true, true, false, true], branch_style(lane));
+                connect_horizontal(
+                    &mut cells,
+                    parent_lane,
+                    lane,
+                    [true, true, false, true],
+                    branch_style(lane),
+                );
             }
             paint(&mut grid, &cells, row);
             row += 1;
@@ -543,13 +681,23 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
             connect(
                 &mut cells,
                 branch_lane * LANE_WIDTH,
-                Additions { up: Some(index > 0), down: Some(span.1 > index), ..Default::default() },
+                Additions {
+                    up: Some(index > 0),
+                    down: Some(span.1 > index),
+                    ..Default::default()
+                },
                 branch_style(branch_lane),
             );
         }
         if let Some(parent) = commit.parents.get(1).and_then(|id| by_id.get(id.as_str())) {
             let parent_lane = lane_of[parent.branch.as_str()];
-            connect_horizontal(&mut cells, lane, parent_lane, [true, false, true, false], branch_style(parent_lane));
+            connect_horizontal(
+                &mut cells,
+                lane,
+                parent_lane,
+                [true, false, true, false],
+                branch_style(parent_lane),
+            );
         }
         paint(&mut grid, &cells, row);
         let (glyph, style) = match commit.kind {
@@ -559,7 +707,12 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
             CommitType::Normal => ("●", Style::Commit),
         };
         grid.set(lane * LANE_WIDTH, row, glyph, Some(style));
-        grid.text(graph_width + LABEL_GAP, row, &label(commit), Some(Style::Label));
+        grid.text(
+            graph_width + LABEL_GAP,
+            row,
+            &label(commit),
+            Some(Style::Label),
+        );
         row += 1;
     }
     Ok(grid)

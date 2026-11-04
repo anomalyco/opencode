@@ -21,7 +21,11 @@ pub struct Cell<S> {
 
 impl<S> Cell<S> {
     fn empty() -> Self {
-        Self { ch: " ".to_string(), style: None, attributes: 0 }
+        Self {
+            ch: " ".to_string(),
+            style: None,
+            attributes: 0,
+        }
     }
 }
 
@@ -41,9 +45,18 @@ pub struct Trim {
     pub bottom: bool,
 }
 
-pub const TRIM_BOTH: Trim = Trim { top: true, bottom: true };
-pub const TRIM_BOTTOM: Trim = Trim { top: false, bottom: true };
-pub const TRIM_NONE: Trim = Trim { top: false, bottom: false };
+pub const TRIM_BOTH: Trim = Trim {
+    top: true,
+    bottom: true,
+};
+pub const TRIM_BOTTOM: Trim = Trim {
+    top: false,
+    bottom: true,
+};
+pub const TRIM_NONE: Trim = Trim {
+    top: false,
+    bottom: false,
+};
 
 impl<S: Copy + PartialEq> Canvas<S> {
     pub fn new(width: i32, height: i32, merge: Option<Merge<S>>) -> Result<Self, SizeError> {
@@ -53,7 +66,9 @@ impl<S: Copy + PartialEq> Canvas<S> {
         Ok(Self {
             width,
             height,
-            cells: (0..height).map(|_| (0..width).map(|_| Cell::empty()).collect()).collect(),
+            cells: (0..height)
+                .map(|_| (0..width).map(|_| Cell::empty()).collect())
+                .collect(),
             row_ends: vec![0; height as usize],
             merge,
         })
@@ -87,7 +102,11 @@ impl<S: Copy + PartialEq> Canvas<S> {
             return;
         }
         let (ux, uy) = (x as usize, y as usize);
-        let incoming = Cell { ch: ch.to_string(), style, attributes };
+        let incoming = Cell {
+            ch: ch.to_string(),
+            style,
+            attributes,
+        };
         let cell = match (merge, self.merge) {
             (true, Some(merge)) => merge(&self.cells[uy][ux], incoming),
             _ => incoming,
@@ -110,12 +129,25 @@ impl<S: Copy + PartialEq> Canvas<S> {
     }
 
     /// Writes `value` from `x`; `attributes` gives each cell's attributes by its column.
-    pub fn text_with(&mut self, x: i32, y: i32, value: &str, style: Option<S>, attributes: impl Fn(i32) -> u8) {
+    pub fn text_with(
+        &mut self,
+        x: i32,
+        y: i32,
+        value: &str,
+        style: Option<S>,
+        attributes: impl Fn(i32) -> u8,
+    ) {
         if value.bytes().all(|byte| (0x20..0x7f).contains(&byte)) {
             for (index, byte) in value.bytes().enumerate() {
                 let cx = x + index as i32;
                 let ch = [byte];
-                self.set_with(cx, y, std::str::from_utf8(&ch).unwrap_or(" "), style, attributes(cx));
+                self.set_with(
+                    cx,
+                    y,
+                    std::str::from_utf8(&ch).unwrap_or(" "),
+                    style,
+                    attributes(cx),
+                );
             }
             return;
         }
@@ -152,12 +184,28 @@ impl<S: Copy + PartialEq> Canvas<S> {
     }
 
     fn row_text(&self, row: usize) -> String {
-        self.cells[row][..self.row_ends[row] as usize].iter().map(|cell| cell.ch.as_str()).collect()
+        self.cells[row][..self.row_ends[row] as usize]
+            .iter()
+            .map(|cell| cell.ch.as_str())
+            .collect()
     }
 
     pub fn to_text(&self, trim: Trim) -> String {
         let (start, end) = self.row_range(trim);
-        (start..end).map(|row| self.row_text(row)).collect::<Vec<_>>().join("\n")
+        (start..end)
+            .map(|row| self.row_text(row))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// The widest row's terminal width (`getTextSize().width`).
+    pub fn text_width(&self, trim: Trim) -> i32 {
+        let (start, end) = self.row_range(trim);
+        (start..end)
+            .filter(|&row| self.row_ends[row] > 0)
+            .map(|row| text::width(&self.row_text(row)))
+            .max()
+            .unwrap_or(0)
     }
 
     pub fn text_height(&self, trim: Trim) -> i32 {
@@ -167,7 +215,11 @@ impl<S: Copy + PartialEq> Canvas<S> {
 
     /// The styled runs of each row: cells with equal `key` join one run. A row ends at its last non-blank
     /// cell or after the styled blanks that follow it.
-    pub fn runs<K: PartialEq>(&self, trim: Trim, key: impl Fn(&Cell<S>) -> K) -> Vec<Vec<(String, &Cell<S>)>> {
+    pub fn runs<K: PartialEq>(
+        &self,
+        trim: Trim,
+        key: impl Fn(&Cell<S>) -> K,
+    ) -> Vec<Vec<(String, &Cell<S>)>> {
         let (start, end) = self.row_range(trim);
         (start..end)
             .map(|row_index| {
