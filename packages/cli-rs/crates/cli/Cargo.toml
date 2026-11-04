@@ -21,10 +21,12 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
+chrono.workspace = true
 clap = { workspace = true, features = ["string"] }
 clap_complete.workspace = true
 log.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 rustix = { workspace = true, features = ["termios", "event"] }
 serde_json.workspace = true
 tokio.workspace = true
