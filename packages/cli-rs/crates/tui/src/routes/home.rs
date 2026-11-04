@@ -29,6 +29,8 @@ pub struct Home {
     prompt: crate::prompt::editor::Prompt,
     /// The global form overlay (E.9b); while it holds the keys, the prompt must not take the focus.
     forms: crate::features::home_forms::HomeForms,
+    /// The `home.footer` slot's plugin claims (P.1).
+    slot: opencode_plugin::SlotMount<Tui>,
 }
 
 impl Home {
@@ -67,7 +69,13 @@ impl Home {
             .column()
             .width(Length::percent(100.0))
             .shrink(0.0);
-        crate::plugins::home_footer::mount(tui, &footer);
+        let slot = crate::plugins::host::slot(
+            tui,
+            &footer,
+            opencode_plugin::slot::HOME_FOOTER,
+            &Default::default(),
+            |footer| crate::plugins::home_footer::mount(tui, footer),
+        );
         let root = View::new(app)
             .column()
             .grow(1.0)
@@ -93,6 +101,7 @@ impl Home {
             root,
             prompt,
             forms,
+            slot,
         }
     }
 }
@@ -104,6 +113,7 @@ impl RouteView for Home {
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
         self.prompt.sync(tui, changes);
+        self.slot.sync(tui, changes);
         // The last form closed: the prompt takes the keys back.
         if self.forms.sync(tui) && !tui.dialogs.is_open() {
             self.prompt.focus(tui);
