@@ -7,8 +7,13 @@ use super::client::{block_on, connect};
 
 pub fn run(context: &Context) -> anyhow::Result<()> {
     block_on(async {
-        let (_, client) = connect(context).await?;
-        anyhow::Ok(client.location_reload(&RequestOptions::default()).await?)
+        let server = connect(context).await?;
+        anyhow::Ok(
+            server
+                .client
+                .location_reload(&RequestOptions::default())
+                .await?,
+        )
     })??;
     crate::output::print("Configuration reloaded\n")
 }
