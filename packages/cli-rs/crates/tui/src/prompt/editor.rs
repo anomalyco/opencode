@@ -266,6 +266,16 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
             .set_cursor_offset(cursor.min(inner.text_end()));
     }
     load_catalog(tui, &inner);
+    // A model, agent, or variant choice (E.16) changes the metadata row.
+    let weak = Rc::downgrade(&inner);
+    let local = tui.local.subscribe(move || {
+        if let Some(inner) = weak.upgrade()
+            && let Some(tui) = inner.tui.upgrade()
+        {
+            inner.refresh(&tui);
+        }
+    });
+    inner.layers.borrow_mut().push(local);
     inner.refresh(tui);
     Prompt { inner }
 }
@@ -380,9 +390,9 @@ impl Inner {
         let theme = tui.page();
         let catalog = self.catalog.borrow().clone();
         let session = self.session_info(tui);
-        let selection = catalog
-            .as_ref()
-            .and_then(|catalog| catalog.selection(session.as_ref()));
+        let selection = catalog.as_ref().and_then(|catalog| {
+            crate::dialogs::model::prompt_selection(tui, catalog, session.as_ref())
+        });
         let agent_color = selection.as_ref().and_then(|selection| {
             catalog.as_ref()?.color(
                 &theme,

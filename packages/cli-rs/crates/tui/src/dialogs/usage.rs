@@ -10,7 +10,9 @@ use opencode_api::generated::{
     ModelInfo, ProviderInfo, UsageLimitsBudget, UsageLimitsBudgetCoverage, UsageLimitsBudgetPer,
     UsageLimitsBudgetScope, UsageLimitsInfo,
 };
-use opencode_ui::dialog::{DialogCx, DialogOptions, HeaderProps, header, layout};
+use opencode_ui::dialog::{
+    DIALOG_LIST_INSET, DialogCx, DialogOptions, HeaderProps, header, layout,
+};
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
 use opentui::prelude::*;
 
@@ -323,10 +325,20 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     let _ = description; // Shown only under `new-designs`, which the select header does not take yet.
     let mut props = SelectProps::new("Usage", options(local, &None, error));
     props.placeholder = Some("Search models".into());
-    props.empty = Some(
-        "No limits apply to your models. Paid models stop only if the workspace runs out of credits."
-            .into(),
-    );
+    let (app, muted) = (cx.app.clone(), cx.theme.text.muted);
+    props.empty_view = Some(Rc::new(move || {
+        View::new(&app)
+            .padding_x(DIALOG_LIST_INSET)
+            .child(
+                &Text::new(
+                    &app,
+                    "No limits apply to your models. Paid models stop only if the workspace runs out of credits.",
+                )
+                .fg(muted)
+                .wrap(WrapMode::Word),
+            )
+            .as_any()
+    }));
     let weak = Rc::downgrade(local);
     props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {
         let Some(local) = weak.upgrade() else { return };
