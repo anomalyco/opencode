@@ -18,7 +18,9 @@ use opencode_local::jsonl::empty_prompt;
 use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::motion::Spinner;
+use opencode_ui::motion::{
+    ScannerOptions, ScannerStyle, Spinner, SpinnerColor, scanner_colors, scanner_frames,
+};
 use opencode_ui::theme::Theme;
 use opentui::input::Keymap;
 use opentui::keymap::{Condition, Disposer};
@@ -90,6 +92,8 @@ pub struct Inner {
     footer: Text,
     /// The pointer is over the footer's location (E.20).
     hovered: Cell<bool>,
+    /// The running indicator: the spinner, one cell in from the footer's edge.
+    running: View,
     spinner: Spinner,
     pub(crate) mode: Cell<Mode>,
     /// The `PromptInfo` being edited; `text` follows the textarea.
@@ -232,16 +236,23 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .border_sides(Sides::LEFT)
         .border_chars(Some(border_chars('╹', ' ', ' ')))
         .child(&edge);
+    // The scanner in the agent's color; `[⋯]` with animations off (`component/prompt/index.tsx:1913-1919`).
     let spinner = Spinner::new(app)
-        .color(theme.border.base)
-        .animations(opencode_ui::motion::enabled(tui.config.info.animations))
+        .frames(&scanner_frames(&scanner(theme.border.base)))
+        .interval(Duration::from_millis(40))
+        .still("[⋯]")
+        .animations(opencode_ui::motion::enabled(tui.config.info.animations));
+    let running = View::new(app)
+        .margin_edge(Edge::Left, 1)
+        .shrink(0.0)
+        .child(&spinner)
         .visible(false);
     let footer = Text::new(app, "").truncate(true).wrap(WrapMode::None);
     let status = View::new(app)
         .row()
         .shrink(0.0)
         .gap(1)
-        .child(&spinner)
+        .child(&running)
         .child(&footer);
     let root = View::new(app)
         .column()
@@ -261,6 +272,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         metadata,
         footer,
         hovered: Cell::new(false),
+        running,
         spinner,
         mode: Cell::new(Mode::Normal),
         prompt: RefCell::new(empty_prompt()),
@@ -444,8 +456,13 @@ impl Inner {
         };
         self.frame.border_color(highlight);
         self.bottom.border_color(highlight);
-        self.spinner
-            .set_color(agent_color.unwrap_or(theme.border.base));
+        self.spinner.set_color(
+            if opencode_ui::motion::enabled(tui.config.info.animations) {
+                scanner_colors(&scanner(agent_color.unwrap_or(theme.border.base)))
+            } else {
+                SpinnerColor::from(theme.text.muted)
+            },
+        );
 
         let display = match (&catalog, &selection) {
             (Some(catalog), Some(selection)) => {
@@ -473,7 +490,7 @@ impl Inner {
             .set(&theme, mode, &display, highlight, self.app.size().0);
 
         let running = self.running(tui);
-        self.spinner.visible(running);
+        self.running.visible(running);
         let footer: Vec<Span> = if running {
             let armed = self.interrupt.get() > 0;
             let (key, label) = if armed {
@@ -828,5 +845,15 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
             Ok(disposer) => inner.layers.borrow_mut().push(disposer),
             Err(error) => log::error!("prompt keymap layer: {error}"),
         }
+    }
+}
+
+/// The prompt's scanner (`spinnerDef`, `component/prompt/index.tsx:1657-1676`).
+fn scanner(color: Color) -> ScannerOptions {
+    ScannerOptions {
+        style: ScannerStyle::Blocks,
+        inactive_factor: 0.6,
+        min_alpha: 0.3,
+        ..ScannerOptions::new(color)
     }
 }
