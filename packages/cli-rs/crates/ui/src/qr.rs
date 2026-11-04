@@ -1,5 +1,6 @@
-//! QR codes for `pair`: a port of `packages/util/src/qr.ts` (Nayuki's reference encoder), byte mode at level L in
-//! the smallest version. The `qrcode` crate picks other masks, so its codes differ from the TS client's.
+//! QR codes for `pair` and the TUI's `/pair` dialog: a port of `packages/util/src/qr.ts` (Nayuki's reference
+//! encoder), byte mode at level L in the smallest version. Not the `qrcode` crate, which picks other masks, so its
+//! codes differ from the TS client's.
 
 // Error correction codewords per block and block count at level L, for versions 1 to 40.
 const ECC_PER_BLOCK: [usize; 40] = [
