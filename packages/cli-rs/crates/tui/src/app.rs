@@ -703,7 +703,6 @@ fn theme_options(app: &App, info: &Info, files: Option<&Files>) -> ThemeStateOpt
         terminal: app.theme_mode(),
         fallback: ThemeMode::Dark,
         palette,
-        new_designs: info.experiment("new-designs"),
     }
 }
 

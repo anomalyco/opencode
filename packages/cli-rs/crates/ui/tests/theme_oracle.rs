@@ -188,11 +188,11 @@ fn builtin_themes_match_the_typescript_resolver() {
     let mut failures = Vec::new();
     let builtins = fixture["builtins"].as_object().unwrap();
     for (key, expected) in builtins {
-        let [variant, name, requested] = key.splitn(3, '/').collect::<Vec<_>>()[..] else {
+        let [name, requested] = key.splitn(2, '/').collect::<Vec<_>>()[..] else {
             panic!("{key}")
         };
         let loaded = catalog
-            .load(name, mode(requested), variant == "newDesigns")
+            .load(name, mode(requested))
             .unwrap();
         assert_eq!(mode_name(loaded.mode), requested, "{key}");
         failures.extend(compare(key, &loaded.modes, &loaded.theme, expected, &paths));
@@ -208,7 +208,7 @@ fn v1_migration_matches_the_typescript_migration() {
     let mut failures = Vec::new();
     let mut checked = 0;
     for (key, expected) in fixture["builtins"].as_object().unwrap() {
-        let [variant, name, requested] = key.splitn(3, '/').collect::<Vec<_>>()[..] else {
+        let [name, requested] = key.splitn(2, '/').collect::<Vec<_>>()[..] else {
             panic!("{key}")
         };
         // The built-in opencode theme is the V2 document; assets/opencode.json is an unused V1 copy.
@@ -224,7 +224,7 @@ fn v1_migration_matches_the_typescript_migration() {
             serde_json::from_str(&raw).unwrap(),
         )]));
         let loaded = catalog
-            .load(name, mode(requested), variant == "newDesigns")
+            .load(name, mode(requested))
             .unwrap();
         failures.extend(compare(
             &format!("migrated {key}"),
@@ -245,7 +245,7 @@ fn system_theme_matches_the_typescript_generator() {
     let mut failures = Vec::new();
     let system = fixture["system"].as_object().unwrap();
     for (key, expected) in system {
-        let [variant, palette, requested] = key.splitn(3, '/').collect::<Vec<_>>()[..] else {
+        let [palette, requested] = key.splitn(2, '/').collect::<Vec<_>>()[..] else {
             panic!("{key}")
         };
         let colors: TerminalColors =
@@ -259,7 +259,7 @@ fn system_theme_matches_the_typescript_generator() {
         let mut catalog = Catalog::default();
         catalog.set_system(Some(generate_system(&colors, mode(requested))));
         let loaded = catalog
-            .load("system", mode(requested), variant == "newDesigns")
+            .load("system", mode(requested))
             .unwrap();
         failures.extend(compare(key, &loaded.modes, &loaded.theme, expected, &paths));
     }
@@ -276,7 +276,7 @@ fn broken_custom_themes_fail_with_the_typescript_message() {
         catalog.set_custom(IndexMap::from([(name.clone(), case["source"].clone())]));
         let message = [ThemeMode::Dark, ThemeMode::Light]
             .iter()
-            .find_map(|mode| catalog.load(name, *mode, false).err());
+            .find_map(|mode| catalog.load(name, *mode).err());
         if message.as_deref() != case["message"].as_str() {
             failures.push(format!(
                 "{name}: {message:?}, expected {:?}",

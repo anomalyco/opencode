@@ -23,7 +23,7 @@ impl Host for TestHost {
 
     fn theme(&self) -> Theme {
         Catalog::default()
-            .load("opencode", ThemeMode::Dark, false)
+            .load("opencode", ThemeMode::Dark)
             .unwrap()
             .theme
     }

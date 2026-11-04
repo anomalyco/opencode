@@ -1,5 +1,6 @@
-//! V1 themes (`{ defs, theme }` with flat color keys) and their migration to V2 documents (`v1-migrate.ts` in
-//! `packages/theme/src/tui`). Custom V1 themes and the generated `system` theme take this path at runtime.
+//! V1 themes (`{ defs, theme }` with flat color keys) and the parts of their migration to V2 documents
+//! (`v1-migrate.ts` in `packages/theme/src/tui`) that the new-designs migration ([`super::v1_new`]) shares. Custom
+//! V1 themes and the generated `system` theme take this path at runtime.
 
 use std::collections::HashMap;
 
@@ -7,7 +8,7 @@ use opentui::style::Color;
 use opentui::theme::ThemeMode;
 use serde_json::{Map, Value, json};
 
-use super::color::{ansi, from_hex, hex, hex_ints, luminance, oklch_to_hex, to_oklch};
+use super::color::{ansi, from_hex, hex, hex_ints, luminance, to_oklch};
 use super::document::{STEPS, truthy};
 
 pub(crate) const CHROMATIC: [&str; 7] =
@@ -180,16 +181,7 @@ pub(crate) fn mode_name(mode: ThemeMode) -> &'static str {
 /// How a migration lays one mode of a V1 theme out as a V2 definition.
 pub(crate) type MigrateMode = fn(&V1, ThemeMode) -> Map<String, Value>;
 
-/// `migrateV1`.
-pub(crate) fn migrate(theme: &Value) -> Result<Value, String> {
-    migrate_with(
-        theme,
-        migrate_mode,
-        |definition, _| json!({ "hue": definition["hue"] }),
-    )
-}
-
-/// The shape both migrations share: one mode when light and dark resolve to the same opaque background with the
+/// The shape of `migrateV1` that `migrateV1NewDesigns` shares: one mode when light and dark resolve to the same opaque background with the
 /// same brightness, else a light base with a full dark definition. `light` builds the light mode's overrides.
 pub(crate) fn migrate_with(
     theme: &Value,
@@ -242,73 +234,6 @@ pub(crate) fn detect_mode(theme: &V1) -> ThemeMode {
     } else {
         ThemeMode::Light
     }
-}
-
-fn migrate_mode(theme: &V1, mode: ThemeMode) -> Map<String, Value> {
-    let color = |key: &str| hex(theme.get(key));
-    let selected = hex(selected_foreground(theme, theme.get("primary")));
-    let destructive = hex(selected_foreground(theme, theme.get("error")));
-    let hues = infer_hues(theme);
-    let (text, text_muted, primary) = (
-        "$hue.neutral.200",
-        "$hue.neutral.400",
-        "$hue.interactive.200",
-    );
-    let (background, panel, menu, max) = (
-        "$hue.neutral.800",
-        "$hue.neutral.700",
-        "$hue.neutral.600",
-        "$hue.neutral.500",
-    );
-    let mut hue = Map::new();
-    hue.insert("gray".to_owned(), scale_value(&neutral_scale(theme)));
-    for (name, matched) in hues.chromatic() {
-        hue.insert(name.to_owned(), scale_value(&hue_scale(matched, mode)));
-    }
-    hue.insert("accent".to_owned(), json!(hues.alias("accent")));
-    hue.insert("interactive".to_owned(), json!(hues.alias("primary")));
-    hue.insert("neutral".to_owned(), json!("$hue.gray"));
-    let definition = json!({
-        "hue": hue,
-        "categorical": hues.categorical(),
-        "text": {
-            "base": text,
-            "muted": text_muted,
-            "action": {
-                "primary": { "base": "$text.base", "$disabled": text_muted, "$focused": selected, "$selected": primary },
-                "secondary": { "base": "$text.muted", "$hovered": "$text.base" },
-                "destructive": { "base": destructive, "$disabled": text_muted },
-            },
-            "formfield": {
-                "base": text,
-                "$hovered": primary,
-                "$focused": primary,
-                "$pressed": primary,
-                "$disabled": text_muted,
-                "$selected": primary,
-            },
-            "feedback": feedback_text(theme),
-        },
-        "background": {
-            "base": background,
-            "raised": { "base": panel, "high": menu, "max": max },
-            "action": {
-                "primary": { "base": "transparent", "$hovered": panel, "$focused": primary, "$selected": "transparent" },
-                "secondary": { "base": "transparent" },
-                "destructive": { "base": color("error") },
-            },
-            "formfield": { "base": "$background.base" },
-            "feedback": feedback_background(),
-        },
-        "@palette": palette_tokens(theme),
-        "@dialog": {
-            "background": {
-                "base": dialog_background(theme),
-                "action": { "primary": { "$hovered": "$background.raised.high" } },
-            },
-        },
-    });
-    reference_hues(splice_palette(definition))
 }
 
 pub(crate) fn feedback_text(theme: &V1) -> Value {
@@ -631,83 +556,6 @@ pub(crate) fn selected_foreground(theme: &V1, background: Color) -> Color {
     } else {
         Color::rgb(255, 255, 255)
     }
-}
-
-fn hue_scale(color: Color, mode: ThemeMode) -> Vec<String> {
-    let value = to_oklch(color);
-    let endpoint = if mode == ThemeMode::Light {
-        value.l.max(0.97)
-    } else {
-        value.l.min(0.18)
-    };
-    STEPS
-        .iter()
-        .map(|step| {
-            if *step == 200 {
-                return hex(color);
-            }
-            let progress = (f64::from(*step) - 200.0) / 700.0;
-            let generated = oklch_to_hex(super::color::Oklch {
-                l: value.l + (endpoint - value.l) * progress,
-                c: value.c * (1.0 - progress * 0.5),
-                h: value.h,
-            });
-            with_alpha(generated, color.a)
-        })
-        .collect()
-}
-
-fn neutral_scale(theme: &V1) -> Vec<String> {
-    let anchors: [(u16, Color); 5] = [
-        (200, theme.get("text")),
-        (400, theme.get("textMuted")),
-        (600, theme.get("backgroundElement")),
-        (700, theme.get("backgroundPanel")),
-        (800, theme.get("background")),
-    ];
-    STEPS
-        .iter()
-        .map(|step| {
-            if let Some((_, color)) = anchors.iter().find(|(anchor, _)| anchor == step) {
-                return hex(*color);
-            }
-            let (lower, upper) = if *step < anchors[0].0 {
-                (anchors[0], anchors[1])
-            } else if *step > anchors[4].0 {
-                (anchors[3], anchors[4])
-            } else {
-                let lower = anchors
-                    .iter()
-                    .rev()
-                    .find(|(anchor, _)| anchor < step)
-                    .copied()
-                    .unwrap_or(anchors[0]);
-                let upper = anchors
-                    .iter()
-                    .find(|(anchor, _)| anchor > step)
-                    .copied()
-                    .unwrap_or(anchors[4]);
-                (lower, upper)
-            };
-            let amount =
-                (f64::from(*step) - f64::from(lower.0)) / (f64::from(upper.0) - f64::from(lower.0));
-            interpolate(lower.1, upper.1, amount)
-        })
-        .collect()
-}
-
-fn interpolate(first: Color, second: Color, amount: f64) -> String {
-    let (start, end) = (to_oklch(first), to_oklch(second));
-    let hue = (((end.h - start.h) % 360.0 + 540.0) % 360.0) - 180.0;
-    let generated = oklch_to_hex(super::color::Oklch {
-        l: start.l + (end.l - start.l) * amount,
-        c: start.c + (end.c - start.c) * amount,
-        h: start.h + hue * amount,
-    });
-    let alpha = (f64::from(first.a) + (f64::from(second.a) - f64::from(first.a)) * amount + 0.5)
-        .floor()
-        .clamp(0.0, 255.0);
-    with_alpha(generated, alpha as u8)
 }
 
 pub(crate) fn with_alpha(generated: String, alpha: u8) -> String {
