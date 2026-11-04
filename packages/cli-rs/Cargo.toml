@@ -106,5 +106,14 @@ tree-sitter-vim = "0.4.0"
 tree-sitter-vue-next = "0.1.0"
 tree-sitter-xml = "=0.7.0"
 
+# Debug info stays in the object files instead of passing through the linker, and dependencies keep only file and line
+# tables. Backtraces still show file and line, and a test binary links in about half the time and memory. `test`
+# inherits this.
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.release]
 debug = "line-tables-only"
