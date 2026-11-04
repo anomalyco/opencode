@@ -581,6 +581,9 @@ impl Data {
     }
 
     pub(crate) fn refresh_catalogs(&self, catalogs: Vec<Catalog>, location: Location) {
+        if !self.live() {
+            return;
+        }
         let reads: Vec<Task<()>> = catalogs
             .into_iter()
             .map(|catalog| self.catalog_sync(catalog, Some(&location)))
