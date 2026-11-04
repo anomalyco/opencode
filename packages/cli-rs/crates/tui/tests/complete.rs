@@ -438,17 +438,22 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
 fn skills_and_references_are_listed_and_sent() {
     let setup = Setup::new();
     setup.app.type_text("@");
-    let screen = setup.wait_for("@release-notes");
-    for row in [
+    // Skills, references and agents load separately.
+    let rows = [
+        "@release-notes",
         "Write release notes.",
         "@docs",
         "/refs/docs",
         "skill",
         "reference",
         "agent",
-    ] {
-        assert!(screen.contains(row), "{row:?} missing:\n{screen}");
-    }
+    ];
+    let listed = setup.app.wait_until(WAIT, || {
+        let screen = setup.app.text();
+        rows.iter().all(|row| screen.contains(row))
+    });
+    let screen = setup.app.text();
+    assert!(listed, "{rows:?} missing:\n{screen}");
     assert!(!screen.contains("@hidden"), "{screen}");
     // A reference name narrows the list to it, and no file search runs for it.
     let finds = setup.requests("GET", "/api/fs/find").len();
