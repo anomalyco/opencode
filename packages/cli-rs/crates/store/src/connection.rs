@@ -381,6 +381,8 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::PersistentPtyAdded(_)
             | V2Event::PersistentPtyRemoved(_)
             | V2Event::PersistentPtyUpdated(_)
+            // Plugin RPC events, which the goal footer follows (E.14); it reads again on `server.connected`.
+            | V2Event::Rpc(_)
     )
 }
 
