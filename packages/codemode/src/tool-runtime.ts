@@ -23,7 +23,7 @@ type ServicesOf<T, Depth extends ReadonlyArray<unknown>> = Depth["length"] exten
   ? never
   : T extends {
         readonly _tag: "CodeModeTool"
-        readonly execute: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
+        readonly execute: (input: unknown, context?: { readonly key: string }) => Effect.Effect<unknown, unknown, infer R>
       }
     ? R
     : T extends object
@@ -37,7 +37,12 @@ export type ToolCall = {
 }
 
 /** A tool call the program is making, with its decoded input. */
-export type ToolInvocation = { readonly name: string; readonly input: unknown }
+export type ToolInvocation = {
+  readonly name: string
+  readonly input: unknown
+  /** The call's idempotency key, `<run id>:<call id>`: the same at every hook, and across a suspended run's resumes. */
+  readonly key: string
+}
 
 /**
  * A call the program is making to an extension global or module function, with its arguments. A module function is
@@ -375,13 +380,21 @@ export class ToolRuntimeError extends Error {
 export type ToolRuntime<R = never> = {
   readonly calls: Array<ToolCall>
   readonly hooks: Hooks<R>
-  /** Runs a tool call. `again` runs one admitted before, re-run on resume: it is not counted a second time. */
+  /**
+   * Runs a tool call under its idempotency `key`. `again` runs one admitted before, re-run on resume: it is not counted
+   * a second time.
+   */
   readonly execute: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
+    key: string,
     again?: boolean,
   ) => Effect.Effect<Json | undefined, unknown, R>
-  readonly search: (args: Array<Json | undefined>, again?: boolean) => Effect.Effect<Json | undefined, unknown, R>
+  readonly search: (
+    args: Array<Json | undefined>,
+    key: string,
+    again?: boolean,
+  ) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   /** The tool at `path`, if there is one, so a caller can see whether it is durable or safe to retry. */
   readonly tool: (path: ReadonlyArray<string>) => Tool<R> | undefined
@@ -396,6 +409,7 @@ export type ToolRuntime<R = never> = {
   readonly attach: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
+    key: string,
     handle: Handle,
   ) => Effect.Effect<Json | undefined, unknown, R>
   /** The handle of a durable tool's work started under `key`, if it was. */
@@ -461,16 +475,16 @@ export const make = <R>(
       catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
     })
 
-  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, again = false) =>
+  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, key: string, again = false) =>
     Effect.gen(function* () {
       const input = yield* decode(name, tool, args)
       if (!again) yield* Effect.sync(() => recordCall({ name }))
       return yield* hooked(
-        { name, input },
+        { name, input, key },
         hooks["tool.before"],
         hooks["tool.after"],
         Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => tool.execute(input)))
+          const raw = yield* failure(Effect.suspend(() => tool.execute(input, { key })))
           return yield* output(name, tool, raw)
         }),
       )
@@ -486,15 +500,15 @@ export const make = <R>(
     calls,
     hooks,
     keys: (path) => namespaceKeys(root, path),
-    search: (args, again) =>
-      Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args, again)),
-    execute: (path, args, again) =>
+    search: (args, key, again) =>
+      Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args, key, again)),
+    execute: (path, args, key, again) =>
       Effect.suspend(() => {
         const segments = canonicalSegments(path)
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", makeSearchTool(prepared.searchIndex), args, again)
-        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, again)
+          return executeTool("search", makeSearchTool(prepared.searchIndex), args, key, again)
+        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, key, again)
       }),
     tool: (path) => lookup(root, canonicalSegments(path))?.tool,
     start: (path, args, key, again) =>
@@ -504,11 +518,11 @@ export const make = <R>(
           const input = yield* decode(found.name, found.tool, args)
           if (!again) yield* Effect.sync(() => recordCall({ name: found.name }))
           const before = hooks["tool.before"]
-          if (before !== undefined) yield* before({ name: found.name, input })
+          if (before !== undefined) yield* before({ name: found.name, input, key })
           return yield* failure(Effect.suspend(() => found.durable.start(input, { key })))
         })
       }),
-    attach: (path, args, handle) =>
+    attach: (path, args, key, handle) =>
       Effect.suspend(() => {
         const found = durableTool(path)
         const after = hooks["tool.after"]
@@ -520,9 +534,10 @@ export const make = <R>(
         // Detaching is not an outcome: `after` sees how the work ended, once it has.
         return Effect.flatMap(decode(found.name, found.tool, args), (input) =>
           Effect.onExit(run, (exit) => {
-            if (Exit.isSuccess(exit)) return after({ name: found.name, input }, { status: "success", value: exit.value })
+            const call = { name: found.name, input, key }
+            if (Exit.isSuccess(exit)) return after(call, { status: "success", value: exit.value })
             if (Cause.hasInterruptsOnly(exit.cause)) return Effect.void
-            return after({ name: found.name, input }, { status: "failure", error: Cause.squash(exit.cause) })
+            return after(call, { status: "failure", error: Cause.squash(exit.cause) })
           }),
         )
       }),

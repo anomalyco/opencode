@@ -186,8 +186,8 @@ export class Driver<R> {
         this.attach(current)
       })
     }
-    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args, again))
-    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args, again))
+    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args, call.key, again))
+    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args, call.key, again))
     // An extension's work, made by the extension bridge with the program's services in its requirements.
     return this.fork(call.id, this.machine.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>)
   }
@@ -195,7 +195,7 @@ export class Driver<R> {
   private attach(call: HostCall): void {
     const request = call.request
     if (request.kind !== "tool") return
-    this.fork(call.id, this.tools.attach(request.path, request.args, call.handle!))
+    this.fork(call.id, this.tools.attach(request.path, request.args, call.key, call.handle!))
   }
 
   // A durable call that may have started before the run was saved: reattach to its work if it did, else start it.

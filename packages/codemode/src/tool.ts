@@ -68,7 +68,11 @@ export type Tool<R = never> = {
   readonly description: string
   readonly input: SchemaType
   readonly output: SchemaType | undefined
-  readonly execute: (input: unknown) => Effect.Effect<unknown, unknown, R>
+  /**
+   * Runs a call. A run passes the call's idempotency key, `<run id>:<call id>`, stable across a suspended run's
+   * resumes; called directly, a random key stands in.
+   */
+  readonly execute: (input: unknown, context?: { readonly key: string }) => Effect.Effect<unknown, unknown, R>
   readonly durable?: Durable<unknown, unknown, R> | undefined
   readonly retry?: Retry | undefined
 }
@@ -85,7 +89,10 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   readonly retry?: Retry
 } & (
   | {
-      readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
+      readonly execute: (
+        input: InputType<I>,
+        context: { readonly key: string },
+      ) => Effect.Effect<ResultType<O>, unknown, R>
       readonly durable?: Durable<InputType<I>, ResultType<O>, R>
     }
   | { readonly execute?: undefined; readonly durable: Durable<InputType<I>, ResultType<O>, R> }
@@ -105,16 +112,19 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
   options: Options<I, O, R>,
 ): Tool<R> => {
   const durable = options.durable as Durable<unknown, unknown, R> | undefined
-  const execute = options.execute as ((input: unknown) => Effect.Effect<unknown, unknown, R>) | undefined
+  const execute = options.execute as
+    | ((input: unknown, context: { readonly key: string }) => Effect.Effect<unknown, unknown, R>)
+    | undefined
   if (execute === undefined && durable === undefined) throw new TypeError("A tool needs `execute` or `durable`.")
   return {
     _tag: "CodeModeTool",
     description: options.description,
     input: options.input,
     output: options.output,
-    execute:
-      execute ??
-      ((input) => Effect.flatMap(durable!.start(input, { key: crypto.randomUUID() }), (handle) => durable!.attach(handle))),
+    execute: (input, context = { key: crypto.randomUUID() }) =>
+      execute !== undefined
+        ? execute(input, context)
+        : Effect.flatMap(durable!.start(input, context), (handle) => durable!.attach(handle)),
     ...(durable === undefined ? {} : { durable }),
     ...(options.retry === undefined ? {} : { retry: options.retry }),
   }

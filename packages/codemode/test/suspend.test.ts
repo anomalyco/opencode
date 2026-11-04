@@ -375,6 +375,32 @@ describe("suspend and resume", () => {
     expect(jobs.jobs.get("e:0")!.cancelled).toBe(true)
   })
 
+  test("tools and hooks see each call's idempotency key, the same at both hooks of a durable call", async () => {
+    const jobs = durableJobs()
+    const keys: Array<string> = []
+    const echo = Tool.make({
+      description: "Echoes its key",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: (_, { key }) => Effect.succeed(key),
+    })
+    const runtime = CodeMode.make({
+      tools: { echo, job: jobs.tool },
+      hooks: {
+        "tool.before": (call) => Effect.sync(() => void keys.push(`before ${call.name} ${call.key}`)),
+        "tool.after": (call) => Effect.sync(() => void keys.push(`after ${call.name} ${call.key}`)),
+      },
+    })
+    const run = runtime.start(`const job = tools.job({ value: 1 }); const key = await tools.echo({}); return [key, (await job).value]`, undefined, {
+      runId: "k",
+    })
+    const fiber = Effect.runFork(run.result)
+    await jobs.started()
+    jobs.finish("k:0", 7)
+    expect(await Effect.runPromise(Fiber.join(fiber))).toMatchObject({ ok: true, value: ["k:1", 7] })
+    expect(keys.toSorted()).toEqual(["after echo k:1", "after job k:0", "before echo k:1", "before job k:0"])
+  })
+
   test("the snapshot codec does not import Effect", async () => {
     for (const file of ["codec.ts", "snapshot.ts"]) {
       expect(await Bun.file(`${import.meta.dir}/../src/snapshot/${file}`).text()).not.toMatch(/from "effect"/)
