@@ -208,10 +208,15 @@ const messageEntries = Effect.fnUntraced(function* (
   // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
   // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
   const native = entries.findLast((entry) => isNativeCompaction(entry.message))
+  // Forked instruction updates remain addressable in storage, but the inherited baseline supersedes them.
   // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
   return entries.filter(
     (entry) =>
-      !(entry.message.type === "system" && native && entry.seq < native.seq) && replayable(entry.message, boundary),
+      !(
+        entry.message.type === "system" &&
+        ((native && entry.seq < native.seq) ||
+          (entry.message.metadata?.notice === "instructions" && entry.message.metadata.instructionSuperseded === true))
+      ) && replayable(entry.message, boundary),
   )
 })
 

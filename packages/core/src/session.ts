@@ -367,8 +367,8 @@ const layer = Layer.effect(
           )
           .pipe(Effect.orDie)
         // The fork adopts the parent's newest instruction values rather than the
-        // values in effect at the boundary; copied history may contain frozen
-        // instruction-update text the initial baseline already reflects.
+        // values in effect at the boundary; their chronological updates are
+        // superseded by that baseline and omitted from the model context.
         // The parent's location, not the caller's, decides whether the copy's media is stored as blobs.
         const media = yield* mediaBlob(parent)
         yield* bus

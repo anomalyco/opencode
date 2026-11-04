@@ -1769,9 +1769,7 @@ describe("SessionRunnerLLM", () => {
       yield* s.session.resume(forked.id)
       expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
       expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
-      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
-        Message.system("Newest instructions"),
-      ])
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
       expect(
         (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
       ).toMatchObject({ native })
@@ -1781,9 +1779,7 @@ describe("SessionRunnerLLM", () => {
       yield* s.session.prompt({ sessionID: forked.id, text: "Switched fork", resume: false })
       yield* s.session.resume(forked.id)
       expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
-      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
-        Message.system("Newest instructions"),
-      ])
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
       s.currentModel = original
 
       yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: checkpoint.id })
@@ -1819,9 +1815,13 @@ describe("SessionRunnerLLM", () => {
     yield* s.session.resume(forked.id)
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
-    // Copied history keeps the frozen chronological update; no new update is emitted.
-    expect(systemTexts(s.requests.at(-1)!)).toContain("Changed context")
-    expect(systemTexts(s.requests.at(-1)!)).not.toContain("Latest context")
+    expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+
+    s.systemBaseline = "Fork context"
+    yield* s.session.prompt({ sessionID: forked.id, text: "Continue fork", resume: false })
+    yield* s.session.resume(forked.id)
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Latest context")
+    expect(systemTexts(s.requests.at(-1)!)).toEqual(["Fork context"])
 
     const recorded = yield* s.db
       .select()
@@ -1845,7 +1845,11 @@ describe("SessionRunnerLLM", () => {
     )
     expect(
       yield* s.db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, forked.id)).get(),
-    ).toMatchObject({ current_values: { "test/context": Instructions.hash("Latest context") } })
+    ).toMatchObject({ current_values: { "test/context": Instructions.hash("Fork context") } })
+    yield* s.session.prompt({ sessionID: forked.id, text: "Replayed fork", resume: false })
+    yield* s.session.resume(forked.id)
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Latest context")
+    expect(systemTexts(s.requests.at(-1)!)).toEqual(["Fork context"])
   })
 
   scenario("keeps nested forks self-contained", function* (s) {
@@ -2380,7 +2384,11 @@ describe("SessionRunnerLLM", () => {
     const fork = yield* s.session.fork({ sessionID, before: latest.id })
     expect(
       (yield* s.session.context(fork.id)).flatMap((message) => (message.type === "system" ? [message.text] : [])),
-    ).toEqual(["Replacement context"])
+    ).toEqual([])
+    yield* s.session.prompt({ sessionID: fork.id, text: "Continue fork", resume: false })
+    yield* s.session.resume(fork.id)
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Replacement context")
+    expect(systemTexts(s.requests.at(-1)!)).toEqual([])
   })
 
   for (const order of ["before", "between", "after"] as const) {

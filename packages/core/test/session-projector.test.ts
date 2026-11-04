@@ -1683,6 +1683,81 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("forks retain instruction notices as history but supersede them when they inherit a baseline", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const boundary = SessionMessage.ID.make("msg_fork_boundary")
+      const messages = [
+        ...[
+          { text: "Legacy tool compatibility notice" },
+          { text: "Other system notice", metadata: { notice: "legacy-tools" } },
+          { text: "Superseded instruction update", metadata: { notice: "instructions" } },
+        ].map((message, index) =>
+          SessionMessage.System.make({
+            ...message,
+            id: SessionMessage.ID.make(`msg_system_${index}`),
+            type: "system",
+            time: { created },
+          }),
+        ),
+        SessionMessage.User.make({
+          id: boundary,
+          type: "user",
+          text: "Continue",
+          time: { created },
+        }),
+      ]
+      yield* db
+        .insert(SessionMessageTable)
+        .values(
+          messages.map((message, seq) => {
+            const { id, type, ...data } = encodeMessage(message)
+            return { id: SessionMessage.ID.make(id), session_id: sessionID, type, seq, time_created: 0, data }
+          }),
+        )
+        .run()
+        .pipe(Effect.orDie)
+
+      for (const inherited of [false, true]) {
+        const childID = Session.ID.make(`ses_instruction_fork_${inherited}`)
+        yield* bus.publish(SessionEvent.Forked, {
+          sessionID: childID,
+          parentID: sessionID,
+          boundary: { type: "through", messageID: boundary },
+          ...(inherited ? { instructions: {} } : {}),
+        })
+        const copied = yield* store.messages({ sessionID: childID, order: "asc" })
+        expect(copied).toMatchObject([
+          { type: "system", text: "Legacy tool compatibility notice" },
+          { type: "system", text: "Other system notice", metadata: { notice: "legacy-tools" } },
+          { type: "system", text: "Superseded instruction update", metadata: { notice: "instructions" } },
+          { type: "user", text: "Continue" },
+        ])
+        expect(copied[2].metadata?.instructionSuperseded).toBe(inherited ? true : undefined)
+        expect(yield* store.context(childID)).toMatchObject([
+          { type: "system", text: "Legacy tool compatibility notice" },
+          { type: "system", text: "Other system notice", metadata: { notice: "legacy-tools" } },
+          ...(inherited ? [] : [{ type: "system", text: "Superseded instruction update" }]),
+          { type: "user", text: "Continue" },
+        ])
+        const grandchildID = Session.ID.make(`ses_instruction_grandfork_${inherited}`)
+        yield* bus.publish(SessionEvent.Forked, {
+          sessionID: grandchildID,
+          parentID: childID,
+          boundary: { type: "before", messageID: copied[2].id },
+          instructions: {},
+        })
+        expect(yield* store.messages({ sessionID: grandchildID, order: "asc" })).toMatchObject([
+          { type: "system", text: "Legacy tool compatibility notice" },
+          { type: "system", text: "Other system notice" },
+        ])
+      }
+      expect(withoutIDs(yield* store.messages({ sessionID, order: "asc" }))).toEqual(withoutIDs(messages))
+    }),
+  )
+
   it.effect("forks a settled message whose parts are in session_part with its content", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
