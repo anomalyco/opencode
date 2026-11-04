@@ -32,6 +32,7 @@ impl Fake {
         let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
             .args(args)
             .env("OPENCODE_TS_BIN", self.dir.path().join("opencode"))
+            .env("XDG_DATA_HOME", self.dir.path())
             .env("DELEGATE_DIR", self.dir.path())
             .env("DELEGATE_EXIT", exit.to_string())
             .env_remove("OPENCODE_PRINT_LOGS")
@@ -92,7 +93,12 @@ fn the_child_keeps_the_process_stdio_and_exit_code() {
     let (output, pid) = fake.run(&["--print-logs", "plugin", "list"], "piped input\n", 7);
     assert_eq!(output.status.code(), Some(7));
     assert_eq!(String::from_utf8_lossy(&output.stdout), "piped input\n");
-    assert_eq!(String::from_utf8_lossy(&output.stderr), "to stderr\n");
+    // `--print-logs` prints this process's "cli starting" line before the TypeScript binary takes over.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("message=\"cli starting\"") && stderr.ends_with("\nto stderr\n"),
+        "{stderr}"
+    );
     // On Unix the TypeScript binary replaces the process, so `serve --service` registers this pid.
     assert_eq!(fake.read("pid").trim(), pid.to_string());
     assert_eq!(fake.read("env"), "print-logs=1\n");
@@ -111,9 +117,11 @@ fn usage_errors_and_bare_plugin_never_start_the_binary() {
 
 #[test]
 fn a_missing_binary_says_how_to_fix_it() {
+    let data = tempfile::tempdir().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
         .args(["uninstall", "--dry-run"])
         .env("OPENCODE_TS_BIN", "/nonexistent/opencode")
+        .env("XDG_DATA_HOME", data.path())
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
