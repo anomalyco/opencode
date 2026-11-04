@@ -877,4 +877,115 @@ describe("SubagentTool", () => {
       ),
     ),
   )
+
+  it.live("records the notify preference explicitly instead of inheriting it", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location,
+            metadata: { "subagent.notify": false, host: "keep" },
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const spawn = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call", id, name: SubagentTool.name, input },
+            })
+
+          const loud = yield* spawn("call-notify-default", {
+            agent: "reviewer",
+            description: "loud review",
+            prompt: "review",
+            background: true,
+          })
+          const quiet = yield* spawn("call-notify-false", {
+            agent: "reviewer",
+            description: "quiet review",
+            prompt: "review",
+            background: true,
+            notify: false,
+          })
+
+          // The inherited false is rewritten by default, and the host key survives the merge.
+          expect((yield* sessions.get(outputSessionID(loud.metadata))).metadata).toEqual({
+            "subagent.notify": true,
+            host: "keep",
+          })
+          expect((yield* sessions.get(outputSessionID(quiet.metadata))).metadata).toEqual({
+            "subagent.notify": false,
+            host: "keep",
+          })
+        }),
+      ),
+    ),
+  )
+
+  it.live("reports only the children whose spawn asked for it", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+          const database = yield* Database.Service
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+          const spawn = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call", id, name: SubagentTool.name, input },
+            })
+
+          const quiet = yield* spawn("call-silent-subagent", {
+            agent: "reviewer",
+            description: "quiet review",
+            prompt: "review",
+            background: true,
+            notify: false,
+          })
+          const loud = yield* spawn("call-loud-subagent", {
+            agent: "reviewer",
+            description: "loud review",
+            prompt: "review",
+            background: true,
+          })
+          const loudID = outputSessionID(loud.metadata)
+
+          const admission = Array.from(yield* Fiber.join(admitted))[0]
+          if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
+          expect(admission.data.item.payload.metadata).toMatchObject({ childID: loudID })
+
+          // The silent child settles without a report but still clears its durable marker.
+          yield* jobs.wait({ id: outputSessionID(quiet.metadata) })
+          yield* jobs.wait({ id: loudID })
+          yield* jobs.pendingBackground.pipe(
+            Effect.repeat({ until: (pending) => pending.length === 0 }),
+            Effect.timeout("2 seconds"),
+          )
+          yield* SessionInbox.promote(database.db, bus, parent.id, "steer")
+          const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
+          expect(synthetic).toHaveLength(1)
+          expect(synthetic[0]?.text).toContain(`<subagent sessionID="${loudID}" state="completed"`)
+        }),
+      ),
+    ),
+  )
 })

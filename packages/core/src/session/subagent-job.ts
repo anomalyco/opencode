@@ -6,12 +6,18 @@ import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { Job } from "../job.js"
 import { Session } from "../session.js"
 import { SubagentCompletion } from "./subagent-completion.js"
+import { SubagentMetadata } from "./subagent-metadata.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
+export type Input = {
+  readonly recovery: Recovery
+  readonly notify: boolean
+}
+
 export interface Interface {
-  start: (recovery: Recovery) => Effect.Effect<Job.Info>
-  background: (recovery: Recovery) => Effect.Effect<void>
+  start: (input: Input) => Effect.Effect<Job.Info>
+  background: (input: Input) => Effect.Effect<void>
   notify: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
 }
 
@@ -27,13 +33,37 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
   // One observer per job generation, including continuations of the same child.
   const notifications = new Set<string>()
 
+  // Children inherit their parent's metadata (Session.create), so the per-spawn preference is
+  // always written explicitly, merged over whatever the child already carries. This must run
+  // before jobs.start, because that forks the child's run. A vanished child keeps the
+  // never-error channel; jobs.start and the run surface a genuinely missing one.
+  const writeNotify = Effect.fnUntraced(function* (recovery: Recovery, notify: boolean) {
+    yield* Effect.gen(function* () {
+      const session = yield* sessions.get(recovery.childSessionID)
+      const metadata = SubagentMetadata.withNotify(session.metadata, notify)
+      if (metadata) yield* sessions.setMetadata({ sessionID: recovery.childSessionID, metadata })
+    }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
+  })
+
   const notify = Effect.fn("SubagentJob.notify")(function* (recovery: Recovery, startedAt: number) {
     const key = `${recovery.childSessionID}:${startedAt}`
     if (notifications.has(key)) return
     notifications.add(key)
     yield* Effect.gen(function* () {
       const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
-      if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
+      if (!info) return
+      // The preference belongs to the spawn call, so read it after the child settles. A silent
+      // child still clears its durable marker rather than leave a row that restart recovery
+      // would replay as a report the parent asked not to receive.
+      const metadata = yield* sessions.get(recovery.childSessionID).pipe(
+        Effect.map((session) => session.metadata),
+        Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
+      )
+      if (!SubagentMetadata.notify(metadata)) {
+        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
+        return
+      }
+      yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
     }).pipe(
       Effect.ensuring(Effect.sync(() => notifications.delete(key))),
       Effect.forkIn(scope, { startImmediately: true }),
@@ -42,17 +72,22 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
   })
 
   return Service.of({
-    start: (recovery: Recovery) =>
-      jobs
-        .start({
-          id: recovery.childSessionID,
+    start: (input: Input) =>
+      Effect.gen(function* () {
+        yield* writeNotify(input.recovery, input.notify)
+        return yield* jobs.start({
+          id: input.recovery.childSessionID,
           type: "subagent",
-          title: recovery.description,
+          title: input.recovery.description,
           metadata: {},
-          recovery,
+          recovery: input.recovery,
           run: Effect.gen(function* () {
-            yield* sessions.resume(recovery.childSessionID)
-            const messages = yield* sessions.messages({ sessionID: recovery.childSessionID, order: "desc", limit: 20 })
+            yield* sessions.resume(input.recovery.childSessionID)
+            const messages = yield* sessions.messages({
+              sessionID: input.recovery.childSessionID,
+              order: "desc",
+              limit: 20,
+            })
             const assistant = messages.find(
               (message) =>
                 message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
@@ -60,10 +95,11 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
             return SubagentCompletion.text(assistant)
           }),
         })
-        .pipe(Effect.setContext(context)),
-    background: Effect.fn("SubagentJob.background")(function* (recovery: Recovery) {
-      const info = yield* jobs.background(recovery.childSessionID)
-      if (info) yield* notify(recovery, info.started_at)
+      }).pipe(Effect.setContext(context)),
+    background: Effect.fn("SubagentJob.background")(function* (input: Input) {
+      yield* writeNotify(input.recovery, input.notify)
+      const info = yield* jobs.background(input.recovery.childSessionID)
+      if (info) yield* notify(input.recovery, info.started_at)
     }),
     notify,
   })

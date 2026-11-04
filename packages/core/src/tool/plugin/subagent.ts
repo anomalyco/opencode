@@ -45,6 +45,10 @@ export const Input = Schema.Struct({
     description:
       "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
   }),
+  notify: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Send you a message when the subagent goes idle. Defaults to true; set false to run it silently. The choice applies to this call only.",
+  }),
 })
 
 export const Output = Schema.Struct({
@@ -59,6 +63,7 @@ export const description = [
   "Foreground (default) runs the subagent to completion and returns its final response.",
   "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
   "Use background only for independent work that can run while you continue elsewhere.",
+  "Set notify=false to run a background subagent silently when you expect to read its session yourself later.",
 ].join("\n")
 
 export const Plugin = {
@@ -198,10 +203,13 @@ export const Plugin = {
                   ))
 
               const background = input.background === true
+              const notify = input.notify !== false
               yield* context.progress({ sessionID: child.id, status: "running" })
 
               // Standard prompt admission outside the job: Job.start joining a running child skips
               // its run effect, and the default wake starts an idle child or steers a running one.
+              // A new child admits only, so the job owns the first drain and its foreground block
+              // is registered before the child can settle; continuations keep the default wake.
               yield* sessions
                 .prompt({
                   sessionID: child.id,
@@ -209,7 +217,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
+                  ...(existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(
                   Effect.mapError(
@@ -224,10 +232,10 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              yield* subagents.start(recovery)
+              yield* subagents.start({ recovery, notify })
 
               if (background) {
-                yield* subagents.background(recovery)
+                yield* subagents.background({ recovery, notify })
                 return backgroundResult(child.id)
               }
 
@@ -239,6 +247,7 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
+                // The observer clears the durable marker even for a silent child.
                 yield* subagents.notify(recovery, result.info.started_at)
                 return backgroundResult(child.id)
               }
