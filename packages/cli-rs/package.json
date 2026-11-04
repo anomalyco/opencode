@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/cli-rs",
+  "version": "2.2.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cargo": "cargo",
+    "generate": "bun run script/generate.ts",
+    "fixtures": "bun run parity/fixtures.ts",
+    "live": "sh script/live.sh",
+    "opentui-lib": "sh script/opentui-lib.sh",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode/httpapi-codegen": "workspace:*",
+    "@opencode/protocol": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:"
+  }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "opencode-store"
+description = "Client data store, ported from packages/client/src/solid/data.ts."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-api.workspace = true
