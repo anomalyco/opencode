@@ -191,9 +191,7 @@ fn builtin_themes_match_the_typescript_resolver() {
         let [name, requested] = key.splitn(2, '/').collect::<Vec<_>>()[..] else {
             panic!("{key}")
         };
-        let loaded = catalog
-            .load(name, mode(requested))
-            .unwrap();
+        let loaded = catalog.load(name, mode(requested)).unwrap();
         assert_eq!(mode_name(loaded.mode), requested, "{key}");
         failures.extend(compare(key, &loaded.modes, &loaded.theme, expected, &paths));
     }
@@ -223,9 +221,7 @@ fn v1_migration_matches_the_typescript_migration() {
             name.to_owned(),
             serde_json::from_str(&raw).unwrap(),
         )]));
-        let loaded = catalog
-            .load(name, mode(requested))
-            .unwrap();
+        let loaded = catalog.load(name, mode(requested)).unwrap();
         failures.extend(compare(
             &format!("migrated {key}"),
             &loaded.modes,
@@ -258,9 +254,7 @@ fn system_theme_matches_the_typescript_generator() {
         );
         let mut catalog = Catalog::default();
         catalog.set_system(Some(generate_system(&colors, mode(requested))));
-        let loaded = catalog
-            .load("system", mode(requested))
-            .unwrap();
+        let loaded = catalog.load("system", mode(requested)).unwrap();
         failures.extend(compare(key, &loaded.modes, &loaded.theme, expected, &paths));
     }
     report(failures, system.len());
