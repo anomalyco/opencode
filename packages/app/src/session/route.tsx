@@ -142,11 +142,13 @@ function ResolvedTargetSessionRoute() {
 
   const view = createMemo(() => sessionRouteView(resolution(), server.health))
 
-  const directory = createMemo(() => {
+  // Kept once the session leaves `ready`: the session providers can still read it while the route
+  // swaps them out, where a narrowed <Match> value would throw a stale read.
+  const directory = createMemo((previous: string) => {
     const current = view()
 
-    return current.type === "ready" ? current.session.location.directory : undefined
-  })
+    return current.type === "ready" ? current.session.location.directory : previous
+  }, "")
 
   const failure = createMemo(() => {
     const current = view()
@@ -164,24 +166,22 @@ function ResolvedTargetSessionRoute() {
         </SessionStatePanel>
       </Match>
       {/* Not keyed: the session providers stay mounted while tabs switch between resolved sessions. */}
-      <Match when={directory()}>
-        {(value) => (
-          <LocationProvider directory={value()}>
-            <SessionUIProvider directory={value()} server={server.key}>
-              <TargetSessionPage />
-            </SessionUIProvider>
-          </LocationProvider>
-        )}
+      <Match when={view().type === "ready"}>
+        <LocationProvider directory={directory()}>
+          <SessionUIProvider directory={directory()} server={server.key}>
+            <TargetSessionPage />
+          </SessionUIProvider>
+        </LocationProvider>
       </Match>
       <Match when={view().type === "not-found"}>
         <SessionStatePanel>
           <SessionNotFoundPanel sessionID={params.id} serverKey={server.key} />
         </SessionStatePanel>
       </Match>
-      <Match when={failure()}>
+      <Match when={failure()} keyed>
         {(value) => (
           <SessionStatePanel>
-            <ErrorPage error={value().error} />
+            <ErrorPage error={value.error} />
           </SessionStatePanel>
         )}
       </Match>

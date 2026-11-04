@@ -38,8 +38,9 @@ function replay(events: Event[]) {
   return events.reduce((current, event) => transitionSessionResolution(current.state, event), initial)
 }
 
+// The SDK rejects with the decoded response body.
 const notFound = (sessionID: string) =>
-  new Error(`Session not found: ${sessionID}`, { cause: { body: { _tag: "SessionNotFoundError", sessionID } } })
+  JSON.parse(`{"_tag":"SessionNotFoundError","sessionID":"${sessionID}","message":"Session not found"}`)
 
 // The route used to rethrow these outcomes into an error boundary that every session tab on the
 // server shares, so the next tab kept showing the previous session's error.

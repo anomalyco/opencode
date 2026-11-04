@@ -16,10 +16,12 @@ function resolved<Scope>(state: SessionResolutionState<Session, Scope>) {
 // deferred promise the test settles or fails explicitly.
 function createFixture(initial: Record<string, Session> = {}) {
   const [cache, setCache] = createSignal(initial)
-  const deferred = new Map<string, PromiseWithResolvers<unknown>>()
+  const deferred = new Map<string, PromiseWithResolvers<void>>()
   const resolves: string[] = []
-  const messages = { syncs: [] as string[], ...Promise.withResolvers<unknown>() }
-  const pending = { syncs: [] as string[] }
+  const messageSyncs: string[] = []
+  const pendingSyncs: string[] = []
+  const messages = { syncs: messageSyncs, ...Promise.withResolvers<void>() }
+  const pending = { syncs: pendingSyncs }
 
   return {
     resolves,
@@ -29,7 +31,7 @@ function createFixture(initial: Record<string, Session> = {}) {
       get: (id: string) => cache()[id],
       sync: (id: string) => {
         resolves.push(id)
-        const entry = deferred.get(id) ?? Promise.withResolvers<unknown>()
+        const entry = deferred.get(id) ?? Promise.withResolvers<void>()
         deferred.set(id, entry)
 
         return entry.promise
@@ -51,10 +53,10 @@ function createFixture(initial: Record<string, Session> = {}) {
     },
     settle(id: string, directory = `/dir/${id}`) {
       setCache({ ...cache(), [id]: { id, directory } })
-      deferred.get(id)?.resolve(undefined)
+      deferred.get(id)?.resolve()
       deferred.delete(id)
     },
-    fail(id: string, error: unknown) {
+    fail(id: string, error: Error) {
       deferred.get(id)?.reject(error)
       // The real store does not cache failures: the inflight request entry is
       // dropped on rejection so the next resolve retries.
@@ -124,7 +126,7 @@ test("starts metadata and messages in parallel once the route has a session ID",
     expect(fixture.resolves).toEqual(["ses_a"])
     expect(fixture.messages.syncs).toEqual(["ses_a"])
 
-    fixture.messages.resolve(undefined)
+    fixture.messages.resolve()
     await flush()
     expect(current().status).toBe("resolving")
 

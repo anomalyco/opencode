@@ -8,12 +8,12 @@ import {
 
 type SessionStore<T> = {
   get: (id: string) => T | undefined
-  sync: (id: string, options?: { children?: boolean }) => Promise<unknown>
+  sync: (id: string, options?: { children?: boolean }) => Promise<void>
   message: {
-    sync: (id: string) => Promise<unknown>
+    sync: (id: string) => Promise<void>
   }
   pending: {
-    sync: (id: string) => Promise<unknown>
+    sync: (id: string) => Promise<void>
   }
 }
 
@@ -60,9 +60,8 @@ export function createSessionResolution<T>(
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  // Computations, not render effects: the route hands the resolved session to its subtree through a
-  // non-keyed <Match>, so a deleted session must leave `ready` before that subtree's render effects
-  // run, or they read the narrowed value after the match has gone (a "Stale read from <Match>").
+  // Computations, not render effects, like the memo this machine replaced: a deleted session leaves
+  // `ready` in the same pure phase that removed it, before the session subtree's render effects run.
   createComputed(
     on([sessionID, sessions] as const, ([id, store]) => {
       if (!id) {
