@@ -347,12 +347,20 @@ impl Kit {
         self.log.lock().unwrap().clone()
     }
 
-    /// The dialog's reads, without the home's own list read (T.1 remounts the home after theme
-    /// discovery, and it reads again by `directory`).
+    /// The dialog's reads, in order: location, projects, and sessions. The home's own list read
+    /// (T.1 remounts the home after theme discovery, and it reads again by `directory`) and the
+    /// prompt's catalog reads after connect are left out; TS does not order those against the
+    /// dialog.
     fn dialog_reads(&self) -> Vec<String> {
         self.requests()
             .into_iter()
-            .filter(|(method, url, _)| method == "GET" && !url.contains("&directory="))
+            .filter(|(method, url, _)| {
+                method == "GET"
+                    && ["/api/location?", "/api/project", "/api/session?"]
+                        .iter()
+                        .any(|path| url.starts_with(path))
+                    && !url.contains("&directory=")
+            })
             .map(|(_, url, _)| url)
             .collect()
     }
@@ -370,8 +378,16 @@ impl Kit {
     }
 
     fn open_list(&self) -> String {
-        self.app.press("ctrl+x");
-        self.app.press("l");
+        // Theme discovery remounts the home once after startup. When that lands between the two keys, focus moves
+        // to the new prompt and the keymap drops the pending leader, so press the sequence again.
+        for _ in 0..3 {
+            self.app.press("ctrl+x");
+            self.app.press("l");
+            if self.tui.dialogs.is_open() {
+                break;
+            }
+        }
+        assert!(self.tui.dialogs.is_open(), "{}", self.app.text());
         self.wait_for("Fix the parser")
     }
 
@@ -603,9 +619,11 @@ fn open_dialog_reads_worktrees_and_creates_one() {
     kit.app.press("right");
     kit.wait_for("App / Worktrees");
     kit.wait_for("app-feature    ");
+    // Only the worktree requests: the prompt's catalog reads after connect are not ordered against them.
     let requests: Vec<(String, String)> = kit
         .requests()
         .into_iter()
+        .filter(|(_, url, _)| url.starts_with("/api/worktree"))
         .map(|(method, url, _)| (method, url))
         .collect();
     assert_eq!(
