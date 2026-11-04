@@ -36,7 +36,12 @@ describe("window registry", () => {
     expect(app.state.stored).toEqual(["a", "b"])
     expect(app.registry.get("a")).toEqual({ name: "a" })
     expect(app.registry.get("missing")).toBeUndefined()
+    // Looked up by identity, not by value.
+    const window = app.registry.get("a")
+    expect(window && app.registry.idOf(window)).toBe("a")
+    expect(app.registry.idOf({ name: "a" })).toBeUndefined()
     expect(app.registry.closed("a")).toBe(true)
+    expect(window && app.registry.idOf(window)).toBeUndefined()
     expect(app.state.stored).toEqual(["b"])
   })
 
