@@ -83,11 +83,15 @@
   color: var(--text-shimmer-peak-color);
 }
 
-[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] > [data-slot="text-shimmer-sweep"] {
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  > [data-slot="text-shimmer-sweep"] {
   display: block;
 }
 
-[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] :is([data-slot="text-shimmer-sweep"], [data-slot="text-shimmer-sweep-text"]) {
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  :is([data-slot="text-shimmer-sweep"], [data-slot="text-shimmer-sweep-text"]) {
   animation-duration: var(--text-shimmer-duration);
   animation-iteration-count: infinite;
   animation-timing-function: linear;
@@ -95,11 +99,15 @@
   animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index) * -1);
 }
 
-[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] [data-slot="text-shimmer-sweep"] {
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  [data-slot="text-shimmer-sweep"] {
   animation-name: text-shimmer-window;
 }
 
-[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] [data-slot="text-shimmer-sweep-text"] {
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  [data-slot="text-shimmer-sweep-text"] {
   animation-name: text-shimmer-text;
 }
 
