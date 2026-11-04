@@ -120,6 +120,8 @@ pub struct Inner {
     hovered: Cell<bool>,
     /// The running indicator: the spinner, one cell in from the footer's edge.
     running: View,
+    /// The session ran at the last refresh; the keymap conditions read it, as they must not lock the store.
+    busy: Cell<bool>,
     spinner: Spinner,
     pub(crate) mode: Cell<Mode>,
     /// The `PromptInfo` being edited; `text` follows the textarea.
@@ -347,6 +349,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         footer_slots: RefCell::default(),
         hovered: Cell::new(false),
         running,
+        busy: Cell::new(false),
         spinner,
         mode: Cell::new(Mode::Normal),
         prompt: RefCell::new(empty_prompt()),
@@ -669,6 +672,7 @@ impl Inner {
             .set(&theme, mode, &display, highlight, self.app.size().0);
 
         let running = self.running(tui);
+        self.busy.set(running);
         self.running.visible(running);
         let staged = !running && self.staging.render(&theme);
         self.footer.visible(!staged);
@@ -1033,7 +1037,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                         true
                     },
                 )
-                .enabled(when(Inner::running)),
+                .enabled(when(|prompt, _| prompt.busy.get())),
                 command(
                     "session.background",
                     "Background blocking tools",
@@ -1045,7 +1049,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                         true
                     },
                 )
-                .enabled(when(Inner::running)),
+                .enabled(when(|prompt, _| prompt.busy.get())),
                 command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
                     crate::dialogs::skill::show(
                         tui,

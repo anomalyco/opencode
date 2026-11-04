@@ -82,15 +82,13 @@ impl Inner {
             aliases: Vec::new(),
             arguments,
         };
+        // Keymap conditions read the routed session as the last sync left it: they must not lock the store.
         let reverted = {
             let (weak, session) = (tui.weak(), self.session.clone());
             Condition::when(move || {
                 weak.upgrade().is_some_and(|tui| {
-                    tui.data.read(|state| {
-                        state
-                            .session(&session)
-                            .is_some_and(|info| info.revert.is_some())
-                    })
+                    tui.routed()
+                        .is_some_and(|info| info.id == session && info.revert.is_some())
                 })
             })
         };
@@ -98,11 +96,8 @@ impl Inner {
             let (weak, session) = (tui.weak(), self.session.clone());
             Condition::when(move || {
                 weak.upgrade().is_some_and(|tui| {
-                    tui.data.read(|state| {
-                        state
-                            .session(&session)
-                            .is_some_and(|info| info.parent_id.is_some())
-                    })
+                    tui.routed()
+                        .is_some_and(|info| info.id == session && info.parent_id.is_some())
                 })
             })
         };
