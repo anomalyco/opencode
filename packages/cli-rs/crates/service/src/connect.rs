@@ -75,7 +75,8 @@ pub struct Connection {
     /// The version the server reported.
     pub version: String,
     pub source: Source,
-    /// The mismatch warning, already written to stderr, if any.
+    /// The mismatch warning for `--server`, already written to stderr. A mismatch with a
+    /// discovered service is only logged (decision O-22): a Rust client is always another version.
     pub warning: Option<String>,
 }
 
@@ -116,7 +117,16 @@ pub async fn resolve(
     if let Some(url) = &options.server {
         let endpoint = Endpoint::new(url, env.password.clone());
         let version = server_version(transport, &endpoint).await?;
-        return Ok(connected(endpoint, version, Source::Server, options));
+        let warning = mismatch(&endpoint, &version, options);
+        if let Some(warning) = &warning {
+            eprintln!("{warning}");
+        }
+        return Ok(Connection {
+            endpoint,
+            version,
+            source: Source::Server,
+            warning,
+        });
     }
     let channels = Channels::from_vars(|name| match name {
         "OPENCODE_CHANNEL" => env.channel.clone().map(Into::into),
@@ -144,29 +154,29 @@ pub async fn resolve(
         );
     }
     let version = found.service.version.clone().unwrap_or_default();
-    let source = Source::Service {
-        channel: found.channel,
-        file: found.file,
-    };
-    Ok(connected(found.service.endpoint, version, source, options))
+    if env.print_logs
+        && let Some(warning) = mismatch(&found.service.endpoint, &version, options)
+    {
+        eprintln!("WARN  service.connect {warning}");
+    }
+    Ok(Connection {
+        endpoint: found.service.endpoint,
+        version,
+        source: Source::Service {
+            channel: found.channel,
+            file: found.file,
+        },
+        warning: None,
+    })
 }
 
-fn connected(endpoint: Endpoint, version: String, source: Source, options: &Options) -> Connection {
-    let warning = (version != options.client_version).then(|| {
+fn mismatch(endpoint: &Endpoint, version: &str, options: &Options) -> Option<String> {
+    (version != options.client_version).then(|| {
         format!(
             "Warning: Server at {} has version {version}; this client is {}. Continuing anyway.",
             endpoint.url, options.client_version
         )
-    });
-    if let Some(warning) = &warning {
-        eprintln!("{warning}");
-    }
-    Connection {
-        endpoint,
-        version,
-        source,
-        warning,
-    }
+    })
 }
 
 async fn server_version(
@@ -368,16 +378,16 @@ mod tests {
                 file: paths.state.join("service-oc-x.json")
             }
         );
-        assert!(connection.warning.is_some());
-        // The same version gives no warning.
+        // Versions differ (2.0.0 against 1.0.0), but a discovered service's mismatch is only
+        // logged (O-22).
+        assert_eq!(connection.warning, None);
+        let endpoint = Endpoint::new(URL, None);
+        assert!(mismatch(&endpoint, "2.0.0", &options(None)).is_some());
         let same = Options {
             client_version: "2.0.0".to_owned(),
             ..options(None)
         };
-        let connection = resolve(server, &paths, &Env::default(), &same)
-            .await
-            .unwrap();
-        assert_eq!(connection.warning, None);
+        assert_eq!(mismatch(&endpoint, "2.0.0", &same), None);
     }
 
     #[tokio::test]
