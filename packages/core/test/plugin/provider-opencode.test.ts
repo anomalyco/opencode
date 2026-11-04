@@ -1196,6 +1196,64 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("explains rejected inference with the status of the current connection, not one switched away from", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { sso: false }
+        const hanging: (() => void)[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            if (!state.sso || request.headers.get("authorization") !== "Bearer first")
+              return Response.json({ providers: {} })
+            const response = Response.json(
+              { _tag: "SsoRequired", orgId: "org_acme", connectionId: "ssoconn_1" },
+              { status: 403 },
+            )
+            return new Promise<Response>((resolve) => hanging.push(() => resolve(response)))
+          },
+        })
+        return { server, state, release: () => hanging.splice(0).forEach((resolve) => resolve()) }
+      }),
+      ({ server, state, release }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const hooks = yield* PluginHooks.Service
+          const key = (key: string) =>
+            Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin, orgName: "Acme" } })
+          yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("first") })
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+
+          // The first connection's config check waits on the Console while the user switches to another one.
+          state.sso = true
+          yield* TestClock.adjust("1 minute")
+          const rejected = yield* hooks
+            .trigger("session", "http.response", {
+              sessionID: Session.ID.make("ses_console"),
+              agent: Agent.ID.make("build"),
+              model: Model.Ref.make({ providerID: Provider.ID.opencode, id: Model.ID.make("model") }),
+              kind: "primary",
+              request: new Request("https://inference.example/v1/responses"),
+              response: Response.json({ error: { message: "Unauthorized" } }, { status: 401 }),
+            })
+            .pipe(
+              Effect.flatMap((event) =>
+                Effect.promise(async () => ({ status: event.response.status, body: await event.response.json() })),
+              ),
+              Effect.forkChild({ startImmediately: true }),
+            )
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+          yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("second") })
+          yield* drain
+
+          release()
+          expect(yield* Fiber.join(rejected)).toEqual({ status: 401, body: { error: { message: "Unauthorized" } } })
+        }),
+      ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+    ),
+  )
+
   it.effect("ignores 403 responses that are not a Console SSO error", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

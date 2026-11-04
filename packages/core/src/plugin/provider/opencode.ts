@@ -188,43 +188,60 @@ export const OpencodePlugin = define<
     const settings = yield* ConsoleAccess.Options
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-    let snapshot: {
-      // The Console's regular OpenCode config, merged as an integration config layer.
-      remote: typeof ConsoleConfig.Type | undefined
-      connection: ActiveConnection
-      organization: string | undefined
+    type Snapshot = {
+      // The Console's regular OpenCode config, merged as an integration config layer. Undefined when it has none.
+      readonly remote: typeof ConsoleConfig.Type | undefined
+      readonly connection: NonNullable<ActiveConnection>
+      readonly organization: string | undefined
       // Fingerprint of an API key, so a key replaced in place counts as a new sign-in.
-      access: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined }
+      readonly access: string | undefined
+    }
+    // A degraded connection's last load failed. `reported` is the status reported for it, so inference failures can
+    // name the fix, and `lastGood` the config that last loaded for it.
+    type State =
+      | { readonly status: "signed-out" }
+      | { readonly status: "connected"; readonly snapshot: Snapshot }
+      | {
+          readonly status: "degraded"
+          readonly connection: NonNullable<ActiveConnection>
+          readonly reported?: IntegrationConnection.Status
+          readonly lastGood?: Snapshot
+        }
+    type Outcome =
+      | { readonly _tag: "SignedOut" }
+      | { readonly _tag: "Loaded"; readonly snapshot: Snapshot }
+      | {
+          readonly _tag: "Failed"
+          readonly connection: NonNullable<ActiveConnection>
+          readonly status: IntegrationConnection.Status | undefined
+        }
+    let state: State = { status: "signed-out" }
+    // The config in effect, which a failed load leaves at the last one that loaded for the same connection.
+    const current = (from: State): Snapshot | undefined => {
+      if (from.status === "signed-out") return undefined
+      if (from.status === "connected") return from.snapshot
+      return from.lastGood
+        ? { ...from.lastGood, connection: from.connection }
+        : { remote: undefined, connection: from.connection, organization: undefined, access: undefined }
+    }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
-    const owner = (from: typeof snapshot) =>
-      `${IntegrationConnection.key(from.connection) ?? ""}:${from.organization ?? ""}`
+    const owner = (from: Snapshot | undefined) =>
+      `${IntegrationConnection.key(from?.connection) ?? ""}:${from?.organization ?? ""}`
     // A newer config's skill download replaces one still in flight.
     const skillDownload = yield* FiberHandle.make<void, never>()
-    // Status last reported for the active connection, so inference failures can name the fix.
-    let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
-    // A failed load reports only its connection: what it falls back to depends on the snapshot, which is read under
-    // `loading` when the outcome is applied.
+    // The outcome leaves plugin state alone: it is committed under `loading`, unless a switch made it stale.
     const load = Effect.fn("OpencodePlugin.load")(function* (
       maxAge: Duration.Input = Duration.minutes(1),
-    ): Effect.fn.Return<
-      | { readonly _tag: "Loaded"; readonly next: typeof snapshot }
-      | { readonly _tag: "Failed"; readonly connection: ActiveConnection }
-    > {
+    ): Effect.fn.Return<Outcome> {
       const connection = yield* ctx.integration.connection.active("opencode")
-      if (!connection) {
-        reported = undefined
-        return { _tag: "Loaded", next: { remote: undefined, connection, organization: undefined, access: undefined } }
-      }
-      const status = (status: IntegrationConnection.Status | undefined) => {
-        reported = status
-        return ctx.integration.connection.status({ integrationID: "opencode", connection, status })
-      }
+      if (!connection) return { _tag: "SignedOut" }
+      const status = (status: IntegrationConnection.Status | undefined) =>
+        ctx.integration.connection.status({ integrationID: "opencode", connection, status })
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
@@ -255,24 +272,32 @@ export const OpencodePlugin = define<
             )
         }),
         Effect.tap(() => status(undefined)),
-        Effect.map((next) => ({ _tag: "Loaded" as const, next })),
+        Effect.map((snapshot) => ({ _tag: "Loaded" as const, snapshot })),
         Effect.catch((cause) =>
           Effect.gen(function* () {
             // Only well-formed Console errors change the connection status; anything else may be transient.
             const next = connectionStatus(cause)
             if (next) yield* status(next)
             yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
-            return { _tag: "Failed" as const, connection }
+            return { _tag: "Failed" as const, connection, status: next }
           }),
         ),
       )
     })
     // A load that fails for the connection already in place keeps its last config: dropping it would lift
-    // organization policy while personal credentials keep working.
-    const fallback = (connection: ActiveConnection): typeof snapshot =>
-      IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-        ? { ...snapshot, connection }
-        : { remote: undefined, connection, organization: undefined, access: undefined }
+    // organization policy while personal credentials keep working. A transient failure keeps its status too.
+    const transition = (from: State, outcome: Outcome): State => {
+      if (outcome._tag === "SignedOut") return { status: "signed-out" }
+      if (outcome._tag === "Loaded") return { status: "connected", snapshot: outcome.snapshot }
+      if (IntegrationConnection.key(current(from)?.connection) !== IntegrationConnection.key(outcome.connection))
+        return { status: "degraded", connection: outcome.connection, reported: outcome.status }
+      return {
+        status: "degraded",
+        connection: outcome.connection,
+        reported: outcome.status ?? (from.status === "degraded" ? from.reported : undefined),
+        lastGood: from.status === "connected" ? from.snapshot : from.status === "degraded" ? from.lastGood : undefined,
+      }
+    }
     // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
@@ -284,11 +309,10 @@ export const OpencodePlugin = define<
       )
     })
     // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
-    const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
+    const publish = Effect.fnUntraced(function* (next: Snapshot | undefined) {
       // The config merges as one integration document, which config loads right after managed policies.
       const document =
-        next.remote &&
-        next.connection &&
+        next?.remote &&
         ConfigIntegration.make({
           integrationID: Integration.ID.make("opencode"),
           connection:
@@ -303,9 +327,9 @@ export const OpencodePlugin = define<
       // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds the Library too.
       yield* syncLibrary(next, document !== undefined && (!config.integration || integrated === document))
     })
-    const syncLibrary = (next: typeof snapshot, allowed: boolean) => {
+    const syncLibrary = (next: Snapshot | undefined, allowed: boolean) => {
       const library = allowed
-        ? Option.getOrUndefined(Schema.decodeUnknownOption(Library)(next.remote?.library))
+        ? Option.getOrUndefined(Schema.decodeUnknownOption(Library)(next?.remote?.library))
         : undefined
       instructions = (library?.instructions ?? []).map(
         (item) =>
@@ -316,7 +340,7 @@ export const OpencodePlugin = define<
       // until the download replaces them.
       return FiberHandle.run(
         skillDownload,
-        loadSkills(next.connection, library?.skills ?? []).pipe(
+        loadSkills(next?.connection, library?.skills ?? []).pipe(
           Effect.flatMap((loaded) => {
             // A failed load keeps the skills already shown.
             if (!loaded) return Effect.void
@@ -417,16 +441,17 @@ export const OpencodePlugin = define<
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    const initial = yield* load()
-    snapshot = initial._tag === "Loaded" ? initial.next : fallback(initial.connection)
-    yield* publish(snapshot)
+    state = transition(state, yield* load())
+    yield* publish(current(state))
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
     })
     yield* ctx.provider.transform((providers) => {
       const item = providers.get(Provider.ID.opencode)
       if (!item) return
-      const hasKey = Boolean(process.env.OPENCODE_API_KEY || snapshot.connection || item.provider.settings?.apiKey)
+      const hasKey = Boolean(
+        process.env.OPENCODE_API_KEY || state.status !== "signed-out" || item.provider.settings?.apiKey,
+      )
       providers.update(item.provider.id, (provider) => {
         if (!hasKey && !disableFree) {
           provider.activation = "enabled"
@@ -439,7 +464,7 @@ export const OpencodePlugin = define<
       if (!item) return
       const hasKey = Boolean(
         process.env.OPENCODE_API_KEY ||
-          snapshot.connection ||
+          state.status !== "signed-out" ||
           (item.provider.settings?.apiKey && item.provider.settings.apiKey !== "public"),
       )
       if (hasKey) return
@@ -455,17 +480,17 @@ export const OpencodePlugin = define<
     // config, where the user's own choice wins.
     yield* ctx.websearch.transform((editor) => {
       const provider = WebSearch.ID.make("opencode")
-      if (snapshot.remote?.websearch && snapshot.remote.websearch.provider === provider && snapshot.connection)
+      const snapshot = current(state)
+      if (snapshot?.remote?.websearch && snapshot.remote.websearch.provider === provider)
         editor.add(search(provider, snapshot.connection))
     })
     yield* discovery.transform((editor) => instructions.forEach((file) => editor.add(file)))
     yield* skills.transform((editor) => {
-      if (librarySkills.owner !== owner(snapshot)) return
+      if (librarySkills.owner !== owner(current(state))) return
       librarySkills.items.forEach((item) => editor.add(item.skill, item.files))
     })
 
-    const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
-      snapshot = next
+    const apply = Effect.fn("OpencodePlugin.apply")(function* (next: Snapshot | undefined) {
       yield* publish(next)
       yield* guard(next)
       yield* Effect.all(
@@ -486,11 +511,18 @@ export const OpencodePlugin = define<
         yield* loading.withPermit(
           Effect.gen(function* () {
             // A switch while this load ran makes it stale; the switch's own check applies the new connection.
-            const loaded = outcome._tag === "Loaded" ? outcome.next.connection : outcome.connection
+            const loaded =
+              outcome._tag === "SignedOut"
+                ? undefined
+                : outcome._tag === "Loaded"
+                  ? outcome.snapshot.connection
+                  : outcome.connection
             const active = yield* ctx.integration.connection.active("opencode")
             if (IntegrationConnection.key(loaded) !== IntegrationConnection.key(active)) return
-            const next = outcome._tag === "Loaded" ? outcome.next : fallback(outcome.connection)
-            if (!Equal.equals(snapshot, next)) yield* apply(next)
+            const previous = current(state)
+            state = transition(state, outcome)
+            const next = current(state)
+            if (!Equal.equals(previous, next)) yield* apply(next)
           }),
         )
       })
@@ -502,7 +534,7 @@ export const OpencodePlugin = define<
       Effect.gen(function* () {
         if (event.response.status !== 401 && event.response.status !== 403) return
         yield* check(Duration.seconds(30))
-        const status = reported
+        const status = state.status === "degraded" ? state.reported : undefined
         if (!status) return
         void event.response.body?.cancel()
         event.response = Response.json(
@@ -516,14 +548,14 @@ export const OpencodePlugin = define<
         )
       })
     // Hooks are scoped per provider so requests to unrelated providers skip the HTTP hook path.
-    const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
+    const guard = Effect.fn("OpencodePlugin.guard")(function* (next: Snapshot | undefined) {
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
       explainers = yield* Effect.forEach(
-        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.remote?.providers ?? {})]) : [],
+        next ? new Set([Provider.ID.opencode, ...Object.keys(next.remote?.providers ?? {})]) : [],
         (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
-    yield* guard(snapshot)
+    yield* guard(current(state))
     // A prompt after the machine slept or the host suspended refreshes stale Console config, and the MCP gateway
     // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
     // 3 seconds; the turn then runs on the config it has.
@@ -535,7 +567,7 @@ export const OpencodePlugin = define<
     // between prompts turn the timer off with the `console.poll` server option and rely on the prompt hook.
     const polling = yield* FiberHandle.make<void, never>()
     const poll = Effect.fnUntraced(function* () {
-      if (!snapshot.connection || !settings.poll) return yield* FiberHandle.clear(polling)
+      if (state.status === "signed-out" || !settings.poll) return yield* FiberHandle.clear(polling)
       yield* FiberHandle.run(polling, Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever), {
         onlyIfMissing: true,
       })
