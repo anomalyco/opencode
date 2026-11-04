@@ -1,13 +1,14 @@
 //! Debug dialog (E.18a): `packages/tui/src/component/dialog-debug.tsx`.
 //!
-//! The facts to paste into a bug report, one per row, and a copy action (Enter, `c` under `new-designs`) that
+//! The facts to paste into a bug report, one per row, and a copy action (`c`) that
 //! puts them on the clipboard. Rows are not click-to-copy, so a mouse selection still copies a single value.
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_ui::dialog::{
-    DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header, layout,
+    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header,
+    layout_view,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -99,24 +100,19 @@ pub fn show(tui: &Tui) {
                     let Some(cx) = cx.upgrade() else { return };
                     let mut action =
                         FooterAction::new(if copied.get() { "✓ copied" } else { "copy" })
-                            .key(if cx.new_designs { "c" } else { "enter" });
+                            .key("c");
                     action.on_trigger = Some(run.clone());
                     if copied.get() {
                         action.color = Some(cx.theme.text.feedback.success.base);
                     }
-                    let mut props = FooterProps {
-                        primary: vec![action],
-                        ..FooterProps::default()
-                    };
-                    if !cx.new_designs {
-                        props.children = vec![
-                            Text::new(&cx.app, "Share this when reporting an issue.")
-                                .fg(cx.theme.text.muted)
-                                .as_any(),
-                        ];
-                    }
                     slot.clear();
-                    slot.add(&footer(&cx, props));
+                    slot.add(&footer(
+                        &cx,
+                        FooterProps {
+                            primary: vec![action],
+                            ..FooterProps::default()
+                        },
+                    ));
                 })
             };
             draw();
@@ -125,21 +121,18 @@ pub fn show(tui: &Tui) {
                 let (weak, copied, text) = (weak.clone(), copied.clone(), text);
                 cx.layer(KeymapLayer {
                     commands: vec![
-                        TuiCommand::inline(
-                            if cx.new_designs { "c" } else { "return" },
-                            move |_, _| {
-                                copy(&weak, &copied, &text);
-                                // The layer owns the footer drawing.
-                                draw();
-                            },
-                        )
+                        TuiCommand::inline("c", move |_, _| {
+                            copy(&weak, &copied, &text);
+                            // The layer owns the footer drawing.
+                            draw();
+                        })
                         .title("Copy debug info")
                         .group("Dialog"),
                     ],
                     ..KeymapLayer::default()
                 });
             }
-            let root = layout(
+            layout_view(
                 cx,
                 &header(
                     cx,
@@ -150,11 +143,10 @@ pub fn show(tui: &Tui) {
                     },
                 ),
                 &body,
-                None,
-                None,
-            );
-            root.add(&slot);
-            root
+                Some(&slot),
+                DIALOG_INSET,
+                1,
+            )
         },
         None,
         DialogOptions {
