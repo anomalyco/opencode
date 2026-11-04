@@ -54,7 +54,7 @@ export function createHomeController() {
     const conn = servers.visible.find((conn) => ServerConnection.key(conn) === current.server)
 
     if (!conn) return
-    const ctx = global.serverCtx(current.server)
+    const ctx = global.serverCtx(ServerConnection.key(conn))
 
     if (!ctx?.sync.project.ready()) return
 
