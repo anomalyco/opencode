@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import { OpenCode } from "@opencode/client/promise"
+import { OpenCode, type LocationGetInput } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
 import { bootstrapGlobal, inferHomeDirectory, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
@@ -113,14 +113,16 @@ describe("query keys", () => {
   test("partitions identical directories by server scope and loads current location metadata", async () => {
     const calls: unknown[] = []
 
+    // SAFETY: the path query reads only `directory` and `project.directory` from the location it gets.
     const location = {
-      get: async (input: unknown) => {
+      get: async (input?: LocationGetInput) => {
         calls.push(input)
 
         return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
       },
     } as ServerApi["location"]
 
+    // SAFETY: a remote server's scope is its origin string, which is how the app scopes it.
     const remote = "https://debian.example" as typeof ServerScope.local
 
     expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])

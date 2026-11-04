@@ -8,10 +8,6 @@ import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import type { ServerScope } from "@/runtime/server/scope"
 import { withWorktreeInventory, worktreeInventoryKey } from "@/workspaces/inventory"
 
-function runAll(list: Array<() => Promise<unknown>>) {
-  return Promise.allSettled(list.map((item) => item()))
-}
-
 export const loadGlobalConfigQuery = (scope: ServerScope) =>
   queryOptions({
     queryKey: [scope, "config"],
@@ -63,22 +59,18 @@ export async function bootstrapGlobal(input: {
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
-  const slow = [
-    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
-    () =>
-      input.queryClient
-        .fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location))
-        .then((data) => input.setGlobalStore("path", data)),
-    () =>
-      loadProjects({
-        scope: input.scope,
-        project: input.serverAPI.project,
-        setGlobalStore: input.setGlobalStore,
-        queryClient: input.queryClient,
-      }),
-  ]
-
-  await runAll(slow)
+  await Promise.allSettled([
+    input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
+    input.queryClient
+      .fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location))
+      .then((data) => input.setGlobalStore("path", data)),
+    loadProjects({
+      scope: input.scope,
+      project: input.serverAPI.project,
+      setGlobalStore: input.setGlobalStore,
+      queryClient: input.queryClient,
+    }),
+  ])
 }
 
 export function inferHomeDirectory(path: string) {
