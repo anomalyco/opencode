@@ -21,7 +21,8 @@ export function createSidecarResolver(input: {
 }) {
   return async (signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
-    const next = await input.api.reconnectService()
+    // Aborting interrupts this window's wait in main; the reconnect keeps running for other windows.
+    const next = await input.api.reconnectService(signal)
 
     if (signal.aborted) throw signal.reason
 

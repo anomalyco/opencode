@@ -14,7 +14,8 @@ import type {
 
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
-  reconnectService(): Promise<ServerReadyData>
+  reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
+  onSidecarChanged(cb: (data: ServerReadyData) => void): () => void
   readyDeepLinks(): void
   acknowledgeDeepLinks(attempt: number): void
   isFirstLaunchOnboardingPending(): Promise<boolean>
