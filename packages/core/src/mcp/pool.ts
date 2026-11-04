@@ -116,6 +116,9 @@ export const layer = Layer.effect(
     const slots = new Map<string, Slot>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
+    // The subset that negotiated legacy. Their private connections skip the 2026-07-28 probe; a refusal
+    // proves nothing about the protocol, so those keep the configured one.
+    const legacy = new Set<string>()
     // Names of local servers already warned about for having no cwd, which keeps each project's folder in the key.
     const unfixed = new Set<string>()
 
@@ -169,6 +172,17 @@ export const layer = Layer.effect(
                 }
                 yield* Deferred.succeed(slot.outcome, answered ? "private" : failure)
               }),
+            legacy: (version) =>
+              Effect.gen(function* () {
+                detach(key, slot)
+                unpoolable.add(key)
+                legacy.add(key)
+                yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
+                  server: input.name,
+                  version,
+                })
+                yield* Deferred.succeed(slot.outcome, "private")
+              }),
             settled: Effect.void,
             closed: (reason) =>
               Effect.gen(function* () {
@@ -189,23 +203,11 @@ export const layer = Layer.effect(
       return slot
     }
 
-    const connect = (key: string, slot: Slot, name: string) =>
+    const connect = (key: string, slot: Slot) =>
       Effect.gen(function* () {
         yield* slot.connection.start
-        const client = slot.connection.client
-        // A failed start already settled the outcome.
-        if (!client) return
-        if (!client.modern) {
-          unpoolable.add(key)
-          yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
-            server: name,
-            version: client.protocolVersion,
-          })
-          detach(key, slot)
-          yield* slot.connection.stop
-          yield* Deferred.succeed(slot.outcome, "private")
-          return
-        }
+        // A failed or legacy start already settled the outcome.
+        if (!slot.connection.client) return
         slot.connected = true
         yield* Deferred.succeed(slot.outcome, "connected")
       }).pipe(
@@ -245,15 +247,30 @@ export const layer = Layer.effect(
         () => release(key, slot, holder),
       )
       // Started once a holder is registered: the attempt reads its OAuth provider from the holders.
-      slot.start ??= run(connect(key, slot, input.name))
+      slot.start ??= run(connect(key, slot))
       const outcome = yield* Deferred.await(slot.outcome)
       return outcome === "connected" ? slot.connection : outcome
     })
 
     const connection = (input: Input): McpConnection.Connection => {
-      const own = McpConnection.make(input)
-      const state: { claim?: Scope.Closeable; holder?: Holder; shared?: McpConnection.Connection } = {}
-      const live = () => state.shared ?? own
+      const state: {
+        claim?: Scope.Closeable
+        holder?: Holder
+        shared?: McpConnection.Connection
+        own?: McpConnection.Connection
+        // This start's credential selection, which a private connection opens with as well.
+        selected?: Selection
+      } = {}
+      // A private connection, used when the key can't be shared, with the configured protocol or plain legacy.
+      const privately = (config: Mcp.ServerConfig) =>
+        McpConnection.make({
+          ...input,
+          config,
+          authProvider: Effect.suspend(() => state.selected?.authProvider ?? input.authProvider),
+        })
+      const configured = privately(input.config)
+      const older = privately({ ...input.config, protocol: "legacy" })
+      const live = () => state.shared ?? state.own ?? configured
       // The shared connection carries the name of the Location that opened it; forms show this Location's.
       const elicit: McpClient.ElicitationHandler["create"] = (request) =>
         input.elicitation.create({ ...request, server: input.name })
@@ -333,11 +350,13 @@ export const layer = Layer.effect(
             )
           }
           const selected = yield* input.select
+          state.selected = selected
           if (!unpoolable.has(selected.key) && (yield* join(selected))) return
-          yield* own.start
+          state.own = legacy.has(selected.key) ? older : configured
+          yield* state.own.start
         }),
         stop: Effect.gen(function* () {
-          if (!state.claim) return yield* own.stop
+          if (!state.claim) return yield* (state.own ?? configured).stop
           yield* clear
           yield* input.events.changed("tools")
           yield* input.events.changed("resources")
@@ -346,7 +365,7 @@ export const layer = Layer.effect(
         recovering: (client, request) =>
           state.shared
             ? state.shared.recovering(client, (client) => request(bind(client)))
-            : own.recovering(client, request),
+            : (state.own ?? configured).recovering(client, request),
         catalog: (client) => live().catalog(client),
       }
     }

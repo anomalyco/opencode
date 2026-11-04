@@ -579,7 +579,8 @@ function repeats(error: unknown): boolean {
     return repeats(error.cause)
   return (
     (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) ||
-    (error instanceof SdkHttpError && error.status === 403) ||
+    // Refused credentials, even without OAuth: any connection with them would be refused the same way.
+    (error instanceof SdkHttpError && (error.status === 401 || error.status === 403)) ||
     isTransient(error) ||
     PlatformError.isPlatformError(error)
   )

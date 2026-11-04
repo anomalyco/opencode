@@ -34,6 +34,11 @@ export interface Events {
   readonly closed: (reason: string) => Effect.Effect<void>
   /** A catalog changed: the server said so, or the connection was torn down and every catalog emptied. */
   readonly changed: (kind: Kind) => Effect.Effect<void>
+  /**
+   * Shared connections only: the server negotiated an older protocol than 2026-07-28, so the attempt closed
+   * right after the handshake, without listing tools. Reported instead of `connected` or `failed`.
+   */
+  readonly legacy?: (version: string | undefined) => Effect.Effect<void>
 }
 
 export interface Input {
@@ -169,7 +174,8 @@ export function make(input: Input): Connection {
       const authProvider = yield* input.authProvider
       const { McpClient } = yield* Effect.promise(() => import("./client.js"))
       // List tools as part of connect so a failure here marks the server failed rather than
-      // leaving it connected with a silently empty tool list and no path to recover.
+      // leaving it connected with a silently empty tool list and no path to recover. A shared connection
+      // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
       const config = input.config
       const result = yield* McpClient.connect({
         server: input.name,
@@ -180,13 +186,23 @@ export function make(input: Input): Connection {
         clientInfo: input.clientInfo,
         roots: !input.shared,
       }).pipe(
-        Effect.flatMap((client) => client.tools().pipe(Effect.map((tools) => ({ client, tools })))),
+        Effect.flatMap(
+          (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
+            input.shared && !client.modern
+              ? Effect.succeed({ client })
+              : client.tools().pipe(Effect.map((tools) => ({ client, tools }))),
+        ),
         Effect.provideService(Environment.Service, input.environment),
         Effect.provideService(FetchHttpClient.Fetch, input.fetch),
         Scope.provide(scope),
         (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
         Effect.exit,
       )
+      if (Exit.isSuccess(result) && !result.value.tools) {
+        yield* Scope.close(scope, Exit.void)
+        state.scope = undefined
+        return yield* input.events.legacy?.(result.value.client.protocolVersion) ?? Effect.void
+      }
       if (Exit.isSuccess(result)) {
         state.client = result.value.client
         state.tools = result.value.tools

@@ -3344,10 +3344,12 @@ describe("MCP pool", () => {
   // A server that is down, or that refuses this client, would refuse a private connection too.
   for (const [code, what, attempts] of [
     [503, "was down", 3],
+    [401, "rejected the credentials", 1],
     [403, "refused access", 1],
   ] as const)
-    live(`keeps pooling a server that ${what} when first tried`, () =>
-      Effect.gen(function* () {
+    live(`keeps pooling a server that ${what} when first tried`, () => {
+      const captured = poolLogs()
+      return Effect.gen(function* () {
         const refusing = { value: true, count: 0 }
         const server = yield* resourceServer({
           modern: true,
@@ -3363,12 +3365,44 @@ describe("MCP pool", () => {
         expect((yield* status(a.mcp))?.status).toBe("failed")
         // The startup retries transient failures, and nothing tries a private connection afterwards.
         expect(refusing.count).toBe(attempts)
+        expect(captured.logs).toEqual([])
         refusing.value = false
         yield* a.mcp.connect("resources")
         yield* open(pooled(server.url), pool, directories[1])
         expect(server.state.toolLists).toBe(1)
-      }),
-    )
+      }).pipe(Effect.provide(captured.layer))
+    })
+
+  live("decides a legacy server is private right after the handshake, before listing its tools", () => {
+    const captured = poolLogs()
+    return Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const wire = path.join(tmp.path, "wire")
+      // Connects without roots but needs one to list its tools, which shared connections never declare.
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+        cwd: directories[0],
+        environment: { MCP_REQUIRE_ROOTS_TO_LIST: "1", MCP_WIRE_LOG: wire },
+        pool: true,
+      })
+      const pool = yield* makePool
+      const a = yield* open(config, pool, directories[0])
+      const b = yield* open(config, pool, directories[1])
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+      const methods = (yield* Effect.promise(() => fs.readFile(wire, "utf8"))).trim().split("\n")
+      const count = (method: string) => methods.filter((item) => item === method).length
+      // The shared attempt probes, falls back to initialize, then closes without listing. The private
+      // connections know the server is legacy, so they skip the probe; each lists its two pages.
+      expect(count("server/discover")).toBe(1)
+      expect(count("initialize")).toBe(3)
+      expect(count("tools/list")).toBe(4)
+      expect(captured.logs).toEqual([
+        ["mcp pool ignored: server speaks an older protocol", { server: "resources", version: expect.any(String) }],
+      ])
+    }).pipe(Effect.provide(captured.layer))
+  })
 
   live("fails a pooled server that can't be spawned after one attempt", () =>
     Effect.gen(function* () {
