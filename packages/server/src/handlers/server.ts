@@ -33,24 +33,41 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
         "server.connect",
         Effect.fn(function* (ctx) {
           const request = yield* HttpServerRequest.HttpServerRequest
-          // Browser navigations ask for HTML; everything else is an API client that wants the token.
-          const browser = request.headers.accept?.includes("text/html") === true
-          // Chat clients fetch shared links to render a preview. A plain HTML fetch must not spend
-          // the single-use code; only a real browser navigation carries Sec-Fetch-Mode: navigate.
-          if (browser && request.headers["sec-fetch-mode"] !== "navigate")
+          // All HTML GETs are inert, including browser navigations and previews. HTTP LAN browsers
+          // do not send Fetch Metadata, so only an explicit form POST should spend the code.
+          if (request.headers.accept?.includes("text/html"))
             return HttpServerResponse.text(
-              "<!doctype html><title>Connect this device</title><p>Open this link in your browser to connect this device.",
-              { status: 200, contentType: "text/html; charset=utf-8" },
+              '<!doctype html><html><head><meta charset="utf-8"><title>Connect this device</title></head><body><h1>Connect this device</h1><p>Confirm to sign in to this OpenCode server.</p><form method="post"><button type="submit">Connect this device</button></form></body></html>',
+              {
+                contentType: "text/html; charset=utf-8",
+                headers: {
+                  "cache-control": "no-store",
+                  "referrer-policy": "same-origin",
+                  "content-security-policy":
+                    "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+                },
+              },
             )
           const token = (yield* pairing.consume(ctx.params.code)) ? ServerAuth.issueSession(auth) : undefined
-          if (token === undefined) {
-            if (!browser) return yield* new UnauthorizedError({ message: "Pairing link expired or already used" })
+          if (token === undefined)
+            return yield* new UnauthorizedError({ message: "Pairing link expired or already used" })
+          return { token }
+        }),
+      )
+      .handle(
+        "server.confirm",
+        Effect.fn(function* (ctx) {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          // Match the host check used for session-cookie authorization, including TLS-terminating proxies.
+          const origin = URL.parse(request.headers.origin ?? "")
+          if (!origin || !["http:", "https:"].includes(origin.protocol) || origin.host !== request.headers.host)
+            return HttpServerResponse.text("Confirm this pairing link from the same server.", { status: 403 })
+          const token = (yield* pairing.consume(ctx.params.code)) ? ServerAuth.issueSession(auth) : undefined
+          if (token === undefined)
             return HttpServerResponse.text(
               "This pairing link expired or was already used. Run `opencode pair` to get a new one.",
               { status: 401 },
             )
-          }
-          if (!browser) return { token }
           return HttpServerResponse.redirect("/").pipe(
             HttpServerResponse.setCookieUnsafe(ServerAuth.sessionCookieName(request.headers.host), token, {
               path: "/",

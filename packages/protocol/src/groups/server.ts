@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { UnauthorizedError } from "../errors.js"
 
 export const ServerInfo = Schema.Struct({
@@ -73,7 +73,20 @@ export const ServerGroup = HttpApiGroup.make("server.server")
         identifier: "server.connect",
         summary: "Redeem pairing code",
         description:
-          "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+          "Show a confirmation form to browsers without spending the pairing code. Requests that accept JSON redeem the code for a session token to use as the password.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("server.confirm", PAIRING_CONNECT_PATH, {
+      params: { code: Schema.String },
+      success: HttpApiSchema.Empty(302),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "server.confirm",
+        summary: "Confirm browser pairing",
+        description:
+          "Redeem a pairing code from the same-origin confirmation form, set a session cookie, and redirect to the web app.",
       }),
     ),
   )

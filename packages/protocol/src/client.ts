@@ -75,12 +75,14 @@ export const clientNamespace = (endpoint: { readonly path: string }) =>
   endpoint.path === "/api/experimental" || endpoint.path.startsWith("/api/experimental/") ? "experimental" : undefined
 
 export const promiseOmitEndpoints = new Set([
+  "server.confirm",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
   "generate.textLegacy",
 ])
 export const effectOmitEndpoints = new Set([
+  "server.confirm",
   "fs.read",
   "fs.write",
   "media.get",

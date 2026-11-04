@@ -76,10 +76,16 @@ describe("web UI", () => {
           headers: { authorization: `Basic ${btoa("opencode:secret")}` },
         }).then((response) => response.json() as Promise<{ code: string }>),
       )
+      const confirmation = yield* Effect.promise(() =>
+        fetch(new URL(`/auth/connect/${pairing.code}`, origin), { headers: { accept: "text/html" } }),
+      )
+      expect(confirmation.status).toBe(200)
+      expect(yield* Effect.promise(() => confirmation.text())).toContain('<form method="post">')
       const redirect = yield* Effect.promise(() =>
         fetch(new URL(`/auth/connect/${pairing.code}`, origin), {
+          method: "POST",
           redirect: "manual",
-          headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+          headers: { accept: "text/html", origin },
         }),
       )
       expect(redirect.status).toBe(302)

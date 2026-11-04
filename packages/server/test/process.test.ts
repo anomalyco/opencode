@@ -198,16 +198,39 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
 
     const browser = yield* pair
     expect(browser.expires_in).toBe(300)
-    // Chat apps preview links with a plain HTML fetch; that must not spend the one-time code.
-    const preview = yield* request(`/auth/connect/${browser.code}`, {
-      headers: { accept: "text/html", "user-agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)" },
-    })
-    expect(preview.status).toBe(200)
-    expect(preview.headers.get("content-type")).toContain("text/html")
-    expect(yield* Effect.promise(() => preview.text())).toContain("Open this link in your browser")
+    // Neither previews nor browser navigations may spend the code before an explicit confirmation.
+    for (const metadata of [undefined, "navigate", "no-cors"]) {
+      const preview = yield* request(`/auth/connect/${browser.code}`, {
+        headers: { accept: "text/html", ...(metadata ? { "sec-fetch-mode": metadata } : {}) },
+      })
+      expect(preview.status).toBe(200)
+      expect(preview.headers.get("content-type")).toContain("text/html")
+      expect(preview.headers.get("set-cookie")).toBeNull()
+      expect(preview.headers.get("cache-control")).toBe("no-store")
+      expect(preview.headers.get("referrer-policy")).toBe("same-origin")
+      const html = yield* Effect.promise(() => preview.text())
+      expect(html).toContain('<form method="post">')
+      expect(html).toContain('<button type="submit">Connect this device</button>')
+      expect(html).not.toContain("<script")
+    }
+    const head = yield* request(`/auth/connect/${browser.code}`, { method: "HEAD", headers: { accept: "text/html" } })
+    expect(head.status).toBe(200)
+    expect(head.headers.get("set-cookie")).toBeNull()
+
+    for (const origin of [undefined, "null", "not a URL", "http://untrusted.example.com", "http://127.0.0.1:1"]) {
+      const denied = yield* request(`/auth/connect/${browser.code}`, {
+        method: "POST",
+        headers: { accept: "text/html", ...(origin ? { origin } : {}) },
+      })
+      expect(denied.status).toBe(403)
+      expect(denied.headers.get("set-cookie")).toBeNull()
+      yield* Effect.promise(() => denied.arrayBuffer())
+    }
 
     const redirect = yield* request(`/auth/connect/${browser.code}`, {
-      headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+      method: "POST",
+      headers: { accept: "text/html", origin: base, "content-type": "application/x-www-form-urlencoded" },
+      body: "",
     })
     expect(redirect.status).toBe(302)
     expect(redirect.headers.get("location")).toBe("/")
@@ -218,7 +241,8 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     const cookie = setCookie.split(";")[0]
 
     const reused = yield* request(`/auth/connect/${browser.code}`, {
-      headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+      method: "POST",
+      headers: { accept: "text/html", origin: base },
     })
     expect(reused.status).toBe(401)
     expect(yield* Effect.promise(() => reused.text())).toContain("opencode pair")
@@ -227,6 +251,33 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     expect((yield* request("/api/info", { headers: { cookie, origin: base } })).status).toBe(200)
     expect((yield* request("/api/info", { headers: { cookie, origin: "http://127.0.0.1:1" } })).status).toBe(401)
     expect((yield* request("/api/info", { headers: { cookie: `${cookie}x` } })).status).toBe(401)
+
+    // HTTP LAN navigation and form submission omit Fetch Metadata, unlike localhost/HTTPS.
+    const lan = yield* pair
+    const host = "192.168.1.5:4096"
+    const page = yield* request(`/auth/connect/${lan.code}`, { headers: { accept: "text/html", host } })
+    expect(page.status).toBe(200)
+    expect(yield* Effect.promise(() => page.text())).toContain('<form method="post">')
+    const connected = yield* request(`/auth/connect/${lan.code}`, {
+      method: "POST",
+      headers: { accept: "text/html", host, origin: `http://${host}` },
+    })
+    expect(connected.status).toBe(302)
+    expect(connected.headers.get("location")).toBe("/")
+    expect(connected.headers.get("set-cookie")).toContain("opencode_session_4096=")
+
+    // The code is not interpolated into HTML, even for arbitrary paths.
+    const invalid = yield* request(`/auth/connect/${encodeURIComponent('<script>alert("x")</script>')}`, {
+      headers: { accept: "text/html" },
+    })
+    expect(invalid.status).toBe(200)
+    expect(yield* Effect.promise(() => invalid.text())).not.toContain("<script>")
+    const expired = yield* request("/auth/connect/unknown", {
+      method: "POST",
+      headers: { accept: "text/html", origin: base },
+    })
+    expect(expired.status).toBe(401)
+    expect(yield* Effect.promise(() => expired.text())).toContain("opencode pair")
 
     const client = yield* pair
     const redeemed = yield* request(`/auth/connect/${client.code}`)
