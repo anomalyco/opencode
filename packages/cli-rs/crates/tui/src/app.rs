@@ -453,8 +453,12 @@ fn install_theme(tui: &Rc<Tui>) {
 
 /// Wakes the UI on store flushes and connection changes, one queued wake at a time.
 fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
+    let pending = Arc::new(AtomicBool::new(false));
+    let clear = pending.clone();
     let weak = tui.weak();
     tui.app.on_message(move |_, _: &DataChanged| {
+        // Cleared before the read, so a flush during the sync posts another wake.
+        clear.store(false, Ordering::SeqCst);
         if let Some(tui) = weak.upgrade() {
             tui.sync();
         }
@@ -467,11 +471,7 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
     });
 
     let proxy = tui.app.proxy();
-    let pending = Arc::new(AtomicBool::new(false));
     let mut revisions = tui.data.subscribe();
-    let clear = pending.clone();
-    tui.app
-        .on_message(move |_, _: &DataChanged| clear.store(false, Ordering::SeqCst));
     tui.app.runtime().spawn(async move {
         while revisions.changed().await.is_ok() {
             if !pending.swap(true, Ordering::SeqCst) && proxy.send(DataChanged).is_err() {
