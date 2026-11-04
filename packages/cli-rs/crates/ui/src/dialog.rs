@@ -243,6 +243,14 @@ impl Dialogs {
         }
     }
 
+    /// While a dialog is open: focuses `widget` once the last dialog closes, instead of what had focus before the
+    /// first opened (a prompt that shows again under a dialog reclaims focus afterwards).
+    pub fn refocus(&self, widget: &impl Widget) {
+        if !self.0.stack.borrow().is_empty() {
+            *self.0.focus.borrow_mut() = Some(widget.as_any());
+        }
+    }
+
     /// Closes every dialog, calling their close handlers (TS `clear`).
     pub fn clear(&self) {
         self.close_all();

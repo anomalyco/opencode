@@ -106,7 +106,10 @@ impl RouteView for Session {
         self.queued.sync(tui, changes, blocked);
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
-            if prompting {
+            // An open dialog keeps the keys; the prompt takes them when it closes.
+            if prompting && tui.dialogs.is_open() {
+                tui.dialogs.refocus(self.prompt.textarea());
+            } else if prompting {
                 self.prompt.focus(tui);
             }
         }
