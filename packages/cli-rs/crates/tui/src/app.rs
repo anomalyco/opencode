@@ -385,6 +385,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
     crate::terminal::install(&tui);
     crate::frame::install(&tui, &shell);
     crate::features::clear::install(&tui);
+    crate::features::quick_switch::install(&tui);
     crate::features::events::install(&tui);
     crate::features::overlays::install(&tui);
     crate::features::title::install(&tui);

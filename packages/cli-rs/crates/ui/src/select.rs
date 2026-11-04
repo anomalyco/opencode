@@ -77,6 +77,8 @@ pub struct SelectOption<T> {
     pub footer_overhang: u32,
     pub title_width: Option<usize>,
     pub truncate: Truncate,
+    /// Replaces the title (TS `titleView`): spans with their own color, or the row's for `None`.
+    pub title_spans: Option<Vec<(String, Option<Color>)>>,
     pub category: Option<String>,
     pub disabled: bool,
     /// The row background while selected.
@@ -106,6 +108,7 @@ impl<T> SelectOption<T> {
             footer_overhang: 0,
             title_width: None,
             truncate: Truncate::Right,
+            title_spans: None,
             category: None,
             disabled: false,
             bg: None,
@@ -1378,7 +1381,13 @@ fn option_row<T>(
         Truncate::Left => truncate_left(&option.title, option.title_width.unwrap_or(61)),
         Truncate::Right => truncate(&option.title, option.title_width.unwrap_or(61)),
     };
-    let mut spans = vec![title.fg(text)];
+    let mut spans = match &option.title_spans {
+        Some(spans) => spans
+            .iter()
+            .map(|(part, color)| part.clone().fg(color.unwrap_or(text)))
+            .collect(),
+        None => vec![title.fg(text)],
+    };
     if let Some(description) = description {
         spans.push(format!(" {description}").fg(secondary));
     }

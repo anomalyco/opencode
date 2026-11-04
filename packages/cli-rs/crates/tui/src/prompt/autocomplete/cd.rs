@@ -96,7 +96,10 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
                         if let Some(project) = &project {
                             tui.prompt.complete.touch(&tui, project, &info.directory.0);
                         }
-                        *tui.prompt.complete.home.borrow_mut() = Some(info.directory.0);
+                        crate::features::location::set(
+                            &tui,
+                            opencode_store::Location::new(info.directory.0),
+                        );
                         prompt.relocate(&tui);
                     }
                 }
