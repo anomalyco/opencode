@@ -15,6 +15,8 @@ const files = Array.from(new Bun.Glob("scenarios/*/*.app.ts").scanSync({ cwd: pa
   .sort()
   .filter((file) => !only || file === `scenarios/${only}.app.ts`)
 
+const STARTUP_READS_MS = 1_500
+
 type Setup = Awaited<ReturnType<typeof createAppFixture>>
 type Logged = {
   method: string
@@ -67,6 +69,7 @@ async function record(name: string, file: string) {
     },
   })
   await setup.ready
+  const started = Date.now()
   const steps: (Step & { fixture?: string })[] = []
   for (const step of scenario.steps) {
     if ("keys" in step) step.keys.forEach((key) => press(setup, key))
@@ -81,6 +84,9 @@ async function record(name: string, file: string) {
     await writeFixture(`${parity}fixtures/${fixture}.json`, cells)
     steps.push({ ...step, fixture })
   }
+  // The migration status poll starts 1 s after mount (src/component/migration-overlay.tsx:19). Staying open
+  // past it records it in every scenario, however fast the steps ran.
+  await Bun.sleep(Math.max(0, STARTUP_READS_MS - (Date.now() - started)))
   const unmatched = log.filter((entry) => entry.unmatched)
   if (unmatched.length > 0)
     throw new Error(
