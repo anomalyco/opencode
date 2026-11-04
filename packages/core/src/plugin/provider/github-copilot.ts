@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
 import { Effect, Option, Schema } from "effect"
-import { HttpClient } from "effect/http"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { CopilotModels } from "../../github-copilot/models.js"
@@ -166,6 +166,7 @@ export const GithubCopilotPlugin = define({
     const providers = yield* Provider.Service
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
+    const outbound = yield* FetchHttpClient.Fetch
     const discovered = yield* ProviderRefresh.start({
       integrationID: "github-copilot",
       initial: {} as {
@@ -293,7 +294,7 @@ export const GithubCopilotPlugin = define({
           const model = utilityTitleModels.find((id) => loaded.models?.has(id))
           if (!model) return
           evt.result = yield* utilityTitle(
-            { baseURL: loaded.baseURL, token: loaded.token, model, app: ctx.app },
+            { baseURL: loaded.baseURL, token: loaded.token, model, app: ctx.app, fetch: outbound },
             evt,
           ).pipe(
             Effect.tapError((cause) => Effect.logDebug("Copilot utility title failed", { model, cause })),
