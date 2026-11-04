@@ -237,7 +237,7 @@ async fn binary_endpoints_return_and_send_bytes() {
 
 #[tokio::test]
 async fn headers_layer_client_input_then_call() {
-    let script = Script::new(200, "text/plain", "");
+    let script = Script::new(204, "text/plain", "");
     let client = client(&script)
         .auth(Auth::password("secret"))
         .header("X-Client", "a")
@@ -270,7 +270,7 @@ async fn headers_layer_client_input_then_call() {
 
 #[tokio::test]
 async fn query_auth_puts_the_token_in_the_url() {
-    let script = Script::new(200, "text/plain", "");
+    let script = Script::new(204, "text/plain", "");
     let client = client(&script).auth(Auth::Query {
         username: "opencode".to_owned(),
         password: "secret".to_owned(),
