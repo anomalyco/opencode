@@ -10,7 +10,7 @@ use crate::dialog::{
 };
 use crate::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 /// How a long title is cut (`truncateTitle`).
@@ -301,8 +301,6 @@ struct Inner<T> {
     input: Option<Input>,
     body: View,
     scroll: ScrollBox,
-    // The unclamped top the scrolls since the last frame asked for, and that frame's number.
-    scroll_request: Cell<Option<(i64, u64)>>,
     footer_slot: View,
     rows: RefCell<Vec<View>>,
 }
@@ -364,7 +362,6 @@ pub fn select<T: Clone + PartialEq + 'static>(
         input: input.clone(),
         body,
         scroll,
-        scroll_request: Cell::new(None),
         footer_slot,
         rows: RefCell::new(Vec::new()),
     });
@@ -954,32 +951,27 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         None
     }
 
-    // `scrollToSelection`. Its `scrollBy` calls reach OpenTUI's native scroll box, which sums the relative scrolls
-    // since the last layout before it clamps them: moves without a frame between them carry an unclamped top.
+    // `scrollToSelection`. The scroll box sums `scroll_by` moves made before a frame and clamps them once, as
+    // OpenTUI's does.
     fn scroll_to_selection(&self, center: bool) {
         let Some(y) = self.selected_y() else { return };
         let (rows, limit) = self.list_rows();
-        let height = i64::from(rows.min(limit));
-        let max = i64::from(rows) - height;
-        let frame = self.0.cx.app.frame_number();
-        let request = match self.0.scroll_request.get() {
-            Some((top, at)) if at == frame => top,
-            _ => self.0.scroll.scroll_position().1 as i64,
-        };
-        let y = i64::from(y) - request.clamp(0, max);
-        let request = if center {
-            request + y - height / 2
-        } else if y >= height {
-            request + y - height + 1
-        } else if y >= 0 {
+        let height = f64::from(rows.min(limit));
+        let scroll = &self.0.scroll;
+        let y = f64::from(y) - scroll.scroll_position().1;
+        if center {
+            scroll.scroll_by(0.0, y - (height / 2.0).floor());
             return;
-        } else if self.0.state.borrow().selected == 0 {
-            0
-        } else {
-            request + y
-        };
-        self.0.scroll_request.set(Some((request, frame)));
-        self.0.scroll.scroll_to(0.0, request.clamp(0, max) as f64);
+        }
+        if y >= height {
+            scroll.scroll_by(0.0, y - height + 1.0);
+        }
+        if y < 0.0 {
+            scroll.scroll_by(0.0, y);
+            if self.0.state.borrow().selected == 0 {
+                scroll.scroll_to(0.0, 0.0);
+            }
+        }
     }
 
     fn render(&self) {
