@@ -19,7 +19,7 @@ import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
-import { SessionMessageTable } from "../sql.js"
+import { SessionMessageTable, SessionTurnTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
@@ -60,11 +60,22 @@ const layer = Layer.effect(
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
-    // Each drain is one turn and starts its own trace, whatever fiber woke it.
+    // A drain may handle several queued turns within one execution busy period.
     const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
       const sessionID = input.sessionID
       let force = input.force
-      let continuing = input.continuation !== undefined
+      // A recovered turn has no in-memory continuation. Finish it before allowing
+      // queued input to promote, just as a carried continuation across a move does.
+      const recovered =
+        !input.continuation && !input.stepped
+          ? yield* db
+              .select({ id: SessionTurnTable.id })
+              .from(SessionTurnTable)
+              .where(and(eq(SessionTurnTable.session_id, sessionID), eq(SessionTurnTable.status, "running")))
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+      let continuing = input.continuation !== undefined || recovered !== undefined
       let step = input.continuation?.step ?? 1
       let entering = true
       let stepped = input.stepped ?? false
@@ -100,6 +111,17 @@ const layer = Layer.effect(
                     sessionID,
                     entering || !continuing ? "input" : "steer",
                   )
+                  // A steer extends the active turn. A queued input starts a fresh turn,
+                  // even when the coordinator coalesces both into one execution.
+                  if (stepped && !continuing && next?.delivery !== "steer") {
+                    const active = yield* db
+                      .select({ id: SessionTurnTable.id })
+                      .from(SessionTurnTable)
+                      .where(and(eq(SessionTurnTable.session_id, sessionID), eq(SessionTurnTable.status, "running")))
+                      .get()
+                      .pipe(Effect.orDie)
+                    if (active) yield* bus.publish(SessionEvent.TurnSettled, { sessionID })
+                  }
                   if (next?.type === "compaction")
                     yield* bus.publishAll([
                       [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],

@@ -451,6 +451,9 @@ export interface SessionApi<E = never> {
   /** @deprecated Use `client.experimental.session.export`. Removed in the next minor. */
   readonly export: ExperimentalSessionExportOperation<E>
 
+  /** @deprecated Use `client.experimental.session.turn`. Removed in the next minor. */
+  readonly turn: ExperimentalSessionTurnOperation<E>
+
   /** @deprecated Use `client.experimental.session.skill`. Removed in the next minor. */
   readonly skill: ExperimentalSessionSkillOperation<E>
 
@@ -561,6 +564,81 @@ export type ExperimentalSessionExportOutput = {
 export type ExperimentalSessionExportOperation<E = never> = (
   input: ExperimentalSessionExportInput,
 ) => Effect.Effect<ExperimentalSessionExportOutput, E>
+
+export type ExperimentalSessionTurnInput = { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+export type ExperimentalSessionTurnOutput =
+  | { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID; readonly status: "pending" }
+  | {
+      readonly sessionID: Session.ID
+      readonly inputID: SessionMessage.ID
+      readonly turnID: SessionMessage.ID
+      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
+      readonly cost: Money.USD
+      readonly tokens: {
+        readonly input: number
+        readonly output: number
+        readonly reasoning: number
+        readonly cache: { readonly read: number; readonly write: number }
+      }
+      readonly assistantMessageID?: SessionMessage.ID | undefined
+      readonly status: "running"
+    }
+  | {
+      readonly sessionID: Session.ID
+      readonly inputID: SessionMessage.ID
+      readonly turnID: SessionMessage.ID
+      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
+      readonly cost: Money.USD
+      readonly tokens: {
+        readonly input: number
+        readonly output: number
+        readonly reasoning: number
+        readonly cache: { readonly read: number; readonly write: number }
+      }
+      readonly assistantMessageID?: SessionMessage.ID | undefined
+      readonly status: "settled"
+    }
+  | {
+      readonly sessionID: Session.ID
+      readonly inputID: SessionMessage.ID
+      readonly turnID: SessionMessage.ID
+      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
+      readonly cost: Money.USD
+      readonly tokens: {
+        readonly input: number
+        readonly output: number
+        readonly reasoning: number
+        readonly cache: { readonly read: number; readonly write: number }
+      }
+      readonly assistantMessageID?: SessionMessage.ID | undefined
+      readonly status: "failed"
+      readonly error: {
+        readonly type: string
+        readonly message: string
+        readonly status?: number | undefined
+        readonly response?: { readonly body: string } | undefined
+        readonly retryAfterMs?: number | undefined
+      }
+    }
+  | {
+      readonly sessionID: Session.ID
+      readonly inputID: SessionMessage.ID
+      readonly turnID: SessionMessage.ID
+      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
+      readonly cost: Money.USD
+      readonly tokens: {
+        readonly input: number
+        readonly output: number
+        readonly reasoning: number
+        readonly cache: { readonly read: number; readonly write: number }
+      }
+      readonly assistantMessageID?: SessionMessage.ID | undefined
+      readonly status: "interrupted"
+      readonly reason: "user" | "superseded" | "inactivity" | "cancelled"
+    }
+export type ExperimentalSessionTurnOperation<E = never> = (
+  input: ExperimentalSessionTurnInput,
+) => Effect.Effect<ExperimentalSessionTurnOutput, E>
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: Session.ID
@@ -1414,6 +1492,17 @@ export type ExperimentalSessionLogOutput =
             readonly content: ReadonlyArray<SessionMessage.AssistantContentEncoded>
           }
         }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.turn.settled"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID }
+        }
     )
   | EventLog.Synced
 export type ExperimentalSessionLogOperation<E = never> = (
@@ -1424,6 +1513,7 @@ export interface ExperimentalSessionApi<E = never> {
   readonly stats: ExperimentalSessionStatsOperation<E>
   readonly import: ExperimentalSessionImportOperation<E>
   readonly export: ExperimentalSessionExportOperation<E>
+  readonly turn: ExperimentalSessionTurnOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
   readonly instructions: {
@@ -2821,6 +2911,15 @@ export type SessionExportOutput = ExperimentalSessionExportOutput
 
 /** @deprecated Use `ExperimentalSessionExportOperation`. Removed in the next minor. */
 export type SessionExportOperation<E = never> = ExperimentalSessionExportOperation<E>
+
+/** @deprecated Use `ExperimentalSessionTurnInput`. Removed in the next minor. */
+export type SessionTurnInput = ExperimentalSessionTurnInput
+
+/** @deprecated Use `ExperimentalSessionTurnOutput`. Removed in the next minor. */
+export type SessionTurnOutput = ExperimentalSessionTurnOutput
+
+/** @deprecated Use `ExperimentalSessionTurnOperation`. Removed in the next minor. */
+export type SessionTurnOperation<E = never> = ExperimentalSessionTurnOperation<E>
 
 /** @deprecated Use `ExperimentalSessionSkillInput`. Removed in the next minor. */
 export type SessionSkillInput = ExperimentalSessionSkillInput

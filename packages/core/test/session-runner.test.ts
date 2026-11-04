@@ -1185,7 +1185,7 @@ describe("SessionRunnerLLM", () => {
         )
         yield* s.llm.push(TestLLM.text("First answer", "text-first"), TestLLM.text("Second answer", "text-second"))
 
-        yield* s.runPrompt("Start")
+        const input = yield* s.runPrompt("Start")
 
         expect(idles).toEqual([sessionID, sessionID])
         expect(s.requests).toHaveLength(2)
@@ -1199,6 +1199,17 @@ describe("SessionRunnerLLM", () => {
           { type: "synthetic", text: "Keep going", description: "Continuing", metadata: { source: "test" } },
           Expected.assistant({}, [Expected.text("Second answer")]),
         ])
+        const notice = (yield* s.context)[2]
+        expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+          status: "settled",
+          turnID: input.id,
+          inputIDs: [input.id],
+        })
+        expect(yield* s.session.turn({ sessionID, inputID: notice.id })).toMatchObject({
+          status: "settled",
+          turnID: notice.id,
+          inputIDs: [notice.id],
+        })
       },
     )
   }
@@ -3454,10 +3465,10 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = compactModel
     s.requests.length = 0
     yield* s.llm.push(
-      TestLLM.text("## Objective\n- Preserve the task", "text-summary"),
+      TestLLM.textWithUsage("## Objective\n- Preserve the task", "text-summary", 700),
       TestLLM.textWithUsage("Continued", "text-final", 3_950),
     )
-    yield* s.runPrompt("Recent exact request ".repeat(180))
+    const input = yield* s.runPrompt("Recent exact request ".repeat(180))
 
     expect(s.requests).toHaveLength(2)
     expect(JSON.stringify(s.requests[0].messages)).toContain("Recent exact request ".repeat(180))
@@ -3468,6 +3479,13 @@ describe("SessionRunnerLLM", () => {
 
     const context = yield* store.context(sessionID)
     expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "settled",
+      turnID: input.id,
+      assistantMessageID: context[1].id,
+      tokens: { input: 3_950 },
+    })
+    expect((yield* s.session.get(sessionID)).tokens.input).toBe(3_950 + 700 + 3_950)
     expect(context[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the task",
@@ -4463,12 +4481,12 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("steers an active step with newly recorded prompts", function* (s) {
-    yield* s.admit("Start working")
+    const input = yield* s.admit("Start working")
 
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
 
     const first = yield* s.resumePaused
-    yield* s.session.prompt({ sessionID, text: "Change direction" })
+    const steer = yield* s.session.prompt({ sessionID, text: "Change direction" })
     yield* first.finish
     yield* Effect.yieldNow
 
@@ -4476,15 +4494,20 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[0])).toEqual(["Start working"])
     expect(userTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
     expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
+    const result = yield* s.session.turn({ sessionID, inputID: input.id })
+    if (!result) throw new Error("Missing input turn")
+    expect(result).toMatchObject({ status: "settled", turnID: input.id, inputIDs: [input.id, steer.id] })
+    expect(yield* s.session.turn({ sessionID, inputID: steer.id })).toEqual({ ...result, inputID: steer.id })
+    expect(result && "assistantMessageID" in result && result.assistantMessageID).toBe((yield* s.context).at(-1)?.id)
   })
 
   scenario("promotes queued input after continuation ends", function* (s) {
-    yield* s.admit("Start working")
+    const input = yield* s.admit("Start working")
 
     yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.stop(), TestLLM.stop())
 
     const first = yield* s.resumePaused
-    yield* s.session.prompt({
+    const queued = yield* s.session.prompt({
       sessionID,
       text: "Wait until continuation ends",
       delivery: "queue",
@@ -4495,6 +4518,48 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[0])).toEqual(["Start working"])
     expect(userTexts(s.requests[1])).toEqual(["Start working"])
     expect(userTexts(s.requests[2])).toEqual(["Start working", "Wait until continuation ends"])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "settled",
+      turnID: input.id,
+      inputIDs: [input.id],
+    })
+    expect(yield* s.session.turn({ sessionID, inputID: queued.id })).toMatchObject({
+      status: "settled",
+      turnID: queued.id,
+      inputIDs: [queued.id],
+    })
+  })
+
+  scenario("finishes a recovered turn before promoting queued input after shutdown", function* (s) {
+    const runner = yield* SessionRunner.Service
+    const input = yield* s.admit("Interrupted work")
+    yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
+    const gate = yield* s.llm.gate()
+    const first = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    yield* gate.started
+    const queued = yield* s.session.prompt({ sessionID, text: "Next turn", delivery: "queue", resume: false })
+    yield* Fiber.interrupt(first)
+    yield* gate.release
+    yield* s.bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({ status: "running" })
+
+    // A restarted coordinator has no in-memory continuation or stepped flag.
+    yield* s.resume
+    expect(s.requests.map(userTexts)).toEqual([
+      ["Interrupted work"],
+      ["Interrupted work"],
+      ["Interrupted work", "Next turn"],
+    ])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "settled",
+      turnID: input.id,
+      inputIDs: [input.id],
+    })
+    expect(yield* s.session.turn({ sessionID, inputID: queued.id })).toMatchObject({
+      status: "settled",
+      turnID: queued.id,
+      inputIDs: [queued.id],
+    })
   })
 
   scenario("keeps queued input parked when a steer is cancelled during preparation", function* (s) {

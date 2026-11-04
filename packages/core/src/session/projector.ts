@@ -14,6 +14,7 @@ import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
+import { SessionTurnStore } from "./turn.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
 import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, type SessionPartData } from "./sql.js"
@@ -1139,6 +1140,20 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
+        const cancelled = yield* db
+          .select({ id: SessionInboxTable.id })
+          .from(SessionInboxTable)
+          .where(
+            and(
+              eq(SessionInboxTable.session_id, event.data.sessionID),
+              gte(SessionInboxTable.enqueued_seq, boundary.seq),
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        yield* Effect.forEach(cancelled, (input) => SessionTurnStore.cancel(db, event.data.sessionID, input.id), {
+          discard: true,
+        })
         yield* db
           .delete(SessionMessageTable)
           .where(
@@ -1161,6 +1176,7 @@ const layer = Layer.effectDiscard(
         yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
+    yield* SessionTurnStore.project(db, bus)
     yield* bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded]).pipe(
       Stream.runForEach((event) => {
         if (

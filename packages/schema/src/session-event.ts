@@ -241,6 +241,10 @@ export const InboxDeliveryChanged = Event.durable({
 })
 export type InboxDeliveryChanged = typeof InboxDeliveryChanged.Type
 
+/** The runner reached an idle boundary, before delivering another queued input. */
+export const TurnSettled = Event.durable({ type: "session.turn.settled", ...options, schema: Base })
+export type TurnSettled = typeof TurnSettled.Type
+
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
   export type Started = typeof Started.Type
@@ -710,6 +714,7 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
+  TurnSettled,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

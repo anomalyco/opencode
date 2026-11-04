@@ -93,6 +93,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.message.content.updated": (event) =>
         adapter.replaceAssistantParts(event.data.messageID, decodeAssistantContent(event.data.content)),
       "session.usage.recorded": () => Effect.void,
+      "session.turn.settled": () => Effect.void,
       "session.agent.selected": (event) =>
         Effect.gen(function* () {
           const previous = event.data.previous ?? (yield* adapter.getAgent())

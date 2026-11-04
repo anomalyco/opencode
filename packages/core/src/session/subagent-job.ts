@@ -4,6 +4,7 @@ import { Context, Effect, Layer, Scope } from "effect"
 import { Node } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { Job } from "../job.js"
+import { Database } from "../database/database.js"
 import { Session } from "../session.js"
 import { SubagentCompletion } from "./subagent-completion.js"
 
@@ -17,9 +18,10 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
 
-const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scope.Scope> = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const sessions = yield* Session.Service
   const jobs = yield* Job.Service
+  const database = yield* Database.Service
   const scope = yield* Scope.Scope
   // Jobs and their completion observers outlive the plugin that launched them.
   // Fork with the global context too, rather than retaining the caller's location.
@@ -33,7 +35,7 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
     notifications.add(key)
     yield* Effect.gen(function* () {
       const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
-      if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
+      if (info) yield* SubagentCompletion.deliver(database.db, sessions, jobs, { ...info, recovery })
     }).pipe(
       Effect.ensuring(Effect.sync(() => notifications.delete(key))),
       Effect.forkIn(scope, { startImmediately: true }),
@@ -72,5 +74,5 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
   layer: Layer.effect(Service, make),
-  deps: [Session.node, Job.node],
+  deps: [Session.node, Job.node, Database.node],
 })

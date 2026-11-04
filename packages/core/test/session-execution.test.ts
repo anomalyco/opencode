@@ -22,6 +22,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { SessionTurnStore } from "@opencode/core/session/turn"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -295,6 +296,14 @@ describe("SessionExecution lifecycle", () => {
       const sessionID = Session.ID.make("ses_resume_exhausted")
       // A claim from a dead process, already resumed twice without completing.
       yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      const inbox = yield* SessionInbox.Service
+      const inputID = SessionMessage.ID.create()
+      yield* inbox.admit({
+        id: inputID,
+        sessionID,
+        item: { type: "user", payload: { text: "Interrupted work" }, delivery: "queue" },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: inputID })
 
       const drained: string[] = []
       const failures: SessionEvent.Execution.Failed[] = []
@@ -312,6 +321,11 @@ describe("SessionExecution lifecycle", () => {
       // The terminal released the claim and reset the counter atomically.
       expect(yield* claims(database)).toEqual({ [sessionID]: false })
       expect(yield* attempts(database, sessionID)).toBe(0)
+      expect(yield* SessionTurnStore.get(database.db, { sessionID, inputID })).toMatchObject({
+        status: "failed",
+        error: { type: "aborted" },
+        turnID: inputID,
+      })
     }),
   )
 
@@ -953,6 +967,74 @@ describe("SessionRestart background recovery", () => {
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
+
+  for (const kind of ["shell", "subagent"] as const) {
+    for (const type of ["synthetic", "user"] as const) {
+      for (const removed of ["cancelled", "reverted"] as const) {
+        it.effect(`recovers ${kind} with a ${removed} ${type} notification identity`, () =>
+          Effect.gen(function* () {
+            const database = yield* Database.Service
+            const bus = yield* Bus.Service
+            const admission = yield* SessionInbox.Service
+            const jobs = yield* Job.Service
+            const parent = Session.ID.make("ses_retired_parent")
+            const child = Session.ID.make("ses_retired_child")
+            yield* seedSessions(database, [parent])
+            yield* seedSessions(database, [child], { parent_id: parent })
+            yield* jobs.start({
+              id: child,
+              type: kind,
+              recovery:
+                kind === "shell"
+                  ? { kind, sessionID: parent, shellID: "sh_retired", command: "echo done" }
+                  : {
+                      kind,
+                      parentSessionID: parent,
+                      childSessionID: child,
+                      agent: "explore",
+                      description: "Inspection",
+                    },
+              run: Effect.succeed("Done"),
+            })
+            yield* jobs.wait({ id: child })
+            yield* jobs.background(child)
+            const marker = (yield* jobs.pendingBackground)[0]
+            if (!marker) return yield* Effect.die("background record missing")
+            yield* admission.admit({
+              id: marker.notificationID,
+              sessionID: parent,
+              item: { type, delivery: "steer", payload: { text: "Done" } },
+            })
+            if (removed === "cancelled")
+              yield* bus.publish(SessionEvent.InboxCancelled, { sessionID: parent, inboxID: marker.notificationID })
+            if (removed === "reverted") {
+              yield* SessionInbox.promote(database.db, bus, parent, "steer")
+              yield* bus.publish(SessionEvent.TurnSettled, { sessionID: parent })
+              yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID: parent, to: marker.notificationID })
+            }
+            const scope = yield* Scope.make()
+            yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+            const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+            const context = yield* buildExecution(
+              scope,
+              () => Effect.die("Removed input must not run"),
+              undefined,
+              restarted,
+            )
+            const exit = yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions.pipe(Effect.exit)
+            expect(Exit.isSuccess(exit)).toBe(type === "synthetic")
+            expect(yield* restarted.pendingBackground).toHaveLength(type === "synthetic" ? 0 : 1)
+            expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+            expect(
+              yield* SessionTurnStore.get(database.db, { sessionID: parent, inputID: marker.notificationID }),
+            ).toMatchObject({
+              status: removed === "cancelled" ? "interrupted" : "settled",
+            })
+          }),
+        )
+      }
+    }
+  }
 
   it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
     Effect.gen(function* () {

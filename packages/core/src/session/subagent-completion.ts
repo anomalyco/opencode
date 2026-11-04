@@ -1,6 +1,8 @@
 export * as SubagentCompletion from "./subagent-completion.js"
 
 import { Effect } from "effect"
+import type { Database } from "../database/database.js"
+import { SessionTurnStore } from "./turn.js"
 import type { Job } from "../job.js"
 import type { Session } from "../session.js"
 import type { SessionMessage } from "./message.js"
@@ -19,6 +21,7 @@ export function text(message: SessionMessage.Info | undefined) {
 }
 
 export const deliver = Effect.fnUntraced(function* (
+  db: Database.Interface["db"],
   sessions: Pick<Session.Interface, "synthetic">,
   jobs: Pick<Job.Interface, "completeBackground">,
   input: Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
@@ -34,13 +37,23 @@ export const deliver = Effect.fnUntraced(function* (
       : input.status === "error"
         ? (input.error ?? "Subagent failed")
         : "Subagent cancelled"
-  yield* sessions.synthetic({
-    ...(input.notificationID ? { id: input.notificationID } : {}),
-    sessionID: recovery.parentSessionID,
-    ...(input.resume === false ? { resume: false } : {}),
-    description: recovery.description,
-    text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-    metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
-  })
+  yield* sessions
+    .synthetic({
+      ...(input.notificationID ? { id: input.notificationID } : {}),
+      sessionID: recovery.parentSessionID,
+      ...(input.resume === false ? { resume: false } : {}),
+      description: recovery.description,
+      text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${text}\n</subagent>`,
+      metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
+    })
+    .pipe(
+      // A cancelled or reverted notification keeps its result identity. Recovery
+      // acknowledges that delivery instead of resurrecting the removed input.
+      Effect.catchTag("Session.SyntheticConflictError", (error) =>
+        SessionTurnStore.hasSynthetic(db, recovery.parentSessionID, error.inputID).pipe(
+          Effect.flatMap((result) => (result ? Effect.void : Effect.fail(error))),
+        ),
+      ),
+    )
   if (input.notificationID) yield* jobs.completeBackground(input.notificationID)
 })
