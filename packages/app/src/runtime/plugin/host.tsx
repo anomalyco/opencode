@@ -480,10 +480,21 @@ function createHost(input: HostInput) {
 
     const next = transitionPluginHost(machine(), event)
 
-    setMachine(next.state)
-    next.effects.forEach(run)
+    // A reader of the state or an effect that throws must not stop the queue or skip the other effects. Promise.try
+    // runs each synchronously and keeps its throw to itself.
+    void Promise.try(() => setMachine(next.state)).catch((cause: unknown) => console.error("[plugin] host", cause))
+    next.effects.forEach(
+      (effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => crashed(effect, cause)),
+    )
     queue.shift()
     drain()
+  }
+
+  // An effect of a running attempt that throws fails that attempt; any other is only logged.
+  const crashed = (effect: PluginHostEffect<Instance>, cause: unknown) => {
+    if ("attempt" in effect) return dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause })
+
+    console.error(`[plugin] ${"id" in effect ? effect.id : effect.instance.definition.id}`, cause)
   }
 
   const run = (effect: PluginHostEffect<Instance>) => {

@@ -979,6 +979,61 @@ story(
   },
 )
 
+story("a throwing effect or state reader fails only its own plugin; later plugins still activate", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPlugins, until, createMemo, createRoot } = await import(fixture)
+    const later = Promise.withResolvers<void>()
+    const thrown = { count: 0 }
+
+    const host = mountPlugins({
+      // Creating the broken plugin's instance throws.
+      plugin: (id: string) => {
+        if (id === "broken") throw new Error("instance broke")
+
+        return undefined
+      },
+      definitions: [
+        { id: "acme", windowEntry: async () => ({ default: () => {} }) },
+        { id: "broken", windowEntry: async () => ({ default: () => {} }) },
+        {
+          id: "later",
+          windowEntry: async () => {
+            await later.promise
+
+            return { default: () => {} }
+          },
+        },
+      ],
+    })
+
+    // A reader with no error boundary: its throw reaches the write that woke it, here acme becoming active.
+    const dispose = createRoot((dispose: () => void) => {
+      createMemo(() => {
+        if (host.status("acme") === "active" && thrown.count++ === 0) throw new Error("reader broke")
+      })
+
+      return dispose
+    })
+
+    await until(() => thrown.count > 0 && host.status("broken") === "failed")
+    later.resolve()
+    await until(() => host.status("later") === "active")
+
+    const outcome = {
+      acme: host.status("acme"),
+      broken: host.failure("broken")?.error.includes("instance broke"),
+      later: host.status("later"),
+    }
+
+    dispose()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual({ acme: "active", broken: true, later: "active" })
+})
+
 story(
   "a plugin follows another's contract across load, reload and disable, provides only its own, and a failed one stays failed",
   async ({ page }) => {

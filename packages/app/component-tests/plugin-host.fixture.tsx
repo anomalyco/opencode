@@ -23,6 +23,7 @@ import type { BuiltinLayout, BuiltinLocale } from "@opencode/plugin/gui/builtin"
 import {
   createComponent,
   createMemo,
+  createRoot,
   createSignal,
   getOwner,
   onCleanup,
@@ -36,7 +37,7 @@ import { render } from "solid-js/web"
 import { PlatformProvider, type Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
-import { PluginHostProvider, usePluginHost, type HostApiFactories } from "../src/runtime/plugin/host"
+import { PluginHostProvider, usePluginHost, type HostApiFactories, type PluginInput } from "../src/runtime/plugin/host"
 import { createHostApis } from "../src/runtime/plugin/host-apis"
 import type { Bridge, Entry } from "@opencode/plugin/gui/host"
 import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
@@ -80,7 +81,7 @@ type Captured = { apis?: ReturnType<typeof createHostApis> }
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
-export { createComponent, createMemo, createSignal, getOwner, onCleanup, runWithOwner }
+export { createComponent, createMemo, createRoot, createSignal, getOwner, onCleanup, runWithOwner }
 
 const layout: BuiltinLayout = {
   narrow: () => false,
@@ -239,6 +240,8 @@ export function mountPlugins(input: {
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
   /** Whether main failed to answer the window's subscribe to an Ipc. */
   ipcFailed?: (token: Ipc) => boolean
+  /** What a plugin's GUI reads of its server plugin. Omitted: every plugin is a built-in. */
+  plugin?: (id: string) => PluginInput | undefined
 }) {
   const held = Promise.withResolvers<void>()
   const saved = { ...input.stored }
@@ -315,6 +318,7 @@ export function mountPlugins(input: {
               whenMounted={mounted}
               ipc={input.ipc}
               ipcFailed={input.ipcFailed}
+              plugin={input.plugin}
             >
               <Capture />
             </PluginHostProvider>
