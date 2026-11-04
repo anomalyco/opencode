@@ -55,7 +55,7 @@ impl Client {
         let call = Call::new(
             "POST",
             "/api/location/reload".to_owned(),
-            200,
+            204,
             &[400, 401, 503],
         );
 
@@ -151,7 +151,7 @@ impl Client {
         let mut call = Call::new(
             "POST",
             "/api/plugin/update".to_owned(),
-            200,
+            204,
             &[400, 401, 404, 503],
         );
         call.object();
@@ -275,7 +275,7 @@ impl Client {
                 "/api/session/{}",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
 
@@ -316,7 +316,7 @@ impl Client {
                 "/api/session/{}/agent",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -336,7 +336,7 @@ impl Client {
                 "/api/session/{}/model",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -356,7 +356,7 @@ impl Client {
                 "/api/session/{}",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -387,7 +387,7 @@ impl Client {
                 "/api/session/{}/move",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -451,7 +451,7 @@ impl Client {
                 "/api/session/{}/command",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 500],
         );
         call.object();
@@ -519,7 +519,7 @@ impl Client {
                 "/api/session/{}/shell",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -590,7 +590,7 @@ impl Client {
                 "/api/session/{}/revert",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 409, 500],
         );
 
@@ -609,7 +609,7 @@ impl Client {
                 "/api/session/{}/revert/commit",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 409],
         );
 
@@ -694,7 +694,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.inbox_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
 
@@ -714,7 +714,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.inbox_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 409],
         );
         call.object();
@@ -775,7 +775,7 @@ impl Client {
                 "/api/session/{}/background",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
 
@@ -881,7 +881,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.form_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 409],
         );
         call.object();
@@ -902,7 +902,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.form_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 409],
         );
         if let Some(value) = &input.message {
@@ -923,7 +923,7 @@ impl Client {
                 "/api/session/{}/environment",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -943,7 +943,7 @@ impl Client {
                 "/api/session/{}/view",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1035,7 +1035,7 @@ impl Client {
                 "/api/experimental/session/{}/skill",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1058,7 +1058,7 @@ impl Client {
                 "/api/experimental/session/{}/wait",
                 crate::client::path_param(&input.session_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 503],
         );
 
@@ -1097,7 +1097,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.key)?
             ),
-            200,
+            204,
             &[400, 401, 404, 413],
         );
         call.object();
@@ -1118,7 +1118,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.key)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
 
@@ -1403,7 +1403,7 @@ impl Client {
                 "/api/integration/{}/connect/key",
                 crate::client::path_param(&input.integration_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1432,7 +1432,7 @@ impl Client {
                 "/api/integration/{}/connect/external",
                 crate::client::path_param(&input.integration_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1513,7 +1513,7 @@ impl Client {
                 crate::client::path_param(&input.integration_id)?,
                 crate::client::path_param(&input.attempt_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1539,7 +1539,7 @@ impl Client {
                 crate::client::path_param(&input.integration_id)?,
                 crate::client::path_param(&input.attempt_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -1609,7 +1609,7 @@ impl Client {
                 crate::client::path_param(&input.integration_id)?,
                 crate::client::path_param(&input.attempt_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -1627,7 +1627,7 @@ impl Client {
         let mut call = Call::new(
             "POST",
             "/api/experimental/integration/wellknown".to_owned(),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1676,7 +1676,7 @@ impl Client {
                 "/api/experimental/mcp/{}",
                 crate::client::path_param(&input.server)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -1699,7 +1699,7 @@ impl Client {
                 "/api/experimental/mcp/{}",
                 crate::client::path_param(&input.server)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -1720,7 +1720,7 @@ impl Client {
                 "/api/experimental/mcp/{}/connect",
                 crate::client::path_param(&input.server)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -1741,7 +1741,7 @@ impl Client {
                 "/api/experimental/mcp/{}/disconnect",
                 crate::client::path_param(&input.server)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -1816,7 +1816,7 @@ impl Client {
                 "/api/credential/{}",
                 crate::client::path_param(&input.credential_id)?
             ),
-            200,
+            204,
             &[400, 401],
         );
         call.object();
@@ -1836,7 +1836,7 @@ impl Client {
                 "/api/credential/{}/activate",
                 crate::client::path_param(&input.credential_id)?
             ),
-            200,
+            204,
             &[400, 401],
         );
 
@@ -1855,7 +1855,7 @@ impl Client {
                 "/api/credential/{}",
                 crate::client::path_param(&input.credential_id)?
             ),
-            200,
+            204,
             &[400, 401],
         );
 
@@ -1992,7 +1992,7 @@ impl Client {
                 "/api/permission/saved/{}",
                 crate::client::path_param(&input.id)?
             ),
-            200,
+            204,
             &[400, 401],
         );
 
@@ -2087,7 +2087,7 @@ impl Client {
                 crate::client::path_param(&input.session_id)?,
                 crate::client::path_param(&input.request_id)?
             ),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -2181,7 +2181,7 @@ impl Client {
         let mut call = Call::new(
             "POST",
             "/api/experimental/fs/watch".to_owned(),
-            200,
+            204,
             &[400, 401, 404, 503],
         );
         call.object();
@@ -2201,7 +2201,7 @@ impl Client {
         let mut call = Call::new(
             "DELETE",
             "/api/experimental/fs/watch".to_owned(),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -2371,7 +2371,7 @@ impl Client {
         let mut call = Call::new(
             "DELETE",
             format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -2483,7 +2483,7 @@ impl Client {
         let call = Call::new(
             "POST",
             "/api/experimental/persistent-pty/shutdown".to_owned(),
-            200,
+            204,
             &[400, 401, 503],
         );
 
@@ -2583,7 +2583,7 @@ impl Client {
                 "/api/experimental/persistent-pty/{}",
                 crate::client::path_param(&input.pty_id)?
             ),
-            200,
+            204,
             &[400, 401, 404, 503],
         );
 
@@ -2748,7 +2748,7 @@ impl Client {
                 "/api/experimental/schedule/{}",
                 crate::client::path_param(&input.schedule_id)?
             ),
-            200,
+            204,
             &[400, 401, 403, 404],
         );
 
@@ -2892,7 +2892,7 @@ impl Client {
                 "/api/experimental/artifacts/{}",
                 crate::client::path_param(&input.artifact_id)?
             ),
-            200,
+            204,
             &[400, 401, 403, 404, 503],
         );
         if let Some(value) = &input.location {
@@ -3041,7 +3041,7 @@ impl Client {
         let mut call = Call::new(
             "DELETE",
             format!("/api/shell/{}", crate::client::path_param(&input.id)?),
-            200,
+            204,
             &[400, 401, 404],
         );
         if let Some(value) = &input.location {
@@ -3104,7 +3104,7 @@ impl Client {
         input: &WorktreeRemoveInput,
         options: &RequestOptions,
     ) -> Result<(), Error> {
-        let mut call = Call::new("DELETE", "/api/worktree".to_owned(), 200, &[400, 401, 404]);
+        let mut call = Call::new("DELETE", "/api/worktree".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("projectID", &input.project_id)?;
         call.field("directory", &input.directory)?;
@@ -3121,7 +3121,7 @@ impl Client {
         let mut call = Call::new(
             "POST",
             "/api/worktree/refresh".to_owned(),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
@@ -3138,7 +3138,7 @@ impl Client {
         let mut call = Call::new(
             "POST",
             "/api/vcs/init".to_owned(),
-            200,
+            204,
             &[400, 401, 404, 409, 501, 503],
         );
         if let Some(value) = &input.location {
@@ -3275,7 +3275,7 @@ impl Client {
         input: &DebugLocationEvictInput,
         options: &RequestOptions,
     ) -> Result<(), Error> {
-        let mut call = Call::new("DELETE", "/api/debug/location".to_owned(), 200, &[400, 401]);
+        let mut call = Call::new("DELETE", "/api/debug/location".to_owned(), 204, &[400, 401]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3388,7 +3388,7 @@ impl Client {
         let mut call = Call::new(
             "PATCH",
             "/api/experimental/config".to_owned(),
-            200,
+            204,
             &[400, 401, 404],
         );
         call.object();
