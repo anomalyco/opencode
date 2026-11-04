@@ -81,6 +81,8 @@ pub struct Tui {
     /// The plugins (P.1).
     pub plugins: crate::plugins::host::Plugins,
     pub epilogue: crate::features::epilogue::Epilogue,
+    /// The update notification and dialog state (E.18b).
+    pub updates: crate::features::update_notification::Updates,
     pub(crate) location: crate::features::location::LocationState,
     pub(crate) overlays: crate::features::overlays::Overlays,
     pub(crate) title: crate::features::title::Title,
@@ -384,6 +386,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
         startup: Startup::new(args),
         plugins,
         epilogue: Default::default(),
+        updates: Default::default(),
         location: Default::default(),
         overlays: Default::default(),
         title: Default::default(),
