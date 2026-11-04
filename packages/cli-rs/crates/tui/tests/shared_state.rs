@@ -5,10 +5,12 @@
 //! - `session.json` and `prompt-history.jsonl` keep what another client wrote, prompts submitted before
 //!   the history loads are kept, and `session.deleted` prunes its pin.
 
+#[path = "support/wait.rs"]
+mod wait;
+
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Client;
@@ -195,7 +197,7 @@ impl Setup {
     }
 
     fn wait(&self, what: &str, check: impl Fn() -> bool) {
-        let done = self.app.wait_until(Duration::from_secs(5), &check);
+        let done = self.app.wait_until(wait::WAIT, &check);
         assert!(done, "{what} never happened:\n{}", self.app.text());
     }
 
@@ -230,8 +232,6 @@ impl Setup {
         }))
         .unwrap();
         self.tui.data.apply(&[event]);
-        // Let `Tui::sync` and the signal handlers run.
-        self.app.wait_until(Duration::from_millis(50), || false);
     }
 
     fn file(&self, name: &str) -> String {
@@ -307,6 +307,12 @@ fn acknowledged_commits_clear_the_drafts() {
     setup.tui.local.set(&Model::new("openai", "gpt-5"), false);
     setup.submit("switch", 1);
     assert_eq!(setup.writes("/agent")[0]["agent"], "build");
+    // The model acknowledgment clears the model draft, which `Local` reports.
+    let changed = Rc::new(std::cell::Cell::new(false));
+    let _listener = setup.tui.local.subscribe({
+        let changed = changed.clone();
+        move || changed.set(true)
+    });
     setup.emit(
         "session.agent.selected",
         json!({ "sessionID": "ses_b", "agent": "build" }),
@@ -315,20 +321,22 @@ fn acknowledged_commits_clear_the_drafts() {
         "session.model.selected",
         json!({ "sessionID": "ses_b", "model": { "providerID": "openai", "id": "gpt-5" } }),
     );
+    setup.wait("the acknowledgments", || changed.get());
     // Another client switches the model, then the agent.
     setup.emit(
         "session.model.selected",
         json!({ "sessionID": "ses_b", "model": { "providerID": "anthropic", "id": "claude-haiku" } }),
     );
-    assert_eq!(
-        setup.tui.local.current(),
-        Some(Model::new("anthropic", "claude-haiku"))
-    );
+    setup.wait("the other client's model", || {
+        setup.tui.local.current() == Some(Model::new("anthropic", "claude-haiku"))
+    });
     setup.emit(
         "session.agent.selected",
         json!({ "sessionID": "ses_b", "agent": "reviewer" }),
     );
-    assert_eq!(setup.agent().as_deref(), Some("reviewer"));
+    setup.wait("the other client's agent", || {
+        setup.agent().as_deref() == Some("reviewer")
+    });
 }
 
 /// carbon-7: a pin keeps the pins another client wrote after this one read the file, and
@@ -368,7 +376,7 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
     let history = History::load(&app, Some(state.path().to_owned()));
     let entry = json!({ "text": "early", "pasted": [] });
     history.append(&app, entry.clone());
-    let saved = app.wait_until(Duration::from_secs(10), || {
+    let saved = app.wait_until(wait::WAIT, || {
         std::fs::read_to_string(&file).is_ok_and(|text| {
             text == "{\"text\":\"old\",\"pasted\":[]}\n{\"text\":\"early\",\"pasted\":[]}\n"
         })
