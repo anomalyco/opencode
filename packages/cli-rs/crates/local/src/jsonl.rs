@@ -3,12 +3,12 @@
 //!
 //! Ports the three TypeScript providers (`packages/tui/src/prompt/{history,stash,frecency}.tsx`): their
 //! parse and limit rules, the rewrite on load that heals a broken file, appends, and the full rewrites
-//! after a trim. Full rewrites are atomic, and the history, which both TUIs append to, is written
-//! under its lock from what the file holds. Write failures are ignored, as in TypeScript. Prompt
+//! after a trim. Full rewrites are atomic. The history, which both TUIs append to, is written under its
+//! lock from what the file holds, and only its load rewrites it. Write failures are ignored, as in TypeScript. Prompt
 //! entries stay `serde_json::Value`, so fields this client does not know survive.
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -61,7 +61,7 @@ fn body<'a>(entries: impl Iterator<Item = &'a Value>) -> String {
 
 // A full rewrite, atomic so a concurrent reader never sees a partial file.
 fn write_text(file: &Path, text: &str) {
-    let _ = write_text_atomic(file, text, || true);
+    let _ = write_text_atomic(file, text);
 }
 
 fn append_text(file: &Path, text: &str) {
@@ -152,29 +152,21 @@ impl History {
 }
 
 /// `append(item)`'s write, under the `Flock` lock in `<state>/locks`: skips a repeat of the file's last
-/// entry, appends the line, and past the limit rewrites the file atomically with the newest entries.
-/// The file is read again, so entries the TypeScript TUI appended stay.
+/// entry, else appends the line. It never rewrites the file, because the TypeScript TUI appends without
+/// the lock and a rename can drop a line it is writing; [`History::load`] trims the file instead.
 pub fn save_history(state: &Path, entry: &Value) -> Result<(), lock::Error> {
     let file = history_file(state);
     let line = jsonc::stringify(entry);
     with_lock(state, &file, || {
         let text = fs::read_to_string(&file).unwrap_or_default();
-        let valid: Vec<Value> = lines(&text).filter(is_prompt).collect();
-        if valid
+        let repeat = lines(&text)
+            .filter(is_prompt)
             .last()
-            .is_some_and(|previous| jsonc::stringify(previous) == line)
-        {
-            return Ok(());
-        }
-        if valid.len() < MAX_HISTORY_ENTRIES {
+            .is_some_and(|previous| jsonc::stringify(&previous) == line);
+        if !repeat {
             append_text(&file, &(line.clone() + "\n"));
-            return Ok(());
         }
-        rewrite(&file, |text| {
-            let mut entries: Vec<Value> = lines(text).filter(is_prompt).collect();
-            entries.push(entry.clone());
-            Some(body(last(entries, MAX_HISTORY_ENTRIES).iter()))
-        })
+        Ok(())
     })
 }
 
@@ -196,22 +188,29 @@ fn with_lock(
     .map_err(lock::Error::Io)
 }
 
-/// How often [`rewrite`] reads the file again after another client appended to it.
-const REWRITE_ATTEMPTS: usize = 5;
-
 // Rewrites `file` atomically with `change(text)` when that gives a new text. A client that appends
-// without the lock (the TypeScript TUI) writes to the file the rename would replace, so when the file
-// grew meanwhile the rewrite reads it again rather than drop that line.
-fn rewrite(file: &Path, change: impl Fn(&str) -> Option<String>) -> io::Result<()> {
-    for _ in 0..REWRITE_ATTEMPTS {
-        let text = fs::read_to_string(file).unwrap_or_default();
-        let Some(next) = change(&text) else {
-            return Ok(());
-        };
-        let size = || fs::metadata(file).map_or(0, |metadata| metadata.len());
-        if write_text_atomic(file, &next, || size() == text.len() as u64)? {
-            return Ok(());
-        }
+// without the lock (the TypeScript TUI) may write to the file the rename replaces; the old file stays
+// open, so the lines it gained are carried over to the end of the new one.
+fn rewrite(file: &Path, change: impl FnOnce(&str) -> Option<String>) -> io::Result<()> {
+    let mut old = match fs::File::open(file) {
+        Ok(old) => Some(old),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let mut bytes = Vec::new();
+    if let Some(old) = old.as_mut() {
+        old.read_to_end(&mut bytes)?;
+    }
+    let Some(next) = change(&String::from_utf8_lossy(&bytes)) else {
+        return Ok(());
+    };
+    write_text_atomic(file, &next)?;
+    let mut late = Vec::new();
+    if let Some(old) = old.as_mut() {
+        old.read_to_end(&mut late)?;
+    }
+    if !late.is_empty() {
+        append_text(file, &String::from_utf8_lossy(&late));
     }
     Ok(())
 }
@@ -466,10 +465,13 @@ mod tests {
             save_history(state.path(), &prompt(&index.to_string())).unwrap();
         }
         let text = fs::read_to_string(&file).unwrap();
-        let entries = parse_history(&text);
+        assert_eq!(text.lines().count(), 51, "saves only append");
+        // The load trims to the newest 50, and keeps the line TypeScript appended.
+        let history = History::load(state.path());
+        let text = fs::read_to_string(&file).unwrap();
         assert_eq!(text.lines().count(), MAX_HISTORY_ENTRIES);
-        assert_eq!(entries[0]["text"], "ts", "the trim kept the newest 50");
-        assert_eq!(entries[49]["text"], "48");
+        assert_eq!(history.entries()[0]["text"], "ts");
+        assert_eq!(history.entries()[49]["text"], "48");
         // A load that changes nothing does not rewrite the file.
         let before = fs::metadata(&file).unwrap().modified().unwrap();
         History::load(state.path());

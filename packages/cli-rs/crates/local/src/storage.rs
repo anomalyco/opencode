@@ -112,17 +112,11 @@ fn segment(value: &str) -> Result<&str, Error> {
 /// `writeJsonAtomic`: compact `JSON.stringify` to `<file>.<pid>.<uuid>.tmp`, then a rename. The
 /// temporary file is removed when either step fails.
 pub fn write_json_atomic(file: &Path, value: &Value) -> io::Result<()> {
-    write_text_atomic(file, &jsonc::stringify(value), || true).map(|_| ())
+    write_text_atomic(file, &jsonc::stringify(value))
 }
 
-/// Writes `text` to `<file>.<pid>.<uuid>.tmp` and renames it over `file` when `ready()` still holds
-/// once the temporary file is written. Returns whether it renamed; the temporary file never
-/// outlives the call.
-pub fn write_text_atomic(
-    file: &Path,
-    text: &str,
-    ready: impl FnOnce() -> bool,
-) -> io::Result<bool> {
+/// [`write_json_atomic`] for any text.
+pub fn write_text_atomic(file: &Path, text: &str) -> io::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -132,16 +126,11 @@ pub fn write_text_atomic(
         std::process::id(),
         uuid::Uuid::new_v4()
     ));
-    let result = fs::write(&temp, text).and_then(|()| {
-        if !ready() {
-            return Ok(false);
-        }
-        fs::rename(&temp, file).map(|()| true)
-    });
-    if !matches!(result, Ok(true)) {
-        let _ = fs::remove_file(&temp);
-    }
-    result
+    fs::write(&temp, text)
+        .and_then(|()| fs::rename(&temp, file))
+        .inspect_err(|_| {
+            let _ = fs::remove_file(&temp);
+        })
 }
 
 #[cfg(test)]
