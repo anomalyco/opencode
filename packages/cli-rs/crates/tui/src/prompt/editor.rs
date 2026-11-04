@@ -5,7 +5,7 @@
 //! layer runs the 36 `input.*` commands on it through `Tui::textarea` (U.2), and the layers here add
 //! submit, queue, clear, history, shell mode, interrupt, and background.
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
@@ -26,6 +26,7 @@ use opentui::prelude::*;
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
+use super::autocomplete::{self, Autocomplete, parts};
 use super::draft::{Draft, Drafts};
 use super::history::{self, History};
 use super::metadata::{self, Catalog, Display, Preferences, Row};
@@ -56,6 +57,8 @@ pub struct Shared {
     pub history: History,
     pub drafts: Drafts,
     pub preferences: Preferences,
+    /// Frecency, directory recents, and the home `/cd` location (E.3).
+    pub complete: autocomplete::Shared,
 }
 
 impl Shared {
@@ -64,6 +67,7 @@ impl Shared {
             history: History::load(app, state.clone()),
             drafts: Drafts::default(),
             preferences: Preferences::load(app, state),
+            complete: autocomplete::Shared::default(),
         }
     }
 }
@@ -93,6 +97,9 @@ pub struct Inner {
     pub(crate) submitting: Cell<bool>,
     pub(crate) catalog: RefCell<Option<Rc<Catalog>>>,
     layers: RefCell<Vec<Disposer>>,
+    /// The mentions' extmarks and the parts they stand for (E.3).
+    pub(crate) parts: parts::Parts,
+    pub(crate) autocomplete: OnceCell<Autocomplete>,
     pub(crate) this: Weak<Inner>,
 }
 
@@ -112,6 +119,9 @@ impl Prompt {
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
         if changes.location(&self.inner.location(tui)) {
             self.inner.read_catalog(tui);
+            if let Some(complete) = self.inner.autocomplete.get() {
+                complete.sync();
+            }
         }
         let Some(session) = &self.inner.session else {
             return;
@@ -253,8 +263,13 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         submitting: Cell::new(false),
         catalog: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
+        parts: parts::Parts::default(),
+        autocomplete: OnceCell::new(),
         this: this.clone(),
     });
+    let _ = inner
+        .autocomplete
+        .set(autocomplete::mount(tui, &inner, &inner.root));
     connect(&inner);
     install_layers(tui, &inner);
     *tui.textarea.borrow_mut() = Some(inner.textarea.clone());
@@ -298,12 +313,14 @@ impl Inner {
         };
         self.textarea.set_text(&text);
         *self.prompt.borrow_mut() = prompt;
+        parts::restore(self);
         self.set_mode(mode);
     }
 
     /// `resetComposer`.
     pub(crate) fn reset(&self) {
         *self.prompt.borrow_mut() = empty_prompt();
+        self.parts.clear();
         self.textarea.set_text("");
     }
 
@@ -365,12 +382,23 @@ impl Inner {
         })
     }
 
-    /// The session's location, else the default one.
+    /// The session's location; on home, the one `/cd` moved to, else the default one.
     pub(crate) fn location(&self, tui: &Tui) -> Location {
         Location::new(self.session_info(tui).map_or_else(
-            || tui.directory.clone(),
+            || {
+                let home = tui.prompt.complete.home.borrow().clone();
+                home.unwrap_or_else(|| tui.directory.clone())
+            },
             |session| session.location.directory.0,
         ))
+    }
+
+    /// Reads the catalogs again after a home `/cd`.
+    pub(crate) fn relocate(&self, tui: &Tui) {
+        if let Some(inner) = self.rc() {
+            load_catalog(tui, &inner);
+        }
+        self.refresh(tui);
     }
 
     /// Rebuilds the catalog from the store and repaints.
@@ -564,6 +592,10 @@ fn connect(inner: &Rc<Inner>) {
     inner.textarea.on_change(move |_, text| {
         if let Some(prompt) = weak.upgrade() {
             prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
+            parts::sync(&prompt);
+            if let Some(complete) = prompt.autocomplete.get() {
+                complete.on_input(text);
+            }
         }
     });
     let weak = Rc::downgrade(inner);
@@ -575,7 +607,7 @@ fn connect(inner: &Rc<Inner>) {
 }
 
 /// Reads the location's catalogs through the store; the prompt repaints as each arrives.
-fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
+pub(crate) fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
     inner.read_catalog(tui);
     for task in metadata::sync(&tui.data, &inner.location(tui)) {
         let weak = Rc::downgrade(inner);
@@ -595,15 +627,8 @@ fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
 /// The skills dialog's pick: an `@skill` mention at the cursor (`prompt.skills`).
 fn insert_skill(prompt: Weak<Inner>) -> crate::dialogs::skill::OnSelect {
     Rc::new(move |_, id| {
-        let Some(prompt) = prompt.upgrade() else {
-            return;
-        };
-        let text = prompt.textarea.text();
-        let cursor = prompt.textarea.cursor_offset();
-        let inserted =
-            crate::dialogs::skill::mention(&mut prompt.prompt.borrow_mut(), &text, cursor, id);
-        if let Some(inserted) = inserted {
-            prompt.textarea.insert(inserted);
+        if let Some(prompt) = prompt.upgrade() {
+            parts::insert_skill(&prompt, &id.0);
         }
     })
 }
@@ -658,7 +683,11 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     true
                 }),
                 command("prompt.queue", "Queue prompt", "Prompt", |prompt, tui| {
+                    // An open popup first completes a server command, else keeps the key.
                     if prompt.focused()
+                        && !prompt.autocomplete.get().is_some_and(|complete| {
+                            complete.visible().is_some() && !complete.complete_queueable()
+                        })
                         && prompt.rc().is_some_and(|rc| {
                             super::submit::submit(&rc, SessionInboxDelivery::Queue)
                         })
@@ -706,6 +735,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     aliases: Vec::new(),
                     arguments: false,
                 }),
+                autocomplete::cd::command(inner.this.clone()),
             ],
             ..KeymapLayer::default()
         },

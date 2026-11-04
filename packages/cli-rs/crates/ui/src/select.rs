@@ -1395,6 +1395,24 @@ pub mod fuzzy {
         score: impl Fn(&[f64; N]) -> f64,
         threshold: f64,
     ) -> Vec<usize> {
+        go_scored(
+            search,
+            targets,
+            keys,
+            |keys, _, _| score(keys),
+            threshold,
+        )
+    }
+
+    /// [`go`] whose `score` also gets the target's index and fuzzysort's own normalized score for it, the
+    /// `objResults.score` a TS `scoreFn` reads: the best key, with a bonus for matching several.
+    pub fn go_scored<T, const N: usize>(
+        search: &str,
+        targets: &[T],
+        keys: impl Fn(&T) -> [Option<&str>; N],
+        score: impl Fn(&[f64; N], f64, usize) -> f64,
+        threshold: f64,
+    ) -> Vec<usize> {
         if search.is_empty() {
             return Vec::new();
         }
@@ -1445,8 +1463,20 @@ pub mod fuzzy {
             } else if results.iter().all(|score| *score == NEG) {
                 continue;
             }
+            let combined = if search.contains_space {
+                best.iter().sum()
+            } else {
+                results.iter().fold(NEG, |combined, &result| {
+                    let bonus = if result > -1000.0 && combined > NEG {
+                        ((combined + result) / 4.0).max(combined)
+                    } else {
+                        combined
+                    };
+                    bonus.max(result)
+                })
+            };
             let normalized = results.map(normalize);
-            let total = score(&normalized);
+            let total = score(&normalized, normalize(combined), index);
             if total == 0.0 || total.is_nan() {
                 continue;
             }
