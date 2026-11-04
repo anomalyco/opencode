@@ -548,6 +548,19 @@
     }
   }
 
+  [data-slot="text-part-meta-speed"] {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+  }
+
+  @media (hover: hover) {
+    [data-slot="text-part-meta"]:hover [data-slot="text-part-meta-speed"] {
+      display: inline-flex;
+    }
+  }
+
   [data-slot="text-part-meta-separator"] {
     flex: none;
   }
@@ -1233,6 +1246,19 @@
     /* Nested sticky file headers stop below the open group header. */
     > [data-slot="collapsible-content"] {
       --sticky-accordion-top: calc(var(--context-group-sticky-top) + 28px + var(--tool-content-gap));
+      position: relative;
+      margin-inline-start: 12px;
+      padding-inline-start: 12px;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-inline-start: -0.25px;
+        inset-block: 6px;
+        width: 0.5px;
+        background-color: var(--v2-border-border-base);
+        pointer-events: none;
+      }
     }
   }
 }
@@ -1791,6 +1817,22 @@
   [data-slot="user-message-text"] {
     background: var(--v2-background-bg-layer-02);
     color: var(--v2-text-text-base);
+
+    .markdown-session-link {
+      padding: 0;
+      text-align: start;
+      background: none;
+      box-shadow: none;
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
+      text-underline-offset: 2px;
+
+      &:hover {
+        color: inherit;
+        text-decoration-color: currentColor;
+      }
+    }
   }
 
   [data-slot="user-message-comments"] {

@@ -3,7 +3,7 @@ import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise
 import { Permission } from "@opencode/schema/permission"
 import { Model } from "@opencode/schema/model"
 import { Worktree } from "@opencode/schema/worktree"
-import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
+import { Effect, Layer, Option, Predicate, Schema } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SERVER } from "./app"
@@ -55,7 +55,8 @@ export interface MockServerConfig {
   onCredentialActivate?: (credentialID: string) => void
   // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
   onCredentialUpdate?: (credentialID: string, body: { label?: string }) => void
-  onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  // Runs on POST /api/integration/:id/connect/key; returning `{ error }` rejects the key with a 400 and that message.
+  onConnectKey?: (input: { integrationID: string; body: unknown }) => void | { error: string }
   // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
   // Background shell commands (`GET /api/shell`).
@@ -90,8 +91,6 @@ export interface MockServerConfig {
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
   vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
-  // Benchmark latency only. Tests hold message pages with `beforeMessagesResponse`.
-  messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
@@ -158,7 +157,7 @@ export interface MockServerConfig {
   pairing?: { code: string; token: string }
 }
 
-// The page relays events as opaque values; benchmarks also push their own payloads.
+// The page relays events as opaque values.
 type MockStream = { push: (payloads: readonly unknown[]) => void }
 
 type MockStreamState = {
@@ -171,11 +170,11 @@ type MockStreamState = {
 type MockSendCommand = { type: "send"; deliveries: { payload: unknown }[]; burst: boolean }
 
 type MockStreamWindow = Window & {
-  // Set to any value by benchmarks that bring their own event stream.
+  // Set to any value by a harness that brings its own event stream, such as the strobe benchmarks' event source.
   __testSseTransport?: unknown
   // `installSseTransport` registrations.
   __testSseTransports?: Record<string, { command: (input: MockSendCommand) => void }>
-  // Per-origin mock event streams; in-page benchmark probes push through them directly.
+  // Per-origin mock event streams, which `push` delivers through.
   __mockServerStreams?: Record<string, MockStream>
 }
 
@@ -186,7 +185,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   await page.addInitScript(
     ({ server, retry, keepalive: idle }) => {
-      // SAFETY: only this script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
+      // SAFETY: only this script, `installSseTransport`, and the benchmarks' event source write these globals, in the declared shapes.
       const host = window as MockStreamWindow
 
       if (host.__testSseTransport || host.__testSseTransports?.[server] || host.__mockServerStreams?.[server]) return
@@ -279,7 +278,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const push = (payloads: readonly MockServerEvent[]) =>
     page.evaluate<void, { server: string; payloads: readonly unknown[] }>(
       ({ server, payloads }) => {
-        // SAFETY: only the init script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
+        // SAFETY: only the init script, `installSseTransport`, and the benchmarks' event source write these globals, in the declared shapes.
         const host = window as MockStreamWindow
         const stream = host.__mockServerStreams?.[server]
 
@@ -486,10 +485,7 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
 }
 
 // `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
-export function createMockServerHandler(
-  config: MockServerConfig,
-  emit: (events: MockServerEvent[]) => void = () => {},
-) {
+function createMockServerHandler(config: MockServerConfig, emit: (events: MockServerEvent[]) => void = () => {}) {
   const persistentPty = createPersistentPty({ config: config.persistentPty, directory: config.directory }, emit)
 
   const web = HttpRouter.toWebHandler(
@@ -605,7 +601,6 @@ function mockHandlers(
   },
 ) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
-  const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
   const configEntries = config.configEntries ?? []
 
   // Without a persistent PTY config the mock is a server with a working daemon and no terminals, since the desktop
@@ -785,9 +780,13 @@ function mockHandlers(
             },
           })),
         integrationConnect: (ctx) =>
-          Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
-            Effect.andThen(noContent),
-          ),
+          Effect.suspend(() => {
+            const rejected = config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })
+
+            if (rejected) return Effect.fail(new MockBadRequest({ message: rejected.error }))
+
+            return noContent
+          }),
         integrationOAuthConnect: (ctx) => {
           const start = config.onIntegrationOAuth
 
@@ -1048,7 +1047,13 @@ function mockHandlers(
         // Like the server, which also answers 204 for a shell that already ended.
         shellRemove: () => noContent,
         persistentPtyList: (ctx) =>
-          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+          persistentPtyEnabled.pipe(
+            Effect.andThen(() =>
+              state.persistentPty.listFails
+                ? Effect.fail(new MockInternal({ message: "Listing terminals failed" }))
+                : Effect.succeed({ data: state.persistentPty.list(ctx.params.sessionID) }),
+            ),
+          ),
         persistentPtyCreate: (ctx) =>
           persistentPtyEnabled.pipe(
             Effect.map(() => {
@@ -1113,6 +1118,10 @@ function mockHandlers(
 
               return session.parentID === ctx.query.parentID
             })
+            .filter(
+              (session) =>
+                !!currentSession(session, config.directory).time.archived === (ctx.query.archived === "true"),
+            )
             .filter((session) =>
               ctx.query.search === undefined
                 ? true
@@ -1286,10 +1295,20 @@ function mockHandlers(
         },
         sessionRename: (ctx) =>
           Effect.sync(() => {
-            const title = Option.getOrUndefined(decodeSessionRename(ctx.payload))?.title
+            const update = Option.getOrUndefined(decodeSessionUpdate(ctx.payload))
+
             const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
 
-            if (session && title !== undefined) session.title = title
+            if (!session || !update) return
+
+            if (update.title !== undefined) session.title = update.title
+
+            if (update.archived !== undefined) {
+              session.time = {
+                ...currentSession(session, config.directory).time,
+                archived: update.archived ? Date.now() : undefined,
+              }
+            }
           }).pipe(Effect.andThen(noContent)),
         sessionCommand: (ctx) => {
           const recordCommand = config.onCommand
@@ -1319,7 +1338,6 @@ function mockHandlers(
         messageGet: (ctx) =>
           Effect.gen(function* () {
             config.onMessage?.({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })
-            yield* delay
 
             const message =
               config.message?.(ctx.params.sessionID, ctx.params.messageID) ??
@@ -1344,7 +1362,6 @@ function mockHandlers(
               yield* Effect.promise(() => config.beforeMessagesResponse!({ sessionID: ctx.params.sessionID, before }))
             }
 
-            yield* delay
             const pageData = config.pageMessages(ctx.params.sessionID, ctx.query.limit ?? 50, before)
             config.onMessages?.({ sessionID: ctx.params.sessionID, before, phase: "end" })
             const cursor = pageData.cursor ? `cursor_${++state.nextCursor}` : undefined
@@ -1512,7 +1529,9 @@ const decodeSessionCreate = Schema.decodeUnknownOption(
   Schema.Struct({ id: lenient(Schema.String), title: lenient(Schema.String), parentID: lenient(Schema.String) }),
 )
 
-const decodeSessionRename = Schema.decodeUnknownOption(Schema.Struct({ title: Schema.String }))
+const decodeSessionUpdate = Schema.decodeUnknownOption(
+  Schema.Struct({ title: Schema.optionalKey(Schema.String), archived: Schema.optionalKey(Schema.Boolean) }),
+)
 
 const decodeRevertStage = Schema.decodeUnknownOption(Schema.Struct({ messageID: Schema.String }))
 
@@ -1565,6 +1584,7 @@ const decodeSession = Schema.decodeUnknownSync(
       Schema.Struct({
         created: lenient(Schema.Number),
         updated: lenient(Schema.Number),
+        busy: lenient(Schema.Number),
         idle: lenient(Schema.Number),
         viewed: lenient(Schema.Number),
         archived: Schema.optionalKey(Schema.Unknown),

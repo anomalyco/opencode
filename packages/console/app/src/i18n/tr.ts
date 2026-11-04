@@ -206,7 +206,7 @@ export const dict = {
     "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
-  "go.promo.kimiK31Pro": "Kimi K3.1 Pro artık Go'da kullanılabilir.",
+  "go.promo.hy4": "Hy4 artık Go'da kullanılabilir.",
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",

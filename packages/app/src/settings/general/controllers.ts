@@ -26,13 +26,11 @@ import { showToast } from "@/shell/notifications/toast"
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
   const serverCtx = useServerCtx(server)
-  const source = () => ServerConnection.key(server())
 
+  // Loads again for the controller a server's new credentials start; a server without one keeps the initial value.
   const [state, actions] = createResource(
-    source,
-    async () => {
-      const context = serverCtx()
-
+    serverCtx,
+    async (context) => {
       const [entries, shells] = await Promise.all([
         context.sdk.api.config.get().catch(() => []),
         context.sdk.api.config.shells().catch(() => []),
@@ -55,11 +53,12 @@ export function createServerShellController(server: Accessor<ServerConnection.An
     shells: () => state.latest.shells,
     current: () => state.latest.shell ?? "",
     select: (value: string) => {
-      if (value === (state.latest.shell ?? "")) return
+      const context = serverCtx()
+
+      if (!context || value === (state.latest.shell ?? "")) return
       const previous = state.latest
       actions.mutate({ ...previous, shell: value || undefined })
-      void serverCtx()
-        .sdk.api.experimental.config.update({ shell: value || null })
+      void context.sdk.api.experimental.config.update({ shell: value || null })
         .catch((error) => {
           actions.mutate(previous)
           showToast({

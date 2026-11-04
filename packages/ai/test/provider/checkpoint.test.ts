@@ -20,7 +20,7 @@ testEffect(
       expect(new URL(request.url).searchParams.get("trace")).toBe("request")
       expect(request.headers.authorization).toBe("Bearer fixture")
       expect(request.headers["chatgpt-account-id"]).toBe("fixture-account")
-      expect(request.headers["x-codex-beta-features"]).toBe("remote_compaction_v2")
+      expect(request.headers["x-beta-features"]).toBe("remote_compaction_v2")
       const body = JSON.parse(text)
       expect(body).toMatchObject({
         model: "fixture",
@@ -80,8 +80,8 @@ testEffect(
         maxToolCalls: 1,
         textVerbosity: "low",
       },
+      headers: { "chatgpt-account-id": "fixture-account", "x-beta-features": "remote_compaction_v2" },
       http: {
-        headers: { "chatgpt-account-id": "fixture-account", "x-codex-beta-features": "remote_compaction_v2" },
         query: { trace: "request" },
         body: {
           service_tier: "priority",

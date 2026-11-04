@@ -33,7 +33,6 @@ for (const scheme of ["light", "dark"] as const) {
         ["MCP", "No MCP servers configured"],
         ["Plugins", "No plugins configured"],
         ["Skills", "No skills configured"],
-        ["LSP", "No LSP servers configured"],
       ]) {
         const trigger = details.getByRole("button", { name, exact: true })
         await trigger.click()
@@ -119,11 +118,6 @@ test("mobile plugin drawers keep configured lists, retry, refresh, and MCP statu
       }),
   )
   await page.route(
-    (url) => url.pathname === "/api/config",
-    (route) =>
-      route.fulfill({ json: [{ type: "document", info: { lsp: { "drawer-lsp": { command: ["drawer-lsp"] } } } }] }),
-  )
-  await page.route(
     (url) => url.pathname.startsWith("/api/mcp") || url.pathname.startsWith("/api/experimental/mcp"),
     (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
@@ -170,15 +164,10 @@ test("mobile plugin drawers keep configured lists, retry, refresh, and MCP statu
   await expect(plugins.getByText("extra-plugin", { exact: true })).toBeVisible()
   await plugins.getByRole("button", { name: "Navigate back", exact: true }).click()
 
-  for (const [name, item] of [
-    ["Skills", "drawer-skill"],
-    ["LSP", "drawer-lsp"],
-  ]) {
-    await details.getByRole("button", { name, exact: true }).click()
-    const plugin = page.getByRole("dialog", { name, exact: true })
-    await expect(plugin.getByText(item, { exact: true })).toBeVisible()
-    await plugin.getByRole("button", { name: "Navigate back", exact: true }).click()
-  }
+  await details.getByRole("button", { name: "Skills", exact: true }).click()
+  const skills = page.getByRole("dialog", { name: "Skills", exact: true })
+  await expect(skills.getByText("drawer-skill", { exact: true })).toBeVisible()
+  await skills.getByRole("button", { name: "Navigate back", exact: true }).click()
 
   await details.getByRole("button", { name: "MCP", exact: true }).click()
   const mcp = page.getByRole("dialog", { name: "MCP", exact: true })

@@ -2677,7 +2677,9 @@ ToolRegistry.register({
 
                 return (
                   <div data-slot="question-answer-item">
-                    <div data-slot="question-text">{q.question}</div>
+                    <div data-slot="question-text">
+                      <LinkedText text={q.question} />
+                    </div>
                     <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
                   </div>
                 )

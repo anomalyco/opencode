@@ -1,20 +1,21 @@
 import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
 import { useQueries, useQueryClient } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
-import { createEffect, createMemo, createSignal, onCleanup, startTransition } from "solid-js"
-import { useGlobal } from "@/runtime/server/runtime"
+import { createEffect, createMemo, onCleanup, startTransition } from "solid-js"
+import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { sessionBusy, sessionRequests } from "@/shell/layout/project-avatar-state"
+import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
 import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
+import { workingSince } from "./inbox-working"
 
 // Keep the immutable result opaque so Solid Query does not recursively unwrap every session.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
@@ -23,7 +24,7 @@ const selectSessions = (sessions: SessionInfo[]) => () => sessions
 const BRANCH_BATCH = 4
 
 // Root sessions fetched per server.
-const INDEX_LIMIT = 200
+const INDEX_LIMIT = 50
 
 // The index excludes archived sessions, so a view that lists them loads the newest archived ones separately.
 const ARCHIVED_LIMIT = 50
@@ -34,9 +35,10 @@ export type InboxEntry = {
   key: string
   conn: ServerConnection.Any
   server: ServerConnection.Key
-  ctx: ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>
+  ctx: ServerCtx
   session: SessionInfo
   status: InboxStatus
+  since: number | undefined
 }
 
 /**
@@ -53,11 +55,20 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   const language = useLanguage()
   const queryClient = useQueryClient()
 
-  const [now, setNow] = createSignal(Date.now())
-  const timer = setInterval(() => setNow(Date.now()), 1_000)
+  const [clock, setClock] = createStore({ second: Date.now(), minute: Date.now() })
+  const timer = setInterval(() => setClock("minute", Date.now()), 60_000)
   onCleanup(() => clearInterval(timer))
 
-  const connections = createMemo(() => servers.visible.map((conn) => ({ conn, ctx: global.ensureServerCtx(conn) })))
+  const [requestTimes, setRequestTimes] = createStore<Record<string, number | undefined>>({})
+
+  // A server that rejects our credentials has no controller, so it lists nothing until it signs in again.
+  const connections = createMemo(() =>
+    servers.visible.flatMap((conn) => {
+      const ctx = global.serverCtx(ServerConnection.key(conn))
+
+      return ctx ? [{ conn, ctx }] : []
+    }),
+  )
 
   // The inbox stays mounted and rarely refetches the index, so drop sessions the server no longer has.
   const forget = (conn: ServerConnection.Any, sessionID: string) => {
@@ -72,6 +83,24 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   createEffect(() => {
     connections().forEach((item) => {
       onCleanup(item.ctx.data.on("session.deleted", (event) => forget(item.conn, event.data.sessionID)))
+      const server = ServerConnection.key(item.conn)
+
+      // Request snapshots have no timestamp; live events let newly waiting rows show their actual waiting age.
+      onCleanup(
+        item.ctx.data.on("permission.asked", (event) => setRequestTimes(`${server}\0${event.data.id}`, event.created)),
+      )
+      onCleanup(
+        item.ctx.data.on("form.created", (event) => setRequestTimes(`${server}\0${event.data.form.id}`, event.created)),
+      )
+      onCleanup(
+        item.ctx.data.on("permission.replied", (event) =>
+          setRequestTimes(`${server}\0${event.data.requestID}`, undefined),
+        ),
+      )
+      onCleanup(item.ctx.data.on("form.replied", (event) => setRequestTimes(`${server}\0${event.data.id}`, undefined)))
+      onCleanup(
+        item.ctx.data.on("form.cancelled", (event) => setRequestTimes(`${server}\0${event.data.id}`, undefined)),
+      )
     })
   })
 
@@ -124,10 +153,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           ),
         )
 
-        const status = (session: SessionInfo): InboxStatus => {
-          const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
-          const requests = sessionRequests(data, session.id, true, settings.permissions.autoApproves(project))
-
+        const status = (session: SessionInfo, requests: SessionRequests): InboxStatus => {
           if (requests.permission) return "approval"
 
           if (requests.form) return "input"
@@ -139,6 +165,17 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           return session.outcome === "failed" ? "failed" : "done"
         }
 
+        // A waiting session ages from the request it shows, not from one auto-approve still answers.
+        const since = (value: InboxStatus, session: SessionInfo, requests: SessionRequests) => {
+          if (value === "working") return workingSince(session)
+
+          if (!inboxBusy(value)) return session.time.idle ?? session.time.updated
+
+          const request = value === "approval" ? requests.permission : requests.form
+
+          return (request && requestTimes[`${server}\0${request.id}`]) ?? workingSince(session) ?? session.time.updated
+        }
+
         // Locally known sessions come last so live archive and unarchive events win over cached indexes.
         const sessions = new Map(
           [
@@ -148,28 +185,45 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           ].map((session) => [session.id, session] as const),
         )
 
-        return data.session.apply([...sessions.values()].filter((session) => !session.parentID)).map(
-          (session): InboxEntry => ({
-            key: `${server}\0${session.id}`,
-            conn: item.conn,
-            server,
-            ctx: item.ctx,
-            session,
-            status: status(session),
-          }),
-        )
+        return data.session
+          .apply([...sessions.values()].filter((session) => !session.parentID))
+          .map((session): InboxEntry => {
+            const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
+            const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))
+            const value = status(session, requests)
+
+            return {
+              key: `${server}\0${session.id}`,
+              conn: item.conn,
+              server,
+              ctx: item.ctx,
+              session,
+              status: value,
+              since: since(value, session, requests),
+            }
+          })
       })
       .toSorted((a, b) => b.session.time.updated - a.session.time.updated),
   )
 
-  // Pending permissions and questions only load for sessions the client has opened. A running session may be waiting
-  // on one, so load them for every working root; events keep them current from then on. `checked` marks the roots
-  // whose first load ended, so the first paint can wait for them instead of moving rows a moment later.
+  const hasWorking = createMemo(() => entries().some((entry) => entry.status === "working"))
+
+  createEffect(() => {
+    if (!hasWorking()) return
+    setClock("second", Date.now())
+    const interval = setInterval(() => setClock("second", Date.now()), 1_000)
+
+    onCleanup(() => clearInterval(interval))
+  })
+
+  // The index can arrive before the active-session snapshot. Check unfinished runs too so pending requests
+  // settle before the first paint.
   const [requests, setRequests] = createStore<{ checked: Record<string, true> }>({ checked: {} })
 
   createEffect(() => {
     entries().forEach((entry) => {
-      if (entry.status !== "working" || requests.checked[entry.key]) return
+      if ((entry.status !== "working" && workingSince(entry.session) === undefined) || requests.checked[entry.key])
+        return
       void Promise.allSettled([
         entry.ctx.data.session.permission.sync(entry.session.id),
         entry.ctx.data.session.form.sync(entry.session.id),
@@ -183,14 +237,18 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   const settled = createMemo(
     (previous: boolean) =>
       previous ||
-      (connections().every((item, index) => {
-        const health = global.servers.health[ServerConnection.key(item.conn)]
+      (servers.hydrated() &&
+        connections().every((item, index) => {
+          const health = global.servers.health[ServerConnection.key(item.conn)]
 
-        if (health && !health.checking && !health.healthy) return true
+          if (health && !health.checking && !health.healthy) return true
 
-        return !!queries[index]?.isSuccess || !!queries[index]?.isError
-      }) &&
-        entries().every((entry) => entry.status !== "working" || !!requests.checked[entry.key])),
+          return !!queries[index]?.isSuccess || !!queries[index]?.isError
+        }) &&
+        entries().every(
+          (entry) =>
+            (entry.status !== "working" && workingSince(entry.session) === undefined) || !!requests.checked[entry.key],
+        )),
     false,
   )
 
@@ -218,12 +276,14 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
     while (queue.length) {
       await Promise.all(
-        queue.splice(0, BRANCH_BATCH).map((entry) =>
-          entry.ctx.data.location.vcs
-            .sync(entry.session.location)
+        queue.splice(0, BRANCH_BATCH).map((entry) => {
+          const location = entry.ctx.data.location
+
+          return (location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location))
+            .then(() => location.vcs.sync(entry.session.location))
             .catch(() => undefined)
-            .then(() => setVcs("settled", locationKey(entry), true)),
-        ),
+            .then(() => setVcs("settled", locationKey(entry), true))
+        }),
       )
     }
 
@@ -235,12 +295,6 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       const key = locationKey(entry)
 
       if (queued.has(key)) return
-
-      if (!entry.ctx.data.location.info(entry.session.location)) {
-        setVcs("settled", key, true)
-
-        return
-      }
 
       queued.add(key)
       queue.push(entry)
@@ -286,7 +340,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })
 
   return {
-    now,
+    now: (status: InboxStatus) => (status === "working" ? clock.second : clock.minute),
     entries,
     /** The first load has not settled: lists would still move or claim nothing needs you. */
     loading: () => !settled(),

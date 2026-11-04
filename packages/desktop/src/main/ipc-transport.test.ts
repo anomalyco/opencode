@@ -77,6 +77,8 @@ describe("desktop RPC transport", () => {
     const live = RpcServer.layer(TestRpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive))
     const runtime = ManagedRuntime.make(live)
     const handoff = await runtime.runPromise(IpcPortHandoff)
+    const disconnected: number[] = []
+    handoff.onDisconnect((clientId) => disconnected.push(clientId))
     const first = new MessageChannel()
     const second = new MessageChannel()
     handoff.bind(sender(1), serverPort(first.port1))
@@ -108,6 +110,8 @@ describe("desktop RPC transport", () => {
 
     expect(reloadedFocused.exit).toEqual(success(true))
     expect(stillUnfocused.exit).toEqual(success(false))
+    // Deep link delivery returns unacknowledged links to the queue when a reload replaces a renderer's port.
+    expect(disconnected).toEqual([0])
 
     for (const port of [first.port2, second.port2, reloaded.port2]) port.close()
     await runtime.dispose()

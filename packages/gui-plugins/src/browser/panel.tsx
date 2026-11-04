@@ -7,6 +7,7 @@ import { LineCommentEditor } from "@opencode/ui/line-comment"
 import { Loader } from "@opencode/ui/loader"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -984,8 +985,7 @@ export default function SessionBrowserPane(props: {
                     }
                     data-slot="browser-comment-editor"
                     data-prevent-autofocus
-                    data-scrollable
-                    class="absolute overflow-y-auto rounded-[8px] shadow-[var(--v2-elevation-floating)]"
+                    class="absolute flex flex-col overflow-hidden rounded-[8px] shadow-[var(--v2-elevation-floating)]"
                     style={{
                       left: `${position().left}px`,
                       top: `${position().top}px`,
@@ -993,56 +993,58 @@ export default function SessionBrowserPane(props: {
                       "max-height": `${position().maxHeight}px`,
                     }}
                   >
-                    <LineCommentEditor
-                      variant="compact"
-                      label={plugin.t("comment.label")}
-                      placeholder={plugin.t("comment.placeholder")}
-                      cancelLabel={plugin.t("comment.cancel")}
-                      submitLabel={plugin.t(current().draft.trim() ? "comment.submit" : "comment.attach")}
-                      allowEmpty
-                      style={{
-                        "--line-comment-preview-lines": 2,
-                        "--line-comment-max-height": `${position().maxHeight}px`,
-                      }}
-                      value={current().draft}
-                      onInput={(value) => setStore("comment", "draft", value)}
-                      onCancel={closeComment}
-                      onSubmit={submitComment}
-                      mention={{
-                        items: (query) => props.screen.file.search(query, { kind: "any" }),
-                      }}
-                      selection={
-                        <span>
-                          <Tooltip
-                            placement="top"
-                            contentStyle={{ "pointer-events": "none" }}
-                            value={
+                    <MenuScroll class="min-h-0">
+                      <LineCommentEditor
+                        variant="compact"
+                        label={plugin.t("comment.label")}
+                        placeholder={plugin.t("comment.placeholder")}
+                        cancelLabel={plugin.t("comment.cancel")}
+                        submitLabel={plugin.t(current().draft.trim() ? "comment.submit" : "comment.attach")}
+                        allowEmpty
+                        style={{
+                          "--line-comment-preview-lines": 2,
+                          "--line-comment-max-height": `${position().maxHeight}px`,
+                        }}
+                        value={current().draft}
+                        onInput={(value) => setStore("comment", "draft", value)}
+                        onCancel={closeComment}
+                        onSubmit={submitComment}
+                        mention={{
+                          items: (query) => props.screen.file.search(query, { kind: "any" }),
+                        }}
+                        selection={
+                          <span>
+                            <Tooltip
+                              placement="top"
+                              contentStyle={{ "pointer-events": "none" }}
+                              value={
+                                <span
+                                  dir="ltr"
+                                  style={{ "font-family": "var(--font-family-mono)", "unicode-bidi": "isolate" }}
+                                >
+                                  {current().element.selector || current().element.label}
+                                </span>
+                              }
+                            >
                               <span
                                 dir="ltr"
-                                style={{ "font-family": "var(--font-family-mono)", "unicode-bidi": "isolate" }}
+                                style={{
+                                  "font-family": "var(--font-family-mono)",
+                                  "unicode-bidi": "isolate",
+                                  display: "-webkit-box",
+                                  "-webkit-box-orient": "vertical",
+                                  "-webkit-line-clamp": "var(--line-comment-preview-lines)",
+                                  overflow: "hidden",
+                                  "overflow-wrap": "anywhere",
+                                }}
                               >
                                 {current().element.selector || current().element.label}
                               </span>
-                            }
-                          >
-                            <span
-                              dir="ltr"
-                              style={{
-                                "font-family": "var(--font-family-mono)",
-                                "unicode-bidi": "isolate",
-                                display: "-webkit-box",
-                                "-webkit-box-orient": "vertical",
-                                "-webkit-line-clamp": "var(--line-comment-preview-lines)",
-                                overflow: "hidden",
-                                "overflow-wrap": "anywhere",
-                              }}
-                            >
-                              {current().element.selector || current().element.label}
-                            </span>
-                          </Tooltip>
-                        </span>
-                      }
-                    />
+                            </Tooltip>
+                          </span>
+                        }
+                      />
+                    </MenuScroll>
                   </div>
                 )}
               </Show>
@@ -1062,30 +1064,32 @@ export default function SessionBrowserPane(props: {
               <div
                 data-slot="browser-comment-editor"
                 data-prevent-autofocus
-                class="absolute end-2 top-2 overflow-y-auto rounded-[6px] shadow-[var(--v2-elevation-raised)]"
+                class="absolute end-2 top-2 flex flex-col overflow-hidden rounded-[6px] shadow-[var(--v2-elevation-raised)]"
                 style={{
                   width: `${Math.max(0, Math.min(400, store.size.width - 16))}px`,
                   "max-height": `${Math.max(0, store.size.height - 16)}px`,
                 }}
               >
-                <LineCommentEditor
-                  value={current().draft}
-                  onInput={(value) => setStore("note", "draft", value)}
-                  onCancel={closeNote}
-                  onSubmit={submitNote}
-                  placeholder={plugin.t("page.placeholder")}
-                  mention={{
-                    items: (query) => props.screen.file.search(query, { kind: "any" }),
-                  }}
-                  selection={
-                    <span class="flex min-w-0 items-center gap-1" dir="ltr">
-                      <Icon name="outline-globe" size="small" class="shrink-0" />
-                      <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
-                        {current().title || addressParts(current().url).host || current().url}
+                <MenuScroll class="min-h-0">
+                  <LineCommentEditor
+                    value={current().draft}
+                    onInput={(value) => setStore("note", "draft", value)}
+                    onCancel={closeNote}
+                    onSubmit={submitNote}
+                    placeholder={plugin.t("page.placeholder")}
+                    mention={{
+                      items: (query) => props.screen.file.search(query, { kind: "any" }),
+                    }}
+                    selection={
+                      <span class="flex min-w-0 items-center gap-1" dir="ltr">
+                        <Icon name="outline-globe" size="small" class="shrink-0" />
+                        <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
+                          {current().title || addressParts(current().url).host || current().url}
+                        </span>
                       </span>
-                    </span>
-                  }
-                />
+                    }
+                  />
+                </MenuScroll>
               </div>
             </div>
           )}

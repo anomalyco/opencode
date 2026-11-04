@@ -18,11 +18,10 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import type { HomeProjectSelection, LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { ServerRowMenuView, serverMenuLabels } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { type ServerHealth } from "@/runtime/server/health"
-import { fileManagerApp } from "@/home/projects/file-manager"
+import { ProjectMenuItems } from "./menu"
 import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import "./view.css"
 
@@ -153,10 +152,12 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
   let observer: MutationObserver | undefined
   let frame = 0
   const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
+
   const updateFades = (element: HTMLDivElement) => {
     element.toggleAttribute("data-fade-top", element.scrollTop > 0)
     element.toggleAttribute("data-fade-bottom", element.scrollTop + element.clientHeight < element.scrollHeight - 1)
   }
+
   onCleanup(() => {
     observer?.disconnect()
     cancelAnimationFrame(frame)
@@ -594,7 +595,6 @@ function HomeProjectRow(
       unread: boolean
     },
 ) {
-  const platform = usePlatform()
   const serverUnreachable = () => props.serverHealth(props.server)?.healthy === false
 
   const contextMenuID = () => projectContextMenuID(props.server, props.project.worktree)
@@ -654,35 +654,7 @@ function HomeProjectRow(
           />
           <Menu.Portal>
             <Menu.Content>
-              <Menu.Item onSelect={() => props.onOpenProjectNewSession(props.server, props.project.worktree)}>
-                {props.language.t("command.session.new")}
-              </Menu.Item>
-              <Show when={props.canImportSession}>
-                <Menu.Item onSelect={() => props.onImportSession(props.server, props.project)}>
-                  {props.language.t("command.session.import")}
-                </Menu.Item>
-              </Show>
-              <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
-                {props.language.t("dialog.project.edit.title")}
-              </Menu.Item>
-              <Show when={props.canRevealProject(props.server)}>
-                <Menu.Item onSelect={() => props.onRevealProject(props.server, props.project)}>
-                  {props.language.t(
-                    fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown")
-                      .actionLabel,
-                  )}
-                </Menu.Item>
-              </Show>
-              <Menu.Item
-                disabled={!props.unread}
-                onSelect={() => props.onClearNotifications(props.server, props.project)}
-              >
-                {props.language.t("sidebar.project.clearNotifications")}
-              </Menu.Item>
-              <Menu.Separator />
-              <Menu.Item onSelect={() => props.onHideProject(props.server, props.project)}>
-                {props.language.t("common.close")}
-              </Menu.Item>
+              <ProjectMenuItems {...props} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>

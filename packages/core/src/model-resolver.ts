@@ -5,14 +5,13 @@ import {
   DecisionModel,
   DecisionModelCompatibility,
   DecisionModelSchema,
-  HttpOptions,
   ImageModel,
   ImageModelSchema,
   LanguageModel,
   ProviderConfigurationError,
   type ProviderPackage,
 } from "@opencode/ai/effect"
-import { Auth, mergeHttpOptions } from "@opencode/ai/route"
+import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
@@ -245,6 +244,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const timeouts = Provider.timeouts(configured)
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
         compatibility: resolved.compatibility
@@ -253,10 +253,10 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         // Timeouts and body encoding are transport policy, so they land on the route's HTTP defaults instead of package settings.
         defaults: {
           ...runtime.defaults,
-          http: mergeHttpOptions(
-            runtime.defaults?.http,
-            new HttpOptions({ ...Provider.timeouts(configured), encoding: Provider.encoding(configured) }),
-          ),
+          ...mergeTransport(runtime.defaults, {
+            timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+            http: { encoding: Provider.encoding(configured) },
+          }),
         },
       })
     },
