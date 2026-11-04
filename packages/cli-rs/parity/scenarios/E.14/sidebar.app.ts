@@ -52,7 +52,10 @@ export default defineApp({
   config: { experimental: { "new-designs": true } },
   args: { sessionID: "ses_s" },
   routes: [
-    { path: "/api/session/ses_s", json: { data: { ...session("ses_s", "Plan the release", { updated: 2 }), cost: 0.42 } } },
+    {
+      path: "/api/session/ses_s",
+      json: { data: { ...session("ses_s", "Plan the release", { updated: 2 }), cost: 0.42 } },
+    },
     { path: "/api/session/ses_s/message", json: { data: [reply, user("msg_1", "Plan it")], cursor: {} } },
     { path: "/api/session/ses_s/inbox", json: { data: [] } },
     { path: "/api/model", json: { location, data: [model] } },
