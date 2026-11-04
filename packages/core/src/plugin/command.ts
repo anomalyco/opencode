@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Location } from "../location.js"
 import { Mcp } from "../mcp/index.js"
+import { MessageContext } from "../session/message-context.js"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
 import PROMPT_REVIEW from "./command/review.txt"
 
@@ -35,6 +36,7 @@ export const Plugin = define({
               ...input.prompt,
               sessionID: input.sessionID,
               text: append(PROMPT_INITIALIZE.replace("${path}", location.project.directory), input.prompt.text),
+              metadata: MessageContext.viaCommand("init"),
               delivery: input.delivery,
             })
             .pipe(Effect.asVoid),
@@ -48,6 +50,7 @@ export const Plugin = define({
               ...input.prompt,
               sessionID: input.sessionID,
               text: append(PROMPT_REVIEW.replace("${path}", location.project.directory), input.prompt.text),
+              metadata: MessageContext.viaCommand("review"),
               delivery: input.delivery,
             })
             .pipe(Effect.asVoid),
@@ -74,6 +77,7 @@ export const Plugin = define({
                   .map((message) => promptMessageText(message.content))
                   .join("\n")
                   .trim(),
+                metadata: MessageContext.viaCommand(mcpCommandName(prompt.server, prompt.name)),
                 delivery: input.delivery,
               })
             }).pipe(Effect.asVoid),

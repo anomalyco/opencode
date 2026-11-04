@@ -101,7 +101,7 @@ describe("command subagents", () => {
           (yield* sessions.messages({ sessionID: child.id })).flatMap((message) =>
             message.type === "user" ? [message.metadata] : [],
           ),
-        ).toEqual([{ "opencode.origin": { kind: "session", sessionID: parent.id, title: "Parent session" } }])
+        ).toEqual([{ "opencode.origin": { from: `session:${parent.id}` } }])
         yield* gate.release
         yield* llm.wait(2)
         yield* sessions.wait(parent.id)

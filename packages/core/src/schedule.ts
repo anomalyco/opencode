@@ -28,6 +28,7 @@ import { KVTable } from "./kv/sql.js"
 import type { Permission } from "./permission.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
+import { MessageContext } from "./session/message-context.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { SessionInboxTable } from "./session/sql.js"
@@ -272,6 +273,7 @@ const layer = Layer.effect(
         text,
         delivery: "steer",
         metadata: {
+          ...MessageContext.fromSchedule(row.id),
           schedule: {
             id: row.id,
             name: row.name ?? undefined,

@@ -215,7 +215,13 @@ export type SessionPromptInput = {
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
   readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
-  readonly metadata?: { readonly [x: string]: unknown } | undefined
+  readonly metadata?:
+    | ({
+        readonly "opencode.origin"?:
+          | { readonly from: string; readonly via?: never; readonly actor?: string }
+          | { readonly via: string; readonly from?: never; readonly actor?: string }
+      } & { readonly [x: string]: unknown })
+    | undefined
   readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
 }

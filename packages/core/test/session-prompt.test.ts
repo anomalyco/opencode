@@ -546,55 +546,36 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("sets a session origin's title from the sender at admission, never from the caller", () =>
+  it.effect("stores an origin exactly as sent, whatever the flag", () =>
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
       const session = yield* Session.Service
-      const insert = (id: Session.ID, directory: string, title: string | null) =>
-        db
-          .insert(SessionTable)
-          .values({ id, project_id: Project.ID.global, slug: id, directory, title, version: "test" })
-          .run()
-          .pipe(Effect.orDie)
       const receiverID = Session.ID.make("ses_prompt_context")
-      const untitledID = Session.ID.make("ses_prompt_untitled")
-      const messyID = Session.ID.make("ses_prompt_messy")
-      yield* insert(receiverID, contextDirectory, "receiver")
-      yield* insert(untitledID, "/project", null)
-      yield* insert(messyID, "/project", `  Fix\nlogin ${"x".repeat(120)}`)
-      const send = (receiver: Session.ID, sender: Session.ID) =>
-        session
-          .prompt({
-            sessionID: receiver,
-            text: "from another session",
-            metadata: { "opencode.origin": { kind: "session", sessionID: sender, title: "Spoofed" }, source: "api" },
-            resume: false,
-          })
-          .pipe(Effect.map((message) => message.payload))
-
-      // The text is stored as sent; only the origin's title is the server's.
-      expect(yield* send(receiverID, sessionID)).toMatchObject({
-        text: "from another session",
-        metadata: { "opencode.origin": { kind: "session", sessionID, title: "test" }, source: "api" },
-      })
-      // The flag only decides what the agent reads, so the stored title is set the same way without it.
-      expect((yield* send(sessionID, sessionID)).metadata).toEqual({
-        "opencode.origin": { kind: "session", sessionID, title: "test" },
-        source: "api",
-      })
-      expect((yield* send(receiverID, untitledID)).metadata).toEqual({
-        "opencode.origin": { kind: "session", sessionID: untitledID },
-        source: "api",
-      })
-      expect((yield* send(receiverID, Session.ID.make("ses_prompt_deleted"))).metadata).toEqual({
-        "opencode.origin": { kind: "session", sessionID: "ses_prompt_deleted" },
-        source: "api",
-      })
-      expect((yield* send(receiverID, messyID)).metadata).toEqual({
-        "opencode.origin": { kind: "session", sessionID: messyID, title: `Fix login ${"x".repeat(90)}` },
-        source: "api",
-      })
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: receiverID,
+          project_id: Project.ID.global,
+          slug: receiverID,
+          directory: contextDirectory,
+          title: "receiver",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      for (const origin of [
+        { from: `session:${sessionID}` },
+        { from: "session:ses_prompt_deleted" },
+        { via: "voice:ios" },
+        { via: "seer", actor: "slack:U123" },
+      ])
+        for (const receiver of [receiverID, sessionID]) {
+          const metadata = { "opencode.origin": origin, source: "api" }
+          expect(
+            (yield* session.prompt({ sessionID: receiver, text: "from elsewhere", metadata, resume: false })).payload,
+          ).toMatchObject({ text: "from elsewhere", metadata })
+        }
     }),
   )
 

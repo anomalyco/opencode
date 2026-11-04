@@ -1,86 +1,58 @@
 export * as MessageContext from "./message-context.js"
 
-import { Session } from "@opencode/schema/session"
+import { MessageOrigin } from "@opencode/schema/message-origin"
+import type { Session } from "@opencode/schema/session"
 import { Option, Schema } from "effect"
 
-/** Who sent a user message, stored under {@link ORIGIN} in its metadata. */
-export const ORIGIN = "opencode.origin"
+export const ORIGIN = MessageOrigin.Key
 
-export const SessionOrigin = Schema.Struct({
-  kind: Schema.Literal("session"),
-  sessionID: Session.ID,
-  // The sender's title when the message arrived, set by the server. It never changes afterwards, so the line the
-  // agent reads stays the same and the prompt cache holds; clients show the sender's current title instead.
-  title: Schema.optional(Schema.String),
-})
-export type SessionOrigin = typeof SessionOrigin.Type
+const decodeOrigin = Schema.decodeUnknownOption(MessageOrigin.Info)
 
-export const ToolOrigin = Schema.Struct({
-  kind: Schema.Literal("tool"),
-  name: Schema.String,
-})
-
-export const Origin = Schema.Union([SessionOrigin, ToolOrigin])
-export type Origin = typeof Origin.Type
-
-export const decodeOrigin = Schema.decodeUnknownOption(Origin)
+/** The stored origin of a user message, or undefined when it has none or it doesn't decode. */
+export const origin = (metadata?: Readonly<Record<string, unknown>>) =>
+  metadata === undefined ? undefined : Option.getOrUndefined(decodeOrigin(metadata[ORIGIN]))
 
 /** Prompt metadata for a message one session sends another. */
 export const fromSession = (sessionID: Session.ID) => ({
-  [ORIGIN]: { kind: "session", sessionID } satisfies Origin,
+  [ORIGIN]: { from: `session:${sessionID}` } satisfies MessageOrigin.Info,
 })
 
-type Formatter = (value: unknown) => string | undefined
+/** Prompt metadata for a message a schedule sends when it fires. */
+export const fromSchedule = (scheduleID: string) => ({
+  [ORIGIN]: { from: `schedule:${scheduleID}` } satisfies MessageOrigin.Info,
+})
 
-const MAX_NAME_LENGTH = 100
-
-/** A title or name on one line, trimmed and at most 100 characters, or undefined when nothing is left. */
-export const cleanName = (value: string | undefined) => {
-  const cleaned = Array.from((value ?? "").replace(/\s+/g, " ").trim())
-  if (cleaned.length === 0) return undefined
-  return cleaned.slice(0, MAX_NAME_LENGTH).join("").trim()
-}
+/** Prompt metadata for a message the server expands from a slash command the person ran. */
+export const viaCommand = (name: string) => ({
+  [ORIGIN]: { via: `command:${name}` } satisfies MessageOrigin.Info,
+})
 
 const escapeAttribute = (value: string) =>
-  value
-    .replace(/[\r\n]+/g, " ")
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
+  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
-const tag = (name: string, attributes: Record<string, string>) =>
-  `<${name} ${Object.entries(attributes)
-    .map(([key, value]) => `${key}="${escapeAttribute(value)}"`)
-    .join(" ")}/>`
+// Values are IDs, never titles, so a message's line never changes once admitted and the prompt cache holds.
+const originLine = (value: MessageOrigin.Info) =>
+  `<message-origin ${[
+    value.from === undefined ? `via="${escapeAttribute(value.via)}"` : `from="${escapeAttribute(value.from)}"`,
+    ...(value.actor === undefined ? [] : [`actor="${escapeAttribute(value.actor)}"`]),
+  ].join(" ")}/>`
 
-const origin: Formatter = (value) => {
-  const decoded = Option.getOrUndefined(decodeOrigin(value))
-  if (decoded === undefined) return undefined
-  if (decoded.kind === "tool") {
-    const name = cleanName(decoded.name)
-    return name === undefined ? undefined : tag("message-origin", { tool: name })
-  }
-  const title = cleanName(decoded.title)
-  return tag("message-origin", { session: decoded.sessionID, ...(title === undefined ? {} : { title }) })
-}
-
-// Metadata keys the agent reads, each with a pure formatter. History drops them all when
-// `experimental.message_context` is off, so a formatter never needs to check the flag.
-const formatters: Record<string, Formatter> = {
-  [ORIGIN]: origin,
-}
-
-export const keys = Object.keys(formatters)
+// Metadata keys the agent reads. History drops them all when `experimental.message_context` is off, so rendering
+// never needs to check the flag.
+export const keys = [ORIGIN]
 
 /** The lines the agent reads before a user message's text, or "" when its metadata has none. */
-export const format = (metadata?: Readonly<Record<string, unknown>>) =>
-  metadata === undefined
-    ? ""
-    : Object.entries(formatters)
-        .flatMap(([key, line]) => line(metadata[key]) ?? [])
-        .join("\n")
+export const format = (metadata?: Readonly<Record<string, unknown>>) => {
+  const value = origin(metadata)
+  return value === undefined ? "" : originLine(value)
+}
 
 /** A user message's text with its context lines before it. */
 export const withText = (metadata: Readonly<Record<string, unknown>> | undefined, text: string) =>
   [format(metadata), text].filter(Boolean).join("\n")
+
+/** Whether the person who owns the session sent the message, directly or through another surface. */
+export const fromPerson = (metadata?: Readonly<Record<string, unknown>>) => {
+  const value = origin(metadata)
+  return value === undefined || (value.from === undefined && value.actor === undefined)
+}

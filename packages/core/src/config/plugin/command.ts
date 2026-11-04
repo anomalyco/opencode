@@ -107,6 +107,7 @@ export const Plugin = define({
                   ...input.prompt,
                   sessionID: input.sessionID,
                   text,
+                  metadata: MessageContext.viaCommand(name),
                   delivery: input.delivery,
                 })
               }).pipe(Effect.asVoid),

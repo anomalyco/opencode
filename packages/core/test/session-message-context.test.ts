@@ -42,86 +42,93 @@ const user = (text: string, metadata?: Record<string, unknown>) =>
     time: { created },
   })
 
+const fromSender = { [ORIGIN]: { from: `session:${senderID}` } }
+const senderLine = `<message-origin from="session:${senderID}"/>`
+
 describe("MessageContext.format", () => {
-  test("renders a session origin with its title, or the session alone without one", () => {
-    expect(MessageContext.format({ [ORIGIN]: { kind: "session", sessionID: senderID, title: "Fix login" } })).toBe(
-      `<message-origin session="${senderID}" title="Fix login"/>`,
+  test("renders from, via and actor as IDs", () => {
+    expect(MessageContext.format(fromSender)).toBe(senderLine)
+    expect(MessageContext.format({ [ORIGIN]: { from: "schedule:sch_1" } })).toBe(
+      `<message-origin from="schedule:sch_1"/>`,
     )
-    expect(MessageContext.format({ [ORIGIN]: { kind: "session", sessionID: senderID } })).toBe(
-      `<message-origin session="${senderID}"/>`,
+    expect(MessageContext.format({ [ORIGIN]: { via: "voice:ios" } })).toBe(`<message-origin via="voice:ios"/>`)
+    expect(MessageContext.format({ [ORIGIN]: { via: "seer", actor: "slack:U123" } })).toBe(
+      `<message-origin via="seer" actor="slack:U123"/>`,
     )
-    expect(MessageContext.format({ [ORIGIN]: { kind: "session", sessionID: senderID, title: "  " } })).toBe(
-      `<message-origin session="${senderID}"/>`,
-    )
-  })
-
-  test("renders a tool origin by name", () => {
-    expect(MessageContext.format({ [ORIGIN]: { kind: "tool", name: "release-bot" } })).toBe(
-      `<message-origin tool="release-bot"/>`,
+    expect(MessageContext.format({ [ORIGIN]: { from: "tool:ios-train", actor: "agent:a1" } })).toBe(
+      `<message-origin from="tool:ios-train" actor="agent:a1"/>`,
     )
   })
 
-  test("keeps titles and tool names on one line, trimmed and at most 100 characters", () => {
-    expect(
-      MessageContext.format({ [ORIGIN]: { kind: "session", sessionID: senderID, title: " Fix\nlogin\r\n  now " } }),
-    ).toBe(`<message-origin session="${senderID}" title="Fix login now"/>`)
-    expect(MessageContext.format({ [ORIGIN]: { kind: "tool", name: "release\nbot" } })).toBe(
-      `<message-origin tool="release bot"/>`,
-    )
-    expect(MessageContext.format({ [ORIGIN]: { kind: "tool", name: " \n " } })).toBe("")
-    expect(MessageContext.format({ [ORIGIN]: { kind: "session", sessionID: senderID, title: "a".repeat(150) } })).toBe(
-      `<message-origin session="${senderID}" title="${"a".repeat(100)}"/>`,
-    )
-    expect(MessageContext.cleanName("😀".repeat(101))).toBe("😀".repeat(100))
+  test("builds origins for sessions, schedules and commands", () => {
+    expect(MessageContext.fromSession(senderID)).toEqual(fromSender)
+    expect(MessageContext.fromSchedule("sch_1")).toEqual({ [ORIGIN]: { from: "schedule:sch_1" } })
+    expect(MessageContext.viaCommand("review")).toEqual({ [ORIGIN]: { via: "command:review" } })
   })
 
   test("escapes attribute values", () => {
-    expect(
-      MessageContext.format({ [ORIGIN]: { kind: "session", sessionID: senderID, title: `Fix "<b>" & more` } }),
-    ).toBe(`<message-origin session="${senderID}" title="Fix &quot;&lt;b&gt;&quot; &amp; more"/>`)
+    expect(MessageContext.format({ [ORIGIN]: { from: `tool:"<b>" & more` } })).toBe(
+      `<message-origin from="tool:&quot;&lt;b&gt;&quot; &amp; more"/>`,
+    )
+    expect(MessageContext.format({ [ORIGIN]: { via: "seer", actor: `a"/><x` } })).toBe(
+      `<message-origin via="seer" actor="a&quot;/&gt;&lt;x"/>`,
+    )
   })
 
-  test("renders nothing for metadata without context or a value that doesn't decode", () => {
+  test("renders nothing for metadata without an origin or one that doesn't decode", () => {
     expect(MessageContext.format(undefined)).toBe("")
     expect(MessageContext.format({ source: "api" })).toBe("")
     for (const value of [
-      "ses_context_sender",
-      { kind: "session" },
-      { kind: "session", sessionID: "not-a-session" },
-      { kind: "tool" },
-      { kind: "agent", name: "build" },
+      "session:ses_context_sender",
+      // from and via together
+      { from: "session:ses_1", via: "voice:ios" },
+      // not one trimmed, non-empty line of at most 200 characters
+      { from: "" },
+      { from: " tool:x" },
+      { via: "voice:ios\n" },
+      { from: "tool:a\nb" },
+      { via: "seer", actor: "a\rb" },
+      { from: "x".repeat(201) },
+      // the shape before from/via
+      { kind: "session", sessionID: "ses_1" },
+      { actor: "slack:U1" },
       null,
     ])
       expect(MessageContext.format({ [ORIGIN]: value })).toBe("")
+    expect(MessageContext.format({ [ORIGIN]: { from: "x".repeat(200) } })).toBe(
+      `<message-origin from="${"x".repeat(200)}"/>`,
+    )
   })
 })
 
 describe("prompt builders", () => {
-  const origin = { [ORIGIN]: { kind: "session", sessionID: senderID, title: "Fix login" } }
-  const line = `<message-origin session="${senderID}" title="Fix login"/>`
-
-  test("toLLMMessages puts the context line before the text the person typed", () => {
-    expect(toLLMMessages([user("rebase the PRs", origin)], model)[0]?.content).toEqual([
-      Message.text(`${line}\nrebase the PRs`),
+  test("toLLMMessages puts the origin line before the text the person typed", () => {
+    expect(toLLMMessages([user("rebase the PRs", fromSender)], model)[0]?.content).toEqual([
+      Message.text(`${senderLine}\nrebase the PRs`),
     ])
-    expect(toLLMMessages([user("", origin)], model)[0]?.content).toEqual([Message.text(line)])
+    expect(toLLMMessages([user("", fromSender)], model)[0]?.content).toEqual([Message.text(senderLine)])
   })
 
-  test("toLLMMessages output is unchanged without context", () => {
-    expect(toLLMMessages([user("rebase the PRs", { source: "api" })], model)).toEqual([
-      Message.make({
-        id: SessionMessage.ID.make("msg_context_user"),
-        role: "user",
-        content: [Message.text("rebase the PRs")],
-        metadata: { source: "api" },
-      }),
+  test("toLLMMessages output is unchanged without an origin", () => {
+    expect(toLLMMessages([user("rebase the PRs", { source: "api" })], model)[0]?.content).toEqual([
+      Message.text("rebase the PRs"),
     ])
   })
 
-  test("compaction's recent text gives the message one [User]: line", () => {
-    const text = SessionRecentText.messageToText(user("rebase the PRs", origin))
-    expect(text).toBe(`[User]: ${line}\nrebase the PRs`)
-    expect(text.match(/\[User\]:/g)).toHaveLength(1)
+  test("compaction's recent text labels only the person's messages [User]", () => {
+    expect(SessionRecentText.messageToText(user("typed"))).toBe("[User]: typed")
+    expect(SessionRecentText.messageToText(user("spoken", { [ORIGIN]: { via: "voice:ios" } }))).toBe(
+      `[User]: <message-origin via="voice:ios"/>\nspoken`,
+    )
+    expect(SessionRecentText.messageToText(user("rebase the PRs", fromSender))).toBe(
+      `[Message]: ${senderLine}\nrebase the PRs`,
+    )
+    expect(SessionRecentText.messageToText(user("hourly", MessageContext.fromSchedule("sch_1")))).toBe(
+      `[Message]: <message-origin from="schedule:sch_1"/>\nhourly`,
+    )
+    expect(SessionRecentText.messageToText(user("lgtm", { [ORIGIN]: { via: "seer", actor: "slack:U1" } }))).toBe(
+      `[Message]: <message-origin via="seer" actor="slack:U1"/>\nlgtm`,
+    )
   })
 })
 
@@ -140,7 +147,7 @@ const flag = (message_context: boolean) =>
     }),
   ])
 
-const setup = (title: string | undefined) =>
+const setup = (title?: string) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const bus = yield* Bus.Service
@@ -183,16 +190,11 @@ const setup = (title: string | undefined) =>
     return { db, bus, prompt, texts }
   })
 
-const tag = (title?: string) =>
-  title === undefined
-    ? `<message-origin session="${senderID}"/>`
-    : `<message-origin session="${senderID}" title="${title}"/>`
-
 describe("SessionHistory message context", () => {
   it.effect("model reads drop the key with the flag off, so the request matches a message without it", () =>
     Effect.gen(function* () {
       const s = yield* setup("Fix login")
-      yield* s.prompt("hello", { [ORIGIN]: { kind: "session", sessionID: senderID, title: "Fix login" } })
+      yield* s.prompt("hello", fromSender)
       for (const history of [
         yield* SessionHistory.loadForModel(s.db, receiverID, "local").pipe(Effect.provide(flag(false))),
         // Without any Config in scope the flag is off too.
@@ -211,7 +213,7 @@ describe("SessionHistory message context", () => {
     Effect.gen(function* () {
       const s = yield* setup("Fix login")
       const store = yield* SessionStore.Service
-      const origin = { kind: "session", sessionID: senderID, title: "Fix login" }
+      const origin = { from: `session:${senderID}` }
       yield* s.prompt("hello", { [ORIGIN]: origin, source: "api" })
       for (const messages of [
         yield* store.context(receiverID),
@@ -222,15 +224,17 @@ describe("SessionHistory message context", () => {
     }),
   )
 
-  it.effect("with the flag on, renders the saved title, which never changes after the message is sent", () =>
+  it.effect("with the flag on, renders the stored IDs, which never change after the message is sent", () =>
     Effect.gen(function* () {
       const s = yield* setup("Fix login")
-      yield* s.prompt("hello", { [ORIGIN]: { kind: "session", sessionID: senderID, title: "Fix login" } })
-      yield* s.prompt("tool says hi", { [ORIGIN]: { kind: "tool", name: "release-bot" } })
+      yield* s.prompt("hello", fromSender)
+      yield* s.prompt("release is out", { [ORIGIN]: { from: "tool:ios-train" } })
+      yield* s.prompt("spoken", { [ORIGIN]: { via: "voice:ios" } })
       yield* s.prompt("typed by a person")
       const expected = [
-        `${tag("Fix login")}\nhello`,
-        `<message-origin tool="release-bot"/>\ntool says hi`,
+        `${senderLine}\nhello`,
+        `<message-origin from="tool:ios-train"/>\nrelease is out`,
+        `<message-origin via="voice:ios"/>\nspoken`,
         "typed by a person",
       ]
       expect(yield* s.texts(true)).toEqual(expected)
@@ -239,33 +243,23 @@ describe("SessionHistory message context", () => {
       expect(yield* s.texts(true)).toEqual(expected)
       yield* s.db.delete(SessionTable).where(eq(SessionTable.id, senderID)).run()
       expect(yield* s.texts(true)).toEqual(expected)
-      expect(yield* s.texts(false)).toEqual(["hello", "tool says hi", "typed by a person"])
-    }),
-  )
-
-  it.effect("renders a sender untitled at admission by its session alone, even once it gets a title", () =>
-    Effect.gen(function* () {
-      const s = yield* setup(undefined)
-      yield* s.prompt("early", { [ORIGIN]: { kind: "session", sessionID: senderID } })
-      yield* s.bus.publish(SessionEvent.Renamed, { sessionID: senderID, title: "Auto title" })
-      expect(yield* s.texts(true)).toEqual([`${tag()}\nearly`])
+      expect(yield* s.texts(false)).toEqual(["hello", "release is out", "spoken", "typed by a person"])
     }),
   )
 
   it.effect("leaves a value that doesn't decode unrendered", () =>
     Effect.gen(function* () {
-      const s = yield* setup("Fix login")
-      yield* s.prompt("hello", { [ORIGIN]: { kind: "session", sessionID: 42 } })
-      expect(yield* s.texts(true)).toEqual(["hello"])
+      const s = yield* setup()
+      yield* s.prompt("hello", { [ORIGIN]: { from: "session:ses_1", via: "voice:ios" } })
+      yield* s.prompt("again", { [ORIGIN]: { kind: "session", sessionID: senderID } })
+      expect(yield* s.texts(true)).toEqual(["hello", "again"])
     }),
   )
 
-  it.effect("builds a compaction's recent text with one [User]: line, as the flag configures", () =>
+  it.effect("builds a compaction's recent text from the origin, as the flag configures", () =>
     Effect.gen(function* () {
       const s = yield* setup("Fix login")
-      const keepID = yield* s.prompt("kept", {
-        [ORIGIN]: { kind: "session", sessionID: senderID, title: "Fix login" },
-      })
+      const keepID = yield* s.prompt("kept", fromSender)
       yield* s.bus.publish(
         SessionEvent.Compaction.Ended,
         { sessionID: receiverID, reason: "manual", model, text: "summary" },
@@ -281,7 +275,7 @@ describe("SessionHistory message context", () => {
               : undefined
           }),
         )
-      expect(yield* recent(true)).toBe(`[User]: ${tag("Fix login")}\nkept`)
+      expect(yield* recent(true)).toBe(`[Message]: ${senderLine}\nkept`)
       expect(yield* recent(false)).toBe("[User]: kept")
     }),
   )

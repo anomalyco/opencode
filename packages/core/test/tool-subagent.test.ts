@@ -523,8 +523,8 @@ describe("SubagentTool", () => {
               message.type === "user" ? [message.payload.metadata] : [],
             ),
           ).toEqual([
-            { "opencode.origin": { kind: "session", sessionID: parent.id } },
-            { "opencode.origin": { kind: "session", sessionID: parent.id } },
+            { "opencode.origin": { from: `session:${parent.id}` } },
+            { "opencode.origin": { from: `session:${parent.id}` } },
           ])
           expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
         }),

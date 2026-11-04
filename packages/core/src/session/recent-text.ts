@@ -31,7 +31,9 @@ export const messageToText = (message: SessionMessage.Info | SessionStored.User)
           const name = file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")
           return `[Attached ${file.mime}: ${name}]`
         }) ?? []
-      return [...skills, `[User]: ${MessageContext.withText(message.metadata, message.text)}`, ...files].join("\n")
+      // A message from a machine or another person isn't the person's, so it isn't labeled `[User]`.
+      const label = MessageContext.fromPerson(message.metadata) ? "User" : "Message"
+      return [...skills, `[${label}]: ${MessageContext.withText(message.metadata, message.text)}`, ...files].join("\n")
     }
 
     case "location-switched":

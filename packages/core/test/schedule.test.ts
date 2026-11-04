@@ -490,7 +490,12 @@ describe("Schedule", () => {
       expect(yield* pending).toEqual([messageID(schedule, 1)])
       const { db } = yield* Database.Service
       expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-        payload: { metadata: { schedule: { id: schedule.id, run: 1, late: true } } },
+        payload: {
+          metadata: {
+            "opencode.origin": { from: `schedule:${schedule.id}` },
+            schedule: { id: schedule.id, run: 1, late: true },
+          },
+        },
       })
       expect(yield* schedules.get(schedule.id)).toMatchObject({ runCount: 1, lastOutcome: "late" })
       expect(iso((yield* schedules.get(schedule.id)).nextDueAt)).toBe("2026-10-26T13:10:00.000Z")
