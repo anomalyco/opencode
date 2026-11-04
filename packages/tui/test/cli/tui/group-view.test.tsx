@@ -249,8 +249,9 @@ test("a low activity group with nothing finished stays collapsed behind a status
   }
 })
 
-test("failed low activity uses a disclosure icon and keeps details expandable", async () => {
-  const config = createTuiResolvedConfig({ animations: false })
+// A collapsed summary shows its tools' media with rich media; expanded, each tool shows its own.
+test.each([false, true])("failed low activity has a disclosure icon and expandable details %p", async (rich) => {
+  const config = createTuiResolvedConfig({ animations: false, experimental: { "rich-media": rich } })
   const anchors = createTimelineAnchors()
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const message: SessionMessageAssistant = {
@@ -291,10 +292,12 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
     await app.waitForFrame((frame) => frame.includes("1 command"))
     expect(app.captureCharFrame()).toContain("+ 1 command")
     expect(app.captureCharFrame()).not.toContain("command failed")
+    expect(app.captureCharFrame().includes("Image previews a/failed-shell")).toBe(rich)
     await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("− 1 command")
     expect(app.captureCharFrame()).toContain("command failed")
+    expect(app.captureCharFrame()).not.toContain("Image previews")
   } finally {
     app.renderer.destroy()
   }
@@ -338,7 +341,9 @@ function mount(input: {
                 <SessionGroupView
                   row={input.row}
                   message={input.message}
-                  images={() => <text>Image previews</text>}
+                  images={(tools) => (
+                    <text>Image previews {tools.map((tool) => `${tool.messageID}/${tool.part.id}`).join(",")}</text>
+                  )}
                   entry={input.entry}
                 />
               </box>

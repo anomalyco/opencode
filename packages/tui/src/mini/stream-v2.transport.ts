@@ -20,7 +20,7 @@ import {
   toolVideoCommits,
   userImageCommits,
   userVideoCommits,
-  type MediaCommit,
+  type ImageCommit,
 } from "./stream-v2.image"
 import { messagePrompt } from "./session.shared"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
@@ -55,7 +55,6 @@ type StreamInput = {
   sessionID: string
   thinking: boolean
   tools?: boolean
-  /** The rich media experiment: caption video attachments and tool videos. */
   richMedia?: boolean
   replay?: boolean
   replayLimit?: number
@@ -598,7 +597,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     input.footer.event({ type: "queued.prompts", prompts })
   }
 
-  const freshImages = (commits: MediaCommit[], render = true) =>
+  const freshImages = (commits: ImageCommit[], render = true) =>
     commits.filter((commit) => {
       const key = streamPartKey(commit.messageID, commit.partID)
       if (state.imageIDs.has(key)) return false
@@ -1040,8 +1039,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return
     const client = attempt.client
     if (catalogEvents.has(event.type)) {
-      if (input.location && event.location && event.location.directory !== input.location.directory)
-        return
+      if (input.location && event.location && event.location.directory !== input.location.directory) return
       void refreshCatalog(attempt)
       return
     }

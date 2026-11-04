@@ -196,13 +196,8 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
   const raw = cleanRunText(commit.text)
   const mono = options?.mono === true
 
-  if (commit.video) {
-    const caption = mono ? monoText(raw.trim()) : raw.trim()
-    return commit.kind === "user" ? userBody(caption, mono) : textBody(caption)
-  }
-
-  if (commit.image) {
-    const caption = raw.trim() || "Image"
+  if (commit.image || commit.video) {
+    const caption = commit.video && mono ? monoText(raw.trim()) : raw.trim() || "Image"
     return commit.kind === "user" ? userBody(caption, mono) : textBody(monoToolText(caption, mono))
   }
 

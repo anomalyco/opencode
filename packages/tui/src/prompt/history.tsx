@@ -62,18 +62,12 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
   }
 }
 
-/**
- * The prompt as history and the stash save it. A video with a local file keeps it as a `file://` uri instead of its
- * bytes, which can be many megabytes; the composer reads the file again when the prompt is sent. A video with no local
- * file keeps its bytes.
- */
+// History and the stash keep a video's local file as its `file://` uri instead of its bytes; sending reads it again.
 export function persistablePrompt(prompt: PromptInfo): PromptInfo {
-  const video = (file: PromptFile) => file.uri.startsWith("data:video/") && file.path !== undefined
-  if (!prompt.files?.some(video)) return prompt
   return {
     ...prompt,
-    files: prompt.files.map((file) =>
-      file.path && video(file) ? { ...file, uri: pathToFileURL(file.path).href } : file,
+    files: prompt.files?.map((file) =>
+      file.path && file.uri.startsWith("data:video/") ? { ...file, uri: pathToFileURL(file.path).href } : file,
     ),
   }
 }

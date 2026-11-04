@@ -200,22 +200,15 @@ function ActivityGroup(props: GroupProps) {
   const entries = createMemo(() => descendants(props.node))
   const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
   const richMedia = useRichMedia()
-  // A collapsed summary still shows its tools' media; once expanded, each tool shows its own.
+  // A collapsed summary shows its tools' media; once expanded, each tool shows its own. The same parts keep the tiles.
   const tools = createMemo(
     () =>
-      richMedia()
-        ? toolRefs(
-            entries().flatMap((entry) =>
-              entry.type === "part" && !isPending(entry, props.pending) ? [entry.ref] : [],
-            ),
-            props.message,
-          )
-        : [],
+      toolRefs(
+        entries().flatMap((entry) => (entry.type === "part" && !isPending(entry, props.pending) ? [entry.ref] : [])),
+        props.message,
+      ),
     [],
-    {
-      equals: (previous, next) =>
-        previous.length === next.length && previous.every((tool, index) => tool.part === next[index]?.part),
-    },
+    { equals: (a, b) => a.length === b.length && a.every((tool, index) => tool.part === b[index]?.part) },
   )
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
@@ -237,7 +230,9 @@ function ActivityGroup(props: GroupProps) {
             <Children {...props} nodes={props.node.children} mode="normal" />
           </box>
         </Show>
-        <Show when={!disclosure.expanded() && !props.imagesOutside && tools().length > 0}>{props.images(tools())}</Show>
+        <Show when={richMedia() && !disclosure.expanded() && !props.imagesOutside && tools().length > 0}>
+          {props.images(tools())}
+        </Show>
       </Show>
       <PendingEntries {...props} entries={entries()} />
     </GroupAnchor>

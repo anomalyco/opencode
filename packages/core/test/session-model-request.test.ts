@@ -250,60 +250,40 @@ describe("SessionModelRequest.boundImages", () => {
 })
 
 describe("SessionModelRequest.boundVideos", () => {
-  const video = (name: string) => ({
-    type: "media" as const,
-    media: Media.base64("AAAAGGZ0eXBtcDQy", "video/mp4"),
-    filename: name,
+  const video = (size = 16) => ({ type: "media" as const, media: Media.base64("a".repeat(size), "video/mp4") })
+  const image = { type: "media" as const, media: Media.base64("aGVsbG8=", "image/png") }
+  const removed = Message.text(expect.stringContaining("video was removed"))
+  const tooLarge = Message.text(expect.stringContaining("shorter or smaller clip"))
+  const cap = 18 * 1024 * 1024
+
+  // Each word is a message: v is a video, c one at the inline cap, V one over it, i an image, r and t replacements.
+  const parts = { v: video(), c: video(cap), V: video(cap + 4), i: image, r: removed, t: tooLarge }
+  const request = (words: string) =>
+    words.split(" ").map((word) => [...word].map((key) => parts[key as keyof typeof parts]))
+  test.each([
+    ["keeps a lone video at the inline cap", "ci", "ci"],
+    ["replaces a lone video over the inline cap", "V", "t"],
+    ["keeps only the newest video", "vi vv", "ri rv"],
+    ["replaces an old video and a newest over the cap", "v V", "r t"],
+  ])("%s", (_, input, output) => {
+    const result = boundVideos(request(input).map((content) => Message.user(content)))
+    expect<readonly unknown[]>(result.map((message) => message.content)).toEqual(request(output))
   })
 
-  test("keeps only the newest video across the request", () => {
-    const image = { type: "media" as const, media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" }
-    const pdf = { type: "media" as const, media: Media.base64("JVBERg==", "application/pdf"), filename: "doc.pdf" }
-    const first = Message.user([video("first.mp4"), image, pdf])
-    const text = Message.assistant("plain")
+  test("counts tool result videos, returns unchanged requests, and leaves the image budget alone", () => {
     const tool = Message.tool(
       ToolResultPart.make({
         id: "call_1",
         name: "read",
-        result: {
-          type: "content",
-          value: [{ type: "file", uri: "data:video/mp4;base64,AAAA", mime: "video/mp4", name: "tool.mp4" }],
-        },
+        result: { type: "content", value: [{ type: "file", uri: "data:video/mp4;base64,AAAA", mime: "video/mp4" }] },
       }),
     )
-    const newest = video("newest.mp4")
-    const result = boundVideos([
-      first,
-      text,
-      tool,
-      Message.user([video("older.mp4"), newest]),
-      Message.assistant("after"),
-    ])
-    const unchanged = [first, text]
-    expect(boundVideos(unchanged)).toBe(unchanged)
-
-    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("video was removed")), image, pdf])
-    expect(result[1]).toBe(text)
-    expect(result[2]?.content[0]).toMatchObject({
-      type: "tool-result",
-      result: { type: "content", value: [{ type: "text", text: expect.stringContaining("video was removed") }] },
+    expect(boundVideos([tool, Message.user([video()])])[0]?.content[0]).toMatchObject({
+      result: { value: [{ type: "text", text: expect.stringContaining("video was removed") }] },
     })
-    expect(result[3]?.content).toEqual([Message.text(expect.stringContaining("video was removed")), newest])
-  })
-
-  test.each([
-    { name: "keeps a video at the inline cap", size: 18 * 1024 * 1024, kept: true },
-    { name: "replaces a video over the inline cap", size: 18 * 1024 * 1024 + 4, kept: false },
-  ])("$name", (input) => {
-    const messages = [Message.user({ type: "media", media: Media.base64("a".repeat(input.size), "video/mp4") })]
-    const result = boundVideos(messages)
-    if (input.kept) return expect(result).toBe(messages)
-    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("shorter or smaller clip"))])
-  })
-
-  test("does not count videos toward the image budget", () => {
-    const large = Media.base64("a".repeat(13 * 1024 * 1024), "video/mp4")
-    const messages = [Message.user({ type: "media", media: large }), Message.user({ type: "media", media: large })]
-    expect(boundImages(messages)).toBe(messages)
+    const unchanged = [tool, Message.user([image])]
+    expect(boundVideos(unchanged)).toBe(unchanged)
+    const large = [Message.user([video(13 * 1024 * 1024)]), Message.user([video(13 * 1024 * 1024)])]
+    expect(boundImages(large)).toBe(large)
   })
 })

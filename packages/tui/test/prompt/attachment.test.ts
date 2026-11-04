@@ -58,15 +58,10 @@ describe("prompt attachments", () => {
     expect(promptAttachmentLabel([{ uri: first }], { uri: first })).toBe("[Image 1]")
   })
 
-  test("numbers PDFs independently from images", () => {
+  test("numbers PDFs and videos independently from images", () => {
     const files = [{ uri: "data:image/png;base64,AAA" }]
 
     expect(promptAttachmentLabel(files, { uri: "data:application/pdf;base64,BBB" })).toBe("[PDF 1]")
-  })
-
-  test("numbers videos independently from images", () => {
-    const files = [{ uri: "data:image/png;base64,AAA", mention: { start: 0, end: 9, text: "[Image 1]" } }]
-
     expect(promptAttachmentLabel(files, { uri: "data:video/mp4;base64,BBB" })).toBe("[Video 1]")
   })
 

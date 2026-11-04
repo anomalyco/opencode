@@ -52,14 +52,13 @@ import { DialogSkill } from "../dialog-skill"
 import { useConfig, useCursorStyle, useRichMedia } from "../../config"
 import { usePromptMove } from "./move"
 import {
-  attachmentExtension,
-  MAX_LOCAL_ATTACHMENT_BYTES,
+  oversizedPastedVideo,
   promptFilesForServer,
   readKeptAttachments,
-  resolvePastedFiles,
+  resolvePastedAttachments,
 } from "./local-attachment"
 import { useMedia } from "../../context/media"
-import { mediaKind, mediaMime, type MediaItem } from "../media/model"
+import { MEDIA_EXTENSIONS, mediaKind, mediaMime, type MediaItem } from "../media/model"
 import { keepMediaItems, MediaStrip } from "../media/strip"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
@@ -418,31 +417,23 @@ export function Prompt(props: PromptProps) {
     dialog.replace(() => <DialogImagePreview images={images} initial={initial} />)
   }
 
-  // Draft images and videos for the rich media preview. An item showing the same file is kept, so its tile is not
-  // rebuilt as the prompt changes; a video plays from the local file it was read from.
-  const draftMedia = createMemo<readonly MediaItem[]>((previous) => {
-    const files = (deduplicatePromptImages(store.prompt.files) ?? []).filter(
-      (file) => file.uri.startsWith("data:") || file.path,
-    )
-    return keepMediaItems(
-      previous,
-      files.flatMap((file, index) => {
-        const mime = /^data:([^;,]+)/.exec(file.uri)?.[1] ?? mediaMime(file.path ?? "") ?? ""
-        const kind = mediaKind(mime, file.name)
-        if (kind === "other") return []
-        return [
-          {
-            id: `draft:${file.mention?.text ?? index}`,
-            kind,
-            mime,
-            uri: file.uri,
-            ...(file.name ? { name: file.name } : {}),
-            ...(file.path ? { path: file.path } : {}),
-          },
-        ]
-      }),
-    )
-  }, [])
+  // Draft images and videos. Keeping the items that show the same file keeps their tiles as the prompt changes. A
+  // `file://` uri names a file this terminal can read only when the server runs on this machine.
+  const draftMedia = createMemo<readonly MediaItem[]>(
+    (previous) =>
+      keepMediaItems(
+        previous,
+        (deduplicatePromptImages(store.prompt.files) ?? []).flatMap((file, index) => {
+          const mime = /^data:([^;,]+)/.exec(file.uri)?.[1] ?? mediaMime(file.path ?? file.uri) ?? ""
+          const kind = mediaKind(mime, file.name)
+          const local = file.uri.startsWith("file:") && terminalEnvironment.localServer === true
+          if (kind === "other" || !(file.uri.startsWith("data:") || file.path || local)) return []
+          const item = { id: `draft:${file.mention?.text ?? index}`, kind, mime, uri: file.uri }
+          return [{ ...item, ...(file.name ? { name: file.name } : {}), ...(file.path ? { path: file.path } : {}) }]
+        }),
+      ),
+    [],
+  )
   const [previewWidth, setPreviewWidth] = createSignal(dimensions().width - 6)
 
   createEffect(
@@ -852,16 +843,17 @@ export function Prompt(props: PromptProps) {
   }
 
   // A video that comes back without a local file, such as one restored from a sent message, gets one in the media
-  // cache, so the composer can play it and history and the stash keep its path instead of its bytes.
+  // cache, so the composer can play it and history and the stash keep its path instead of its bytes. A local server's
+  // `file://` video gets its path, so sending reads it again and notices when it is gone.
   function localizeVideos(prompt: PromptInfo) {
     if (!richMedia()) return
     prompt.files?.forEach((file) => {
       if (file.path) return
       const uri = file.uri
       const mime = /^data:(video\/[^;,]+);base64,/.exec(uri)?.[1]
-      const extension = mime && attachmentExtension(mime)
+      const extension = Object.keys(MEDIA_EXTENSIONS).find((key) => MEDIA_EXTENSIONS[key] === mime)
       const local = extension
-        ? media.files.write(Buffer.from(uri.slice(uri.indexOf(",") + 1), "base64"), extension)
+        ? media.files.write(Buffer.from(uri.split(",")[1]!, "base64"), extension)
         : uri.startsWith("file:") && terminalEnvironment.localServer && mediaMime(uri)?.startsWith("video/")
           ? Promise.resolve(uri).then((value) => fileURLToPath(value))
           : undefined
@@ -1381,7 +1373,8 @@ export function Prompt(props: PromptProps) {
       })
       return true
     }
-    // A video history or the stash kept as its local file is sent as the bytes read now, never as this machine's path.
+    history.append(entry)
+    // Files history or the stash kept as local paths are sent as the bytes read now, never as this machine's paths.
     const kept = entry.files?.some((file) => file.path && file.uri.startsWith("file:"))
       ? await readKeptAttachments(entry.files)
       : undefined
@@ -1390,8 +1383,6 @@ export function Prompt(props: PromptProps) {
         message: `Could not read ${kept.unreadable.join(", ")} again, so the prompt was sent without ${kept.unreadable.length === 1 ? "it" : "them"}`,
         variant: "warning",
       })
-    const sent = kept ? { ...entry, files: kept.files } : entry
-    history.append(sent)
     if (currentMode === "shell") {
       move.startSubmit()
       const send = () => client.api.session.shell({ sessionID: target, command: inputText })
@@ -1408,7 +1399,7 @@ export function Prompt(props: PromptProps) {
           sessionID: target,
           name: slashHead.name,
           text: slashHead.arguments,
-          files: promptFilesForServer(sent.files, terminalEnvironment.localServer === true),
+          files: promptFilesForServer(kept?.files ?? entry.files, terminalEnvironment.localServer === true),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1449,7 +1440,7 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID: target,
           text: inputText,
-          files: promptFilesForServer(sent.files, terminalEnvironment.localServer === true),
+          files: promptFilesForServer(kept?.files ?? entry.files, terminalEnvironment.localServer === true),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1529,14 +1520,15 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = stripAnsiSequences(text).replace(/\r\n?/g, "\n")
     const pastedContent = normalizedText.trim()
-    const pasted = await resolvePastedFiles(pastedContent, terminalEnvironment.platform, { video: richMedia() })
+    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform, richMedia())
+    const oversized =
+      !attachments && richMedia() ? await oversizedPastedVideo(pastedContent, terminalEnvironment.platform) : undefined
     if (changed()) return
-    if (pasted.oversized)
+    if (oversized)
       toast.show({
-        message: `${path.basename(pasted.oversized)} is over the ${MAX_LOCAL_ATTACHMENT_BYTES / 1024 / 1024} MiB attachment limit, so its path was pasted as text`,
+        message: `${path.basename(oversized)} is over the attachment size limit, so its path was pasted as text`,
         variant: "warning",
       })
-    const attachments = pasted.attachments
     if (attachments) {
       attachments.forEach((attachment) => {
         if (attachment.type === "text") {

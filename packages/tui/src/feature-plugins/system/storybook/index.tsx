@@ -9,8 +9,7 @@ import { oneCellSpinnerStory } from "./one-cell-spinner"
 import { linkClicksStory } from "./link-clicks"
 import { highlightsStory } from "./highlights"
 import { todoStory } from "./todo"
-import { inlineMediaStory } from "./inline-media"
-import { mediaViewerStory } from "./media-viewer"
+import { mediaStory } from "./media"
 
 /**
  * A story is a full-screen, fixture-driven simulation of a real production component. Stories own
@@ -30,8 +29,7 @@ const stories: Story[] = [
   linkClicksStory,
   highlightsStory,
   todoStory,
-  inlineMediaStory,
-  mediaViewerStory,
+  mediaStory,
 ]
 
 function Commands(props: { context: Plugin.Context }) {

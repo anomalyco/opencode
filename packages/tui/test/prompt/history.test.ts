@@ -70,18 +70,11 @@ describe("prompt history", () => {
   })
 
   test("keeps a video's local file instead of its bytes, and the bytes of a video without one", () => {
-    const image = { uri: "data:image/png;base64,AAAA", name: "shot.png", path: "/tmp/shot.png" }
-    const video = { uri: "data:video/mp4;base64,BBBB", name: "clip.mp4", path: "/tmp/my clip.mp4" }
-    const prompt = entry("[Image 1] [Video 1] [Video 2]", [image, video, { uri: "data:video/mp4;base64,CCCC" }])
-
-    expect(persistablePrompt(prompt).files).toEqual([
-      image,
-      { ...video, uri: pathToFileURL(video.path).href },
-      { uri: "data:video/mp4;base64,CCCC" },
-    ])
-    expect(prompt.files?.[1]).toBe(video)
-    const plain = entry("[Image 1]", [image])
-    expect(persistablePrompt(plain)).toBe(plain)
+    const image = { uri: "data:image/png;base64,AAAA", path: "/tmp/shot.png" }
+    const video = { uri: "data:video/mp4;base64,BBBB", path: "/tmp/my clip.mp4" }
+    const files = [image, video, { uri: "data:video/mp4;base64,CCCC" }]
+    const kept = [image, { ...video, uri: pathToFileURL(video.path).href }, files[2]]
+    expect(persistablePrompt(entry("[Image 1] [Video 1] [Video 2]", files)).files).toEqual(kept)
   })
 
   test.each(["wcwidth", "unicode"] as const)("appends a prompt and shifts ranges by the %s offset", (widthMethod) => {

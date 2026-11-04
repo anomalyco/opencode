@@ -52,8 +52,7 @@ const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const VIDEO_REMOVED =
   "[This video was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, ask the user to attach it again.]"
-// Base64 characters. Gemini rejects inline requests over about 20 MB and Bedrock Converse over about 25 MB, and a
-// rejected video would fail every later request, so a larger one is replaced and leaves room for the rest.
+// Base64 characters, below Gemini's ~20 MB and Bedrock's ~25 MB inline request limits.
 const VIDEO_BYTES_MAX = 18 * 1024 * 1024 // 18 MiB
 const VIDEO_TOO_LARGE =
   "[This video was removed to reduce the request size because it is too large to send to the model. Do not make claims about its contents. Ask the user to attach a shorter or smaller clip.]"
@@ -220,7 +219,6 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-/** The inline size of each media item matching `prefix`, in request order. */
 const mediaSizes = (messages: LLMRequest["messages"], prefix: string) =>
   messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -255,10 +253,8 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   })
 }
 
-/**
- * Keeps only the newest video, and only if it fits inline: Bedrock accepts one video per request, every request
- * resends it in full, and a rejected request would repeat on every later turn.
- */
+// Keeps only the newest video, and only if it fits: Bedrock accepts one video per request, and a rejected request
+// would repeat on every later step.
 export const boundVideos = (messages: LLMRequest["messages"]) => {
   const sizes = mediaSizes(messages, "video/")
   if (sizes.length === 0 || (sizes.length === 1 && sizes[0]! <= VIDEO_BYTES_MAX)) return messages

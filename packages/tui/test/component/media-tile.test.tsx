@@ -1,220 +1,143 @@
 /** @jsxImportSource @opentui/solid */
-import { ImageRenderable, VideoRenderable, type Renderable } from "@opentui/core"
-import { testRender } from "@opentui/solid"
+import { ImageRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
-import { createSignal, Index, type Accessor, type JSX } from "solid-js"
 import path from "node:path"
-import { MediaStrip } from "../../src/component/media/strip"
-import { MediaTile, posterTime } from "../../src/component/media/tile"
+import { createSignal, Index, Show } from "solid-js"
 import type { MediaItem } from "../../src/component/media/model"
-import { ConfigProvider } from "../../src/config"
-import { MediaProvider, useMedia, type MediaContext } from "../../src/context/media"
-import { ThemeProvider } from "../../src/context/theme"
-import { emptyThemeSource, tmpdir } from "../fixture/fixture"
-import { imageFixture, longVideoFixture, videoFixture } from "../fixture/media"
-import { TestTuiContexts } from "../fixture/tui-environment"
-import { createTuiResolvedConfig } from "../fixture/tui-runtime"
+import { MediaStrip } from "../../src/component/media/strip"
+import { MediaTile } from "../../src/component/media/tile"
+import { descendants, image, imageFixture, longVideoFixture, renderMedia, video, videoFixture } from "../fixture/media"
 
-const clip = (id: string): MediaItem => ({
-  id,
-  kind: "video",
-  mime: "video/mp4",
-  uri: "",
-  name: `${id}.mp4`,
-  path: videoFixture,
-})
+const videoBytes = new Uint8Array(await Bun.file(videoFixture).arrayBuffer())
+const videoData = `data:video/mp4;base64,${Buffer.from(videoBytes).toString("base64")}`
 
-async function renderTiles(
-  items: readonly MediaItem[] | Accessor<readonly MediaItem[]>,
-  onOpen: (item: MediaItem) => void = () => {},
-  view: (items: Accessor<readonly MediaItem[]>) => JSX.Element = (items) => (
-    <box flexDirection="row" gap={2}>
-      <Index each={items()}>
-        {(item) => <MediaTile item={item()} width={16} height={6} onOpen={() => onOpen(item())} />}
-      </Index>
-    </box>
-  ),
-) {
-  const list = typeof items === "function" ? items : () => items
-  const temporary = await tmpdir()
-  const directory = path.join(temporary.path, "media")
-  let media: MediaContext | undefined
-  function Probe() {
-    media = useMedia()
-    return null
-  }
-  const app = await testRender(
-    () => (
-      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
-        <ConfigProvider config={createTuiResolvedConfig()}>
-          <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <MediaProvider directory={directory}>
-              <Probe />
-              {view(list)}
-              <text>selectable words</text>
-            </MediaProvider>
-          </ThemeProvider>
-        </ConfigProvider>
-      </TestTuiContexts>
-    ),
-    { width: 60, height: 10, kittyKeyboard: true },
-  )
-  return {
-    app,
-    directory,
-    media: () => media!,
-    videos: () => descendants(app.renderer.root).filter((node) => node instanceof VideoRenderable),
-    // Playback follows the wall clock, so poll with short sleeps between frames.
-    async until(condition: () => boolean) {
-      const deadline = Date.now() + 5_000
-      while (!condition() && Date.now() < deadline) {
-        await Bun.sleep(5)
-        await app.renderOnce()
-      }
-      expect(condition()).toBe(true)
-    },
-    async [Symbol.asyncDispose]() {
-      app.renderer.destroy()
-      await temporary[Symbol.asyncDispose]()
-    },
-  }
-}
-
-function descendants(node: Renderable): Renderable[] {
-  return node.getChildren().flatMap((child) => [child, ...descendants(child as Renderable)])
-}
-
-test("shows a paused poster with its duration and plays only the hovered tile", async () => {
-  // The second tile's bytes are a data URI, which plays from a file written into the media directory.
-  const data = `data:video/mp4;base64,${Buffer.from(await Bun.file(videoFixture).arrayBuffer()).toString("base64")}`
-  await using tiles = await renderTiles([clip("a"), { ...clip("b"), uri: data, path: undefined }])
-  await tiles.until(() => tiles.videos().length === 2 && tiles.app.captureCharFrame().includes("▶ 0:02"))
-  const [first, second] = tiles.videos() as VideoRenderable[]
+test("a strip shows paused silent posters and plays only the hovered tile", async () => {
+  await using tiles = await renderMedia(() => (
+    <MediaStrip
+      items={[video("a", { path: longVideoFixture }), video("b", { uri: videoData, path: undefined })]}
+      width={60}
+      height={6}
+      onOpen={() => {}}
+    />
+  ))
+  await tiles.until(() => /▶ 0:04.*▶ 0:02/.test(tiles.frame()))
+  const [first, second] = tiles.videos()
+  // A data URI plays from a file written into the media directory; a clip of 3 s or more poses 10% in.
   expect(path.dirname(second!.source!)).toBe(tiles.directory)
-  const frame = tiles.app.captureCharFrame()
-  expect(frame.split("\n").slice(0, 5).join("").trim().length).toBeGreaterThan(0)
+  await tiles.until(() => first!.currentTime === 0.4)
   expect(first!.paused).toBe(true)
   expect(first!.audio).toBe(false)
   expect(first!.loop).toBe(true)
-  expect(first!.maxFps).toBe(tiles.media().capabilities().thumbnailFps)
+  expect(first!.maxFps).toBe(tiles.media().thumbnailFps())
 
   await tiles.app.mockMouse.moveTo(4, 2)
-  await tiles.until(() => first!.playing && first!.currentTime > 0.1)
-  expect(second!.paused).toBe(true)
+  await tiles.until(() => first!.playing && first!.currentTime > 0.5)
   // Moving over the badge stays within the tile.
   await tiles.app.mockMouse.moveTo(1, 5)
   await tiles.app.renderOnce()
-  await Bun.sleep(0)
   expect(first!.playing).toBe(true)
-  expect(first!.currentTime).toBeGreaterThan(0.1)
+  expect(second!.paused).toBe(true)
 
-  await tiles.app.mockMouse.moveTo(22, 2)
-  await tiles.until(() => second!.playing)
-  expect(first!.paused).toBe(true)
-  expect(first!.currentTime).toBe(0)
-
+  await tiles.app.mockMouse.moveTo(26, 2)
+  await tiles.until(() => second!.playing && first!.paused)
+  expect(first!.currentTime).toBe(0.4)
   await tiles.app.mockMouse.moveTo(50, 8)
   await tiles.until(() => second!.paused && tiles.media().activeTile() === undefined)
   expect(second!.currentTime).toBe(0)
-})
-
-test("shows a poster 10% into a clip, at most 30 s, and returns there after hover", async () => {
-  expect([0, 2.9, 4, 5, 300, 3600].map(posterTime)).toEqual([0, 0, 0.4, 0.5, 30, 30])
-  await using tiles = await renderTiles([{ ...clip("a"), path: longVideoFixture }])
-  await tiles.until(() => tiles.videos()[0]?.currentTime === 0.4)
-  const player = tiles.videos()[0] as VideoRenderable
-  expect(player.paused).toBe(true)
 
   await tiles.app.mockMouse.moveTo(4, 2)
-  await tiles.until(() => player.playing && player.currentTime > 0.5)
-  await tiles.app.mockMouse.moveTo(50, 8)
-  await tiles.until(() => player.paused && tiles.media().activeTile() === undefined)
-  expect(player.currentTime).toBe(0.4)
+  await tiles.until(() => first!.playing)
+  tiles.media().openViewer([image("image")], 0)
+  expect(tiles.media().activeTile()).toBeUndefined()
 })
 
-test("opens the viewer request and stops inline playback", async () => {
-  const opened: string[] = []
-  await using tiles = await renderTiles(
-    [clip("a"), { ...clip("b"), kind: "image", mime: "image/png", path: imageFixture }],
-    (item) => opened.push(item.id),
-  )
-  await tiles.until(() => tiles.videos().length === 1)
-  await tiles.app.mockMouse.moveTo(4, 2)
-  await tiles.until(() => tiles.videos()[0]!.playing)
-
-  await tiles.app.mockMouse.click(4, 2)
-  await tiles.app.mockMouse.click(22, 2)
-  // The badge is part of the tile, not text to select.
-  await tiles.app.mockMouse.click(1, 5)
-  expect(opened).toEqual(["a", "b", "a"])
-  // Releasing a text selection over a tile copies the text instead of opening the tile.
-  await tiles.app.mockMouse.drag(2, 6, 4, 2)
-  expect(tiles.app.renderer.getSelection()?.getSelectedText()).toBeTruthy()
-  expect(opened).toEqual(["a", "b", "a"])
-
-  tiles.media().openViewer([clip("a")], 0)
-  await tiles.until(() => (tiles.videos()[0] as VideoRenderable).paused)
-  expect(
-    tiles
-      .media()
-      .viewer()
-      ?.items.map((item) => item.id),
-  ).toEqual(["a"])
-})
-
-test("a selection released on the +N more tile bubbles without opening it", async () => {
+test("a strip opens on clicks, but a selection released over it copies instead", async () => {
   const opened: number[] = []
   let released = 0
-  const image = (id: string): MediaItem => ({ id, kind: "image", mime: "image/png", uri: "", path: imageFixture })
-  await using tiles = await renderTiles([image("a"), image("b"), image("c")], undefined, (items) => (
-    <box onMouseUp={() => released++}>
-      <MediaStrip items={items()} width={30} height={6} onOpen={(index) => opened.push(index)} />
+  await using tiles = await renderMedia(() => (
+    <box flexDirection="column" onMouseUp={() => released++}>
+      <MediaStrip
+        items={[video("a"), image("b"), image("c"), image("d")]}
+        width={50}
+        height={6}
+        onOpen={(index) => opened.push(index)}
+      />
+      <text>selectable words</text>
     </box>
   ))
-  await tiles.until(() => tiles.app.captureCharFrame().includes("+2 more"))
-  await tiles.app.mockMouse.drag(2, 6, 16, 2)
-  expect(tiles.app.renderer.getSelection()?.getSelectedText()).toBeTruthy()
-  expect(opened).toEqual([])
-  expect(released).toBe(1)
+  await tiles.until(() => tiles.frame().includes("▶ 0:02") && tiles.frame().includes("+2 more"))
+  const more = tiles
+    .frame()
+    .split("\n")
+    .find((line) => line.includes("+2 more"))!
+    .indexOf("+2 more")
 
-  tiles.app.renderer.clearSelection()
-  await tiles.app.mockMouse.click(16, 2)
-  expect(opened).toEqual([1])
-  expect(released).toBe(1)
+  // Releasing a text selection over a tile or "+N more" bubbles to the page.
+  for (const x of [4, more]) {
+    await tiles.app.mockMouse.drag(2, 6, x, 2)
+    expect(tiles.app.renderer.getSelection()?.getSelectedText()).toBeTruthy()
+    tiles.app.renderer.clearSelection()
+  }
+  expect(opened).toEqual([])
+  expect(released).toBe(2)
+
+  // The badge is part of the tile.
+  await tiles.app.mockMouse.click(1, 5)
+  await tiles.app.mockMouse.click(26, 2)
+  await tiles.app.mockMouse.click(more, 2)
+  expect(opened).toEqual([0, 1, 2])
+  expect(released).toBe(2)
 })
 
-test("falls back to the kind and name when media cannot be shown", async () => {
-  await using temporary = await tmpdir()
-  const broken = path.join(temporary.path, "x.mp4")
-  await Bun.write(broken, "not a video")
-  await using tiles = await renderTiles([
-    { id: "remote", kind: "video", mime: "video/mp4", uri: "https://example.com/a.mp4", name: "r.mp4" },
-    { ...clip("broken"), name: "x.mp4", path: broken },
-    { id: "bad", kind: "image", mime: "image/png", uri: "data:image/png;base64,AAAA", name: "bad.png" },
-  ])
-  await tiles.until(() => {
-    const frame = tiles.app.captureCharFrame()
-    return frame.includes("video · r.mp4") && frame.includes("video · x.mp4") && frame.includes("image · bad.png")
-  })
+test("a video tile stays empty while its file loads", async () => {
+  const bytes = Promise.withResolvers<Uint8Array>()
+  const [item, setItem] = createSignal<MediaItem>()
+  await using tiles = await renderMedia(() => (
+    <Show when={item()}>{(value) => <MediaTile item={value()} width={30} height={4} />}</Show>
+  ))
+  // The tile's write of the data URI joins this pending one for the same file.
+  const sha256 = new Bun.CryptoHasher("sha256").update(videoBytes).digest("hex")
+  const written = tiles.media().files.ensure(sha256, ".mp4", () => bytes.promise)
+  setItem(video("clip", { uri: videoData, path: undefined }))
+  await tiles.app.renderOnce()
+  expect(tiles.frame()).not.toContain("clip.mp4")
+
+  bytes.resolve(videoBytes)
+  await written
+  await tiles.until(() => tiles.frame().includes("▶ 0:02"))
+  expect(tiles.frame()).not.toContain("clip.mp4")
+})
+
+test("a tile falls back to its kind and name when its media cannot be shown", async () => {
+  await using tiles = await renderMedia(() => (
+    <box flexDirection="row" gap={1}>
+      <MediaTile item={video("remote", { uri: "https://example.com/a.mp4", path: undefined })} width={18} height={4} />
+      <MediaTile item={video("broken", { path: import.meta.path })} width={18} height={4} />
+      <MediaTile item={image("bad", { uri: "data:image/png;base64,AAAA", path: "/gone.png" })} width={18} height={4} />
+    </box>
+  ))
+  await tiles.until(() => /video · remote\.mp4.*video · broken\.mp4.*image · bad\.png/.test(tiles.frame()))
   expect(tiles.videos()).toHaveLength(0)
 })
 
-test("retries a failed source when the item's uri changes and skips a draft file that is gone", async () => {
-  await using temporary = await tmpdir()
+test("a tile that failed tries again when its item changes", async () => {
   const png = Buffer.from(await Bun.file(imageFixture).arrayBuffer()).toString("base64")
-  const broken: MediaItem = {
-    id: "image",
-    kind: "image",
-    mime: "image/png",
-    uri: "data:image/png;base64,AAAA",
-    name: "pic.png",
-    path: path.join(temporary.path, "gone.png"),
-  }
-  const [items, setItems] = createSignal<readonly MediaItem[]>([broken])
-  await using tiles = await renderTiles(items)
-  await tiles.until(() => tiles.app.captureCharFrame().includes("image · pic.png"))
+  const [items, setItems] = createSignal<MediaItem[]>([
+    video("clip", { path: import.meta.path }),
+    image("pic", { uri: "data:image/png;base64,AAAA", path: "/gone.png" }),
+  ])
+  await using tiles = await renderMedia(() => (
+    <box flexDirection="row" gap={1}>
+      <Index each={items()}>{(item) => <MediaTile item={item()} width={18} height={4} />}</Index>
+    </box>
+  ))
+  await tiles.until(() => /video · clip\.mp4.*image · pic\.png/.test(tiles.frame()))
 
-  setItems([{ ...broken, uri: `data:image/png;base64,${png}` }])
-  const picture = () => descendants(tiles.app.renderer.root).find((node) => node instanceof ImageRenderable)
-  await tiles.until(() => !tiles.app.captureCharFrame().includes("image · pic.png") && picture() !== undefined)
+  setItems((list) => [
+    { ...list[0]!, path: videoFixture },
+    { ...list[1]!, uri: `data:image/png;base64,${png}` },
+  ])
+  await tiles.until(() => tiles.frame().includes("▶ 0:02") && !tiles.frame().includes("pic.png"))
+  expect(tiles.videos()).toHaveLength(1)
+  expect(descendants(tiles.app.renderer.root).some((node) => node instanceof ImageRenderable)).toBe(true)
 })

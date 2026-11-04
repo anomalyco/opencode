@@ -5,11 +5,7 @@ import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { resolveImageSource, resolveVideoFile, type MediaSources } from "./file"
 import type { MediaItem } from "./model"
 
-/**
- * An `<image>` source for the item, resolved when it changes: its own file when this machine can read it, otherwise
- * a data URI or the bytes read through the client. `failed` covers a failed read and, through `onError`, a failed
- * decode, until the item changes.
- */
+/** An `<image>` source for the item. `failed` covers a failed read and, through `onError`, a failed decode. */
 export function createImageSource(item: Accessor<MediaItem>) {
   const [state, setState] = createResolved(item, resolveImageSource)
   return {
@@ -19,10 +15,7 @@ export function createImageSource(item: Accessor<MediaItem>) {
   }
 }
 
-/**
- * A local file `<video>` can open for the item, resolved when the item changes: its own file when this machine can
- * read it, otherwise its bytes copied into the media cache. `failed` means no source could supply the bytes.
- */
+/** A local file `<video>` can open for the item. `failed` means no source could supply the bytes. */
 export function createVideoFile(item: Accessor<MediaItem>) {
   const [state] = createResolved(item, resolveVideoFile)
   return () => ({ path: state().value, failed: state().failed })
@@ -35,7 +28,6 @@ function createResolved<T>(item: Accessor<MediaItem>, resolve: (item: MediaItem,
   const [state, setState] = createSignal<{ value?: T; failed: boolean }>({ failed: false })
   const source = createMemo(item, undefined, {
     equals: (a, b) =>
-      a.id === b.id &&
       a.uri === b.uri &&
       a.path === b.path &&
       a.location?.directory === b.location?.directory &&
@@ -46,21 +38,15 @@ function createResolved<T>(item: Accessor<MediaItem>, resolve: (item: MediaItem,
     on(source, (current) => {
       setState({ failed: false })
       let active = true
-      onCleanup(() => {
-        active = false
-      })
+      onCleanup(() => (active = false))
       resolve(current, {
         files: media.files,
         localServer: environment.localServer === true,
         media: client?.media,
         readFile: client ? (input) => client.api.file.read(input) : undefined,
       }).then(
-        (value) => {
-          if (active) setState({ value, failed: false })
-        },
-        () => {
-          if (active) setState({ failed: true })
-        },
+        (value) => active && setState({ value, failed: false }),
+        () => active && setState({ failed: true }),
       )
     }),
   )

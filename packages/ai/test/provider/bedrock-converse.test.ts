@@ -1926,7 +1926,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("lowers image media into Bedrock image blocks", () =>
+  it.effect("lowers image and video media into Bedrock blocks", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -1939,6 +1939,10 @@ describe("Bedrock Converse route", () => {
               { type: "media", media: Media.base64("BBBB", "image/jpeg") },
               { type: "media", media: Media.base64("CCCC", "image/jpg") },
               { type: "media", media: Media.base64("DDDD", "image/webp") },
+              { type: "media", media: Media.base64("EEEE", "video/quicktime"), filename: "a.mov" },
+              { type: "media", media: Media.base64("FFFF", "video/3gpp") },
+              { type: "media", media: Media.base64("GGGG", "video/mpg") },
+              { type: "media", media: Media.base64("HHHH", "video/wmv") },
             ]),
           ],
           cache: "none",
@@ -1956,55 +1960,14 @@ describe("Bedrock Converse route", () => {
               // image/jpg is a non-standard alias; we map it to jpeg.
               { image: { format: "jpeg", source: { bytes: "CCCC" } } },
               { image: { format: "webp", source: { bytes: "DDDD" } } },
+              { video: { format: "mov", source: { bytes: "EEEE" } } },
+              { video: { format: "three_gp", source: { bytes: "FFFF" } } },
+              { video: { format: "mpg", source: { bytes: "GGGG" } } },
+              { video: { format: "wmv", source: { bytes: "HHHH" } } },
             ],
           },
         ],
       })
-    }),
-  )
-
-  it.effect("lowers video media into Bedrock video blocks", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        ai.request({
-          model,
-          messages: [
-            Message.user([
-              { type: "text", text: "What happens in these clips?" },
-              { type: "media", media: Media.base64("AAAA", "video/mp4"), filename: "a.mp4" },
-              { type: "media", media: Media.base64("BBBB", "video/quicktime") },
-              { type: "media", media: Media.base64("CCCC", "video/3gpp") },
-            ]),
-          ],
-          cache: "none",
-        }),
-      )
-
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "user",
-          content: [
-            { text: "What happens in these clips?" },
-            { video: { format: "mp4", source: { bytes: "AAAA" } } },
-            { video: { format: "mov", source: { bytes: "BBBB" } } },
-            { video: { format: "three_gp", source: { bytes: "CCCC" } } },
-          ],
-        },
-      ])
-    }),
-  )
-
-  it.effect("rejects video media types without a Converse format", () =>
-    Effect.gen(function* () {
-      const error = yield* compileRequest(
-        ai.request({
-          model,
-          messages: [Message.user({ type: "media", media: Media.base64("AAAA", "video/x-msvideo") })],
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
-      expect(error.message).toContain("Bedrock Converse does not support video media type video/x-msvideo")
     }),
   )
 
@@ -2361,17 +2324,19 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("rejects unsupported image media types", () =>
+  it.effect("rejects unsupported image and video media types", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
-        ai.request({
-          id: "req_bad_image",
-          model,
-          messages: [Message.user([{ type: "media", media: Media.base64("x", "image/svg+xml") }])],
-        }),
-      ).pipe(Effect.flip)
+      for (const mime of ["image/svg+xml", "video/x-msvideo"]) {
+        const error = yield* compileRequest(
+          ai.request({
+            id: "req_bad_image",
+            model,
+            messages: [Message.user([{ type: "media", media: Media.base64("x", mime) }])],
+          }),
+        ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Bedrock Converse does not support image media type image/svg+xml")
+        expect(error.message).toContain(`Bedrock Converse does not support ${mime.split("/")[0]} media type ${mime}`)
+      }
     }),
   )
 

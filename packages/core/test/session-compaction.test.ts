@@ -527,24 +527,16 @@ it.effect("auto compaction estimates current content against the buffered prompt
       expect(SessionCompaction.estimateContext({ ...selected, messages: [...messages, user] })).toBe(tokens)
       expect(SessionCompaction.estimateContext({ ...selected, messages: [user] })).toBe(fallback + 20)
     }
-    // Video scales with its payload, at 500 base64 characters per token, and costs at least one frame.
+    // Video scales with its payload and costs at least one image.
     const watching = {
       ...grown,
       model: { ...grown.model, capabilities: { ...grown.model.capabilities, input: ["text", "video"] as const } },
     }
-    for (const [length, tokens] of [
-      [1_000_000, 2_000],
-      [100_000, 1_500],
-    ] as const) {
-      const clip = Schema.decodeUnknownSync(SessionMessage.User)({
-        id: SessionMessage.ID.create(),
-        type: "user",
-        text: "",
-        files: [{ mime: "video/mp4", data: "a".repeat(length), source: { type: "inline" } }],
-        time: { created: 0 },
-      })
-      expect(SessionCompaction.estimateContext({ ...watching, messages: [clip] })).toBe(tokens + 20)
-    }
+    const clip = (length: number) => [
+      { ...user, files: [{ mime: "video/mp4", data: "a".repeat(length), source: { type: "inline" as const } }] },
+    ]
+    expect(SessionCompaction.estimateContext({ ...watching, messages: clip(1_000_000) })).toBe(2_020)
+    expect(SessionCompaction.estimateContext({ ...watching, messages: clip(100_000) })).toBe(1_520)
 
     const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
       id: SessionMessage.ID.create(),

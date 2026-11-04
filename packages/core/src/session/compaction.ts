@@ -150,9 +150,7 @@ const TRANSCRIPT_LEVELS = [0, OUTPUTS_CLIPPED, OUTPUTS_REMOVED, USER_ONLY, OMITT
 const TRANSCRIPT_CLIP = 2_000
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
-// Gemini samples video at 1 frame per second, about 300 tokens per second with audio, and a typical H.264 clip runs
-// about 1 Mbit/s, or 167 KB of base64 per second: about 555 base64 characters per token. Rounding down leans high so
-// compaction runs before a long clip overflows the window; a slower bitrate (a screen recording) still estimates low.
+// Gemini spends about 300 tokens per second of video, and a 1 Mbit/s clip is about 167 KB of base64 per second.
 const VIDEO_BASE64_PER_TOKEN = 500
 /**
  * Tokens before the ceiling at which a background summary starts. Writing one takes 30–60 s, and in that time the
@@ -1274,12 +1272,10 @@ const estimatePart = (part: ContentPart): number => {
   return Token.estimate(typeof value === "string" ? value : (JSON.stringify(value) ?? ""))
 }
 
-/** `base64Length` is the inline payload in base64 characters; remote and provider-referenced media have none. */
 const estimateMedia = (mime: string, base64Length: number) => {
   const type = mime.toLowerCase()
   if (type.startsWith("image/")) return IMAGE_TOKEN_ESTIMATE
   if (type === "application/pdf") return PDF_TOKEN_ESTIMATE
-  // A video costs at least one frame.
   if (type.startsWith("video/")) return Math.max(IMAGE_TOKEN_ESTIMATE, Math.ceil(base64Length / VIDEO_BASE64_PER_TOKEN))
   return 0
 }
