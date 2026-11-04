@@ -18,3 +18,11 @@ for handler errors.
 Reason: the stack trace names TS source files and is not output a user or script can rely on. The exit
 code, the stream, and the message are the same. `debug heap-dump` catches its errors in TS and prints the
 bare message; Rust does the same, and P-CLI compares it (`C.1/debug-heap-dump-unsupported`).
+
+`api` (C05) has no catch either. Where TS fails with a plain `Error` (a header without a name, two
+arguments that are not a method and a path), the first stderr line is the same on both sides and P-CLI
+compares it. Where TS fails inside `Effect.tryPromise` (an unknown operation ID, a missing path parameter,
+an OpenAPI document that does not load, a request that cannot be sent), TS prints
+`UnknownError: An error occurred in Effect.tryPromise` and keeps the real message in the `[cause]` below
+the stack. Rust prints the real message: `Error: Operation not found: <id>`. P-CLI compares the exit code
+and the requests of those cases, not stderr.
