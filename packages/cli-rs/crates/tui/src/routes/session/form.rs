@@ -1014,10 +1014,7 @@ impl Inner {
         let input = SessionFormReplyInput {
             session_id: self.form.info.session_id.clone(),
             form_id: self.form.info.id.clone(),
-            answer: answer
-                .into_iter()
-                .map(|(key, value)| (key, wire(value)))
-                .collect(),
+            answer,
         };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
@@ -2261,18 +2258,6 @@ fn checkbox(app: &App, theme: &Theme, checked: bool, active: bool) -> Text {
         } else {
             theme.text.muted
         })
-}
-
-/// JavaScript sends a whole number as `3`, not `3.0`.
-fn wire(value: FormValue) -> FormValue {
-    match value {
-        FormValue::Number(number)
-            if number.fract() == 0.0 && number.abs() < 9_007_199_254_740_992.0 =>
-        {
-            FormValue::Unknown(serde_json::Value::from(number as i64))
-        }
-        value => value,
-    }
 }
 
 /// Replaces the browser launch; for tests, which must not open one.
