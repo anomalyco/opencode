@@ -18,9 +18,10 @@
 //! [`is_interactive`] first, as `requireInteractive` does. Unlike Clack, which waits forever, a
 //! prompt whose input ends is cancelled.
 
-// `session export` (C.2) uses the autocomplete and the messages; the other prompts wait for C.5, C.6,
-// C.8, C.9 and C.15.
-#![allow(dead_code, unused_imports)]
+// What no command uses yet: `note`, the box-drawing symbols, the spinner's options and `message`, and builder
+// options (`output`, `max_items`, `placeholder`, `default_value`, `mask`, `cursor_at`, ...) that C.8, C.9 and
+// C.15 may need. The builder types and `limit_options` are not re-exported until a caller names them.
+#![allow(dead_code)]
 
 mod autocomplete;
 mod confirm;
@@ -33,12 +34,12 @@ mod term;
 mod text;
 mod wrap;
 
-pub use autocomplete::{Autocomplete, View, autocomplete};
-pub use confirm::{Confirm, confirm};
-pub use select::{Choice, MultiSelect, Select, limit_options, multiselect, select};
-pub use spinner::{Spinner, spinner};
+pub use autocomplete::{View, autocomplete};
+pub use confirm::confirm;
+pub use select::{Choice, multiselect, select};
+pub use spinner::spinner;
 pub use style::*;
-pub use text::{Password, Text, password, text};
+pub use text::{password, text};
 
 /// The user cancelled a prompt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

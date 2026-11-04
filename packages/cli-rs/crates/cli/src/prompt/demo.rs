@@ -1,6 +1,8 @@
 //! `opencode-prompt-demo <case>`: the scripts of `parity/oracle/C.p-prompts.ts`, run with this kit, so
 //! P-PTY and P-CLI can compare them with `@clack/prompts`.
 
+// The demo drives a subset of the kit; the CLI uses the rest.
+#[allow(unused_imports)]
 #[path = "mod.rs"]
 mod prompt;
 
