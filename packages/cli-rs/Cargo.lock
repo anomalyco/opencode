@@ -1089,6 +1089,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "futures-util",
+ "indexmap",
  "log",
  "opencode-acp",
  "opencode-api",
