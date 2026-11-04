@@ -15,14 +15,14 @@ type Grid = Vec<Vec<bool>>;
 
 fn mask(index: usize, x: usize, y: usize) -> bool {
     match index {
-        0 => (x + y) % 2 == 0,
-        1 => y % 2 == 0,
-        2 => x % 3 == 0,
-        3 => (x + y) % 3 == 0,
-        4 => (x / 3 + y / 2) % 2 == 0,
+        0 => (x + y).is_multiple_of(2),
+        1 => y.is_multiple_of(2),
+        2 => x.is_multiple_of(3),
+        3 => (x + y).is_multiple_of(3),
+        4 => (x / 3 + y / 2).is_multiple_of(2),
         5 => (x * y) % 2 + (x * y) % 3 == 0,
-        6 => ((x * y) % 2 + (x * y) % 3) % 2 == 0,
-        _ => ((x + y) % 2 + (x * y) % 3) % 2 == 0,
+        6 => ((x * y) % 2 + (x * y) % 3).is_multiple_of(2),
+        _ => ((x + y) % 2 + (x * y) % 3).is_multiple_of(2),
     }
 }
 
@@ -30,9 +30,8 @@ fn mask(index: usize, x: usize, y: usize) -> bool {
 /// when the text does not fit version 40.
 pub fn encode(text: &str) -> Option<Grid> {
     let bytes = text.as_bytes();
-    let version = (1..=40).find(|&v| {
-        4 + if v < 10 { 8 } else { 16 } + bytes.len() * 8 <= data_capacity(v) * 8
-    })?;
+    let version = (1..=40)
+        .find(|&v| 4 + if v < 10 { 8 } else { 16 } + bytes.len() * 8 <= data_capacity(v) * 8)?;
     let size = version * 4 + 17;
     let mut modules = vec![vec![false; size]; size];
     let mut reserved = vec![vec![false; size]; size];
@@ -58,7 +57,7 @@ pub fn encode(text: &str) -> Option<Grid> {
             masked
         })
         .collect();
-    let scores: Vec<i64> = candidates.iter().map(|grid| penalty(grid)).collect();
+    let scores: Vec<i64> = candidates.iter().map(penalty).collect();
     let best = (0..8).min_by_key(|&i| (scores[i], i))?;
     candidates.into_iter().nth(best)
 }
@@ -311,11 +310,8 @@ fn line_penalty(line: &[bool]) -> i64 {
     };
     let finders = |history: &[usize; 7]| -> i64 {
         let n = history[1];
-        let core = n > 0
-            && history[2] == n
-            && history[3] == n * 3
-            && history[4] == n
-            && history[5] == n;
+        let core =
+            n > 0 && history[2] == n && history[3] == n * 3 && history[4] == n && history[5] == n;
         i64::from(core && history[0] >= n * 4 && history[6] >= n)
             + i64::from(core && history[6] >= n * 4 && history[0] >= n)
     };
@@ -365,15 +361,16 @@ fn reed_solomon_divisor(degree: usize) -> Vec<u8> {
 }
 
 fn reed_solomon_remainder(data: &[u8], divisor: &[u8]) -> Vec<u8> {
-    data.iter().fold(vec![0u8; divisor.len()], |remainder, &byte| {
-        let factor = byte ^ remainder[0];
-        remainder[1..]
-            .iter()
-            .chain(std::iter::once(&0))
-            .zip(divisor)
-            .map(|(&value, &d)| value ^ multiply(d, factor))
-            .collect()
-    })
+    data.iter()
+        .fold(vec![0u8; divisor.len()], |remainder, &byte| {
+            let factor = byte ^ remainder[0];
+            remainder[1..]
+                .iter()
+                .chain(std::iter::once(&0))
+                .zip(divisor)
+                .map(|(&value, &d)| value ^ multiply(d, factor))
+                .collect()
+        })
 }
 
 // Multiplies in GF(2^8) modulo x^8 + x^4 + x^3 + x^2 + 1.

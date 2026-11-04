@@ -70,14 +70,13 @@ async fn pair(local: &Local, args: &PairArgs) -> anyhow::Result<()> {
 
 /// The links, and a QR code of the reachable ones, as TS prints them to stdout.
 fn links(urls: &[String], code: &str, expires_in: i64) -> String {
-    let links: Vec<String> = urls
-        .iter()
-        .map(|url| connect_link(url, code))
-        .collect();
+    let links: Vec<String> = urls.iter().map(|url| connect_link(url, code)).collect();
     // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
     let remote: Vec<&String> = urls
         .iter()
-        .filter(|url| !url::Url::parse(url).is_ok_and(|url| is_loopback(url.host_str().unwrap_or(""))))
+        .filter(|url| {
+            !url::Url::parse(url).is_ok_and(|url| is_loopback(url.host_str().unwrap_or("")))
+        })
         .collect();
     let mut lines = vec![
         String::new(),
@@ -125,7 +124,9 @@ fn ssh_hint(endpoint: &str) -> Option<String> {
         [
             "  Over SSH? Forward the port, then open the link on your machine:".to_string(),
             format!("  ssh -L {port}:{host}:{port} <host>"),
-            format!("  If port {port} is busy locally, forward another port and use it in the link."),
+            format!(
+                "  If port {port} is busy locally, forward another port and use it in the link."
+            ),
             String::new(),
             "  To connect from other devices, run `opencode service set hostname 0.0.0.0`.".into(),
             String::new(),
@@ -159,7 +160,6 @@ fn consent(local: &Local, config: &Info, yes: bool) -> anyhow::Result<bool> {
     }
     prompt::log::warn(REMOTE_WARNING);
     if !yes {
-        let _restore = restore_terminal_on_signal();
         match prompt::confirm("Expose your server to the internet?")
             .initial_value(true)
             .prompt()
@@ -177,22 +177,6 @@ fn consent(local: &Local, config: &Info, yes: bool) -> anyhow::Result<bool> {
     }
     local.config().accept_remote()?;
     Ok(true)
-}
-
-// The prompt puts the terminal in raw mode and restores it when it ends; a SIGTERM meanwhile exits
-// without that, so put back the modes from before the prompt and show the cursor.
-fn restore_terminal_on_signal() -> crate::signals::Registration {
-    let saved = rustix::termios::tcgetattr(std::io::stdin()).ok();
-    crate::signals::on_shutdown("restore the terminal", move || {
-        if let Some(saved) = saved {
-            let _ = rustix::termios::tcsetattr(
-                std::io::stdin(),
-                rustix::termios::OptionalActions::Now,
-                &saved,
-            );
-        }
-        let _ = std::io::Write::write_all(&mut std::io::stdout(), b"\x1b[?25h");
-    })
 }
 
 /// The tunnel URL of the service, once the tunnel is attached: the service attaches it in the
@@ -256,7 +240,13 @@ mod tests {
 
     #[test]
     fn loopback_hosts() {
-        for host in ["localhost", "a.localhost", "127.0.0.1", "127.9.9.9", "[::1]"] {
+        for host in [
+            "localhost",
+            "a.localhost",
+            "127.0.0.1",
+            "127.9.9.9",
+            "[::1]",
+        ] {
             assert!(is_loopback(host), "{host}");
         }
         for host in ["0.0.0.0", "10.0.0.1", "example.com", "[::2]"] {
