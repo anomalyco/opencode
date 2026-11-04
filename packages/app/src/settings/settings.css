@@ -1709,7 +1709,7 @@
 }
 
 .settings-models [data-slot="settings-row-copy"] {
-  gap: 0;
+  gap: 8px;
 }
 
 .settings-models [data-component="settings-row"] {

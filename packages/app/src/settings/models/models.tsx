@@ -15,6 +15,7 @@ import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/p
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
 import { settingsScroller } from "@/settings/scroller"
+import { useModelUsage } from "./usage-context"
 
 import "@/settings/settings.css"
 
@@ -71,6 +72,24 @@ export const SettingsModels: Component<{
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
 
+  const usage = useModelUsage()
+
+  const usageLabel = (item: ModelItem) => {
+    const map = usage()
+    if (!map) return ""
+
+    const entry = map.get(`${item.provider.id}:${item.id}`)
+    if (!entry || entry.steps === 0) return language.t("settings.models.usage.never")
+    if (entry.generated === 0) return language.t("settings.models.usage.noOutput")
+
+    return language.t("settings.models.usage.used", {
+      tokens: new Intl.NumberFormat(language.intl(), {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(entry.generated),
+    })
+  }
+
   const setProviderVisibility = (providerID: string, visible: boolean) =>
     models
       .list()
@@ -85,7 +104,7 @@ export const SettingsModels: Component<{
             const key = { providerID: item.provider.id, modelID: item.id }
 
             return (
-              <SettingsRow title={item.name} description="">
+              <SettingsRow title={item.name} description={usageLabel(item)}>
                 <div>
                   <Switch
                     checked={models.visible(key)}
