@@ -70,6 +70,8 @@ pub struct Tui {
     /// The prompt textarea while it has the keymap's edit bindings (E.2 fills it). The keymap's
     /// `textarea_enabled` holds while it is focused.
     pub textarea: Rc<RefCell<Option<Textarea>>>,
+    /// Prompt history, drafts, and catalogs, shared by every prompt (E.2).
+    pub prompt: crate::prompt::editor::Shared,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -242,6 +244,10 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
         config: deps.config,
         directory: deps.directory,
         textarea,
+        prompt: crate::prompt::editor::Shared::new(
+            app,
+            deps.roots.as_ref().map(|roots| roots.paths.state.clone()),
+        ),
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
