@@ -498,7 +498,11 @@ fn install_keys(tui: &Rc<Tui>) {
     };
     let layers = [
         commands,
-        bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show"]),
+        // Part of `appBindingCommands` (`app.tsx:150-186`); E.20 binds its own commands.
+        bindings(
+            None,
+            &[COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"],
+        ),
         // `appGlobalBindingCommands` (`app.tsx:117`).
         bindings(
             Some(GLOBAL_MODE),
