@@ -406,3 +406,21 @@ fn connect_works_from_a_thread_outside_the_runtime() {
     });
     drop(connection);
 }
+
+/// MS1 `carbon-5`: the store mutex is not reentrant. A read inside a read on the same thread panics in debug
+/// builds instead of hanging; reads of another store nest.
+#[tokio::test]
+async fn a_reentrant_read_panics_instead_of_deadlocking() {
+    let data = common::data(handler(|_| async { ok(json!({})) }), Options::default());
+    let other = common::data(handler(|_| async { ok(json!({})) }), Options::default());
+    assert!(data.read(|_| other.read(|_| true)));
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            data.read(|_| data.read(|_| ()));
+        }));
+        let _ = sender.send(result.is_err());
+    });
+    let panicked = receiver.recv_timeout(std::time::Duration::from_secs(2));
+    assert_eq!(panicked, Ok(true), "a reentrant read must panic, not hang");
+}

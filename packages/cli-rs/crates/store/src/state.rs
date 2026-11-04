@@ -322,7 +322,7 @@ impl Data {
 
     /// Reads the state. Keep `f` short: it holds the store lock.
     pub fn read<R>(&self, f: impl FnOnce(&State) -> R) -> R {
-        f(&lock(&self.inner.state))
+        f(&self.lock())
     }
 
     /// The revision of the last flush.
@@ -348,14 +348,30 @@ impl Data {
 
     /// Mutates the state and flushes its changes unless a batch is open.
     pub(crate) fn write<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
-        let mut state = lock(&self.inner.state);
+        let mut state = self.lock();
         let result = f(&mut state);
         self.flush(&mut state);
         result
     }
 
-    pub(crate) fn lock(&self) -> MutexGuard<'_, State> {
-        lock(&self.inner.state)
+    /// The mutex is not reentrant. In debug builds locking it again on the same thread panics instead of
+    /// deadlocking (a keymap condition that reads the store, run under [`Data::read`]).
+    pub(crate) fn lock(&self) -> Locked<'_> {
+        #[cfg(debug_assertions)]
+        let key = Arc::as_ptr(&self.inner) as usize;
+        #[cfg(debug_assertions)]
+        assert!(
+            !HELD.with_borrow(|held| held.contains(&key)),
+            "reentrant store lock: this thread already holds it"
+        );
+        let guard = lock(&self.inner.state);
+        #[cfg(debug_assertions)]
+        HELD.with_borrow_mut(|held| held.push(key));
+        Locked {
+            guard,
+            #[cfg(debug_assertions)]
+            key,
+        }
     }
 
     pub(crate) fn flush(&self, state: &mut State) {
@@ -510,6 +526,44 @@ impl Data {
 enum Start<R, B> {
     Begun(R),
     After(Task<()>, B),
+}
+
+#[cfg(debug_assertions)]
+thread_local! {
+    /// The stores whose state this thread holds locked.
+    static HELD: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The locked [`State`].
+pub(crate) struct Locked<'a> {
+    guard: MutexGuard<'a, State>,
+    #[cfg(debug_assertions)]
+    key: usize,
+}
+
+impl std::ops::Deref for Locked<'_> {
+    type Target = State;
+
+    fn deref(&self) -> &State {
+        &self.guard
+    }
+}
+
+impl std::ops::DerefMut for Locked<'_> {
+    fn deref_mut(&mut self) -> &mut State {
+        &mut self.guard
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Drop for Locked<'_> {
+    fn drop(&mut self) {
+        HELD.with_borrow_mut(|held| {
+            if let Some(index) = held.iter().rposition(|key| *key == self.key) {
+                held.remove(index);
+            }
+        });
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
