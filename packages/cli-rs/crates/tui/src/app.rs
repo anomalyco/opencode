@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
+use opencode_api::generated::SessionInfo;
 use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, ThemeMode as ConfigMode};
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
@@ -102,6 +103,10 @@ pub struct Tui {
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
+    /// What keymap conditions and [`crate::dialogs::model::Local`] read, cached at each sync: they run inside
+    /// keymap queries, which may come while the store is locked.
+    has_sessions: Cell<bool>,
+    routed: RefCell<Option<SessionInfo>>,
     connection: RefCell<Option<Connection>>,
     layers: RefCell<Vec<Disposer>>,
     this: Weak<Tui>,
@@ -156,6 +161,7 @@ impl Tui {
             view.root().detach();
         }
         *self.route.borrow_mut() = route.clone();
+        self.cache();
         // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
             crate::features::location::home(self);
@@ -183,6 +189,7 @@ impl Tui {
         if changes.is_empty() {
             return;
         }
+        self.cache();
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &changes);
         }
@@ -192,6 +199,24 @@ impl Tui {
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
         crate::features::attention::program_status::sync(self);
+    }
+
+    fn cache(&self) {
+        let route = self.route();
+        let (has_sessions, routed) = self.data.read(|state| {
+            let routed = match &route {
+                Route::Session { id } => state.session(id).cloned(),
+                _ => None,
+            };
+            (!state.sessions().is_empty(), routed)
+        });
+        self.has_sessions.set(has_sessions);
+        *self.routed.borrow_mut() = routed;
+    }
+
+    /// The routed session as the last sync read it.
+    pub(crate) fn routed(&self) -> Option<SessionInfo> {
+        self.routed.borrow().clone()
     }
 
     /// Syncs the route view with everything, after state outside the store changed.
@@ -374,6 +399,8 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
         painted: RefCell::new(page),
         restyle: Cell::new(false),
         seen: Cell::new(0),
+        has_sessions: Cell::new(false),
+        routed: RefCell::new(None),
         connection: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
         this: this.clone(),
@@ -679,8 +706,7 @@ fn route_is_session(tui: &Weak<Tui>) -> Condition {
 fn has_sessions(tui: &Weak<Tui>) -> Condition {
     let weak = tui.clone();
     Condition::When(Rc::new(move || {
-        weak.upgrade()
-            .is_some_and(|tui| tui.data.read(|state| !state.sessions().is_empty()))
+        weak.upgrade().is_some_and(|tui| tui.has_sessions.get())
     }))
 }
 
