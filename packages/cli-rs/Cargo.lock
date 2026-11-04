@@ -1073,6 +1073,7 @@ name = "opencode-ui"
 version = "0.1.0"
 dependencies = [
  "indexmap",
+ "opencode-api",
  "opencode-local",
  "opencode-parity",
  "opentui",
