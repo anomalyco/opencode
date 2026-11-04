@@ -7,7 +7,13 @@ export default defineApp({
       checkpoint: "wide",
       until: "Ask anything",
       masks: [
-        { x: 16, y: 16, width: 84, height: 1, reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)" },
+        {
+          x: 16,
+          y: 16,
+          width: 84,
+          height: 1,
+          reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+        },
       ],
       // The prompt footer hints are E.14's.
       deviation: ["P01-read-only-prompt"],

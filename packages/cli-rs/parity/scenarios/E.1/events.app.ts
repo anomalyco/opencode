@@ -9,7 +9,13 @@ const event = (id: string, type: string, data: unknown, location: unknown = here
 })
 // The home prompt's placeholder row (T17-home-prompt) and the prompt footer hints (P01-read-only-prompt).
 const prompt = [
-  { x: 16, y: 16, width: 84, height: 1, reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)" },
+  {
+    x: 16,
+    y: 16,
+    width: 84,
+    height: 1,
+    reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+  },
   { x: 50, y: 20, width: 50, height: 1, reason: "the prompt footer hints are E.14's (P01-read-only-prompt)" },
 ]
 
@@ -26,9 +32,14 @@ export default defineApp({
   ],
   steps: [
     { checkpoint: "home", until: "Ask anything", masks: prompt },
-    event("evt_1", "tui.toast.show", { title: "Elsewhere", message: "Not for this location", variant: "error" }, {
-      directory: "/somewhere/else",
-    }),
+    event(
+      "evt_1",
+      "tui.toast.show",
+      { title: "Elsewhere", message: "Not for this location", variant: "error" },
+      {
+        directory: "/somewhere/else",
+      },
+    ),
     // No title: TS merges a replacing toast into the old one (T21-toast-replace-merge), and the deleted toast
     // below has none either.
     event("evt_2", "tui.toast.show", { message: "Deployed to staging", variant: "success" }),
