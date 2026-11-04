@@ -9,9 +9,7 @@
 
 use std::cell::RefCell;
 
-use opencode_api::generated::{
-    PromptAgentAttachment, PromptInputFileAttachment, PromptInputSkillAttachment,
-};
+use opencode_api::generated::{PromptAgentAttachment, PromptInputSkillAttachment};
 use opentui::native::SelectionColors;
 use opentui::prelude::*;
 use opentui::widget::{ExtmarkId, ExtmarkOptions};
@@ -244,11 +242,7 @@ pub fn has(prompt: &Inner, kind: Kind, field: &str, value: &Value) -> bool {
         .is_some_and(|list| list.iter().any(|part| &part[field] == value))
 }
 
-/// The parts a submit sends, from a `PromptInfo` snapshot.
-pub fn files(entry: &Value) -> Option<Vec<PromptInputFileAttachment>> {
-    serde_json::from_value(entry.get(Kind::File.key())?.clone()).ok()
-}
-
+/// The parts a submit sends, from a `PromptInfo` snapshot; files go through `attach::files_for_server`.
 pub fn agents(entry: &Value) -> Option<Vec<PromptAgentAttachment>> {
     serde_json::from_value(entry.get(Kind::Agent.key())?.clone()).ok()
 }
