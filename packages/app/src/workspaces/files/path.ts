@@ -92,11 +92,14 @@ export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
 
+    // A file URL carries a query, a fragment and percent escapes; a raw path is already literal, so a filename like
+    // `notes#1.txt` or `notes%20one.txt` keeps its characters.
+    const source = input.startsWith("file://")
+      ? decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))
+      : input
+
     // file:///C:/dir becomes /C:/dir once the protocol is gone; restore the drive form.
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(
-      /^[/\\]([A-Za-z]:)/,
-      "$1",
-    )
+    let path = unquoteGitPath(source).replace(/^[/\\]([A-Za-z]:)/, "$1")
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)
