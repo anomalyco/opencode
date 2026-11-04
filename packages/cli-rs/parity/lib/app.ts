@@ -16,6 +16,8 @@ export type Step =
   | { keys: string[] }
   // Text, one key press per character.
   | { type: string }
+  // A bracketed paste of the text (E.4).
+  | { paste: string }
   // A left press and release at a cell, `[x, y]`.
   | { click: [number, number] }
   // One `/api/event` event.
