@@ -19,7 +19,6 @@ const CORPUS: &str = include_str!("../../../parity/fixtures/U.4a/corpus.json");
 const SYNTAX: &str = include_str!("../../../parity/fixtures/U.4a/syntax.json");
 const V03: &str = "V03-markdown-widget";
 const H06: &str = "H06-highlight-queries";
-const V05A: &str = "V05a-diff-gutter";
 
 fn corpus(name: &str) -> String {
     let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
@@ -249,6 +248,7 @@ fn patch_matches_typescript() {
         DiffView::Unified,
         Some("typescript"),
         WrapMode::Word,
+        0,
     );
     app.root().add(
         &View::new(&app)
@@ -260,7 +260,7 @@ fn patch_matches_typescript() {
         &app.render(),
         "U.4a/diff",
         &[
-            (0..=4, Allow::Anything, V05A),
+            (0..=0, Allow::Highlight, H06),
             (6..=9, Allow::Highlight, H06),
         ],
     );

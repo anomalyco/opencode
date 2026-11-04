@@ -4,7 +4,7 @@
 
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
-use opentui::widget::{Diff, DiffColors, DiffView};
+use opentui::widget::{Diff, DiffColors, DiffGutter, DiffView};
 
 use crate::theme::Theme;
 
@@ -94,7 +94,9 @@ pub fn colors(theme: &Theme) -> DiffColors {
 }
 
 /// A patch with line numbers, highlighted as `filetype`: a column of one [`Diff`] per hunk, with the `@@` line of
-/// each later hunk in a row of its own.
+/// each later hunk in a row of its own. The hunks share one gutter width, with `gutter_padding` extra cells before
+/// the line numbers (`PatchDiff`'s `gutterPadding`).
+#[allow(clippy::too_many_arguments)]
 pub fn view(
     app: &App,
     theme: &Theme,
@@ -103,7 +105,12 @@ pub fn view(
     view: DiffView,
     filetype: Option<&str>,
     wrap: WrapMode,
+    gutter_padding: u32,
 ) -> View {
+    let gutter = DiffGutter {
+        padding_left: 1 + gutter_padding,
+        min_digits: Some(last_line(patch).to_string().len() as u32),
+    };
     let column = View::new(app).width(Length::Percent(100.0));
     for (index, hunk) in split_hunks(patch).into_iter().enumerate() {
         if index > 0 {
@@ -125,21 +132,32 @@ pub fn view(
             .syntax_theme(syntax.clone())
             .wrap(wrap)
             .colors(colors(theme))
+            .gutter(gutter)
             .set_diff(hunk.patch);
         let (left, right) = diff.code_views();
-        // The unified column grows from a zero basis, so a diff without a height shows no rows. Core's diff sizes to
-        // its lines, wrapped ones included; an automatic basis on the column does the same.
-        if view == DiffView::Unified
-            && let Some(numbers) = left.parent()
-        {
-            numbers.basis(Length::Auto);
-        }
         for code in [left, right] {
             code.fg(theme.text.base).focusable(false);
         }
         column.add(&diff);
     }
     column
+}
+
+/// The largest line number the patch's `@@` lines reach on either side, at least 1.
+fn last_line(patch: &str) -> i64 {
+    let end = |range: &str| {
+        let (start, count) = range.split_once(',').unwrap_or((range, "1"));
+        Some(start.parse::<i64>().ok()? + count.parse::<i64>().ok()? - 1)
+    };
+    patch
+        .lines()
+        .filter_map(|line| {
+            let (old, rest) = line.strip_prefix("@@ -")?.split_once(" +")?;
+            let (new, _) = rest.split_once(" @@")?;
+            Some([end(old)?, end(new)?])
+        })
+        .flatten()
+        .fold(1, i64::max)
 }
 
 #[cfg(test)]
@@ -173,5 +191,16 @@ mod tests {
         for line in ["@@ -1, +1 @@", "@@ -a +1 @@", "@@ -1 +1@@", " @@ -1 +1 @@"] {
             assert!(!is_hunk_header(line), "{line}");
         }
+    }
+
+    #[test]
+    fn last_line_is_the_largest_hunk_end() {
+        assert_eq!(
+            last_line("@@ -1,4 +1,4 @@\n a\n@@ -10,3 +98,4 @@ fn\n b\n"),
+            101
+        );
+        assert_eq!(last_line("@@ -7 +7 @@\n-a\n+b\n"), 7);
+        assert_eq!(last_line("@@ -0,0 +0,0 @@\n"), 1);
+        assert_eq!(last_line("no hunks"), 1);
     }
 }
