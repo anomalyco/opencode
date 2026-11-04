@@ -18,7 +18,8 @@
 //! [`is_interactive`] first, as `requireInteractive` does. Unlike Clack, which waits forever, a
 //! prompt whose input ends is cancelled.
 
-// The commands of C.2, C.5, C.6, C.8, C.9 and C.15 use this module; until they land, parts are unused.
+// `session export` (C.2) uses the autocomplete and the messages; the other prompts wait for C.5, C.6,
+// C.8, C.9 and C.15.
 #![allow(dead_code, unused_imports)]
 
 mod autocomplete;
@@ -78,21 +79,51 @@ pub fn is_interactive() -> bool {
 
 /// `┌  title`: opens a group of prompts.
 pub fn intro(title: &str) {
-    Output::Stdout.write(&format!("{}  {title}\n", gray(S_BAR_START())));
+    Output::Stdout.intro(title);
 }
 
 /// `└  message`: closes a group of prompts.
 pub fn outro(message: &str) {
-    Output::Stdout.write(&format!(
-        "{}\n{}  {message}\n\n",
-        gray(S_BAR()),
-        gray(S_BAR_END())
-    ));
+    Output::Stdout.outro(message);
 }
 
 /// `└  message` in red: closes a group of prompts that was cancelled.
 pub fn cancel(message: &str) {
-    Output::Stdout.write(&format!("{}  {}\n\n", gray(S_BAR_END()), red(message)));
+    Output::Stdout.cancel(message);
+}
+
+/// The messages with Clack's `output` option, for commands that keep stdout for data.
+impl Output {
+    pub fn intro(self, title: &str) {
+        self.write(&format!("{}  {title}\n", gray(S_BAR_START())));
+    }
+
+    pub fn outro(self, message: &str) {
+        self.write(&format!(
+            "{}\n{}  {message}\n\n",
+            gray(S_BAR()),
+            gray(S_BAR_END())
+        ));
+    }
+
+    pub fn cancel(self, message: &str) {
+        self.write(&format!("{}  {}\n\n", gray(S_BAR_END()), red(message)));
+    }
+
+    /// `log.message(message, { symbol, output })`.
+    pub fn log(self, message: &str, symbol: &str) {
+        let bar = gray(S_BAR());
+        let mut parts = vec![bar.clone()];
+        for (index, line) in message.split('\n').enumerate() {
+            let lead = if index == 0 { symbol } else { bar.as_str() };
+            parts.push(if line.is_empty() {
+                lead.to_string()
+            } else {
+                format!("{lead}  {line}")
+            });
+        }
+        self.write(&format!("{}\n", parts.join("\n")));
+    }
 }
 
 /// A boxed note with a title, its lines dim.
@@ -176,16 +207,6 @@ pub mod log {
 
     /// `log.message(message, { symbol })` with the default spacing of one bar line.
     pub fn with_symbol(message: &str, symbol: &str) {
-        let bar = gray(S_BAR());
-        let mut parts = vec![bar.clone()];
-        for (index, line) in message.split('\n').enumerate() {
-            let lead = if index == 0 { symbol } else { bar.as_str() };
-            parts.push(if line.is_empty() {
-                lead.to_string()
-            } else {
-                format!("{lead}  {line}")
-            });
-        }
-        Output::Stdout.write(&format!("{}\n", parts.join("\n")));
+        Output::Stdout.log(message, symbol);
     }
 }
