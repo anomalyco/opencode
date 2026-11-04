@@ -495,9 +495,6 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
     favicon.className = "markdown-link-favicon"
     favicon.setAttribute("aria-hidden", "true")
     const host = url.hostname.toLowerCase()
-    const glyph = document.createElement("span")
-    glyph.className = "markdown-link-favicon-glyph"
-    favicon.appendChild(glyph)
 
     if (host === "github.com") favicon.dataset.github = ""
     else if (
@@ -508,6 +505,7 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
     ) {
       const image = document.createElement("img")
       image.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.host)}&sz=32`
+      favicon.style.setProperty("--markdown-link-favicon", `url("${image.src}")`)
       image.alt = ""
       image.setAttribute("data-markdown-favicon", "")
       image.width = 14
@@ -520,10 +518,10 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
   })
 }
 
-// The globe stands in only until the favicon loads; removing it keeps transparent favicons from showing it through.
+// The globe stands in only until the favicon loads, then the favicon replaces it so a transparent one hides it.
 function showFavicon(image: HTMLImageElement) {
   image.dataset.loaded = ""
-  image.parentElement?.querySelector(".markdown-link-favicon-glyph")?.remove()
+  image.parentElement?.setAttribute("data-loaded", "")
 }
 
 function setupExternalLinkFavicons(root: HTMLDivElement) {
