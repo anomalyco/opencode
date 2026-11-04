@@ -109,10 +109,11 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
         refetchType: "none",
       })
     },
-    // The first connect enables the bootstrap query, which loads on its own. After a reconnect, a fetch still
-    // running from the lost stream may have read nothing, so it is replaced rather than joined.
+    // The first `connected` status enables the bootstrap query, which loads on its own. Once an earlier stream
+    // reported `connected`, a fetch it started may still be running and may have read nothing, so going live replaces
+    // it rather than joining it.
     connected: (info) => {
-      if (info.reconnect) void bootstrap.refetch({ cancelRefetch: true })
+      if (info.restart) void bootstrap.refetch({ cancelRefetch: true })
     },
   })
 

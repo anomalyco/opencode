@@ -30,9 +30,22 @@ describe("transitionConnectionSync", () => {
 
     expect(dropped.effects).toEqual([{ type: "invalidate" }, { type: "invalidate" }])
 
+    // That stream's `connected` status enabled the bootstrap query, so the first live stream replaces its fetch.
     const next = replay([status("connected"), handshake], dropped.state)
 
-    expect(next.effects).toEqual([{ type: "sync", reconnect: false }])
+    expect(next.effects).toEqual([{ type: "sync", restart: true }])
+  })
+
+  test("restarts the bootstrap on the first live stream after an earlier stream reported connected", () => {
+    const result = replay([
+      status("connecting"),
+      status("connected"),
+      status("reconnecting"),
+      status("connected"),
+      handshake,
+    ])
+
+    expect(result.effects).toEqual([{ type: "invalidate" }, { type: "invalidate" }, { type: "sync", restart: true }])
   })
 
   test("syncs once per connection in either order of status and handshake", () => {
@@ -48,9 +61,9 @@ describe("transitionConnectionSync", () => {
 
     expect(result.effects).toEqual([
       { type: "invalidate" },
-      { type: "sync", reconnect: false },
+      { type: "sync", restart: false },
       { type: "invalidate" },
-      { type: "sync", reconnect: true },
+      { type: "sync", restart: true },
     ])
     expect(result.state).toEqual({ type: "live" })
   })

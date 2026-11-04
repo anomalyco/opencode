@@ -5,7 +5,7 @@ import { transitionConnectionSync, type ConnectionSyncEvent, type ConnectionSync
 export function createConnectionSync(input: {
   status: Accessor<ServerConnectionStatus>
   invalidate: () => void
-  connected: (info: { reconnect: boolean }) => void
+  connected: (info: { restart: boolean }) => void
 }) {
   // Read only by `dispatch`; the effects run untracked, so their reads never re-run the status effect.
   let connection: ConnectionSyncState = { type: "idle" }
@@ -15,7 +15,7 @@ export function createConnectionSync(input: {
     connection = result.state
     result.effects.forEach((effect) => {
       if (effect.type === "invalidate") return input.invalidate()
-      input.connected({ reconnect: effect.reconnect })
+      input.connected({ restart: effect.restart })
     })
   }
 
