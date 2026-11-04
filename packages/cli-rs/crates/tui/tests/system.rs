@@ -15,10 +15,12 @@ use opencode_api::client::Client;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Info, Resolved, merge};
 use opencode_parity::{Fixture, compare, fixtures_dir};
-use opencode_tui::dialogs::{settings, theme_list};
+use opencode_tui::dialogs::{settings, status, theme_list};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+
+const DIRECTORY: &str = "/tmp/opencode/app";
 
 type Answer = Box<dyn Fn(&str, &str, &Value) -> Option<(u16, Value)> + Send + Sync>;
 
@@ -101,7 +103,7 @@ fn mount_with(app: &TestApp, info: Info, answer: Answer) -> Mounted {
         app,
         Deps {
             client,
-            directory: "/project".into(),
+            directory: DIRECTORY.into(),
             config: Resolved::new(info, |_| None),
             roots: None,
             route: Route::Home,
@@ -269,4 +271,44 @@ fn settings_theme_opens_the_list_and_comes_back() {
     wait_for(&app, "opencode2 ↵");
     assert_eq!(configured_theme(&tui).as_deref(), Some("opencode2"));
     assert_eq!(theme(&tui), "opencode2");
+}
+
+// Status ------------------------------------------------------------------------------------------------------
+
+fn location() -> Value {
+    json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } })
+}
+
+fn servers() -> Value {
+    json!([
+        { "name": "linear", "status": { "status": "failed", "error": "MCP error -32000: Connection closed" } },
+        { "name": "github", "status": { "status": "connected" } },
+        { "name": "sentry", "status": { "status": "needs_auth", "error": "Authentication required" } },
+        { "name": "docs", "status": { "status": "disabled" } },
+        { "name": "figma", "status": { "status": "pending" } },
+    ])
+}
+
+fn mcp(list: Value) -> Answer {
+    Box::new(move |_, path, _| match path {
+        "/api/location" => Some((200, location())),
+        "/api/mcp" => Some((200, json!({ "location": location(), "data": list.clone() }))),
+        _ => None,
+    })
+}
+
+#[test]
+fn status_matches_typescript() {
+    let app = TestApp::new(80, 30);
+    let mounted = mount_with(&app, info(json!({})), mcp(servers()));
+    mounted.tui.keymap.dispatch("opencode.status", None);
+    wait_for(&app, "5 MCP servers");
+    assert_dialog(&app, "E.18b/status", "Status");
+    assert_eq!(mounted.requests("/api/mcp").len(), 1);
+
+    let app = TestApp::new(80, 30);
+    let tui = mount_with(&app, info(json!({})), mcp(json!([]))).tui;
+    status::show(&tui);
+    wait_for(&app, "No MCP servers");
+    assert_dialog(&app, "E.18b/status-empty", "Status");
 }
