@@ -99,6 +99,11 @@ export function getWindowByID(id: string) {
   return win
 }
 
+/** The persisted ID of an app window, or nothing for popups and other native windows. */
+export function getWindowID(win: BrowserWindow) {
+  return registry.persisted().find((id) => registry.get(id) === win)
+}
+
 /** App windows that host the renderer, excluding popups and other native windows. */
 export function getMainWindows() {
   return registry.list().filter((win) => !win.isDestroyed())
@@ -239,5 +244,3 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
-
