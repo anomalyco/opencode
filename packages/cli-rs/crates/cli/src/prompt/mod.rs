@@ -77,6 +77,12 @@ pub fn is_interactive() -> bool {
     term::interactive()
 }
 
+/// Puts the terminal back as it was before a prompt took raw mode, when one holds it. The CLI runs this as a
+/// shutdown step, so a SIGTERM during a prompt does not leave the shell in raw mode.
+pub fn restore_terminal() {
+    term::restore();
+}
+
 /// `┌  title`: opens a group of prompts.
 pub fn intro(title: &str) {
     Output::Stdout.intro(title);

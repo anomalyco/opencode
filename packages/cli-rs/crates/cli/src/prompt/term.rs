@@ -88,13 +88,31 @@ impl Output {
 /// Raw mode on stdin while alive, when stdin is a terminal. The flags are libuv's
 /// `UV_TTY_MODE_RAW`, which keeps `ONLCR`, so `\n` still starts a new line.
 pub struct Raw {
-    saved: Option<Termios>,
+    fd: BorrowedFd<'static>,
+    saved: Option<(u64, Termios)>,
+}
+
+/// The modes saved by each live [`Raw`], oldest first, so [`restore`] can put the terminal back from a signal
+/// handler's thread while a prompt still holds raw mode.
+static ACTIVE: std::sync::Mutex<Vec<(u64, BorrowedFd<'static>, Termios)>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn active() -> std::sync::MutexGuard<'static, Vec<(u64, BorrowedFd<'static>, Termios)>> {
+    ACTIVE.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Raw {
     pub fn enable() -> Raw {
-        let saved = isatty(stdin()).then(|| tcgetattr(stdin()).ok()).flatten();
-        if let Some(saved) = &saved {
+        Raw::enable_on(stdin())
+    }
+
+    fn enable_on(fd: BorrowedFd<'static>) -> Raw {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let saved = isatty(fd)
+            .then(|| tcgetattr(fd).ok())
+            .flatten()
+            .map(|saved| (NEXT.fetch_add(1, Ordering::Relaxed), saved));
+        if let Some((id, saved)) = &saved {
             let mut raw = saved.clone();
             raw.input_modes -= InputModes::BRKINT
                 | InputModes::ICRNL
@@ -107,18 +125,32 @@ impl Raw {
                 LocalModes::ECHO | LocalModes::ICANON | LocalModes::IEXTEN | LocalModes::ISIG;
             raw.special_codes[SpecialCodeIndex::VMIN] = 1;
             raw.special_codes[SpecialCodeIndex::VTIME] = 0;
-            let _ = tcsetattr(stdin(), OptionalActions::Now, &raw);
+            active().push((*id, fd, saved.clone()));
+            let _ = tcsetattr(fd, OptionalActions::Now, &raw);
         }
-        Raw { saved }
+        Raw { fd, saved }
     }
 }
 
 impl Drop for Raw {
     fn drop(&mut self) {
-        if let Some(saved) = &self.saved {
-            let _ = tcsetattr(stdin(), OptionalActions::Now, saved);
+        if let Some((id, saved)) = &self.saved {
+            active().retain(|(other, _, _)| other != id);
+            let _ = tcsetattr(self.fd, OptionalActions::Now, saved);
         }
     }
+}
+
+/// Puts the terminal back as it was before the first live prompt took raw mode, and shows the cursor that
+/// prompts hide. A shutdown step: the process exits right after, without running the prompt's own drop.
+/// Does nothing while no prompt holds raw mode.
+pub fn restore() {
+    let active = active();
+    let Some((_, fd, saved)) = active.first() else {
+        return;
+    };
+    let _ = tcsetattr(*fd, OptionalActions::Now, saved);
+    Output::Stdout.write("\x1b[?25h");
 }
 
 /// A key as `emitKeypressEvents` reports it. `name` is `None` for unnamed characters and
@@ -500,6 +532,30 @@ fn sequence_name(code: &str) -> (&'static str, bool, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restore_undoes_raw_mode_from_another_thread() {
+        use rustix::fs::{Mode, OFlags, open};
+        use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
+        let master = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).unwrap();
+        grantpt(&master).unwrap();
+        unlockpt(&master).unwrap();
+        let name = ptsname(&master, Vec::new()).unwrap();
+        let slave = open(name.as_c_str(), OFlags::RDWR | OFlags::NOCTTY, Mode::empty()).unwrap();
+        let slave: &'static std::os::fd::OwnedFd = Box::leak(Box::new(slave));
+        let fd = slave.as_fd();
+        let cooked = tcgetattr(fd).unwrap().local_modes;
+        assert!(cooked.contains(LocalModes::ICANON));
+        let raw = Raw::enable_on(fd);
+        assert!(!tcgetattr(fd).unwrap().local_modes.contains(LocalModes::ICANON));
+        // A shutdown step runs on the signal thread while the prompt still holds raw mode.
+        std::thread::spawn(restore).join().unwrap();
+        assert_eq!(tcgetattr(fd).unwrap().local_modes, cooked);
+        drop(raw);
+        assert!(active().is_empty());
+        restore();
+        assert_eq!(tcgetattr(fd).unwrap().local_modes, cooked);
+    }
 
     fn presses(input: &str) -> Vec<Press> {
         let mut chars: VecDeque<String> = input.chars().map(String::from).collect();
