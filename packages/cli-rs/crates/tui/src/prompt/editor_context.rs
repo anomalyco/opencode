@@ -416,14 +416,14 @@ impl Context {
     /// Calls `listener` for each `at_mentioned` notification.
     pub fn on_mention(&self, listener: impl Fn(&Mention) + 'static) -> Disposer {
         let id = self.listener_id();
-        self.0
-            .borrow_mut()
-            .mentions
-            .push((id, Rc::new(listener)));
+        self.0.borrow_mut().mentions.push((id, Rc::new(listener)));
         let weak = Rc::downgrade(&self.0);
         Disposer::new(move || {
             if let Some(state) = weak.upgrade() {
-                state.borrow_mut().mentions.retain(|(other, _)| *other != id);
+                state
+                    .borrow_mut()
+                    .mentions
+                    .retain(|(other, _)| *other != id);
             }
         })
     }
@@ -431,14 +431,14 @@ impl Context {
     /// Calls `listener` when the selection or its label state changes.
     pub fn subscribe(&self, listener: impl Fn() + 'static) -> Disposer {
         let id = self.listener_id();
-        self.0
-            .borrow_mut()
-            .watchers
-            .push((id, Rc::new(listener)));
+        self.0.borrow_mut().watchers.push((id, Rc::new(listener)));
         let weak: Weak<RefCell<State>> = Rc::downgrade(&self.0);
         Disposer::new(move || {
             if let Some(state) = weak.upgrade() {
-                state.borrow_mut().watchers.retain(|(other, _)| *other != id);
+                state
+                    .borrow_mut()
+                    .watchers
+                    .retain(|(other, _)| *other != id);
             }
         })
     }
@@ -588,7 +588,10 @@ pub fn resolve_connection(source: &Source, directory: &str) -> Option<Connection
             auth_token: None,
         });
     }
-    discover(&source.home.as_ref()?.join(".claude").join("ide"), directory)
+    discover(
+        &source.home.as_ref()?.join(".claude").join("ide"),
+        directory,
+    )
 }
 
 /// The `<port>.lock` in `root` whose workspace folder contains `directory` most closely, newest first on a tie
@@ -639,7 +642,10 @@ pub fn discover(root: &Path, directory: &str) -> Option<Connection> {
         })
         .collect();
     found.sort_by(|left, right| right.0.cmp(&left.0).then(right.1.cmp(&left.1)));
-    found.into_iter().next().map(|(_, _, connection)| connection)
+    found
+        .into_iter()
+        .next()
+        .map(|(_, _, connection)| connection)
 }
 
 /// `Number.parseInt(value, 10)` limited to a port: leading digits, 1 to 65535.
@@ -761,11 +767,7 @@ async fn session(mut socket: Socket, request_id: &mut i64, post: &impl Fn(Event)
             "clientInfo": { "name": "opencode", "version": "0.0.0" },
         },
     });
-    if socket
-        .send(Frame::text(request.to_string()))
-        .await
-        .is_err()
-    {
+    if socket.send(Frame::text(request.to_string())).await.is_err() {
         return true;
     }
     let mut pending = Some(initialize);
@@ -986,7 +988,9 @@ pub mod zed {
             )
             .ok()?;
         let raw: Vec<(Sql, Sql)> = query
-            .query_map(params![editor, workspace], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map(params![editor, workspace], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
             .ok()?
             .collect::<Result<_, _>>()
             .ok()?;
@@ -1111,7 +1115,10 @@ mod tests {
         assert_eq!(many.source, Some(SourceKind::Zed));
         assert_eq!(many.label(), "lib.rs#2-4 +1");
         assert!(Selection::decode(&json!({ "filePath": "/a", "ranges": [] })).is_none());
-        assert!(Selection::decode(&json!({ "filePath": "/a", "source": "vim", "ranges": [] })).is_none());
+        assert!(
+            Selection::decode(&json!({ "filePath": "/a", "source": "vim", "ranges": [] }))
+                .is_none()
+        );
         let cursor = Selection::decode(&json!({
             "text": "", "filePath": "/w/a.ts",
             "selection": { "start": { "line": 1, "character": 1 }, "end": { "line": 1, "character": 1 } },
@@ -1186,16 +1193,24 @@ mod tests {
         let selection = zed::resolve(&db, Path::new("/w/app/src")).unwrap().unwrap();
         assert_eq!(selection.file_path, "/w/app/b.ts");
         // Bytes 1..14 end inside 語, so the range takes the whole character.
-        assert_eq!(selection.ranges, vec![range("éllo\n日本語", (1, 2), (2, 4))]);
+        assert_eq!(
+            selection.ranges,
+            vec![range("éllo\n日本語", (1, 2), (2, 4))]
+        );
         // An editor without selections cannot tell, so the last selection stays.
         assert_eq!(zed::resolve(&db, Path::new("/w/lib")), None);
         assert_eq!(zed::resolve(&db, Path::new("/elsewhere")), Some(None));
-        assert_eq!(zed::resolve(&root.path().join("missing"), Path::new("/w")), None);
+        assert_eq!(
+            zed::resolve(&root.path().join("missing"), Path::new("/w")),
+            None
+        );
     }
 
     #[test]
     fn backoff_doubles_to_ten_seconds() {
-        let seconds: Vec<u64> = (1..=6).map(|attempt| backoff(attempt).as_millis() as u64).collect();
+        let seconds: Vec<u64> = (1..=6)
+            .map(|attempt| backoff(attempt).as_millis() as u64)
+            .collect();
         assert_eq!(seconds, [1000, 2000, 4000, 8000, 10_000, 10_000]);
     }
 }
