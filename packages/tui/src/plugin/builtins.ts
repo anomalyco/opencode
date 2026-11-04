@@ -14,10 +14,6 @@ import Stats from "../feature-plugins/system/stats"
 import Latex from "@opencode/latex/plugin"
 import Merman from "@opencode/merman/plugin"
 
-// Builtins listed here start disabled; a tui config `plugins` entry naming
-// the id enables them.
-export const optIn: ReadonlySet<string> = new Set<string>()
-
 export const builtins = [
   HomeFooter,
   PromptFooter,

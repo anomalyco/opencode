@@ -1692,15 +1692,19 @@ export function Prompt(props: PromptProps) {
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
           width="100%"
-          border={band() ? undefined : ["left"]}
-          borderColor={borderHighlight()}
+          border={["left"]}
+          // Workaround: an OpenTUI box keeps its border once styled (setting
+          // `border` back to false leaves the bar drawn), so the band paints the
+          // bar in the band colour instead of removing it.
+          borderColor={band() ? promptBg() : borderHighlight()}
+          backgroundColor={band() ? promptBg() : undefined}
           customBorderChars={{
             ...SplitBorder.customBorderChars,
             bottomLeft: "╹",
           }}
         >
           <box
-            paddingLeft={band() ? 1 : dimensions().width < 44 ? 1 : 2}
+            paddingLeft={band() ? 0 : dimensions().width < 44 ? 1 : 2}
             paddingRight={dimensions().width < 44 ? 1 : 2}
             paddingTop={1}
             paddingBottom={band() ? 1 : 0}
@@ -1778,95 +1782,95 @@ export function Prompt(props: PromptProps) {
               </box>
             </Show>
             <box flexDirection="row" width="100%">
-            <Show when={band()?.prefix}>{(prefix) => <text fg={theme.text.base}>{prefix()}</text>}</Show>
-            <textarea
-              flexGrow={1}
-              flexShrink={1}
-              placeholder={placeholderText()}
-              placeholderColor={theme.text.muted}
-              textColor={muted() ? theme.text.muted : theme.text.base}
-              focusedTextColor={muted() ? theme.text.muted : theme.text.base}
-              minHeight={1}
-              maxHeight={maxHeight()}
-              cursorStyle={cursorStyle()}
-              onContentChange={() => {
-                const value = input.plainText
-                setStore("prompt", "text", value)
-                auto()?.onInput(value)
-                syncExtmarksWithPromptParts()
-                setCursorVersion((value) => value + 1)
-              }}
-              onCursorChange={() => setCursorVersion((value) => value + 1)}
-              onKeyDown={(e: { preventDefault(): void }) => {
-                if (disabled()) {
-                  e.preventDefault()
-                  return
-                }
-              }}
-              onSubmit={() => {
-                if (disabled()) return
-                // IME: double-defer so the last composed character (e.g. Korean
-                // hangul) is flushed to plainText before we read it for submission.
-                setTimeout(() => setTimeout(() => submit(), 0), 0)
-              }}
-              onPaste={(event: PasteEvent) => {
-                if (disabled()) {
+              <Show when={band()?.prefix}>{(prefix) => <text fg={theme.text.base}>{prefix()}</text>}</Show>
+              <textarea
+                flexGrow={1}
+                flexShrink={1}
+                placeholder={placeholderText()}
+                placeholderColor={theme.text.muted}
+                textColor={muted() ? theme.text.muted : theme.text.base}
+                focusedTextColor={muted() ? theme.text.muted : theme.text.base}
+                minHeight={1}
+                maxHeight={maxHeight()}
+                cursorStyle={cursorStyle()}
+                onContentChange={() => {
+                  const value = input.plainText
+                  setStore("prompt", "text", value)
+                  auto()?.onInput(value)
+                  syncExtmarksWithPromptParts()
+                  setCursorVersion((value) => value + 1)
+                }}
+                onCursorChange={() => setCursorVersion((value) => value + 1)}
+                onKeyDown={(e: { preventDefault(): void }) => {
+                  if (disabled()) {
+                    e.preventDefault()
+                    return
+                  }
+                }}
+                onSubmit={() => {
+                  if (disabled()) return
+                  // IME: double-defer so the last composed character (e.g. Korean
+                  // hangul) is flushed to plainText before we read it for submission.
+                  setTimeout(() => setTimeout(() => submit(), 0), 0)
+                }}
+                onPaste={(event: PasteEvent) => {
+                  if (disabled()) {
+                    event.preventDefault()
+                    return
+                  }
+
+                  // Normalize line endings at the boundary
+                  // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                  // Replace CRLF first, then any remaining CR
+                  const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+
+                  // Windows Terminal <1.25 can surface image-only clipboard as an
+                  // empty bracketed paste. Windows Terminal 1.25+ does not.
+                  if (event.bytes.byteLength === 0) {
+                    keymap.dispatch("prompt.paste")
+                    return
+                  }
+
+                  // Once we cross an async boundary below, the terminal may perform its
+                  // default paste unless we suppress it first and handle insertion ourselves.
                   event.preventDefault()
-                  return
-                }
 
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
-                const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-
-                // Windows Terminal <1.25 can surface image-only clipboard as an
-                // empty bracketed paste. Windows Terminal 1.25+ does not.
-                if (event.bytes.byteLength === 0) {
-                  keymap.dispatch("prompt.paste")
-                  return
-                }
-
-                // Once we cross an async boundary below, the terminal may perform its
-                // default paste unless we suppress it first and handle insertion ourselves.
-                event.preventDefault()
-
-                void enqueuePaste((changed) => pasteInputText(normalizedText, changed))
-              }}
-              ref={(r: TextareaRenderable) => {
-                input = r
-                Object.assign(r, {
-                  getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.pasted),
-                })
-                setInputTarget(r)
-                if (promptPartTypeId === 0) {
-                  promptPartTypeId = input.extmarks.registerType("prompt-part")
-                }
-                props.ref?.(ref)
-                setTimeout(() => {
-                  // setTimeout is a workaround and needs to be addressed properly
-                  if (!input || input.isDestroyed) return
-                  input.cursorColor = disabled() ? theme.background.raised.base : theme.text.base
-                }, 0)
-              }}
-              onMouseDown={(r: MouseEvent) => {
-                if (disabled()) {
+                  void enqueuePaste((changed) => pasteInputText(normalizedText, changed))
+                }}
+                ref={(r: TextareaRenderable) => {
+                  input = r
+                  Object.assign(r, {
+                    getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.pasted),
+                  })
+                  setInputTarget(r)
+                  if (promptPartTypeId === 0) {
+                    promptPartTypeId = input.extmarks.registerType("prompt-part")
+                  }
+                  props.ref?.(ref)
+                  setTimeout(() => {
+                    // setTimeout is a workaround and needs to be addressed properly
+                    if (!input || input.isDestroyed) return
+                    input.cursorColor = disabled() ? theme.background.raised.base : theme.text.base
+                  }, 0)
+                }}
+                onMouseDown={(r: MouseEvent) => {
+                  if (disabled()) {
+                    r.preventDefault()
+                    return
+                  }
+                  if (r.button !== 0) return
+                  r.target?.focus()
+                  const extmark = input.extmarks
+                    .getAtOffset(input.cursorOffset)
+                    .find((item) => store.extmarkToPart.get(item.id)?.type === "pasted")
+                  if (!extmark || !expandPastedText(extmark.id)) return
                   r.preventDefault()
-                  return
-                }
-                if (r.button !== 0) return
-                r.target?.focus()
-                const extmark = input.extmarks
-                  .getAtOffset(input.cursorOffset)
-                  .find((item) => store.extmarkToPart.get(item.id)?.type === "pasted")
-                if (!extmark || !expandPastedText(extmark.id)) return
-                r.preventDefault()
-                r.stopPropagation()
-              }}
-              focusedBackgroundColor="transparent"
-              cursorColor={disabled() ? theme.background.raised.base : theme.text.base}
-              syntaxStyle={syntax()}
-            />
+                  r.stopPropagation()
+                }}
+                focusedBackgroundColor="transparent"
+                cursorColor={disabled() ? theme.background.raised.base : theme.text.base}
+                syntaxStyle={syntax()}
+              />
             </box>
             <box
               flexDirection="row"

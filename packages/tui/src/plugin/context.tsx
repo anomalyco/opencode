@@ -347,10 +347,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
-    const { builtins, optIn } = await import("./builtins")
+    const { builtins } = await import("./builtins")
     const desired = new Map<string, Desired>()
     for (const plugin of builtins)
-      desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: !optIn.has(plugin.id) })
+      desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
     const failures: State[] = []
     for (const source of entries) {
       const entry = source.entry
