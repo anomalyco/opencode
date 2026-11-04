@@ -241,13 +241,13 @@ impl Inner {
 }
 
 /// `reasoningContent`: the text without OpenRouter's first `[REDACTED]` placeholder, trimmed.
-fn content(part: &SessionMessageAssistantReasoning) -> String {
+pub(crate) fn content(part: &SessionMessageAssistantReasoning) -> String {
     part.text.replacen("[REDACTED]", "", 1).trim().to_owned()
 }
 
 /// The bold title block a reasoning summary starts with (`reasoningSummary`):
 /// `**Title**` followed by a blank line or the end.
-fn summary(content: &str) -> Option<String> {
+pub(crate) fn summary(content: &str) -> Option<String> {
     let rest = content.trim().strip_prefix("**")?;
     let end = rest.find(['*', '\n'])?;
     let after = rest[end..].strip_prefix("**")?;
