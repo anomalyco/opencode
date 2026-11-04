@@ -413,7 +413,8 @@ export interface SettingsPage {
   /** Search metadata, indexed without mounting the page. */
   readonly entries?: readonly SettingEntry[]
   /**
-   * Renders the page, section or rows.
+   * Renders the page, section or rows: `Ui.SettingsLayout` frames a page, `Ui.SettingsSection` a section, and
+   * `Ui.SettingsRow` is one row, each as the app's own settings render them.
    *
    * @param input - `target` is the entry search is revealing.
    */
@@ -799,7 +800,10 @@ export interface SlotMap {
      */
     readonly compact: boolean
   }
-  /** Items in the project/location menu, after its location details. Omitted on loading headers without a screen. */
+  /**
+   * Items in the project/location menu, after its location details. Omitted on loading headers without a screen.
+   * Render rows with `Ui.MenuItem`, `Ui.MenuSub`, `Ui.MenuGroup` and `Ui.MenuSeparator`, so they match the host's.
+   */
   readonly "session.location.menu": {
     /** The menu's owning session screen; always present. */
     readonly screen: SessionScreen

@@ -236,7 +236,7 @@ const screenActive = useQuery(() => ({
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, dialog frame, fields, Markdown and code with the other `ctx.ui` components.
+SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, menu rows, dialog frame, fields, selects, settings pages and rows, Markdown and code with the other `ctx.ui` components. Built-ins use them too where they need nothing more, such as the settings rows of pairing, updates and review.
 
 ### Registries
 
@@ -257,7 +257,8 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
-owning screen show the host's location details without this slot.
+owning screen show the host's location details without this slot. Render its rows with `ctx.ui.MenuItem`,
+`ctx.ui.MenuSub`, `ctx.ui.MenuGroup` and `ctx.ui.MenuSeparator`, so they navigate and close like the host's rows.
 
 `session.location.branch.menu` (built-ins only, through `BuiltinSlot`) contributes items after Copy branch name in
 the branch submenu, with the same `screen`, live `session`, and project-menu `shown` context. It renders only when a
@@ -291,7 +292,7 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.commands`               | `Commands`                                                                         | Runs a published or app command, as the palette does             |
 | `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler   |
 | `ctx.embeds`                 | `Embeds`                                                                           | Shows a web page the main entry created                          |
-| `ctx.ui`                     | `Ui`                                                                               | The app's icons, buttons, menus, dialog frame, Markdown and code |
+| `ctx.ui`                     | `Ui`                                                                               | Icons, buttons, menu rows, dialog frame, fields, settings rows   |
 | `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                             |
 | `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                     |
 | `ctx.appearance`             | `Appearance`                                                                       | The user's mono font, and the light or dark scheme               |

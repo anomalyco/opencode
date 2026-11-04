@@ -8,6 +8,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
+import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -100,16 +101,37 @@ export const ui: Ui = {
                 return (
                   <Menu.Group>
                     <Menu.GroupLabel>{entry.label}</Menu.GroupLabel>
-                    <For each={entry.items}>{(item) => <MenuRow item={item} />}</For>
+                    <For each={entry.items}>{(item) => <MenuItem {...item} />}</For>
                   </Menu.Group>
                 )
 
-              return <MenuRow item={entry} />
+              return <MenuItem {...entry} />
             }}
           </For>
         </Menu.Content>
       </Menu.Portal>
     </Menu>
+  ),
+  MenuItem,
+  MenuSeparator: () => <Menu.Separator />,
+  MenuGroup: (props) => (
+    <Menu.Group>
+      <Menu.GroupLabel>{props.label}</Menu.GroupLabel>
+      {props.children}
+    </Menu.Group>
+  ),
+  MenuSub: (props) => (
+    <Menu.Sub gutter={4} overflowPadding={16} overlap onOpenChange={(open) => props.onOpenChange?.(open)}>
+      <Menu.SubTrigger disabled={props.disabled} class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted">
+        <Show when={props.icon}>{(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}</Show>
+        <span class="min-w-0 truncate">{props.label}</span>
+      </Menu.SubTrigger>
+      <Menu.Portal>
+        <Menu.SubContent class="w-max min-w-[172px] max-w-[calc(100vw-32px)]" aria-label={props.label}>
+          {props.children}
+        </Menu.SubContent>
+      </Menu.Portal>
+    </Menu.Sub>
   ),
   Loader: (props) => (
     <Loader
@@ -171,6 +193,22 @@ export const ui: Ui = {
       }}
     />
   ),
+  Select: (props) => (
+    <Select
+      options={[...props.options]}
+      current={props.options.find((option) => option.value === props.value)}
+      value={(option) => option.value}
+      label={(option) => option.label}
+      placeholder={props.placeholder}
+      aria-label={props.label}
+      disabled={props.disabled}
+      invalid={props.invalid}
+      placement={props.placement ?? "bottom-end"}
+      gutter={6}
+      class={props.class}
+      onSelect={(option) => option && props.onChange(option.value)}
+    />
+  ),
   Keybind: (props) => (
     <Show when={props.keys.length > 0}>
       <Keybind keys={[...props.keys]} variant="neutral" class={props.class} />
@@ -179,17 +217,60 @@ export const ui: Ui = {
   Markdown: (props) => <Markdown text={props.text} class={props.class} />,
   // The timeline's code block: a fenced block in Markdown, highlighted by the same worker.
   Code: (props) => <Markdown text={fence(props.content, props.language)} class={props.class} />,
+  // The settings screen's markup. Its stylesheet loads with that screen, where every `SettingsPage` renders, so the
+  // startup chunk does not carry it.
+  SettingsLayout: (props) => (
+    <>
+      <div class="settings-tab-header">
+        <div class="settings-tab-header-row">
+          <div class="flex min-w-0 flex-col gap-1">
+            <h2 class="settings-tab-title">{props.title}</h2>
+            <Show when={props.description}>
+              <span class="text-11-regular text-v2-text-text-muted">{props.description}</span>
+            </Show>
+          </div>
+          <div class="settings-tab-header-actions">{props.actions}</div>
+        </div>
+      </div>
+      <div class="settings-tab-body settings-tab-body--sectioned">{props.children}</div>
+    </>
+  ),
+  SettingsSection: (props) => (
+    <section class="settings-section" aria-label={props.title}>
+      <Show when={props.title}>
+        <h3 class="settings-section-title">{props.title}</h3>
+      </Show>
+      <div data-component="settings-list">{props.children}</div>
+      {props.footer}
+    </section>
+  ),
+  SettingsRow: (props) => {
+    const description = children(() => props.description)
+
+    // Settings search reveals the row whose `data-action` is the entry it picked.
+    return (
+      <div data-component="settings-row" data-action={props.id}>
+        <div data-slot="settings-row-copy">
+          <div data-slot="settings-row-title">{props.title}</div>
+          <Show when={description()}>
+            <div data-slot="settings-row-description">{description()}</div>
+          </Show>
+        </div>
+        <div data-slot="settings-row-control">{props.children}</div>
+      </div>
+    )
+  },
 }
 
-function MenuRow(props: { item: UiMenuItem }) {
+function MenuItem(props: UiMenuItem) {
   return (
     <Menu.Item
-      disabled={props.item.disabled}
-      onSelect={() => props.item.onSelect()}
-      shortcut={props.item.keys?.length ? <Keybind keys={[...props.item.keys]} variant="neutral" /> : undefined}
+      disabled={props.disabled}
+      onSelect={() => props.onSelect()}
+      shortcut={props.keys?.length ? <Keybind keys={[...props.keys]} variant="neutral" /> : undefined}
     >
-      <Show when={props.item.icon}>{(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}</Show>
-      <span class="min-w-0 truncate">{props.item.label}</span>
+      <Show when={props.icon}>{(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}</Show>
+      <span class="min-w-0 truncate">{props.label}</span>
     </Menu.Item>
   )
 }
