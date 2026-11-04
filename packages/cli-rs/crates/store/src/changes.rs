@@ -8,6 +8,8 @@ use std::collections::{HashSet, VecDeque};
 
 use opencode_api::generated::{SessionID, SessionMessageID};
 
+use crate::location::Location;
+
 /// Flushes kept for [`Log::since`]. A view further behind gets [`Changes::all`].
 pub const LOG_LIMIT: usize = 256;
 
@@ -30,6 +32,12 @@ pub struct Changes {
     pub pending: HashSet<SessionID>,
     /// Sessions whose pending permissions changed.
     pub permissions: HashSet<SessionID>,
+    /// Form owners (session IDs or `global`) whose pending forms changed.
+    pub forms: HashSet<String>,
+    /// Projects or saved permissions changed.
+    pub projects: bool,
+    /// Locations whose info, catalogs, or shells changed.
+    pub locations: HashSet<Location>,
 }
 
 impl Changes {
@@ -49,6 +57,9 @@ impl Changes {
             && self.message.is_empty()
             && self.pending.is_empty()
             && self.permissions.is_empty()
+            && self.forms.is_empty()
+            && !self.projects
+            && self.locations.is_empty()
     }
 
     pub fn sessions(&self) -> bool {
@@ -86,6 +97,18 @@ impl Changes {
         self.all || self.permissions.contains(id)
     }
 
+    pub fn forms(&self, owner: &str) -> bool {
+        self.all || self.forms.contains(owner)
+    }
+
+    pub fn projects(&self) -> bool {
+        self.all || self.projects
+    }
+
+    pub fn location(&self, location: &Location) -> bool {
+        self.all || self.locations.contains(location)
+    }
+
     pub fn extend(&mut self, other: &Changes) {
         self.all |= other.all;
         self.sessions |= other.sessions;
@@ -95,6 +118,9 @@ impl Changes {
         self.message.extend(other.message.iter().cloned());
         self.pending.extend(other.pending.iter().cloned());
         self.permissions.extend(other.permissions.iter().cloned());
+        self.forms.extend(other.forms.iter().cloned());
+        self.projects |= other.projects;
+        self.locations.extend(other.locations.iter().cloned());
     }
 }
 
@@ -169,6 +195,18 @@ impl Log {
 
     pub(crate) fn permissions(&mut self, id: &SessionID) {
         self.current.permissions.insert(id.clone());
+    }
+
+    pub(crate) fn forms(&mut self, owner: &str) {
+        self.current.forms.insert(owner.to_owned());
+    }
+
+    pub(crate) fn projects(&mut self) {
+        self.current.projects = true;
+    }
+
+    pub(crate) fn location(&mut self, location: &Location) {
+        self.current.locations.insert(location.clone());
     }
 }
 

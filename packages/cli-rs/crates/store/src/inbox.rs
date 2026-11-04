@@ -446,16 +446,26 @@ impl Data {
     /// overtook the response.
     pub fn pending_sync(&self, session: &SessionID) -> Task<()> {
         let session = session.clone();
-        self.sync_run(
+        // Events after this call must reach the read's overtake log, so it opens before the read
+        // is spawned.
+        let register = {
+            let session = session.clone();
+            move |state: &mut State| {
+                let token = state.token();
+                state
+                    .pending_updates
+                    .insert(session, (token, HashMap::new()));
+                (state.deletion_epoch, token)
+            }
+        };
+        self.sync_start(
             format!("session.pending:{}", session.0),
-            move |data| async move {
-                let (started, token) = data.write(|state| {
-                    let token = state.token();
-                    state
-                        .pending_updates
-                        .insert(session.clone(), (token, HashMap::new()));
-                    (state.deletion_epoch, token)
-                });
+            register.clone(),
+            move |data, begun| async move {
+                let (started, token) = match begun {
+                    Some(begun) => begun,
+                    None => data.write(register),
+                };
                 let response = data
                     .client()
                     .session_inbox_list(
