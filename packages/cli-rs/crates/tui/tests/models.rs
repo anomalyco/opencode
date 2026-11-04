@@ -19,6 +19,8 @@ use opencode_local::model_pref::Model;
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_parity::{assert_fixture, fixtures_dir};
+use opencode_store::location::Location;
+use opencode_store::{Data, Options as StoreOptions};
 use opencode_tui::app::Roots;
 use opencode_tui::dialogs::go_upsell::{self, Offer};
 use opencode_tui::dialogs::model::{self, Files, Local};
@@ -170,10 +172,17 @@ fn kit(width: u16, height: u16) -> Kit {
     let fixture = Server::new();
     let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
     let state = state();
+    let data = Data::with_runtime(
+        client,
+        StoreOptions {
+            directory: "/project".into(),
+            ..StoreOptions::default()
+        },
+        app.runtime(),
+    );
     let local = Local::new(
         &app,
-        client,
-        "/project".into(),
+        data,
         dialogs,
         toasts,
         Some(Files {
@@ -181,6 +190,7 @@ fn kit(width: u16, height: u16) -> Kit {
             storage: None,
         }),
         Rc::new(|| None),
+        Rc::new(|| Location::new("/project")),
     );
     local.load();
     local.load_usage(false);

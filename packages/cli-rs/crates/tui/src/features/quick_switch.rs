@@ -75,12 +75,7 @@ pub fn quick_switch(tui: &Tui, slot: usize) {
 /// `session.deleted` prunes the session's pin (`prune`).
 pub(crate) fn event(tui: &Tui, event: &V2Event) {
     if let V2Event::SessionDeleted(event) = event {
-        prune(tui, &event.data.session_id);
-    }
-}
-
-fn prune(tui: &Tui, id: &SessionID) {
-    if pins::list(tui).contains(id) {
-        pins::toggle(tui, id);
+        // The file loses the pin even when only another client had it.
+        pins::prune(tui, &event.data.session_id);
     }
 }

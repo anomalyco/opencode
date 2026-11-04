@@ -208,6 +208,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
             .then_some(agent),
         model,
     };
+    // A shell command commits no selection.
+    if trimmed.is_empty() || mode != Mode::Shell {
+        tui.local
+            .track_commit(&target, &commit.model, &selection.agent.id.0);
+    }
 
     if trimmed.is_empty() {
         // A blank Enter commits the selection, then steers the first queued prompt.

@@ -1,36 +1,35 @@
 //! Models and agents (E.16): the model dialog (`component/dialog-model.tsx`, `component/model-options.tsx`), the
 //! model and agent state of `context/local.tsx`, and the app commands that reach them (`app.tsx:903-1018`).
 //!
-//! [`Local`] holds the location's catalog (models, providers, agents, integrations, the configured model, and the
-//! usage limits), `model.json`, and the per-session and per-agent selections. It sends no mutating request: the
-//! prompt commits a selection when it submits (`prompt/index.tsx:1293`). `model.json` writes run in order on one
-//! worker thread, because its file lock blocks.
+//! [`Local`] holds the current location's catalog (models, providers, agents, integrations, and the configured
+//! model, read through the store; and the usage limits), `model.json`, and the per-session and per-agent
+//! selections. It sends no mutating request: the prompt commits a selection when it submits
+//! (`prompt/index.tsx:1293`), and the session's `session.agent.selected` and `session.model.selected` settle the
+//! drafts that commit sent. `model.json` writes run in order on one worker thread, because its file lock blocks.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::future::Future;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use opencode_api::client::{Call, Client, RequestOptions};
-use opencode_api::error::Error;
+use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, AgentListInput, ExperimentalUsageLimitsInput, IntegrationInfo,
-    IntegrationListInput, LocationQueryInput, ModelInfo, ModelInfoStatus, ModelListInput,
-    ProviderInfo, ProviderListInput, SessionID, SessionInfo, UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, ExperimentalUsageLimitsInput, IntegrationInfo, LocationQueryInput,
+    ModelInfo, ModelInfoStatus, ModelRef, ProviderInfo, SessionID, SessionInfo, UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
+use opencode_store::location::{Catalog, Location};
+use opencode_store::{Changes, Data};
 use opencode_ui::dialog::{DialogOptions, Dialogs};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps, fuzzy};
 use opencode_ui::toast::{ToastOptions, Toasts, Variant};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
-use serde_json::Value;
 
 use crate::app::Tui;
 use crate::routes::Route;
@@ -62,6 +61,18 @@ pub struct Routed {
 /// Where the TUI is: the routed session, or `None` on home.
 pub type RouteFn = Rc<dyn Fn() -> Option<Routed>>;
 
+/// The location the TUI works in (`location.ref ?? data.location.default()`).
+pub type LocationFn = Rc<dyn Fn() -> Location>;
+
+/// The store catalogs [`Local`] reads.
+const CATALOGS: [Catalog; 5] = [
+    Catalog::Model,
+    Catalog::Provider,
+    Catalog::Agent,
+    Catalog::Integration,
+    Catalog::Config,
+];
+
 /// The client-local files [`Local`] uses.
 pub struct Files {
     /// The state directory that holds `model.json`.
@@ -79,10 +90,11 @@ pub type OpenUrl = Rc<dyn Fn(&str) -> Result<(), String>>;
 pub struct Local {
     pub app: App,
     pub client: Client,
-    pub directory: String,
+    data: Data,
     pub dialogs: Dialogs,
     pub toasts: Toasts,
     route: RouteFn,
+    location: LocationFn,
     preferences: Option<ModelPreferences>,
     pub(crate) storage: Option<Storage>,
     writer: Option<mpsc::Sender<Job>>,
@@ -101,6 +113,8 @@ pub struct Local {
 
 #[derive(Default)]
 struct State {
+    /// Where the catalog below is read from.
+    location: Option<Location>,
     models: Option<Vec<ModelInfo>>,
     providers: Option<Vec<ProviderInfo>>,
     agents: Option<Vec<AgentInfo>>,
@@ -117,6 +131,9 @@ struct State {
     new_session: HashMap<String, Model>,
     /// Per session and agent: the model chosen there (`selectionBySessionAgent`).
     selections: HashMap<String, HashMap<String, Selection>>,
+    /// Per session: the agent and selection key a submit committed, until the session reports them
+    /// (`pendingSelectionCommits`).
+    commits: HashMap<String, (String, String)>,
 }
 
 /// Posted from the `model.json` watcher thread.
@@ -125,12 +142,12 @@ struct PreferencesChanged;
 impl Local {
     pub fn new(
         app: &App,
-        client: Client,
-        directory: String,
+        data: Data,
         dialogs: Dialogs,
         toasts: Toasts,
         files: Option<Files>,
         route: RouteFn,
+        location: LocationFn,
     ) -> Rc<Self> {
         let (preferences, storage) = match files {
             Some(files) => (Some(ModelPreferences::new(&files.state)), files.storage),
@@ -147,11 +164,12 @@ impl Local {
         });
         Rc::new_cyclic(|this| Local {
             app: app.clone(),
-            client,
-            directory,
+            client: data.client().clone(),
+            data,
             dialogs,
             toasts,
             route,
+            location,
             preferences,
             storage,
             writer,
@@ -167,49 +185,9 @@ impl Local {
         })
     }
 
-    /// Loads the catalog and `model.json`, and watches `model.json`.
+    /// Reads the location's catalog, loads `model.json`, and watches `model.json`.
     pub fn load(&self) {
-        let location = self.location();
-        let client = self.client.clone();
-        let input = ModelListInput {
-            location: location.clone(),
-            types: None,
-        };
-        self.fetch(
-            async move { client.model_list(&input, &RequestOptions::default()).await },
-            |state, output| state.models = Some(output.data),
-        );
-        let client = self.client.clone();
-        let input = ProviderListInput {
-            location: location.clone(),
-        };
-        self.fetch(
-            async move {
-                client
-                    .provider_list(&input, &RequestOptions::default())
-                    .await
-            },
-            |state, output| state.providers = Some(output.data),
-        );
-        let client = self.client.clone();
-        let input = AgentListInput {
-            location: location.clone(),
-        };
-        self.fetch(
-            async move { client.agent_list(&input, &RequestOptions::default()).await },
-            |state, output| state.agents = Some(output.data),
-        );
-        self.load_integrations();
-        // The config is read as JSON: only the last document's `model` matters here.
-        let client = self.client.clone();
-        self.fetch(
-            async move {
-                let mut call = Call::new("GET", "/api/config".to_owned(), 200, &[400, 401, 404]);
-                call.query("location", &location)?;
-                client.json::<Value>(call, &RequestOptions::default()).await
-            },
-            |state, entries| state.configured = configured_model(&entries),
-        );
+        self.relocate((self.location)());
         self.load_preferences();
         let Some(preferences) = &self.preferences else {
             self.state.borrow_mut().ready = true;
@@ -227,45 +205,91 @@ impl Local {
         });
     }
 
-    /// Reloads the integrations, for example after a connect.
+    /// Reads the integrations again, for example after a connect.
     pub fn load_integrations(&self) {
-        let client = self.client.clone();
-        let input = IntegrationListInput {
-            location: self.location(),
+        let Some(location) = self.state.borrow().location.clone() else {
+            return;
         };
-        self.fetch(
-            async move {
-                client
-                    .integration_list(&input, &RequestOptions::default())
-                    .await
-            },
-            |state, output| state.integrations = Some(output.data),
-        );
+        self.data
+            .catalog_invalidate(Catalog::Integration, Some(&location));
+        self.read(Catalog::Integration, &location);
     }
 
-    /// Reloads the models and providers.
-    pub fn load_catalog(&self) {
-        let client = self.client.clone();
-        let input = ModelListInput {
-            location: self.location(),
-            types: None,
+    /// Follows the store (`Tui::sync`): the catalog of the location the TUI moved to or whose catalog
+    /// changed, and the drafts of sessions that changed.
+    pub fn sync(&self, changes: &Changes) {
+        let location = (self.location)();
+        if self.state.borrow().location.as_ref() != Some(&location) {
+            self.relocate(location);
+        } else if changes.all || changes.location(&location) {
+            self.read_catalog();
+        }
+        let sessions: Vec<String> = if changes.all {
+            self.state
+                .borrow()
+                .commits
+                .keys()
+                .cloned()
+                .chain(self.state.borrow().agent_drafts.keys().cloned())
+                .collect()
+        } else {
+            changes.session.iter().map(|id| id.0.clone()).collect()
         };
-        self.fetch(
-            async move { client.model_list(&input, &RequestOptions::default()).await },
-            |state, output| state.models = Some(output.data),
-        );
-        let client = self.client.clone();
-        let input = ProviderListInput {
-            location: self.location(),
+        for id in sessions {
+            self.reconcile(&SessionID(id));
+        }
+    }
+
+    // Takes the catalog of `location` from the store, and asks the store to read what it lacks.
+    fn relocate(&self, location: Location) {
+        self.state.borrow_mut().location = Some(location.clone());
+        self.read_catalog();
+        for catalog in CATALOGS {
+            self.read(catalog, &location);
+        }
+    }
+
+    fn read(&self, catalog: Catalog, location: &Location) {
+        let weak = self.this.clone();
+        let task = self.data.catalog_sync(catalog, Some(location));
+        self.app.spawn(task, move |_, result| {
+            let Some(local) = weak.upgrade() else { return };
+            match result {
+                Ok(()) => local.read_catalog(),
+                Err(error) => log::warn!("model catalog: {error}"),
+            }
+        });
+    }
+
+    fn read_catalog(&self) {
+        let Some(location) = self.state.borrow().location.clone() else {
+            return;
         };
-        self.fetch(
-            async move {
-                client
-                    .provider_list(&input, &RequestOptions::default())
-                    .await
-            },
-            |state, output| state.providers = Some(output.data),
-        );
+        let read = self.data.read(|state| {
+            let data = state.location(Some(&location))?;
+            Some((
+                data.model.clone(),
+                data.provider.clone(),
+                data.agent.clone(),
+                data.integration.clone(),
+                data.config
+                    .as_deref()
+                    .and_then(crate::prompt::metadata::configured),
+            ))
+        });
+        {
+            let mut state = self.state.borrow_mut();
+            let (models, providers, agents, integrations, configured) = read.unwrap_or_default();
+            state.models = models;
+            state.providers = providers;
+            state.agents = agents;
+            state.integrations = integrations;
+            state.configured = configured.map(|choice| Selection {
+                model: Model::new(&choice.provider_id, &choice.model_id),
+                variant: choice.variant,
+            });
+        }
+        self.notify();
     }
 
     /// Replaces the integrations, models, and providers that a connect reloaded.
@@ -341,28 +365,13 @@ impl Local {
         self.app.request_redraw();
     }
 
-    fn location(&self) -> Option<LocationQueryInput> {
+    /// The location the catalog is read from, as a request names it.
+    pub(crate) fn location(&self) -> Option<LocationQueryInput> {
+        let location = self.state.borrow().location.clone();
+        let location = location.unwrap_or_else(|| (self.location)());
         Some(LocationQueryInput {
-            directory: Some(self.directory.clone()),
+            directory: Some(location.directory),
         })
-    }
-
-    fn fetch<T: Send + 'static>(
-        &self,
-        future: impl Future<Output = Result<T, Error>> + Send + 'static,
-        apply: impl FnOnce(&mut State, T) + 'static,
-    ) {
-        let weak = self.this.clone();
-        self.app.spawn(future, move |_, result| {
-            let Some(local) = weak.upgrade() else { return };
-            match result {
-                Ok(value) => {
-                    apply(&mut local.state.borrow_mut(), value);
-                    local.notify();
-                }
-                Err(error) => log::warn!("model catalog: {error}"),
-            }
-        });
     }
 
     fn load_preferences(&self) {
@@ -493,16 +502,18 @@ impl Local {
         let selected = {
             let state = self.state.borrow();
             match (self.route)() {
-                Some(routed) => {
-                    let draft = state.agent_drafts.get(&routed.id.0);
-                    match draft {
-                        Some(draft) => draft.clone(),
-                        None => routed
+                // An acknowledged draft (`Some(None)`) gives way to the session's agent.
+                Some(routed) => state
+                    .agent_drafts
+                    .get(&routed.id.0)
+                    .cloned()
+                    .flatten()
+                    .or_else(|| {
+                        routed
                             .session
-                            .and_then(|session| session.agent.map(|agent| agent.0)),
-                    }
-                    .or_else(|| state.agent.clone())
-                }
+                            .and_then(|session| session.agent.map(|agent| agent.0))
+                    })
+                    .or_else(|| state.agent.clone()),
                 None => state.agent.clone(),
             }
         };
@@ -588,9 +599,13 @@ impl Local {
     // `newSessionModel`.
     fn new_session_model(&self) -> Option<Model> {
         let agent = self.agent();
-        let chosen = agent
-            .as_ref()
-            .and_then(|agent| self.state.borrow().new_session.get(&agent.id.0).cloned());
+        let chosen = agent.as_ref().and_then(|agent| {
+            self.state
+                .borrow()
+                .new_session
+                .get(&self.location_agent_key(&agent.id.0))
+                .cloned()
+        });
         let configured = agent
             .as_ref()
             .and_then(|agent| agent.model.as_ref())
@@ -739,11 +754,92 @@ impl Local {
         let Some(agent) = self.agent() else {
             return false;
         };
+        let key = self.location_agent_key(&agent.id.0);
         self.state
             .borrow_mut()
             .new_session
-            .insert(agent.id.0, model.clone());
+            .insert(key, model.clone());
         true
+    }
+
+    // `locationAgentKey`: a model chosen for a new session belongs to the location and the agent.
+    fn location_agent_key(&self, agent: &str) -> String {
+        let location = self.state.borrow().location.clone();
+        format!(
+            "{}:{agent}",
+            location.unwrap_or_else(|| (self.location)()).key()
+        )
+    }
+
+    /// `trackSessionCommit`: a submit is committing `model` and `agent` to `session`; once the session
+    /// reports both, the draft that chose them gives way to the session's own selection.
+    pub fn track_commit(&self, session: &SessionID, model: &ModelRef, agent: &str) {
+        let selection = Selection {
+            model: Model::new(&model.provider_id.0, &model.id),
+            variant: model.variant.clone(),
+        };
+        self.state
+            .borrow_mut()
+            .commits
+            .insert(session.0.clone(), (agent.to_owned(), selection.key()));
+        // An unchanged model emits no event; the agent may be the only durable change.
+        self.reconcile(session);
+    }
+
+    // `reconcileSessionSelection` and the agent arm of `session.agent.selected`, from the session as the
+    // store holds it after the event.
+    fn reconcile(&self, id: &SessionID) {
+        let session = self.data.read(|state| state.session(id).cloned());
+        let Some(session) = session else { return };
+        let agent = session.agent.as_ref().map(|agent| agent.0.clone());
+        {
+            let mut state = self.state.borrow_mut();
+            // Keep an entry after acknowledgment: CLI defaults must not override a user's later choice.
+            if let Some(draft) = state.agent_drafts.get_mut(&id.0)
+                && draft.is_some()
+                && *draft == agent
+            {
+                *draft = None;
+            }
+        }
+        let expected = self.state.borrow().commits.get(&id.0).cloned();
+        let Some((expected_agent, expected_selection)) = expected else {
+            return;
+        };
+        let durable = Self::durable(Some(&session));
+        if agent.as_ref() != Some(&expected_agent)
+            || durable.is_none_or(|durable| durable.key() != expected_selection)
+        {
+            return;
+        }
+        self.state.borrow_mut().commits.remove(&id.0);
+        // Inactive agents keep their remembered choices after another agent commits.
+        let here = (self.route)().is_some_and(|routed| routed.id == *id);
+        if !here
+            || self
+                .agent()
+                .is_none_or(|agent| agent.id.0 != expected_agent)
+        {
+            return;
+        }
+        let mut state = self.state.borrow_mut();
+        if let Some(drafts) = state.selections.get_mut(&id.0)
+            && drafts
+                .get(&expected_agent)
+                .is_some_and(|draft| draft.key() == expected_selection)
+        {
+            drafts.remove(&expected_agent);
+        }
+        drop(state);
+        self.notify();
+    }
+
+    /// `session.deleted`: drops the session's drafts.
+    pub fn forget(&self, id: &SessionID) {
+        let mut state = self.state.borrow_mut();
+        state.agent_drafts.remove(&id.0);
+        state.selections.remove(&id.0);
+        state.commits.remove(&id.0);
     }
 
     /// `model.remember`: keeps the current selection for the current agent in this session.
@@ -925,34 +1021,6 @@ impl Local {
 
 fn is(info: &ModelInfo, model: &Model) -> bool {
     info.provider_id.0 == model.provider_id && info.id == model.model_id
-}
-
-// The last config document that sets `model`, as a string `provider/model` or an object.
-fn configured_model(entries: &Value) -> Option<Selection> {
-    let model = entries
-        .as_array()?
-        .iter()
-        .rev()
-        .find(|entry| entry["type"] == "document" && !entry["info"]["model"].is_null())?
-        .get("info")?
-        .get("model")?;
-    if let Some(text) = model.as_str() {
-        let (provider, model) = text.split_once('/').unwrap_or((text, ""));
-        return Some(Selection {
-            model: Model::new(provider, model),
-            variant: None,
-        });
-    }
-    Some(Selection {
-        model: Model::new(
-            model.get("providerID")?.as_str()?,
-            model.get("model")?.as_str()?,
-        ),
-        variant: model
-            .get("variant")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-    })
 }
 
 /// `isFreeModel`.
@@ -1608,6 +1676,17 @@ pub fn prompt_selection(
         })
         .or_else(|| base.and_then(|base| base.model));
     Some(crate::prompt::metadata::Selection { agent, model })
+}
+
+/// The [`LocationFn`] of the TUI: the current location, else the default one.
+pub fn location_fn(tui: Weak<Tui>) -> LocationFn {
+    Rc::new(move || {
+        let Some(tui) = tui.upgrade() else {
+            return Location::default();
+        };
+        crate::features::location::current(&tui)
+            .unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
+    })
 }
 
 /// The [`RouteFn`] of the TUI: the routed session and what the store holds of it.
