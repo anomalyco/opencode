@@ -312,6 +312,7 @@ const source = {
   "ui.sources.openFailed": "Couldn’t open page",
   "ui.sessionTimeline.notice.model": "Model",
   "ui.sessionTimeline.notice.modelSwitched": "Switched to {{model}}",
+  "ui.sessionTimeline.notice.newMessages": "New",
   "ui.sessionTimeline.notice.variantSwitched": "Switched variant to {{variant}}",
   "ui.sessionTimeline.notice.variantDefault": "Switched variant to Default",
   "ui.sessionTimeline.notice.agentChanged": "Agent changed",

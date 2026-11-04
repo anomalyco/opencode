@@ -1037,6 +1037,29 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
+    if (Predicate.isTagged(row(), "NewMessages")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "NewMessages")) throw new Error("Expected a new-messages timeline row")
+
+        return value
+      }
+
+      return (
+        <Frame row={current()}>
+          <div
+            data-slot="session-timeline-notice"
+            aria-hidden={current().read}
+            class={`w-full py-2 ${padding()}`}
+            classList={{ invisible: current().read }}
+          >
+            <TimelineSeparator label={i18n.t("ui.sessionTimeline.notice.newMessages")} />
+          </div>
+        </Frame>
+      )
+    }
+
     if (Predicate.isTagged(row(), "TurnDivider")) {
       const current = () => {
         const value = row()
