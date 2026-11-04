@@ -200,7 +200,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
 
 /// The rows `text` takes when word-wrapped at `width` cells: greedy by words, a word longer than a
 /// row broken across rows.
-fn wrapped_lines(text: &str, width: usize) -> usize {
+pub(crate) fn wrapped_lines(text: &str, width: usize) -> usize {
     use unicode_width::UnicodeWidthStr;
     let width = width.max(1);
     text.split('\n')
