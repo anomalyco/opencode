@@ -146,7 +146,7 @@ const teamsLimits: Record<string, [number, number]> = {
   "glm-5.2": [953, 65],
   "deepseek-v4-pro": [1400, 20],
   "kimi-k2.7-code": [1462, 65],
-  hy4: [5420, 120],
+  hy4: [2936, 65],
   "hy4-preview": [1575, 35],
   "gpt-5.6-luna": [2733, 20],
   "minimax-m3": [3467, 65],
