@@ -3,6 +3,7 @@
 // crates/tui/tests/app.rs replays the recording through the Rust TUI.
 import type { Fixture } from "./cells"
 import type { Route } from "./fake-server"
+import type { PtyScript, PtyStep } from "./pty-socket"
 
 export type { Route }
 
@@ -25,6 +26,8 @@ export type Step =
   // A notification from the fake IDE MCP server (`ide: true`), `{ method, params }`, sent once a client finished
   // the MCP handshake.
   | { ide: { method: string; params?: unknown } }
+  // Output from, or the close of, the fake persistent PTY socket (parity/lib/pty-socket.ts).
+  | { pty: PtyStep }
   | {
       checkpoint: string
       // Text the TS frame contains once it is ready.
@@ -56,6 +59,8 @@ export type AppScenario = {
   ide?: boolean
   // A Zed database built from this SQL in a temporary directory, with ZED_TERM=true and a temporary HOME (E.5).
   zed?: { sql: string }
+  // Serves persistent PTY sockets with the fake shell.
+  pty?: PtyScript
   steps: Step[]
   // A deviation that allows the request comparison (P-REQ) to differ.
   requests?: { deviation: string }
