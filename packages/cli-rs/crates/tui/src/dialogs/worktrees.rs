@@ -77,6 +77,7 @@ pub fn show(tui: &Tui, props: Props) {
         state: RefCell::new(State::default()),
         select: RefCell::new(None),
         shown: Cell::new(false),
+        pending: Cell::new(false),
     });
     OPEN.with(|open| *open.borrow_mut() = Rc::downgrade(&workspaces));
     workspaces.reopen(None);
@@ -102,6 +103,8 @@ struct Workspaces {
     select: RefCell<Option<Select<Selection>>>,
     /// The dialog on screen is this one's latest build.
     shown: Cell<bool>,
+    /// A build is queued; it reads the state when it runs.
+    pending: Cell<bool>,
 }
 
 #[derive(Default)]
@@ -463,13 +466,28 @@ impl Workspaces {
 
     /// Builds the dialog again if it is still on screen.
     fn rebuild(self: &Rc<Self>) {
-        if self.shown.get() {
+        if self.shown.get() || self.pending.get() {
             self.build();
         }
     }
 
+    /// Builds the dialog after the current key or select handler returns, from the state at that time.
     fn build(self: &Rc<Self>) {
         let Some(tui) = self.tui() else { return };
+        if self.pending.replace(true) {
+            return;
+        }
+        let workspaces = self.clone();
+        let weak = tui.weak();
+        tui.app.defer(move |_| {
+            workspaces.pending.set(false);
+            if let Some(tui) = weak.upgrade() {
+                workspaces.replace(&tui);
+            }
+        });
+    }
+
+    fn replace(self: &Rc<Self>, tui: &Tui) {
         let (filter, selected) = self
             .select
             .borrow()
@@ -494,14 +512,8 @@ impl Workspaces {
         let animations = opencode_ui::motion::enabled(tui.config.info.animations);
         let height = i64::from(tui.app.size().1);
         let full_height = (height - height / 4 - 2).clamp(8, 16) as u32;
-        let workspaces = self.clone();
-        // Built from inside key and select handlers, so it waits for them to return.
-        let weak_tui = tui.weak();
-        tui.app.defer(move |_| {
-            let Some(tui) = weak_tui.upgrade() else {
-                return;
-            };
-            let built = workspaces.clone();
+        let built = self.clone();
+        {
             tui.dialogs.replace(
                 move |cx| {
                     let app = &cx.app;
@@ -633,7 +645,7 @@ impl Workspaces {
                     key: Some(KEY.into()),
                 },
             );
-        });
+        }
     }
 
     fn refresh_later(self: &Rc<Self>) {
