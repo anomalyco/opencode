@@ -120,9 +120,12 @@ where
     Arc::new(move |req| f(req).boxed())
 }
 
+pub fn client(handler: Handler) -> Client {
+    Client::with_transport("http://opencode.local", Arc::new(Fake { handler })).unwrap()
+}
+
 pub fn data(handler: Handler, options: Options) -> Data {
-    let client =
-        Client::with_transport("http://opencode.local", Arc::new(Fake { handler })).unwrap();
+    let client = client(handler);
     let directory = match options.directory.as_str() {
         "" => "/project".to_owned(),
         directory => directory.to_owned(),
