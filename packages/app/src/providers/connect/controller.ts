@@ -155,6 +155,8 @@ export function createProviderConnectionController(options: {
 
     if (effect.type === "refresh") return void refresh(effect)
 
+    if (effect.type === "sync") return void sync()
+
     options.onComplete(effect.method)
   }
 
@@ -260,18 +262,22 @@ export function createProviderConnectionController(options: {
       )
   }
 
-  const refresh = async (effect: Extract<ProviderConnectEffect, { type: "refresh" }>) => {
+  const sync = () => {
     data.location.integration.invalidate(location)
     data.location.provider.invalidate(location)
     data.location.model.invalidate(location)
 
-    const refreshed = await Promise.all([
+    return Promise.all([
       data.location.integration.sync(location),
       data.location.provider.sync(location),
       data.location.model.sync(location),
     ])
       .then(() => true)
       .catch(() => false)
+  }
+
+  const refresh = async (effect: Extract<ProviderConnectEffect, { type: "refresh" }>) => {
+    const refreshed = await sync()
 
     if (!options.prepare) return dispatch({ type: "refresh.succeeded", attempt: effect.attempt })
 

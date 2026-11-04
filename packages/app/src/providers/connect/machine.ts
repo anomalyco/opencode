@@ -132,6 +132,8 @@ export type ProviderConnectEffect =
       readonly answer?: FormAnswer
     }
   | { readonly type: "refresh"; readonly attempt: number; readonly method: ProviderConnectMethod }
+  /** Reloads the catalogs without reporting back, for a credential saved after the dialog moved on. */
+  | { readonly type: "sync" }
   | { readonly type: "complete"; readonly method: ProviderConnectMethod }
 
 export type ProviderConnectTransition = {
@@ -180,6 +182,10 @@ export function transitionProviderConnect(
 
   if (event.type === "command.started" && !startedHere(state, event.attempt, "command"))
     return unchanged(state, [{ type: "cancel", target: "command", attemptID: event.command.attemptID }])
+
+  // Back does not undo a request the server already took: a credential saved after the dialog moved on
+  // still has to reach the catalogs, without moving the dialog or reporting the connection.
+  if (savedElsewhere(state, event)) return unchanged(state, [{ type: "sync" }])
 
   if (state.status === "disposed") return unchanged(state)
 
@@ -481,7 +487,17 @@ function cleanup(state: ProviderConnectState): ProviderConnectEffect[] {
   return stop
 }
 
-function startedHere(state: ProviderConnectState, attempt: number, type: "oauth" | "command") {
+function savedElsewhere(state: ProviderConnectState, event: ProviderConnectEvent) {
+  if (event.type === "submit.succeeded") return state.status !== "submitting" || state.attempt !== event.attempt
+
+  if (event.type === "external.saved") return !startedHere(state, event.attempt, "external")
+
+  if (event.type !== "polled" || event.outcome.status !== "complete") return false
+
+  return state.status !== "waiting" || state.attempt !== event.attempt
+}
+
+function startedHere(state: ProviderConnectState, attempt: number, type: ProviderConnectMethod["type"]) {
   return (
     state.status === "starting" && state.attempt === attempt && state.catalog.methods[state.methodIndex]?.type === type
   )

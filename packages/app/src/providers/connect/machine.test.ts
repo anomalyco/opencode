@@ -77,15 +77,16 @@ function submittingCode() {
 test.each([
   { name: "Back", leave: { type: "back" } as const, status: "choosing" },
   { name: "closing the connection", leave: { type: "disposed" } as const, status: "disposed" },
-])("$name during an API key request ignores its late result", (row) => {
+])("$name during an API key request does not report its late result", (row) => {
   const sent = submittingKey()
   expect(selectProviderConnectView(sent.state)).toMatchObject({ screen: "key", submitting: true })
 
   const left = transitionProviderConnect(sent.state, row.leave)
   expect(left.state.status).toBe(row.status)
 
+  // The server saved the key anyway, so only the catalogs reload.
   const succeeded = transitionProviderConnect(left.state, { type: "submit.succeeded", attempt: sent.attempt })
-  expect(succeeded).toEqual({ state: left.state, effects: [] })
+  expect(succeeded).toEqual({ state: left.state, effects: [{ type: "sync" }] })
   expect(transitionProviderConnect(left.state, { type: "submit.failed", attempt: sent.attempt, error: "x" })).toEqual({
     state: left.state,
     effects: [],
@@ -104,7 +105,7 @@ test("a request abandoned with Back does not settle the next request for the sam
 
   expect(transitionProviderConnect(second.state, { type: "submit.succeeded", attempt: first.attempt })).toEqual({
     state: second.state,
-    effects: [],
+    effects: [{ type: "sync" }],
   })
   expect(
     transitionProviderConnect(second.state, { type: "submit.failed", attempt: first.attempt, error: "late" }),
@@ -148,12 +149,47 @@ test("a successful API key refreshes the catalogs before it reports the connecti
   expect(done.effects).toEqual([{ type: "complete", method: key }])
 })
 
-test("Back during a pasted code request cancels the open attempt and ignores its late result", () => {
+test("Back during a pasted code request cancels the open attempt and does not report its late result", () => {
   const sent = submittingCode()
   const back = transitionProviderConnect(sent.state, { type: "back" })
   expect(back.state.status).toBe("choosing")
   expect(back.effects).toEqual([{ type: "cancel", target: "oauth", attemptID: "att_1" }])
-  expect(transitionProviderConnect(back.state, { type: "submit.succeeded", attempt: sent.attempt }).effects).toEqual([])
+  expect(transitionProviderConnect(back.state, { type: "submit.succeeded", attempt: sent.attempt })).toEqual({
+    state: back.state,
+    effects: [{ type: "sync" }],
+  })
+})
+
+test.each<{
+  name: string
+  index: number
+  started: (attempt: number) => ProviderConnectEvent[]
+  late: (attempt: number) => ProviderConnectEvent
+}>([
+  {
+    name: "an external method",
+    index: 0,
+    started: () => [],
+    late: (attempt) => ({ type: "external.saved", attempt }),
+  },
+  {
+    name: "a browser sign-in",
+    index: 1,
+    started: (attempt) => [{ type: "oauth.started", attempt, authorization: authorization("auto") }],
+    late: (attempt) => ({ type: "polled", attempt, outcome: { status: "complete" } }),
+  },
+])("$name that completes after Back reloads the catalogs without reporting it", (row) => {
+  const external: ProviderConnectMethod = { id: "ext", type: "external", label: "Login" }
+  const starting = replay([loaded([external, oauth]), { type: "method.selected", index: row.index }])
+  const start = starting.effects.find((effect) => effect.type === "start")
+
+  if (start?.type !== "start") throw new Error("expected a start effect")
+
+  const back = replay([...row.started(start.attempt), { type: "back" }], starting.state)
+  expect(transitionProviderConnect(back.state, row.late(start.attempt))).toEqual({
+    state: back.state,
+    effects: [{ type: "sync" }],
+  })
 })
 
 test("a rejected code keeps the attempt open for another code", () => {
