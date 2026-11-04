@@ -74,7 +74,8 @@ impl Home {
             &footer,
             opencode_plugin::slot::HOME_FOOTER,
             &Default::default(),
-            |footer| crate::plugins::home_footer::mount(tui, footer),
+            // The footer itself is the `opencode.home.footer` plugin's claim (E.14).
+            |_| {},
         );
         let root = View::new(app)
             .column()
@@ -133,7 +134,7 @@ fn padding(width: u16) -> u16 {
 }
 
 /// `Logo`: nothing below 12 rows, the short mark below 22 columns, the two words stacked below 44.
-fn paint_logo(app: &App, logo: &View, theme: &Theme, width: u16, height: u16) {
+pub(crate) fn paint_logo(app: &App, logo: &View, theme: &Theme, width: u16, height: u16) {
     logo.clear();
     let muted = theme.text.muted;
     let base = theme.text.base;
