@@ -18,19 +18,22 @@ let current = ""
 const client = make({
   baseUrl: "http://127.0.0.1:4096/prefix",
   headers: { authorization: "Basic b3BlbmNvZGU6c2VjcmV0" },
-  fetch: (async (url: URL, init: RequestInit) => {
-    const headers = Object.fromEntries(new Headers(init.headers))
-    const body = init.body
-    recorded.push({
-      name: current,
-      method: init.method ?? "GET",
-      url: String(url),
-      headers,
-      ...(typeof body === "string" ? { body } : {}),
-      ...(body instanceof Uint8Array ? { bodyBase64: Buffer.from(body).toString("base64") } : {}),
-    })
-    throw new Error("recorded")
-  }) as typeof fetch,
+  fetch: Object.assign(
+    async (url: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+      const headers = Object.fromEntries(new Headers(init.headers))
+      const body = init.body
+      recorded.push({
+        name: current,
+        method: init.method ?? "GET",
+        url: String(url),
+        headers,
+        ...(typeof body === "string" ? { body } : {}),
+        ...(body instanceof Uint8Array ? { bodyBase64: Buffer.from(body).toString("base64") } : {}),
+      })
+      throw new Error("recorded")
+    },
+    { preconnect: fetch.preconnect },
+  ),
 })
 
 const call = async (name: string, run: () => Promise<unknown> | AsyncIterable<unknown>) => {
