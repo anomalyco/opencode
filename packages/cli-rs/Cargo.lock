@@ -1134,6 +1134,7 @@ dependencies = [
  "opencode-api",
  "opencode-local",
  "rand",
+ "reqwest",
  "rustix",
  "serde_json",
  "tempfile",
