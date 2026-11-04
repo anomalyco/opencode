@@ -15,9 +15,13 @@ import {
 import { createMemoryComposerState, type ImageAttachmentPart, type Prompt } from "./state"
 
 const target = createMemoryComposerState().capture()
+
 const promoted = createMemoryComposerState().capture()
+
 const selection = { agent: "build", model: { providerID: "provider-1", modelID: "model-1" }, variant: "balanced" }
+
 const ready = Promise.resolve()
+
 const done = () => {}
 
 const image: ImageAttachmentPart = {
