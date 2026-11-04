@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures of highlighted code and a patch as the transcript's Write and Edit tools show them
 // (routes/session/index.tsx): <code> inside <line_number>, and PatchDiff in the unified view with word wrap.
-// crates/ui/tests/content.rs compares opencode_ui::code and opencode_ui::diff with them.
+// crates/ui/tests/all/content.rs compares opencode_ui::code and opencode_ui::diff with them.
 import { PatchDiff } from "../../../tui/src/component/patch-diff"
 import { useTheme, useThemes } from "../../../tui/src/context/theme"
 import { renderComponent } from "../lib/component"

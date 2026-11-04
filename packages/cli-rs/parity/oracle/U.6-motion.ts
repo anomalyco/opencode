@@ -1,5 +1,5 @@
 // P-ORACLE for U.6: the TUI's pure motion functions over fixed inputs. Writes parity/fixtures/U.6/functions.json;
-// crates/ui/tests/motion_oracle.rs evaluates the Rust ports on the same inputs and compares.
+// crates/ui/tests/all/motion_oracle.rs evaluates the Rust ports on the same inputs and compares.
 //
 // - `oneCellFrame` of every work spinner, the seed launch, and the mono spinner at fixed instants, including the
 //   seed's intro and the paced slowdown between 30 s and 60 s.

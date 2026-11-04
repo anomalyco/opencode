@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixture for DialogAlert (packages/tui/src/ui/dialog-alert.tsx): crates/ui/tests/dialogs.rs.
+// P-COMP fixture for DialogAlert (packages/tui/src/ui/dialog-alert.tsx): crates/ui/tests/all/dialogs.rs.
 import { DialogAlert } from "../../../tui/src/ui/dialog-alert"
 import { renderComponent } from "../lib/component"
 
