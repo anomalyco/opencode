@@ -179,7 +179,8 @@ fn consent(local: &Local, config: &Info, yes: bool) -> anyhow::Result<bool> {
 }
 
 /// The tunnel URL of the service, once the tunnel is attached: the service attaches it in the
-/// background, so poll `/api/info` every second for up to 3 minutes.
+/// background, so poll `/api/info` every second for up to 3 minutes. The route is read from this
+/// client's channel (parity/deviations/C41-pair-remote-channel.md).
 async fn remote_url(local: &Local, client: &Client) -> anyhow::Result<String> {
     let attempt = async || -> Option<String> {
         let route = local.config().read().ok()?.remote?.route;
@@ -215,11 +216,7 @@ mod tests {
         let text = links(
             &["http://127.0.0.1:4096".into(), "http://[::1]:4096/".into()],
             "abc",
-            600,
-        );
-        assert_eq!(
-            text,
-            "\n  Open a link to connect. Links work once and expire in 10 minutes.\n\n  http://127.0.0.1:4096/auth/connect/abc\n  http://[::1]:4096/auth/connect/abc\n\n"
+            600 work once and expire in 10 minutes.\n\n  http://127.0.0.1:4096/auth/connect/abc\n  http://[::1]:4096/auth/connect/abc\n\n"
         );
         assert!(links(&[], "abc", 90).contains("expire in 2 minutes.\n\n  (no server URLs)\n"));
         let remote = links(&["https://x.example/base".into()], "abc", 600);
