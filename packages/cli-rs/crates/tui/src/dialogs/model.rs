@@ -1689,14 +1689,15 @@ pub fn location_fn(tui: Weak<Tui>) -> LocationFn {
     })
 }
 
-/// The [`RouteFn`] of the TUI: the routed session and what the store holds of it.
+/// The [`RouteFn`] of the TUI: the routed session and what the store held of it at the last sync. It does not
+/// lock the store, as `Local` is read from keymap conditions.
 pub fn route_fn(tui: Weak<Tui>) -> RouteFn {
     Rc::new(move || {
         let tui = tui.upgrade()?;
         let Route::Session { id } = tui.route() else {
             return None;
         };
-        let session = tui.data.read(|state| state.session(&id).cloned());
+        let session = tui.routed();
         Some(Routed { id, session })
     })
 }
