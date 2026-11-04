@@ -73,9 +73,9 @@ impl Read {
         self.loaded.clear();
         for path in &loaded {
             self.loaded.add(
-                &View::new(cx.app).padding_edge(Edge::Left, 6).child(
-                    &Text::new(cx.app, format!("↳ Loaded {path}")).fg(cx.theme.text.muted),
-                ),
+                &View::new(cx.app)
+                    .padding_edge(Edge::Left, 6)
+                    .child(&Text::new(cx.app, format!("↳ Loaded {path}")).fg(cx.theme.text.muted)),
             );
         }
         *self.shown.borrow_mut() = Some(loaded);
