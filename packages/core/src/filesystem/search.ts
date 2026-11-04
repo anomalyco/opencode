@@ -49,6 +49,14 @@ function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInpu
   })
 }
 
+// Neither backend indexes the location root reliably: ripgrep only records parents of files, and fff can rank it
+// past the requested page. `@/` must still offer it, so it is added here for both.
+function withRoot(entries: FileSystem.Entry[], input: FileSystem.FindInput) {
+  if (input.type === "file" || input.query.trim() !== "/") return entries
+  const root = FileSystem.Entry.make({ path: RelativePath.make(path.sep), type: "directory" })
+  return [root, ...entries.filter((entry) => entry.path !== root.path)].slice(0, input.limit ?? 50)
+}
+
 const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -106,7 +114,7 @@ const ripgrepLayer = Layer.effect(
       find: (input) =>
         Effect.gen(function* () {
           yield* refresh
-          return search(index, input)
+          return withRoot(search(index, input), input)
         }),
     })
   }),
@@ -204,7 +212,7 @@ export const makeFffLayer = (create: CreatePicker) =>
                 score: found.value.scores[index]?.total ?? 0,
               }))
             })()
-            return items
+            const entries = items
               .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
               .map((item) => {
                 const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
@@ -213,6 +221,7 @@ export const makeFffLayer = (create: CreatePicker) =>
                   type: item.type,
                 })
               })
+            return withRoot(entries, input)
           }),
       })
     }),
