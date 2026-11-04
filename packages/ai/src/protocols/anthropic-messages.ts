@@ -513,7 +513,6 @@ interface ParserState {
   readonly compactions: Readonly<Record<number, string | null>>
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
-  readonly reasoningSignatures: Readonly<Record<number, string>>
   readonly usage?: Usage
   readonly pendingFinish?: {
     readonly reason: FinishReasonDetails
@@ -1186,17 +1185,18 @@ const onContentBlockStart = (
       block.signature === undefined
         ? undefined
         : providerMetadata(state.providerMetadataKey, { signature: block.signature })
-    const lifecycle = Lifecycle.reasoningStart(state.lifecycle, events, id, metadata)
+    const lifecycle = Lifecycle.setMetadata(
+      Lifecycle.reasoningStart(state.lifecycle, events, id, metadata),
+      "reasoning",
+      id,
+      metadata,
+    )
     return [
       {
         ...state,
         lifecycle: block.thinking
           ? Lifecycle.reasoningDelta(lifecycle, events, id, block.thinking, metadata)
           : lifecycle,
-        reasoningSignatures:
-          event.index === undefined || block.signature === undefined
-            ? state.reasoningSignatures
-            : { ...state.reasoningSignatures, [event.index]: block.signature },
       },
       events,
     ]
@@ -1243,7 +1243,8 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   }
 
   if (delta.type === "text_delta" && delta.text) {
-    if (!state.lifecycle.text.has(`text-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
+    if (!Lifecycle.isOpen(state.lifecycle, "text", `text-${event.index ?? 0}`))
+      return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
       { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${event.index ?? 0}`, delta.text) },
@@ -1252,7 +1253,8 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   }
 
   if (delta.type === "thinking_delta" && delta.thinking) {
-    if (!state.lifecycle.reasoning.has(`reasoning-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
+    if (!Lifecycle.isOpen(state.lifecycle, "reasoning", `reasoning-${event.index ?? 0}`))
+      return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
       {
@@ -1264,12 +1266,17 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   }
 
   if (delta.type === "signature_delta" && delta.signature) {
-    const index = event.index ?? 0
-    if (!state.lifecycle.reasoning.has(`reasoning-${index}`)) return [state, NO_EVENTS] satisfies StepResult
+    const id = `reasoning-${event.index ?? 0}`
+    if (!Lifecycle.isOpen(state.lifecycle, "reasoning", id)) return [state, NO_EVENTS] satisfies StepResult
     return [
       {
         ...state,
-        reasoningSignatures: { ...state.reasoningSignatures, [index]: delta.signature },
+        lifecycle: Lifecycle.setMetadata(
+          state.lifecycle,
+          "reasoning",
+          id,
+          providerMetadata(state.providerMetadataKey, { signature: delta.signature }),
+        ),
       },
       NO_EVENTS,
     ] satisfies StepResult
@@ -1312,19 +1319,15 @@ const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, even
   const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
   const events: LLMEvent[] = []
   const resultEvents = result.events ?? []
-  const signature = state.reasoningSignatures[event.index]
   const lifecycle = resultEvents.length
     ? Lifecycle.stepStart(state.lifecycle, events)
     : Lifecycle.reasoningEnd(
         Lifecycle.textEnd(state.lifecycle, events, `text-${event.index}`),
         events,
         `reasoning-${event.index}`,
-        signature === undefined ? undefined : providerMetadata(state.providerMetadataKey, { signature }),
       )
   events.push(...resultEvents)
-  const reasoningSignatures = { ...state.reasoningSignatures }
-  delete reasoningSignatures[event.index]
-  return [{ ...state, lifecycle, tools: result.tools, reasoningSignatures }, events] satisfies StepResult
+  return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
 const onMessageDelta = (
@@ -1370,17 +1373,7 @@ const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
   const events: LLMEvent[] = []
   const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
   events.push(...result.events)
-  const closed = Object.entries(state.reasoningSignatures).reduce(
-    (current, [index, signature]) =>
-      Lifecycle.reasoningEnd(
-        current,
-        events,
-        `reasoning-${index}`,
-        providerMetadata(state.providerMetadataKey, { signature }),
-      ),
-    lifecycle,
-  )
-  const finished = Lifecycle.finish(closed, events, {
+  const finished = Lifecycle.finish(lifecycle, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -1514,7 +1507,6 @@ export const protocol = Protocol.make({
       compactions: {},
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       tools: ToolStream.empty<number>(),
-      reasoningSignatures: {},
       lifecycle: Lifecycle.initial(),
     }),
     step,

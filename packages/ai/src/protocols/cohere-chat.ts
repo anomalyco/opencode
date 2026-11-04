@@ -138,7 +138,6 @@ type Event = typeof Event.Type
 type State = {
   readonly lifecycle: Lifecycle.State
   readonly tools: ToolStream.State<number>
-  readonly finished: boolean
 }
 
 const TOOL_CHOICE = { auto: undefined, none: "NONE", required: "REQUIRED", tool: "REQUIRED" } as const
@@ -325,7 +324,7 @@ const step = Effect.fnUntraced(function* (state: State, event: Event) {
         reason: finishReason(event.delta.finish_reason),
         usage: event.delta.usage && mapUsage(event.delta.usage),
       })
-      return [{ tools: pending.tools, lifecycle, finished: true }, events] as const
+      return [{ tools: pending.tools, lifecycle }, events] as const
     }
     default:
       return [state, events] as const
@@ -337,7 +336,7 @@ export const protocol = Protocol.make({
   body: { schema: Body, from: fromRequest },
   stream: {
     event: Protocol.jsonEvent(Event),
-    initial: (): State => ({ lifecycle: Lifecycle.initial(), tools: ToolStream.empty(), finished: false }),
+    initial: (): State => ({ lifecycle: Lifecycle.initial(), tools: ToolStream.empty() }),
     step,
     terminal: (event) => event.type === "message-end",
   },
