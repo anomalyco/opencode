@@ -51,4 +51,9 @@ export default defineConfig({
     target: "esnext",
     sourcemap: true,
   },
+  experimental: {
+    // Scripts and stylesheets reference their dependencies relative to themselves, so the built app keeps working when a
+    // server mounts it under a path prefix. The HTML stays root-absolute; the server rewrites it for a prefix.
+    renderBuiltUrl: (_filename, { hostType }) => (hostType === "html" ? undefined : { relative: true }),
+  },
 })
