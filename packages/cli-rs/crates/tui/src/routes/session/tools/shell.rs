@@ -44,6 +44,8 @@ struct Inner {
     loading: Cell<bool>,
     drain_requested: Cell<bool>,
     was_running: Cell<bool>,
+    /// The store lists the shell as running; read where the store is not held.
+    listed: Cell<bool>,
     interval: Cell<Option<TimerId>>,
     painted: RefCell<Option<Paint>>,
 }
@@ -100,6 +102,7 @@ impl Shell {
             loading: Cell::new(false),
             drain_requested: Cell::new(false),
             was_running: Cell::new(false),
+            listed: Cell::new(false),
             interval: Cell::new(None),
             painted: RefCell::default(),
         });
@@ -108,6 +111,7 @@ impl Shell {
             let Some(inner) = weak.upgrade() else { return };
             let expanded = !inner.expanded.get();
             inner.expanded.set(expanded);
+            inner.refresh();
             if expanded {
                 inner.load(!inner.background_running());
             }
@@ -132,11 +136,9 @@ impl Shell {
         let directory = shell
             .as_ref()
             .and_then(|id| {
-                cx.tui.data.read(|state| {
-                    state
-                        .shell(&ShellID(id.clone()))
-                        .map(|shell| shell.location.directory.clone())
-                })
+                cx.state
+                    .shell(&ShellID(id.clone()))
+                    .map(|shell| shell.location.directory.clone())
             })
             .or(cx.directory.map(str::to_owned));
         let call = Call {
@@ -160,6 +162,11 @@ impl Shell {
             width: content_width(cx),
             directory,
         };
+        self.0.listed.set(
+            call.shell
+                .as_ref()
+                .is_some_and(|id| cx.state.shell(&ShellID(id.clone())).is_some()),
+        );
         *self.0.call.borrow_mut() = Some(call);
         self.0.watch();
         self.0.paint();
@@ -175,12 +182,24 @@ impl Drop for Shell {
 impl Inner {
     /// The store lists the call's shell as running (`backgroundRunning`).
     fn background_running(&self) -> bool {
-        let Some(id) = self.call.borrow().as_ref().and_then(|call| call.shell.clone()) else {
-            return false;
+        self.listed.get()
+    }
+
+    /// Reads [`Self::listed`] again, outside a render (timers and clicks).
+    fn refresh(&self) {
+        let Some(id) = self
+            .call
+            .borrow()
+            .as_ref()
+            .and_then(|call| call.shell.clone())
+        else {
+            return;
         };
-        self.tui
+        let listed = self
+            .tui
             .upgrade()
-            .is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()))
+            .is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()));
+        self.listed.set(listed);
     }
 
     /// The polling effect: read the output every second while the shell runs (a background one only
@@ -210,6 +229,7 @@ impl Inner {
         let weak = Rc::downgrade(self);
         let timer = self.app.set_interval(Duration::from_secs(1), move |_| {
             let Some(inner) = weak.upgrade() else { return };
+            inner.refresh();
             if inner.background_running() {
                 inner.load(false);
                 return;
@@ -343,7 +363,10 @@ impl Inner {
             width: call.width,
         });
         let paint = Paint {
-            command: call.command.as_deref().is_some_and(|command| !command.is_empty()),
+            command: call
+                .command
+                .as_deref()
+                .is_some_and(|command| !command.is_empty()),
             running,
             streaming: call.status == Status::Streaming,
             expanded,
@@ -492,7 +515,8 @@ pub fn collapse_shell_output(
     }
     let command_lines = max_lines.min(2);
     let line_chars = (max_chars / max_lines.max(1)).max(1);
-    let (command, command_overflow, used) = collapse_shell_command(input, command_lines, line_chars);
+    let (command, command_overflow, used) =
+        collapse_shell_command(input, command_lines, line_chars);
     if output.is_empty() {
         return Collapsed {
             input: command,
@@ -516,7 +540,11 @@ pub fn collapse_shell_output(
 
 /// `collapseShellCommand`: the command wrapped at `line_width` cells, cut after `max_lines` lines.
 /// Returns the text, whether it was cut, and the lines it takes.
-fn collapse_shell_command(input: &str, max_lines: usize, line_width: usize) -> (String, bool, usize) {
+fn collapse_shell_command(
+    input: &str,
+    max_lines: usize,
+    line_width: usize,
+) -> (String, bool, usize) {
     let mut visible: Vec<char> = Vec::new();
     let mut lines = 1;
     let mut width = 0;
@@ -561,7 +589,10 @@ fn collapse_tail(output: &str, max_lines: usize, max_chars: usize) -> String {
     if lines.len() <= max_lines && output.chars().count() <= max_chars {
         return output.to_owned();
     }
-    let count = lines.len().saturating_sub(max_lines.saturating_sub(1)).max(1);
+    let count = lines
+        .len()
+        .saturating_sub(max_lines.saturating_sub(1))
+        .max(1);
     let label = format!(
         "({count} earlier {})",
         if count == 1 { "line" } else { "lines" }
@@ -618,7 +649,10 @@ mod tests {
         assert!(overflow);
         assert_eq!(lines, 2);
         assert_eq!(text, format!("$ {}…", "x".repeat(37)));
-        assert_eq!(collapse_shell_command("a\nb\nc", 2, 20), ("a\nb…".into(), true, 2));
+        assert_eq!(
+            collapse_shell_command("a\nb\nc", 2, 20),
+            ("a\nb…".into(), true, 2)
+        );
     }
 
     #[test]

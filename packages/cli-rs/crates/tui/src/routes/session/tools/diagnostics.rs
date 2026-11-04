@@ -78,9 +78,7 @@ mod tests {
 
     #[test]
     fn only_the_first_three_errors_of_the_file_show() {
-        let error = |line: u32, message: &str| {
-            json!({ "severity": 1, "message": message, "range": { "start": { "line": line, "character": 4 } } })
-        };
+        let error = |line: u32, message: &str| json!({ "severity": 1, "message": message, "range": { "start": { "line": line, "character": 4 } } });
         let diagnostics = json!({
             "/p/a.rs": [
                 error(0, "first"),
