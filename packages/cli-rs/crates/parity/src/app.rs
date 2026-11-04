@@ -38,6 +38,9 @@ pub struct Recording {
     /// With a Zed database built from this SQL (E.5).
     #[serde(default)]
     pub zed: Option<Zed>,
+    /// The fake persistent PTY sockets the TS TUI opened, in order (E.13a).
+    #[serde(default)]
+    pub sockets: Vec<SocketRecording>,
     /// A deviation that allows the request comparison to differ.
     pub deviation: Option<String>,
     pub requests: Requests,
@@ -100,12 +103,101 @@ pub enum Step {
     Ide {
         ide: Value,
     },
+    /// Output from, or the close of, the fake PTY socket (E.13a). The recorded socket replays what it sent.
+    Pty {
+        pty: Value,
+    },
 }
 
 /// A Zed database for the scenario: the SQL that creates it.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Zed {
     pub sql: String,
+}
+
+/// One fake persistent PTY socket of `parity/lib/pty-socket.ts` (E.13a).
+#[derive(Clone, Debug, Deserialize)]
+pub struct SocketRecording {
+    pub path: String,
+    /// The query, with `attachment_id` as `<attachment>`.
+    pub query: BTreeMap<String, String>,
+    pub sent: Vec<SentFrame>,
+    pub received: Vec<Received>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct SentFrame {
+    pub step: usize,
+    pub frame: Vec<u8>,
+}
+
+/// A message the fake sent once the scenario reached `step` and the client had sent `after` frames.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Received {
+    pub step: usize,
+    pub after: usize,
+    #[serde(flatten)]
+    pub message: SocketMessage,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum SocketMessage {
+    Text {
+        text: String,
+    },
+    /// Base64.
+    Binary {
+        binary: String,
+    },
+    Close {
+        close: bool,
+    },
+}
+
+/// Compares the frames the Rust TUI sent on each socket, and the sockets it opened, with the recording. `opened` is
+/// each socket's path and query, with `attachment_id` as `<attachment>`.
+pub fn compare_sockets(
+    recording: &Recording,
+    opened: &[(String, BTreeMap<String, String>)],
+    sent: &[Vec<Vec<u8>>],
+) -> Result<(), String> {
+    let mut report = String::new();
+    if opened.len() != recording.sockets.len() {
+        let _ = writeln!(
+            report,
+            "opened {} sockets, the TS TUI {}",
+            opened.len(),
+            recording.sockets.len()
+        );
+    }
+    for (index, socket) in recording.sockets.iter().enumerate() {
+        if let Some((path, query)) = opened.get(index)
+            && (path != &socket.path || query != &socket.query)
+        {
+            let _ = writeln!(
+                report,
+                "socket {index}: opened {path} {query:?}, the TS TUI {} {:?}",
+                socket.path, socket.query
+            );
+        }
+        let expected: Vec<&Vec<u8>> = socket.sent.iter().map(|sent| &sent.frame).collect();
+        let actual: Vec<&Vec<u8>> = sent
+            .get(index)
+            .map(|frames| frames.iter().collect())
+            .unwrap_or_default();
+        if expected != actual {
+            let _ = writeln!(
+                report,
+                "socket {index}: sent {actual:?}, the TS TUI {expected:?}"
+            );
+        }
+    }
+    if report.is_empty() {
+        Ok(())
+    } else {
+        Err(report)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

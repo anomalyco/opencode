@@ -1,0 +1,1083 @@
+{
+  "scenario": "E.13a/terminal",
+  "width": 100,
+  "height": 30,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "experimental": {
+      "new-designs": true
+    },
+    "animations": false
+  },
+  "args": {
+    "sessionID": "ses_t"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_t",
+      "json": {
+        "data": {
+          "id": "ses_t",
+          "title": "Run the tests",
+          "projectID": "proj_test",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_t/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_1",
+            "type": "user",
+            "text": "Open a terminal",
+            "time": {
+              "created": 1000
+            }
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_t/inbox",
+      "json": {
+        "data": []
+      }
+    },
+    {
+      "path": "/api/experimental/session/ses_t/terminal",
+      "json": {
+        "data": [
+          {
+            "id": "pty_1",
+            "title": "Terminal",
+            "command": "/bin/sh",
+            "args": [],
+            "cwd": "/tmp/opencode/packages/tui",
+            "status": "running",
+            "pid": 42,
+            "sessionID": "ses_t",
+            "foregroundProcess": null,
+            "size": {
+              "cols": 80,
+              "rows": 24
+            },
+            "output": {
+              "head": 0,
+              "tail": 27
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/experimental/persistent-pty/pty_1/snapshot",
+      "json": {
+        "data": {
+          "info": {
+            "id": "pty_1",
+            "title": "Terminal",
+            "command": "/bin/sh",
+            "args": [],
+            "cwd": "/tmp/opencode/packages/tui",
+            "status": "running",
+            "pid": 42,
+            "sessionID": "ses_t",
+            "foregroundProcess": null,
+            "size": {
+              "cols": 80,
+              "rows": 24
+            },
+            "output": {
+              "head": 0,
+              "tail": 27
+            }
+          },
+          "text": "Welcome to the fake shell",
+          "checkpoint": "V2VsY29tZSB0byB0aGUgZmFrZSBzaGVsbA0K",
+          "cursor": {
+            "x": 0,
+            "y": 1
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/experimental/persistent-pty/pty_1/connect-token",
+      "json": {
+        "data": {
+          "ticket": "ticket_1",
+          "expires_in": 30
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "session",
+      "until": "Open a terminal",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/session"
+    },
+    {
+      "keys": [
+        "ctrl+x",
+        "t"
+      ]
+    },
+    {
+      "checkpoint": "shown",
+      "until": "fake shell",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/shown"
+    },
+    {
+      "type": "echo hi"
+    },
+    {
+      "keys": [
+        "enter"
+      ]
+    },
+    {
+      "checkpoint": "typed",
+      "until": "echo hi",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/typed"
+    },
+    {
+      "pty": {
+        "output": "hi\r\n\u001b[31mred \u001b[34mblue \u001b[35mmagenta \u001b[92mgreen\u001b[0m\r\n$ "
+      }
+    },
+    {
+      "checkpoint": "output",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/output"
+    },
+    {
+      "keys": [
+        "ctrl+x",
+        "up"
+      ]
+    },
+    {
+      "checkpoint": "closed",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/closed"
+    },
+    {
+      "keys": [
+        "ctrl+x",
+        "t"
+      ]
+    },
+    {
+      "checkpoint": "reopened",
+      "until": "fake shell",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/reopened"
+    },
+    {
+      "pty": {
+        "close": true
+      }
+    },
+    {
+      "checkpoint": "disconnected",
+      "until": "Terminal disconnected",
+      "masks": [
+        {
+          "x": 0,
+          "y": 28,
+          "width": 100,
+          "height": 1,
+          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
+        }
+      ],
+      "fixture": "E.13a/terminal/disconnected"
+    }
+  ],
+  "sockets": [
+    {
+      "path": "/api/experimental/persistent-pty/pty_1/connect",
+      "query": {
+        "ticket": "ticket_1",
+        "cursor": "27",
+        "attachment_id": "<attachment>",
+        "takeover": "true",
+        "input_protocol": "1"
+      },
+      "sent": [
+        {
+          "step": 2,
+          "frame": [
+            0,
+            0,
+            48,
+            0,
+            29
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            101
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            99
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            104
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            111
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            32
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            104
+          ]
+        },
+        {
+          "step": 3,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            105
+          ]
+        },
+        {
+          "step": 4,
+          "frame": [
+            1,
+            0,
+            48,
+            0,
+            29,
+            13
+          ]
+        }
+      ],
+      "received": [
+        {
+          "step": 2,
+          "after": 0,
+          "text": "{\"type\":\"attached\",\"inputProtocol\":1,\"info\":{\"size\":{\"cols\":80,\"rows\":24}},\"role\":\"controller\"}"
+        },
+        {
+          "step": 2,
+          "after": 0,
+          "binary": "JCA="
+        },
+        {
+          "step": 2,
+          "after": 0,
+          "text": "{\"type\":\"replay_complete\"}"
+        },
+        {
+          "step": 2,
+          "after": 1,
+          "text": "{\"type\":\"resized\",\"cols\":48,\"rows\":29,\"checkpoint\":\"V2VsY29tZSB0byB0aGUgZmFrZSBzaGVsbA0KJCA=\"}"
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "ZQ=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "Yw=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "aA=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "bw=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "IA=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "aA=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "aQ=="
+        },
+        {
+          "step": 5,
+          "after": 9,
+          "binary": "DQo="
+        },
+        {
+          "step": 6,
+          "after": 9,
+          "binary": "aGkNChtbMzFtcmVkIBtbMzRtYmx1ZSAbWzM1bW1hZ2VudGEgG1s5Mm1ncmVlbhtbMG0NCiQg"
+        }
+      ]
+    },
+    {
+      "path": "/api/experimental/persistent-pty/pty_1/connect",
+      "query": {
+        "ticket": "ticket_1",
+        "cursor": "27",
+        "attachment_id": "<attachment>",
+        "takeover": "true",
+        "input_protocol": "1"
+      },
+      "sent": [
+        {
+          "step": 11,
+          "frame": [
+            0,
+            0,
+            48,
+            0,
+            29
+          ]
+        }
+      ],
+      "received": [
+        {
+          "step": 11,
+          "after": 0,
+          "text": "{\"type\":\"attached\",\"inputProtocol\":1,\"info\":{\"size\":{\"cols\":80,\"rows\":24}},\"role\":\"controller\"}"
+        },
+        {
+          "step": 11,
+          "after": 0,
+          "binary": "JCA="
+        },
+        {
+          "step": 11,
+          "after": 0,
+          "text": "{\"type\":\"replay_complete\"}"
+        },
+        {
+          "step": 11,
+          "after": 1,
+          "text": "{\"type\":\"resized\",\"cols\":48,\"rows\":29,\"checkpoint\":\"V2VsY29tZSB0byB0aGUgZmFrZSBzaGVsbA0KJCA=\"}"
+        },
+        {
+          "step": 12,
+          "after": 1,
+          "close": true
+        }
+      ]
+    }
+  ],
+  "requests": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/api/experimental/persistent-pty/pty_1/connect-token",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "ticket": "ticket_1",
+            "expires_in": 30
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/experimental/persistent-pty/pty_1/connect-token",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "ticket": "ticket_1",
+            "expires_in": 30
+          }
+        }
+      }
+    ],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/persistent-pty/pty_1/snapshot",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "info": {
+              "id": "pty_1",
+              "title": "Terminal",
+              "command": "/bin/sh",
+              "args": [],
+              "cwd": "/tmp/opencode/packages/tui",
+              "status": "running",
+              "pid": 42,
+              "sessionID": "ses_t",
+              "foregroundProcess": null,
+              "size": {
+                "cols": 80,
+                "rows": 24
+              },
+              "output": {
+                "head": 0,
+                "tail": 27
+              }
+            },
+            "text": "Welcome to the fake shell",
+            "checkpoint": "V2VsY29tZSB0byB0aGUgZmFrZSBzaGVsbA0K",
+            "cursor": {
+              "x": 0,
+              "y": 1
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_t/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "pty_1",
+              "title": "Terminal",
+              "command": "/bin/sh",
+              "args": [],
+              "cwd": "/tmp/opencode/packages/tui",
+              "status": "running",
+              "pid": 42,
+              "sessionID": "ses_t",
+              "foregroundProcess": null,
+              "size": {
+                "cols": 80,
+                "rows": 24
+              },
+              "output": {
+                "head": 0,
+                "tail": 27
+              }
+            }
+          ]
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_t"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_t",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_t",
+            "title": "Run the tests",
+            "projectID": "proj_test",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_t/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_t/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_t/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_1",
+              "type": "user",
+              "text": "Open a terminal",
+              "time": {
+                "created": 1000
+              }
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_t/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_t"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
