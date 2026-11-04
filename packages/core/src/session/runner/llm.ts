@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode/ai/effect"
-import { and, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
@@ -19,7 +19,7 @@ import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
-import { SessionMessageTable, SessionTurnTable } from "../sql.js"
+import { SessionMessageTable, SessionTable, SessionTurnTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
@@ -71,7 +71,14 @@ const layer = Layer.effect(
           ? yield* db
               .select({ id: SessionTurnTable.id })
               .from(SessionTurnTable)
-              .where(and(eq(SessionTurnTable.session_id, sessionID), eq(SessionTurnTable.status, "running")))
+              .innerJoin(SessionTable, eq(SessionTable.id, SessionTurnTable.session_id))
+              .where(
+                and(
+                  eq(SessionTable.id, sessionID),
+                  gt(SessionTable.resume_attempts, 0),
+                  eq(SessionTurnTable.status, "running"),
+                ),
+              )
               .get()
               .pipe(Effect.orDie)
           : undefined

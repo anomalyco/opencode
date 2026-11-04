@@ -15,7 +15,6 @@ const Base = {
 
 const Turn = {
   turnID: SessionMessage.ID,
-  inputIDs: Schema.Array(SessionMessage.ID),
   /** Assistant-step charges, including failed attempts. Title and compaction usage remain session overhead. */
   cost: Money.USD,
   tokens: TokenUsage.Info,
@@ -27,7 +26,8 @@ const Turn = {
  * A turn begins when the first user or synthetic input is promoted. It contains all
  * model steps and steers promoted before the first boundary with no continuation
  * or eligible steer. The next queued input starts another turn, even inside the
- * same coordinator execution. All inputIDs share these totals; do not sum them.
+ * same coordinator execution. Inputs sharing a turnID share totals; do not sum them.
+ * Reusing a cancelled or reverted input ID replaces that input's result.
  * Shutdown preserves an unfinished turn. "running" does not assert process ownership.
  */
 export const Result = Schema.Union([

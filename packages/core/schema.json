@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "3dfb16a0-947a-4cf7-8883-dde84518906d",
+  "id": "e27bd454-86fd-4550-8efe-0e48e17d6d8d",
   "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
@@ -86,10 +86,6 @@
     },
     {
       "name": "session_v2",
-      "entityType": "tables"
-    },
-    {
-      "name": "session_turn_input",
       "entityType": "tables"
     },
     {
@@ -1932,46 +1928,6 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "session_turn_input"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "type",
-      "entityType": "columns",
-      "table": "session_turn_input"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "session_id",
-      "entityType": "columns",
-      "table": "session_turn_input"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "turn_id",
-      "entityType": "columns",
-      "table": "session_turn_input"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
       "table": "session_turn"
     },
     {
@@ -1996,7 +1952,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -2255,28 +2211,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_session_turn_input_session_id_session_v2_id_fk",
-      "entityType": "fks",
-      "table": "session_turn_input"
-    },
-    {
-      "columns": ["turn_id"],
-      "tableTo": "session_turn",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "fk_session_turn_input_turn_id_session_turn_id_fk",
-      "entityType": "fks",
-      "table": "session_turn_input"
-    },
-    {
-      "columns": ["session_id"],
-      "tableTo": "session_v2",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
       "name": "fk_session_turn_session_id_session_v2_id_fk",
       "entityType": "fks",
       "table": "session_turn"
@@ -2444,13 +2378,6 @@
       "nameExplicit": false,
       "name": "session_v2_pk",
       "table": "session_v2",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_turn_input_pk",
-      "table": "session_turn_input",
       "entityType": "pks"
     },
     {
@@ -2830,26 +2757,16 @@
         {
           "value": "session_id",
           "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
         }
       ],
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_turn_input_session_idx",
-      "entityType": "indexes",
-      "table": "session_turn_input"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": "\"session_turn\".\"status\" = 'running'",
-      "origin": "manual",
-      "name": "session_turn_running_idx",
+      "name": "session_turn_session_status_idx",
       "entityType": "indexes",
       "table": "session_turn"
     }

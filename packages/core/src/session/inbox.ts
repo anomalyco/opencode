@@ -27,7 +27,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
-import { SessionInboxTable, SessionMessageTable, SessionTurnInputTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -182,17 +182,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   }) {
     const existing =
       (yield* find(db, request.id)) ?? (yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery))
-    if (existing === undefined) {
-      // Cancellation or history reversion must not reuse an input's retained result identity.
-      const retained = yield* db
-        .select({ id: SessionTurnInputTable.id })
-        .from(SessionTurnInputTable)
-        .where(eq(SessionTurnInputTable.id, request.id))
-        .get()
-        .pipe(Effect.orDie)
-      if (retained) return yield* new LifecycleConflict({ id: request.id })
-      return undefined
-    }
+    if (existing === undefined) return undefined
     if (existing.type === "compaction" || !matches(existing, request))
       return yield* new LifecycleConflict({ id: request.id })
     return existing

@@ -572,7 +572,6 @@ export type ExperimentalSessionTurnOutput =
       readonly sessionID: Session.ID
       readonly inputID: SessionMessage.ID
       readonly turnID: SessionMessage.ID
-      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
       readonly cost: Money.USD
       readonly tokens: {
         readonly input: number
@@ -587,7 +586,6 @@ export type ExperimentalSessionTurnOutput =
       readonly sessionID: Session.ID
       readonly inputID: SessionMessage.ID
       readonly turnID: SessionMessage.ID
-      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
       readonly cost: Money.USD
       readonly tokens: {
         readonly input: number
@@ -602,7 +600,6 @@ export type ExperimentalSessionTurnOutput =
       readonly sessionID: Session.ID
       readonly inputID: SessionMessage.ID
       readonly turnID: SessionMessage.ID
-      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
       readonly cost: Money.USD
       readonly tokens: {
         readonly input: number
@@ -624,7 +621,6 @@ export type ExperimentalSessionTurnOutput =
       readonly sessionID: Session.ID
       readonly inputID: SessionMessage.ID
       readonly turnID: SessionMessage.ID
-      readonly inputIDs: ReadonlyArray<SessionMessage.ID>
       readonly cost: Money.USD
       readonly tokens: {
         readonly input: number

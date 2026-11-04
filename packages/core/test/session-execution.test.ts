@@ -5,6 +5,11 @@ import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { EventTable } from "@opencode/core/event/sql"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Money } from "@opencode/schema/money"
 import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
@@ -34,6 +39,70 @@ const it = testEffect(
 )
 
 describe("SessionExecution lifecycle", () => {
+  it.effect("keeps per-input results without retained events, including cancellation and ID reuse", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const sessionID = Session.ID.create()
+      yield* seedSessions(database, [sessionID])
+      const get = (inputID: SessionMessage.ID) => SessionTurnStore.get(database.db, { sessionID, inputID })
+      const admit = (id = SessionMessage.ID.create()) =>
+        inbox.admit({ id, sessionID, item: { type: "user", delivery: "queue", payload: { text: "Work" } } })
+      const deliver = (inboxID: SessionMessage.ID) => bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })
+      const first = yield* admit()
+      const steer = yield* admit()
+      expect(yield* get(first.id)).toMatchObject({ status: "pending" })
+      yield* bus.publish(SessionEvent.InboxCancelled, { sessionID, inboxID: steer.id })
+      expect(yield* get(steer.id)).toMatchObject({ status: "interrupted", reason: "cancelled", cost: 0 })
+      expect((yield* admit(steer.id)).id).toBe(steer.id)
+      expect(yield* get(steer.id)).toMatchObject({ status: "pending" })
+      yield* deliver(first.id)
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.ID.make("general"),
+        model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+        started: 0,
+      })
+      yield* bus.publish(SessionEvent.Step.Failed, {
+        sessionID,
+        assistantMessageID,
+        error: { type: "unknown", message: "Retry" },
+        cost: Money.USD.make(2),
+        tokens: { input: 10, output: 5, reasoning: 2, cache: { read: 3, write: 4 } },
+      })
+      yield* deliver(steer.id)
+      yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+      expect(yield* get(steer.id)).toMatchObject({ status: "running", cost: 2 })
+      yield* bus.publish(SessionEvent.TurnSettled, { sessionID })
+      const result = yield* get(first.id)
+      expect(result).toMatchObject({ status: "settled", cost: 2, tokens: { input: 10, output: 5 }, assistantMessageID })
+      expect(yield* get(steer.id)).toEqual({ ...result, inputID: steer.id })
+      expect((yield* admit(first.id)).id).toBe(first.id)
+      expect(yield* SessionInbox.list(database.db, sessionID)).toEqual([])
+      const later = yield* admit()
+      yield* deliver(later.id)
+      yield* bus.publish(SessionEvent.Execution.Failed, { sessionID, error: { type: "unknown", message: "Failed" } })
+      expect(yield* get(later.id)).toMatchObject({ status: "failed", error: { type: "unknown", message: "Failed" } })
+      expect(yield* get(first.id)).toEqual(result)
+      const pending = yield* admit()
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: first.id })
+      expect(yield* get(first.id)).toEqual(result)
+      expect(yield* get(pending.id)).toMatchObject({ status: "interrupted", reason: "cancelled" })
+      expect((yield* admit(first.id)).id).toBe(first.id)
+      expect(yield* get(first.id)).toMatchObject({ status: "pending" })
+      yield* deliver(first.id)
+      yield* bus.publish(SessionEvent.TurnSettled, { sessionID })
+      expect(yield* get(first.id)).not.toEqual(result)
+      expect(yield* get(steer.id)).toEqual({ ...result, inputID: steer.id })
+      expect(yield* database.db.select().from(EventTable).all()).toEqual([])
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(yield* get(first.id)).toBeUndefined()
+    }),
+  )
+
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(
@@ -125,6 +194,15 @@ describe("SessionExecution lifecycle", () => {
       const database = yield* Database.Service
       const sessionID = Session.ID.make("ses_claim_user_cancel")
       yield* seedSessions(database, [sessionID])
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const inputID = SessionMessage.ID.create()
+      yield* inbox.admit({
+        id: inputID,
+        sessionID,
+        item: { type: "user", payload: { text: "Work" }, delivery: "queue" },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: inputID })
 
       const draining = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
@@ -140,6 +218,10 @@ describe("SessionExecution lifecycle", () => {
       expect(yield* execution.interrupt(sessionID)).toBeTrue()
       yield* execution.awaitIdle(sessionID)
       expect((yield* claims(database))[sessionID]).toBe(false)
+      expect(yield* SessionTurnStore.get(database.db, { sessionID, inputID })).toMatchObject({
+        status: "interrupted",
+        reason: "user",
+      })
     }),
   )
 
@@ -296,14 +378,6 @@ describe("SessionExecution lifecycle", () => {
       const sessionID = Session.ID.make("ses_resume_exhausted")
       // A claim from a dead process, already resumed twice without completing.
       yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
-      const inbox = yield* SessionInbox.Service
-      const inputID = SessionMessage.ID.create()
-      yield* inbox.admit({
-        id: inputID,
-        sessionID,
-        item: { type: "user", payload: { text: "Interrupted work" }, delivery: "queue" },
-      })
-      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: inputID })
 
       const drained: string[] = []
       const failures: SessionEvent.Execution.Failed[] = []
@@ -321,11 +395,6 @@ describe("SessionExecution lifecycle", () => {
       // The terminal released the claim and reset the counter atomically.
       expect(yield* claims(database)).toEqual({ [sessionID]: false })
       expect(yield* attempts(database, sessionID)).toBe(0)
-      expect(yield* SessionTurnStore.get(database.db, { sessionID, inputID })).toMatchObject({
-        status: "failed",
-        error: { type: "aborted" },
-        turnID: inputID,
-      })
     }),
   )
 
@@ -967,74 +1036,6 @@ describe("SessionRestart background recovery", () => {
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
-
-  for (const kind of ["shell", "subagent"] as const) {
-    for (const type of ["synthetic", "user"] as const) {
-      for (const removed of ["cancelled", "reverted"] as const) {
-        it.effect(`recovers ${kind} with a ${removed} ${type} notification identity`, () =>
-          Effect.gen(function* () {
-            const database = yield* Database.Service
-            const bus = yield* Bus.Service
-            const admission = yield* SessionInbox.Service
-            const jobs = yield* Job.Service
-            const parent = Session.ID.make("ses_retired_parent")
-            const child = Session.ID.make("ses_retired_child")
-            yield* seedSessions(database, [parent])
-            yield* seedSessions(database, [child], { parent_id: parent })
-            yield* jobs.start({
-              id: child,
-              type: kind,
-              recovery:
-                kind === "shell"
-                  ? { kind, sessionID: parent, shellID: "sh_retired", command: "echo done" }
-                  : {
-                      kind,
-                      parentSessionID: parent,
-                      childSessionID: child,
-                      agent: "explore",
-                      description: "Inspection",
-                    },
-              run: Effect.succeed("Done"),
-            })
-            yield* jobs.wait({ id: child })
-            yield* jobs.background(child)
-            const marker = (yield* jobs.pendingBackground)[0]
-            if (!marker) return yield* Effect.die("background record missing")
-            yield* admission.admit({
-              id: marker.notificationID,
-              sessionID: parent,
-              item: { type, delivery: "steer", payload: { text: "Done" } },
-            })
-            if (removed === "cancelled")
-              yield* bus.publish(SessionEvent.InboxCancelled, { sessionID: parent, inboxID: marker.notificationID })
-            if (removed === "reverted") {
-              yield* SessionInbox.promote(database.db, bus, parent, "steer")
-              yield* bus.publish(SessionEvent.TurnSettled, { sessionID: parent })
-              yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID: parent, to: marker.notificationID })
-            }
-            const scope = yield* Scope.make()
-            yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-            const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
-            const context = yield* buildExecution(
-              scope,
-              () => Effect.die("Removed input must not run"),
-              undefined,
-              restarted,
-            )
-            const exit = yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions.pipe(Effect.exit)
-            expect(Exit.isSuccess(exit)).toBe(type === "synthetic")
-            expect(yield* restarted.pendingBackground).toHaveLength(type === "synthetic" ? 0 : 1)
-            expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
-            expect(
-              yield* SessionTurnStore.get(database.db, { sessionID: parent, inputID: marker.notificationID }),
-            ).toMatchObject({
-              status: removed === "cancelled" ? "interrupted" : "settled",
-            })
-          }),
-        )
-      }
-    }
-  }
 
   it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
     Effect.gen(function* () {

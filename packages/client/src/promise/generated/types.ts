@@ -597,7 +597,6 @@ export type SessionTurnInfo =
       sessionID: SessionID
       inputID: SessionMessageID
       turnID: SessionMessageID
-      inputIDs: Array<SessionMessageID>
       cost: MoneyUSD
       tokens: TokenUsageInfo
       assistantMessageID?: SessionMessageID
@@ -607,7 +606,6 @@ export type SessionTurnInfo =
       sessionID: SessionID
       inputID: SessionMessageID
       turnID: SessionMessageID
-      inputIDs: Array<SessionMessageID>
       cost: MoneyUSD
       tokens: TokenUsageInfo
       assistantMessageID?: SessionMessageID
@@ -617,7 +615,6 @@ export type SessionTurnInfo =
       sessionID: SessionID
       inputID: SessionMessageID
       turnID: SessionMessageID
-      inputIDs: Array<SessionMessageID>
       cost: MoneyUSD
       tokens: TokenUsageInfo
       assistantMessageID?: SessionMessageID
@@ -628,7 +625,6 @@ export type SessionTurnInfo =
       sessionID: SessionID
       inputID: SessionMessageID
       turnID: SessionMessageID
-      inputIDs: Array<SessionMessageID>
       cost: MoneyUSD
       tokens: TokenUsageInfo
       assistantMessageID?: SessionMessageID

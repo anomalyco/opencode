@@ -92,30 +92,10 @@ export const SessionTurnTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    status: text().$type<SessionTurn.Result["status"]>().notNull(),
-    data: text({ mode: "json" }).$type<SessionTurn.Result>().notNull(),
+    status: text().$type<SessionTurn.Info["status"]>().notNull(),
+    data: text({ mode: "json" }).$type<SessionTurn.Result>(),
   },
-  (table) => [
-    uniqueIndex("session_turn_running_idx")
-      .on(table.session_id)
-      .where(sql`${table.status} = 'running'`),
-  ],
-)
-
-export const SessionTurnInputTable = sqliteTable(
-  "session_turn_input",
-  {
-    id: text().$type<SessionMessage.ID>().primaryKey(),
-    type: text().$type<"user" | "synthetic">().notNull(),
-    session_id: text()
-      .$type<SessionSchema.ID>()
-      .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
-    turn_id: text()
-      .$type<SessionMessage.ID>()
-      .references(() => SessionTurnTable.id, { onDelete: "cascade" }),
-  },
-  (table) => [index("session_turn_input_session_idx").on(table.session_id)],
+  (table) => [index("session_turn_session_status_idx").on(table.session_id, table.status)],
 )
 
 export const SessionMessageTable = sqliteTable(

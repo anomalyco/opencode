@@ -9,29 +9,13 @@ import type { Database } from "../database/database.js"
 import type { Bus } from "../bus.js"
 import { SessionEvent } from "./event.js"
 import type { SessionSchema } from "./schema.js"
-import type { SessionMessage } from "./message.js"
-import { SessionTurnInputTable, SessionTurnTable } from "./sql.js"
+import { SessionMessage } from "./message.js"
+import { SessionTurnTable } from "./sql.js"
 
 type DB = Database.Interface["db"]
-const zero = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-
-/** Recovery may acknowledge a removed notification, but never a cross-type or cross-session conflict. */
-export const hasSynthetic = (db: DB, sessionID: SessionSchema.ID, inputID: SessionMessage.ID) =>
-  db
-    .select({ id: SessionTurnInputTable.id })
-    .from(SessionTurnInputTable)
-    .where(
-      and(
-        eq(SessionTurnInputTable.id, inputID),
-        eq(SessionTurnInputTable.session_id, sessionID),
-        eq(SessionTurnInputTable.type, "synthetic"),
-      ),
-    )
-    .get()
-    .pipe(
-      Effect.orDie,
-      Effect.map((row) => row !== undefined),
-    )
+const zero = { cost: Money.USD.make(0), tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }
+const running = (sessionID: SessionSchema.ID) =>
+  and(eq(SessionTurnTable.session_id, sessionID), eq(SessionTurnTable.status, "running"))
 
 export const get = Effect.fn("SessionTurn.get")(function* (
   db: DB,
@@ -39,69 +23,33 @@ export const get = Effect.fn("SessionTurn.get")(function* (
 ): Effect.fn.Return<SessionTurn.Info | undefined> {
   const row = yield* db
     .select()
-    .from(SessionTurnInputTable)
-    .leftJoin(SessionTurnTable, eq(SessionTurnInputTable.turn_id, SessionTurnTable.id))
-    .where(and(eq(SessionTurnInputTable.id, input.inputID), eq(SessionTurnInputTable.session_id, input.sessionID)))
+    .from(SessionTurnTable)
+    .where(and(eq(SessionTurnTable.id, input.inputID), eq(SessionTurnTable.session_id, input.sessionID)))
     .get()
     .pipe(Effect.orDie)
-  if (!row) return undefined
-  return { ...input, ...(row.session_turn?.data ?? { status: "pending" as const }) }
+  return row ? { ...input, ...(row.data ?? { status: "pending" as const }) } : undefined
 })
 
-/** Cancellation and history reversion both retire unconsumed inputs without changing an active turn. */
-export const cancel = Effect.fn("SessionTurn.cancel")(function* (
-  db: DB,
-  sessionID: SessionSchema.ID,
-  inputID: SessionMessage.ID,
-) {
-  const input = yield* db
-    .select()
-    .from(SessionTurnInputTable)
-    .where(and(eq(SessionTurnInputTable.id, inputID), eq(SessionTurnInputTable.session_id, sessionID)))
-    .get()
-    .pipe(Effect.orDie)
-  if (!input || input.turn_id) return
-  yield* db
-    .insert(SessionTurnTable)
-    .values({
-      id: input.id,
-      session_id: sessionID,
-      status: "interrupted",
-      data: {
-        turnID: input.id,
-        inputIDs: [input.id],
-        status: "interrupted",
-        reason: "cancelled",
-        cost: Money.USD.make(0),
-        tokens: zero,
-      },
-    })
+export const cancel = (db: DB, sessionID: SessionSchema.ID, inputID: SessionMessage.ID) =>
+  db
+    .update(SessionTurnTable)
+    .set({ status: "interrupted", data: { ...zero, turnID: inputID, status: "interrupted", reason: "cancelled" } })
+    .where(
+      and(
+        eq(SessionTurnTable.session_id, sessionID),
+        eq(SessionTurnTable.id, inputID),
+        eq(SessionTurnTable.status, "pending"),
+      ),
+    )
     .run()
     .pipe(Effect.orDie)
-  yield* db
-    .update(SessionTurnInputTable)
-    .set({ turn_id: input.id })
-    .where(eq(SessionTurnInputTable.id, input.id))
-    .run()
-    .pipe(Effect.orDie)
-})
 
-/** Called with the other projectors: these writes share the event's transaction even without retained events. */
+/** One compact result per input. All running inputs belong to the same turn and update together. */
 export const project = Effect.fn("SessionTurn.project")(function* (db: DB, bus: Bus.Interface) {
   const active = (sessionID: SessionSchema.ID) =>
-    db
-      .select()
-      .from(SessionTurnTable)
-      .where(and(eq(SessionTurnTable.session_id, sessionID), eq(SessionTurnTable.status, "running")))
-      .get()
-      .pipe(Effect.orDie)
-  const save = (data: SessionTurn.Result) =>
-    db
-      .update(SessionTurnTable)
-      .set({ status: data.status, data })
-      .where(eq(SessionTurnTable.id, data.turnID))
-      .run()
-      .pipe(Effect.orDie)
+    db.select().from(SessionTurnTable).where(running(sessionID)).get().pipe(Effect.orDie)
+  const save = (sessionID: SessionSchema.ID, data: SessionTurn.Result) =>
+    db.update(SessionTurnTable).set({ status: data.status, data }).where(running(sessionID)).run().pipe(Effect.orDie)
   const finish = Effect.fnUntraced(function* (
     sessionID: SessionSchema.ID,
     outcome:
@@ -110,12 +58,12 @@ export const project = Effect.fn("SessionTurn.project")(function* (db: DB, bus: 
       | { status: "interrupted"; reason: Extract<SessionTurn.Result, { status: "interrupted" }>["reason"] },
   ) {
     const row = yield* active(sessionID)
-    if (row) yield* save({ ...row.data, ...outcome })
+    if (row?.data) yield* save(sessionID, { ...row.data, ...outcome })
   })
   const usage = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, cost: number, tokens: TokenUsage.Info) {
     const row = yield* active(sessionID)
-    if (!row) return
-    yield* save({
+    if (!row?.data) return
+    yield* save(sessionID, {
       ...row.data,
       cost: Money.USD.make(row.data.cost + cost),
       tokens: {
@@ -131,40 +79,27 @@ export const project = Effect.fn("SessionTurn.project")(function* (db: DB, bus: 
   })
   yield* bus.project(SessionEvent.InboxEnqueued, (event) => {
     if (event.data.item.type !== "user" && event.data.item.type !== "synthetic") return Effect.void
+    // A genuinely new admission may reuse a cancelled/reverted ID. Normal retries never enqueue again.
     return db
-      .insert(SessionTurnInputTable)
-      .values({ id: event.data.inboxID, session_id: event.data.sessionID, type: event.data.item.type })
+      .insert(SessionTurnTable)
+      .values({ id: event.data.inboxID, session_id: event.data.sessionID, status: "pending" })
+      .onConflictDoUpdate({
+        target: SessionTurnTable.id,
+        set: { session_id: event.data.sessionID, status: "pending", data: null },
+      })
       .run()
       .pipe(Effect.orDie)
   })
   yield* bus.project(SessionEvent.InboxDelivered, (event) =>
     Effect.gen(function* () {
-      const input = yield* db
-        .select()
-        .from(SessionTurnInputTable)
-        .where(eq(SessionTurnInputTable.id, event.data.inboxID))
-        .get()
-        .pipe(Effect.orDie)
-      // Controls and inputs admitted before this projection existed have no binding.
-      if (!input || input.turn_id) return
       const row = yield* active(event.data.sessionID)
-      const turnID = row?.id ?? input.id
-      if (row) yield* save({ ...row.data, inputIDs: [...row.data.inputIDs, input.id] })
-      if (!row)
-        yield* db
-          .insert(SessionTurnTable)
-          .values({
-            id: turnID,
-            session_id: event.data.sessionID,
-            status: "running",
-            data: { turnID, inputIDs: [input.id], status: "running", cost: Money.USD.make(0), tokens: zero },
-          })
-          .run()
-          .pipe(Effect.orDie)
       yield* db
-        .update(SessionTurnInputTable)
-        .set({ turn_id: turnID })
-        .where(eq(SessionTurnInputTable.id, input.id))
+        .update(SessionTurnTable)
+        .set({
+          status: "running",
+          data: row?.data ?? { ...zero, turnID: SessionMessage.ID.fromEvent(event.id), status: "running" },
+        })
+        .where(and(eq(SessionTurnTable.id, event.data.inboxID), eq(SessionTurnTable.status, "pending")))
         .run()
         .pipe(Effect.orDie)
     }),
@@ -173,7 +108,8 @@ export const project = Effect.fn("SessionTurn.project")(function* (db: DB, bus: 
   yield* bus.project(SessionEvent.Step.Started, (event) =>
     Effect.gen(function* () {
       const row = yield* active(event.data.sessionID)
-      if (row) yield* save({ ...row.data, assistantMessageID: event.data.assistantMessageID })
+      if (row?.data)
+        yield* save(event.data.sessionID, { ...row.data, assistantMessageID: event.data.assistantMessageID })
     }),
   )
   yield* bus.project(SessionEvent.Step.Ended, (event) =>
@@ -184,8 +120,6 @@ export const project = Effect.fn("SessionTurn.project")(function* (db: DB, bus: 
       ? usage(event.data.sessionID, event.data.cost, event.data.tokens)
       : Effect.void,
   )
-  // Title and background compaction may finish during a different turn. They remain
-  // session overhead until their usage records carry source-turn attribution.
   yield* bus.project(SessionEvent.TurnSettled, (event) => finish(event.data.sessionID, { status: "settled" }))
   yield* bus.project(SessionEvent.Execution.Succeeded, (event) => finish(event.data.sessionID, { status: "settled" }))
   yield* bus.project(SessionEvent.Execution.Failed, (event) =>

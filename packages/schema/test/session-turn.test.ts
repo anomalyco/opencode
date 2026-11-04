@@ -6,7 +6,6 @@ const input = { sessionID: "ses_result", inputID: "msg_input" }
 const turn = {
   ...input,
   turnID: input.inputID,
-  inputIDs: [input.inputID],
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
 }

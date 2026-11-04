@@ -12,8 +12,6 @@ import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
-import { Database } from "../../database/database.js"
-import { SessionTurnStore } from "../turn.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -74,7 +72,6 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
-      const database = yield* Database.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -161,11 +158,6 @@ export const layer = (options?: Options) =>
             resume: false,
           })
           .pipe(
-            Effect.catchTag("Session.SyntheticConflictError", (error) =>
-              SessionTurnStore.hasSynthetic(database.db, recovery.sessionID, error.inputID).pipe(
-                Effect.flatMap((result) => (result ? Effect.void : Effect.fail(error))),
-              ),
-            ),
             Effect.catchTag("Session.NotFoundError", () => Effect.void),
             Effect.orDie,
           )
@@ -184,7 +176,7 @@ export const layer = (options?: Options) =>
         }
 
         const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
-          yield* SubagentCompletion.deliver(database.db, sessions, jobs, {
+          yield* SubagentCompletion.deliver(sessions, jobs, {
             ...result,
             recovery,
             notificationID: background.notificationID,
@@ -272,5 +264,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node, Database.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
 })
