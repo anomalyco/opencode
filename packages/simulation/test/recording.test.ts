@@ -152,7 +152,7 @@ test("matches live screen text while recording", async () => {
           renderer.root.add(new TextRenderable(renderer, { content: "recorded screen text" }))
           yield* Effect.promise(() => SimulationRenderer.setupFor(renderer)?.renderOnce() ?? Promise.resolve())
 
-          expect(matches(createHarness(renderer), "recorded screen text")).toBe(true)
+          expect(yield* matches(createHarness(renderer), "recorded screen text")).toBe(true)
           expect(yield* SimulationRenderer.finish(renderer)).toBe(path)
           yield* Effect.promise(() => SimulationRenderer.setupFor(renderer)?.renderOnce() ?? Promise.resolve())
           expect(renderer.isDestroyed).toBe(false)
