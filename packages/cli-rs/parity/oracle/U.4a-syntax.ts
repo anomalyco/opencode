@@ -22,7 +22,7 @@ const pack = (color: Color | undefined) =>
 
 const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
 const result = views.map(([name, mode]) => {
-  const syntax = generateSyntax(resolveThemeDocument(parseTheme(allThemes()[name], name), mode), owner)
+  const syntax = generateSyntax(resolveThemeDocument(parseTheme(allThemes()[name], name, { newDesigns: true }), mode), owner)
   const styles = Object.fromEntries(
     [...syntax.getAllStyles()].map(([scope, style]) => [
       scope,

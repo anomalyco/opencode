@@ -3,7 +3,7 @@
 // dialog-experiments.tsx): crates/tui/tests/settings.rs. The harness has no config service, so a changed value is
 // shown by starting from a config that already holds it.
 import { DialogConfig } from "../../../tui/src/component/dialog-config"
-import { DialogExperiments } from "../../../tui/src/component/dialog-experiments"
+import { DialogExperiments, experiments as registry } from "../../../tui/src/component/dialog-experiments"
 import { renderComponent } from "../lib/component"
 
 const settings = { width: 80, height: 30, dialog: () => <DialogConfig />, ready: (f: string) => f.includes("esc") && f.includes("Scroll") }
@@ -30,6 +30,12 @@ await renderComponent({
   act: (setup) => setup.mockInput.typeText("speed"),
 })
 
+// The Rust client graduated `new-designs` (parity/deviations/X02-new-designs-graduated.md): its registry drops the
+// entry, as packages/tui/AGENTS.md describes graduating. The dialog is recorded with the same registry.
+registry.splice(
+  registry.findIndex((experiment) => experiment.id === "new-designs"),
+  1,
+)
 const experiments = {
   width: 80,
   height: 24,
