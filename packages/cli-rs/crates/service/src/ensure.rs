@@ -94,7 +94,7 @@ const UNRESPONSIVE: u32 = 3;
 pub async fn ensure(
     transport: Arc<dyn Transport>,
     options: &Options,
-    on_start: &mut dyn FnMut(),
+    on_start: &mut (dyn FnMut() + Send),
 ) -> Result<Ensured, Error> {
     let mut run = Run {
         transport,
@@ -131,7 +131,7 @@ struct Run<'a> {
     timeouts: Option<(Registration, u32)>,
     announced: bool,
     spawned: bool,
-    on_start: &'a mut dyn FnMut(),
+    on_start: &'a mut (dyn FnMut() + Send),
 }
 
 impl Run<'_> {
@@ -139,7 +139,9 @@ impl Run<'_> {
         let file = &self.options.file;
         let info = registration::read(file);
         let probe = match &info {
-            Some(info) => probe::probe(self.transport.as_ref(), info, self.options.timing.request).await,
+            Some(info) => {
+                probe::probe(self.transport.as_ref(), info, self.options.timing.request).await
+            }
             None => Probe {
                 service: None,
                 timed_out: false,
@@ -158,7 +160,7 @@ impl Run<'_> {
             };
         }
         if self.spawned
-            && let Some(found) = self.started_elsewhere().await
+            && let Some(found) = started_elsewhere(self.transport.as_ref(), self.options).await
         {
             return Ok(Some(found));
         }
@@ -203,20 +205,6 @@ impl Run<'_> {
         Ok(())
     }
 
-    // The TS binary registers under its own build channel, which may not be the client's. Any
-    // other registration that answers ready is taken, newest first.
-    async fn started_elsewhere(&self) -> Option<Ensured> {
-        let files = discover::scan(&self.options.state, std::slice::from_ref(&self.options.file));
-        let probes = files.iter().map(|file| async move {
-            let info = registration::read(file)?;
-            let service = probe::probe(self.transport.as_ref(), &info, self.options.timing.request)
-                .await
-                .service?;
-            (probe::decide(&service, None) == Decision::Reuse).then(|| reuse(service, file))
-        });
-        join_all(probes).await.into_iter().flatten().next()
-    }
-
     fn announce(&mut self) {
         if !self.announced {
             self.announced = true;
@@ -232,6 +220,20 @@ impl Run<'_> {
             .chain([handoff::environment(&self.options.file)])
             .collect()
     }
+}
+
+// The TS binary registers under its own build channel, which may not be the client's. Any other
+// registration that answers ready is taken, newest first.
+async fn started_elsewhere(transport: &dyn Transport, options: &Options) -> Option<Ensured> {
+    let files = discover::scan(&options.state, std::slice::from_ref(&options.file));
+    let probes = files.iter().map(|file| async move {
+        let info = registration::read(file)?;
+        let service = probe::probe(transport, &info, options.timing.request)
+            .await
+            .service?;
+        (probe::decide(&service, None) == Decision::Reuse).then(|| reuse(service, file))
+    });
+    join_all(probes).await.into_iter().flatten().next()
 }
 
 fn reuse(service: LocalService, file: &Path) -> Ensured {

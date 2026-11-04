@@ -56,7 +56,9 @@ pub async fn stop(
 ) -> Result<(), StillRunning> {
     let info = registration::read(file);
     match (&info, pty) {
-        (Some(info), Pty::Handoff) => handoff::prepare(transport, file, info, REQUEST_TIMEOUT).await,
+        (Some(info), Pty::Handoff) => {
+            handoff::prepare(transport, file, info, REQUEST_TIMEOUT).await
+        }
         _ => handoff::clear(file),
     }
     match info {
