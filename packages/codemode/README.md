@@ -143,6 +143,13 @@ const build = Tool.make({
 })
 ```
 
+Every call sees its key: a tool's `execute` gets it as `execute(input, { key })`, and both hooks as `call.key`. A durable
+call's `tool.before` runs when it starts and its `tool.after` when its work ends, possibly in a later resume; a call
+detached by a suspend reports nothing until then, while one cancelled because its run ended reports `interrupted`.
+Tools are `retry: "unsafe"` by default.
+
+Nothing in OpenCode suspends runs yet; this is the capability a host builds on.
+
 Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests with every run saved to bytes and restored into a
 brand-new runtime at every host call and every few steps.
 

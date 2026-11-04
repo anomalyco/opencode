@@ -401,6 +401,34 @@ describe("suspend and resume", () => {
     expect(keys.toSorted()).toEqual(["after echo k:1", "after job k:0", "before echo k:1", "before job k:0"])
   })
 
+  test("tool.after sees a durable call that ends with its run as interrupted, but not one detached to suspend", async () => {
+    const jobs = durableJobs()
+    const events: Array<string> = []
+    const hooks = {
+      "tool.after": (call: CodeMode.ToolInvocation, result: CodeMode.CallResult) =>
+        Effect.sync(() => void events.push(`${call.key} ${result.status}`)),
+    }
+    const ended = await Effect.runPromise(
+      CodeMode.make({ tools: { job: jobs.tool }, hooks }).start(`tools.job({ value: 1 }); return 1`, undefined, {
+        runId: "a",
+      }).result,
+    )
+    expect(ended).toMatchObject({ ok: true })
+    expect(events).toEqual(["a:0 interrupted"])
+
+    events.length = 0
+    jobs.reset()
+    const run = CodeMode.make({ tools: { job: jobs.tool }, hooks }).start(`return (await tools.job({ value: 2 })).value`, undefined, {
+      runId: "b",
+    })
+    Effect.runFork(run.result)
+    await jobs.started()
+    await Bun.sleep(5)
+    const suspended = await Effect.runPromise(run.suspend)
+    expect(suspended).toMatchObject({ ok: "suspended", pending: [{ key: "b:0", status: "started" }] })
+    expect(events).toEqual([])
+  })
+
   test("the snapshot codec does not import Effect", async () => {
     for (const file of ["codec.ts", "snapshot.ts"]) {
       expect(await Bun.file(`${import.meta.dir}/../src/snapshot/${file}`).text()).not.toMatch(/from "effect"/)

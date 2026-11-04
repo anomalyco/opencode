@@ -195,7 +195,7 @@ export class Driver<R> {
   private attach(call: HostCall): void {
     const request = call.request
     if (request.kind !== "tool") return
-    this.fork(call.id, this.tools.attach(request.path, request.args, call.key, call.handle!))
+    this.fork(call.id, this.tools.attach(request.path, request.args, call.key, call.handle!, () => this.suspending))
   }
 
   // A durable call that may have started before the run was saved: reattach to its work if it did, else start it.

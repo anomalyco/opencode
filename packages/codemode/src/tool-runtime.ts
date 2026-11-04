@@ -405,12 +405,17 @@ export type ToolRuntime<R = never> = {
     key: string,
     again?: boolean,
   ) => Effect.Effect<Handle, unknown, R>
-  /** Waits for a durable tool's work: its output, as `execute` gives it. Interrupting it detaches. */
+  /**
+   * Waits for a durable tool's work: its output, as `execute` gives it. Interrupting it detaches. `detaching` says
+   * whether an interruption detaches to suspend the run, which `tool.after` doesn't see, or ends the call, which it
+   * sees as interrupted.
+   */
   readonly attach: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
     key: string,
     handle: Handle,
+    detaching: () => boolean,
   ) => Effect.Effect<Json | undefined, unknown, R>
   /** The handle of a durable tool's work started under `key`, if it was. */
   readonly lookup: (path: ReadonlyArray<string>, key: string) => Effect.Effect<Handle | undefined, unknown, R>
@@ -522,7 +527,7 @@ export const make = <R>(
           return yield* failure(Effect.suspend(() => found.durable.start(input, { key })))
         })
       }),
-    attach: (path, args, key, handle) =>
+    attach: (path, args, key, handle, detaching) =>
       Effect.suspend(() => {
         const found = durableTool(path)
         const after = hooks["tool.after"]
@@ -531,12 +536,12 @@ export const make = <R>(
           return yield* output(found.name, found.tool, raw)
         })
         if (after === undefined) return run
-        // Detaching is not an outcome: `after` sees how the work ended, once it has.
+        // Detaching to suspend is not an outcome: `after` sees how the work ended, once it has.
         return Effect.flatMap(decode(found.name, found.tool, args), (input) =>
           Effect.onExit(run, (exit) => {
             const call = { name: found.name, input, key }
             if (Exit.isSuccess(exit)) return after(call, { status: "success", value: exit.value })
-            if (Cause.hasInterruptsOnly(exit.cause)) return Effect.void
+            if (Cause.hasInterruptsOnly(exit.cause)) return detaching() ? Effect.void : after(call, { status: "interrupted" })
             return after(call, { status: "failure", error: Cause.squash(exit.cause) })
           }),
         )
