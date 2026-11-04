@@ -52,15 +52,22 @@ export type ColdMountTransition = {
 }
 
 const revealed: ColdMountState = { type: "revealed" }
+
 const none: readonly ColdMountEffect[] = []
+
 const settled: ColdMountTransition = { state: revealed, effects: none }
 
 // Shared events for the frequent dispatches, so a revealed timeline allocates nothing on scroll or resize.
 export const CHECK_REQUESTED: ColdMountEvent = { type: "check.requested" }
+
 export const ACTIVATED: ColdMountEvent = { type: "activated" }
+
 export const DEACTIVATED: ColdMountEvent = { type: "deactivated" }
+
 export const SIZES_FLUSHING: ColdMountEvent = { type: "sizes.flushing" }
+
 export const SIZES_FLUSHED: ColdMountEvent = { type: "sizes.flushed" }
+
 export const DISPOSED: ColdMountEvent = { type: "disposed" }
 
 export function createColdMountState(cold: boolean): ColdMountState {

@@ -75,6 +75,7 @@ describe("cold mount", () => {
       { type: "check.ready", attempt: 1 },
       { type: "check.sampled", attempt: 1, sample: "pinned" },
     )
+
     expect(exposed.state).toMatchObject({ type: "expanding", checking: false })
     expect(exposed.effects).toEqual([])
 

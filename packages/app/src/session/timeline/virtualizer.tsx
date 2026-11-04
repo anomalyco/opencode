@@ -139,9 +139,11 @@ export function createTimelineVirtualizer(input: Input) {
   const entry = cache.get(ownerSessionKey)
   const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
   const initialMeasurements = cached?.measurements
+
   const [coldMount, setColdMount] = createSignal(
     createColdMountState(!initialMeasurements?.length && input.follow.following()),
   )
+
   // Each flips once per mount, so the many hidden-phase transitions do not reach the rows or the range.
   const coldHidden = createMemo(() => coldMountHidden(coldMount()))
   const coldTailOnly = createMemo(() => coldMountTailOnly(coldMount()))
@@ -282,8 +284,7 @@ export function createTimelineVirtualizer(input: Input) {
   const readEnd = () => {
     const root = listRoot()
 
-    if (!active() || untrack(coldHidden) || !root || (newMessagesKey() && !readIntent) || !atReachableEnd(root))
-      return
+    if (!active() || untrack(coldHidden) || !root || (newMessagesKey() && !readIntent) || !atReachableEnd(root)) return
     input.onReadEnd?.()
     releaseReadMark()
   }
