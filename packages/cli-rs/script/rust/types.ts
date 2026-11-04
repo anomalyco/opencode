@@ -61,7 +61,7 @@ export class Types {
 
   isDefault(type: string) {
     return (
-      /^(Option|Vec|BTreeMap)</.test(type) ||
+      /^(Option|Vec|IndexMap)</.test(type) ||
       ["String", "bool", "i64", "f64", "serde_json::Value", "()"].includes(type) ||
       this.defaultable.has(type)
     )
@@ -160,7 +160,7 @@ export class Types {
     const value = index === undefined ? undefined : this.type(index.type, `${hint}Value`)
     if (r.propertySignatures.length === 0 && value !== undefined) {
       this.names.delete(name)
-      return `BTreeMap<String, ${value}>`
+      return `IndexMap<String, ${value}>`
     }
     const used = new Set<string>()
     const fields = r.propertySignatures.flatMap((property) => {
@@ -181,10 +181,10 @@ export class Types {
     const lines = fields.filter((_, i) => i % 2 === 0)
     const types = fields.filter((_, i) => i % 2 === 1)
     if (value !== undefined) {
-      lines.push(`    #[serde(flatten)]\n    pub extra: BTreeMap<String, ${value}>,`)
-      types.push("BTreeMap")
+      lines.push(`    #[serde(flatten)]\n    pub extra: IndexMap<String, ${value}>,`)
+      types.push("IndexMap")
     }
-    const defaults = types.every((type) => this.isDefault(type) || type === "BTreeMap")
+    const defaults = types.every((type) => this.isDefault(type) || type === "IndexMap")
     if (defaults) this.defaultable.add(name)
     this.items.push(
       `#[derive(Debug, Clone, PartialEq, Serialize, Deserialize${defaults ? ", Default" : ""})]\npub struct ${name} {\n${lines.join("\n")}\n}`,
