@@ -22,6 +22,9 @@ export type Step =
   // A left-button drag from one cell to another, `[[x, y], [x, y]]`; TS moves in five steps, Rust one cell at a
   // time, and both end with the release on the target cell.
   | { drag: [[number, number], [number, number]] }
+  // A notification from the fake IDE MCP server (`ide: true`), `{ method, params }`, sent once a client finished
+  // the MCP handshake.
+  | { ide: { method: string; params?: unknown } }
   | {
       checkpoint: string
       // Text the TS frame contains once it is ready.
@@ -49,6 +52,10 @@ export type AppScenario = {
   // Environment variables the TUI reads at startup, such as `OPENCODE_ROUTE`.
   env?: Record<string, string>
   routes?: Route[]
+  // Runs a fake IDE MCP server at OPENCODE_EDITOR_SSE_PORT (E.5); the recording keeps what the TUI sent it.
+  ide?: boolean
+  // A Zed database built from this SQL in a temporary directory, with ZED_TERM=true and a temporary HOME (E.5).
+  zed?: { sql: string }
   steps: Step[]
   // A deviation that allows the request comparison (P-REQ) to differ.
   requests?: { deviation: string }
