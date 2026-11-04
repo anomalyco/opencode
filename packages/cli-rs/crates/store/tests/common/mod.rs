@@ -123,10 +123,14 @@ where
 pub fn data(handler: Handler, options: Options) -> Data {
     let client =
         Client::with_transport("http://opencode.local", Arc::new(Fake { handler })).unwrap();
+    let directory = match options.directory.as_str() {
+        "" => "/project".to_owned(),
+        directory => directory.to_owned(),
+    };
     Data::new(
         client,
         Options {
-            directory: "/project".into(),
+            directory,
             ..options
         },
     )
