@@ -7,6 +7,8 @@
 mod config;
 #[rustfmt::skip]
 mod generated;
+#[cfg(test)]
+mod tests;
 
 pub use config::{Keybinds, default_value, description};
 pub use generated::{DEFINITIONS, Definition, LEADER_DEFAULT};
@@ -98,6 +100,7 @@ impl TuiCommand {
     ) -> Self {
         Self {
             id: Some(id.into()),
+            bind: Bind::Default,
             ..Self::inline("", run)
         }
     }
