@@ -186,7 +186,9 @@ function verifierConfig(llmUrl: string) {
 }
 
 function spawnAcp(input: { readonly env: Record<string, string | undefined> }): AcpProcess {
-  const child = Bun.spawn([process.execPath, "run", "src/index.ts", "acp"], {
+  // OPENCODE_ACP_TEST_BIN runs the suites against another ACP binary, such as the Rust client.
+  const override = process.env.OPENCODE_ACP_TEST_BIN
+  const child = Bun.spawn(override ? [override, "acp"] : [process.execPath, "run", "src/index.ts", "acp"], {
     cwd: path.join(import.meta.dir, "../.."),
     env: input.env,
     stdin: "pipe",
