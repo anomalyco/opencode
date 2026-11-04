@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import type { Api } from "./api.js"
+import type { Cost } from "./cost.js"
 import {
   mergeRequestOptions,
   type Capabilities,
@@ -93,6 +94,8 @@ export namespace Model {
     readonly limit: Limit
     readonly modalities: Modalities
     readonly compatibility?: Compatibility
+    /** Listed prices, as models.dev v2 `cost`. `calculateCost(model.cost, usage)` turns usage into USD. */
+    readonly cost?: Cost
     /** The provider's implementation of `api`, such as a vendor dialect. Absent means the package's standard one. */
     readonly [implementation]?: Route<Type, C>
   }
@@ -124,6 +127,7 @@ export namespace Model {
     readonly limit?: Limit
     readonly modalities?: Modalities
     readonly compatibility?: Compatibility
+    readonly cost?: Cost
     readonly [implementation]?: Route<Type, C>
   }
 
