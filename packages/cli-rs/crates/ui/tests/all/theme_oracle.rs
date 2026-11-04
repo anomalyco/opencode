@@ -8,7 +8,7 @@ use opencode_ui::theme::{
 use opentui::style::Color;
 use serde_json::Value;
 
-const FIXTURE: &str = include_str!("../../../parity/fixtures/U.1/tokens.json");
+const FIXTURE: &str = include_str!("../../../../parity/fixtures/U.1/tokens.json");
 const ASSETS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tui/src/theme/assets");
 
 fn fixture() -> Value {

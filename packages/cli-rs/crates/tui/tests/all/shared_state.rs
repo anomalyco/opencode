@@ -5,8 +5,7 @@
 //! - `session.json` and `prompt-history.jsonl` keep what another client wrote, prompts submitted before
 //!   the history loads are kept, and `session.deleted` prunes its pin.
 
-#[path = "support/wait.rs"]
-mod wait;
+use crate::support::wait;
 
 use std::path::Path;
 use std::rc::Rc;

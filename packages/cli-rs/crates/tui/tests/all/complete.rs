@@ -2,8 +2,7 @@
 //! keymap's and the server's), `@` mentions of agents, skills, references, and files, `/cd` with
 //! directory completion and recents, and the mentions as atomic prompt parts.
 
-#[path = "support/wait.rs"]
-mod wait;
+use crate::support::wait;
 
 use std::path::Path;
 use std::rc::Rc;

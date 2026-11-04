@@ -2,8 +2,7 @@
 //! through the whole Rust TUI in a `TestApp`, over the in-memory transport, and compares each checkpoint's
 //! cells and the requests with what the TS TUI did. `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 
-#[path = "support/ide.rs"]
-mod ide;
+use crate::support::ide;
 
 use std::collections::BTreeMap;
 use std::fmt::Write;

@@ -1,8 +1,7 @@
 //! The prompt (E.2) over a fixture server that records requests: editing through the `input.*`
 //! layer, submit, queue, history, drafts, shell mode, clear, interrupt, and a new session from home.
 
-#[path = "support/wait.rs"]
-mod wait;
+use crate::support::wait;
 
 use std::path::Path;
 use std::rc::Rc;
