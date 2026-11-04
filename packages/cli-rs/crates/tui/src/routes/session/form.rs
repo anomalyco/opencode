@@ -644,11 +644,11 @@ fn first_form(state: &State, owners: &[String], location: Option<&Location>) -> 
         .cloned()
 }
 
-/// Awaits a form read; failures are ignored, as TS ignores them (`.catch(() => undefined)`).
+/// Awaits a form or permission read; failures are ignored, as TS ignores them (`.catch(() => undefined)`).
 pub(crate) fn quiet(tui: &Tui, task: opencode_store::Task<()>) {
     tui.app.spawn(task, |_, result| {
         if let Err(error) = result {
-            log::debug!("form read failed: {error}");
+            log::debug!("read failed: {error}");
         }
     });
 }
