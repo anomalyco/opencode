@@ -65,7 +65,10 @@ export async function startFakeServer(options: Options = {}) {
         const response = respond(route, streams, entry, requests)
         if (route.then) {
           const frames = route.then(entry, requests).map((event) => encode(event))
-          setTimeout(() => streams.forEach((controller) => frames.forEach((frame) => controller.enqueue(frame))), route.thenDelay ?? 0)
+          setTimeout(
+            () => streams.forEach((controller) => frames.forEach((frame) => controller.enqueue(frame))),
+            route.thenDelay ?? 0,
+          )
         }
         return response
       }

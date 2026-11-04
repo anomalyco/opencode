@@ -21,8 +21,7 @@ pub enum Prepared {
 /// Reads `input`, relative to `root`. The errors are the TS messages.
 pub fn prepare(input: &str, root: &Path) -> Result<Prepared, String> {
     let file = resolve(root, input);
-    let mut handle =
-        std::fs::File::open(&file).map_err(|_| format!("File not found: {input}"))?;
+    let mut handle = std::fs::File::open(&file).map_err(|_| format!("File not found: {input}"))?;
     let metadata = handle
         .metadata()
         .map_err(|_| format!("File not found: {input}"))?;

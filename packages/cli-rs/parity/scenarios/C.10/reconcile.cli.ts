@@ -10,7 +10,12 @@ export const content = [
     type: "tool",
     id: "call_9",
     name: "glob",
-    state: { status: "completed", input: { pattern: "*.ts" }, metadata: { count: 2 }, content: [{ type: "text", text: "a.ts\nb.ts" }] },
+    state: {
+      status: "completed",
+      input: { pattern: "*.ts" },
+      metadata: { count: 2 },
+      content: [{ type: "text", text: "a.ts\nb.ts" }],
+    },
     time: { created: 14, ran: 15, completed: 16 },
   },
 ]

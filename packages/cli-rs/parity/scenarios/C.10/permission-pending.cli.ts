@@ -8,7 +8,10 @@ export default defineCli({
   server: server({
     events: () => textStep("ok"),
     routes: [
-      { path: "/api/session/ses_run/permission", json: { data: [{ id: "per_2", sessionID: "ses_run", action: "bash", resources: ["ls"] }] } },
+      {
+        path: "/api/session/ses_run/permission",
+        json: { data: [{ id: "per_2", sessionID: "ses_run", action: "bash", resources: ["ls"] }] },
+      },
       { method: "POST", path: "/api/session/ses_run/permission/per_2/reply", status: 204 },
     ],
   }),
