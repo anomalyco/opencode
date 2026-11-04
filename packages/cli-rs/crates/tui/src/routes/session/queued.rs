@@ -201,11 +201,10 @@ impl Queued {
 
 impl Drop for Queued {
     fn drop(&mut self) {
-        // The command may run while the view drops, so the layers go afterwards (a dropped disposer stays).
+        // The command may run while the view drops, so the layers go afterwards.
         let layers = std::mem::take(&mut *self.0.layers.borrow_mut());
         if let Some(tui) = self.0.tui.upgrade() {
-            tui.app
-                .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+            tui.app.defer(move |_| drop(layers));
         }
     }
 }

@@ -284,9 +284,7 @@ impl Dialogs {
             self.layout_frame();
             return;
         }
-        if let Some(mode) = self.0.mode.borrow_mut().take() {
-            mode.dispose();
-        }
+        self.0.mode.borrow_mut().take();
         self.0.backdrop.visible(false);
         let focus = self.0.focus.borrow_mut().take();
         if let Some(widget) = focus.filter(|widget| widget.is_shown()) {
@@ -391,9 +389,7 @@ impl Dialogs {
 
 fn close(entry: Entry) {
     entry.content.detach();
-    for layer in entry.cx.layers.borrow_mut().drain(..) {
-        layer.dispose();
-    }
+    entry.cx.layers.borrow_mut().clear();
     entry.cx.editors.borrow_mut().clear();
     if let Some(on_close) = entry.on_close {
         on_close();

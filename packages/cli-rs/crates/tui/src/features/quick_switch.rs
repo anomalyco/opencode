@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use opencode_api::generated::V2Event;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
+use opentui::keymap::{Condition, Disposer};
 
 use crate::app::Tui;
 use crate::dialogs::session_list::pins;
@@ -55,7 +55,7 @@ pub fn install(tui: &Rc<Tui>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("quick switch keymap layer: {error}");
         }
     }

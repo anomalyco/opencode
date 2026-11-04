@@ -14,6 +14,7 @@ use crate::app::Tui;
 use crate::dialogs::highlights::{self, Highlight};
 use crate::routes::Route;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opentui::keymap::Disposer;
 
 /// The current release's highlights and the version they belong to.
 #[derive(Clone, Debug, Default)]
@@ -60,11 +61,15 @@ pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
             arguments: false,
         });
         // The layer lives as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        }) {
+        if let Err(error) = tui
+            .keymap
+            .layer(KeymapLayer {
+                mode: Some(GLOBAL_MODE.to_owned()),
+                commands: vec![command],
+                ..KeymapLayer::default()
+            })
+            .map(Disposer::forget)
+        {
             log::error!("highlights keymap layer: {error}");
         }
     }
