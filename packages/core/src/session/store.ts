@@ -2,9 +2,11 @@ export * as SessionStore from "./store.js"
 
 import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import { isSqlError } from "effect/sql/SqlError"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
+import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionHistory } from "./history.js"
@@ -51,10 +53,26 @@ export type MessagesInput = {
   }
 }
 
+/**
+ * One page of messages and the Session's durable sequence, read in one transaction: the page reflects exactly the
+ * durable events up to `seq`, which is undefined while the Session has none.
+ */
+export type MessagesSnapshot<Message> = {
+  readonly messages: Message[]
+  readonly seq: number | undefined
+}
+
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
+  readonly messagesSnapshot: (
+    input: MessagesInput,
+  ) => Effect.Effect<MessagesSnapshot<SessionMessage.Info>, MessageDecodeError>
+  /** {@link Interface.messagesSnapshot} with files stored in `blob` left as `media:` refs. */
+  readonly messagesSnapshotWithRefs: (
+    input: MessagesInput,
+  ) => Effect.Effect<MessagesSnapshot<SessionMessage.MediaInfo>, MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
@@ -134,6 +152,25 @@ const layer = Layer.effect(
       return direction === "previous" ? rows.toReversed() : rows
     })
 
+    // Projections and the sequence advance in one write transaction, so one read transaction sees a page that matches
+    // its sequence exactly.
+    const snapshot = <Message>(
+      input: MessagesInput,
+      decode: (
+        database: typeof db,
+        rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
+      ) => Effect.Effect<Message[], MessageDecodeError>,
+    ) =>
+      db
+        .transaction(() =>
+          Effect.gen(function* () {
+            const seq = yield* Bus.latestSequence(db, input.sessionID)
+            const messages = yield* decode(db, yield* messageRows(input))
+            return { messages, seq: seq < 0 ? undefined : seq }
+          }),
+        )
+        .pipe(Effect.catchIf(isSqlError, (error) => Effect.die(error)))
+
     const messageRow = (messageID: SessionMessage.ID) =>
       db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, messageID)).get().pipe(Effect.orDie)
 
@@ -191,6 +228,12 @@ const layer = Layer.effect(
       messagesWithRefs: Effect.fn("SessionStore.messagesWithRefs")(function* (input) {
         return yield* SessionHistory.decodeMessageRowsWithRefs(db, yield* messageRows(input))
       }),
+      messagesSnapshot: Effect.fn("SessionStore.messagesSnapshot")((input) =>
+        snapshot(input, SessionHistory.decodeMessageRows),
+      ),
+      messagesSnapshotWithRefs: Effect.fn("SessionStore.messagesSnapshotWithRefs")((input) =>
+        snapshot(input, SessionHistory.decodeMessageRowsWithRefs),
+      ),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* messageRow(messageID)

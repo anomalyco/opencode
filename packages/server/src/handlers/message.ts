@@ -1,5 +1,7 @@
 import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
+import { SessionStore } from "@opencode/core/session/store"
+import { Event } from "@opencode/schema/event"
 import { Effect, Option, Schema } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -49,33 +51,38 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           type: ctx.query.type,
           cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
         }
-        const page = <Message extends { readonly id: SessionMessage.ID }>(messages: ReadonlyArray<Message>) => {
-          const first = messages[0]
-          const last = messages.at(-1)
+        const page = <Message extends { readonly id: SessionMessage.ID }>(
+          snapshot: SessionStore.MessagesSnapshot<Message>,
+        ) => {
+          const first = snapshot.messages[0]
+          const last = snapshot.messages.at(-1)
           return {
-            data: messages,
+            data: snapshot.messages,
             cursor: {
               previous: first ? cursor.encode(first, order, "previous") : undefined,
               next: last ? cursor.encode(last, order, "next") : undefined,
             },
+            experimental: snapshot.seq === undefined ? undefined : { seq: Event.Seq.make(snapshot.seq) },
           }
         }
+        // Only a first page composes with the live stream; older pages skip the read transaction and its sequence.
+        const older = <Message>(messages: Message[]) => ({ messages, seq: undefined })
         if (wantsMediaRefs(ctx.request)) {
-          const messages = yield* session
-            .messagesWithRefs(input)
-            .pipe(
-              Effect.catchTag("Session.NotFoundError", missingSession),
-              Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
-            )
-          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(messages)).pipe(Effect.orDie)
-        }
-        const messages = yield* session
-          .messages(input)
-          .pipe(
+          const snapshot = yield* (
+            decoded ? session.messagesWithRefs(input).pipe(Effect.map(older)) : session.messagesSnapshotWithRefs(input)
+          ).pipe(
             Effect.catchTag("Session.NotFoundError", missingSession),
             Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
           )
-        return page(messages)
+          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(snapshot)).pipe(Effect.orDie)
+        }
+        const snapshot = yield* (
+          decoded ? session.messages(input).pipe(Effect.map(older)) : session.messagesSnapshot(input)
+        ).pipe(
+          Effect.catchTag("Session.NotFoundError", missingSession),
+          Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
+        )
+        return page(snapshot)
       }),
     )
   }),

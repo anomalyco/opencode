@@ -2778,6 +2778,7 @@ export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMe
 export type SessionMessagesResponse = {
   data: Array<SessionMessageInfo>
   cursor: { previous?: string | null; next?: string | null }
+  experimental?: { seq?: EventSeq }
 }
 
 export type IntegrationInfo = {

@@ -73,7 +73,7 @@ it.live("filters message types before paginating in either direction through the
         const previous = await fixture.api.message.list({ ...input, cursor: second.cursor.previous })
         expect(previous.data).toEqual(first.data)
         const end = await fixture.api.message.list({ ...input, cursor: second.cursor.next })
-        expect(end).toEqual({ data: [], cursor: { previous: null, next: null } })
+        expect(end).toMatchObject({ data: [], cursor: { previous: null, next: null } })
       }
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "compaction" })).data).toEqual([
         messages[4],
@@ -85,6 +85,24 @@ it.live("filters message types before paginating in either direction through the
         messages[8],
       ])
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "shell" })).data).toEqual([])
+    })
+  }),
+)
+
+it.live("reports the durable sequence each page was read at", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup
+    yield* Effect.promise(async () => {
+      const before = (await fixture.api.message.list({ sessionID: fixture.sessionID })).experimental?.seq
+      if (before === undefined) throw new Error("Expected a durable sequence")
+      await fixture.api.session.update({ sessionID: fixture.sessionID, title: "Renamed" })
+      const after = await fixture.api.message.list({ sessionID: fixture.sessionID, limit: 1 })
+      expect(after.experimental).toEqual({ seq: before + 1 })
+      // Older pages never join the live stream, so they carry no sequence.
+      if (!after.cursor.next) throw new Error("Expected a next cursor")
+      expect(
+        (await fixture.api.message.list({ sessionID: fixture.sessionID, cursor: after.cursor.next })).experimental,
+      ).toBeUndefined()
     })
   }),
 )
