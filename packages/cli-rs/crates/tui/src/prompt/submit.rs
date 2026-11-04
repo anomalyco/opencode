@@ -69,7 +69,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         return false;
     };
     let session = prompt.session_info(tui);
-    let Some(selection) = catalog.selection(session.as_ref()) else {
+    let Some(selection) = crate::dialogs::model::prompt_selection(tui, &catalog, session.as_ref())
+    else {
         return false;
     };
     let Some(model) = selection.model.clone() else {
