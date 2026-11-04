@@ -195,6 +195,7 @@ const nativeExitCommand = isWindows ? 'cmd /c "exit 3"' : "exit 3"
 const nativeExitStderrCommand = isWindows
   ? 'cmd /c "echo boom 1>&2 & exit 3" 2>&1'
   : "{ echo boom >&2; exit 3; } 2>&1"
+const nativeExitPipeCommand = isWindows ? 'cmd /c "exit 3" | Out-String' : "exit 3 | cat"
 const stderrMergeCommand = isWindows
   ? 'cmd /c "echo x 1>&2 & exit 0" 2>&1'
   : "{ echo x 1>&2; exit 0; } 2>&1"
@@ -1292,6 +1293,27 @@ describe("ShellTool", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: nativeExitCommand }, "call-native-exit")),
+        ps51,
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 3, truncated: false })
+            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 3")))
+          }),
+        ),
+      )
+    }),
+  )
+
+  // Off Windows the pipeline's exit status is the last command's (cat's), so this
+  // PowerShell-specific recovery has no sh equivalent.
+  const pipeTest = isWindows ? it.live : it.live.skip
+  pipeTest("reports a failing native command's exit code through a pipeline", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: nativeExitPipeCommand }, "call-native-exit-pipe")),
         ps51,
       ).pipe(
         Effect.andThen((settled) =>
