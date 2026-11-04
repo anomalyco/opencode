@@ -4,6 +4,7 @@ import type {
   Context,
   Dialog,
   DialogSelectOptions,
+  Layout,
   Page,
   SlotClaim,
   SlotMap,
@@ -51,11 +52,12 @@ const placements = ["prepend", "append", "before", "after", "replace"] as const 
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown", name: string): boolean
+  has(kind: "routes" | "slots" | "markdown" | "layout", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  remove(kind: "routes" | "slots" | "markdown", name: string): void
+  set(kind: "layout", name: string, layout: Layout): void
+  remove(kind: "routes" | "slots" | "markdown" | "layout", name: string): void
   active(): boolean
 }
 
@@ -99,6 +101,7 @@ export function createPluginContext(input: {
   input.owned.push(async () => host.panel?.release(input.id))
   let context: Context
   let claims = 0
+  let layouts = 0
   // Every dialog and registered render is wrapped so plugin components can
   // reach their own context through usePlugin().
   const provide = (render: () => JSX.Element) => (
@@ -132,7 +135,7 @@ export function createPluginContext(input: {
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
   // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
+  const registration = (kind: "routes" | "slots" | "markdown" | "layout", name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -309,6 +312,11 @@ export function createPluginContext(input: {
           render: (slotInput) => provide(() => (value.render as SlotRender)(slotInput)),
         })
         return registration("slots", key)
+      },
+      layout(value: Layout) {
+        const key = `layout#${layouts++}`
+        input.registry.set("layout", key, value)
+        return registration("layout", key)
       },
     },
   }

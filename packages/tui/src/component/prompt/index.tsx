@@ -58,6 +58,7 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
 import { abbreviateHome } from "../../runtime"
 import { Slot } from "../../plugin/render"
+import { usePlugin } from "../../plugin/context"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import {
   deduplicatePromptImages,
@@ -1675,14 +1676,23 @@ export function Prompt(props: PromptProps) {
   })
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
 
-  const promptBg = createMemo(() => theme.decrease(theme.background.raised.base))
+  const plugins = usePlugin()
+  // "band" chrome: no accent bar or metadata row; the editor sits on a
+  // raised band with a blank row above and below and an optional prefix.
+  const band = createMemo(() => {
+    const composer = plugins.layout().composer
+    return composer?.chrome === "band" ? { prefix: composer.prefix } : undefined
+  })
+  const promptBg = createMemo(() =>
+    band() ? theme.background.raised.base : theme.decrease(theme.background.raised.base),
+  )
 
   return (
     <>
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
           width="100%"
-          border={["left"]}
+          border={band() ? undefined : ["left"]}
           borderColor={borderHighlight()}
           customBorderChars={{
             ...SplitBorder.customBorderChars,
@@ -1690,9 +1700,10 @@ export function Prompt(props: PromptProps) {
           }}
         >
           <box
-            paddingLeft={dimensions().width < 44 ? 1 : 2}
+            paddingLeft={band() ? 1 : dimensions().width < 44 ? 1 : 2}
             paddingRight={dimensions().width < 44 ? 1 : 2}
             paddingTop={1}
+            paddingBottom={band() ? 1 : 0}
             flexShrink={0}
             backgroundColor={promptBg()}
             flexGrow={1}
@@ -1766,8 +1777,11 @@ export function Prompt(props: PromptProps) {
                 </Show>
               </box>
             </Show>
+            <box flexDirection="row" width="100%">
+            <Show when={band()?.prefix}>{(prefix) => <text fg={theme.text.base}>{prefix()}</text>}</Show>
             <textarea
-              width="100%"
+              flexGrow={1}
+              flexShrink={1}
               placeholder={placeholderText()}
               placeholderColor={theme.text.muted}
               textColor={muted() ? theme.text.muted : theme.text.base}
@@ -1853,7 +1867,15 @@ export function Prompt(props: PromptProps) {
               cursorColor={disabled() ? theme.background.raised.base : theme.text.base}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
+            </box>
+            <box
+              flexDirection="row"
+              flexShrink={0}
+              paddingTop={1}
+              gap={1}
+              justifyContent="space-between"
+              visible={!band()}
+            >
               <PromptMetadataRow
                 mode={store.mode}
                 agent={agentLabel()}
@@ -1873,6 +1895,7 @@ export function Prompt(props: PromptProps) {
         </box>
         <box
           height={1}
+          visible={!band()}
           border={["left"]}
           borderColor={borderHighlight()}
           customBorderChars={{

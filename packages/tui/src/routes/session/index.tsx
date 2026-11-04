@@ -102,6 +102,7 @@ import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
+import type { TranscriptRowKind } from "@opencode/plugin/tui/context"
 import {
   cacheReuseDrop,
   completeGroupBoundary,
@@ -159,6 +160,7 @@ export function Session(props: {
   width?: number
 }) {
   const epilogue = useEpilogue()
+  const plugins = usePlugin()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
     await mkdir(path.dirname(file), { recursive: true })
@@ -258,7 +260,9 @@ export function Session(props: {
     enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
     commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
   }))
-  const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
+  const contentWidth = createMemo(
+    () => (props.width ?? dimensions().width - props.verticalTabsWidth) - 2 * (plugins.layout().inset ?? 2),
+  )
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -1516,10 +1520,11 @@ export function Session(props: {
           flexGrow={1}
           minHeight={0}
           paddingBottom={1}
-          paddingLeft={dimensions().width < 44 ? 1 : 2}
-          paddingRight={dimensions().width < 44 ? 1 : 2}
+          paddingLeft={plugins.layout().inset ?? (dimensions().width < 44 ? 1 : 2)}
+          paddingRight={plugins.layout().inset ?? (dimensions().width < 44 ? 1 : 2)}
         >
           <Show when={session()}>
+            <Slot path="session.header" input={{ sessionID: route.sessionID }} />
             <box flexGrow={1} minHeight={0} position="relative">
               <scrollbox
                 ref={(r) => {
@@ -1549,10 +1554,12 @@ export function Session(props: {
                   updateAwayFromBottom()
                 }}
               >
+                <Slot path="session.transcript.start" input={{ sessionID: route.sessionID }} />
                 <For each={visibleRows()}>
                   {(row, index) => (
                     <SessionRowView
                       row={row}
+                      previous={visibleRows()[index() - 1]}
                       message={(messageID) => data.session.message.get(route.sessionID, messageID)}
                       boundaryID={boundaries()[index() + hidden()]}
                     />
@@ -1669,18 +1676,44 @@ export function Session(props: {
 
 type SessionRowViewProps = {
   row: SessionRow
+  previous?: SessionRow
   message: (messageID: string) => SessionMessageInfo | undefined
   boundaryID?: string
 }
 
+// The coarse row kind a plugin layout rule sees: one name per visual role.
+function transcriptRowKind(
+  row: SessionRow,
+  message: (messageID: string) => SessionMessageInfo | undefined,
+): TranscriptRowKind {
+  if (row.type === "group") return "group"
+  if (row.type === "assistant-footer") return "footer"
+  if (row.type === "message") return message(row.messageID)?.type === "user" ? "user" : "other"
+  if (row.type !== "part") return "other"
+  const item = message(row.ref.messageID)
+  if (item?.type !== "assistant") return "other"
+  const part = resolvePart(item, row.ref.partID)
+  if (part?.type === "text" || part?.type === "reasoning" || part?.type === "tool") return part.type
+  return "other"
+}
+
 function SessionRowView(props: SessionRowViewProps) {
+  const plugins = usePlugin()
   const [target, setTarget] = createSignal<BoxRenderable>()
   useEntryAnchor({
     entry: () => (props.row.type === "group" ? undefined : props.row),
     node: target,
   })
+  const gap = createMemo(() => {
+    const rule = plugins.layout().rowGap
+    if (!rule) return 1
+    return rule({
+      kind: transcriptRowKind(props.row, props.message),
+      previous: props.previous ? transcriptRowKind(props.previous, props.message) : undefined,
+    })
+  })
   return (
-    <box ref={setTarget} id={sessionRowID(props.row, props.boundaryID)} marginTop={1} flexShrink={0}>
+    <box ref={setTarget} id={sessionRowID(props.row, props.boundaryID)} marginTop={gap()} flexShrink={0}>
       <Switch>
         <Match when={props.row.type === "group" ? props.row : undefined}>
           {(row) => (
@@ -1701,6 +1734,7 @@ function SessionRowView(props: SessionRowViewProps) {
 }
 
 function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewProps["message"]; images?: boolean }) {
+  const ctx = use()
   return (
     <Switch>
       <Match when={props.row.type === "message" ? props.row : undefined}>
@@ -1719,7 +1753,12 @@ function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewPro
           <Show when={props.message(row().messageID)}>
             {(message) => (
               <Show when={message().type === "assistant"}>
-                <AssistantFooter message={message() as SessionMessageAssistant} />
+                <Slot
+                  path="session.message.assistant.footer"
+                  input={{ sessionID: ctx.sessionID, messageID: message().id }}
+                >
+                  <AssistantFooter message={message() as SessionMessageAssistant} />
+                </Slot>
               </Show>
             )}
           </Show>
@@ -1929,10 +1968,13 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
 }
 
 function SessionMessageView(props: { message: SessionMessageInfo }) {
+  const ctx = use()
   return (
     <Switch>
       <Match when={props.message.type === "user"}>
-        <UserMessage message={props.message as SessionMessageUser} />
+        <Slot path="session.message.user" input={{ sessionID: ctx.sessionID, messageID: props.message.id }}>
+          <UserMessage message={props.message as SessionMessageUser} />
+        </Slot>
       </Match>
       <Match when={props.message.type === "shell"}>
         <ShellMessage message={props.message as Extract<SessionMessageInfo, { type: "shell" }>} />
@@ -1983,26 +2025,37 @@ function SessionPartView(props: {
     if (item?.type !== "assistant") return
     return resolvePart(item, props.partRef.partID)
   })
+  const ctx = use()
+  const input = () => ({ sessionID: ctx.sessionID, messageID: props.partRef.messageID, partID: props.partRef.partID })
   return (
     <Show when={part()}>
       {(item) => (
         <Switch>
           <Match when={item().type === "text"}>
-            <TextPart
-              part={item() as SessionMessageAssistantText}
-              message={message() as SessionMessageAssistant}
-              last={false}
-            />
+            <Slot path="session.part.text" input={input()}>
+              <TextPart
+                part={item() as SessionMessageAssistantText}
+                message={message() as SessionMessageAssistant}
+                last={false}
+              />
+            </Slot>
           </Match>
           <Match when={item().type === "reasoning"}>
-            <ReasoningPart
-              part={item() as SessionMessageAssistantReasoning}
-              message={message() as SessionMessageAssistant}
-              last={false}
-            />
+            <Slot path="session.part.reasoning" input={input()}>
+              <ReasoningPart
+                part={item() as SessionMessageAssistantReasoning}
+                message={message() as SessionMessageAssistant}
+                last={false}
+              />
+            </Slot>
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            <Slot
+              path="session.part.tool"
+              input={{ ...input(), tool: canonicalToolName((item() as SessionMessageAssistantTool).name) }}
+            >
+              <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            </Slot>
           </Match>
         </Switch>
       )}

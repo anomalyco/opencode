@@ -162,6 +162,17 @@ type PromptFooterInput = {
   readonly showDetails: boolean
 }
 
+/** One message of a session transcript. */
+export interface SessionMessageInput {
+  readonly sessionID: string
+  readonly messageID: string
+}
+
+/** One part of an assistant message; read it with data.session.message.get. */
+export interface SessionPartInput extends SessionMessageInput {
+  readonly partID: string
+}
+
 export type PanelPresentation = "panel" | "fullscreen"
 
 /** Client-local state of the selected session panel. The host owns its layout and input scope. */
@@ -196,6 +207,18 @@ export interface SlotMap {
   readonly "prompt.footer.status": PromptFooterInput
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
+  /** Above the transcript, full width. Empty by default. */
+  readonly "session.header": { readonly sessionID: string }
+  /** First child of the transcript scroll area. Empty by default. */
+  readonly "session.transcript.start": { readonly sessionID: string }
+  /** A user prompt in the transcript. */
+  readonly "session.message.user": SessionMessageInput
+  /** The agent, model and duration line closing an assistant turn. */
+  readonly "session.message.assistant.footer": SessionMessageInput
+  readonly "session.part.text": SessionPartInput
+  readonly "session.part.reasoning": SessionPartInput
+  /** One tool call; `tool` is the canonical tool name (shell, patch, subagent, read, ...). */
+  readonly "session.part.tool": SessionPartInput & { readonly tool: string }
   readonly "session.panel": PanelInput
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": { readonly sessionID: string }
@@ -487,6 +510,27 @@ export interface Keymap {
   }
 }
 
+/** The kind of one transcript row, as layout rules see it. */
+export type TranscriptRowKind = "user" | "text" | "reasoning" | "tool" | "group" | "footer" | "other"
+
+/**
+ * Host layout knobs a plugin may set. Every field is optional; an unset field
+ * keeps the host default. When several active plugins set one field, the
+ * last-enabled plugin wins.
+ */
+export interface Layout {
+  /** Blank rows above a transcript row. The host default is 1. */
+  readonly rowGap?: (row: { readonly kind: TranscriptRowKind; readonly previous?: TranscriptRowKind }) => number
+  /** Horizontal padding of the transcript and the dock, in cells. The host default is 2. */
+  readonly inset?: number
+  /**
+   * The composer's chrome. "bar" is the host default: a left accent bar and a
+   * metadata row. "band" is a full-width band on raised.base with a blank row
+   * above and below the editor and the given prefix before it.
+   */
+  readonly composer?: { readonly chrome: "bar" } | { readonly chrome: "band"; readonly prefix?: string }
+}
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -539,6 +583,8 @@ export interface UI {
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
+  /** Sets host layout knobs until the returned cleanup runs; see Layout. */
+  readonly layout: (layout: Layout) => () => void
 }
 
 export interface Context {
