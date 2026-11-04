@@ -5000,11 +5000,11 @@ describe("SessionRunnerLLM", () => {
     })
     yield* callTool(crashed, "call-running", "subagent")
     yield* s.db
-      .update(SessionMessageTable)
+      .update(SessionPartTable)
       .set({
-        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
+        data: sql`json_set(${SessionPartTable.data}, '$.state.metadata', json('{"sessionID":"ses_child"}'))`,
       })
-      .where(eq(SessionMessageTable.id, crashed))
+      .where(and(eq(SessionPartTable.message_id, crashed), eq(SessionPartTable.ordinal, 1)))
       .run()
       .pipe(Effect.orDie)
     // An unfinished assistant behind the checkpoint is outside the history the runner settles.
