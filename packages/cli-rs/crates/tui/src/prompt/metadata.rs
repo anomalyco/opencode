@@ -1,28 +1,34 @@
 //! Prompt metadata (E.2, row P15): the agent, model, and variant the prompt submits with, and the
 //! row under the textarea that shows them (`component/prompt/metadata.tsx`).
 //!
-//! The selection follows `context/local.tsx` over a [`Catalog`] of the location's agents, models,
-//! providers, configured model, and commands, plus `model.json`. The store has no location
-//! catalogs yet (F.8), so the prompt reads them once per directory; F.8 and E.16 replace that.
+//! The selection follows `context/local.tsx` over a [`Catalog`]: the location's agents, models,
+//! providers, configured model, commands, and branch from the store (F.8), plus `model.json`.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-use opencode_api::client::{Client, RequestOptions};
-use opencode_api::error::Error;
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, AgentListInput, CommandListInput, ConfigEntry,
-    ConfigEntryDocumentInfoModel, ConfigGetInput, LocationQueryInput, ModelInfo, ModelListInput,
-    ModelRef, ProviderID, ProviderInfo, ProviderListInput, SessionInfo,
+    AgentInfo, AgentInfoMode, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef,
+    ProviderID, ProviderInfo, SessionInfo,
 };
 use opencode_local::model_pref::{Model, ModelPreferences, Preference, normalize_variant};
+use opencode_store::location::{Catalog as Read, Location};
+use opencode_store::{Data, State, Task};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
 use super::editor::Mode;
+
+/// The store catalogs the prompt reads.
+const READS: [Read; 6] = [
+    Read::Agent,
+    Read::Model,
+    Read::Provider,
+    Read::Config,
+    Read::Command,
+    Read::Vcs,
+];
 
 /// What the prompt needs to know about a location.
 #[derive(Debug, Default)]
@@ -34,6 +40,8 @@ pub struct Catalog {
     pub configured: Option<Choice>,
     /// Server command names, for `/name args` submits.
     pub commands: Vec<String>,
+    /// The current VCS branch, for the footer.
+    pub branch: Option<String>,
     pub preference: Preference,
 }
 
@@ -62,66 +70,60 @@ pub struct Selection {
     pub model: Option<Choice>,
 }
 
+/// Asks the store for the catalogs the prompt reads; each task ends when its read is published.
+pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
+    READS
+        .iter()
+        .map(|read| data.catalog_sync(*read, Some(location)))
+        .collect()
+}
+
+/// `model.json`, read once on a blocking thread and shared by every prompt.
+#[derive(Clone, Default)]
+pub struct Preferences(Arc<Mutex<Option<Preference>>>);
+
+impl Preferences {
+    pub fn load(app: &App, state: Option<PathBuf>) -> Self {
+        let preferences = Self::default();
+        if let Some(state) = state {
+            let slot = preferences.0.clone();
+            app.runtime().spawn_blocking(move || {
+                let loaded = ModelPreferences::new(&state).load();
+                if let Ok(mut slot) = slot.lock() {
+                    *slot = Some(loaded);
+                }
+            });
+        }
+        preferences
+    }
+
+    fn get(&self) -> Preference {
+        self.0
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone())
+            .unwrap_or_default()
+    }
+}
+
 impl Catalog {
-    /// Loads a location's catalog: five reads at once, then `model.json` on a blocking thread.
-    pub async fn load(
-        client: Client,
-        directory: String,
-        state: Option<PathBuf>,
-    ) -> Result<Self, Error> {
-        let location = || {
-            Some(LocationQueryInput {
-                directory: Some(directory.clone()),
-            })
-        };
-        let options = RequestOptions::default();
-        let agents = AgentListInput {
-            location: location(),
-        };
-        let models = ModelListInput {
-            location: location(),
-            types: None,
-        };
-        let providers = ProviderListInput {
-            location: location(),
-        };
-        let config = ConfigGetInput {
-            location: location(),
-        };
-        let commands = CommandListInput {
-            location: location(),
-        };
-        let (agents, models, providers, config, commands) = tokio::join!(
-            client.agent_list(&agents, &options),
-            client.model_list(&models, &options),
-            client.provider_list(&providers, &options),
-            client.config_get(&config, &options),
-            client.command_list(&commands, &options),
-        );
-        let preference = match state {
-            Some(state) => {
-                tokio::task::spawn_blocking(move || ModelPreferences::new(&state).load())
-                    .await
-                    .unwrap_or_default()
-            }
-            None => Preference::default(),
-        };
-        Ok(Self {
-            agents: agents?.data,
-            models: models?.data,
-            // The rest only label or refine the selection; a failed read leaves them empty.
-            providers: providers.map(|output| output.data).unwrap_or_default(),
-            configured: config.ok().and_then(|entries| configured(&entries)),
-            commands: commands
-                .map(|output| {
-                    output
-                        .data
-                        .into_iter()
-                        .map(|command| command.name)
-                        .collect()
-                })
-                .unwrap_or_default(),
-            preference,
+    /// The catalog of `location` once its agents and models are read (`promptDisplay` waits for
+    /// both); the rest only label or refine the selection.
+    pub fn read(state: &State, location: &Location, preferences: &Preferences) -> Option<Self> {
+        let data = state.location(Some(location))?;
+        Some(Self {
+            agents: data.agent.clone()?,
+            models: data.model.clone()?,
+            providers: data.provider.clone().unwrap_or_default(),
+            configured: data.config.as_deref().and_then(configured),
+            commands: data
+                .command
+                .iter()
+                .flatten()
+                .map(|command| command.name.clone())
+                .collect(),
+            branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
+            preference: preferences.get(),
         })
     }
 
@@ -306,20 +308,6 @@ fn configured(entries: &[ConfigEntry]) -> Option<Choice> {
     })
 }
 
-/// Catalogs by directory, shared by every prompt of the app.
-#[derive(Default)]
-pub struct Catalogs(RefCell<HashMap<String, Rc<Catalog>>>);
-
-impl Catalogs {
-    pub fn get(&self, directory: &str) -> Option<Rc<Catalog>> {
-        self.0.borrow().get(directory).cloned()
-    }
-
-    pub fn insert(&self, directory: String, catalog: Rc<Catalog>) {
-        self.0.borrow_mut().insert(directory, catalog);
-    }
-}
-
 /// What the row shows.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Display {
@@ -337,7 +325,11 @@ pub struct Row {
 impl Row {
     pub fn new(app: &App) -> Self {
         Self {
-            text: Text::new(app, "").truncate(true).wrap(WrapMode::None),
+            // An empty row keeps its line, as `<box height={1} />` does.
+            text: Text::new(app, "")
+                .truncate(true)
+                .wrap(WrapMode::None)
+                .min_height(1),
         }
     }
 
@@ -388,12 +380,7 @@ impl Row {
                     spans
                 }
             };
-        // An empty row keeps its line, as `<box height={1} />` does.
-        self.text.set_text(if spans.is_empty() {
-            vec![" ".into()]
-        } else {
-            spans
-        });
+        self.text.set_text(spans);
     }
 }
 
