@@ -1583,17 +1583,20 @@ const EndpointExperimentalPersistentPtyConnectToken =
     )
 
 const EndpointExperimentalScheduleCreate =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalScheduleCreateInput) =>
     preserveEffect<ExperimentalScheduleCreateOutput>()(
       raw["schedule.create"]({
         payload: {
-          sessionID: input["sessionID"],
-          name: input["name"],
-          when: input["when"],
-          if: input["if"],
-          until: input["until"],
-          ends: input["ends"],
-          prompt: input["prompt"],
+          sessionID: input?.["sessionID"],
+          name: input?.["name"],
+          when: input?.["when"],
+          if: input?.["if"],
+          until: input?.["until"],
+          ends: input?.["ends"],
+          prompt: input?.["prompt"],
+          run: input?.["run"],
+          cwd: input?.["cwd"],
+          timeout: input?.["timeout"],
         },
       }).pipe(
         Effect.mapError(mapClientError),

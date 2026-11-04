@@ -12157,7 +12157,7 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Schedule a prompt that wakes the Session, or a shell command that runs on its own, once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Create schedule",
         "requestBody": {
           "content": {
@@ -22439,11 +22439,34 @@
           "prompt": {
             "type": "string",
             "minLength": 1,
-            "description": "The message the Session receives when the schedule wakes."
+            "description": "The message the Session receives when the schedule wakes. Pass exactly one of prompt or run."
+          },
+          "run": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A shell command to run when the schedule fires, with no model call. Pass exactly one of prompt or run."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "The directory the command runs in, relative to the schedule's directory. Defaults to that directory."
+          },
+          "timeout": {
+            "$ref": "#/components/schemas/Schedule.Duration"
           }
         },
-        "required": ["sessionID", "prompt"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "required": ["prompt"]
+              },
+              {
+                "required": ["run"]
+              }
+            ]
+          }
+        ]
       },
       "Schedule.Duration": {
         "type": "string",

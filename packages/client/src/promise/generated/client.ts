@@ -1506,19 +1506,22 @@ export function make(options: ClientOptions) {
           ),
       },
       schedule: {
-        create: (input: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>
+        create: (input?: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalScheduleCreateOutput }>(
             {
               method: "POST",
               path: `/api/experimental/schedule`,
               body: {
-                sessionID: input["sessionID"],
-                name: input["name"],
-                when: input["when"],
-                if: input["if"],
-                until: input["until"],
-                ends: input["ends"],
-                prompt: input["prompt"],
+                sessionID: input?.["sessionID"],
+                name: input?.["name"],
+                when: input?.["when"],
+                if: input?.["if"],
+                until: input?.["until"],
+                ends: input?.["ends"],
+                prompt: input?.["prompt"],
+                run: input?.["run"],
+                cwd: input?.["cwd"],
+                timeout: input?.["timeout"],
               },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],

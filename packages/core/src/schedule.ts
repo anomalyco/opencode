@@ -5,6 +5,7 @@ import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, FiberMap, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import {
   Condition,
   ConditionInput,
@@ -27,7 +28,10 @@ import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
 import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
+import { Location } from "./location.js"
+import { LocationServiceMap } from "./location-service-map.js"
 import type { Permission } from "./permission.js"
+import { AbsolutePath } from "./schema.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionMessage } from "./session/message.js"
@@ -70,8 +74,8 @@ export interface Interface {
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
-  /** Whether experimental.schedules is on in the config where the Session lives. */
-  readonly enabled: (sessionID: SessionSchema.ID) => Effect.Effect<boolean, Session.NotFoundError>
+  /** Whether experimental.schedules is on in the config where the Session lives, or in the global config without one. */
+  readonly enabled: (sessionID?: SessionSchema.ID) => Effect.Effect<boolean, Session.NotFoundError>
   /** Fires every schedule that is due now, at most once each, then waits for the shell actions it started. */
   readonly tick: Effect.Effect<void>
   /**
@@ -215,22 +219,32 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const instances = yield* Instance.Service
     const execution = yield* SessionExecution.Service
+    const global = yield* Global.Service
+    const locations = yield* LocationServiceMap.Service
     const doorbell = yield* Latch.make()
     // Shell actions run in the background so one slow command never stalls the tick loop. Layer-scoped, so a shutdown
     // interrupts them; remove() interrupts one run, pause() lets it finish.
     const running = yield* FiberMap.make<ID, void, never>()
 
     // Config is per location, so a schedule follows the config where its Session lives.
-    const settings = (session: SessionSchema.Info) =>
-      Effect.gen(function* () {
-        const config = yield* Effect.serviceOption(Config.Service)
-        if (Option.isNone(config)) return { enabled: false, timezone: undefined }
-        const entries = yield* config.value.entries()
-        return {
-          enabled: Config.latest(entries, "experimental")?.schedules === true,
-          timezone: Config.latest(entries, "timezone"),
-        }
-      }).pipe(instances.provide(session))
+    const readSettings = Effect.gen(function* () {
+      const config = yield* Effect.serviceOption(Config.Service)
+      if (Option.isNone(config)) return { enabled: false, timezone: undefined }
+      const entries = yield* config.value.entries()
+      return {
+        enabled: Config.latest(entries, "experimental")?.schedules === true,
+        timezone: Config.latest(entries, "timezone"),
+      }
+    })
+    const settings = (session: SessionSchema.Info) => readSettings.pipe(instances.provide(session))
+    // A schedule with no Session has no location of its own, so it follows the global config.
+    const globalSettings = readSettings.pipe(
+      Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))),
+      // The global config directory always exists; treat a missing one as schedules off.
+      Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
+        Effect.succeed({ enabled: false, timezone: undefined }),
+      ),
+    )
 
     const find = (id: ID) =>
       db
@@ -767,14 +781,25 @@ const layer = Layer.effect(
 
     return Service.of({
       create: Effect.fn("Schedule.create")(function* (input) {
-        const session = yield* sessions.get(input.sessionID)
+        const session = input.sessionID === undefined ? undefined : yield* sessions.get(input.sessionID)
         const missingDirectory = () =>
-          Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }))
-        const config = yield* settings(session).pipe(
-          Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
-        )
+          Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session?.location.directory}` }))
+        const config =
+          session === undefined
+            ? yield* globalSettings
+            : yield* settings(session).pipe(Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))
         if (!config.enabled) return yield* new DisabledError()
+        // Without a Session there is nothing to wake, so prompt actions and gates that need one wait for session-less
+        // firing (2/3).
+        if (session === undefined) {
+          if (input.action.type === "prompt")
+            return yield* new InvalidError({ reason: "A schedule without a Session needs a run command" })
+          if (input.if !== undefined || input.until !== undefined)
+            return yield* new InvalidError({ reason: "if and until need a Session" })
+        }
         const check = yield* resolveStoredCheck(input)
+        if (input.action.type === "prompt" && input.action.prompt.trim() === "")
+          return yield* new InvalidError({ reason: "Pass exactly one of prompt or run" })
         if (input.action.type === "shell") {
           if (input.action.run.trim() === "")
             return yield* new InvalidError({ reason: "A shell action needs a command" })
@@ -794,7 +819,7 @@ const layer = Layer.effect(
 
         const scheduleID = ID.create()
         const seeded =
-          check === undefined
+          session === undefined || check === undefined
             ? UNSEEDED
             : yield* Effect.gen(function* () {
                 yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
@@ -825,8 +850,9 @@ const layer = Layer.effect(
                 return { matched: false as const, state: init.state, checks: 1 }
               })
 
-        // A shell action runs unattended, so ask for its shell and external_directory permissions now, once.
-        if (input.action.type === "shell")
+        // A shell action runs unattended, so ask for its shell and external_directory permissions now, once. A
+        // session-less schedule has no Session to ask through and trusts its API caller instead.
+        if (session !== undefined && input.action.type === "shell")
           yield* ScheduleAction.authorize(session, input.name, when, input.action).pipe(
             instances.provide(session),
             Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
@@ -837,7 +863,7 @@ const layer = Layer.effect(
           .insert(ScheduleTable)
           .values({
             id: scheduleID,
-            session_id: session.id,
+            session_id: session?.id ?? null,
             name: input.name ?? null,
             check: check ?? null,
             state: seeded.state,
@@ -868,7 +894,7 @@ const layer = Layer.effect(
         if (seeded.matched) {
           // An until check that already matched still runs a shell action; otherwise the schedule would silently do
           // nothing. It runs in the background like any other.
-          if (input.action.type === "shell")
+          if (input.action.type === "shell" && session !== undefined)
             yield* FiberMap.run(running, row.id, execute(row, session, input.action, 1, seeded.message), {
               onlyIfMissing: true,
             })
@@ -925,7 +951,8 @@ const layer = Layer.effect(
         yield* FiberMap.remove(running, id)
         yield* db.delete(ScheduleTable).where(eq(ScheduleTable.id, id)).run().pipe(Effect.orDie)
       }),
-      enabled: Effect.fn("Schedule.enabled")(function* (sessionID) {
+      enabled: Effect.fn("Schedule.enabled")(function* (sessionID?: SessionSchema.ID) {
+        if (sessionID === undefined) return (yield* globalSettings).enabled
         const session = yield* sessions.get(sessionID)
         return yield* settings(session).pipe(
           Effect.map((value) => value.enabled),
@@ -941,5 +968,5 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Database.node, Session.node, SessionExecution.node, Instance.node],
+  deps: [Database.node, Session.node, SessionExecution.node, Instance.node, Global.node, LocationServiceMap.node],
 })

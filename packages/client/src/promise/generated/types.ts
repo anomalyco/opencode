@@ -4539,7 +4539,7 @@ export type ExperimentalMediaGetInput = { readonly hash: string }
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 
 export type ExperimentalScheduleCreateInput = {
-  readonly sessionID: string
+  readonly sessionID?: string | undefined
   readonly name?: string | undefined
   readonly when?:
     | (
@@ -4610,7 +4610,10 @@ export type ExperimentalScheduleCreateInput = {
       )
     | undefined
   readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
-  readonly prompt: string
+  readonly prompt?: string | undefined
+  readonly run?: string | undefined
+  readonly cwd?: string | undefined
+  readonly timeout?: string | undefined
 }
 
 export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]

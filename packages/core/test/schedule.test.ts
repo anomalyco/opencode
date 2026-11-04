@@ -40,6 +40,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
+import { Global } from "@opencode/util/global"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { location } from "./fixture/location"
@@ -50,6 +51,7 @@ const enabledDirectory = "/enabled"
 const disabledDirectory = "/disabled"
 const toggleDirectory = "/toggle"
 const missingDirectory = "/missing"
+const globalDirectory = "/global"
 
 const wakes: Session.ID[] = []
 /** Runs inside the next wake, which happens while a schedule is firing. */
@@ -90,6 +92,8 @@ const disabledEntries = [
 ]
 const enabled = Config.testLayer(enabledEntries)
 const disabled = Config.testLayer(disabledEntries)
+/** The global location's flag for session-less schedules. */
+const globalFlag = { on: false }
 /** A location whose flag the test turns on, counting every config read. */
 const toggle = { on: false, reads: 0 }
 const readToggle = () => {
@@ -244,11 +248,15 @@ const locations = makeGlobalNode({
           }
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           return Layer.mergeAll(
-            ref.directory === enabledDirectory || ref.directory === missingDirectory
-              ? enabled
-              : ref.directory === toggleDirectory
-                ? toggled
-                : disabled,
+            ref.directory === globalDirectory
+              ? globalFlag.on
+                ? enabled
+                : disabled
+              : ref.directory === enabledDirectory || ref.directory === missingDirectory
+                ? enabled
+                : ref.directory === toggleDirectory
+                  ? toggled
+                  : disabled,
             configureAgent.pipe(
               Layer.provideMerge(
                 LayerNode.compile(
@@ -306,11 +314,13 @@ const it = testEffect(
       Schedule.node,
       Instance.node,
       LocationServiceMap.node,
+      Global.node,
     ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(execution),
       LocationServiceMap.node.replace(locations),
+      Global.node.replace(Layer.succeed(Global.Service, Global.make({ config: globalDirectory }))),
     ],
   ),
 )
@@ -335,6 +345,7 @@ const setup = (directory = enabledDirectory) =>
     duringWake = Effect.void
     toggle.on = false
     toggle.reads = 0
+    globalFlag.on = false
     shellState.exitCode = 0
     shellState.stdout = ""
     shellState.stderr = ""
@@ -606,6 +617,77 @@ describe("Schedule", () => {
       yield* schedules.tick
       expect(yield* pending).toEqual([])
       expect((yield* schedules.list())[0]).toMatchObject({ runCount: 0 })
+    }),
+  )
+
+  it.effect("creates a session-less shell schedule that does not fire yet", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      expect(yield* schedules.enabled()).toBe(true)
+
+      const schedule = yield* schedules.create({
+        when: { type: "in", in: "5 minutes" },
+        action: { type: "shell", run: "echo hi", timeout: "1 minute" },
+      })
+      expect(schedule.sessionID).toBeUndefined()
+      expect(schedule.action).toEqual({ type: "shell", run: "echo hi", timeout: "1 minute" })
+      expect(iso(schedule.nextDueAt)).toBe("1970-01-01T00:05:00.000Z")
+
+      const { db } = yield* Database.Service
+      const row = yield* db
+        .select()
+        .from(ScheduleTable)
+        .where(eq(ScheduleTable.id, schedule.id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.session_id).toBeNull()
+
+      // Session-less firing arrives in 2/3, so a due row still does nothing.
+      yield* TestClock.adjust("5 minutes")
+      yield* schedules.tick
+      expect(shellState.runs).toEqual([])
+      expect((yield* schedules.get(schedule.id)).runCount).toBe(0)
+    }),
+  )
+
+  it.effect("refuses a session-less schedule while the global flag is off", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      expect(yield* schedules.enabled()).toBe(false)
+      expect(
+        yield* Effect.flip(
+          schedules.create({
+            when: { type: "in", in: "5 minutes" },
+            action: { type: "shell", run: "echo hi" },
+          }),
+        ),
+      ).toMatchObject({ _tag: "Schedule.DisabledError" })
+    }),
+  )
+
+  it.effect("refuses a session-less prompt, if or until", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      const invalid = (input: Schedule.CreateInput) => Effect.flip(schedules.create(input))
+
+      expect(
+        yield* invalid({ when: { type: "in", in: "5 minutes" }, action: { type: "prompt", prompt: "poll" } }),
+      ).toMatchObject({ _tag: "Schedule.InvalidError" })
+      expect(
+        yield* invalid({
+          when: { type: "every", every: "1 minute" },
+          if: { type: "shell", run: "true" },
+          action: { type: "shell", run: "echo hi" },
+        }),
+      ).toMatchObject({ _tag: "Schedule.InvalidError" })
+      expect(
+        yield* invalid({
+          until: { type: "shell", run: "true" },
+          action: { type: "shell", run: "echo hi" },
+        }),
+      ).toMatchObject({ _tag: "Schedule.InvalidError" })
     }),
   )
 

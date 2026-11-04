@@ -24,6 +24,7 @@ export const DurationString = Schema.String.annotate({
   identifier: "Schedule.Duration",
   description: 'A duration such as "90 seconds", "5 minutes" or "2 hours".',
 })
+export type DurationString = typeof DurationString.Type
 
 const zone = {
   tz: Schema.String.pipe(optional).annotate({
@@ -175,7 +176,7 @@ export const Info = Schema.Struct({
 export type Info = typeof Info.Type
 
 export const CreateInput = Schema.Struct({
-  sessionID: SessionID,
+  sessionID: SessionID.pipe(optional),
   name: Schema.String.pipe(optional),
   when: When.pipe(optional),
   if: Condition.pipe(optional),
@@ -236,7 +237,29 @@ export const ConditionInput = Schema.Union([
 ]).annotate({ identifier: "Schedule.ConditionInput" })
 export type ConditionInput = typeof ConditionInput.Type
 
-/** A schedule as callers describe it: when it fires, optional condition, when it stops, and the prompt it sends. */
+/**
+ * Exactly one action, so a caller cannot send a prompt and a command together or neither of them.
+ * The metadata is portable, so `httpapi-codegen` can carry the check into the payload schema.
+ */
+export const requireOneAction = Schema.makeFilter(
+  (value: { readonly prompt?: string; readonly run?: string }) =>
+    (value.prompt === undefined) === (value.run === undefined) ? "Pass exactly one of prompt or run" : undefined,
+  {
+    expected: "exactly one of prompt or run",
+    representation: { id: "opencode/schedule/requireOneAction", payload: null },
+    toJsonSchema: () => ({ oneOf: [{ required: ["prompt"] }, { required: ["run"] }] }),
+    toCode: () => ({
+      importDeclarations: ['import { Schedule } from "@opencode/schema/schedule"'],
+      runtime: "Schedule.requireOneAction",
+    }),
+    arbitraryConstraint: {},
+  },
+)
+
+/**
+ * A schedule as callers describe it: when it fires, optional condition, when it stops, and the prompt it sends or the
+ * command it runs. Pass exactly one of `prompt` or `run`.
+ */
 export const Request = Schema.Struct({
   name: Schema.String.pipe(optional).annotate({ description: "A short label for the schedule." }),
   when: WhenInput.pipe(optional).annotate({
@@ -254,20 +277,37 @@ export const Request = Schema.Struct({
   ends: Ends.pipe(optional).annotate({
     description: 'Stops a repeating schedule at the first limit reached: { after: "8 hours" }, { at }, { times: 3 }.',
   }),
-  prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
-    description: "The message the Session receives when the schedule wakes.",
-  }),
-}).annotate({ identifier: "Schedule.Request" })
+  prompt: Schema.String.check(Schema.isMinLength(1))
+    .annotate({
+      description: "The message the Session receives when the schedule wakes. Pass exactly one of prompt or run.",
+    })
+    .pipe(optional),
+  run: Schema.String.check(Schema.isMinLength(1))
+    .annotate({
+      description: "A shell command to run when the schedule fires, with no model call. Pass exactly one of prompt or run.",
+    })
+    .pipe(optional),
+  cwd: Schema.String.annotate({
+    description: "The directory the command runs in, relative to the schedule's directory. Defaults to that directory.",
+  }).pipe(optional),
+  timeout: DurationString.pipe(optional),
+})
+  .check(requireOneAction)
+  .annotate({ identifier: "Schedule.Request" })
 export type Request = typeof Request.Type
 
-export const toCreateInput = (sessionID: SessionID, request: Request): CreateInput => ({
+export const toCreateInput = (sessionID: SessionID | undefined, request: Request): CreateInput => ({
   sessionID,
   name: request.name,
   when: request.when === undefined ? undefined : toWhen(request.when),
   if: request.if === undefined ? undefined : toCondition(request.if),
   until: request.until === undefined ? undefined : toCondition(request.until),
   ends: request.ends,
-  action: { type: "prompt", prompt: request.prompt },
+  // `requireOneAction` has already rejected a request with both or neither, so the run branch owns the shell case.
+  action:
+    request.run === undefined
+      ? { type: "prompt", prompt: request.prompt ?? "" }
+      : { type: "shell", run: request.run, cwd: request.cwd, timeout: request.timeout },
 })
 
 const toCondition = (condition: ConditionInput): Condition => {

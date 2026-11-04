@@ -25,6 +25,7 @@ it.live("manages schedules through the experimental API when enabled and honors 
     const disabled = path.join(dir, "disabled")
     yield* Effect.promise(async () => {
       await Promise.all([global, enabled, disabled].map((item) => fs.mkdir(item, { recursive: true })))
+      await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
       await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
       await fs.writeFile(path.join(disabled, "opencode.json"), JSON.stringify({ experimental: { schedules: false } }))
     })
@@ -70,6 +71,29 @@ it.live("manages schedules through the experimental API when enabled and honors 
       await expect(api.experimental.schedule.get({ scheduleID: created.id })).rejects.toMatchObject({
         _tag: "ScheduleNotFoundError",
       })
+
+      // No Session: the command stands on its own, follows the global flag, and stores a null session_id.
+      const standalone = await api.experimental.schedule.create({
+        when: { in: "5 minutes" },
+        run: "echo hi",
+        timeout: "1 minute",
+      })
+      expect(standalone.sessionID).toBeUndefined()
+      expect(standalone).toMatchObject({
+        action: { type: "shell", run: "echo hi", timeout: "1 minute" },
+        status: "active",
+      })
+      expect(standalone.nextDueAt).toBeDefined()
+      await expect(
+        api.experimental.schedule.create({ when: { in: "5 minutes" }, run: "echo hi", prompt: "ping" }),
+      ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
+      await expect(api.experimental.schedule.create({ when: { in: "5 minutes" } })).rejects.toMatchObject({
+        _tag: "InvalidRequestError",
+      })
+      // A prompt needs a Session to wake until session-less prompt firing lands.
+      await expect(
+        api.experimental.schedule.create({ when: { in: "5 minutes" }, prompt: "ping" }),
+      ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
 
       await expect(
         api.experimental.schedule.create({ sessionID: session.id, when: { every: "soon" }, prompt: "ping" }),

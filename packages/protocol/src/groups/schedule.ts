@@ -1,4 +1,5 @@
 import { Schedule } from "@opencode/schema/schedule"
+import { optional } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
@@ -16,9 +17,14 @@ const annotations = (identifier: string, summary: string, description: string) =
     transform: (operation) => ({ ...operation, tags: ["experimental"] }),
   })
 
-export const CreatePayload = Schema.Struct({ sessionID: Session.ID, ...Schedule.Request.fields }).annotate({
-  identifier: "Schedule.CreatePayload",
+export const CreatePayload = Schema.Struct({
+  // Optional: a schedule without a Session runs its command on its own. Spreading `Request.fields` drops its struct
+  // check, so the exactly-one rule is reapplied here.
+  sessionID: Session.ID.pipe(optional),
+  ...Schedule.Request.fields,
 })
+  .check(Schedule.requireOneAction)
+  .annotate({ identifier: "Schedule.CreatePayload" })
 export type CreatePayload = typeof CreatePayload.Type
 
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
@@ -31,7 +37,7 @@ export const ScheduleEndpoints = [
     annotations(
       "create",
       "Create schedule",
-      "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron.",
+      "Schedule a prompt that wakes the Session, or a shell command that runs on its own, once after a delay, at a time, every interval, or on a cron.",
     ),
   ),
   HttpApiEndpoint.get("schedule.list", "/api/experimental/schedule", {

@@ -7,7 +7,10 @@ import { Effect } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { missingSession } from "./session-error"
 
-/** `schedule.*` in the `server.experimental` group. Every route needs experimental.schedules where the Session lives. */
+/**
+ * `schedule.*` in the `server.experimental` group. Session routes need experimental.schedules where the Session lives;
+ * a create without a `sessionID` needs it in the global config.
+ */
 export const makeSchedule = Effect.gen(function* () {
   const schedules = yield* Schedule.Service
 
