@@ -75,9 +75,9 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         return true;
     }
     // The editor context goes once, before the prompt it came with (E.5).
-    let editor = prompt.editor_context(tui).filter(|_| {
-        tui.prompt.editor.label_state() == super::editor_context::LabelState::Pending
-    });
+    let editor = prompt
+        .editor_context(tui)
+        .filter(|_| tui.prompt.editor.label_state() == super::editor_context::LabelState::Pending);
     if queue && editor.is_some() {
         warn(tui, "Editor context cannot be queued");
         return false;

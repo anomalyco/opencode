@@ -32,6 +32,8 @@ impl Ide {
         runtime.spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
                 let auth = auth.clone();
+                // tungstenite's handshake callback returns its error response by value.
+                #[allow(clippy::result_large_err)]
                 let header = move |request: &tokio_tungstenite::tungstenite::handshake::server::Request,
                                    response| {
                     auth.lock().unwrap().push(

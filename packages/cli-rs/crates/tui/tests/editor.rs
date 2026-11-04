@@ -223,7 +223,10 @@ fn ide_selection_shows_and_goes_once_before_the_prompt() {
 
     setup.app.press("return");
     setup.wait("the prompt", || {
-        setup.posts().iter().any(|(path, _)| path.ends_with("/prompt"))
+        setup
+            .posts()
+            .iter()
+            .any(|(path, _)| path.ends_with("/prompt"))
     });
     let posts = setup.posts();
     let paths: Vec<&str> = posts
@@ -303,7 +306,10 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
     });
     setup.app.press("return");
     setup.wait("the prompt", || {
-        setup.posts().iter().any(|(path, _)| path.ends_with("/prompt"))
+        setup
+            .posts()
+            .iter()
+            .any(|(path, _)| path.ends_with("/prompt"))
     });
     let prompt = setup
         .posts()
@@ -330,7 +336,8 @@ fn lock_files_name_the_server_and_its_token() {
     std::fs::create_dir_all(&locks).unwrap();
     std::fs::write(
         locks.join(format!("{}.lock", ide.port)),
-        json!({ "workspaceFolders": ["/project"], "authToken": "token-1", "transport": "ws" }).to_string(),
+        json!({ "workspaceFolders": ["/project"], "authToken": "token-1", "transport": "ws" })
+            .to_string(),
     )
     .unwrap();
     let setup = Setup::new(Source {
@@ -357,7 +364,12 @@ fn zed_selection_is_read_from_its_database() {
         ..Source::default()
     });
     // `index.*` names its directory too; bytes 6..17 run from line 1 into line 2.
-    let directory = root.path().file_name().unwrap().to_string_lossy().into_owned();
+    let directory = root
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
     setup.wait_for(&format!("{directory}/index.ts#1-2"));
     // The next poll sees a new selection.
     let connection = rusqlite::Connection::open(&db).unwrap();
