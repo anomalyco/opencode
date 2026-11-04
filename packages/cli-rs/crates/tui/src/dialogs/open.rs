@@ -939,9 +939,12 @@ impl Open {
                     return;
                 };
                 match result {
-                    Ok(_) => {
+                    Ok(created) => {
                         tui.dialogs.clear();
-                        tui.navigate(Route::Home);
+                        crate::features::location::navigate_home(
+                            &tui,
+                            Some(opencode_store::Location::new(created.directory.0)),
+                        );
                     }
                     Err(error) => {
                         current.set_busy(false);
@@ -963,8 +966,10 @@ impl Open {
             tui.dialogs.clear();
             match target {
                 Target::Session(id) => tui.navigate(Route::Session { id }),
-                // The Rust TUI has one location until the location context lands (E.1).
-                Target::Project { .. } => tui.navigate(Route::Home),
+                Target::Project { directory, .. } => crate::features::location::navigate_home(
+                    &tui,
+                    Some(opencode_store::Location::new(directory)),
+                ),
             }
         });
     }

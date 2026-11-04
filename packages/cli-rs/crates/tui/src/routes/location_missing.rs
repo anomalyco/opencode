@@ -2,24 +2,24 @@
 //! the open session's directory missing, the prompt gives way to "Session location unavailable" with one
 //! action, "Choose directory", which moves the session (`session.move`).
 //!
-//! TS chooses the directory in `DialogWorkspaces`, which is not ported yet; this view asks for a path in a
-//! prompt dialog instead (see the E.1 report). The session route owns one [`LocationMissing`] beside its
-//! prompt and hides the prompt while [`LocationMissing::active`].
+//! The directory comes from the worktrees dialog (E.11b). The session route owns one [`LocationMissing`]
+//! beside its prompt and hides the prompt while [`LocationMissing::active`].
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{AbsolutePath, SessionID, SessionMoveInput};
-use opencode_ui::dialog::DialogOptions;
+use opencode_api::generated::{
+    AbsolutePath, ProjectID, SessionID, SessionMoveInput, WorktreeCreateInput,
+};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::prompt::{PromptProps, prompt};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::app::Tui;
+use crate::dialogs::worktrees::Selection;
 
 pub struct LocationMissing {
     session: SessionID,
@@ -183,34 +183,73 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
         .child(&footer)
 }
 
-/// Asks for the new directory, then moves the session there.
+/// `open`: the worktrees dialog for the session's project; the pick (a new worktree is created first) is
+/// where the session moves.
 fn choose(tui: &Tui, session: SessionID, directory: String) {
-    let weak = tui.weak();
-    let clear = tui.dialogs.clone();
-    tui.dialogs.replace(
-        move |cx| {
-            let (view, _) = prompt(
-                cx,
-                PromptProps {
-                    title: "Choose directory".into(),
-                    placeholder: Some("Absolute path".into()),
-                    value: Some(directory.clone()),
-                    on_confirm: Some(Rc::new(move |value: &str| {
-                        let target = value.trim().to_owned();
-                        let Some(tui) = weak.upgrade() else { return };
-                        tui.dialogs.clear();
-                        if !target.is_empty() {
-                            move_session(&tui, session.clone(), target);
-                        }
-                    })),
-                    on_cancel: Some(Rc::new(move || clear.clear())),
-                    ..PromptProps::default()
-                },
-            );
-            view
+    let Some((project, subdirectory)) = tui.data.read(|state| {
+        state.session(&session).map(|info| {
+            (
+                info.project_id.clone(),
+                info.subpath.as_ref().is_some_and(|sub| !sub.0.is_empty()),
+            )
+        })
+    }) else {
+        return;
+    };
+    crate::dialogs::worktrees::show(
+        tui,
+        crate::dialogs::worktrees::Props {
+            project_id: project.clone(),
+            location: Some(opencode_store::Location::new(directory.clone())),
+            current: Some(Selection::Directory {
+                directory,
+                subdirectory,
+            }),
+            on_select: Rc::new(move |tui, selection| {
+                tui.dialogs.clear();
+                match selection {
+                    Selection::Directory { directory, .. } => {
+                        move_session(tui, session.clone(), directory)
+                    }
+                    Selection::New { name } => create(tui, session.clone(), project.clone(), name),
+                }
+            }),
+            on_current_change: None,
         },
-        None,
-        DialogOptions::default(),
+    );
+}
+
+/// A new worktree for the session, then the move.
+fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
+    let client = tui.data.client().clone();
+    let input = WorktreeCreateInput {
+        project_id: project,
+        name: Some(name),
+        ..WorktreeCreateInput::default()
+    };
+    let weak = tui.weak();
+    tui.app.spawn(
+        async move {
+            client
+                .worktree_create(&input, &RequestOptions::default())
+                .await
+        },
+        move |_, result| {
+            let Some(tui) = weak.upgrade() else { return };
+            match result.map(|created| created.directory.0) {
+                Ok(directory) if !directory.is_empty() => move_session(&tui, session, directory),
+                result => tui.toasts.show(
+                    ToastOptions::new(
+                        Variant::Error,
+                        result.map_or_else(
+                            |error| crate::dialogs::worktrees::error_message(&error),
+                            |_| "No worktree directory returned".to_owned(),
+                        ),
+                    )
+                    .title("Creating workspace failed"),
+                ),
+            }
+        },
     );
 }
 
