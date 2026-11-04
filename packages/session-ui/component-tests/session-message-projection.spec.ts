@@ -10,6 +10,7 @@ story("reveals turn speed only while hovering the response metadata", async ({ m
   const speed = meta.locator('[data-slot="text-part-meta-speed"]')
 
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(meta.locator('[data-slot="text-part-meta-item"]').last()).toHaveText("5m 2s")
   await expect(speed).toHaveText("·60.0 tok/s")
   await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
   await expect(footer).toHaveCSS("opacity", "1")

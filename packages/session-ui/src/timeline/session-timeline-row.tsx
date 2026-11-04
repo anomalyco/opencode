@@ -205,17 +205,17 @@ export function createSessionTimelineRowRenderer(input: {
 
     if (user?.type !== "user") return null
 
-    const completed = (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages).reduce<
-      number | undefined
-    >((latest, message) => {
-      if (message.time.completed === undefined) return latest
+    const message = input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.time.completed !== undefined)
 
-      return latest === undefined ? message.time.completed : Math.max(latest, message.time.completed)
-    }, undefined)
+    if (message?.time.completed === undefined || message.time.completed < user.time.created) return undefined
 
-    if (completed === undefined || completed < user.time.created) return undefined
-
-    return completed - user.time.created
+    return SessionTurn.duration(turns().messages, message, {
+      index: turns().indexes.get(message.id),
+      legacy: turns().legacy,
+    })
   }
 
   const copyContentID = (messageID: string) => {
