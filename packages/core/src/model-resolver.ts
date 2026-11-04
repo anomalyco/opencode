@@ -107,6 +107,16 @@ export class UnsupportedCompactionError extends Schema.TaggedError<UnsupportedCo
   }
 }
 
+/** Keeps the selected catalog identity when credential resolution fails before a request exists. */
+export class AuthorizationError extends Integration.AuthorizationError {
+  readonly model: Ref
+
+  constructor(input: { readonly model: Ref; readonly cause: unknown; readonly credentialID?: Credential.ID }) {
+    super({ cause: input.cause, credentialID: input.credentialID })
+    this.model = input.model
+  }
+}
+
 export type Error =
   | VariantUnavailableError
   | UnsupportedPackageError
@@ -465,7 +475,21 @@ export const layer = Layer.effect(
       return { provider, credential, runtimeInfo }
     })
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
-      const { provider, credential, runtimeInfo } = yield* prepare(selected, variant)
+      const { provider, credential, runtimeInfo } = yield* prepare(selected, variant).pipe(
+        Effect.catchTag("Integration.Authorization", (error) =>
+          Effect.fail(
+            new AuthorizationError({
+              model: Ref.make({
+                id: selected.id,
+                providerID: selected.providerID,
+                ...(variant === undefined ? {} : { variant }),
+              }),
+              cause: error.cause,
+              credentialID: error.credentialID,
+            }),
+          ),
+        ),
+      )
       const model = yield* fromCatalogModel(runtimeInfo, credential, dependencies)
       const runtime =
         provider?.activation === "enabled" &&

@@ -1,6 +1,6 @@
 export * as SessionRunnerLLM from "./llm.js"
 
-import { Message } from "@opencode/ai/effect"
+import { AIError, AuthenticationError, Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
@@ -33,6 +33,7 @@ import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
+import { ModelResolver } from "../../model-resolver.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
@@ -200,7 +201,7 @@ const layer = Layer.effect(
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
+                  return { _tag: "Ready" as const, context: selected }
                 }),
               )
               if (ready) return ready
@@ -230,17 +231,36 @@ const layer = Layer.effect(
     })
 
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
-    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
+    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Selection, step: number) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
-      let initial: SessionContext.Loaded | undefined = first
+      let initial: SessionContext.Selection | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
-        const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
+        const selected = initial ?? (yield* prepareContext(sessionID))
         initial = undefined
+        const result = yield* context.load(selected).pipe(Effect.result)
+        if (result._tag === "Failure") {
+          const failure = result.failure
+          if (!(failure instanceof ModelResolver.AuthorizationError)) return yield* failure
+          const error = toSessionError(failure)
+          const decision = yield* retry.decide({
+            cause: new AIError({ reason: new AuthenticationError({ message: failure.message, cause: failure }) }),
+            error,
+            agent: selected.agent.id,
+            model: failure.model,
+            credentialID: failure.credentialID,
+            hook: (event) => hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
+            retry: false,
+          })
+          if (!decision.retry) return yield* failure
+          yield* retry.wait({ decision, error, assistantMessageID })
+          continue
+        }
+        const loaded = result.success
         const estimate = SessionCompaction.estimatePrompt(loaded)
         const compacted = yield* compaction.compact({ reason: "auto", context: loaded, estimate })
         if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })

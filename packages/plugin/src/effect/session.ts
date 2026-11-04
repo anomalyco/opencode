@@ -1,6 +1,7 @@
 import type { ExperimentalSessionApi, SessionApi } from "@opencode/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
+import type { Credential } from "@opencode/schema/credential"
 import type { Model } from "@opencode/schema/model"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
@@ -135,6 +136,8 @@ export interface SessionRetry {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  /** The credential whose resolution failed before a model request, when known. */
+  readonly credentialID?: Credential.ID
   readonly error: SessionError.Error
   readonly attempt: number
   decision: SessionRetryDecision
