@@ -6,12 +6,12 @@ use std::rc::Rc;
 
 use opencode_api::generated::{McpServer, SessionID};
 use opencode_plugin::{Definition, Placement, slot};
-use opencode_store::Location;
+use opencode_store::{Catalog, Location};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
 use crate::app::Tui;
-use crate::routes::session::sidebar::{Fold, Section, on_click};
+use crate::routes::session::sidebar::{Fold, Section, on_click, sync_catalogs};
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.mcp", |cx| {
@@ -28,6 +28,7 @@ pub fn plugin() -> Definition<Tui> {
 }
 
 fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
+    sync_catalogs(tui, session, &[Catalog::McpServer]);
     let list = servers(tui, session);
     if list.is_empty() {
         return None;
