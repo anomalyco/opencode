@@ -13,13 +13,13 @@ use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
 use super::assistant::titlecase;
+use super::errors::StepError;
 use super::list::Context;
 
 /// The line under a finished step: agent, model, turn duration, tokens per second.
 pub struct Footer {
     root: View,
-    error: View,
-    error_text: Text,
+    error: StepError,
     line_box: View,
     line: Text,
     rendered: RefCell<String>,
@@ -27,23 +27,17 @@ pub struct Footer {
 
 impl Footer {
     pub fn new(cx: &Context<'_>) -> Self {
-        let error_text = Text::new(cx.app, "")
-            .fg(cx.theme.text.feedback.error.base)
-            .wrap(WrapMode::Word);
-        let error = View::new(cx.app)
-            .padding_edge(Edge::Left, 3)
-            .child(&error_text);
+        let error = StepError::new(cx);
         let line = Text::new(cx.app, "").wrap(WrapMode::Word);
         let line_box = View::new(cx.app).padding_edge(Edge::Left, 3).child(&line);
         let root = View::new(cx.app)
             .column()
             .shrink(0.0)
-            .child(&error)
+            .child(error.root())
             .child(&line_box);
         Self {
             root,
             error,
-            error_text,
             line_box,
             line,
             rendered: RefCell::default(),
@@ -61,16 +55,7 @@ impl Footer {
             .error
             .as_ref()
             .is_some_and(|error| error.message == "Step interrupted");
-        // E.6b adds the free-limit and usage-limit notices and the retry row.
-        let error = message
-            .error
-            .as_ref()
-            .filter(|_| !interrupted && message.retry.is_none());
-        self.error.visible(error.is_some());
-        if let Some(error) = error {
-            self.error_text
-                .set_text(format!("Error: {}", error.message));
-        }
+        self.error.update(cx, message);
         let index = cx.index.get(message.id.as_str()).copied();
         let duration = turn_duration(cx.messages, message, index, cx.legacy);
         let width = cx.width;
