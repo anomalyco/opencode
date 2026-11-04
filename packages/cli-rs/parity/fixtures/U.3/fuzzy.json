@@ -1,0 +1,3228 @@
+{
+ "options": [
+  {
+   "title": "Leader key for keybind combinations",
+   "category": "leader",
+   "searchText": "leader"
+  },
+  {
+   "title": "Exit the application",
+   "category": "app",
+   "searchText": "app.exit"
+  },
+  {
+   "title": "Clear the screen in mini",
+   "category": "app",
+   "searchText": "app.clear"
+  },
+  {
+   "title": "Toggle debug panel",
+   "category": "app",
+   "searchText": "app.debug"
+  },
+  {
+   "title": "Toggle console",
+   "category": "app",
+   "searchText": "app.console"
+  },
+  {
+   "title": "Open scrap screen",
+   "category": "app",
+   "searchText": "app.scrap"
+  },
+  {
+   "title": "Toggle animations",
+   "category": "app",
+   "searchText": "app.toggle.animations"
+  },
+  {
+   "title": "Toggle file context",
+   "category": "app",
+   "searchText": "app.toggle.file_context"
+  },
+  {
+   "title": "Toggle diff wrapping",
+   "category": "app",
+   "searchText": "app.toggle.diffwrap"
+  },
+  {
+   "title": "Toggle paste summary",
+   "category": "app",
+   "searchText": "app.toggle.paste_summary"
+  },
+  {
+   "title": "List available commands",
+   "category": "command",
+   "searchText": "command.palette.show"
+  },
+  {
+   "title": "Open help dialog",
+   "category": "help",
+   "searchText": "help.show"
+  },
+  {
+   "title": "Open documentation",
+   "category": "docs",
+   "searchText": "docs.open"
+  },
+  {
+   "title": "Open settings",
+   "category": "opencode",
+   "searchText": "opencode.settings"
+  },
+  {
+   "title": "Pair device",
+   "category": "server",
+   "searchText": "server.pair"
+  },
+  {
+   "title": "Restart service",
+   "category": "service",
+   "searchText": "service.restart"
+  },
+  {
+   "title": "Reload configuration",
+   "category": "location",
+   "searchText": "location.reload"
+  },
+  {
+   "title": "Open diff viewer",
+   "category": "diff",
+   "searchText": "diff.open"
+  },
+  {
+   "title": "Close diff viewer",
+   "category": "diff",
+   "searchText": "diff.close"
+  },
+  {
+   "title": "Move diff viewer down",
+   "category": "diff",
+   "searchText": "diff.down"
+  },
+  {
+   "title": "Move diff viewer up",
+   "category": "diff",
+   "searchText": "diff.up"
+  },
+  {
+   "title": "Page diff viewer down",
+   "category": "diff",
+   "searchText": "diff.page.down"
+  },
+  {
+   "title": "Page diff viewer up",
+   "category": "diff",
+   "searchText": "diff.page.up"
+  },
+  {
+   "title": "Scroll diff viewer down half a page",
+   "category": "diff",
+   "searchText": "diff.half_page.down"
+  },
+  {
+   "title": "Scroll diff viewer up half a page",
+   "category": "diff",
+   "searchText": "diff.half_page.up"
+  },
+  {
+   "title": "Go to the start of the diff",
+   "category": "diff",
+   "searchText": "diff.first"
+  },
+  {
+   "title": "Go to the end of the diff",
+   "category": "diff",
+   "searchText": "diff.last"
+  },
+  {
+   "title": "Deprecated: file tree is mouse-controlled",
+   "category": "diff",
+   "searchText": "diff.toggle"
+  },
+  {
+   "title": "Deprecated: file tree is mouse-controlled",
+   "category": "diff",
+   "searchText": "diff.expand"
+  },
+  {
+   "title": "Deprecated: file tree is mouse-controlled",
+   "category": "diff",
+   "searchText": "diff.expand_all"
+  },
+  {
+   "title": "Deprecated: file tree is mouse-controlled",
+   "category": "diff",
+   "searchText": "diff.collapse"
+  },
+  {
+   "title": "Deprecated: keyboard navigation always controls the diff",
+   "category": "diff",
+   "searchText": "diff.switch_focus"
+  },
+  {
+   "title": "Jump to next diff hunk",
+   "category": "diff",
+   "searchText": "diff.next_hunk"
+  },
+  {
+   "title": "Jump to previous diff hunk",
+   "category": "diff",
+   "searchText": "diff.previous_hunk"
+  },
+  {
+   "title": "Jump to next diff file",
+   "category": "diff",
+   "searchText": "diff.next_file"
+  },
+  {
+   "title": "Jump to previous diff file",
+   "category": "diff",
+   "searchText": "diff.previous_file"
+  },
+  {
+   "title": "Toggle diff viewer file tree",
+   "category": "diff",
+   "searchText": "diff.toggle_file_tree"
+  },
+  {
+   "title": "Toggle single patch view",
+   "category": "diff",
+   "searchText": "diff.single_patch"
+  },
+  {
+   "title": "Switch diff viewer source",
+   "category": "diff",
+   "searchText": "diff.switch_source"
+  },
+  {
+   "title": "Toggle diff viewer split or unified view",
+   "category": "diff",
+   "searchText": "diff.toggle_view"
+  },
+  {
+   "title": "Toggle diff viewer full screen",
+   "category": "diff",
+   "searchText": "diff.toggle_fullscreen"
+  },
+  {
+   "title": "Toggle selected diff file reviewed",
+   "category": "diff",
+   "searchText": "diff.mark_reviewed"
+  },
+  {
+   "title": "Show more diff viewer shortcuts",
+   "category": "diff",
+   "searchText": "diff.help"
+  },
+  {
+   "title": "Open external editor",
+   "category": "prompt",
+   "searchText": "prompt.editor"
+  },
+  {
+   "title": "List available themes",
+   "category": "theme",
+   "searchText": "theme.switch"
+  },
+  {
+   "title": "Switch between light and dark theme mode",
+   "category": "theme",
+   "searchText": "theme.switch_mode"
+  },
+  {
+   "title": "Lock or unlock theme mode",
+   "category": "theme",
+   "searchText": "theme.mode.lock"
+  },
+  {
+   "title": "Toggle sidebar",
+   "category": "session",
+   "searchText": "session.sidebar.toggle"
+  },
+  {
+   "title": "Focus session pane",
+   "category": "pane",
+   "searchText": "pane.focus.left"
+  },
+  {
+   "title": "Focus right pane",
+   "category": "pane",
+   "searchText": "pane.focus.right"
+  },
+  {
+   "title": "Select terminal",
+   "category": "terminal",
+   "searchText": "terminal.select"
+  },
+  {
+   "title": "Toggle terminal pane",
+   "category": "terminal",
+   "searchText": "terminal.toggle"
+  },
+  {
+   "title": "Close terminal pane",
+   "category": "terminal",
+   "searchText": "terminal.close"
+  },
+  {
+   "title": "Toggle session scrollbar",
+   "category": "session",
+   "searchText": "session.toggle.scrollbar"
+  },
+  {
+   "title": "View status",
+   "category": "opencode",
+   "searchText": "opencode.status"
+  },
+  {
+   "title": "View debug info",
+   "category": "opencode",
+   "searchText": "opencode.debug"
+  },
+  {
+   "title": "Export session to editor",
+   "category": "session",
+   "searchText": "session.export"
+  },
+  {
+   "title": "Copy session transcript",
+   "category": "session",
+   "searchText": "session.copy"
+  },
+  {
+   "title": "Copy session ID",
+   "category": "session",
+   "searchText": "session.copy.id"
+  },
+  {
+   "title": "Manage workspaces",
+   "category": "session",
+   "searchText": "session.move"
+  },
+  {
+   "title": "Create a new session",
+   "category": "session",
+   "searchText": "session.new"
+  },
+  {
+   "title": "List all sessions",
+   "category": "session",
+   "searchText": "session.list"
+  },
+  {
+   "title": "Open recent sessions and projects",
+   "category": "open",
+   "searchText": "open.menu"
+  },
+  {
+   "title": "Switch to next open session tab",
+   "category": "session",
+   "searchText": "session.tab.next"
+  },
+  {
+   "title": "Switch to previous open session tab",
+   "category": "session",
+   "searchText": "session.tab.previous"
+  },
+  {
+   "title": "Go back in session tab history",
+   "category": "session",
+   "searchText": "session.tab.history.back"
+  },
+  {
+   "title": "Go forward in session tab history",
+   "category": "session",
+   "searchText": "session.tab.history.forward"
+  },
+  {
+   "title": "Switch to next unread session tab",
+   "category": "session",
+   "searchText": "session.tab.next_unread"
+  },
+  {
+   "title": "Switch to previous unread session tab",
+   "category": "session",
+   "searchText": "session.tab.previous_unread"
+  },
+  {
+   "title": "Close current session tab",
+   "category": "session",
+   "searchText": "session.tab.close"
+  },
+  {
+   "title": "Reopen last closed session tab",
+   "category": "session",
+   "searchText": "session.tab.reopen"
+  },
+  {
+   "title": "Show session timeline",
+   "category": "session",
+   "searchText": "session.timeline"
+  },
+  {
+   "title": "Fork session from message",
+   "category": "session",
+   "searchText": "session.fork"
+  },
+  {
+   "title": "Rename session",
+   "category": "session",
+   "searchText": "session.rename"
+  },
+  {
+   "title": "Delete session",
+   "category": "session",
+   "searchText": "session.delete"
+  },
+  {
+   "title": "Deprecated: session sharing was removed",
+   "category": "session",
+   "searchText": "session.share"
+  },
+  {
+   "title": "Deprecated: session sharing was removed",
+   "category": "session",
+   "searchText": "session.unshare"
+  },
+  {
+   "title": "Interrupt current session",
+   "category": "session",
+   "searchText": "session.interrupt"
+  },
+  {
+   "title": "Background blocking session tools",
+   "category": "session",
+   "searchText": "session.background"
+  },
+  {
+   "title": "Compact the session",
+   "category": "session",
+   "searchText": "session.compact"
+  },
+  {
+   "title": "Ask a side question",
+   "category": "session",
+   "searchText": "session.aside"
+  },
+  {
+   "title": "Change working directory",
+   "category": "session",
+   "searchText": "session.cd"
+  },
+  {
+   "title": "Manage queued prompts",
+   "category": "session",
+   "searchText": "session.queued_prompts"
+  },
+  {
+   "title": "Undo queued prompt",
+   "category": "queued_prompt",
+   "searchText": "queued_prompt.undo"
+  },
+  {
+   "title": "Delete queued prompt",
+   "category": "queued_prompt",
+   "searchText": "queued_prompt.delete"
+  },
+  {
+   "title": "Toggle related tool call grouping",
+   "category": "session",
+   "searchText": "session.toggle.exploration_grouping"
+  },
+  {
+   "title": "Cycle transcript verbosity",
+   "category": "session",
+   "searchText": "session.verbosity.cycle"
+  },
+  {
+   "title": "Toggle subagent picker",
+   "category": "session",
+   "searchText": "session.child.first"
+  },
+  {
+   "title": "Go to next child session",
+   "category": "session",
+   "searchText": "session.child.next"
+  },
+  {
+   "title": "Go to previous child session",
+   "category": "session",
+   "searchText": "session.child.previous"
+  },
+  {
+   "title": "Go to parent session",
+   "category": "session",
+   "searchText": "session.parent"
+  },
+  {
+   "title": "Pin or unpin session in the session list",
+   "category": "session",
+   "searchText": "session.pin.toggle"
+  },
+  {
+   "title": "Switch to session in quick slot 1",
+   "category": "session",
+   "searchText": "session.quick_switch.1"
+  },
+  {
+   "title": "Switch to session in quick slot 2",
+   "category": "session",
+   "searchText": "session.quick_switch.2"
+  },
+  {
+   "title": "Switch to session in quick slot 3",
+   "category": "session",
+   "searchText": "session.quick_switch.3"
+  },
+  {
+   "title": "Switch to session in quick slot 4",
+   "category": "session",
+   "searchText": "session.quick_switch.4"
+  },
+  {
+   "title": "Switch to session in quick slot 5",
+   "category": "session",
+   "searchText": "session.quick_switch.5"
+  },
+  {
+   "title": "Switch to session in quick slot 6",
+   "category": "session",
+   "searchText": "session.quick_switch.6"
+  },
+  {
+   "title": "Switch to session in quick slot 7",
+   "category": "session",
+   "searchText": "session.quick_switch.7"
+  },
+  {
+   "title": "Switch to session in quick slot 8",
+   "category": "session",
+   "searchText": "session.quick_switch.8"
+  },
+  {
+   "title": "Switch to session in quick slot 9",
+   "category": "session",
+   "searchText": "session.quick_switch.9"
+  },
+  {
+   "title": "Switch to session tab 1",
+   "category": "session",
+   "searchText": "session.tab.select.1"
+  },
+  {
+   "title": "Switch to session tab 2",
+   "category": "session",
+   "searchText": "session.tab.select.2"
+  },
+  {
+   "title": "Switch to session tab 3",
+   "category": "session",
+   "searchText": "session.tab.select.3"
+  },
+  {
+   "title": "Switch to session tab 4",
+   "category": "session",
+   "searchText": "session.tab.select.4"
+  },
+  {
+   "title": "Switch to session tab 5",
+   "category": "session",
+   "searchText": "session.tab.select.5"
+  },
+  {
+   "title": "Switch to session tab 6",
+   "category": "session",
+   "searchText": "session.tab.select.6"
+  },
+  {
+   "title": "Switch to session tab 7",
+   "category": "session",
+   "searchText": "session.tab.select.7"
+  },
+  {
+   "title": "Switch to session tab 8",
+   "category": "session",
+   "searchText": "session.tab.select.8"
+  },
+  {
+   "title": "Switch to session tab 9",
+   "category": "session",
+   "searchText": "session.tab.select.9"
+  },
+  {
+   "title": "Switch to session tab 10",
+   "category": "session",
+   "searchText": "session.tab.select.10"
+  },
+  {
+   "title": "Delete stash entry",
+   "category": "stash",
+   "searchText": "stash.delete"
+  },
+  {
+   "title": "Open provider list from model dialog",
+   "category": "model",
+   "searchText": "model.dialog.provider"
+  },
+  {
+   "title": "Toggle model favorite status",
+   "category": "model",
+   "searchText": "model.dialog.favorite"
+  },
+  {
+   "title": "Open usage limits from model dialog",
+   "category": "model",
+   "searchText": "model.dialog.usage"
+  },
+  {
+   "title": "List available models",
+   "category": "model",
+   "searchText": "model.list"
+  },
+  {
+   "title": "Next recently used model",
+   "category": "model",
+   "searchText": "model.cycle_recent"
+  },
+  {
+   "title": "Previous recently used model",
+   "category": "model",
+   "searchText": "model.cycle_recent_reverse"
+  },
+  {
+   "title": "Next favorite model",
+   "category": "model",
+   "searchText": "model.cycle_favorite"
+  },
+  {
+   "title": "Previous favorite model",
+   "category": "model",
+   "searchText": "model.cycle_favorite_reverse"
+  },
+  {
+   "title": "List MCP servers",
+   "category": "mcp",
+   "searchText": "mcp.list"
+  },
+  {
+   "title": "View usage limits",
+   "category": "usage",
+   "searchText": "usage.show"
+  },
+  {
+   "title": "Connect integration",
+   "category": "provider",
+   "searchText": "provider.connect"
+  },
+  {
+   "title": "List agents",
+   "category": "agent",
+   "searchText": "agent.list"
+  },
+  {
+   "title": "Next agent",
+   "category": "agent",
+   "searchText": "agent.cycle"
+  },
+  {
+   "title": "Previous agent",
+   "category": "agent",
+   "searchText": "agent.cycle.reverse"
+  },
+  {
+   "title": "Cycle model variants",
+   "category": "variant",
+   "searchText": "variant.cycle"
+  },
+  {
+   "title": "List model variants",
+   "category": "variant",
+   "searchText": "variant.list"
+  },
+  {
+   "title": "Scroll messages up by one page",
+   "category": "session",
+   "searchText": "session.page.up"
+  },
+  {
+   "title": "Scroll messages down by one page",
+   "category": "session",
+   "searchText": "session.page.down"
+  },
+  {
+   "title": "Scroll messages up by one line",
+   "category": "session",
+   "searchText": "session.line.up"
+  },
+  {
+   "title": "Scroll messages down by one line",
+   "category": "session",
+   "searchText": "session.line.down"
+  },
+  {
+   "title": "Scroll messages up by half page",
+   "category": "session",
+   "searchText": "session.half.page.up"
+  },
+  {
+   "title": "Scroll messages down by half page",
+   "category": "session",
+   "searchText": "session.half.page.down"
+  },
+  {
+   "title": "Navigate to first message",
+   "category": "session",
+   "searchText": "session.first"
+  },
+  {
+   "title": "Navigate to last message",
+   "category": "session",
+   "searchText": "session.last"
+  },
+  {
+   "title": "Navigate to next message",
+   "category": "session",
+   "searchText": "session.message.next"
+  },
+  {
+   "title": "Navigate to previous message",
+   "category": "session",
+   "searchText": "session.message.previous"
+  },
+  {
+   "title": "Navigate to next user message",
+   "category": "session",
+   "searchText": "session.message.user.next"
+  },
+  {
+   "title": "Navigate to previous user message",
+   "category": "session",
+   "searchText": "session.message.user.previous"
+  },
+  {
+   "title": "Navigate to last user message",
+   "category": "session",
+   "searchText": "session.messages_last_user"
+  },
+  {
+   "title": "Copy message",
+   "category": "messages",
+   "searchText": "messages.copy"
+  },
+  {
+   "title": "Undo message",
+   "category": "session",
+   "searchText": "session.undo"
+  },
+  {
+   "title": "Redo message",
+   "category": "session",
+   "searchText": "session.redo"
+  },
+  {
+   "title": "Toggle thinking blocks visibility",
+   "category": "session",
+   "searchText": "session.toggle.thinking"
+  },
+  {
+   "title": "Submit prompt",
+   "category": "prompt",
+   "searchText": "prompt.submit"
+  },
+  {
+   "title": "Queue prompt",
+   "category": "prompt",
+   "searchText": "prompt.queue"
+  },
+  {
+   "title": "Clear editor context",
+   "category": "prompt",
+   "searchText": "prompt.editor_context.clear"
+  },
+  {
+   "title": "View image attachments",
+   "category": "prompt",
+   "searchText": "prompt.images.view"
+  },
+  {
+   "title": "Open skill selector",
+   "category": "prompt",
+   "searchText": "prompt.skills"
+  },
+  {
+   "title": "Stash prompt",
+   "category": "prompt",
+   "searchText": "prompt.stash"
+  },
+  {
+   "title": "Pop stashed prompt",
+   "category": "prompt",
+   "searchText": "prompt.stash.pop"
+  },
+  {
+   "title": "List stashed prompts",
+   "category": "prompt",
+   "searchText": "prompt.stash.list"
+  },
+  {
+   "title": "Clear input field",
+   "category": "prompt",
+   "searchText": "prompt.clear"
+  },
+  {
+   "title": "Paste from clipboard",
+   "category": "prompt",
+   "searchText": "prompt.paste"
+  },
+  {
+   "title": "Submit input",
+   "category": "input",
+   "searchText": "input.submit"
+  },
+  {
+   "title": "Insert newline in input",
+   "category": "input",
+   "searchText": "input.newline"
+  },
+  {
+   "title": "Move cursor left in input",
+   "category": "input",
+   "searchText": "input.move.left"
+  },
+  {
+   "title": "Move cursor right in input",
+   "category": "input",
+   "searchText": "input.move.right"
+  },
+  {
+   "title": "Move cursor up in input",
+   "category": "input",
+   "searchText": "input.move.up"
+  },
+  {
+   "title": "Move cursor down in input",
+   "category": "input",
+   "searchText": "input.move.down"
+  },
+  {
+   "title": "Select left in input",
+   "category": "input",
+   "searchText": "input.select.left"
+  },
+  {
+   "title": "Select right in input",
+   "category": "input",
+   "searchText": "input.select.right"
+  },
+  {
+   "title": "Select up in input",
+   "category": "input",
+   "searchText": "input.select.up"
+  },
+  {
+   "title": "Select down in input",
+   "category": "input",
+   "searchText": "input.select.down"
+  },
+  {
+   "title": "Move to start of line in input",
+   "category": "input",
+   "searchText": "input.line.home"
+  },
+  {
+   "title": "Move to end of line in input",
+   "category": "input",
+   "searchText": "input.line.end"
+  },
+  {
+   "title": "Select to start of line in input",
+   "category": "input",
+   "searchText": "input.select.line.home"
+  },
+  {
+   "title": "Select to end of line in input",
+   "category": "input",
+   "searchText": "input.select.line.end"
+  },
+  {
+   "title": "Move to start of visual line in input",
+   "category": "input",
+   "searchText": "input.visual.line.home"
+  },
+  {
+   "title": "Move to end of visual line in input",
+   "category": "input",
+   "searchText": "input.visual.line.end"
+  },
+  {
+   "title": "Select to start of visual line in input",
+   "category": "input",
+   "searchText": "input.select.visual.line.home"
+  },
+  {
+   "title": "Select to end of visual line in input",
+   "category": "input",
+   "searchText": "input.select.visual.line.end"
+  },
+  {
+   "title": "Move to start of buffer in input",
+   "category": "input",
+   "searchText": "input.buffer.home"
+  },
+  {
+   "title": "Move to end of buffer in input",
+   "category": "input",
+   "searchText": "input.buffer.end"
+  },
+  {
+   "title": "Select to start of buffer in input",
+   "category": "input",
+   "searchText": "input.select.buffer.home"
+  },
+  {
+   "title": "Select to end of buffer in input",
+   "category": "input",
+   "searchText": "input.select.buffer.end"
+  },
+  {
+   "title": "Delete line in input",
+   "category": "input",
+   "searchText": "input.delete.line"
+  },
+  {
+   "title": "Delete to end of line in input",
+   "category": "input",
+   "searchText": "input.delete.to.line.end"
+  },
+  {
+   "title": "Delete to start of line in input",
+   "category": "input",
+   "searchText": "input.delete.to.line.start"
+  },
+  {
+   "title": "Backspace in input",
+   "category": "input",
+   "searchText": "input.backspace"
+  },
+  {
+   "title": "Delete character in input",
+   "category": "input",
+   "searchText": "input.delete"
+  },
+  {
+   "title": "Undo in input",
+   "category": "input",
+   "searchText": "input.undo"
+  },
+  {
+   "title": "Redo in input",
+   "category": "input",
+   "searchText": "input.redo"
+  },
+  {
+   "title": "Move word forward in input",
+   "category": "input",
+   "searchText": "input.word.forward"
+  },
+  {
+   "title": "Move word backward in input",
+   "category": "input",
+   "searchText": "input.word.backward"
+  },
+  {
+   "title": "Select word forward in input",
+   "category": "input",
+   "searchText": "input.select.word.forward"
+  },
+  {
+   "title": "Select word backward in input",
+   "category": "input",
+   "searchText": "input.select.word.backward"
+  },
+  {
+   "title": "Delete word forward in input",
+   "category": "input",
+   "searchText": "input.delete.word.forward"
+  },
+  {
+   "title": "Delete word backward in input",
+   "category": "input",
+   "searchText": "input.delete.word.backward"
+  },
+  {
+   "title": "Select all in input",
+   "category": "input",
+   "searchText": "input.select.all"
+  },
+  {
+   "title": "Previous history item",
+   "category": "prompt",
+   "searchText": "prompt.history.previous"
+  },
+  {
+   "title": "Next history item",
+   "category": "prompt",
+   "searchText": "prompt.history.next"
+  },
+  {
+   "title": "Previous subagent",
+   "category": "composer",
+   "searchText": "composer.subagent.up"
+  },
+  {
+   "title": "Next subagent",
+   "category": "composer",
+   "searchText": "composer.subagent.down"
+  },
+  {
+   "title": "Navigate to subagent",
+   "category": "composer",
+   "searchText": "composer.subagent.select"
+  },
+  {
+   "title": "Interrupt subagent",
+   "category": "composer",
+   "searchText": "composer.subagent.interrupt"
+  },
+  {
+   "title": "Previous shell",
+   "category": "composer",
+   "searchText": "composer.shell.up"
+  },
+  {
+   "title": "Next shell",
+   "category": "composer",
+   "searchText": "composer.shell.down"
+  },
+  {
+   "title": "View shell output",
+   "category": "composer",
+   "searchText": "composer.shell.select"
+  },
+  {
+   "title": "Kill shell command",
+   "category": "composer",
+   "searchText": "composer.shell.kill"
+  },
+  {
+   "title": "Previous terminal",
+   "category": "composer",
+   "searchText": "composer.terminal.up"
+  },
+  {
+   "title": "Next terminal",
+   "category": "composer",
+   "searchText": "composer.terminal.down"
+  },
+  {
+   "title": "Select terminal",
+   "category": "composer",
+   "searchText": "composer.terminal.select"
+  },
+  {
+   "title": "Move to previous dialog item",
+   "category": "dialog",
+   "searchText": "dialog.select.prev"
+  },
+  {
+   "title": "Move to next dialog item",
+   "category": "dialog",
+   "searchText": "dialog.select.next"
+  },
+  {
+   "title": "Move up one page in dialog",
+   "category": "dialog",
+   "searchText": "dialog.select.page_up"
+  },
+  {
+   "title": "Move down one page in dialog",
+   "category": "dialog",
+   "searchText": "dialog.select.page_down"
+  },
+  {
+   "title": "Move to first dialog item",
+   "category": "dialog",
+   "searchText": "dialog.select.home"
+  },
+  {
+   "title": "Move to last dialog item",
+   "category": "dialog",
+   "searchText": "dialog.select.end"
+  },
+  {
+   "title": "Submit selected dialog item",
+   "category": "dialog",
+   "searchText": "dialog.select.submit"
+  },
+  {
+   "title": "Submit dialog prompt",
+   "category": "dialog",
+   "searchText": "dialog.prompt.submit"
+  },
+  {
+   "title": "Rename integration account",
+   "category": "dialog",
+   "searchText": "dialog.integration.rename"
+  },
+  {
+   "title": "Delete integration account",
+   "category": "dialog",
+   "searchText": "dialog.integration.delete"
+  },
+  {
+   "title": "Generate worktree name",
+   "category": "dialog",
+   "searchText": "dialog.worktree.generate"
+  },
+  {
+   "title": "New worktree",
+   "category": "dialog",
+   "searchText": "dialog.move_session.new"
+  },
+  {
+   "title": "Move session to worktree",
+   "category": "dialog",
+   "searchText": "dialog.move_session.move"
+  },
+  {
+   "title": "Delete worktree",
+   "category": "dialog",
+   "searchText": "dialog.move_session.delete"
+  },
+  {
+   "title": "Refresh worktrees",
+   "category": "dialog",
+   "searchText": "dialog.move_session.refresh"
+  },
+  {
+   "title": "Move to previous autocomplete item",
+   "category": "prompt",
+   "searchText": "prompt.autocomplete.prev"
+  },
+  {
+   "title": "Move to next autocomplete item",
+   "category": "prompt",
+   "searchText": "prompt.autocomplete.next"
+  },
+  {
+   "title": "Hide autocomplete",
+   "category": "prompt",
+   "searchText": "prompt.autocomplete.hide"
+  },
+  {
+   "title": "Select autocomplete item",
+   "category": "prompt",
+   "searchText": "prompt.autocomplete.select"
+  },
+  {
+   "title": "Complete autocomplete item",
+   "category": "prompt",
+   "searchText": "prompt.autocomplete.complete"
+  },
+  {
+   "title": "Toggle permission prompt fullscreen",
+   "category": "permission",
+   "searchText": "permission.prompt.fullscreen"
+  },
+  {
+   "title": "Toggle plugin",
+   "category": "plugins",
+   "searchText": "plugins.toggle"
+  },
+  {
+   "title": "Toggle MCP server",
+   "category": "dialog",
+   "searchText": "dialog.mcp.toggle"
+  },
+  {
+   "title": "View plugin error",
+   "category": "dialog",
+   "searchText": "dialog.plugins.error"
+  },
+  {
+   "title": "Update plugin from plugin dialog",
+   "category": "dialog",
+   "searchText": "dialog.plugins.update"
+  },
+  {
+   "title": "Check for plugin updates from plugin dialog",
+   "category": "dialog",
+   "searchText": "dialog.plugins.check"
+  },
+  {
+   "title": "Suspend terminal",
+   "category": "terminal",
+   "searchText": "terminal.suspend"
+  },
+  {
+   "title": "Toggle terminal title",
+   "category": "terminal",
+   "searchText": "terminal.title.toggle"
+  },
+  {
+   "title": "Open plugin manager dialog",
+   "category": "plugins",
+   "searchText": "plugins.list"
+  },
+  {
+   "title": "Toggle which-key panel",
+   "category": "which-key",
+   "searchText": "which-key.toggle"
+  },
+  {
+   "title": "Switch which-key layout",
+   "category": "which-key",
+   "searchText": "which-key.layout.toggle"
+  },
+  {
+   "title": "Toggle which-key pending preview",
+   "category": "which-key",
+   "searchText": "which-key.pending.toggle"
+  },
+  {
+   "title": "Previous which-key group",
+   "category": "which-key",
+   "searchText": "which-key.group.previous"
+  },
+  {
+   "title": "Next which-key group",
+   "category": "which-key",
+   "searchText": "which-key.group.next"
+  },
+  {
+   "title": "Scroll which-key up",
+   "category": "which-key",
+   "searchText": "which-key.scroll.up"
+  },
+  {
+   "title": "Scroll which-key down",
+   "category": "which-key",
+   "searchText": "which-key.scroll.down"
+  },
+  {
+   "title": "Page which-key up",
+   "category": "which-key",
+   "searchText": "which-key.page.up"
+  },
+  {
+   "title": "Page which-key down",
+   "category": "which-key",
+   "searchText": "which-key.page.down"
+  },
+  {
+   "title": "Jump to first which-key binding",
+   "category": "which-key",
+   "searchText": "which-key.home"
+  },
+  {
+   "title": "Jump to last which-key binding",
+   "category": "which-key",
+   "searchText": "which-key.end"
+  }
+ ],
+ "cases": [
+  {
+   "query": "s",
+   "threshold": 0,
+   "results": [
+    58,
+    111,
+    71,
+    74,
+    73,
+    80,
+    57,
+    107,
+    103,
+    109,
+    104,
+    108,
+    102,
+    105,
+    106,
+    101,
+    72,
+    15,
+    110,
+    47,
+    61,
+    130,
+    128,
+    63,
+    56,
+    131,
+    129,
+    87,
+    132,
+    95,
+    100,
+    92,
+    94,
+    96,
+    97,
+    133,
+    99,
+    98,
+    93,
+    64,
+    67,
+    53,
+    60,
+    79,
+    68,
+    90,
+    75,
+    76,
+    69,
+    65,
+    91,
+    88,
+    77,
+    66,
+    70,
+    78,
+    89,
+    198,
+    194,
+    199,
+    200,
+    203,
+    197,
+    193,
+    196,
+    195,
+    143,
+    142,
+    155,
+    150,
+    145,
+    59,
+    5,
+    50,
+    163,
+    86,
+    54,
+    230,
+    190,
+    135,
+    164,
+    161,
+    13,
+    162,
+    151,
+    134,
+    149,
+    238,
+    38,
+    152,
+    239,
+    140,
+    210,
+    211,
+    37,
+    186,
+    168,
+    187,
+    167,
+    136,
+    176,
+    138,
+    175,
+    137,
+    82,
+    45,
+    121,
+    216,
+    144,
+    139,
+    172,
+    171,
+    222,
+    9,
+    179,
+    120,
+    48,
+    44,
+    141,
+    25,
+    169,
+    10,
+    14,
+    81,
+    201,
+    85,
+    40,
+    218,
+    234,
+    224,
+    42,
+    24,
+    23,
+    209,
+    226,
+    208,
+    165,
+    41,
+    2,
+    173,
+    123,
+    115,
+    154,
+    127,
+    62,
+    204,
+    18,
+    39,
+    52,
+    113,
+    31,
+    49,
+    180,
+    192,
+    191,
+    114,
+    4,
+    125,
+    236,
+    117,
+    156,
+    119,
+    170,
+    35,
+    33,
+    12,
+    6,
+    148,
+    30,
+    229,
+    202,
+    232,
+    225,
+    11,
+    205,
+    159,
+    160,
+    157,
+    158,
+    206,
+    207,
+    215,
+    243,
+    217,
+    242,
+    116,
+    219,
+    112,
+    126,
+    29,
+    28,
+    27,
+    0,
+    26,
+    227,
+    228
+   ]
+  },
+  {
+   "query": "se",
+   "threshold": 0,
+   "results": [
+    73,
+    74,
+    58,
+    15,
+    61,
+    60,
+    57,
+    79,
+    90,
+    71,
+    72,
+    56,
+    109,
+    103,
+    102,
+    106,
+    101,
+    104,
+    105,
+    107,
+    108,
+    69,
+    110,
+    88,
+    53,
+    77,
+    75,
+    63,
+    70,
+    65,
+    76,
+    98,
+    93,
+    96,
+    100,
+    95,
+    94,
+    97,
+    99,
+    92,
+    89,
+    78,
+    91,
+    66,
+    67,
+    64,
+    68,
+    203,
+    13,
+    50,
+    163,
+    190,
+    161,
+    164,
+    162,
+    138,
+    140,
+    80,
+    130,
+    128,
+    143,
+    142,
+    131,
+    129,
+    216,
+    210,
+    139,
+    132,
+    222,
+    168,
+    133,
+    186,
+    187,
+    167,
+    59,
+    176,
+    87,
+    47,
+    175,
+    135,
+    134,
+    172,
+    171,
+    86,
+    136,
+    137,
+    199,
+    48,
+    195,
+    14,
+    81,
+    111,
+    82,
+    144,
+    198,
+    200,
+    85,
+    194,
+    201,
+    120,
+    197,
+    226,
+    193,
+    149,
+    196,
+    18,
+    41,
+    62,
+    52,
+    218,
+    209,
+    208,
+    204,
+    121,
+    141,
+    156,
+    30,
+    117,
+    154,
+    125,
+    230,
+    202,
+    45,
+    180,
+    37,
+    119,
+    114,
+    38,
+    4,
+    192,
+    9,
+    191,
+    169,
+    170,
+    35,
+    224,
+    205,
+    40,
+    206,
+    207,
+    215,
+    217,
+    116,
+    123,
+    127,
+    42,
+    151,
+    152,
+    28,
+    27,
+    29,
+    44,
+    115,
+    10,
+    5,
+    238,
+    239,
+    234,
+    24,
+    23,
+    49,
+    157,
+    236,
+    2,
+    165,
+    173,
+    243,
+    25,
+    179,
+    242,
+    219,
+    112,
+    39,
+    31,
+    12,
+    225,
+    148,
+    227,
+    229,
+    228
+   ]
+  },
+  {
+   "query": "session",
+   "threshold": 0,
+   "results": [
+    74,
+    73,
+    58,
+    61,
+    60,
+    79,
+    90,
+    57,
+    72,
+    71,
+    56,
+    88,
+    69,
+    77,
+    109,
+    108,
+    104,
+    102,
+    101,
+    105,
+    107,
+    103,
+    106,
+    110,
+    53,
+    63,
+    70,
+    75,
+    89,
+    78,
+    76,
+    65,
+    97,
+    100,
+    99,
+    98,
+    96,
+    95,
+    94,
+    93,
+    92,
+    64,
+    67,
+    91,
+    66,
+    68,
+    216,
+    81,
+    59,
+    143,
+    142,
+    135,
+    134,
+    80,
+    130,
+    128,
+    131,
+    129,
+    87,
+    132,
+    136,
+    133,
+    82,
+    47,
+    144,
+    86,
+    137,
+    138,
+    140,
+    139,
+    85,
+    48,
+    62,
+    215,
+    217,
+    218
+   ]
+  },
+  {
+   "query": "ses new",
+   "threshold": 0,
+   "results": [
+    60,
+    215,
+    81,
+    59,
+    131,
+    129,
+    133,
+    10
+   ]
+  },
+  {
+   "query": "new ses",
+   "threshold": 0,
+   "results": [
+    60,
+    81,
+    215,
+    59,
+    131,
+    129,
+    133,
+    10
+   ]
+  },
+  {
+   "query": "model",
+   "threshold": 0,
+   "results": [
+    115,
+    118,
+    116,
+    119,
+    113,
+    117,
+    114,
+    112,
+    127,
+    126,
+    46,
+    217,
+    207
+   ]
+  },
+  {
+   "query": "mod fav",
+   "threshold": 0,
+   "results": [
+    113,
+    118,
+    119
+   ]
+  },
+  {
+   "query": "toggle side",
+   "threshold": 0,
+   "results": [
+    47,
+    39
+   ]
+  },
+  {
+   "query": "sidebar",
+   "threshold": 0,
+   "results": [
+    47
+   ]
+  },
+  {
+   "query": "x",
+   "threshold": 0,
+   "results": [
+    1,
+    56,
+    192,
+    237,
+    34,
+    32,
+    88,
+    198,
+    124,
+    194,
+    202,
+    118,
+    116,
+    205,
+    63,
+    67,
+    220,
+    136,
+    138,
+    7,
+    147,
+    43,
+    28,
+    29,
+    85
+   ]
+  },
+  {
+   "query": "dialog sel",
+   "threshold": 0,
+   "results": [
+    209,
+    205,
+    208,
+    204,
+    206,
+    207,
+    210,
+    114,
+    112,
+    217
+   ]
+  },
+  {
+   "query": "pr",
+   "threshold": 0,
+   "results": [
+    146,
+    150,
+    145,
+    151,
+    152,
+    191,
+    83,
+    84,
+    219,
+    224,
+    154,
+    43,
+    211,
+    33,
+    35,
+    82,
+    236,
+    204,
+    149,
+    89,
+    197,
+    137,
+    64,
+    112,
+    193,
+    201,
+    68,
+    139,
+    153,
+    148,
+    192,
+    122,
+    221,
+    220,
+    222,
+    147,
+    223,
+    125,
+    119,
+    117,
+    235,
+    62,
+    76,
+    75,
+    28,
+    30,
+    29,
+    27,
+    31,
+    14,
+    5,
+    56,
+    90,
+    227,
+    9,
+    49,
+    91,
+    200,
+    198,
+    199,
+    202,
+    194,
+    203,
+    195,
+    196,
+    230,
+    242,
+    120,
+    57,
+    77,
+    17,
+    228,
+    22,
+    21,
+    226,
+    232,
+    114,
+    229,
+    86,
+    87,
+    39,
+    183,
+    184,
+    185,
+    2,
+    174,
+    158,
+    173,
+    162,
+    188,
+    186,
+    189,
+    187,
+    8,
+    176,
+    175,
+    179,
+    85
+   ]
+  },
+  {
+   "query": "ul",
+   "threshold": 0,
+   "results": [
+    121,
+    114,
+    91,
+    130,
+    40,
+    224,
+    157,
+    221,
+    232,
+    222,
+    223,
+    35,
+    220,
+    170,
+    172,
+    219,
+    169,
+    171,
+    243,
+    228,
+    210,
+    211,
+    46,
+    197,
+    78,
+    230,
+    117,
+    201,
+    153,
+    34,
+    3,
+    119,
+    206,
+    89,
+    204,
+    116,
+    229,
+    132,
+    24,
+    100,
+    99,
+    98,
+    97,
+    96,
+    95,
+    94,
+    92,
+    93,
+    30,
+    29,
+    28,
+    27,
+    166,
+    165,
+    181,
+    163,
+    190,
+    177,
+    164,
+    161,
+    162,
+    168,
+    167,
+    176,
+    178,
+    175,
+    188,
+    186,
+    189,
+    187,
+    179,
+    156,
+    225,
+    48,
+    84,
+    195,
+    234
+   ]
+  },
+  {
+   "query": "SESS",
+   "threshold": 0,
+   "results": [
+    74,
+    73,
+    58,
+    61,
+    60,
+    79,
+    90,
+    57,
+    71,
+    72,
+    56,
+    88,
+    108,
+    104,
+    106,
+    101,
+    109,
+    102,
+    107,
+    103,
+    105,
+    69,
+    77,
+    110,
+    53,
+    63,
+    70,
+    89,
+    75,
+    78,
+    65,
+    76,
+    96,
+    99,
+    98,
+    97,
+    95,
+    94,
+    93,
+    100,
+    92,
+    64,
+    67,
+    91,
+    66,
+    68,
+    130,
+    128,
+    131,
+    129,
+    216,
+    132,
+    133,
+    135,
+    134,
+    137,
+    138,
+    140,
+    139,
+    81,
+    143,
+    142,
+    59,
+    80,
+    87,
+    136,
+    82,
+    47,
+    144,
+    86,
+    85,
+    48,
+    62,
+    215,
+    217,
+    218,
+    171,
+    42,
+    199,
+    195
+   ]
+  },
+  {
+   "query": "  tab  ",
+   "threshold": 0,
+   "results": [
+    101,
+    109,
+    106,
+    103,
+    107,
+    108,
+    104,
+    102,
+    105,
+    69,
+    110,
+    63,
+    70,
+    65,
+    64,
+    67,
+    66,
+    68,
+    115,
+    44,
+    10,
+    173,
+    86,
+    175,
+    243
+   ]
+  },
+  {
+   "query": "input.",
+   "threshold": 0,
+   "results": [
+    183,
+    182,
+    181,
+    155,
+    159,
+    156,
+    166,
+    160,
+    180,
+    163,
+    165,
+    157,
+    158,
+    174,
+    190,
+    177,
+    164,
+    173,
+    161,
+    184,
+    162,
+    185,
+    168,
+    170,
+    169,
+    167,
+    176,
+    178,
+    175,
+    188,
+    186,
+    179,
+    189,
+    187,
+    172,
+    171
+   ]
+  },
+  {
+   "query": "cmd",
+   "threshold": 0,
+   "results": [
+    10,
+    45,
+    126,
+    129,
+    131,
+    133,
+    200,
+    116,
+    46,
+    117,
+    229,
+    28,
+    30,
+    29,
+    27,
+    75,
+    76,
+    198,
+    202,
+    194,
+    221
+   ]
+  },
+  {
+   "query": "zzz",
+   "threshold": 0,
+   "results": []
+  },
+  {
+   "query": "copy last",
+   "threshold": 0,
+   "results": []
+  },
+  {
+   "query": "a b c",
+   "threshold": 0,
+   "results": [
+    194,
+    195,
+    193,
+    196,
+    0,
+    10,
+    180,
+    243,
+    78,
+    210,
+    87,
+    45,
+    65,
+    128,
+    132,
+    129,
+    133,
+    44,
+    185,
+    175,
+    154,
+    31,
+    189,
+    187,
+    69,
+    86,
+    109,
+    108,
+    107,
+    106,
+    105,
+    104,
+    103,
+    102,
+    101,
+    110,
+    63,
+    70,
+    64,
+    67,
+    68,
+    53,
+    130,
+    131
+   ]
+  },
+  {
+   "query": "exit app",
+   "threshold": 0,
+   "results": [
+    1
+   ]
+  },
+  {
+   "query": "undo",
+   "threshold": 0,
+   "results": [
+    182,
+    142,
+    83,
+    78,
+    67,
+    232,
+    206,
+    117,
+    229,
+    228,
+    68,
+    194
+   ]
+  },
+  {
+   "query": "page down",
+   "threshold": 0,
+   "results": [
+    21,
+    241,
+    207,
+    129,
+    23,
+    133,
+    31,
+    194
+   ]
+  },
+  {
+   "query": "dg",
+   "threshold": 0,
+   "results": [
+    228,
+    213,
+    211,
+    207,
+    209,
+    205,
+    208,
+    210,
+    204,
+    206,
+    229,
+    214,
+    55,
+    3,
+    24,
+    23,
+    112,
+    235,
+    114,
+    226,
+    227,
+    215,
+    216,
+    212,
+    217,
+    218,
+    143,
+    142,
+    16,
+    11,
+    8,
+    78,
+    31,
+    76,
+    75,
+    85,
+    129,
+    133,
+    232,
+    243,
+    242,
+    27,
+    22,
+    21,
+    39,
+    36,
+    40,
+    37,
+    113,
+    13,
+    47
+   ]
+  },
+  {
+   "query": "s",
+   "threshold": 0.7,
+   "results": [
+    58,
+    111,
+    71,
+    74,
+    73,
+    80,
+    57,
+    107,
+    105,
+    103,
+    101,
+    106,
+    102,
+    104,
+    108,
+    109,
+    72,
+    15,
+    110,
+    47,
+    61,
+    128,
+    130,
+    63,
+    56,
+    131,
+    129,
+    87,
+    132,
+    96,
+    94,
+    133,
+    100,
+    99,
+    92,
+    98,
+    97,
+    93,
+    95,
+    64,
+    67,
+    53,
+    60,
+    79,
+    68,
+    90,
+    75,
+    76,
+    69,
+    65,
+    91,
+    88,
+    77,
+    66,
+    70,
+    78,
+    89,
+    198,
+    194,
+    199,
+    200,
+    203,
+    197,
+    193,
+    196,
+    195,
+    143,
+    142,
+    155,
+    150,
+    145,
+    59,
+    5,
+    50,
+    163,
+    86,
+    54,
+    230,
+    190,
+    135,
+    164,
+    161,
+    13,
+    162,
+    151,
+    134,
+    149,
+    238,
+    38,
+    152,
+    239,
+    140,
+    210,
+    211,
+    37,
+    186,
+    168,
+    187,
+    167,
+    136,
+    176,
+    138,
+    175,
+    137,
+    82,
+    45,
+    121,
+    216,
+    144,
+    139,
+    172,
+    171,
+    222,
+    9,
+    179,
+    120,
+    48,
+    44,
+    141,
+    25,
+    169,
+    10,
+    14,
+    81,
+    201,
+    85,
+    40,
+    218,
+    234,
+    224,
+    42,
+    24,
+    23,
+    209,
+    226,
+    208,
+    165,
+    41,
+    2,
+    173,
+    123,
+    115,
+    154,
+    127,
+    62,
+    204,
+    18,
+    39,
+    52,
+    113,
+    31,
+    49,
+    180,
+    192,
+    191,
+    114,
+    4,
+    125,
+    236,
+    117,
+    156,
+    119,
+    170,
+    35,
+    33,
+    12,
+    6,
+    148,
+    30,
+    229,
+    202,
+    232,
+    225,
+    11,
+    205,
+    159,
+    157,
+    160,
+    158,
+    206,
+    207
+   ]
+  },
+  {
+   "query": "se",
+   "threshold": 0.7,
+   "results": [
+    74,
+    73,
+    58,
+    15,
+    61,
+    60,
+    57,
+    79,
+    90,
+    71,
+    72,
+    56,
+    109,
+    105,
+    101,
+    106,
+    108,
+    107,
+    102,
+    104,
+    103,
+    69,
+    110,
+    88,
+    53,
+    77,
+    75,
+    63,
+    70,
+    65,
+    76,
+    98,
+    99,
+    92,
+    93,
+    100,
+    94,
+    96,
+    97,
+    95,
+    89,
+    78,
+    91,
+    66,
+    67,
+    64,
+    68,
+    203,
+    13,
+    50,
+    163,
+    190,
+    164,
+    161,
+    162,
+    138,
+    140,
+    80,
+    130,
+    128,
+    143,
+    142,
+    129,
+    131,
+    216,
+    210,
+    139,
+    132,
+    222,
+    168,
+    133,
+    186,
+    187,
+    167,
+    59,
+    176,
+    87,
+    47,
+    175,
+    135,
+    134,
+    172,
+    171,
+    86,
+    136,
+    137,
+    199,
+    48,
+    195,
+    14,
+    81,
+    111,
+    82,
+    144,
+    198,
+    200,
+    85,
+    194,
+    201,
+    120,
+    197,
+    226,
+    193,
+    149,
+    196,
+    18,
+    41,
+    62,
+    52,
+    218,
+    209,
+    208,
+    204,
+    121,
+    141,
+    156,
+    30,
+    117,
+    154,
+    125,
+    230,
+    202,
+    45,
+    180,
+    37,
+    119,
+    114,
+    38,
+    4,
+    192,
+    9,
+    191,
+    169,
+    170,
+    35,
+    224,
+    205,
+    40,
+    206,
+    207,
+    215,
+    217,
+    116
+   ]
+  },
+  {
+   "query": "session",
+   "threshold": 0.7,
+   "results": [
+    74,
+    73,
+    58,
+    61,
+    60,
+    79,
+    90,
+    57,
+    72,
+    71,
+    56,
+    88,
+    69,
+    77,
+    109,
+    108,
+    104,
+    102,
+    101,
+    105,
+    107,
+    103,
+    106,
+    110,
+    53,
+    63,
+    70,
+    75,
+    89,
+    78,
+    76,
+    65,
+    97,
+    100,
+    99,
+    98,
+    96,
+    95,
+    94,
+    93,
+    92,
+    64,
+    67,
+    91,
+    66,
+    68,
+    216,
+    81,
+    59,
+    143,
+    142,
+    135,
+    134,
+    80,
+    130,
+    128,
+    131,
+    129,
+    87,
+    132,
+    136,
+    133,
+    82,
+    47,
+    144,
+    86,
+    137,
+    138,
+    140,
+    139,
+    85,
+    48,
+    62,
+    215,
+    217,
+    218
+   ]
+  },
+  {
+   "query": "ses new",
+   "threshold": 0.7,
+   "results": [
+    60,
+    215,
+    81,
+    59,
+    131,
+    129,
+    133,
+    10
+   ]
+  },
+  {
+   "query": "new ses",
+   "threshold": 0.7,
+   "results": [
+    60,
+    81,
+    215,
+    59,
+    131,
+    129,
+    133,
+    10
+   ]
+  },
+  {
+   "query": "model",
+   "threshold": 0.7,
+   "results": [
+    115,
+    118,
+    116,
+    119,
+    113,
+    117,
+    114,
+    112,
+    127,
+    126,
+    46
+   ]
+  },
+  {
+   "query": "mod fav",
+   "threshold": 0.7,
+   "results": [
+    113,
+    118,
+    119
+   ]
+  },
+  {
+   "query": "toggle side",
+   "threshold": 0.7,
+   "results": [
+    47,
+    39
+   ]
+  },
+  {
+   "query": "sidebar",
+   "threshold": 0.7,
+   "results": [
+    47
+   ]
+  },
+  {
+   "query": "x",
+   "threshold": 0.7,
+   "results": [
+    1,
+    56,
+    192,
+    237,
+    32,
+    34,
+    88,
+    198,
+    124,
+    202,
+    194,
+    118,
+    116,
+    205,
+    63,
+    67,
+    220,
+    136,
+    138,
+    7,
+    147,
+    43
+   ]
+  },
+  {
+   "query": "dialog sel",
+   "threshold": 0.7,
+   "results": [
+    209,
+    205,
+    208,
+    204,
+    206,
+    207,
+    210,
+    114,
+    112,
+    217
+   ]
+  },
+  {
+   "query": "pr",
+   "threshold": 0.7,
+   "results": [
+    146,
+    150,
+    145,
+    151,
+    152,
+    191,
+    83,
+    84,
+    219,
+    224,
+    154,
+    43,
+    211,
+    35,
+    33,
+    82,
+    236,
+    204,
+    149,
+    89,
+    197,
+    137,
+    64,
+    112,
+    201,
+    193,
+    68,
+    139,
+    153,
+    148,
+    192,
+    122,
+    220,
+    221,
+    222,
+    147,
+    223,
+    125,
+    119,
+    117,
+    235,
+    62,
+    76,
+    75,
+    30,
+    29,
+    28,
+    27,
+    31,
+    14,
+    5,
+    56,
+    90,
+    227,
+    9
+   ]
+  },
+  {
+   "query": "ul",
+   "threshold": 0.7,
+   "results": [
+    121,
+    114,
+    91,
+    130,
+    40,
+    224,
+    157,
+    221,
+    232,
+    222,
+    223,
+    35,
+    220,
+    170,
+    172,
+    219,
+    169,
+    171
+   ]
+  },
+  {
+   "query": "SESS",
+   "threshold": 0.7,
+   "results": [
+    74,
+    73,
+    58,
+    61,
+    60,
+    79,
+    90,
+    57,
+    71,
+    72,
+    56,
+    88,
+    107,
+    104,
+    105,
+    108,
+    102,
+    101,
+    103,
+    109,
+    106,
+    69,
+    77,
+    110,
+    53,
+    63,
+    70,
+    89,
+    75,
+    78,
+    65,
+    76,
+    97,
+    100,
+    99,
+    98,
+    96,
+    95,
+    94,
+    93,
+    92,
+    64,
+    67,
+    91,
+    66,
+    68,
+    130,
+    128,
+    131,
+    129,
+    216,
+    132,
+    133,
+    135,
+    134,
+    137,
+    138,
+    140,
+    139,
+    81,
+    59,
+    143,
+    142,
+    80,
+    87,
+    136,
+    82,
+    47,
+    144,
+    86,
+    85,
+    48,
+    62,
+    215,
+    217,
+    218
+   ]
+  },
+  {
+   "query": "  tab  ",
+   "threshold": 0.7,
+   "results": [
+    104,
+    102,
+    103,
+    106,
+    107,
+    109,
+    101,
+    105,
+    108,
+    69,
+    110,
+    63,
+    70,
+    65,
+    64,
+    67,
+    66,
+    68
+   ]
+  },
+  {
+   "query": "input.",
+   "threshold": 0.7,
+   "results": [
+    183,
+    182,
+    181,
+    155,
+    159,
+    156,
+    166,
+    160,
+    180,
+    163,
+    165,
+    157,
+    158,
+    174,
+    190,
+    177,
+    164,
+    173,
+    161,
+    184,
+    162,
+    185,
+    168,
+    170,
+    169,
+    167,
+    176,
+    178,
+    175,
+    188,
+    186,
+    179,
+    189,
+    187,
+    172,
+    171
+   ]
+  },
+  {
+   "query": "cmd",
+   "threshold": 0.7,
+   "results": [
+    10,
+    45
+   ]
+  },
+  {
+   "query": "zzz",
+   "threshold": 0.7,
+   "results": []
+  },
+  {
+   "query": "copy last",
+   "threshold": 0.7,
+   "results": []
+  },
+  {
+   "query": "a b c",
+   "threshold": 0.7,
+   "results": [
+    194,
+    195,
+    193,
+    196,
+    0,
+    10,
+    180,
+    243,
+    78,
+    210,
+    87,
+    45,
+    65,
+    128,
+    132,
+    129,
+    133,
+    44,
+    185,
+    175,
+    154,
+    31,
+    189,
+    187,
+    69,
+    86,
+    109,
+    108,
+    107,
+    106,
+    105,
+    104,
+    103,
+    102,
+    101,
+    110,
+    63,
+    70,
+    64,
+    67,
+    68,
+    53,
+    130,
+    131
+   ]
+  },
+  {
+   "query": "exit app",
+   "threshold": 0.7,
+   "results": [
+    1
+   ]
+  },
+  {
+   "query": "undo",
+   "threshold": 0.7,
+   "results": [
+    182,
+    142,
+    83
+   ]
+  },
+  {
+   "query": "page down",
+   "threshold": 0.7,
+   "results": [
+    21,
+    241,
+    207,
+    129,
+    23,
+    133
+   ]
+  },
+  {
+   "query": "dg",
+   "threshold": 0.7,
+   "results": [
+    228,
+    213,
+    211,
+    207,
+    209,
+    205,
+    208,
+    210,
+    204,
+    206,
+    229,
+    214,
+    55,
+    3,
+    24,
+    23,
+    112,
+    235,
+    114
+   ]
+  }
+ ]
+}
