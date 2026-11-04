@@ -92,6 +92,8 @@ pub struct Tui {
     pub frame: crate::frame::Frame,
     /// Plugin side panels (E.12).
     pub panels: crate::panel::Panels,
+    /// Session terminals (E.13a).
+    pub terminals: crate::terminal::Terminals,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -364,6 +366,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
         tabs: Default::default(),
         frame: crate::frame::Frame::new(app, this.clone()),
         panels: Default::default(),
+        terminals: Default::default(),
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
@@ -379,6 +382,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
     install_theme(&tui);
     install_wakeups(&tui, deps.events);
     crate::tabs::install(&tui);
+    crate::terminal::install(&tui);
     crate::frame::install(&tui, &shell);
     crate::features::clear::install(&tui);
     crate::features::events::install(&tui);
@@ -430,6 +434,8 @@ fn install_keys(tui: &Rc<Tui>) {
     // Console copy, then the selection keys, go before the keymap (E.20).
     crate::features::console_copy::install(tui);
     crate::features::selection::install(tui);
+    // A focused terminal takes keys before the keymap (E.13a).
+    crate::terminal::install_keys(tui);
     route_keys(&tui.app, tui.keymap.clone());
     // The leader sequence expires on a timer (`leader.timeout`).
     let weak = tui.weak();
