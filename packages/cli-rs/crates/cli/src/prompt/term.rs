@@ -50,6 +50,18 @@ pub fn columns() -> Option<usize> {
         .filter(|columns| *columns > 0)
 }
 
+/// `process.stdout.rows`: unset when stdout is not a terminal.
+pub fn stdout_rows() -> Option<usize> {
+    let stdout = std::io::stdout();
+    if !isatty(&stdout) {
+        return None;
+    }
+    tcgetwinsize(&stdout)
+        .ok()
+        .map(|size| usize::from(size.ws_row))
+        .filter(|rows| *rows > 0)
+}
+
 /// The rows of the prompt's output terminal, or 10 when it is not one (`limitOptions`).
 pub fn rows(output: Output) -> usize {
     let size = match output {
@@ -98,7 +110,9 @@ static ACTIVE: std::sync::Mutex<Vec<(u64, BorrowedFd<'static>, Termios)>> =
     std::sync::Mutex::new(Vec::new());
 
 fn active() -> std::sync::MutexGuard<'static, Vec<(u64, BorrowedFd<'static>, Termios)>> {
-    ACTIVE.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    ACTIVE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Raw {
@@ -541,13 +555,23 @@ mod tests {
         grantpt(&master).unwrap();
         unlockpt(&master).unwrap();
         let name = ptsname(&master, Vec::new()).unwrap();
-        let slave = open(name.as_c_str(), OFlags::RDWR | OFlags::NOCTTY, Mode::empty()).unwrap();
+        let slave = open(
+            name.as_c_str(),
+            OFlags::RDWR | OFlags::NOCTTY,
+            Mode::empty(),
+        )
+        .unwrap();
         let slave: &'static std::os::fd::OwnedFd = Box::leak(Box::new(slave));
         let fd = slave.as_fd();
         let cooked = tcgetattr(fd).unwrap().local_modes;
         assert!(cooked.contains(LocalModes::ICANON));
         let raw = Raw::enable_on(fd);
-        assert!(!tcgetattr(fd).unwrap().local_modes.contains(LocalModes::ICANON));
+        assert!(
+            !tcgetattr(fd)
+                .unwrap()
+                .local_modes
+                .contains(LocalModes::ICANON)
+        );
         // A shutdown step runs on the signal thread while the prompt still holds raw mode.
         std::thread::spawn(restore).join().unwrap();
         assert_eq!(tcgetattr(fd).unwrap().local_modes, cooked);
