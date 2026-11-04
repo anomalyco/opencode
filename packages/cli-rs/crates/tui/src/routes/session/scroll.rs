@@ -75,6 +75,21 @@ impl Controls {
     }
 }
 
+impl Drop for Inner {
+    fn drop(&mut self) {
+        if let Some(tui) = self.tui.upgrade() {
+            dispose(&tui, std::mem::take(&mut *self.layers.borrow_mut()));
+        }
+    }
+}
+
+/// Unregisters `layers`. A command may drop the view while the keymap runs it, so they go afterwards;
+/// dropping a disposer does not unregister its layer.
+fn dispose(tui: &Tui, layers: Vec<Disposer>) {
+    tui.app
+        .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+}
+
 impl Inner {
     fn install(&self, tui: &Tui) {
         self.configure(&tui.settings.info());
@@ -166,7 +181,7 @@ impl Inner {
     /// the scroll keys in every mode, `session.first` and `session.last` also while no editor has
     /// focus, and the rest in the base mode.
     pub(super) fn register(&self, tui: &Tui) {
-        self.layers.borrow_mut().clear();
+        dispose(tui, std::mem::take(&mut *self.layers.borrow_mut()));
         let command = |id: &str, title: &str, run: fn(&Inner, &Tui)| {
             let weak = self.this.clone();
             TuiCommand::new(id, move |_, _| {

@@ -6,7 +6,7 @@
 //! beside its prompt and hides the prompt while [`LocationMissing::active`].
 
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
@@ -22,6 +22,7 @@ use crate::app::Tui;
 use crate::dialogs::worktrees::Selection;
 
 pub struct LocationMissing {
+    tui: Weak<Tui>,
     session: SessionID,
     root: View,
     active: Cell<bool>,
@@ -36,6 +37,7 @@ impl LocationMissing {
             .max_height(15)
             .visible(false);
         Self {
+            tui: tui.weak(),
             session: session.clone(),
             root,
             active: Cell::new(false),
@@ -67,7 +69,7 @@ impl LocationMissing {
         }
         self.active.set(missing.is_some());
         self.root.clear();
-        self.layer.take();
+        dispose(tui, self.layer.take());
         let Some(directory) = missing else {
             self.root.visible(false);
             return;
@@ -94,6 +96,22 @@ impl LocationMissing {
         }
         // The prompt hides; it must not keep the keys.
         tui.app.blur();
+    }
+}
+
+impl Drop for LocationMissing {
+    fn drop(&mut self) {
+        if let Some(tui) = self.tui.upgrade() {
+            dispose(&tui, self.layer.take());
+        }
+    }
+}
+
+/// Unregisters the `return` layer. A command may drop the view while the keymap runs it, so the layer goes
+/// afterwards; dropping a disposer does not unregister it.
+fn dispose(tui: &Tui, layer: Option<Disposer>) {
+    if let Some(layer) = layer {
+        tui.app.defer(move |_| layer.dispose());
     }
 }
 
