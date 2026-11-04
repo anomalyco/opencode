@@ -391,7 +391,6 @@ fn history_steps_through_submitted_prompts_and_is_written_as_typescript_writes_i
     setup.app.press("down");
     assert_eq!(setup.textarea().text(), "second");
     setup.app.press("down");
-    setup.app.press("down");
     assert_eq!(setup.textarea().text(), "");
 
     // Up inside a multi-line prompt moves the cursor before it steps.

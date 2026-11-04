@@ -600,7 +600,8 @@ fn copies_and_the_parent_report_their_outcome() {
         vec![],
     );
     kit.ready();
-    kit.leader("y");
+    // A child session shows the composer, whose mode leaves the base-mode keys out (E.13b).
+    kit.tui.keymap.dispatch("messages.copy", None);
     kit.wait_for("Failed to copy to clipboard");
     kit.tui.keymap.dispatch("session.copy.id", None);
     kit.wait_for("Failed to copy session ID");
