@@ -11,6 +11,7 @@ import "../../../tui/src/plugin/context"
 import { PluginsDialog } from "../../../tui/src/feature-plugins/system/plugins"
 import { usePathFormatter } from "../../../tui/src/context/path-format"
 import { useThemes } from "../../../tui/src/context/theme"
+import { DialogPair } from "../../../tui/src/component/dialog-pair"
 import { DialogStatus } from "../../../tui/src/component/dialog-status"
 import { DialogThemeList } from "../../../tui/src/component/dialog-theme-list"
 import { ConfigProvider } from "../../../tui/src/config"
@@ -79,8 +80,21 @@ const BUILTINS = [
   "opencode.diffs",
 ]
 
+const INFO = {
+  version: "0.0.0-test",
+  pid: 4242,
+  urls: ["http://127.0.0.1:4096/", "http://192.168.1.20:4096/"],
+  paths: { tmp: "/tmp" },
+}
+let pairFails = false
+
 const calls = createFetch((url) => {
   if (url.pathname === "/api/location") return json(location)
+  if (url.pathname === "/api/info") return json(INFO)
+  if (url.pathname === "/api/pair")
+    return pairFails
+      ? json({ _tag: "ServiceUnavailable", message: "Pairing is disabled" }, { status: 503 })
+      : json({ code: "XK7Q2M", expires_in: 600 })
   if (url.pathname === "/api/mcp") return json({ location, data: servers })
   if (url.pathname === "/api/plugin") return json({ location, data: PLUGINS })
   return undefined
@@ -173,6 +187,15 @@ await render("E.18b/status", status, (f) => f.includes("MCP servers"), { mcp: tr
 servers = []
 await render("E.18b/status-empty", status, (f) => f.includes("No MCP servers"), { mcp: true })
 servers = SERVERS
+
+// Pair: side by side from 96 columns and 36 rows, else stacked in a scroll box.
+const pair = () => <DialogPair />
+const paired = (f: string) => f.includes("expire in")
+await render("E.18b/pair", pair, paired, { width: 100, height: 40 })
+await render("E.18b/pair-narrow", pair, paired, { width: 80, height: 30 })
+pairFails = true
+await render("E.18b/pair-error", pair, (f) => f.includes("Could not load"), { width: 100, height: 40 })
+pairFails = false
 
 // Plugins: TUI rows first, then the server rows; built-ins show after ctrl+a.
 const plugins = () => <Plugins />
