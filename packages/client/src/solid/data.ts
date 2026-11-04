@@ -90,6 +90,10 @@ export type CreateDataInput = {
 }
 
 const messagePageLimit = 20
+// Waits between attempts to load a Session after the live stream reconnected.
+const hydrationBackoff = [500, 1_000, 2_000, 5_000]
+// Long enough for a large page on a slow phone connection; a hung request otherwise holds the Session's live events.
+const transcriptReadTimeout = 30_000
 // Trailing window for event bursts that each ask for the same refetch.
 export const settleMs = 150
 
@@ -203,7 +207,9 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
   }
 }
 
-function createSync() {
+// `offline` reports a disconnected event stream: a read that starts then may miss events published after it, so it
+// never satisfies a read requested once the stream is back.
+function createSync(offline: () => boolean) {
   // `started` is false while a reload waits for the load it replaces. Invalidations that land in
   // that window are already covered, since the reload has not read anything yet.
   type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
@@ -213,6 +219,7 @@ function createSync() {
     state.set(key, entry)
     const run = () => {
       entry.started = true
+      entry.invalidated ||= offline()
       return load()
     }
     entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
@@ -320,9 +327,25 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
-  const sync = createSync()
+  const sync = createSync(() => !!config.connection && config.connection.status() !== "connected")
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+
+  // The live stream drops whatever is published while it is down, so a transcript read is the only way to catch up,
+  // and it must compose with the stream instead of racing it. Each page carries the durable sequence it was read at:
+  // events at or below it are already in the page, so only their client-side effects (pending input, status, info)
+  // apply. Events for a Session wait while its transcript is being read, then apply in order on top of the page.
+  // Deltas carry no sequence and the page does not mark finished text, so deltas apply only once the stream has
+  // delivered the event the page was read at; earlier ones may extend text the page already holds in full.
+  const transcripts = new Map<string, { seq: number; current: boolean }>()
+  const transcriptReads = new Map<string, OpenCodeEvent[]>()
+  // A held Session shows no live progress, so its read is bounded: it ends when the stream drops (the stream will
+  // have lost what followed the page anyway) or when it outlasts `transcriptReadTimeout`.
+  const transcriptAborts = new Set<AbortController>()
+  // The highest durable sequence the live stream has delivered for each Session.
+  const streamed = new Map<string, number>()
+  // Whether the event being applied is already reflected in its Session's transcript page.
+  let covered = false
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -389,9 +412,23 @@ export function createData(config: CreateDataInput) {
   // Inbox IDs of optimistic admissions awaiting acknowledgement, so rejection
   // only rolls back unacknowledged rows and a pending re-fetch cannot wipe a
   // row the server does not know about yet. Prompts clear on their durable
-  // echo, positive pending read, or rollback; compactions also reconcile the
-  // POST's canonical ID.
+  // echo, accepted POST, positive pending read, delivery, or rollback;
+  // compactions also reconcile the POST's canonical ID.
   const outbox = new Set<string>()
+
+  // Prompts whose POST the server accepted before any echo arrived, by the admission count at acceptance. The server
+  // admitted them durably, so an inbox read sent after acceptance that lacks one proves it was delivered or cancelled,
+  // even when the stream lost both events.
+  const acknowledged = new Map<string, number>()
+  let admissions = 0
+  // Prompts an inbox read kept only because it was sent before the server accepted them: once accepted, the inbox is
+  // read again so a prompt delivered or cancelled meanwhile cannot stay pending.
+  const unconfirmed = new Set<string>()
+  function settleAdmission(id: string) {
+    outbox.delete(id)
+    acknowledged.delete(id)
+    unconfirmed.delete(id)
+  }
 
   // Session IDs of optimistic create admissions still awaiting acknowledgement
   // (the session.created echo or the create response itself). A failed create
@@ -453,13 +490,18 @@ export function createData(config: CreateDataInput) {
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
       if (item.type === "compaction") return
+      // Every pending input's row is its overlay. A row without pending input under a covered echo is the delivered
+      // one from the page, which the overlay must not replace.
+      if (covered && at < 0 && messageIndex.get(item.sessionID)?.has(item.id)) return
       materializeInboxMessage(item)
     })
   }
 
+  // Pending input is a client-side overlay on the transcript, so it applies even when the page already reflects the
+  // event.
   function materializeInboxMessage(item: SessionInboxInfo) {
     if (item.type !== "user" && item.type !== "synthetic") return
-    message.update(item.sessionID, (draft, index) => {
+    message.overlay(item.sessionID, (draft, index) => {
       const row =
         item.type === "user"
           ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.time.created } }
@@ -476,7 +518,7 @@ export function createData(config: CreateDataInput) {
     batch(() => {
       removePending(sessionID, inboxID)
       if (!messageIndex.get(sessionID)?.has(inboxID)) return
-      message.update(sessionID, (draft, index) => {
+      message.overlay(sessionID, (draft, index) => {
         const position = index.get(inboxID)
         if (position === undefined) return
         draft.splice(position, 1)
@@ -487,7 +529,12 @@ export function createData(config: CreateDataInput) {
   }
 
   const message = {
+    // Mirrors the server's projection, so the transcript page already holds the effect of a covered event.
     update(sessionID: string, fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void) {
+      if (covered) return
+      message.overlay(sessionID, fn)
+    },
+    overlay(sessionID: string, fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void) {
       setStore(
         "session",
         "message",
@@ -623,9 +670,11 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
-    // Keep unacknowledged submissions until their echo or rollback settles them.
-    const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
-    const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    transcripts.delete(sessionID)
+    // Keep submissions without an echo until their echo, an inbox read, or rollback settles them.
+    const unsettled = (id: string) => outbox.has(id) || acknowledged.has(id)
+    const pending = store.session.pending[sessionID]?.filter((item) => unsettled(item.id)) ?? []
+    const messages = store.session.message[sessionID]?.filter((item) => unsettled(item.id)) ?? []
     messageIndex.delete(sessionID)
     if (messages.length) messageIndex.set(sessionID, new Map(messages.map((item, index) => [item.id, index])))
     setStore(
@@ -673,8 +722,10 @@ export function createData(config: CreateDataInput) {
 
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
-    store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
+    store.session.pending[sessionID]?.forEach((item) => settleAdmission(item.id))
     messageIndex.delete(sessionID)
+    transcripts.delete(sessionID)
+    streamed.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -702,6 +753,29 @@ export function createData(config: CreateDataInput) {
   }
 
   function handleEvent(event: OpenCodeEvent) {
+    const sessionID = event.type.startsWith("session.") && "sessionID" in event.data ? event.data.sessionID : undefined
+    if (sessionID === undefined) return applyEvent(event)
+    const read = transcriptReads.get(sessionID)
+    if (read) return void read.push(event)
+    covered = coveredByTranscript(sessionID, event)
+    try {
+      applyEvent(event)
+    } finally {
+      covered = false
+    }
+  }
+
+  function coveredByTranscript(sessionID: string, event: OpenCodeEvent) {
+    const transcript = transcripts.get(sessionID)
+    const durable = "durable" in event ? event.durable : undefined
+    if (!durable) return transcript ? !transcript.current : false
+    streamed.set(sessionID, Math.max(streamed.get(sessionID) ?? -1, durable.seq))
+    if (!transcript) return false
+    if (durable.seq >= transcript.seq) transcript.current = true
+    return durable.seq <= transcript.seq
+  }
+
+  function applyEvent(event: OpenCodeEvent) {
     switch (event.type) {
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
@@ -881,6 +955,7 @@ export function createData(config: CreateDataInput) {
       }
       case "session.inbox.delivered": {
         const admitted = result.session.input.has(event.data.sessionID, event.data.inboxID)
+        settleAdmission(event.data.inboxID)
         removePending(event.data.sessionID, event.data.inboxID)
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.inboxID)
@@ -899,12 +974,13 @@ export function createData(config: CreateDataInput) {
         updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
         return
       case "session.inbox.cancelled": {
+        settleAdmission(event.data.inboxID)
         retractLocal(event.data.sessionID, event.data.inboxID)
         compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.enqueued": {
-        outbox.delete(event.data.inboxID)
+        settleAdmission(event.data.inboxID)
         const item = {
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
@@ -1590,6 +1666,7 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const started = deletionEpoch
+            const accepted = admissions
             const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
             pendingUpdates.set(sessionID, updates)
             try {
@@ -1607,21 +1684,44 @@ export function createData(config: CreateDataInput) {
               })
               const pending = [...current.values()]
               // A positive read acknowledges admission even when its SSE echo is delayed.
-              pending.forEach((item) => outbox.delete(item.id))
+              pending.forEach((item) => settleAdmission(item.id))
               // Compactions also coalesce by Session, not just by the proposed ID.
               if (pending.some((item) => item.type === "compaction"))
                 store.session.pending[sessionID]
                   ?.filter((item) => item.type === "compaction")
                   .forEach((item) => outbox.delete(item.id))
-              // Keep optimistic rows still awaiting their echo: this fetch may
-              // have raced ahead of an in-flight admission the server does not
-              // know about yet.
-              const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
+              // Keep optimistic rows this read cannot speak for: the server had not yet accepted them when it was sent.
+              const previous = store.session.pending[sessionID] ?? []
+              const inflight = previous.filter(
+                (item) => outbox.has(item.id) || (acknowledged.get(item.id) ?? 0) > accepted,
+              )
               const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
+              // Anything else this read lacks was delivered or cancelled while the stream missed it. Its row is the
+              // pending overlay, never the delivered one, so it goes, and a delivered prompt returns from the transcript.
+              const kept = new Set(merged.map((item) => item.id))
+              const consumed = previous.filter((item) => !kept.has(item.id))
               batch(() => {
+                consumed.forEach((item) => {
+                  settleAdmission(item.id)
+                  // A compaction's row is the transcript's own, under the same ID; only input has an overlay.
+                  if (item.type === "user" || item.type === "synthetic") retractLocal(sessionID, item.id)
+                  else removePending(sessionID, item.id)
+                })
                 setStore("session", "pending", sessionID, reconcile(merged))
                 merged.forEach(materializeInboxMessage)
               })
+              inflight.forEach((item) => {
+                if (outbox.has(item.id) && item.type !== "compaction") unconfirmed.add(item.id)
+              })
+              if (store.session.message[sessionID] && consumed.some((item) => item.type !== "compaction")) {
+                sync.invalidate(`session.message:${sessionID}`)
+                refresh(() => result.session.message.sync(sessionID))
+              }
+              // Accepted while this read was on its way: only a newer read can say where they are.
+              if (inflight.some((item) => acknowledged.has(item.id))) {
+                sync.invalidate(`session.pending:${sessionID}`)
+                refresh(() => result.session.pending.sync(sessionID))
+              }
             } finally {
               if (pendingUpdates.get(sessionID) === updates) pendingUpdates.delete(sessionID)
             }
@@ -1774,12 +1874,23 @@ export function createData(config: CreateDataInput) {
             return api().session.prompt({ ...request, id })
           },
           gate,
-        ).catch((error) => {
-          // Roll back only rows this call admitted and the server has not
-          // acknowledged: anything else is server state.
-          if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
-          throw error
-        })
+        )
+          .then((admitted) => {
+            if (!outbox.delete(id)) return admitted
+            acknowledged.set(id, ++admissions)
+            if (unconfirmed.delete(id)) {
+              sync.invalidate(`session.pending:${request.sessionID}`)
+              refresh(() => result.session.pending.sync(request.sessionID))
+            }
+            return admitted
+          })
+          .catch((error) => {
+            // Roll back only rows this call admitted and the server has not
+            // acknowledged: anything else is server state.
+            unconfirmed.delete(id)
+            if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
+            throw error
+          })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
@@ -1808,6 +1919,38 @@ export function createData(config: CreateDataInput) {
       invalidate(sessionID: string) {
         sync.invalidate(`session:${sessionID}`)
       },
+      /**
+       * Loads a Session's transcript and pending input, the only way to recover what the live stream dropped while it
+       * was down. A read that fails while connected is retried with backoff, so one lost request on a bad network does
+       * not leave the Session behind until the next reconnect. Rejects once `signal` aborts, the connection drops (the
+       * next connect hydrates again), the Session is gone, or the retries run out.
+       */
+      async hydrate(sessionID: string, options?: { signal?: AbortSignal }) {
+        for (const delay of [...hydrationBackoff, undefined]) {
+          const failure = await Promise.all([
+            result.session.message.sync(sessionID),
+            result.session.pending.sync(sessionID),
+          ])
+            .then(() => undefined)
+            .catch((error: unknown) => ({ error }))
+          if (!failure) return
+          const live = !config.connection || config.connection.status() === "connected"
+          if (delay === undefined || !live || options?.signal?.aborted || isSessionNotFoundError(failure.error))
+            throw failure.error
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(done, delay)
+            options?.signal?.addEventListener("abort", done, { once: true })
+            function done() {
+              clearTimeout(timer)
+              options?.signal?.removeEventListener("abort", done)
+              resolve()
+            }
+          })
+          // A failed read keeps no cached result, so the next attempt reads again while a finished one stays.
+          if (options?.signal?.aborted || (config.connection && config.connection.status() !== "connected"))
+            throw failure.error
+        }
+      },
       message: {
         list(sessionID: string) {
           return store.session.message[sessionID] ?? []
@@ -1820,39 +1963,79 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
             const started = deletionEpoch
-            const response = await api()
-              .message.list({
-                sessionID,
-                limit: config.initialMessageLimit?.() ?? messagePageLimit,
-                order: "desc",
-              })
-              .catch(evictMissing)
-            if ((deletedAt.get(sessionID) ?? 0) > started) return
-            const fetched = response.data.toReversed().map(stored)
-            // Same protection as the pending sync: a re-fetch racing an
-            // admission must not wipe its local transcript row.
-            const ids = new Set(fetched.map((item) => item.id))
-            const admitted = new Set(
-              (store.session.pending[sessionID] ?? []).flatMap((item) =>
-                item.type === "user" || item.type === "synthetic" ? [item.id] : [],
-              ),
+            const events: OpenCodeEvent[] = []
+            transcriptReads.set(sessionID, events)
+            const release = () => events.forEach(handleEvent)
+            const controller = new AbortController()
+            transcriptAborts.add(controller)
+            const timeout = setTimeout(
+              () => controller.abort(new Error("Timed out reading the transcript")),
+              transcriptReadTimeout,
             )
-            const local = (store.session.message[sessionID] ?? []).filter(
-              (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
-            )
-            const messages = local.length === 0 ? fetched : [...fetched, ...local]
-            // The transcript only holds delivered input, so a pending row it contains missed its
-            // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
-            const delivered = [...admitted].filter((id) => ids.has(id))
-            batch(() => {
-              delivered.forEach((id) => {
-                outbox.delete(id)
-                removePending(sessionID, id)
+            try {
+              const response = await api()
+                .message.list(
+                  {
+                    sessionID,
+                    limit: config.initialMessageLimit?.() ?? messagePageLimit,
+                    order: "desc",
+                  },
+                  { signal: controller.signal },
+                )
+                .catch(evictMissing)
+              if ((deletedAt.get(sessionID) ?? 0) > started) return
+              const fetched = response.data.toReversed().map(stored)
+              // Same protection as the pending sync: a re-fetch racing an
+              // admission must not wipe its local transcript row.
+              const ids = new Set(fetched.map((item) => item.id))
+              const admitted = new Set(
+                (store.session.pending[sessionID] ?? []).flatMap((item) =>
+                  item.type === "user" || item.type === "synthetic" ? [item.id] : [],
+                ),
+              )
+              const local = (store.session.message[sessionID] ?? []).filter(
+                (item) =>
+                  !ids.has(item.id) && (outbox.has(item.id) || acknowledged.has(item.id) || admitted.has(item.id)),
+              )
+              const messages = local.length === 0 ? fetched : [...fetched, ...local]
+              // The transcript only holds delivered input, so a pending row it contains missed its
+              // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
+              const delivered = [...admitted].filter((id) => ids.has(id))
+              const seq = response.experimental?.seq
+              batch(() => {
+                delivered.forEach((id) => {
+                  settleAdmission(id)
+                  removePending(sessionID, id)
+                })
+                messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
+                setStore("session", "message", sessionID, reconcile(messages))
+                setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+                transcriptReads.delete(sessionID)
+                if (seq !== undefined) {
+                  transcripts.set(sessionID, { seq, current: (streamed.get(sessionID) ?? -1) >= seq })
+                  return release()
+                }
+                // A server without page sequences cannot say which held events the page reflects; like a
+                // replaced snapshot, the page keeps only their client-side effects.
+                transcripts.delete(sessionID)
+                events.forEach((event) => {
+                  covered = true
+                  try {
+                    applyEvent(event)
+                  } finally {
+                    covered = false
+                  }
+                })
               })
-              messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
-              setStore("session", "message", sessionID, reconcile(messages))
-              setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
-            })
+            } finally {
+              clearTimeout(timeout)
+              transcriptAborts.delete(controller)
+              // A failed or abandoned read leaves the previous transcript, so held events apply as they would have live.
+              if (transcriptReads.get(sessionID) === events) {
+                transcriptReads.delete(sessionID)
+                batch(release)
+              }
+            }
           })
         },
         more(sessionID: string) {
@@ -2150,6 +2333,7 @@ export function createData(config: CreateDataInput) {
   createEffect(() => {
     if (config.connection?.status() === "connected") return
     sync.invalidate()
+    transcriptAborts.forEach((controller) => controller.abort(new Error("Event stream disconnected")))
   })
 
   onCleanup(
