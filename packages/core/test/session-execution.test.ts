@@ -22,7 +22,8 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -66,9 +67,31 @@ describe("SessionExecution lifecycle", () => {
 
       expect(yield* store.listSuspended()).toEqual([parent])
 
-      // The sweep clears orphaned child claims outright; parents keep theirs.
-      yield* store.releaseChildClaims([])
-      expect(yield* claims(database)).toEqual({ [parent]: true, [child]: false, [idle]: false })
+      expect(yield* store.listOrphanedChildren([])).toEqual([child])
+      expect(yield* store.listOrphanedChildren([child])).toEqual([])
+    }),
+  )
+
+  it.effect("settles an orphaned child claim so the child does not stay busy", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_orphan_parent")
+      const child = Session.ID.make("ses_orphan_child")
+      yield* seedSessions(database, [parent])
+      // A child whose turn died with the previous process and has no background Job to recover it.
+      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: 1, time_busy: 1 })
+      yield* TestClock.adjust("1 second")
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      expect((yield* claims(database))[child]).toBe(false)
+      const info = yield* store.get(child)
+      expect(info?.outcome).toBe("failed")
+      expect(DateTime.toEpochMillis(info!.time.idle!)).toBeGreaterThan(DateTime.toEpochMillis(info!.time.busy!))
     }),
   )
 
@@ -423,7 +446,8 @@ describe("SessionRestart background recovery", () => {
       expect(yield* SessionInbox.list(database.db, child)).toHaveLength(1)
 
       yield* seedInbox(database, parent, ["steer"])
-      yield* seedInbox(database, child, ["steer"])
+      // The orphaned child's Failed terminal and restart notice already used the low event seqs.
+      yield* seedInbox(database, child, ["steer"], 10)
       yield* execution.wake(parent)
       yield* execution.wake(child)
       yield* Effect.forEach([parent, child], execution.awaitIdle, { discard: true })
@@ -1299,6 +1323,7 @@ function seedInbox(
   items: ReadonlyArray<
     SessionInbox.Delivery | { readonly delivery: SessionInbox.Delivery; readonly type: "compaction" }
   >,
+  firstSeq = 1,
 ) {
   return database.db
     .insert(SessionInboxTable)
@@ -1311,7 +1336,7 @@ function seedInbox(
           type: entry.type,
           payload: entry.type === "user" ? { text: "queued prompt" } : {},
           delivery: entry.delivery,
-          enqueued_seq: index + 1,
+          enqueued_seq: firstSeq + index,
         }
       }),
     )
@@ -1322,7 +1347,7 @@ function seedInbox(
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
+  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "time_busy">> = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
