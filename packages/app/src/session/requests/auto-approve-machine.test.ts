@@ -3,6 +3,7 @@ import {
   INITIAL_AUTO_APPROVE_STATE,
   isDockVisible,
   transitionAutoApprove,
+  type AutoApproveEffect,
   type AutoApproveEvent,
   type AutoApproveState,
   type AutoApproveTransition,
@@ -139,7 +140,7 @@ describe("transitionAutoApprove", () => {
     { from: gaveUp, cancel: INITIAL_AUTO_APPROVE_STATE, resolved: { status: "replied" }, clears: false },
     { from: { status: "replied" }, cancel: { status: "replied" }, resolved: { status: "replied" }, clears: false },
   ])("cancel and resolved from $from.status", (input) => {
-    const effects = input.clears ? [{ type: "cancel-retry" }] : []
+    const effects: AutoApproveEffect[] = input.clears ? [{ type: "cancel-retry" }] : []
 
     expect(transitionAutoApprove(input.from, { type: "cancel" })).toEqual({ state: input.cancel, effects })
     expect(transitionAutoApprove(input.from, { type: "resolved" })).toEqual({ state: input.resolved, effects })
