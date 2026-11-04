@@ -4,6 +4,7 @@ import {
   delegating,
   MAX_ROUNDS,
   RESPONSE_TIMEOUT,
+  TIMED_OUT,
   transitionVoiceDelegation,
   type VoiceDelegationEffect,
   type VoiceDelegationEvent,
@@ -99,7 +100,7 @@ test.each(["cancelled", "failed", "incomplete"] as const)("response.%s ends only
   expect(delegating(result.state)).toBe(false)
 })
 
-test("a timeout discards only its delegation and ignores an earlier phase's timer and round", () => {
+test("a timeout with the data channel closed discards only its delegation and ignores earlier attempts", () => {
   const start = replay([created("del_1"), created("del_2")])
   expect(start.effects).toContainEqual({
     type: "deadline",
@@ -114,7 +115,7 @@ test("a timeout discards only its delegation and ignores an earlier phase's time
     [
       call("call_1"),
       { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
-      { type: "delegation.timeout", id: "del_1", attempt: responding },
+      { type: "delegation.timeout", id: "del_1", attempt: responding, channelOpen: true },
     ],
     start.state,
   )
@@ -125,7 +126,7 @@ test("a timeout discards only its delegation and ignores an earlier phase's time
 
   const timedOut = replay(
     [
-      { type: "delegation.timeout", id: "del_1", attempt: round },
+      { type: "delegation.timeout", id: "del_1", attempt: round, channelOpen: false },
       { type: "round.completed", id: "del_1", attempt: round, sessionID: "ses_here", outputs: [] },
     ],
     running.state,
@@ -133,6 +134,55 @@ test("a timeout discards only its delegation and ignores an earlier phase's time
 
   expect(timedOut.effects).toEqual([{ type: "finish", id: "del_1", outcome: "discarded" }])
   expect(timedOut.state.delegations.map((delegation) => delegation.id)).toEqual(["del_2"])
+
+  // A response that never finishes has no outputs to send, so it ends even with the channel open.
+  const silent = replay(
+    [{ type: "delegation.timeout", id: "del_2", attempt: attempt(timedOut.state, "del_2"), channelOpen: true }],
+    timedOut.state,
+  )
+
+  expect(silent.effects).toEqual([{ type: "finish", id: "del_2", outcome: "discarded" }])
+})
+
+test("a tool round that times out sends error outputs and waits for the delegator's answer", () => {
+  const running = replay([
+    created("del_1"),
+    call("call_1"),
+    call("call_2"),
+    { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
+  ])
+
+  const round = attempt(running.state, "del_1")
+
+  const timedOut = transitionVoiceDelegation(running.state, {
+    type: "delegation.timeout",
+    id: "del_1",
+    attempt: round,
+    channelOpen: true,
+  })
+
+  expect(timedOut.effects).toEqual([
+    { type: "abort", id: "del_1" },
+    {
+      type: "outputs",
+      outputs: [
+        { call_id: "call_1", output: TIMED_OUT },
+        { call_id: "call_2", output: TIMED_OUT },
+      ],
+    },
+    { type: "deadline", id: "del_1", attempt: attempt(timedOut.state, "del_1"), ms: RESPONSE_TIMEOUT },
+  ])
+
+  const answered = replay(
+    [
+      { type: "round.completed", id: "del_1", attempt: round, sessionID: "ses_here", outputs: [] },
+      { type: "response.created", delegationID: null, responseID: "resp_2" },
+      { type: "response.finished", delegationID: null, responseID: "resp_2", outcome: "completed" },
+    ],
+    timedOut.state,
+  )
+
+  expect(answered.effects).toEqual([{ type: "finish", id: "del_1", outcome: "answered" }])
 })
 
 test("a runaway delegation is discarded after the last allowed round", () => {

@@ -218,7 +218,14 @@ export function createVoiceCall(input: {
       const handle = handles.get(effect.id) ?? {}
       clearTimeout(handle.timer)
       handle.timer = setTimeout(
-        () => dispatch({ type: "delegation.timeout", id: effect.id, attempt: effect.attempt }),
+        () =>
+          dispatch({
+            type: "delegation.timeout",
+            id: effect.id,
+            attempt: effect.attempt,
+            // The transport aborts as soon as its data channel closes.
+            channelOpen: !!state.transport && !state.transport.abort.signal.aborted,
+          }),
         effect.ms,
       )
       handles.set(effect.id, handle)
@@ -233,6 +240,12 @@ export function createVoiceCall(input: {
       const abort = new AbortController()
       handles.set(effect.id, { ...handles.get(effect.id), abort })
       void runRound(effect, AbortSignal.any([abort.signal, transport.abort.signal]))
+
+      return
+    }
+
+    if (effect.type === "abort") {
+      handles.get(effect.id)?.abort?.abort()
 
       return
     }
