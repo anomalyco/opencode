@@ -6,6 +6,7 @@ import {
   type Renderable,
   type TextareaRenderable,
 } from "@opentui/core"
+import { ManualClock } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
 import { descendants, image, renderMedia, video } from "../fixture/media"
 
@@ -182,6 +183,90 @@ test("the seek bar previews the hovered frame silently and seeks where it is cli
   expect(player.paused).toBe(true)
 })
 
+test("the seek preview seeks once the pointer rests, at most every 120 ms, and stays mounted across the bar", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  await viewer.app.mockMouse.moveTo(bar.x + 5, bar.y)
+  await viewer.until(() => viewer.videos("media-seek-preview")[0]?.ready === true)
+  const preview = viewer.videos("media-seek-preview")[0]!
+  let seeks = 0
+  preview.onSeek = () => seeks++
+
+  // A sweep that never rests 80 ms seeks nothing until it stops, then seeks once, to where it stopped.
+  for (let column = 6; column <= 30; column++) {
+    await viewer.app.mockMouse.moveTo(bar.x + column, bar.y)
+    clock.advance(30)
+  }
+  expect(seeks).toBe(0)
+  clock.advance(80)
+  expect(seeks).toBe(1)
+  expect(preview.currentTime).toBeCloseTo((30 / (bar.width - 1)) * 2, 1)
+  expect(viewer.videos("media-seek-preview")[0]).toBe(preview)
+
+  // A rest right after a seek waits out the rest of the interval.
+  await viewer.app.mockMouse.moveTo(bar.x + 31, bar.y)
+  clock.advance(80)
+  expect(seeks).toBe(1)
+  clock.advance(40)
+  expect(seeks).toBe(2)
+})
+
+test("scrubbing seeks the main player at most every 120 ms, lands on release, and never seeks the preview", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  await viewer.app.mockMouse.moveTo(bar.x + 5, bar.y)
+  await viewer.until(() => viewer.videos("media-seek-preview")[0]?.ready === true)
+  const preview = viewer.videos("media-seek-preview")[0]!
+  let previewSeeks = 0
+  let playerSeeks = 0
+  preview.onSeek = () => previewSeeks++
+  player.onSeek = () => playerSeeks++
+
+  await viewer.app.mockMouse.pressDown(bar.x + 5, bar.y)
+  expect(playerSeeks).toBe(1)
+  for (const column of [10, 15, 20]) await viewer.app.mockMouse.moveTo(bar.x + column, bar.y)
+  expect(playerSeeks).toBe(1)
+  clock.advance(120)
+  expect(playerSeeks).toBe(2)
+  expect(player.currentTime).toBeCloseTo((20 / (bar.width - 1)) * 2, 1)
+  await viewer.app.mockMouse.moveTo(bar.x + 25, bar.y)
+  clock.advance(1_000)
+  // The main player shows the frame, so the preview hides and keeps still.
+  expect(viewer.find("media-seek-preview")!.visible).toBe(false)
+  expect(previewSeeks).toBe(0)
+
+  await viewer.app.mockMouse.release(bar.x + 25, bar.y)
+  expect(playerSeeks).toBe(4)
+  expect(player.currentTime).toBeCloseTo((25 / (bar.width - 1)) * 2, 1)
+  // Still over the bar, the preview shows again and catches up once.
+  clock.advance(1_000)
+  expect(viewer.find("media-seek-preview")!.visible).toBe(true)
+  expect(previewSeeks).toBe(1)
+  expect(playerSeeks).toBe(4)
+})
+
+test("the seek bar keeps its text while time passes within the playhead's column", async () => {
+  await using viewer = await renderMedia(() => null)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  await viewer.press("0")
+  const bar = seekBar(viewer)!
+  let rebuilds = 0
+  bar.on("line-info-change", () => rebuilds++)
+  player.seek(0.01)
+  await viewer.app.renderOnce()
+  expect(rebuilds).toBe(0)
+  player.seek(1)
+  await viewer.app.renderOnce()
+  expect(rebuilds).toBe(1)
+})
+
 test("scrubbing pauses a playing video and plays it again on release", async () => {
   await using viewer = await renderMedia(() => null)
   const player = await openVideo(viewer)
@@ -194,6 +279,16 @@ test("scrubbing pauses a playing video and plays it again on release", async () 
   await viewer.app.mockMouse.release(bar.x + Math.floor(bar.width / 2), bar.y)
   expect(player.playing).toBe(true)
   expect(player.currentTime).toBeCloseTo(1, 0)
+})
+
+test("the filmstrip names videos instead of opening players for them", async () => {
+  await using viewer = await renderMedia(() => null)
+  viewer.media().openViewer([video("first"), video("second"), image("image")], 0)
+  await viewer.until(() => viewer.videos("media-viewer-stage")[0]?.playing === true)
+  expect(viewer.videos("media-viewer-filmstrip")).toHaveLength(0)
+  expect(viewer.frame()).toContain("▶ second.mp4")
+  const tiles = viewer.find("media-viewer-filmstrip")!
+  expect(descendants(tiles).filter((node) => node instanceof ImageRenderable)).toHaveLength(1)
 })
 
 test("clicking the current filmstrip tile keeps the video playing", async () => {

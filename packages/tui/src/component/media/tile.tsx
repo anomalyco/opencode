@@ -8,9 +8,16 @@ import { createImageSource, createVideoFile } from "./source"
 
 /**
  * A thumbnail for an image or video. A video shows a poster frame and, while the pointer is over it, plays silently
- * in a loop as the one active tile; leaving it pauses and returns to the poster. A click calls `onOpen`.
+ * in a loop as the one active tile; leaving it pauses and returns to the poster. A click calls `onOpen`. A `still`
+ * video shows only its name, keeping no decoder open.
  */
-export function MediaTile(props: { item: MediaItem; width: number; height: number; onOpen?: () => void }) {
+export function MediaTile(props: {
+  item: MediaItem
+  width: number
+  height: number
+  still?: boolean
+  onOpen?: () => void
+}) {
   const media = useMedia()
   const theme = useTheme()
   const renderer = useRenderer()
@@ -27,7 +34,7 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
       backgroundColor={theme.background.raised.base}
       onMouseOver={() => {
         hovered = true
-        if (isPlayableVideo(props.item)) media.setActiveTile(key)
+        if (isPlayableVideo(props.item) && !props.still) media.setActiveTile(key)
       }}
       onMouseOut={() => {
         hovered = false
@@ -44,6 +51,9 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
         <Match when={props.item.kind === "image"}>
           <TileImage item={props.item} />
         </Match>
+        <Match when={props.still && isPlayableVideo(props.item)}>
+          <TileLabel item={props.item} text={`▶ ${props.item.name ?? "video"}`} />
+        </Match>
         <Match when={isPlayableVideo(props.item)}>
           <TileVideo item={props.item} active={media.activeTile() === key} />
         </Match>
@@ -52,12 +62,12 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
   )
 }
 
-function TileLabel(props: { item: MediaItem }) {
+function TileLabel(props: { item: MediaItem; text?: string }) {
   const theme = useTheme()
   return (
     <box width="100%" height="100%" alignItems="center" justifyContent="center">
       <text fg={theme.text.muted} wrapMode="none" truncate selectable={false}>
-        {props.item.name ? `${props.item.kind} · ${props.item.name}` : props.item.kind}
+        {props.text ?? (props.item.name ? `${props.item.kind} · ${props.item.name}` : props.item.kind)}
       </text>
     </box>
   )

@@ -73,6 +73,12 @@ function init(directory: string) {
     clearInterval(poll)
   })
 
+  // Kitty frames pass through temporary files instead of base64 in the output. OpenTUI keeps sending them inline
+  // until a probe shows the terminal reads the files, and always in a remote session or a multiplexer.
+  const transport = renderer.kittyImageTransport
+  createEffect(() => (renderer.kittyImageTransport = richMedia() ? "file" : transport))
+  onCleanup(() => (renderer.kittyImageTransport = transport))
+
   createEffect(
     on(
       richMedia,

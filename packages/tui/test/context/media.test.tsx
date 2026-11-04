@@ -56,3 +56,13 @@ test("opens clamped requests, and turning rich media off closes the viewer, pict
   expect(media.pip()).toBeUndefined()
   expect(media.activeTile()).toBeUndefined()
 })
+
+test("sends Kitty frames through files while rich media is on", async () => {
+  await using host = await renderMedia(() => null)
+  const renderer = host.app.renderer
+  expect(renderer.kittyImageTransport).toBe("raw")
+  await host.setRichMedia(true)
+  expect(renderer.kittyImageTransport).toBe("file")
+  await host.setRichMedia(false)
+  expect(renderer.kittyImageTransport).toBe("raw")
+})

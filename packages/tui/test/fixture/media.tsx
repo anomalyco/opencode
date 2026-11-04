@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { VideoRenderable, type Renderable } from "@opentui/core"
+import { VideoRenderable, type Clock, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { expect } from "bun:test"
 import path from "node:path"
@@ -37,8 +37,11 @@ const probe = () => ({
   config: useConfig(),
 })
 
-/** Renders `view` inside the media provider and host, which shows the real viewer and PiP, toasts, and what they need. */
-export async function renderMedia(view: () => JSX.Element, richMedia = false) {
+/**
+ * Renders `view` inside the media provider and host, which shows the real viewer and PiP, toasts, and what they need.
+ * The `clock` drives the renderer's timers, such as the seek bar's; playback follows the wall clock regardless.
+ */
+export async function renderMedia(view: () => JSX.Element, richMedia = false, clock?: Clock) {
   const temporary = await tmpdir()
   const info: Info = { experimental: { "rich-media": richMedia } }
   const service = {
@@ -74,7 +77,7 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false) {
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 80, height: 30, kittyKeyboard: true },
+    { width: 80, height: 30, kittyKeyboard: true, clock },
   )
   // Playback and file resolution follow the wall clock, so poll with short sleeps between frames.
   async function until(condition: () => boolean) {
