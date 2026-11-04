@@ -10,12 +10,16 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 log.workspace = true
+percent-encoding.workspace = true
 rand.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_path_to_error.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
@@ -23,5 +27,4 @@ tokio-util.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-reqwest.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
