@@ -362,7 +362,9 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::features::events::install(&tui);
     crate::features::overlays::install(&tui);
     crate::features::title::install(&tui);
-    crate::features::system_commands::install(&tui);
+    let system = crate::features::system_commands::install(&tui);
+    tui.layers.borrow_mut().extend(system);
+    crate::features::links::install(&tui);
     crate::dialogs::settings::install(&tui);
     crate::dialogs::mcp::install(&tui);
     crate::features::devtools::mount(&tui, &shell);
@@ -375,12 +377,16 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
 
 /// Runs the TUI on the terminal until it quits.
 pub fn run(launch: Launch) -> opentui::Result<()> {
-    let options = AppOptions {
+    let mut options = AppOptions {
         exit_on_ctrl_c: false,
+        // `terminal.suspend` (E.20) owns Ctrl+Z, so `keybinds` can turn it off.
+        suspend_on_ctrl_z: false,
         // `ThemeState` follows the palette when the `system` theme is active.
         palette_size: 16,
         ..AppOptions::default()
     };
+    options.host.terminal.mouse =
+        crate::features::system_commands::mouse_tracking(&launch.deps.config);
     let app = App::new(options)?;
     let tui = mount_with(&app, launch.deps, launch.args);
     let result = app.run();
@@ -395,6 +401,9 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
 }
 
 fn install_keys(tui: &Rc<Tui>) {
+    // Console copy, then the selection keys, go before the keymap (E.20).
+    crate::features::console_copy::install(tui);
+    crate::features::selection::install(tui);
     route_keys(&tui.app, tui.keymap.clone());
     // The leader sequence expires on a timer (`leader.timeout`).
     let weak = tui.weak();
