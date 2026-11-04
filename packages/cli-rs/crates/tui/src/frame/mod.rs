@@ -197,7 +197,7 @@ fn available(tui: &Tui) -> bool {
         && !matches!(tui.route(), Route::Plugin { .. })
 }
 
-fn fullscreen_panel(tui: &Tui) -> bool {
+pub(crate) fn fullscreen_panel(tui: &Tui) -> bool {
     matches!(tui.route(), Route::Session { id } if tui.panels.current().is_some_and(|panel| panel.session == id.0))
         && tui.panels.presentation() == Presentation::Fullscreen
 }
@@ -278,6 +278,10 @@ struct SessionState {
     right: View,
     handle: Custom<resize::Handle>,
     host: RefCell<Option<Host>>,
+    /// The selected terminal's pane (E.13a) while no panel shows.
+    terminal: RefCell<Option<Rc<crate::terminal::pane::Pane>>>,
+    /// The panel and terminal of the last layout, to tell which of them just opened.
+    shown: RefCell<(Option<crate::panel::Target>, Option<String>)>,
     active: Cell<Pane>,
 }
 
@@ -321,10 +325,13 @@ impl SessionFrame {
             right,
             handle,
             host: RefCell::default(),
+            terminal: RefCell::default(),
+            shown: RefCell::default(),
             active: Cell::new(Pane::Session),
         });
         *tui.frame.session.borrow_mut() = Some(Rc::downgrade(&state));
         state.layout(tui);
+        crate::terminal::session_mounted(tui, session);
         Self { root, state }
     }
 
@@ -364,7 +371,45 @@ impl SessionState {
                 *self.host.borrow_mut() = Some(host);
             }
         }
-        let shown = panel.is_some();
+        // A panel that opens closes the terminal pane, and a terminal that opens closes the panel.
+        let selected = tui.terminals.selected(&self.session.0);
+        let previous = self.shown.replace((panel.clone(), selected.clone()));
+        if panel.is_some() && panel != previous.0 {
+            if selected.is_some() {
+                crate::terminal::select(tui, &self.session.0, None, true);
+            }
+        } else if selected.is_some() && selected != previous.1 && panel.is_some() {
+            tui.panels.close(tui);
+            return;
+        }
+        let terminal = selected.filter(|_| panel.is_none());
+        let current = self
+            .terminal
+            .borrow()
+            .as_ref()
+            .map(|pane| pane.pty().to_owned());
+        let mut focus = false;
+        if current != terminal {
+            if let Some(old) = self.terminal.borrow_mut().take() {
+                old.dispose();
+                old.root().detach();
+            }
+            if let Some(pty) = &terminal {
+                let pane = crate::terminal::pane::Pane::new(tui, pty);
+                self.right.add(pane.root());
+                focus = tui.terminals.take_focus(pty);
+                *self.terminal.borrow_mut() = Some(pane);
+            }
+        }
+        if tui.terminals.take_restore(terminal.is_some()) {
+            self.focus_session(tui);
+        }
+        if let Some(pane) = self.terminal.borrow().as_ref()
+            && tui.frame.pane_resize.resizing()
+        {
+            pane.interact();
+        }
+        let shown = panel.is_some() || terminal.is_some();
         self.right.visible(shown);
         self.right
             .width(if fullscreen { available as u16 } else { size });
@@ -373,7 +418,8 @@ impl SessionState {
         self.handle.visible(handle);
         self.handle
             .position(Edge::Left, (available - i64::from(size) - 1).max(0) as u16);
-        if fullscreen {
+        // Focus needs the pane shown.
+        if fullscreen || focus {
             self.focus_right(tui);
         } else if !shown {
             self.active.set(Pane::Session);
@@ -402,7 +448,49 @@ impl SessionState {
         self.active.set(Pane::Right);
         if let Some(host) = self.host.borrow().as_ref() {
             tui.app.focus(&host.root);
+            return;
         }
+        let terminal = self.terminal.borrow().clone();
+        if let Some(terminal) = terminal {
+            terminal.focus();
+        }
+    }
+}
+
+impl Drop for SessionState {
+    fn drop(&mut self) {
+        if let Some(terminal) = self.terminal.get_mut().take() {
+            terminal.dispose();
+        }
+    }
+}
+
+/// The open session's terminal pane (E.13a).
+pub(crate) fn terminal(tui: &Tui) -> Option<Rc<crate::terminal::pane::Pane>> {
+    tui.frame.session()?.terminal.borrow().clone()
+}
+
+/// Whether a session frame is open, which the terminal commands need.
+pub(crate) fn terminal_host(tui: &Tui) -> bool {
+    tui.frame.session().is_some()
+}
+
+/// Whether the right pane is a terminal (`rightPane() === "terminal"`).
+pub(crate) fn terminal_shown(tui: &Tui) -> bool {
+    terminal(tui).is_some()
+}
+
+/// Focus moved into the right pane, as by a click on the terminal.
+pub(crate) fn right_focused(tui: &Tui) {
+    if let Some(session) = tui.frame.session() {
+        session.active.set(Pane::Right);
+    }
+}
+
+/// `focusSession`.
+pub(crate) fn focus_session(tui: &Tui) {
+    if let Some(session) = tui.frame.session() {
+        session.focus_session(tui);
     }
 }
 
@@ -424,10 +512,9 @@ fn install_commands(tui: &Rc<Tui>) {
         Condition::when(move || {
             weak.upgrade().is_some_and(|tui| {
                 !tui.dialogs.is_open()
-                    && tui
-                        .frame
-                        .session()
-                        .is_some_and(|session| session.host.borrow().is_some())
+                    && tui.frame.session().is_some_and(|session| {
+                        session.host.borrow().is_some() || session.terminal.borrow().is_some()
+                    })
             })
         })
     };

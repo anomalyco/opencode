@@ -66,6 +66,7 @@ fn handle(tui: &Tui, event: &V2Event) {
     if crate::tabs::event(tui, event) {
         return;
     }
+    crate::terminal::event(tui, event);
     match event {
         V2Event::TuiCommandExecute(event) if here(tui, event.location.as_ref()) => {
             tui.keymap.dispatch(&event.data.command, None);
