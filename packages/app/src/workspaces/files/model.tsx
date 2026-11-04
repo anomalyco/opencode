@@ -48,7 +48,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
 
-    const inflight = new Map<string, { promise: Promise<void>; silent: boolean }>()
+    const inflight = new Map<string, { promise: Promise<void>; silent: boolean; reread: boolean }>()
 
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
@@ -196,7 +196,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         skill ? { type: "text", content: skill.content, mimeType: artifactMime(file) } : undefined,
       )
 
-    const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {
+    const load = (input: string, options?: { force?: boolean; silent?: boolean }): Promise<void> => {
       const file = path.normalize(input)
 
       if (!file) return Promise.resolve()
@@ -215,6 +215,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       if (pending) {
         if (!silent) pending.silent = false
 
+        // The running read can predate the change a forced load reports, so read again once it lands.
+        if (options?.force) pending.reread = true
+
         return pending.promise
       }
 
@@ -222,6 +225,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       const entry = {
         silent,
+        reread: false,
         promise: Promise.resolve(),
       }
 
@@ -261,6 +265,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
         .finally(() => {
           inflight.delete(key)
+
+          if (entry.reread && scope() === directory) return load(file, { force: true, silent: entry.silent })
         })
 
       inflight.set(key, entry)

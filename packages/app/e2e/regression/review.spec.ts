@@ -762,6 +762,61 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(missingTab).toHaveCount(0)
 })
 
+test("rereads an open file that changes again while it is being read", async ({ page }) => {
+  const directory = "C:/OpenCode/FileReread"
+  const file = { content: "first draft" }
+  const read = { arrived: Promise.withResolvers<void>(), released: Promise.resolve() }
+
+  const workspace = await openSession(page, {
+    name: "FileReread",
+    fileList: (path) => (path ? [] : [fileNode(directory, "shopping.txt")]),
+    // The server reads the file when the request arrives, however long its response then takes.
+    fileContent: async () => {
+      const { content } = file
+      read.arrived.resolve()
+      await read.released
+
+      return { content }
+    },
+    seed: {
+      panes: { ses_filereread: { review: true } },
+      storage: reviewTabs(directory, "ses_filereread"),
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "shopping.txt" }).click()
+  await expect(panel.getByText("first draft", { exact: true })).toBeVisible()
+
+  const release = Promise.withResolvers<void>()
+  read.arrived = Promise.withResolvers<void>()
+  read.released = release.promise
+  file.content = "second draft"
+  await workspace.push([filesystemEvent(directory, "shopping.txt", "change")])
+  await read.arrived.promise
+
+  // Events arrive in order, so the new title shows the second change has reached the app too.
+  file.content = "third draft"
+  await workspace.push([
+    { ...filesystemEvent(directory, "shopping.txt", "change"), id: "evt_shopping_second_change" },
+    // SAFETY: the rename's wire fields, the only ones the client reads for this event.
+    {
+      id: "evt_filereread_renamed",
+      created: 2,
+      type: "session.renamed",
+      durable: { aggregateID: "ses_filereread", seq: 2, version: 1 },
+      data: { sessionID: "ses_filereread", title: "FileReread renamed" },
+    } as OpenCodeEvent,
+  ])
+  await expectSessionTitle(page, "FileReread renamed")
+  release.resolve()
+
+  await expect(panel.getByText("third draft", { exact: true })).toBeVisible()
+  await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
+})
+
 test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
   page,
   context,
