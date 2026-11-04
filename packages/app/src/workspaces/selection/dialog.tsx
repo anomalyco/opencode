@@ -302,7 +302,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   async function navigate(path: string, options?: { selectChild?: string; input?: string }) {
     const value = policy.navigation(
-      pickerAbsoluteInput(cleanPickerInput(path), home(), state.root || start() || home()),
+      pickerAbsoluteInput(cleanPickerInput(path, false), home(), state.root || start() || home()),
     )
 
     if (!value) return
@@ -339,9 +339,13 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     setState("selected", policy.selection(value, entry) ?? options.selectChild)
   }
 
-  async function selectDirectory(path: string, options?: { fromInput?: boolean }) {
+  async function selectDirectory(path: string, options?: { fromInput?: boolean; resolved?: boolean }) {
     const value = policy.navigation(
-      pickerAbsoluteInput(cleanPickerInput(path), home(), state.root || start() || home()),
+      pickerAbsoluteInput(
+        options?.resolved ? cleanPickerInput(path, false) : cleanPickerInput(path),
+        home(),
+        state.root || start() || home(),
+      ),
     )
 
     if (!value) return
@@ -431,7 +435,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   function chooseSuggestion(suggestion: { absolute: string; type: "file" | "directory" }) {
     if (suggestion.type === "directory") {
-      void selectDirectory(suggestion.absolute, { fromInput: true })
+      void selectDirectory(suggestion.absolute, { fromInput: true, resolved: true })
 
       return
     }
@@ -774,7 +778,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                           name: name(),
                           path: shortPath(),
                         })}
-                        onClick={() => void selectDirectory(project.worktree)}
+                        onClick={() => void selectDirectory(project.worktree, { resolved: true })}
                       >
                         <ProjectAvatar
                           class="shrink-0"
