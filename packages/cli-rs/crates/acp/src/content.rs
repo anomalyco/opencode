@@ -292,3 +292,122 @@ pub fn path_to_file_url(path: &str) -> String {
         .map(String::from)
         .unwrap_or_else(|()| format!("file://{absolute}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn text(text: &str) -> PromptPart {
+        PromptPart::text(text)
+    }
+
+    #[test]
+    fn blocks_to_parts() {
+        let rows = [
+            (
+                json!({ "type": "resource", "resource": { "uri": "file:///src/a.ts#L12", "text": "body" } }),
+                vec![text("[/src/a.ts:12]\nbody")],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "file:///context.txt", "mimeType": "text/plain", "text": "embedded" } }),
+                vec![text("[/context.txt]\nembedded")],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "untitled:notes", "text": "body" } }),
+                vec![text("[untitled:notes]\nbody")],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "not a uri", "text": "body" } }),
+                vec![text("[not a uri]\nbody")],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "file:///a.bin", "mimeType": "application/octet-stream", "blob": "AAE=" } }),
+                vec![PromptPart::File {
+                    url: "data:application/octet-stream;base64,AAE=".to_owned(),
+                    filename: Some("a.bin".to_owned()),
+                    mime: "application/octet-stream".to_owned(),
+                }],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "file:///a.bin", "blob": "AAE=" } }),
+                vec![],
+            ),
+            (
+                json!({ "type": "resource_link", "uri": "zed://file?path=/src/main.rs", "name": "" }),
+                vec![PromptPart::File {
+                    url: "file:///src/main.rs".to_owned(),
+                    filename: Some("main.rs".to_owned()),
+                    mime: "text/plain".to_owned(),
+                }],
+            ),
+            (
+                json!({ "type": "resource_link", "uri": "https://example.com/a", "name": "" }),
+                vec![text("https://example.com/a")],
+            ),
+            (
+                json!({ "type": "image", "mimeType": "image/png", "data": "iVBO" }),
+                vec![PromptPart::File {
+                    url: "data:image/png;base64,iVBO".to_owned(),
+                    filename: Some("image".to_owned()),
+                    mime: "image/png".to_owned(),
+                }],
+            ),
+            (
+                json!({ "type": "text", "text": "seen by user", "annotations": { "audience": ["user"] } }),
+                vec![PromptPart::Text {
+                    text: "seen by user".to_owned(),
+                    synthetic: false,
+                    ignored: true,
+                }],
+            ),
+            (
+                json!({ "type": "audio", "mimeType": "audio/wav", "data": "AA==" }),
+                vec![],
+            ),
+        ];
+        for (block, expected) in rows {
+            assert_eq!(
+                prompt_content_to_parts(std::slice::from_ref(&block)),
+                expected,
+                "{block}"
+            );
+        }
+    }
+
+    #[test]
+    fn replayed_parts_to_chunks() {
+        let chunks = parts_to_content_chunks(&[
+            ReplayPart::Prompt(PromptPart::Text {
+                text: "hidden".to_owned(),
+                synthetic: true,
+                ignored: false,
+            }),
+            ReplayPart::Reasoning(String::new()),
+            ReplayPart::Prompt(PromptPart::File {
+                url: "file:///a.ts".to_owned(),
+                filename: None,
+                mime: "text/plain".to_owned(),
+            }),
+            ReplayPart::Prompt(PromptPart::File {
+                url: "data:text/plain;base64,aGk=".to_owned(),
+                filename: Some("/notes.txt".to_owned()),
+                mime: "text/plain".to_owned(),
+            }),
+            ReplayPart::Prompt(PromptPart::File {
+                url: "https://example.com".to_owned(),
+                filename: None,
+                mime: "text/html".to_owned(),
+            }),
+        ]);
+        assert_eq!(
+            json!(chunks),
+            json!([
+                { "content": { "type": "text", "text": "hidden", "annotations": { "audience": ["assistant"] } } },
+                { "content": { "type": "resource_link", "uri": "file:///a.ts", "name": "file", "mimeType": "text/plain" } },
+                { "content": { "type": "resource", "resource": { "uri": "file:///notes.txt", "mimeType": "text/plain", "text": "hi" } } },
+            ])
+        );
+    }
+}
