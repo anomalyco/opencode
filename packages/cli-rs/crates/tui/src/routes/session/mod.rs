@@ -66,6 +66,8 @@ impl Session {
             .padding_edge(Edge::Left, 2)
             .padding_edge(Edge::Right, 2)
             .padding_edge(Edge::Top, 1)
+            // `paddingBottom={1}` (`routes/session/index.tsx:1518`); T.1's status row used to fill it.
+            .padding_edge(Edge::Bottom, 1)
             .gap(1)
             .child(&header)
             .child(transcript.root())

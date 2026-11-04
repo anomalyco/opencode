@@ -1,12 +1,12 @@
-# T17: the home's prompt is the T.1 stand-in
+# T17: the home prompt draws no placeholder
 
-TypeScript: the home (`packages/tui/src/routes/home.tsx`) centers the logo above the prompt: a bordered input
-(`┃` rows and a `╹▀▀…` bottom edge, five rows) and the prompt footer with the directory, branch, and hints.
+TypeScript: the home passes its placeholders to the prompt (`packages/tui/src/routes/home.tsx:20-23`), so the
+empty prompt shows `Ask anything… "<one picked at random>"` in the muted color.
 
-Rust: E.1 builds the same home: the logo, the prompt slot (75 columns at most, one row of padding above), and
-the home footer with the version in the bottom right corner. The prompt in that slot is still T.1's one-line
-stand-in ("Read only: the prompt is not built yet"), so the column is four rows shorter and the logo sits two
-rows lower. P-APP `H.2/home-sessions` (`home`, `list`) differs in rows 9 to 20 only; the footer row matches.
+Rust: E.1 builds the home as TS does (the logo, the prompt slot of at most 75 columns, the footer with the
+version), and E.2's prompt fills the slot cell for cell. The prompt has no placeholder yet, so its first row is
+empty. P-APP `E.1/home`, `E.1/home-narrow`, `E.1/events`, `E.1/mcp-toast`, `E.1/model-invalid` mask that row
+(the TS text is random anyway); `H.2/home-sessions` (`home`, `list`) differs in it.
 
-Reason: not built yet. E.2's prompt goes into the home through `prompt::editor::mount(tui, None)`; once it is
-in, remove this file and the `deviation` entries that name it.
+Reason: not built yet. The prompt (E.2's `prompt/editor.rs`) takes the placeholders; then the masks keep only
+the random text, and this file and the `deviation` entries that name it go.
