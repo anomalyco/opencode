@@ -165,14 +165,14 @@ fn enter_allows_once_and_the_prompt_returns() {
         "no save patterns:\n{screen}"
     );
     assert!(screen.contains("ctrl+f fullscreen"), "{screen}");
-    assert!(!screen.contains("Read only"), "the prompt hides:\n{screen}");
+    assert!(!screen.contains("╹▀"), "the prompt hides:\n{screen}");
 
     harness.app.press("enter");
     assert_eq!(
         harness.replies(1),
         [reply("per_1", "ses_root", json!({ "decision": "once" }))]
     );
-    harness.wait_for("Read only");
+    harness.wait_for("╹▀");
     assert!(!harness.app.text().contains("Permission required"));
 }
 
@@ -313,7 +313,7 @@ fn autoaccept_replies_once_to_each_request_without_prompting() {
             reply("per_2", "ses_root", json!({ "decision": "once" })),
         ]
     );
-    let screen = harness.wait_for("Read only");
+    let screen = harness.wait_for("╹▀");
     assert!(!screen.contains("Permission required"), "{screen}");
 }
 
