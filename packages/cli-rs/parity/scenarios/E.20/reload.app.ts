@@ -13,14 +13,14 @@ export default defineApp({
       checkpoint: "home",
       until: "Ask anything",
       masks: [placeholder],
-      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
+      deviation: ["T17-home-prompt"],
     },
     { keys: ["f5"] },
     {
       checkpoint: "reloaded",
       until: "Configuration reloaded",
       masks: [placeholder],
-      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
+      deviation: ["T17-home-prompt"],
     },
   ],
 })

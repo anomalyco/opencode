@@ -3,7 +3,7 @@
 import { defineApp, session, user } from "../../lib/app"
 
 const location = { directory: "/tmp/opencode/packages/tui" }
-const deviation = ["V01-plain-transcript", "P01-read-only-prompt"]
+const deviation = ["V01-plain-transcript"]
 
 export default defineApp({
   args: { sessionID: "ses_b" },

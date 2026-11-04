@@ -15,11 +15,6 @@ const event = (type: string, data: Record<string, unknown>, durable = true) => (
   },
 })
 
-// The prompt footer hints are E.14's (P01-read-only-prompt).
-const masks = [
-  { x: 50, y: 28, width: 50, height: 1, reason: "the prompt footer hints are E.14's (P01-read-only-prompt)" },
-]
-
 export default defineApp({
   height: 30,
   config: { experimental: { "new-designs": true } },
@@ -47,10 +42,10 @@ export default defineApp({
     { path: "/api/session/active", json: { data: { [id]: { type: "running" } } } },
   ],
   steps: [
-    { checkpoint: "waiting", until: "echo hello", masks },
+    { checkpoint: "waiting", until: "echo hello" },
     event("session.reasoning.started", { ordinal: 0 }),
     event("session.reasoning.delta", { ordinal: 0, delta: "**Planning the command**\n\nI will run echo." }, false),
-    { checkpoint: "thinking", until: "Thinking: Planning the command", masks },
+    { checkpoint: "thinking", until: "Thinking: Planning the command" },
     event("session.reasoning.ended", {
       ordinal: 0,
       text: "**Planning the command**\n\nI will run echo.",
@@ -58,6 +53,6 @@ export default defineApp({
     event("session.tool.input.started", { id: "call_1", name: "shell" }),
     event("session.tool.input.ended", { id: "call_1", text: '{"command":"echo hello"}' }),
     event("session.tool.called", { id: "call_1", input: { command: "echo hello" }, executed: true }),
-    { checkpoint: "shell", until: "⋯ echo hello", masks },
+    { checkpoint: "shell", until: "⋯ echo hello" },
   ],
 })

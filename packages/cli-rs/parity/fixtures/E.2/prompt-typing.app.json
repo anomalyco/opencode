@@ -88,8 +88,7 @@
       "checkpoint": "open",
       "until": "The parser drops the last token.",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.2/prompt-typing/open"
     },
@@ -119,8 +118,7 @@
       "checkpoint": "typed",
       "until": "second line",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.2/prompt-typing/typed"
     }

@@ -172,15 +172,6 @@
     {
       "checkpoint": "rail",
       "until": "The notes are written.",
-      "masks": [
-        {
-          "x": 80,
-          "y": 28,
-          "width": 40,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/rail-resize/rail"
     },
     {
@@ -198,15 +189,6 @@
     {
       "checkpoint": "resized",
       "until": "The notes are written.",
-      "masks": [
-        {
-          "x": 80,
-          "y": 28,
-          "width": 40,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/rail-resize/resized"
     },
     {
@@ -224,15 +206,6 @@
     {
       "checkpoint": "compact",
       "until": "The notes are written.",
-      "masks": [
-        {
-          "x": 80,
-          "y": 28,
-          "width": 40,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/rail-resize/compact"
     }
   ],
@@ -299,15 +272,6 @@
         "status": 200,
         "json": {
           "status": "completed"
-        }
-      },
-      {
-        "method": "GET",
-        "path": "/api/experimental/session/ses_a/terminal",
-        "query": {},
-        "status": 200,
-        "json": {
-          "data": []
         }
       },
       {
@@ -873,24 +837,6 @@
               "default": "main"
             }
           }
-        }
-      },
-      {
-        "method": "POST",
-        "path": "/api/rpc/opencode.goal/get",
-        "query": {
-          "location[directory]": [
-            "/tmp/opencode/packages/tui"
-          ]
-        },
-        "body": {
-          "input": {
-            "sessionID": "ses_a"
-          }
-        },
-        "status": 200,
-        "json": {
-          "output": null
         }
       },
       {

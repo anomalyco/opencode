@@ -90,15 +90,6 @@
     {
       "checkpoint": "waiting",
       "until": "echo hello",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.2/running-reply/waiting"
     },
     {
@@ -134,15 +125,6 @@
     {
       "checkpoint": "thinking",
       "until": "Thinking: Planning the command",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.2/running-reply/thinking"
     },
     {
@@ -223,15 +205,6 @@
     {
       "checkpoint": "shell",
       "until": "⋯ echo hello",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.2/running-reply/shell"
     }
   ],
