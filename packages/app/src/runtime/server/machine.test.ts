@@ -36,8 +36,7 @@ const rejected = (password: string): ServerControllersEvent<Ctx> => ({
   type: "health.reported",
   key,
   auth: `${url}\n${password}`,
-  healthy: false,
-  unauthorized: true,
+  result: { type: "unauthorized" },
 })
 
 // Controllers dispose long after the run that created them, so every run appends to one log.
@@ -112,6 +111,24 @@ test("a rejection of credentials the server has since replaced changes nothing",
   expect(late.state).toBe(rotated)
   expect(late.effects).toEqual([])
   expect(selectServerCtx(late.state, key)?.name).toBe("ctx2")
+})
+
+test("a contributed server has credentials to check only while it is ready, never its placeholder endpoint", () => {
+  const plugin = (status: ServerConnection.Plugin["status"]): ServerConnection.Plugin => ({
+    type: "plugin",
+    key: "ssh:box",
+    plugin: "ssh",
+    status,
+    managed: true,
+    http: { url: "http://127.0.0.1:0" },
+    authenticate: () => false,
+  })
+
+  expect(serverCredentials(plugin({ type: "auth" }))).toEqual({ controller: "", auth: undefined })
+  expect(serverCredentials(plugin({ type: "ready", http: { url, password: "pw" } }))).toEqual({
+    controller: "",
+    auth: `${url}\npw`,
+  })
 })
 
 test("new HTTP credentials dispose the old controller before the new one starts", () => {

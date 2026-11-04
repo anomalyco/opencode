@@ -1,9 +1,12 @@
 import {
+  batch,
   createContext,
   createEffect,
   createMemo,
   createRenderEffect,
   createSignal,
+  onCleanup,
+  untrack,
   useContext,
   type ParentProps,
 } from "solid-js"
@@ -12,6 +15,14 @@ import { Schema } from "effect"
 import { MenuItem, Server, type ServerEntry } from "@opencode/plugin/gui"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import {
+  canAuthenticatePluginServer,
+  createPluginServerState,
+  selectPluginStatus,
+  transitionPluginServer,
+  type PluginEntrySnapshot,
+  type PluginServerEvent,
+} from "@/runtime/server/plugin-machine"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { usePluginHost } from "./host"
 import { renamedFrom } from "./stores"
@@ -19,7 +30,7 @@ import { renamedFrom } from "./stores"
 /** A server a plugin contributes. `key` is `${plugin}:${entry.id}`. */
 export type PluginServer = { readonly key: string; readonly plugin: string; readonly entry: ServerEntry }
 
-// Endpoint of a contributed server before its plugin reports one.
+// Where a contributed server's event stream starts before its plugin reports an endpoint; it never answers.
 const offline = { url: "http://127.0.0.1:0" }
 
 // The last complete inventory of each plugin that contributes servers, without endpoints or credentials.
@@ -120,13 +131,15 @@ function createPluginServers() {
 
   // Routes key on the connection object. Keep one per key across entry updates so reconnecting
   // never unmounts an open conversation or composer.
-  const connections = new Map<string, { update: (server: PluginServer) => void; value: ServerConnection.Plugin }>()
+  const connections = new Map<string, ReturnType<typeof connection>>()
 
   const list = createMemo(() => {
     const listed = entries().filter((item) => item.entry.listed !== false)
     const keys = new Set(listed.map((item) => item.key))
-    connections.forEach((_, key) => {
-      if (!keys.has(key)) connections.delete(key)
+    connections.forEach((item, key) => {
+      if (keys.has(key)) return
+      item.dispose()
+      connections.delete(key)
     })
 
     return listed.map((item) => {
@@ -145,6 +158,8 @@ function createPluginServers() {
     })
   })
 
+  onCleanup(() => connections.forEach((item) => item.dispose()))
+
   return {
     ready: host.serversReady,
     /** Contributed servers the app lists, as stable connections. */
@@ -160,7 +175,25 @@ function createPluginServers() {
 
 function connection(initial: PluginServer) {
   const [current, setCurrent] = createSignal(initial)
+  const [machine, setMachine] = createSignal(createPluginServerState(snapshot(initial.entry)))
   const entry = () => current().entry
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: PluginServerEvent) => {
+    const result = transitionPluginServer(untrack(machine), event)
+    setMachine(result.state)
+
+    result.effects.forEach((effect) => {
+      if (effect.type === "timeout.cancel") return clearTimeout(timer)
+
+      // Out of the update that reported the server ready: the callbacks navigate.
+      if (effect.type === "notify.connected") return queueMicrotask(() => effect.callbacks.forEach((run) => run()))
+
+      timer = setTimeout(() => dispatch({ type: "connect.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+      const settled = (ready: boolean) => dispatch({ type: "connect.settled", attempt: effect.attempt, ready })
+      void Promise.try(() => untrack(entry).connect?.() ?? false).then(settled, () => settled(false))
+    })
+  }
 
   const value: ServerConnection.Plugin = {
     type: "plugin",
@@ -172,14 +205,8 @@ function connection(initial: PluginServer) {
     get label() {
       return entry().label
     },
-    get state() {
-      return entry().state
-    },
-    get connecting() {
-      return entry().state === "starting"
-    },
-    get authenticationRequired() {
-      return entry().state === "auth"
+    get status() {
+      return selectPluginStatus(machine())
     },
     get managed() {
       return !!entry().reconnect
@@ -193,10 +220,28 @@ function connection(initial: PluginServer) {
 
       return (signal: AbortSignal) => entry().reconnect?.(signal) ?? Promise.resolve(entry().http ?? offline)
     },
+    authenticate: (onConnected) => {
+      if (!canAuthenticatePluginServer(untrack(machine))) return false
+      dispatch({ type: "authenticate", onConnected })
+
+      return true
+    },
     connect: () => entry().connect?.() ?? Promise.resolve(entry().state === "ready"),
   }
 
-  return { update: (server: PluginServer) => setCurrent(server), value }
+  return {
+    update: (server: PluginServer) =>
+      batch(() => {
+        setCurrent(server)
+        dispatch({ type: "entry.updated", entry: snapshot(server.entry) })
+      }),
+    dispose: () => dispatch({ type: "disposed" }),
+    value,
+  }
+}
+
+function snapshot(entry: ServerEntry): PluginEntrySnapshot {
+  return { state: entry.state, http: entry.http }
 }
 
 /** MenuItem "server.row" contributions that apply to a server. */

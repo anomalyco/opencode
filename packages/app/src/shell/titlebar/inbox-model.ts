@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { createEffect, createMemo, onCleanup, startTransition } from "solid-js"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { canUseServer } from "@/runtime/server/health-machine"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useLayout } from "@/shell/state/layout"
@@ -239,9 +240,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       previous ||
       (servers.hydrated() &&
         connections().every((item, index) => {
-          const health = global.servers.health[ServerConnection.key(item.conn)]
-
-          if (health && !health.checking && !health.healthy) return true
+          if (!canUseServer(global.servers.health[ServerConnection.key(item.conn)])) return true
 
           return !!queries[index]?.isSuccess || !!queries[index]?.isError
         }) &&

@@ -47,9 +47,10 @@ test("a plugin server's event stream follows the endpoint the plugin reports", a
     type: "plugin",
     key: "remote:box",
     plugin: "remote",
-    state: "ready",
-    connecting: false,
-    authenticationRequired: false,
+    get status() {
+      return { type: "ready" as const, http: http() }
+    },
+    authenticate: () => false,
     managed: false,
     get http() {
       return http()

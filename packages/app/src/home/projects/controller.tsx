@@ -4,6 +4,7 @@ import { useSettingsCommand } from "@/settings/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createResource } from "solid-js"
@@ -90,7 +91,7 @@ export function createHomeProjectsController(home: HomeController) {
       choose: (conn: ServerConnection.Any) => {
         if (actions.authenticate(conn, (next) => choose(next))) return
 
-        if (home.server.health(conn)?.healthy === false) return
+        if (isServerFailed(home.server.health(conn))) return
         choose(conn)
       },
       hide: actions.hide,

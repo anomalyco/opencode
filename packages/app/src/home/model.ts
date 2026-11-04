@@ -1,6 +1,7 @@
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { type HomeProjectSelection, useLayout } from "@/shell/state/layout"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
 import { createEffect, createMemo } from "solid-js"
@@ -88,7 +89,7 @@ export function createHomeController() {
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
 
-        if (global.servers.health[key]?.healthy === false) return
+        if (isServerFailed(global.servers.health[key])) return
 
         if (
           !global

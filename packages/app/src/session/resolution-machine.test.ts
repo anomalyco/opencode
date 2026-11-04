@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { ServerHealth } from "@/runtime/server/health"
+import type { ServerHealth } from "@/runtime/server/health-machine"
 import {
   createSessionResolutionState,
   sessionRouteView,
@@ -154,31 +154,31 @@ const missing: State = { status: "not-found", target: target("ses_a"), attempt: 
 test.each<{ name: string; health: ServerHealth; state: State; view: SessionRouteView<Session>["type"] }>([
   {
     name: "incompatible wins over a resolved session",
-    health: { healthy: true, incompatible: true },
+    health: { type: "incompatible" },
     state: resolved,
     view: "incompatible",
   },
   {
     name: "an unreachable server explains a pending session",
-    health: { healthy: false },
+    health: { type: "unreachable" },
     state: resolving,
     view: "unreachable",
   },
   {
     name: "a running health check keeps waiting",
-    health: { healthy: false, checking: true },
+    health: { type: "checking", managed: true },
     state: resolving,
     view: "resolving",
   },
   {
     name: "a rejected credential keeps waiting",
-    health: { healthy: false, unauthorized: true },
+    health: { type: "unauthorized" },
     state: resolving,
     view: "resolving",
   },
   {
     name: "an unreachable server keeps a known outcome",
-    health: { healthy: false },
+    health: { type: "unreachable" },
     state: missing,
     view: "not-found",
   },

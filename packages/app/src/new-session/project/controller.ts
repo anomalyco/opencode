@@ -4,6 +4,7 @@ import { type ServerCtx, useGlobal } from "@/runtime/server/runtime"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { workspaceSelectionDestination } from "@/workspaces/paths"
 import { useTabs } from "@/shell/tabs/tabs"
@@ -45,11 +46,11 @@ export function createComposerProjectControls(props: { draftId: string; worktree
 
   // Servers that are down or still connecting contribute nothing.
   const ready = createMemo(() =>
-    servers.list.filter((connection) => {
-      if (connection.type === "plugin" && connection.state !== "ready") return false
-
-      return global.servers.health[ServerConnection.key(connection)]?.healthy !== false
-    }),
+    servers.list.filter(
+      (connection) =>
+        !!ServerConnection.http(connection) &&
+        !isServerFailed(global.servers.health[ServerConnection.key(connection)]),
+    ),
   )
 
   const projects = createMemo(() => {
