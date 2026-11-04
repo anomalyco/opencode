@@ -2,7 +2,7 @@
 //!
 //! [`Frame`] is the body of `app.tsx:1425-1472`: the vertical tab rail and its resize handle, or the
 //! horizontal strip above the route. [`SessionFrame`] is `component/session-frame.tsx`: the session pane, the
-//! right pane (a plugin panel here; the terminal is E.13a's and the sidebar E.14's), and the handle between.
+//! right pane (a plugin panel, else the selected terminal of E.13a; the sidebar is E.14's), and the handle between.
 
 pub mod layout;
 pub mod resize;
@@ -494,8 +494,8 @@ pub(crate) fn focus_session(tui: &Tui) {
     }
 }
 
-/// `pane.focus.left` and `pane.focus.right`, enabled while the right pane is a panel (or, with E.13a, a
-/// terminal) and no dialog is open.
+/// `pane.focus.left` and `pane.focus.right`, enabled while the right pane is a panel or a terminal and no dialog
+/// is open.
 fn install_commands(tui: &Rc<Tui>) {
     let weak = tui.weak();
     let run = |focus: fn(&SessionState, &Tui)| {
