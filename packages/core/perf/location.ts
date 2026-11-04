@@ -7,9 +7,9 @@ import { rmSync } from "fs"
 import os from "os"
 import path from "path"
 import { Effect, Layer, Logger, ManagedRuntime, Scope } from "effect"
-import { FetchHttpClient } from "effect/http"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppNodeBuilder } from "../src/effect/app-node-builder"
 import { Bus } from "../src/bus"
 import { Database } from "../src/database/database"
@@ -30,7 +30,12 @@ import { providerHost, host, integrationHost } from "../test/plugin/host"
 const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-location-bench-")))
 process.on("exit", () => rmSync(root, { recursive: true, force: true }))
 
+const offline = Object.assign(() => Promise.reject(new Error("no network in the location benchmark")), {
+  preconnect: () => {},
+})
+
 const replacements = [
+  LayerNodePlatform.httpFetch.replace(LayerNodePlatform.fetchLayer(offline)),
   Global.node.replace(
     Global.layerWith({
       home: path.join(root, "home"),
@@ -55,12 +60,8 @@ const runtime = ManagedRuntime.make(
   ).pipe(Layer.provide(Logger.layer([]))),
 )
 
-const offline = Object.assign(() => Promise.reject(new Error("no network in the location benchmark")), {
-  preconnect: () => {},
-})
-
 const run = <A, E>(effect: Effect.Effect<A, E, LocationServiceMap.Service | ModelsDev.Service>) =>
-  runtime.runPromise(effect.pipe(Effect.provideService(FetchHttpClient.Fetch, offline)))
+  runtime.runPromise(effect)
 
 // The variant's own checkout: a real project with its config, git and instructions.
 const ref = Location.Ref.make({ directory: AbsolutePath.make(process.cwd()) })
