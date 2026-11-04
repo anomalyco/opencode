@@ -232,7 +232,10 @@ impl Kit {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(method, _, _)| method != "GET")
+            // The goal footer's RPC `get` is a read, as P-REQ counts it.
+            .filter(|(method, path, _)| {
+                method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get"))
+            })
             .map(|(method, path, body)| format!("{method} {path} {body}"))
             .collect()
     }
