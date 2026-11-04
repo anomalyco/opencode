@@ -33,7 +33,8 @@ pub fn install(tui: &Rc<Tui>) {
         cx.prevent_default();
         let Some(tui) = weak.upgrade() else { return };
         if copy_on_select(&tui) {
-            copy(&tui, text, "Copied to clipboard");
+            let text = crate::prompt::paste::clipboard_text(&tui, text);
+            copy(&tui, &text, "Copied to clipboard");
         }
     });
     let weak = tui.weak();
@@ -68,7 +69,11 @@ pub fn copy_selection(tui: &Tui) -> bool {
     let Some(text) = tui.app.selected_text() else {
         return false;
     };
-    copy(tui, &text, "Copied to clipboard");
+    copy(
+        tui,
+        &crate::prompt::paste::clipboard_text(tui, &text),
+        "Copied to clipboard",
+    );
     true
 }
 
@@ -118,7 +123,11 @@ fn handle_key(tui: &Tui, cx: &mut Cx<'_>, key: &KeyEvent) {
             tui.app.clear_selection();
             return;
         }
-        copy(tui, &text, "Copied to clipboard");
+        copy(
+            tui,
+            &crate::prompt::paste::clipboard_text(tui, &text),
+            "Copied to clipboard",
+        );
         cx.prevent_default();
         cx.stop_propagation();
         return;
