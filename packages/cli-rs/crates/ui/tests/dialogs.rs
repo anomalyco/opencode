@@ -5,12 +5,13 @@
 use opencode_parity::assert_fixture;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
 use opencode_ui::keymap::{Keybinds, Options};
-use opencode_ui::theme::{Catalog, Theme, ThemeMode};
-use opencode_ui::{alert, confirm};
+use opencode_ui::theme::{Catalog, Theme, ThemeError, ThemeMode};
+use opencode_ui::{alert, confirm, toast};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 struct Kit {
     app: TestApp,
@@ -174,4 +175,69 @@ fn replace_closes_the_previous_dialog_and_restores_focus_after_the_last() {
     kit.dialogs.clear();
     assert_eq!(*log.borrow(), ["first", "second"]);
     assert!(input.is_focused());
+}
+
+fn toasts(kit: &Kit) -> toast::Toasts {
+    toast::Toasts::new(&kit.app, theme(), &kit.app.root())
+}
+
+#[test]
+fn theme_error_toast_matches_typescript() {
+    let kit = kit(70, 12);
+    let toasts = toasts(&kit);
+    toasts.theme_error(ThemeError {
+        name: "mine".into(),
+        message: "Color reference \"missing\" not found in defs or theme".into(),
+    });
+    assert_fixture(&kit.app.render(), "U.3/toast-theme");
+}
+
+#[test]
+fn toast_without_title_wraps_as_typescript_does() {
+    let kit = kit(50, 10);
+    let toasts = toasts(&kit);
+    toasts.show(toast::ToastOptions::new(
+        toast::Variant::Success,
+        "Copied the session link to the clipboard so you can share it",
+    ));
+    assert_fixture(&kit.app.render(), "U.3/toast");
+}
+
+#[test]
+fn toasts_time_out_queue_while_paused_and_run_their_action() {
+    let kit = kit(70, 12);
+    let toasts = toasts(&kit);
+    toasts.show(toast::ToastOptions::new(toast::Variant::Info, "one"));
+    // Showing while nothing waits replaces the current toast, as in TypeScript.
+    toasts.show(toast::ToastOptions::new(toast::Variant::Info, "two").title("Two"));
+    assert_eq!(toasts.current().unwrap().message, "two");
+    assert_eq!(toasts.pending(), 0);
+    kit.app.advance(Duration::from_millis(4999));
+    assert!(toasts.current().is_some());
+    kit.app.advance(Duration::from_millis(1));
+    assert!(toasts.current().is_none());
+
+    let ran = Rc::new(RefCell::new(0));
+    let count = ran.clone();
+    toasts.show(
+        toast::ToastOptions::new(toast::Variant::Warning, "first")
+            .duration(Duration::from_millis(1000))
+            .action("Open", move || *count.borrow_mut() += 1),
+    );
+    kit.app.advance(Duration::from_millis(400));
+    toasts.pause();
+    toasts.show(toast::ToastOptions::new(toast::Variant::Info, "second"));
+    assert_eq!(toasts.pending(), 1);
+    assert!(kit.app.render().text().contains("+1 more"));
+    kit.app.advance(Duration::from_secs(10));
+    assert_eq!(toasts.current().unwrap().message, "first");
+    toasts.resume();
+    kit.app.advance(Duration::from_millis(599));
+    assert_eq!(toasts.current().unwrap().message, "first");
+    toasts.activate();
+    assert_eq!(*ran.borrow(), 1);
+    assert_eq!(toasts.current().unwrap().message, "second");
+    kit.app.advance(Duration::from_millis(5000));
+    assert!(toasts.current().is_none());
+    assert!(kit.app.render().text().trim().is_empty());
 }
