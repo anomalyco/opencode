@@ -13,6 +13,8 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createWorktree } from "@/workspaces/create"
+import { isWorkspaceDirectory } from "@/workspaces/paths"
+import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { createSessionMessageHandoff } from "@/session/handoff"
@@ -48,8 +50,9 @@ export function createNewSessionComposerAdapter(props: {
       const draftID = props.draftID
       const currentDirectory = location().directory
 
-      const projectDirectory =
-        data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
+      const projectInfo = data.location.info({ directory: currentDirectory })?.project
+      const projectDirectory = projectInfo?.canonical ?? currentDirectory
+      const project = projectInfo ? data.project.get(projectInfo.id) : undefined
 
       const worktree = props.worktree()
       const branch = props.branch()
@@ -64,6 +67,11 @@ export function createNewSessionComposerAdapter(props: {
       await pending?.ready
 
       const sessionDirectory = await resolveSessionDirectory({
+        // A draft opened inside a worktree that is switched to Local runs in the project root. Any
+        // other folder, such as a subdirectory of the repository, keeps its own location.
+        directory: isWorkspaceDirectory(project && normalizeProjectInfo(project), currentDirectory)
+          ? projectDirectory
+          : currentDirectory,
         projectDirectory,
         worktree,
         branch,
@@ -196,6 +204,7 @@ export function createNewSessionComposerAdapter(props: {
 }
 
 async function resolveSessionDirectory(input: {
+  directory: string
   projectDirectory: string
   worktree: string
   branch?: string
@@ -203,7 +212,7 @@ async function resolveSessionDirectory(input: {
   serverSDK: ReturnType<typeof useServerSDK>
   language: ReturnType<typeof useLanguage>
 }) {
-  if (input.worktree === "main") return input.projectDirectory
+  if (input.worktree === "main") return input.directory
 
   if (input.worktree !== "create") return input.worktree
 
