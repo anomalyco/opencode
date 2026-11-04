@@ -178,6 +178,15 @@
       },
       {
         "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
         "path": "/api/experimental/session/ses_b/terminal",
         "query": {},
         "status": 200,

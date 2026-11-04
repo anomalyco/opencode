@@ -136,7 +136,7 @@
       "until": "Ask anything",
       "masks": [
         {
-          "line": "Ask anything… \".*\"",
+          "line": "Ask anything….*",
           "reason": "the prompt placeholder is picked at random"
         }
       ],
