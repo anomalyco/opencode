@@ -3,7 +3,10 @@ import { defineApp } from "../../lib/app"
 
 // Rust reads the default location's catalogs at startup on every route (the prompt and model state); TS
 // reads none on a plugin route. Answering them keeps P-REQ to the reads both sides send.
-const location = { directory: "/tmp/opencode/packages/tui", project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
+const location = {
+  directory: "/tmp/opencode/packages/tui",
+  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
+}
 const catalog = (path: string) => ({ path, json: { location, data: [] } })
 
 export default defineApp({
