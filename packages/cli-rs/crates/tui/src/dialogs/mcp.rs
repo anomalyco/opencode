@@ -261,8 +261,8 @@ impl Mcp {
                 let status = kind(&server.status);
                 let pending = loading.contains(&server.name) || status == "pending";
                 let mut option = SelectOption::new(server.name.clone(), server.name);
+                // TS wraps "Connected ✓" in a bold span, which the row's `<text>` draws plain.
                 option.footer = Some(status_label(status, pending).to_owned());
-                option.footer_bold = !pending && status == "connected";
                 option.footer_color = Some(if pending {
                     theme.text.muted
                 } else {
