@@ -217,7 +217,7 @@ fn model_dialog_matches_typescript_opened_and_filtered() {
     // Tall enough for the whole list (parity/deviations/DLG13-model-scroll.md).
     let kit = kit(90, 60);
     model::show(&kit.local, None);
-    kit.settle("Usage");
+    kit.settle("usage");
     assert_fixture(&kit.app.render(), "E.16/model");
     kit.app.type_text("gpt");
     kit.settle("GPT-5 mini");
@@ -269,7 +269,7 @@ fn go_upsell_matches_typescript_when_compact() {
 fn dialogs_send_reads_only() {
     let kit = kit(90, 34);
     model::show(&kit.local, None);
-    kit.settle("Usage");
+    kit.settle("usage");
     usage::show(&kit.local);
     kit.settle("left");
     let seen = kit.fixture.seen();
@@ -402,7 +402,7 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
     assert_eq!(local.variant().as_deref(), Some("high"));
     h.app.press("ctrl+x");
     h.app.press("m");
-    h.wait_for("Select model");
+    h.wait_for("Search models");
     h.app.type_text("mini");
     h.wait_for("GPT-5 mini");
     h.app.press("return");
@@ -426,7 +426,7 @@ fn a_filter_typed_before_the_limits_arrive_stays() {
     // The limits load when the dialog opens; the dialog opens again to show the usage action.
     h.app.press("ctrl+x");
     h.app.press("m");
-    h.wait_for("Select model");
+    h.wait_for("Search models");
     h.app.type_text("mini");
     h.wait_for("GPT-5 mini");
     assert!(
@@ -446,7 +446,7 @@ fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
     let h = mount();
     h.app.press("ctrl+x");
     h.app.press("m");
-    h.wait_for("Select model");
+    h.wait_for("Search models");
     h.app.type_text("mini");
     h.wait_for("GPT-5 mini");
     h.app.press("return");
@@ -481,13 +481,13 @@ fn ctrl_f_favorites_the_selected_model() {
     let h = mount();
     h.app.press("ctrl+x");
     h.app.press("m");
-    h.wait_for("Select model");
+    h.wait_for("Search models");
     h.app.type_text("haiku");
     h.wait_for("Claude Haiku");
     h.app.press("ctrl+f");
     h.wait_file(|file| file["favorite"][0] == model_ref("anthropic", "claude-haiku"));
-    // The favorite shows in the list at once.
-    h.wait_for("Claude Haiku (Favorite)");
+    // The favorite shows in the list at once: the row's action turns into unfavorite.
+    h.wait_for("unfavorite");
     assert_no_writes(&h.fixture);
 }
 
@@ -542,7 +542,7 @@ fn leader_a_switches_the_agent() {
     let h = mount();
     h.app.press("ctrl+x");
     h.app.press("a");
-    let screen = h.wait_for("Select agent");
+    let screen = h.wait_for("Search agents");
     assert!(
         !screen.contains("general"),
         "subagents are hidden:\n{screen}"
@@ -561,7 +561,7 @@ fn usage_opens_from_the_model_dialog_and_a_row_opens_its_limits() {
     let h = mount();
     h.app.press("ctrl+x");
     h.app.press("m");
-    h.wait_for("Usage");
+    h.wait_for("usage");
     h.app.press("ctrl+u");
     h.wait_for("$0.50 left");
     h.app.press("return");
@@ -577,7 +577,7 @@ fn model_json_is_shared_with_the_typescript_client() {
     let h = mount();
     h.app.press("ctrl+x");
     h.app.press("m");
-    h.wait_for("Select model");
+    h.wait_for("Search models");
     h.app.type_text("haiku");
     h.wait_for("Claude Haiku");
     h.app.press("ctrl+f");

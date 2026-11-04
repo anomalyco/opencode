@@ -18,7 +18,7 @@ use opencode_store::{Catalog, Location};
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{
-    self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, Side,
+    self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps,
 };
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
@@ -96,6 +96,8 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
             let mcp = built;
             let weak = Rc::downgrade(&mcp);
             let mut props = SelectProps::new("MCP servers", mcp.options(&cx.theme));
+            props.search_in_title = true;
+            props.title_placeholder = Some("Search MCP servers".to_owned());
             props.preserve_selection = true;
             props.on_select = Some(Rc::new({
                 let weak = weak.clone();
@@ -140,7 +142,6 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
                     vec![FooterHint {
                         title: "view error".into(),
                         label: "enter".into(),
-                        side: Side::Left,
                         group: Some(Group::Primary),
                     }]
                 }

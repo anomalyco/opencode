@@ -145,7 +145,7 @@ fn the_session_list_opens_a_session_and_its_transcript_streams() {
     // `session.list` is suggested first.
     app.press("ctrl+p");
     let palette = wait_for(&app, "Switch session");
-    assert!(palette.contains("Commands"), "{palette}");
+    assert!(palette.contains("Search commands"), "{palette}");
     // The prompt's commands push the shell's below the fold; search for them.
     app.type_text("exit");
     wait_for(&app, "Exit the app");
@@ -169,7 +169,7 @@ fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
         "the session list did not open:\n{}",
         app.text()
     );
-    wait_for(&app, "Sessions");
+    wait_for(&app, "Search sessions");
     app.press("escape");
     assert!(!tui.dialogs.is_open());
 

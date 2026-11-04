@@ -91,7 +91,6 @@ pub struct Local {
     next_listener: Cell<u64>,
     usage_loading: Cell<bool>,
     watch: RefCell<Option<Watch>>,
-    new_designs: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
     /// The in-memory `go-upsell` record (`storage.memory`).
     pub(crate) go_memory: RefCell<crate::dialogs::go_upsell::Seen>,
@@ -161,7 +160,6 @@ impl Local {
             next_listener: Cell::new(0),
             usage_loading: Cell::new(false),
             watch: RefCell::new(None),
-            new_designs: Cell::new(false),
             layers: RefCell::new(Vec::new()),
             go_memory: RefCell::default(),
             open_url: RefCell::new(Rc::new(crate::dialogs::go_upsell::open_url)),
@@ -969,10 +967,10 @@ struct Row {
     provider_id: String,
     provider_name: String,
     title: String,
-    description: Option<String>,
     category: Option<String>,
-    footer: Option<String>,
+    favorite: bool,
     free: bool,
+    model: ModelInfo,
 }
 
 /// `sortModelOptions`: OpenCode Go, then OpenCode, then by provider name, free models first; stable otherwise.
@@ -1055,10 +1053,10 @@ pub fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
         .then_with(|| a.cmp(b))
 }
 
-/// Opens the model dialog (`DialogModel`): the free models picker under `new-designs` with nothing connected,
-/// else the connected models, of one provider when `provider` is set.
+/// Opens the model dialog (`DialogModel`): the free models picker with nothing connected, else the connected
+/// models, of one provider when `provider` is set.
 pub fn show(local: &Rc<Local>, provider: Option<String>) {
-    if local.new_designs.get() && !local.connected() && provider.is_none() {
+    if !local.connected() && provider.is_none() {
         crate::dialogs::free_models::show(local);
         return;
     }
@@ -1082,10 +1080,6 @@ fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
 }
 
 impl Local {
-    /// The `new-designs` experiment, as the TUI config resolves it.
-    pub fn set_new_designs(&self, on: bool) {
-        self.new_designs.set(on);
-    }
 }
 
 // The select of `DialogConnectedModels`.
@@ -1095,21 +1089,15 @@ fn build(
     provider: Option<String>,
     filter: &str,
 ) -> View {
-    let new_designs = cx.new_designs;
-    // Under new designs, favoriting does not reorder the list until the dialog is reopened.
+    // Favoriting does not reorder the list until the dialog is reopened.
     let favorites_at_open = local.favorite();
+    let marker = cx.theme.text.formfield.selected;
     let options: select::Options<Model> = {
         let weak = Rc::downgrade(local);
         let provider = provider.clone();
         Rc::new(move |query: &str| {
             weak.upgrade().map_or_else(Vec::new, |local| {
-                options(
-                    &local,
-                    provider.as_deref(),
-                    query,
-                    new_designs,
-                    &favorites_at_open,
-                )
+                options(&local, provider.as_deref(), query, &favorites_at_open, marker)
             })
         })
     };
@@ -1122,7 +1110,8 @@ fn build(
     props.flat = true;
     props.skip_filter = true;
     props.current = local.current();
-    props.placeholder = new_designs.then(|| "Search models".to_owned());
+    props.search_in_title = true;
+    props.title_placeholder = Some("Search models".to_owned());
     let on_select = {
         let weak = Rc::downgrade(local);
         Rc::new(move |option: &SelectOption<Model>| {
@@ -1148,18 +1137,14 @@ fn build(
             }
         })
     };
-    let provider_title = match (new_designs, connected) {
-        (true, true) => "connect integration",
-        (true, false) => "view all integrations",
-        (false, true) => "Connect an integration",
-        (false, false) => "View all integrations",
+    let provider_title = if connected {
+        "connect integration"
+    } else {
+        "view all integrations"
     };
     let favorite_title = {
         let weak = Rc::downgrade(local);
         move |option: Option<&SelectOption<Model>>| -> String {
-            if !new_designs {
-                return "Favorite".into();
-            }
             let favorite = weak.upgrade().is_some_and(|local| {
                 option.is_some_and(|option| local.favorite().contains(&option.value))
             });
@@ -1174,11 +1159,7 @@ fn build(
         SelectAction {
             run: ActionRun::Dialog(usage),
             hidden: !matches!(local.usage(), Some(Some(_))),
-            ..SelectAction::new(
-                "model.dialog.usage",
-                if new_designs { "usage" } else { "Usage" },
-                |_| {},
-            )
+            ..SelectAction::new("model.dialog.usage", "usage", |_| {})
         },
         SelectAction {
             title: Rc::new(favorite_title),
@@ -1225,18 +1206,16 @@ fn options(
     local: &Local,
     provider: Option<&str>,
     query: &str,
-    new_designs: bool,
     favorites_at_open: &[Model],
+    marker: Color,
 ) -> Vec<SelectOption<Model>> {
     let needle = query.trim();
     let connected = local.connected();
     let show_sections = connected && provider.is_none() && needle.is_empty();
-    let favorites: Vec<Model> = if !connected {
-        Vec::new()
-    } else if new_designs {
+    let favorites: Vec<Model> = if connected {
         favorites_at_open.to_vec()
     } else {
-        local.favorite()
+        Vec::new()
     };
     let favorite_now = local.favorite();
     let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
@@ -1249,11 +1228,15 @@ fn options(
             .find(|item| item.id.0 == id)
             .map_or(id.to_owned(), |provider| provider.name.clone())
     };
-    let trailing = |model: &ModelInfo, favorite: bool| -> Option<String> {
-        if new_designs {
-            return favorite.then(|| "*".to_owned());
+    let usage = local.usage().flatten();
+    // The detail row shows the price, so the trailing slot only marks favorites.
+    let marked = |option: &mut SelectOption<Model>, model: &ModelInfo, favorite: bool| {
+        if favorite {
+            option.footer = Some("*".to_owned());
+            option.footer_fg = Some(marker);
         }
-        is_free(model).then(|| "Free".to_owned())
+        let provider = providers.iter().find(|item| item.id == model.provider_id);
+        option.detail = Some(detail(model, true, usage_label(usage.as_ref(), model, provider)));
     };
     let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
         if !show_sections {
@@ -1269,7 +1252,7 @@ fn options(
                 )
                 .description(provider_name(&model.provider_id.0))
                 .category(category);
-                option.footer = trailing(model, favorite_now.contains(item));
+                marked(&mut option, model, favorite_now.contains(item));
                 Some(option)
             })
             .collect()
@@ -1282,8 +1265,9 @@ fn options(
         .collect();
     let recent_options = section(&recent_items, "Recent");
 
+    // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
     let free_group = |model: &ModelInfo| {
-        new_designs && provider.is_none() && model.provider_id.0 == "opencode" && is_free(model)
+        provider.is_none() && model.provider_id.0 == "opencode" && is_free(model)
     };
     let mut rows: Vec<Row> = models
         .iter()
@@ -1297,7 +1281,6 @@ fn options(
                 provider_id: model.provider_id.0.clone(),
                 provider_name: name.clone(),
                 title: model.name.clone(),
-                description: (!new_designs && favorite).then(|| "(Favorite)".to_owned()),
                 category: connected.then(|| {
                     if free_group(model) {
                         "Free".to_owned()
@@ -1305,8 +1288,9 @@ fn options(
                         name
                     }
                 }),
-                footer: trailing(model, favorite),
+                favorite,
                 free: is_free(model),
+                model: model.clone(),
                 value,
             }
         })
@@ -1318,9 +1302,8 @@ fn options(
 
     let to_option = |row: Row| {
         let mut option = SelectOption::new(row.title, row.value);
-        option.description = row.description;
         option.category = row.category;
-        option.footer = row.footer;
+        marked(&mut option, &row.model, row.favorite);
         option
     };
     if !needle.is_empty() {
@@ -1340,15 +1323,13 @@ fn options(
         return results
             .into_iter()
             .map(|row| {
-                // Search results name the provider inline under new designs.
-                if new_designs {
-                    let name = row.provider_name.clone();
-                    let mut option = to_option(row);
-                    option.description = Some(name);
-                    option.category = None;
-                    return option;
-                }
-                to_option(row)
+                // Search results name the provider inline. Without a category, the trailing slot keeps the
+                // favorite marker instead of falling back to the provider name.
+                let name = row.provider_name.clone();
+                let mut option = to_option(row);
+                option.description = Some(name);
+                option.category = None;
+                option
             })
             .collect();
     }
@@ -1361,6 +1342,124 @@ fn options(
         .chain(paid.into_iter().map(to_option))
         .chain(free.into_iter().map(to_option))
         .collect()
+}
+
+/// What the model picker says the usage limits leave a model: `$x left`, in the error color when it cannot take
+/// another request, or `No limit` for a paid model OpenCode Console serves without one.
+fn usage_label(
+    info: Option<&UsageLimitsInfo>,
+    model: &ModelInfo,
+    provider: Option<&ProviderInfo>,
+) -> Option<(String, bool)> {
+    let info = info?;
+    let usage = crate::dialogs::usage::model_usage(info, model, provider);
+    if let Some(usage) = usage {
+        let level = crate::dialogs::usage::level(&usage, model);
+        return Some((
+            format!("{} left", crate::dialogs::usage::format_dollars(usage.left)),
+            matches!(
+                level,
+                crate::dialogs::usage::Level::Out | crate::dialogs::usage::Level::Reached
+            ),
+        ));
+    }
+    let paid = !model.cost.iter().all(|cost| cost.input == 0.0);
+    (crate::dialogs::usage::served_by_console(provider) && paid).then(|| ("No limit".to_owned(), false))
+}
+
+/// `ModelDetail`: the selected model's price (unless `price` is false), input modalities, context window, and
+/// reasoning support, below the list; after what its usage limits leave when `usage` says so.
+pub fn detail(model: &ModelInfo, price: bool, usage: Option<(String, bool)>) -> select::Detail {
+    let model = model.clone();
+    select::Detail::View(Rc::new(move |cx| {
+        let (app, theme) = (&cx.app, &cx.theme);
+        let cost = if is_free(&model) {
+            "Free".to_owned()
+        } else {
+            model.cost.first().map_or(String::new(), |cost| {
+                format!("${}/${}", dollars(cost.input), dollars(cost.output))
+            })
+        };
+        let mut facts: Vec<String> = vec![
+            model
+                .capabilities
+                .input
+                .iter()
+                .map(|value| modality(value))
+                .collect::<Vec<_>>()
+                .join(", "),
+            tokens(model.limit.context),
+        ];
+        if !model.variants.is_empty() {
+            facts.push("Reasoning".to_owned());
+        }
+        let list = |items: Vec<String>| {
+            let spans: Vec<Span> = items
+                .into_iter()
+                .filter(|item| !item.is_empty())
+                .enumerate()
+                .flat_map(|(index, item)| {
+                    let separator = (index > 0).then(|| " · ".fg(theme.neutral().step(400)));
+                    separator.into_iter().chain([item.fg(theme.text.muted)])
+                })
+                .collect();
+            Text::new(app, spans).wrap(WrapMode::None).shrink(0.0)
+        };
+        let row = View::new(app).row().gap(2).justify(Justify::SpaceBetween);
+        match &usage {
+            Some((text, danger)) => {
+                row.add(
+                    &Text::new(app, text.as_str())
+                        .fg(if *danger {
+                            theme.text.feedback.error.base
+                        } else {
+                            theme.text.muted
+                        })
+                        .wrap(WrapMode::None),
+                );
+                let price = if !cost.is_empty() && cost != "Free" {
+                    format!("{cost} per 1M")
+                } else {
+                    cost.clone()
+                };
+                row.add(&list([vec![price], facts.clone()].concat()));
+            }
+            None => {
+                if price {
+                    row.add(&Text::new(app, cost.as_str()).fg(theme.text.muted).wrap(WrapMode::None));
+                } else {
+                    row.justify(Justify::Start);
+                }
+                row.add(&list(facts.clone()));
+            }
+        }
+        row.as_any()
+    }))
+}
+
+// `String(Number(value.toFixed(2)))`.
+fn dollars(value: f64) -> String {
+    format!("{}", (value * 100.0).round() / 100.0)
+}
+
+fn modality(value: &str) -> String {
+    if value == "pdf" {
+        return "PDF".to_owned();
+    }
+    let mut chars = value.chars();
+    chars.next().map_or(String::new(), |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
+fn tokens(value: i64) -> String {
+    if value >= 1_000_000 {
+        return format!("{}M", (value as f64 / 100_000.0).round() / 10.0);
+    }
+    if value >= 1_000 {
+        return format!("{}K", (value as f64 / 1_000.0).round());
+    }
+    value.to_string()
 }
 
 /// `DialogModel`'s `select`: selects the model, then offers its variants unless the current one still applies.
@@ -1471,7 +1570,6 @@ pub fn install(tui: &Rc<Tui>) {
             Err(error) => log::error!("model keymap layer: {error}"),
         }
     }
-    local.set_new_designs(tui.config.info.experiment("new-designs"));
     local.load();
 }
 

@@ -919,29 +919,19 @@ impl State {
         };
         let app = &tui.app;
         let theme = tui.page();
-        let new_designs = tui.config.info.experiment("new-designs");
         let height = self.height();
         let width = self.content_width(tui) + 4;
         self.popup
             .visible(true)
             .position(Edge::Top, Length::Cells(-(height as f32)))
-            .border_sides(if new_designs {
-                Sides::RIGHT
-            } else {
-                Sides::LEFT | Sides::RIGHT
-            })
+            .border_sides(Sides::RIGHT)
             .border_chars(Some(split_border()))
             .border_color(theme.border.base);
-        let list_bg = (!new_designs).then_some(theme.background.raised.high);
-        self.list.height(height as u32);
-        match list_bg {
-            Some(bg) => self.list.bg(bg),
-            None => self.list.bg(Color::TRANSPARENT),
-        };
+        self.list.height(height as u32).bg(Color::TRANSPARENT);
         for child in self.list.children() {
             child.detach();
         }
-        let row_bg = new_designs.then_some(theme.background.raised.high);
+        let row_bg = theme.background.raised.high;
         let options = self.options.borrow();
         if options.is_empty() {
             let results = self.results.borrow();
@@ -959,28 +949,21 @@ impl State {
                 _ => "No matching files, agents, or references",
             };
             let error = mode == Mode::Reference && !loading && failed;
-            let text = if new_designs {
-                truncate(message, width.saturating_sub(4).max(1))
-            } else {
-                message.to_owned()
-            };
-            let label = Text::new(app, text).fg(if error {
-                theme.text.feedback.error.base
-            } else {
-                theme.text.muted
-            });
-            if new_designs {
-                label.wrap(WrapMode::None);
-            }
+            let label = Text::new(app, truncate(message, width.saturating_sub(4).max(1)))
+                .fg(if error {
+                    theme.text.feedback.error.base
+                } else {
+                    theme.text.muted
+                })
+                .wrap(WrapMode::None);
             let row = View::new(app)
                 .row()
+                .grow(1.0)
+                .bg(row_bg)
                 .padding_edge(Edge::Left, 1)
                 .padding_edge(Edge::Right, 1)
                 .child(&label);
-            if let Some(bg) = row_bg {
-                row.grow(1.0).bg(bg);
-            }
-            self.list.child(&rail(app, &theme, new_designs, None, &row));
+            self.list.child(&rail(app, &theme, None, &row));
             self.request_redraw();
             return;
         }
@@ -995,13 +978,13 @@ impl State {
                 .is_some_and(|action| Some(&action.id) == confirming.as_ref());
             let (bg, fg, muted) = if confirm {
                 (
-                    Some(theme.background.action.destructive.focused),
+                    theme.background.action.destructive.focused,
                     theme.text.action.destructive.focused,
                     theme.text.muted,
                 )
             } else if active {
                 (
-                    Some(theme.background.action.primary.focused),
+                    theme.background.action.primary.focused,
                     theme.text.action.primary.focused,
                     theme.text.action.primary.focused,
                 )
@@ -1020,6 +1003,8 @@ impl State {
             };
             let row = View::new(app)
                 .row()
+                .grow(1.0)
+                .bg(bg)
                 .padding_edge(Edge::Left, 1)
                 .padding_edge(Edge::Right, 1)
                 .child(
@@ -1028,12 +1013,6 @@ impl State {
                         .shrink(0.0)
                         .wrap(WrapMode::None),
                 );
-            if new_designs {
-                row.grow(1.0);
-            }
-            if let Some(bg) = bg {
-                row.bg(bg);
-            }
             if !confirm {
                 if let Some(description) = &item.description {
                     let description = description.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1075,8 +1054,7 @@ impl State {
             } else {
                 None
             };
-            self.list
-                .child(&rail(app, &theme, new_designs, color, &row));
+            self.list.child(&rail(app, &theme, color, &row));
         }
         self.request_redraw();
     }
@@ -1129,17 +1107,8 @@ fn split_border() -> [char; 11] {
     [' ', ' ', ' ', ' ', ' ', '┃', ' ', ' ', ' ', ' ', ' ']
 }
 
-/// `AutocompleteRail`: under new designs, each row draws its own left rail.
-fn rail(
-    app: &App,
-    theme: &opencode_ui::theme::Theme,
-    enabled: bool,
-    color: Option<Color>,
-    row: &View,
-) -> View {
-    if !enabled {
-        return row.clone();
-    }
+/// `AutocompleteRail`: each row draws its own left rail.
+fn rail(app: &App, theme: &opencode_ui::theme::Theme, color: Option<Color>, row: &View) -> View {
     View::new(app)
         .row()
         .child(

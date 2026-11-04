@@ -142,7 +142,6 @@ fn pending(tui: &Tui) {
                 ),
                 &spinner,
                 None,
-                None,
                 DIALOG_LIST_INSET,
                 1,
             )

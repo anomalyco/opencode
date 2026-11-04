@@ -22,7 +22,7 @@ use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{
-    self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps, Side,
+    self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps,
 };
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -80,6 +80,8 @@ pub fn show(tui: &Tui) {
                 }),
             );
             props.title_view = Some(list.title.as_any());
+            props.search_in_title = true;
+            props.title_placeholder = Some(list.placeholder());
             props.skip_filter = true;
             props.current = current;
             props.on_filter = Some(Rc::new({
@@ -474,6 +476,19 @@ impl List {
             self.title
                 .add(&Text::new(&app, format!(" for {name}")).fg(theme.text.muted));
         }
+        let select = self.select.borrow().clone();
+        if let Some(select) = select {
+            select.set_placeholder(&self.placeholder());
+        }
+    }
+
+    /// `titlePlaceholder`.
+    fn placeholder(&self) -> String {
+        let name = self.project_name();
+        if !self.state.borrow().all_projects && !name.is_empty() {
+            return format!("Search sessions in {name}");
+        }
+        "Search sessions".to_owned()
     }
 
     /// `currentProjectName`.
@@ -551,23 +566,8 @@ impl List {
     }
 
     fn hints(&self) -> Vec<FooterHint> {
-        let Some(tui) = self.tui.upgrade() else {
-            return Vec::new();
-        };
-        let mut hints = Vec::new();
-        if !tui.config.info.experiment("new-designs")
-            && let Some(label) = quick_switch_hint(&tui)
-            && !pins::slots(&tui).is_empty()
-        {
-            hints.push(FooterHint {
-                title: "switch".into(),
-                label,
-                side: Side::Left,
-                group: None,
-            });
-        }
         let all = self.state.borrow().all_projects;
-        hints.push(FooterHint {
+        vec![FooterHint {
             title: if all {
                 "current directory"
             } else {
@@ -575,10 +575,8 @@ impl List {
             }
             .into(),
             label: "ctrl+a".into(),
-            side: Side::Right,
             group: None,
-        });
-        hints
+        }]
     }
 
     /// `options()`.
@@ -755,20 +753,6 @@ fn load_all_projects(tui: &Tui) -> bool {
         .and_then(|storage| storage.load("session-list", &json!({})).ok())
         .and_then(|value| value.get("allProjects").and_then(Value::as_bool))
         .unwrap_or(initial)
-}
-
-/// `quickSwitchHint()`: the range of the quick switch shortcuts, as `ctrl+x 1-9`.
-fn quick_switch_hint(tui: &Tui) -> Option<String> {
-    if tui.config.tabs.enabled {
-        return None;
-    }
-    let first = tui.keymap.shortcut("session.quick_switch.1")?;
-    let last = tui.keymap.shortcut("session.quick_switch.9")?;
-    let prefix = &first[..first.len() - first.chars().last().map_or(0, char::len_utf8)];
-    if first.ends_with('1') && last == format!("{prefix}9") {
-        return Some(format!("{prefix}1-9"));
-    }
-    Some(format!("{first} through {last}"))
 }
 
 /// A row's footer: the checkout name when the session's root is outside its project.
