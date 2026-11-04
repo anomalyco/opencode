@@ -28,6 +28,7 @@ import type { ComposerStateValue } from "@/composer/state"
 import { useLocal } from "@/providers/models/selection"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { sessionInWorkspace, sessionProject, type SessionModel } from "@/session/model"
 import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -83,7 +84,7 @@ export function createMountedSession(session: SessionModel) {
       return ServerConnection.builtin(server.conn)
     },
     get compatible() {
-      return !server.health?.incompatible
+      return !isServerIncompatible(server.health)
     },
     get connected() {
       return server.ctx.sdk.connection.status() === "connected"

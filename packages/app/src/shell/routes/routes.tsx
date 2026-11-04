@@ -4,6 +4,7 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerUnauthorized } from "@/runtime/server/health-machine"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { ServerSignedOutPanel } from "@/session/server-unavailable-panel"
 import { LayoutProvider } from "@/shell/state/layout"
@@ -115,7 +116,7 @@ function AppLayout(props: ParentProps) {
 
     if (only?.type !== "http") return
 
-    return global.servers.health[ServerConnection.key(only)]?.unauthorized ? only : undefined
+    return isServerUnauthorized(global.servers.health[ServerConnection.key(only)]) ? only : undefined
   }
 
   return (

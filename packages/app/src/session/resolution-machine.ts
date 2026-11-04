@@ -1,5 +1,5 @@
 import { isSessionNotFoundError } from "@/runtime/server/errors"
-import type { ServerHealth } from "@/runtime/server/health"
+import type { ServerHealth } from "@/runtime/server/health-machine"
 
 // One routed session: its ID within the session store that resolves it. A replaced store is a new target.
 export type SessionTarget<Scope> = {
@@ -109,7 +109,7 @@ export function sessionRouteView<T, Scope>(
   if (state.status === "idle") return { type: "idle" }
   const sessionID = state.target.sessionID
 
-  if (health?.incompatible) return { type: "incompatible", sessionID }
+  if (health?.type === "incompatible") return { type: "incompatible", sessionID }
 
   if (state.status === "ready") return { type: "ready", sessionID, session: state.session }
 
@@ -119,7 +119,7 @@ export function sessionRouteView<T, Scope>(
 
   // Nothing is cached and an unreachable server never resolves the session, so explain instead of waiting blank.
   // Only a failed health check counts: a version mismatch has its own panel, and a rejected credential is not an outage.
-  if (health && !health.healthy && !health.checking && !health.unauthorized) return { type: "unreachable", sessionID }
+  if (health?.type === "unreachable") return { type: "unreachable", sessionID }
 
   return { type: "resolving", sessionID }
 }

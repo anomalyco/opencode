@@ -3,6 +3,7 @@ import { startTransition } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createKnownServerSessions, createServerSessionEntries, type CommandPaletteEntry } from "./palette"
 import { CommandPaletteView } from "./dialog"
@@ -18,9 +19,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
   const tabs = useTabs()
   const registry = useServers()
 
-  const servers = registry.visible.filter(
-    (conn) => global.servers.health[ServerConnection.key(conn)]?.healthy !== false,
-  )
+  const servers = registry.visible.filter((conn) => !isServerFailed(global.servers.health[ServerConnection.key(conn)]))
 
   const loaders = servers.flatMap((conn) => {
     const ctx = global.serverCtx(ServerConnection.key(conn))

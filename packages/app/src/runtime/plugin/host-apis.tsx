@@ -40,6 +40,7 @@ import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
@@ -540,7 +541,7 @@ export function createPluginAttachment(apis: HostApis) {
         return ServerConnection.builtin(listed())
       },
       get compatible() {
-        return !global.servers.health[key]?.incompatible
+        return !isServerIncompatible(global.servers.health[key])
       },
       get connected() {
         return global.serverCtx(key)?.sdk.connection.status() === "connected"

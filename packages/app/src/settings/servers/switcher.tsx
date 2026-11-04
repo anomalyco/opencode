@@ -4,7 +4,7 @@ import { Menu } from "@opencode/ui/menu"
 import { For, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
-import type { ServerHealth } from "@/runtime/server/health"
+import type { ServerHealth } from "@/runtime/server/health-machine"
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { ServerLabel } from "@/servers/registry/label"
 import { useSettingsSurface } from "@/settings/surface"
@@ -72,11 +72,11 @@ export function SettingsServerSwitcher() {
 }
 
 function ServerDot(props: { health: ServerHealth | undefined; unreachable: boolean }) {
-  const health = () => props.health ?? (props.unreachable ? { healthy: false } : undefined)
+  const health = (): ServerHealth | undefined => props.health ?? (props.unreachable ? { type: "unreachable" } : undefined)
 
   return (
     <span class="settings-server-switcher-icon">
-      <ServerHealthIndicator health={health()} authenticationRequired={!!health()?.unauthorized} />
+      <ServerHealthIndicator health={health()} />
     </span>
   )
 }

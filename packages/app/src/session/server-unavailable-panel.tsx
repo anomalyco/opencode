@@ -4,6 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
+import { selectServerVersion } from "@/runtime/server/health-machine"
 import { type ServerConnection, useServers } from "@/runtime/server/registry"
 
 export function ServerUnavailablePanel(props: { reason: "incompatible" | "unreachable"; onClose?: () => void }) {
@@ -25,7 +26,7 @@ export function ServerUnavailablePanel(props: { reason: "incompatible" | "unreac
             {props.reason === "incompatible"
               ? language.t("session.error.incompatible.description", {
                   server: servers.label(server.conn),
-                  version: server.health?.version ?? "1",
+                  version: selectServerVersion(server.health) ?? "1",
                 })
               : language.t("session.error.unreachable.description", { server: servers.label(server.conn) })}
           </div>

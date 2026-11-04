@@ -27,6 +27,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { normalizeServerUrl, ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useCheckServerHealth } from "@/runtime/server/health"
+import { isServerFailed, isServerHealthy, isServerUnauthorized } from "@/runtime/server/health-machine"
 import { usePlatform } from "@/runtime/platform/platform"
 import { isMixedContent } from "./browser"
 import { cameraHint, createCameraAvailability } from "./camera"
@@ -327,7 +328,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
     if (!original || original.http.url === pairing.url) return pairing
     const http = { url: original.http.url, password: pairing.password }
 
-    return (await checkServerHealth(http)).healthy ? http : pairing
+    return (await checkServerHealth(http)).type === "healthy" ? http : pairing
   }
 
   // Where the form points: a scanned or pasted pairing link wins, else the address and password fields.
@@ -380,7 +381,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       // asked for sign-in can continue.
       if (
         original?.type === "http" &&
-        !global.servers.health[ServerConnection.key(original)]?.unauthorized &&
+        !isServerUnauthorized(global.servers.health[ServerConnection.key(original)]) &&
         normalized === original.http.url &&
         name === original.displayName &&
         password === original.http.password
@@ -401,7 +402,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
 
       const result = await checkServerHealth(connection.http)
 
-      if (!result.healthy) {
+      if (result.type !== "healthy") {
         setStore(
           "error",
           language.t(
@@ -456,11 +457,12 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
   }
 
   const startEdit = (connection: ServerConnection.Http) => {
+    const health = global.servers.health[ServerConnection.key(connection)]
     reset()
     setStore({
       mode: "edit",
       // A signed-out server needs a new pairing link; otherwise editing starts from its address.
-      method: global.servers.health[ServerConnection.key(connection)]?.unauthorized ? "link" : "password",
+      method: isServerUnauthorized(health) ? "link" : "password",
       originalUrl: connection.http.url,
       values: {
         url: connection.http.url,
@@ -468,7 +470,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
         password: connection.http.password ?? "",
       },
       error: "",
-      status: global.servers.health[ServerConnection.key(connection)]?.healthy,
+      status: isServerFailed(health) ? false : isServerHealthy(health) || undefined,
     })
   }
 
@@ -508,7 +510,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       signedOut: () => {
         const original = editing()
 
-        return !!original && !!global.servers.health[ServerConnection.key(original)]?.unauthorized
+        return !!original && isServerUnauthorized(global.servers.health[ServerConnection.key(original)])
       },
     },
     change: {
