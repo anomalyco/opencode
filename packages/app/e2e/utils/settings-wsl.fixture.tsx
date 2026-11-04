@@ -247,64 +247,66 @@ export function mount(input: {
     return (
       <PlatformProvider value={platform}>
         <AppBaseProviders locale="en">
-          <output aria-label="WSL actions">{store.calls.join(",")}</output>
-          {/* The WSL plugin's main side going away, as on a reload or failure, and coming back. */}
-          <label>
-            <input
-              type="checkbox"
-              checked={store.available}
-              onChange={(event) => {
-                const available = event.currentTarget.checked
-                setStore("available", available)
-                listeners.forEach((listener) => listener({ type: "available", ipc: "wsl", available }))
+          <div>
+            <output aria-label="WSL actions">{store.calls.join(",")}</output>
+            {/* The WSL plugin's main side going away, as on a reload or failure, and coming back. */}
+            <label>
+              <input
+                type="checkbox"
+                checked={store.available}
+                onChange={(event) => {
+                  const available = event.currentTarget.checked
+                  setStore("available", available)
+                  listeners.forEach((listener) => listener({ type: "available", ipc: "wsl", available }))
 
-                if (available) publish("wsl")
-              }}
-            />
-            WSL plugin
-          </label>
-          {/* The SSH plugin's main side going away and coming back. */}
-          <label>
-            <input
-              type="checkbox"
-              checked
-              onChange={(event) => {
-                const available = event.currentTarget.checked
-                listeners.forEach((listener) => listener({ type: "available", ipc: "ssh", available }))
+                  if (available) publish("wsl")
+                }}
+              />
+              WSL plugin
+            </label>
+            {/* The SSH plugin's main side going away and coming back. */}
+            <label>
+              <input
+                type="checkbox"
+                checked
+                onChange={(event) => {
+                  const available = event.currentTarget.checked
+                  listeners.forEach((listener) => listener({ type: "available", ipc: "ssh", available }))
 
-                if (available) publish("ssh")
-              }}
-            />
-            SSH plugin
-          </label>
-          {/* The SSH tunnel dropping, which only main notices. */}
-          <Show when={input.ssh}>
-            <button
-              type="button"
-              onClick={() => {
-                setSsh({ stage: "disconnected" })
-                publish("ssh")
-              }}
-            >
-              Drop SSH tunnel
-            </button>
-            {/* A background reconnect that needs a password, as main reports it to every window. */}
-            <button
-              type="button"
-              onClick={() => {
-                setSsh({ stage: "authentication" })
-                publish("ssh")
-              }}
-            >
-              Require SSH sign-in
-            </button>
-            <output aria-label="SSH connects">{store.connects}</output>
-          </Show>
-          <Show when={input.hold}>
-            <button type="button" onClick={() => held.resolve()}>
-              Load held storage
-            </button>
-          </Show>
+                  if (available) publish("ssh")
+                }}
+              />
+              SSH plugin
+            </label>
+            {/* The SSH tunnel dropping, which only main notices. */}
+            <Show when={input.ssh}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "disconnected" })
+                  publish("ssh")
+                }}
+              >
+                Drop SSH tunnel
+              </button>
+              {/* A background reconnect that needs a password, as main reports it to every window. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "authentication" })
+                  publish("ssh")
+                }}
+              >
+                Require SSH sign-in
+              </button>
+              <output aria-label="SSH connects">{store.connects}</output>
+            </Show>
+            <Show when={input.hold}>
+              <button type="button" onClick={() => held.resolve()}>
+                Load held storage
+              </button>
+            </Show>
+          </div>
           <Interface />
         </AppBaseProviders>
       </PlatformProvider>
