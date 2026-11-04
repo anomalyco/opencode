@@ -163,23 +163,24 @@ export async function runNonInteractivePrompt(input: Input) {
   let waitingForBackground = false
 
   // Any job in the tree holds the run open: this session's, its subagents', and theirs.
+  // A failed read throws instead of reading as "nothing pending": this is only rechecked when
+  // an execution ends, so a run that kept waiting after a failed read might never be woken.
   const pendingBackground = async () => {
     if (input.compatibility === "v1" || interrupted || permissionRejected || formCancelled || emittedError) return false
-    const jobs = await input.client.experimental.job
-      .list({ sessionID: input.sessionID, descendants: true })
-      .catch(() => [])
+    const jobs = await input.client.experimental.job.list({ sessionID: input.sessionID, descendants: true })
     jobs.forEach((job) => {
       jobSessions.add(job.sessionID)
       if (job.kind === "subagent") jobSessions.add(job.childSessionID)
     })
     if (jobs.length > 0) return true
-    // A finished job wakes its session before its row is removed, so a wake that raced the
-    // list above shows up as a queued inbox item or an active session in the tree.
-    const [active, inboxes] = await Promise.all([
-      input.client.session.active().catch(() => ({})),
-      Promise.all([...jobSessions].map((sessionID) => input.client.session.inbox.list({ sessionID }).catch(() => []))),
-    ])
+    // Work moves from job to inbox to active execution: a finished job queues its wake before its
+    // row is removed, and a session is active before it takes a queued wake. Reading in that
+    // order, one read at a time, means work moving along can't slip between two reads.
+    const inboxes = await Promise.all(
+      [...jobSessions].map((sessionID) => input.client.session.inbox.list({ sessionID })),
+    )
     if (inboxes.some((inbox) => inbox.length > 0)) return true
+    const active = await input.client.session.active()
     for (const sessionID of Object.keys(active)) {
       if (await ownsSession(sessionID)) return true
     }

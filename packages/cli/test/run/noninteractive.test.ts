@@ -3,6 +3,8 @@ import {
   OpenCode,
   type EventSubscribeOutput,
   type ExperimentalJobListOutput,
+  type SessionActiveOutput,
+  type SessionInboxListOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
@@ -219,6 +221,8 @@ async function run(input: {
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   jobs?: () => ExperimentalJobListOutput
+  inbox?: () => SessionInboxListOutput
+  active?: () => SessionActiveOutput
   terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
@@ -257,8 +261,8 @@ async function run(input: {
   let promptID = "msg_prompt"
   spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
   spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(input.jobs?.() ?? []) as never)
-  spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
-  spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.session, "active").mockImplementation((async () => input.active?.() ?? {}) as never)
+  spyOn(sdk.session.inbox, "list").mockImplementation((async () => input.inbox?.() ?? []) as never)
   spyOn(sdk.session, "get").mockImplementation(
     ({ sessionID }) => ok({ id: sessionID, parentID: sessionID === "ses_child" ? "ses_1" : undefined }) as never,
   )
@@ -687,6 +691,47 @@ describe("runNonInteractivePrompt", () => {
     })
     expect(sdk.experimental.job.list).toHaveBeenCalledWith({ sessionID: "ses_1", descendants: true })
     expect(lists).toEqual([])
+  })
+
+  test("keeps waiting when a woken reply moves from the inbox to running between reads", async () => {
+    // The wake leaves the inbox as it is read, and its reply runs until the next check.
+    let wake: "queued" | "running" | "done" = "queued"
+    const output = await capture({
+      format: "json",
+      inbox: () => {
+        if (wake === "queued") wake = "running"
+        return []
+      },
+      active: (): SessionActiveOutput => {
+        if (wake !== "running") return {}
+        wake = "done"
+        return { ses_1: { type: "running" } }
+      },
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_text",
+          created: 2,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_2", ordinal: 0, text: "Shell finished." },
+        },
+        settled(),
+      ],
+    })
+    expect(output.stdout).toContain("Shell finished.")
+  })
+
+  test("fails the run when a background state read fails instead of treating it as done", async () => {
+    await expect(
+      run({
+        turn: (id) => [prompted(id), settled()],
+        active: () => {
+          throw new Error("state unavailable")
+        },
+      }),
+    ).rejects.toThrow("state unavailable")
   })
 
   test("Ctrl-C while waiting on a background subagent exits with code 130", async () => {
