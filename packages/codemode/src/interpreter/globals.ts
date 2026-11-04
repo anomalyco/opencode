@@ -1,4 +1,4 @@
-import { Arr, Callable, coerceToInteger, coerceToString, get, Obj, type Value } from "./objects.js"
+import { Arr, BoundFn, Callable, coerceToInteger, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
 import { mapGlobal, setGlobal, weakMapGlobal, weakSetGlobal } from "../stdlib/collections.js"
@@ -41,15 +41,7 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "bind",
       1,
-      (thisValue, args) => {
-        const fn = target(thisValue, "bind")
-        const bound = args.slice(1)
-        return native(ctx.builtins, {
-          name: `bound ${coerceToString(get(fn, "name"))}`,
-          length: Math.max(0, fn.length - bound.length),
-          call: (_, rest, site) => ctx.call(fn, args[0], [...bound, ...rest], site),
-        })
-      },
+      (thisValue, args) => new BoundFn(ctx.builtins.Function, target(thisValue, "bind"), args[0], args.slice(1)),
     ],
   ])
   return constructor(ctx.builtins, ctx.builtins.Function, {

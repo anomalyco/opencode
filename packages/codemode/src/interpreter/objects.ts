@@ -2,7 +2,15 @@ import type { BlockStatement, Expression, Pattern } from "acorn"
 import { ToolReference } from "../tool-runtime.js"
 import type { Builtins } from "./intrinsics.js"
 import { checkArrayLength } from "./limits.js"
-import { type AstNode, AsyncIteratorSymbol, type Binding, IteratorSymbol, rangeError, typeError } from "./model.js"
+import {
+  type AstNode,
+  AsyncIteratorSymbol,
+  type Binding,
+  IteratorSymbol,
+  rangeError,
+  Throw,
+  typeError,
+} from "./model.js"
 import type { Entry, Eval, GeneratorRequest, Reaction, Resolving } from "./runner.js"
 
 /** Property attributes, as in a JS property descriptor. */
@@ -194,6 +202,11 @@ export type NativeCall = (thisValue: Value, args: Array<Value>, site: AstNode | 
 export type NativeConstruct = (args: Array<Value>, newTarget: Callable, site: AstNode | undefined) => NativeResult
 
 export type NativeOptions = {
+  /**
+   * Why this native may be made while the program runs, for the few kinds that still capture state in a host closure.
+   * Every other native is made with the intrinsics; see `nativeRule`.
+   */
+  readonly runtime?: RuntimeNative
   readonly name: string
   readonly length?: number
   readonly call: NativeCall
@@ -203,16 +216,92 @@ export type NativeOptions = {
   readonly callback?: boolean
 }
 
-export class Native extends Callable {
+/** The natives still made at run time, each holding state in a host closure that cannot be saved yet. */
+export type RuntimeNative = "iterator-helper" | "async-from-sync" | "extension"
+
+/**
+ * Natives are made only with the intrinsics, so each one has an intrinsic name and run state never holds a host
+ * closure. When `check` is on (tests turn it on), making a native for a runtime whose intrinsics are `sealed` (keyed by
+ * its `Function.prototype`) throws, unless it declares one of the `RuntimeNative` exceptions.
+ */
+export const nativeRule: { check: boolean; sealed: WeakSet<Obj>; observe?: (native: Native) => void } = {
+  check: false,
+  sealed: new WeakSet(),
+}
+
+/** What a built-in whose state is data needs from the running interpreter. */
+export interface Realm {
+  call(callable: Value, thisValue: Value, args: Array<Value>, site?: AstNode): Eval<Value>
+}
+
+/**
+ * A built-in function: a `Native` made with the intrinsics, or a data kind such as `BoundFn` or `Resolver` whose state
+ * is plain fields and whose behaviour lives on its class.
+ */
+export abstract class Builtin extends Callable {
+  /** `new name(...)`; without it the function is not a constructor. */
+  abstract readonly construct: NativeConstruct | undefined
+  /** Whether callback sites (array methods, replacers, promise reactions) admit this function. */
+  abstract readonly callback: boolean
+  abstract invoke(realm: Realm, thisValue: Value, args: Array<Value>, site: AstNode | undefined): NativeResult
+}
+
+export class Native extends Builtin {
   readonly call: NativeCall
   readonly construct: NativeConstruct | undefined
   readonly callback: boolean
 
   constructor(proto: Obj, options: NativeOptions) {
+    if (nativeRule.check && options.runtime === undefined && nativeRule.sealed.has(proto)) {
+      throw new Error(`Native "${options.name}" was made after the intrinsics; make it a data kind instead.`)
+    }
     super(proto, options.name, options.length ?? 0)
+    nativeRule.observe?.(this)
     this.call = options.call
     this.construct = options.construct
     this.callback = options.callback ?? true
+  }
+
+  invoke(_: Realm, thisValue: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
+    return this.call(thisValue, args, site)
+  }
+}
+
+/** `Function.prototype.bind`'s result: calls `target` with the bound receiver and leading arguments. */
+export class BoundFn extends Builtin {
+  readonly construct = undefined
+  readonly callback = true
+  constructor(
+    proto: Obj,
+    readonly target: Callable,
+    readonly boundThis: Value,
+    readonly boundArgs: ReadonlyArray<Value>,
+  ) {
+    super(proto, `bound ${coerceToString(get(target, "name"))}`, Math.max(0, target.length - boundArgs.length))
+  }
+
+  invoke(realm: Realm, _: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
+    return realm.call(this.target, this.boundThis, [...this.boundArgs, ...args], site)
+  }
+}
+
+/** A `resolve` or `reject` function handed to an executor or thenable: settles its shared `Resolving` once. */
+export class Resolver extends Builtin {
+  readonly construct = undefined
+  readonly callback = true
+  constructor(
+    proto: Obj,
+    name: string,
+    readonly resolving: Resolving,
+    readonly kind: "resolve" | "reject",
+  ) {
+    super(proto, name, 1)
+  }
+
+  invoke(_: Realm, __: Value, args: Array<Value>): NativeResult {
+    if (this.kind === "resolve") this.resolving.resolve(args[0])
+    else this.resolving.reject(new Throw(args[0]))
+    return undefined
   }
 }
 

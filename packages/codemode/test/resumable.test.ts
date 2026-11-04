@@ -3,7 +3,9 @@ import { Context } from "effect"
 import { parseProgram } from "../src/interpreter/execute.js"
 import { Interpreter } from "../src/interpreter/interpreter.js"
 import { createBuiltins } from "../src/interpreter/intrinsics.js"
-import { Native, Obj } from "../src/interpreter/objects.js"
+import { getOwn, Native, nativeRule, Obj } from "../src/interpreter/objects.js"
+import { CodeMode } from "../src/index.js"
+import { Effect } from "effect"
 import { ToolRuntime } from "../src/tool-runtime.js"
 import { nodeId, sourceOf } from "../src/interpreter/source.js"
 
@@ -106,5 +108,64 @@ describe("intrinsic names", () => {
     const array = ctx.intrinsics.valueOf("Array.prototype")!
     array.props.delete("map")
     expect(ctx.intrinsics.nameOf(map)).toBe("Array.prototype.map")
+  })
+})
+
+describe("natives only at intrinsic creation", () => {
+  test("every native made with the intrinsics has a name", () => {
+    const made: Array<Native> = []
+    nativeRule.observe = (native) => made.push(native)
+    const ctx = (() => {
+      try {
+        return interpreter()
+      } finally {
+        nativeRule.observe = undefined
+      }
+    })()
+    expect(made.length).toBeGreaterThan(300)
+    expect(
+      made.filter((native) => ctx.intrinsics.nameOf(native) === undefined).map((native) => getOwn(native, "name")),
+    ).toEqual([])
+  })
+
+  test("making a native once the program runs breaks the rule", () => {
+    const ctx = interpreter()
+    expect(() => new Native(ctx.builtins.Function, { name: "late", call: () => undefined })).toThrow(
+      'Native "late" was made after the intrinsics',
+    )
+  })
+
+  const value = async (code: string) => {
+    const result = await Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+
+  test("bound functions and resolvers behave as functions", async () => {
+    expect(
+      await value(`
+        function add(a, b, c) { return [this?.k, a, b, c] }
+        const bound = add.bind({ k: 1 }, 2)
+        let resolve, reject
+        const promise = new Promise((res, rej) => { resolve = res; reject = rej })
+        const thenable = await new Promise((res) => res({ then(a, b) { a([a.name, a.length, typeof b]) } }))
+        resolve(5)
+        reject(6)
+        return [bound.name, bound.length, typeof bound, bound(3, 4), bound.bind(null, 3).name, resolve.name, resolve.length,
+          reject.name, typeof resolve, await promise, thenable]
+      `),
+    ).toEqual([
+      "bound add",
+      2,
+      "function",
+      [1, 2, 3, 4],
+      "bound bound add",
+      "resolve",
+      1,
+      "reject",
+      "function",
+      5,
+      ["", 1, "function"],
+    ])
   })
 })

@@ -1,6 +1,6 @@
 import { type AstNode, Throw, typeError } from "./model.js"
-import { Callable, define, get, hidden, Arr, Fn, Obj, PromiseObj, record, type Value } from "./objects.js"
-import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
+import { Callable, define, get, hidden, Arr, Fn, Obj, PromiseObj, record, Resolver, type Value } from "./objects.js"
+import { constructor, methods, native, receiver, requiresNew } from "./native.js"
 import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
 import { isSupportedCallback } from "./callback.js"
@@ -9,24 +9,16 @@ import { type Completion, type Eval, Interruption, normal, type Reaction, type R
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
-  resolve: fn(ctx.builtins, "resolve", 1, (_, args) => {
-    resolving.resolve(args[0])
-    return undefined
-  }),
-  reject: fn(ctx.builtins, "reject", 1, (_, args) => {
-    resolving.reject(new Throw(args[0]))
-    return undefined
-  }),
+  resolve: new Resolver(ctx.builtins.Function, "resolve", resolving, "resolve"),
+  reject: new Resolver(ctx.builtins.Function, "reject", resolving, "reject"),
 })
 
 /**
- * NewPromiseCapability(%Promise%): a pending promise with the host functions that settle it once. A built-in's own
- * failure that rejects it is located at `site`, the call that created it.
+ * NewPromiseCapability(%Promise%): a pending promise with what settles it once. A built-in's own failure that rejects
+ * it is located at `site`, the call that created it.
  */
-export const capability = <R>(ctx: Interpreter<R>, site: AstNode | undefined) => {
-  const promise = ctx.runner.newPromise()
-  return { promise, ...ctx.runner.resolving(promise, site) }
-}
+export const capability = <R>(ctx: Interpreter<R>, site: AstNode | undefined): Resolving =>
+  ctx.runner.resolving(ctx.runner.newPromise(), site)
 
 /** Settles `resolving` with a completion: a fulfillment value is resolved, so a thenable is adopted. */
 const settleWith = (resolving: Resolving, completion: Completion) =>
@@ -258,22 +250,17 @@ function* constructPromise<R>(ctx: Interpreter<R>, executor: Value, site: AstNod
   return made.promise
 }
 
-const promiseLikePrototypes = new WeakMap<object, Obj>()
-
 /**
  * Lets a synchronous object result also be awaited or chained like a Promise. It inherits non-enumerable
  * then/catch/finally that settle with a plain copy, so data views never show them and awaiting does not recurse.
  */
 export const promiseLike = <R>(ctx: Interpreter<R>, value: Value): Value => {
   if (!(value instanceof Obj) || value.proto !== ctx.builtins.Object) return value
-  value.proto = promiseLikePrototype(ctx)
+  value.proto = ctx.builtins.PromiseLike
   return value
 }
 
-const promiseLikePrototype = <R>(ctx: Interpreter<R>): Obj => {
-  const cached = promiseLikePrototypes.get(ctx)
-  if (cached !== undefined) return cached
-  const proto = new Obj(ctx.builtins.Object)
+const promiseLikeMethods = <R>(ctx: Interpreter<R>) => {
   const settled = (thisValue: Value, name: string) => {
     const source = receiver(Obj, thisValue, name)
     const copy = new Obj(ctx.builtins.Object)
@@ -282,15 +269,13 @@ const promiseLikePrototype = <R>(ctx: Interpreter<R>): Obj => {
   }
   methods(
     ctx.builtins,
-    proto,
+    ctx.builtins.PromiseLike,
     (["then", "catch", "finally"] as const).map((name) => [
       name,
       name === "then" ? 2 : 1,
       (thisValue, args, site) => instanceMethod(ctx, name, settled(thisValue, name), args, site),
     ]),
   )
-  promiseLikePrototypes.set(ctx, proto)
-  return proto
 }
 
 export const promiseGlobal = <R>(ctx: Interpreter<R>) => {
@@ -323,5 +308,6 @@ export const promiseGlobal = <R>(ctx: Interpreter<R>) => {
   ])
   const then = get(proto, "then")
   if (then instanceof Callable) ctx.runner.intrinsicThen = then
+  promiseLikeMethods(ctx)
   return promise
 }

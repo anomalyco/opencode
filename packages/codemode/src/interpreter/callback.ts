@@ -4,7 +4,7 @@ import { GeneratorReturn, typeError } from "./model.js"
 import {
   Callable,
   get,
-  Native,
+  Builtin,
   DateObj,
   Obj,
   coerceToNumber,
@@ -92,7 +92,7 @@ export const withPrimitives = <R>(
 // Admission means dispatchable, not necessarily invocable: new-requiring
 // constructors pass the gate and throw a TypeError on call, like JS.
 export const isSupportedCallback = (value: Value): value is Callable =>
-  value instanceof Callable && !(value instanceof Native && !value.callback)
+  value instanceof Callable && !(value instanceof Builtin && !value.callback)
 
 export const applyCollectionCallback = <R>(
   ctx: Interpreter<R>,

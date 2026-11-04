@@ -88,7 +88,8 @@ import {
   hidden,
   hasPrototype,
   keys,
-  Native,
+  Builtin,
+  nativeRule,
   parseArrayIndex,
   Arguments,
   Arr,
@@ -103,6 +104,7 @@ import {
   coerceToString,
   entries,
   getOwn,
+  type NativeCall,
   type NativeResult,
   type Step,
   type Value,
@@ -125,7 +127,7 @@ import {
 } from "./runner.js"
 import { moduleName, resolveModule } from "./modules.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
-import { fn } from "./native.js"
+import { native } from "./native.js"
 import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
@@ -422,6 +424,7 @@ export class Interpreter<R> {
     for (const [name, value] of [...intrinsics, ...(options.globals?.(this) ?? [])]) {
       globalScope.set(name, { mutable: false, value })
     }
+    nativeRule.sealed.add(this.builtins.Function)
   }
 
   /** A module, as `require` returns it and a default import binds it: a global, by its Node module name. */
@@ -1033,7 +1036,7 @@ class Frame<R> {
         settled.ok ? made.resolve(result(settled.value as Value, step.done)) : rejected(settled.error),
       )
     }
-    const next = fn(builtins, "next", 1, function* (_, args) {
+    const next = asyncFromSyncMethod(builtins, "next", function* (_, args) {
       const made = capability(ctx, node)
       try {
         settle(yield* syncNext(args), true, made)
@@ -1042,7 +1045,7 @@ class Frame<R> {
       }
       return made.promise
     })
-    const close = fn(builtins, "return", 1, function* (_, args) {
+    const close = asyncFromSyncMethod(builtins, "return", function* (_, args) {
       const made = capability(ctx, node)
       try {
         const method = syncReturn()
@@ -1062,7 +1065,7 @@ class Frame<R> {
       }
       return made.promise
     })
-    const raise = fn(builtins, "throw", 1, function* (_, args) {
+    const raise = asyncFromSyncMethod(builtins, "throw", function* (_, args) {
       const made = capability(ctx, node)
       try {
         const method = custom ? get(custom.iterator, "throw") : undefined
@@ -1641,7 +1644,7 @@ class Frame<R> {
 
   private *evaluateNewExpression(node: NewExpression): Eval<Value> {
     const callee = yield* this.evaluateExpression(node.callee)
-    const construct = callee instanceof Native ? callee.construct : undefined
+    const construct = callee instanceof Builtin ? callee.construct : undefined
     if (construct === undefined) {
       // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
       // unsupported syntax. Built-ins like Number are real constructors in JS, so do not claim
@@ -1650,13 +1653,13 @@ class Frame<R> {
       const message =
         callee instanceof Fn
           ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
-          : callee instanceof Native
+          : callee instanceof Builtin
             ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
             : `${name} is not a constructor.`
       throw typeError(message, node)
     }
     const args = yield* this.evaluateCallArguments(node.arguments)
-    const result = this.native(() => construct(args, callee as Native, node), node)
+    const result = this.native(() => construct(args, callee as Builtin, node), node)
     return isEval(result) ? yield* result : result
   }
 
@@ -1988,10 +1991,12 @@ class Frame<R> {
     callee?: Expression,
   ): Value | Eval<Value> | Call {
     if (callable instanceof Fn) return this.invokeFunction(callable, thisValue, args, node)
-    if (callable instanceof Native) {
+    if (callable instanceof Builtin) {
+      const ctx = this.ctx
       // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call.
-      if (this.ctx.runner.tick()) return afterSlice(() => this.native(() => callable.call(thisValue, args, node), node))
-      return this.native(() => callable.call(thisValue, args, node), node)
+      if (ctx.runner.tick())
+        return afterSlice(() => this.native(() => callable.invoke(ctx, thisValue, args, node), node))
+      return this.native(() => callable.invoke(ctx, thisValue, args, node), node)
     }
     if (callable instanceof ToolReference) {
       if (callable.path.length === 0) {
@@ -2528,6 +2533,10 @@ class Frame<R> {
 }
 
 // The body a generator object resumes: a `return()` request ends it with the returned value.
+// The async-from-sync adapter still keeps its iterator in host closures, so its methods are made per iteration.
+const asyncFromSyncMethod = (builtins: Builtins, name: string, call: NativeCall) =>
+  native(builtins, { name, length: 1, call, runtime: "async-from-sync" })
+
 function* generatorBody(body: Eval<Value>): Eval<Value> {
   try {
     return yield* body

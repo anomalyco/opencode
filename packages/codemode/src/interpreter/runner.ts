@@ -3,9 +3,8 @@ import type { Diagnostic } from "../codemode.js"
 import { locate, normalizeError } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { MAX_PENDING_PROMISES } from "./limits.js"
-import { type AstNode, type GeneratorRequestKind, PendingThrow, rangeError, Throw, typeError } from "./model.js"
-import { fn } from "./native.js"
-import { type Callable, get, Obj, PromiseObj, type Value } from "./objects.js"
+import { type AstNode, type GeneratorRequestKind, PendingThrow, rangeError, typeError } from "./model.js"
+import { type Callable, get, Obj, PromiseObj, Resolver, type Value } from "./objects.js"
 import { typeofValue } from "./references.js"
 
 /**
@@ -119,8 +118,30 @@ export type Reaction = (settled: Completion) => Start | void
 
 export type Start = { readonly task: Task; readonly input: Completion }
 
-/** The functions that settle one promise, at most once between them. */
-export type Resolving = { readonly resolve: (resolution: Value) => void; readonly reject: (reason: unknown) => void }
+/**
+ * CreateResolvingFunctions as data: settles one promise at most once, however many `Resolver`s share it. `reject` takes
+ * the failure as thrown; one without a location is located at `site`, the call that created the promise.
+ */
+export class Resolving {
+  done = false
+  constructor(
+    private readonly runner: Pick<Runner<unknown>, "resolveWith" | "reject">,
+    readonly promise: PromiseObj,
+    readonly site: AstNode | undefined,
+  ) {}
+
+  resolve(resolution: Value): void {
+    if (this.done) return
+    this.done = true
+    this.runner.resolveWith(this.promise, resolution, this.site)
+  }
+
+  reject(reason: unknown): void {
+    if (this.done) return
+    this.done = true
+    this.runner.reject(this.promise, locate(reason, this.site))
+  }
+}
 
 type Job = () => Start | void
 
@@ -316,24 +337,9 @@ export class Runner<R> {
     return new PromiseObj(this.ctx.builtins.Promise, this.nextID++)
   }
 
-  /**
-   * CreateResolvingFunctions, for host callers; `reject` takes the failure as thrown. A failure without a location is
-   * located at `site`, the call that created the promise.
-   */
+  /** CreateResolvingFunctions for `promise`; a failure without a location is located at `site`. */
   resolving(promise: PromiseObj, site?: AstNode): Resolving {
-    let done = false
-    return {
-      resolve: (resolution) => {
-        if (done) return
-        done = true
-        this.resolveWith(promise, resolution, site)
-      },
-      reject: (reason) => {
-        if (done) return
-        done = true
-        this.settle(promise, abrupt(locate(reason, site)))
-      },
-    }
+    return new Resolving(this, promise, site)
   }
 
   /** PerformPromiseThen with one reaction for either outcome; marks the promise handled. */
@@ -361,6 +367,11 @@ export class Runner<R> {
     return promise
   }
 
+  /** Rejects `promise` with a failure as thrown. */
+  reject(promise: PromiseObj, reason: unknown): void {
+    this.settle(promise, abrupt(reason))
+  }
+
   private settle(promise: PromiseObj, completion: Completion): void {
     if (promise.state !== "pending") return
     this.pending--
@@ -378,7 +389,8 @@ export class Runner<R> {
     for (const reaction of reactions) this.enqueue(() => reaction(completion))
   }
 
-  private resolveWith(promise: PromiseObj, resolution: Value, site?: AstNode): void {
+  /** ResolvePromise: adopts a thenable, otherwise fulfills. */
+  resolveWith(promise: PromiseObj, resolution: Value, site?: AstNode): void {
     if (resolution === promise) {
       const cycle = typeError("Chaining cycle detected: a promise cannot resolve with itself.", site)
       return this.settle(promise, abrupt(cycle))
@@ -399,15 +411,9 @@ export class Runner<R> {
       )
       return
     }
-    const builtins = this.ctx.builtins
-    const resolve = fn(builtins, "", 1, (_, args) => {
-      resolving.resolve(args[0])
-      return undefined
-    })
-    const reject = fn(builtins, "", 1, (_, args) => {
-      resolving.reject(new Throw(args[0]))
-      return undefined
-    })
+    const proto = this.ctx.builtins.Function
+    const resolve = new Resolver(proto, "", resolving, "resolve")
+    const reject = new Resolver(proto, "", resolving, "reject")
     const ctx = this.ctx
     const body = function* (): Eval<void> {
       try {

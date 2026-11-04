@@ -26,7 +26,7 @@ import {
 } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { matchToValue, toHostRegex } from "./regexp.js"
-import { coercion } from "./value.js"
+import { coerce } from "./value.js"
 
 // console is intercepted by the interpreter before reaching here.
 const requireDataArgument = (name: string, index: number, arg: Value): Value => {
@@ -95,7 +95,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const string = constructor(builtins, builtins.String, {
     name: "String",
     length: 1,
-    call: coercion(ctx, "String").call,
+    call: (_, args) => coerce(ctx, "String", args),
   })
   const codeUnits = (name: string, op: (...codes: Array<number>) => string): Method => [
     name,

@@ -35,6 +35,7 @@ const builtins = [
   "TextEncoder",
   "TextDecoder",
   "Promise",
+  "PromiseLike",
   "Iterator",
   "IteratorHelper",
   "AsyncIterator",
@@ -98,6 +99,8 @@ export const createBuiltins = (): Builtins => {
     TextEncoder: plain(),
     TextDecoder: plain(),
     Promise: plain(),
+    /** What a synchronous result that can also be awaited inherits: then/catch/finally over a plain copy. */
+    PromiseLike: plain(),
     Iterator: iterator,
     IteratorHelper: new Obj(iterator),
     AsyncIterator: asyncIterator,

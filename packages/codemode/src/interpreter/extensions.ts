@@ -6,7 +6,7 @@ import type { Interpreter } from "./interpreter.js"
 import { createErrorValue } from "./intrinsics.js"
 import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
 import { type AstNode, PendingThrow, rangeError, Throw, typeError } from "./model.js"
-import { fn } from "./native.js"
+import { native } from "./native.js"
 import {
   define,
   get,
@@ -162,11 +162,11 @@ export const extensionGlobals = <R>(
     // and a count cross.
     const name: unknown = value.name
     const length: unknown = value.length
-    return fn(
-      builtins,
-      typeof name === "string" ? name : "",
-      typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
-      function* (_, values, site) {
+    return native(builtins, {
+      runtime: "extension",
+      name: typeof name === "string" ? name : "",
+      length: typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
+      call: function* (_, values, site) {
         const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
         const cross = (reason: unknown) => new Throw(fromHost(reason, label))
         const call = describe?.(args)
@@ -188,7 +188,7 @@ export const extensionGlobals = <R>(
         if (host.async) return pending(settle(host.effect), site)
         return (yield ctx.runner.blocking(settle(host.effect))) as Value
       },
-    )
+    })
   }
 
   // An asynchronous host call: the program holds a promise that settles when the host's work does.
