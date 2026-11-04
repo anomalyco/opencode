@@ -192,7 +192,7 @@ export const McpElicitationRequest = {
             kind: "mcp-elicitation",
             server: "release",
             message:
-              "Publish v2.4.0 to the selected channel?\n\n  npm publish --tag beta\n  npm view my-package version\n\nRelease notes: **beta** <release>\nhttps://example.com/releases/v2.4.0/approval?token=0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
+              "Publish v2.4.0 to the selected channel?\n\n  npm publish --tag beta\n  npm view my-package version\n\nRelease notes: **beta** <release>\nChangelog: https://example.com/releases/v2.4.0\nhttps://example.com/releases/v2.4.0/approval?token=0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
           },
           fields: [
             { key: "approve", type: "boolean", title: "Approve publish", required: true },

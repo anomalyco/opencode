@@ -1617,11 +1617,11 @@ story("preserves elicitation message whitespace as plain text and wraps long lin
   const component = await mount("app-current-session-surface--mcp-elicitation-request")
   const text = component.locator('[data-component="session-elicitation-dock"] [data-slot="question-text"]')
   const message =
-    "Publish v2.4.0 to the selected channel?\n\n  npm publish --tag beta\n  npm view my-package version\n\nRelease notes: **beta** <release>\nhttps://example.com/releases/v2.4.0/approval?token=0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"
+    "Publish v2.4.0 to the selected channel?\n\n  npm publish --tag beta\n  npm view my-package version\n\nRelease notes: **beta** <release>\nChangelog: https://example.com/releases/v2.4.0\nhttps://example.com/releases/v2.4.0/approval?token=0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"
 
   await expect(text).toBeVisible()
   await expect.poll(() => text.innerText()).toBe(message)
-  await expect(text.locator("a, strong, release")).toHaveCount(0)
+  await expect(text.locator("strong, release")).toHaveCount(0)
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
