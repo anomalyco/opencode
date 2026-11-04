@@ -53,6 +53,14 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import {
+  createMessageActionState,
+  transitionMessageAction,
+  viewMessageActions,
+  type MessageAction,
+  type MessageActionCapabilities,
+  type MessageActionEvent,
+} from "./action-machine"
 
 export async function writeClipboard(text: string): Promise<boolean> {
   const written = await navigator.clipboard?.writeText(text).then(
@@ -327,12 +335,7 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const [state, setState] = createStore({
-    reverting: false,
-    forking: false,
-    updating: false,
-    expanded: false,
-  })
+  const [state, setState] = createStore({ expanded: false })
 
   const expanded = () => props.expanded ?? state.expanded
 
@@ -432,36 +435,44 @@ export function CurrentUserMessageDisplay(props: {
     ),
   )
 
-  const revert = async () => {
-    if (!props.actions?.revert || state.reverting) return
-    setState("reverting", true)
+  const [action, setAction] = createSignal(createMessageActionState())
 
-    try {
-      await props.actions.revert({ sessionID: props.sessionID, messageID: props.message.id })
-    } finally {
-      setState("reverting", false)
-    }
+  const capabilities = createMemo<MessageActionCapabilities>(() => ({
+    pending: pending(),
+    canPending: !!props.actions?.pending,
+    canRevert: !!props.actions?.revert,
+    canFork: !!props.actions?.fork,
+  }))
+
+  const actionView = createMemo(() => viewMessageActions(action(), capabilities()))
+
+  const runAction = (kind: MessageAction) => {
+    const input = { sessionID: props.sessionID, messageID: props.message.id }
+
+    if (kind === "queue") return props.actions?.pending?.queue(input)
+
+    if (kind === "remove") return props.actions?.pending?.remove(input)
+
+    if (kind === "revert") return props.actions?.revert?.(input)
+
+    return props.actions?.fork?.(input)
   }
 
-  const fork = async () => {
-    if (!props.actions?.fork || state.forking) return
-    setState("forking", true)
-
-    try {
-      await props.actions.fork({ sessionID: props.sessionID, messageID: props.message.id })
-    } finally {
-      setState("forking", false)
-    }
+  const dispatch = (event: MessageActionEvent) => {
+    const next = transitionMessageAction(action(), event)
+    setAction(next.state)
+    next.effects.forEach((effect) => {
+      // The executor turns a synchronous throw into a rejection, so every outcome settles the attempt.
+      void new Promise<void>((resolve) => resolve(runAction(effect.action))).then(
+        () => dispatch({ type: "succeeded", attempt: effect.attempt }),
+        () => dispatch({ type: "failed", attempt: effect.attempt }),
+      )
+    })
   }
 
-  const updatePending = async (action: "queue" | "remove") => {
-    const actions = props.actions?.pending
+  const request = (kind: MessageAction) => dispatch({ type: "requested", action: kind, capabilities: capabilities() })
 
-    if (!actions || state.updating) return
-    setState("updating", true)
-    await actions[action]({ sessionID: props.sessionID, messageID: props.message.id })
-    setState("updating", false)
-  }
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const renderActions = () => (
     <span data-slot="user-message-actions">
@@ -471,11 +482,11 @@ export function CurrentUserMessageDisplay(props: {
             icon="arrow-down-to-line"
             size="small"
             label={i18n.t("ui.message.moveToQueue")}
-            disabled={state.updating}
+            disabled={actionView().disabled.queue}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
-              void updatePending("queue")
+              request("queue")
             }}
             aria-label={i18n.t("ui.message.moveToQueue")}
           />
@@ -483,11 +494,11 @@ export function CurrentUserMessageDisplay(props: {
             icon="outline-trash"
             size="small"
             label={i18n.t("ui.message.deletePending")}
-            disabled={state.updating}
+            disabled={actionView().disabled.remove}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
-              void updatePending("remove")
+              request("remove")
             }}
             aria-label={i18n.t("ui.message.deletePending")}
           />
@@ -499,11 +510,11 @@ export function CurrentUserMessageDisplay(props: {
             icon="reset"
             size="small"
             label={i18n.t("ui.message.revertMessage")}
-            disabled={state.reverting}
+            disabled={actionView().disabled.revert}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
-              void revert()
+              request("revert")
             }}
             aria-label={i18n.t("ui.message.revertMessage")}
           />
@@ -529,7 +540,7 @@ export function CurrentUserMessageDisplay(props: {
               </Menu.GroupLabel>
             </Menu.Group>
             <Menu.Separator />
-            <Menu.Item disabled={!props.actions?.fork || pending() || state.forking} onSelect={() => void fork()}>
+            <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
               {i18n.t("ui.message.forkMessage")}
             </Menu.Item>
             <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
