@@ -25,6 +25,15 @@ pub enum Truncate {
     None,
 }
 
+/// A handler of one option.
+pub type OnOption<T> = Rc<dyn Fn(&SelectOption<T>)>;
+/// An option's own select handler, given the dialog stack.
+pub type OnDialog = Rc<dyn Fn(&Dialogs)>;
+/// A handler of text, such as the filter.
+pub type OnText = Rc<dyn Fn(&str)>;
+/// Whether an action is disabled for the selected option.
+pub type ActionDisabled<T> = Rc<dyn Fn(Option<&SelectOption<T>>) -> bool>;
+
 /// Draws a row's gutter in the row's text color (TS `gutter`).
 pub type Gutter = Rc<dyn Fn(&App, Color) -> AnyWidget>;
 
@@ -50,7 +59,7 @@ pub struct SelectOption<T> {
     /// The row text color while selected.
     pub fg: Option<Color>,
     pub gutter: Option<Gutter>,
-    pub on_select: Option<Rc<dyn Fn(&Dialogs)>>,
+    pub on_select: Option<OnDialog>,
 }
 
 impl<T> SelectOption<T> {
@@ -118,7 +127,7 @@ pub enum Group {
 /// What an action runs on.
 pub enum ActionRun<T> {
     /// The selected option; the action is disabled without one.
-    Selected(Rc<dyn Fn(&SelectOption<T>)>),
+    Selected(OnOption<T>),
     /// The dialog (`selection: "none"`).
     Dialog(Rc<dyn Fn()>),
 }
@@ -144,7 +153,7 @@ pub struct SelectAction<T> {
     pub side: Side,
     pub group: Option<Group>,
     pub hidden: bool,
-    pub disabled: Option<Rc<dyn Fn(Option<&SelectOption<T>>) -> bool>>,
+    pub disabled: Option<ActionDisabled<T>>,
     pub run: ActionRun<T>,
 }
 
@@ -205,9 +214,9 @@ pub struct SelectProps<T> {
     pub flat: bool,
     /// `fuzzysort`'s normalized threshold; 0 keeps every match.
     pub filter_threshold: f64,
-    pub on_move: Option<Rc<dyn Fn(&SelectOption<T>)>>,
-    pub on_filter: Option<Rc<dyn Fn(&str)>>,
-    pub on_select: Option<Rc<dyn Fn(&SelectOption<T>)>>,
+    pub on_move: Option<OnOption<T>>,
+    pub on_filter: Option<OnText>,
+    pub on_select: Option<OnOption<T>>,
     pub on_cancel: Option<Rc<dyn Fn()>>,
     pub skip_filter: bool,
     pub search: Option<Search<T>>,
@@ -1396,7 +1405,7 @@ pub mod fuzzy {
                 }
             }
             if search.contains_space {
-                if best.iter().any(|score| *score == NEG) {
+                if best.contains(&NEG) {
                     continue 'outer;
                 }
             } else if results.iter().all(|score| *score == NEG) {

@@ -10,7 +10,12 @@ const options = [
   { title: "Claude Opus", value: "opus", category: "Anthropic", description: "best" },
   { title: "Claude Haiku", value: "haiku", category: "Anthropic" },
   { title: "Disabled", value: "off", category: "Anthropic", disabled: true },
-  { title: "GPT-5", value: "gpt5", category: "OpenAI", details: ["/a/very/long/path/that/gets/cut/in/the/middle/model.json"] },
+  {
+    title: "GPT-5",
+    value: "gpt5",
+    category: "OpenAI",
+    details: ["/a/very/long/path/that/gets/cut/in/the/middle/model.json"],
+  },
   { title: "GPT-5 mini", value: "gpt5-mini", category: "OpenAI", footer: "$0.25" },
   { title: "o4", value: "o4", category: "OpenAI" },
   { title: "Codex", value: "codex", category: "OpenAI", searchText: "code" },
