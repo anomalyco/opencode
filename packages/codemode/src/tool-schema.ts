@@ -298,8 +298,10 @@ export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
       ? toTypeScript(tool.output, true, pretty)
       : jsonSchemaToTypeScript(tool.output, pretty)
 
-export const decodeInput = <R>(tool: Tool<R>, value: unknown): unknown =>
-  isEffectSchema(tool.input) ? Schema.decodeUnknownSync(tool.input)(value) : value
+export const decodeInput = <R>(tool: Tool<R>, value: unknown): unknown => {
+  const input = tool.freeformField !== undefined && typeof value === "string" ? { [tool.freeformField]: value } : value
+  return isEffectSchema(tool.input) ? Schema.decodeUnknownSync(tool.input)(input) : input
+}
 
 export const decodeOutput = <R>(tool: Tool<R>, value: unknown): unknown =>
   tool.output === undefined

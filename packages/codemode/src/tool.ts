@@ -46,6 +46,7 @@ export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string
   readonly input: SchemaType
+  readonly freeformField?: string
   readonly output: SchemaType | undefined
   readonly execute: (input: unknown) => Effect.Effect<unknown, unknown, R>
 }
@@ -58,6 +59,8 @@ type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unkno
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
   readonly description: string
   readonly input: I
+  /** Expose a single required string field as a positional argument. Object calls still use the input schema. */
+  readonly freeformField?: string
   readonly output?: O
   readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
 }
@@ -78,6 +81,7 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
   _tag: "CodeModeTool",
   description: options.description,
   input: options.input,
+  freeformField: options.freeformField,
   output: options.output,
   execute: (input) => options.execute(input as InputType<I>),
 })
