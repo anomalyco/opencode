@@ -146,6 +146,8 @@ impl State {
                 }
             }
         }
+        // The root's family and cost cover this session.
+        self.log.session(&root);
         let family = self.family.entry(root).or_default();
         if !family.contains(id) {
             family.push(id.clone());
@@ -177,6 +179,15 @@ impl State {
         self.loading.remove(id);
         self.pending.remove(id);
         self.permission.remove(id);
+        let roots: Vec<SessionID> = self
+            .family
+            .iter()
+            .filter(|(_, family)| family.contains(id))
+            .map(|(root, _)| root.clone())
+            .collect();
+        for root in &roots {
+            self.log.session(root);
+        }
         self.family.retain(|_, family| {
             family.retain(|member| member != id);
             !family.is_empty()
@@ -241,6 +252,9 @@ impl State {
         if let Some(info) = self.info.get_mut(id) {
             f(info);
             self.log.session(id);
+            // A child's cost is part of its root's.
+            let root = self.root(id);
+            self.log.session(&root);
         }
     }
 
@@ -456,36 +470,40 @@ impl Data {
             "session"
         };
         let id = id.clone();
-        self.sync_run(format!("{key}:{}", id.0), move |data| async move {
-            let started = data.read(|state| state.deletion_epoch);
-            let info = async {
-                data.client()
-                    .session_get(
-                        &SessionGetInput {
-                            session_id: id.clone(),
-                        },
-                        &RequestOptions::default(),
-                    )
-                    .await
-                    .map_err(|error| evict_missing(&data, error))
-            };
-            let family = async {
-                if !children {
-                    return Ok(Vec::new());
-                }
-                list_children(&data, &id).await
-            };
-            let (info, family) = futures_util::future::try_join(info, family).await?;
-            data.write(|state| {
-                for session in std::iter::once(info).chain(family) {
-                    if state.deleted_since(&session.id, started) {
-                        continue;
+        let key = format!("{key}:{}", id.0);
+        self.sync_start(
+            key,
+            |state| state.deletion_epoch,
+            move |data, started| async move {
+                let info = async {
+                    data.client()
+                        .session_get(
+                            &SessionGetInput {
+                                session_id: id.clone(),
+                            },
+                            &RequestOptions::default(),
+                        )
+                        .await
+                        .map_err(|error| evict_missing(&data, error))
+                };
+                let family = async {
+                    if !children {
+                        return Ok(Vec::new());
                     }
-                    state.remember(session);
-                }
-            });
-            Ok(())
-        })
+                    list_children(&data, &id).await
+                };
+                let (info, family) = futures_util::future::try_join(info, family).await?;
+                data.write(|state| {
+                    for session in std::iter::once(info).chain(family) {
+                        if state.deleted_since(&session.id, started) {
+                            continue;
+                        }
+                        state.remember(session);
+                    }
+                });
+                Ok(())
+            },
+        )
     }
 
     pub fn session_invalidate(&self, id: &SessionID) {
@@ -597,6 +615,8 @@ impl Data {
                     .is_some_and(|(current, _)| *current == token)
                 {
                     state.creating.remove(&session);
+                    // `is_creating` is part of the session's view.
+                    state.log.session(&session);
                 }
             });
             result
@@ -646,8 +666,7 @@ async fn list_children(data: &Data, parent: &SessionID) -> Result<Vec<SessionInf
 impl Data {
     /// Refetches one projected message and upserts it (the `session.model.selected` read).
     pub(crate) fn fetch_message(&self, session: SessionID, message: SessionMessageID) {
-        let data = self.clone();
-        self.refresh(async move {
+        self.refresh(|data| async move {
             let item = data
                 .client()
                 .session_message_get(
@@ -669,8 +688,7 @@ impl Data {
 
     /// Applies a live title after the session's reads, so a racing read cannot overwrite it.
     pub(crate) fn renamed(&self, session: SessionID, title: String) {
-        let data = self.clone();
-        self.refresh(async move {
+        self.refresh(|data| async move {
             let family = data.read(|state| {
                 state
                     .syncs
