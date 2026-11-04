@@ -27,6 +27,8 @@ export type ComponentOptions = {
   fixture: string
   width: number
   height: number
+  // More `cli.json` fields for the resolved config, merged over the theme and `animations: false`.
+  config?: Record<string, unknown>
   // A built-in theme name; default "opencode".
   theme?: string
   mode?: "dark" | "light"
@@ -70,6 +72,7 @@ function Providers(props: ComponentOptions) {
   const config = createTuiResolvedConfig({
     theme: { name: props.theme ?? "opencode", mode: props.mode ?? "dark" },
     animations: false,
+    ...props.config,
   })
   return (
     <TestTuiContexts>
