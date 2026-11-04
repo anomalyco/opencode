@@ -48,7 +48,7 @@ pub fn builtins() -> Vec<Definition<Tui>> {
         super::stats::plugin(),
         empty("opencode.merman"), // P.3
         empty("opencode.latex"),  // P.2
-        empty("opencode.diffs"),  // E.15a
+        super::diffs::viewer::plugin(),
     ]
 }
 

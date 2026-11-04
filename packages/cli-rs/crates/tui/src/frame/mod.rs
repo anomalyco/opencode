@@ -360,6 +360,8 @@ impl SessionState {
             .borrow()
             .as_ref()
             .map(|host| host.target().clone());
+        // A panel that mounts takes the focus (`PanelHost`'s `onTarget`).
+        let mut focus = false;
         if host != panel {
             if let Some(old) = self.host.borrow_mut().take() {
                 old.root.detach();
@@ -369,6 +371,7 @@ impl SessionState {
                 let host = Host::new(tui, target, width, self.active.get() == Pane::Right);
                 self.right.add(&host.root);
                 *self.host.borrow_mut() = Some(host);
+                focus = true;
             }
         }
         // A panel that opens closes the terminal pane, and a terminal that opens closes the panel.
@@ -388,7 +391,6 @@ impl SessionState {
             .borrow()
             .as_ref()
             .map(|pane| pane.pty().to_owned());
-        let mut focus = false;
         if current != terminal {
             if let Some(old) = self.terminal.borrow_mut().take() {
                 old.dispose();
