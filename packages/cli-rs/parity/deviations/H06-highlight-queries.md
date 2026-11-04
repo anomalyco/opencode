@@ -7,7 +7,7 @@ color, so comments show in the text color, italic.
 
 Rust: opentui-rust bundles each grammar's own highlight query, which names those `keyword`, `property` and
 `comment`, and has no `@spell`. With the same syntax theme, those tokens come out in other colors or attributes. In
-`parity/fixtures/U.4a/code.json` and `diff.json`, `import`, `export` and `function` are italic `syntax.keyword`
+`parity/fixtures/U.4a/code.json`, `diff.json` and `markdown-fences.json`, `import`, `export` and `function` are italic `syntax.keyword`
 instead of plain `syntax.keyword` and `syntax.function`, and comments are `syntax.comment` instead of `text.base`.
 
 The syntax theme itself matches: `code::syntax_theme` equals `generateSyntax` scope for scope

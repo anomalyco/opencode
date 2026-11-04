@@ -147,12 +147,10 @@ fn markdown_prose_matches_typescript() {
         &markdown_app("prose").render(),
         "U.4a/markdown-prose",
         &[
-            // The link's ` (url)`, and the italic color, on the paragraph's two rows.
-            (2..=3, Allow::Anything, V03),
-            // `-` bullets.
-            (7..=10, Allow::Anything, V03),
+            // The italic color, and the colors of the link's ` (url)`, on the paragraph's two rows.
+            (2..=3, Allow::Highlight, V03),
             // The `###` heading's color.
-            (15..=15, Allow::Anything, V03),
+            (15..=15, Allow::Highlight, V03),
         ],
     );
 }
@@ -162,8 +160,7 @@ fn markdown_fences_match_typescript() {
     assert_parity(
         &markdown_app("fences").render(),
         "U.4a/markdown-fences",
-        // Code block padding, which shifts the highlighted code too.
-        &[(2..=8, Allow::Anything, V03)],
+        &[(2..=3, Allow::Highlight, H06)],
     );
 }
 
