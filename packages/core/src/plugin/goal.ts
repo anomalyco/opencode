@@ -11,6 +11,7 @@ import CONTINUATION from "./goal/continuation.txt"
 import JUDGE from "./goal/judge.txt"
 import KICKOFF from "./goal/kickoff.txt"
 import REMINDER from "./goal/reminder.txt"
+import RETRY from "./goal/retry.txt"
 
 export const MAX_OBJECTIVE = 4_000
 export const MAX_ROUNDS = 50
@@ -120,19 +121,26 @@ export const Plugin = define({
         wait:
           shells.length === 0 ? "" : '{"verdict":"wait","reason":"<the running shell whose result the goal needs>"}\n',
       })
-      const attempt = ctx.session.generate({ sessionID, prompt }).pipe(
-        Effect.map((result) => {
-          const verdict = parseVerdict(result.text)
-          // "wait" is only offered while a shell runs; without one, nothing would wake the Session to judge again.
-          return verdict?.verdict === "wait" && shells.length === 0 ? undefined : verdict
-        }),
-        // The reviewer runs right after the last step, before the next step's automatic compaction, so a long final
-        // step can leave more history than the model takes.
-        Effect.catchIf(isContextOverflowFailure, () => Effect.succeed("overflow" as const)),
-      )
-      const first = yield* attempt
-      if (first !== undefined) return first
-      return yield* attempt
+      const attempt = (text: string) =>
+        ctx.session.generate({ sessionID, prompt: text }).pipe(
+          Effect.map((result) => {
+            const verdict = parseVerdict(result.text)
+            // "wait" is only offered while a shell runs; without one, nothing would wake the Session to judge again.
+            return {
+              text: result.text,
+              verdict: verdict?.verdict === "wait" && shells.length === 0 ? undefined : verdict,
+            }
+          }),
+          // The reviewer runs right after the last step, before the next step's automatic compaction, so a long final
+          // step can leave more history than the model takes.
+          Effect.catchIf(isContextOverflowFailure, () => Effect.succeed("overflow" as const)),
+        )
+      const first = yield* attempt(prompt)
+      if (first === "overflow") return first
+      if (first.verdict !== undefined) return first.verdict
+      // Showing the reviewer its unusable answer fixes it more often than asking the same question again.
+      const second = yield* attempt(render(RETRY, { prompt, previous: escape(first.text.slice(0, 2_000)) }))
+      return second === "overflow" ? second : second.verdict
     })
 
     // Stop-hook style loop: the runner fires this only once the Session would go idle with nothing pending, and input
