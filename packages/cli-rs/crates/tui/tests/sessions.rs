@@ -520,13 +520,18 @@ fn a_failed_delete_shows_a_toast_and_keeps_the_row() {
 fn pin_toggles_session_json() {
     let kit = Kit::new(Mode::List);
     kit.open_list();
-    kit.wait_gone("Loading");
+    kit.wait_for("Pinned");
     // ses_b is pinned; unpin it.
     kit.app.press("ctrl+f");
     kit.wait_gone("Pinned");
-    assert!(kit.app.wait_until(Duration::from_secs(5), || {
-        kit.pins() == json!({ "pinned": [] })
-    }));
+    assert!(
+        kit.app.wait_until(Duration::from_secs(5), || {
+            kit.pins() == json!({ "pinned": [] })
+        }),
+        "{}\n{}",
+        kit.pins(),
+        kit.app.text()
+    );
     // Pin the first row again (ses_a is newest).
     kit.app.press("ctrl+f");
     kit.wait_for("Pinned");
