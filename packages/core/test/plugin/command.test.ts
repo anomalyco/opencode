@@ -73,10 +73,12 @@ describe("CommandPlugin.Plugin", () => {
       expect(yield* command.get("init")).toMatchObject({
         name: "init",
         description: "guided AGENTS.md setup",
+        source: "builtin",
       })
       expect(yield* command.get("review")).toMatchObject({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
+        source: "builtin",
       })
       yield* command.execute({
         name: "init",

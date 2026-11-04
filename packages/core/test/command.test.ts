@@ -45,6 +45,33 @@ describe("Command", () => {
     }),
   )
 
+  it.effect("does not retain built-in metadata when an identical custom command replaces it", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      yield* command.transform((editor) => {
+        editor.add({
+          name: "init",
+          description: "guided AGENTS.md setup",
+          source: "builtin",
+          execute: () => Effect.void,
+        })
+      })
+      expect(yield* command.list()).toEqual([
+        Command.Info.make({ name: "init", description: "guided AGENTS.md setup", source: "builtin" }),
+      ])
+
+      yield* command.transform((editor) => {
+        editor.add({ name: "init", description: "guided AGENTS.md setup", execute: () => Effect.void })
+      })
+      expect(yield* command.get("init")).toEqual(
+        Command.Info.make({ name: "init", description: "guided AGENTS.md setup" }),
+      )
+      expect(yield* command.list()).toEqual([
+        Command.Info.make({ name: "init", description: "guided AGENTS.md setup" }),
+      ])
+    }),
+  )
+
   it.effect("returns callback error messages without stack traces", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
