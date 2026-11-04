@@ -287,7 +287,7 @@ impl Catalog {
 }
 
 /// The last config document that sets `model`.
-fn configured(entries: &[ConfigEntry]) -> Option<Choice> {
+pub(crate) fn configured(entries: &[ConfigEntry]) -> Option<Choice> {
     entries.iter().rev().find_map(|entry| match entry {
         ConfigEntry::Document(document) => match document.info.model.as_ref()? {
             ConfigEntryDocumentInfoModel::String(value) => {

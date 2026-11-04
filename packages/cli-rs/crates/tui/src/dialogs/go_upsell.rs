@@ -496,9 +496,7 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
 
 impl Connect {
     fn location(&self) -> Option<LocationQueryInput> {
-        Some(LocationQueryInput {
-            directory: Some(self.local.directory.clone()),
-        })
+        self.local.location()
     }
 
     fn render(&self) {
