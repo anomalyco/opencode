@@ -703,6 +703,7 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
 /// Repaints what shows the tabs.
 fn changed(tui: &Tui) {
     crate::frame::refresh(tui);
+    crate::features::attention::program_status::sync(tui);
 }
 
 /// `status` over a store snapshot.
