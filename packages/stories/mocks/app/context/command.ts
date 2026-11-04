@@ -1,3 +1,14 @@
+import { useLanguage } from "@/runtime/i18n/language"
+import {
+  DEFAULT_PALETTE_KEYBIND,
+  formatKeybind,
+  formatKeybindParts,
+  matchKeybind,
+  parseKeybind,
+} from "../../../../app/src/shell/commands/command"
+
+export { DEFAULT_PALETTE_KEYBIND, formatKeybind, formatKeybindParts, matchKeybind, parseKeybind }
+
 const keybinds: Record<string, string> = {
   "file.attach": "mod+u",
   "prompt.mode.shell": "mod+shift+x",
@@ -9,45 +20,9 @@ const keybinds: Record<string, string> = {
   "session.background": "ctrl+b",
 }
 
-export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
-
-export function parseKeybind(config: string) {
-  if (!config || config === "none") return []
-  return config.split(",").map((combo) => {
-    const parts = combo.trim().toLowerCase().split("+")
-    return {
-      key:
-        parts.find(
-          (part) => !["ctrl", "control", "meta", "cmd", "command", "mod", "alt", "option", "shift"].includes(part),
-        ) ?? "",
-      ctrl: parts.includes("ctrl") || parts.includes("control") || parts.includes("mod"),
-      meta: parts.includes("meta") || parts.includes("cmd") || parts.includes("command"),
-      shift: parts.includes("shift"),
-      alt: parts.includes("alt") || parts.includes("option"),
-    }
-  })
-}
-
-export function matchKeybind(keybinds: ReturnType<typeof parseKeybind>, event: KeyboardEvent) {
-  return keybinds.some(
-    (keybind) =>
-      keybind.key === event.key.toLowerCase() &&
-      keybind.ctrl === event.ctrlKey &&
-      keybind.meta === event.metaKey &&
-      keybind.shift === event.shiftKey &&
-      keybind.alt === event.altKey,
-  )
-}
-
-export function formatKeybind(config: string) {
-  return config === "none" ? "" : config
-}
-
-export function formatKeybindParts(config: string) {
-  return !config || config === "none" ? [] : config.split(",")[0].split("+")
-}
-
 export function useCommand() {
+  const language = useLanguage()
+
   return {
     options: [],
     register() {
@@ -55,10 +30,10 @@ export function useCommand() {
     },
     trigger() {},
     keybind(id: string) {
-      return keybinds[id]
+      return formatKeybind(keybinds[id] ?? "", language.t)
     },
     keybindParts(id: string) {
-      return keybinds[id]?.split("+") ?? []
+      return formatKeybindParts(keybinds[id] ?? "", language.t)
     },
   }
 }

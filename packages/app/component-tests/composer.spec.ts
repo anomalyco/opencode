@@ -578,24 +578,67 @@ for (const [theme, background] of [
   })
 }
 
-story("centers add menu shortcuts in a consistent column", async ({ mount, page }) => {
-  const component = await mount("opencode-composer-flow--empty-draft")
-  await component.locator('[data-action="composer-attach"]').click()
+for (const [platform, attach] of [
+  ["MacIntel", "⌘U"],
+  ["Win32", "Ctrl+U"],
+] as const) {
+  story(`keeps add menu shortcuts inside the menu and aligns narrow keys (${attach})`, async ({ mount, page }) => {
+    await page.addInitScript((value) => {
+      Object.defineProperty(navigator, "platform", { configurable: true, value })
+    }, platform)
+    const component = await mount("opencode-composer-flow--empty-draft")
+    await component.locator('[data-action="composer-attach"]').click()
 
-  const shortcuts = page.locator('[role="menu"] [data-slot="menu-v2-item-shortcut"]')
-  await expect(shortcuts).toHaveCount(4)
+    const menu = page.getByRole("menu")
+    const shortcuts = menu.locator('[data-slot="menu-v2-item-shortcut"]')
+    await expect(shortcuts).toHaveText([attach, "/", "@", "!"])
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
-  const boxes = await shortcuts.evaluateAll((items) =>
-    items.map((item) => {
-      const box = item.getBoundingClientRect()
+    const layout = await menu.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      const contentLeft = rect.left + parseFloat(style.paddingLeft)
+      const contentRight = rect.right - parseFloat(style.paddingRight)
 
-      return { width: box.width, center: box.left + box.width / 2 }
-    }),
-  )
+      return {
+        contentLeft,
+        contentRight,
+        items: Array.from(element.querySelectorAll('[data-slot="menu-v2-item-shortcut"]')).map((item) => {
+          const range = document.createRange()
+          range.selectNodeContents(item)
+          const text = range.getBoundingClientRect()
+          const cell = item.getBoundingClientRect()
+          const row = item.parentElement!.getBoundingClientRect()
 
-  expect(new Set(boxes.map((box) => box.width)).size).toBe(1)
-  expect(new Set(boxes.map((box) => box.center)).size).toBe(1)
-})
+          return {
+            cellWidth: cell.width,
+            cellCenter: cell.left + cell.width / 2,
+            cellRight: cell.right,
+            textLeft: text.left,
+            textRight: text.right,
+            textCenter: text.left + text.width / 2,
+            rowRight: row.right,
+          }
+        }),
+      }
+    })
+
+    for (const item of layout.items) {
+      expect(item.textLeft).toBeGreaterThanOrEqual(layout.contentLeft)
+      expect(item.textRight).toBeLessThanOrEqual(layout.contentRight)
+      expect(item.textRight).toBeLessThanOrEqual(item.rowRight)
+      expect(item.cellRight).toBeCloseTo(layout.items[0]!.cellRight, 1)
+    }
+
+    const narrow = layout.items.slice(1)
+    expect(new Set(narrow.map((item) => item.cellWidth)).size).toBe(1)
+    expect(new Set(narrow.map((item) => item.cellCenter)).size).toBe(1)
+
+    for (const item of narrow) {
+      expect(Math.abs(item.textCenter - item.cellCenter)).toBeLessThan(1)
+    }
+  })
+}
 
 for (const draft of ["empty-draft", "multiline-draft", "mixed-attachments"]) {
   story(`select all stays inside the composer with ${draft}`, async ({ mount, page }) => {

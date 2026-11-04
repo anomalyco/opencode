@@ -951,7 +951,7 @@ function ComposerEditorAddMenu(props: {
         <Menu.Portal>
           <Menu.Content
             onCloseAutoFocus={focus.onCloseAutoFocus}
-            class="[&_[data-slot=menu-v2-item-shortcut]]:w-5 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
+            class="[&_[data-slot=menu-v2-item-shortcut]]:min-w-5 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
             style={{ "min-width": "180px" }}
           >
             <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
