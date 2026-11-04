@@ -372,7 +372,8 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // usual. `"auto"` is the default for agent loops — it places
 // breakpoints at the last tool definition, the first and last distinct system
 // parts, and the conversation tail so recent prefixes remain reusable during
-// tool loops.
+// tool loops. On Anthropic's own API it also marks the second newest message,
+// giving up the first system part's breakpoint when the budget runs out.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular
 // object form to choose placements exactly; an object with only `ttl` keeps

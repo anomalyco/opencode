@@ -73,9 +73,10 @@ describe("cache policy", () => {
         }),
       )
 
+      // Anthropic's auto policy marks the two newest messages; the effort marker counts as neither.
       expect(prepared.body.messages).toEqual([
         { role: "user", content: [{ type: "text", text: "first" }] },
-        { role: "assistant", content: [{ type: "text", text: "reply" }] },
+        { role: "assistant", content: [{ type: "text", text: "reply", cache_control: { type: "ephemeral" } }] },
         { role: "user", content: [{ type: "text", text: "latest", cache_control: { type: "ephemeral" } }] },
         { role: "system", content: [], output_config: { effort: "low" } },
       ])

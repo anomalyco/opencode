@@ -60,7 +60,7 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  it.effect("'auto' marks the last tool, first and last system parts, and final message boundary on Anthropic", () =>
+  it.effect("'auto' on Anthropic marks the last tool, the last system part, and the two newest messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -79,21 +79,102 @@ describe("applyCachePolicy", () => {
         }),
       )
 
+      expect(prepared.body).toEqual(
+        expect.objectContaining({
+          tools: [expect.objectContaining({ name: "t1", cache_control: { type: "ephemeral" } })],
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions", cache_control: { type: "ephemeral" } },
+          ],
+          messages: [
+            { role: "user", content: [{ type: "text", text: "first user" }] },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "assistant reply", cache_control: { type: "ephemeral" } }],
+            },
+            {
+              role: "user",
+              content: [{ type: "text", text: "latest user message", cache_control: { type: "ephemeral" } }],
+            },
+          ],
+        }),
+      )
+    }),
+  )
+
+  it.effect("'auto' on Anthropic keeps the first system part's breakpoint while a slot is left", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+          prompt: "first prompt",
+          cache: "auto",
+        }),
+      )
+
       expect(prepared.body).toMatchObject({
-        tools: [{ name: "t1", cache_control: { type: "ephemeral" } }],
         system: [
           { type: "text", text: "Base agent", cache_control: { type: "ephemeral" } },
           { type: "text", text: "Project instructions", cache_control: { type: "ephemeral" } },
         ],
         messages: [
-          { role: "user", content: [{ type: "text", text: "first user" }] },
-          { role: "assistant", content: [{ type: "text", text: "assistant reply" }] },
-          {
-            role: "user",
-            content: [{ type: "text", text: "latest user message", cache_control: { type: "ephemeral" } }],
-          },
+          { role: "user", content: [{ type: "text", text: "first prompt", cache_control: { type: "ephemeral" } }] },
         ],
       })
+    }),
+  )
+
+  it.effect("'auto' on Anthropic keeps the previous tail marked when one new message has many blocks", () =>
+    Effect.gen(function* () {
+      const attachments = Array.from({ length: 24 }, (_, index) => Message.text(`Attached file: f${index}.md`))
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          messages: [
+            Message.user("start"),
+            Message.assistant([ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "tc_1", name: "lookup", result: "found" }),
+            Message.user([Message.text("look at these"), ...attachments]),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ content: Array<{ cache_control?: unknown }> }> }
+      // The tool result is where the previous request's tail breakpoint sat, 25 positions before the new one.
+      expect(body.messages[2]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(body.messages[3]?.content.at(-1)?.cache_control).toEqual({ type: "ephemeral" })
+    }),
+  )
+
+  it.effect("'auto' keeps the first and last system parts and one message boundary off Anthropic's own API", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: AnthropicCompatible.configure({ baseURL: "https://compatible.test/v1/", apiKey: "test" }).model(
+            "claude-compatible",
+          ),
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          messages: [Message.user("first user"), Message.assistant("assistant reply"), Message.user("latest")],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as {
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      expect(body.system.map((part) => part.cache_control)).toEqual([{ type: "ephemeral" }, { type: "ephemeral" }])
+      expect(body.messages[1]?.content[0]?.cache_control).toBeUndefined()
+      expect(body.messages[2]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
     }),
   )
 
@@ -427,9 +508,10 @@ describe("applyCachePolicy", () => {
       })
       const applied = applyCachePolicy(request)
       expect(applied.tools[0]?.cache).toBeDefined()
-      expect(applied.system.map((part) => part.cache !== undefined)).toEqual([true, true, true])
+      // The conversation tail outranks the first system part when a manual hint takes a slot.
+      expect(applied.system.map((part) => part.cache !== undefined)).toEqual([false, true, true])
       const tail = applied.messages[0]!.content[0]!
-      expect("cache" in tail ? tail.cache : undefined).toBeUndefined()
+      expect("cache" in tail ? tail.cache : undefined).toBeDefined()
       expect(applyCachePolicy(applied)).toBe(applied)
 
       const prepared = yield* compileRequest(request)
@@ -446,7 +528,35 @@ describe("applyCachePolicy", () => {
       ].filter((cache) => cache !== undefined)
       expect(marked).toHaveLength(4)
       expect(body.system[1]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
-      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
+      expect(body.messages[0]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+    }),
+  )
+
+  it.effect("a tail that outgrows the budget keeps the newest messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2"), Message.assistant("a2")],
+          cache: { system: true, messages: { tail: 3 } },
+        }),
+      )
+
+      const body = prepared.body as {
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      expect(body.system.map((part) => part.cache_control)).toEqual([undefined, { type: "ephemeral" }])
+      expect(body.messages.map((message) => message.content[0]?.cache_control)).toEqual([
+        undefined,
+        { type: "ephemeral" },
+        { type: "ephemeral" },
+        { type: "ephemeral" },
+      ])
     }),
   )
 

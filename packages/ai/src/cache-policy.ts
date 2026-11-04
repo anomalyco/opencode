@@ -8,8 +8,16 @@
 // advancing the tail after each tool result keeps recent conversation prefixes
 // reusable during long agent runs.
 //
+// Anthropic reads an earlier cache entry only within 20 block positions of a
+// breakpoint, so one new message with 20+ blocks (a batch of attached files)
+// hides the previous request's entry and the whole conversation is written
+// again. On Anthropic's own API, auto therefore marks the two newest messages;
+// the first system part, which only adds the base prompt to the tools prefix,
+// keeps its breakpoint only when one is left over, as on a Session's first request.
+//
 // Manual `cache: CacheHint` placements on individual parts are preserved and
-// count against the four-breakpoint budget; auto only fills remaining slots.
+// count against the four-breakpoint budget; auto only fills remaining slots,
+// in the order tools, last system part, newest messages, first system part.
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import {
   AssistantMessage,
@@ -35,7 +43,9 @@ const BREAKPOINT_CAP = 4
 
 // Resolution rules:
 //   - undefined   → "auto" — caching is on by default.
-//   - "auto"      → tools + first/last system + final message boundary.
+//   - "auto"      → tools + first/last system + final message boundary; on
+//                   Anthropic's API the two newest messages instead of the
+//                   first system part when the budget runs out.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
 //   - `{ ttl }`   → "auto" with that lifetime.
 //   - object form → exactly what the caller asked for.
@@ -114,16 +124,16 @@ const countToolHints = (tools: ReadonlyArray<ToolEntry>): number =>
     0,
   )
 
-const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, budget: Budget): LLMRequest["system"] => {
-  if (system.length === 0) return system
-  let changed = false
-  const next = system.map((part, index) => {
-    if ((index !== 0 && index !== system.length - 1) || part.cache || budget.remaining === 0) return part
-    budget.remaining -= 1
-    changed = true
-    return { ...part, cache: hint }
-  })
-  return changed ? next : system
+const markSystemPart = (
+  system: LLMRequest["system"],
+  index: number,
+  hint: CacheHint,
+  budget: Budget,
+): LLMRequest["system"] => {
+  const part = system[index]
+  if (!part || part.cache || budget.remaining === 0) return system
+  budget.remaining -= 1
+  return system.map((item, i) => (i === index ? { ...item, cache: hint } : item))
 }
 
 const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
@@ -193,8 +203,9 @@ const markMessages = (
     start -= 1
     if (effortUpdate(messages[start]!) === undefined) remaining -= 1
   }
+  // Newest first: when the budget runs short, the conversation tail must keep its breakpoint.
   let next = messages
-  for (let i = start; i < messages.length; i++)
+  for (let i = messages.length - 1; i >= start; i--)
     if (effortUpdate(messages[i]!) === undefined) next = markMessageAt(next, i, hint, budget)
   return next
 }
@@ -219,8 +230,13 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const hint = makeHint(requestTTL(request))
   const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
   const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
-  const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
+  // The last system part comes first; the first one only adds the base prompt to the tools prefix, so it takes a
+  // breakpoint only when the conversation has left one over.
+  const lastSystem = policy.system
+    ? markSystemPart(request.system, request.system.length - 1, hint, budget)
+    : request.system
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
+  const system = policy.system ? markSystemPart(lastSystem, 0, hint, budget) : lastSystem
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
   return { ...request, tools, system, messages }
@@ -243,5 +259,10 @@ const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   if (!auto) return resolve(request.cache)
   if (route === "openrouter" || route === "vercel-ai-gateway-messages") return gatewayPolicy(request.model.id)
   if (route === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
+  // Only Anthropic's own route: other Messages-compatible endpoints may cache and bill breakpoints differently.
+  if (route === "anthropic-messages") return ANTHROPIC
   return AUTO
 }
+
+// A breakpoint on the second newest message keeps the previous request's tail within the lookback.
+const ANTHROPIC: CachePolicyObject = { ...AUTO, messages: { tail: 2 } }
