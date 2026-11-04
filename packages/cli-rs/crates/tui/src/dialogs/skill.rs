@@ -2,18 +2,16 @@
 //!
 //! "Skills": the location's skills, read once if the store has none, with the description after
 //! the padded name. Choosing one hands its ID to the caller and closes the dialog; the prompt
-//! inserts an `@skill` mention ([`mention`]) and sends it as a skill attachment ([`attachments`]).
+//! inserts an `@skill` mention as a prompt part (`prompt::autocomplete::parts::insert_skill`).
 
 use std::cell::Cell;
 use std::rc::Rc;
 
-use opencode_api::generated::{PromptInputSkillAttachment, PromptMention, SkillID, SkillInfo};
+use opencode_api::generated::{SkillID, SkillInfo};
 use opencode_store::{Catalog, Location};
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opentui::prelude::*;
-use serde_json::{Value, json};
-use unicode_width::UnicodeWidthStr;
 
 use crate::app::Tui;
 
@@ -159,91 +157,4 @@ fn options(skills: &[SkillInfo]) -> Vec<SelectOption<SkillID>> {
             option
         })
         .collect()
-}
-
-/// The prompt's `prompt.skills` pick: inserts `@id ` at `cursor` and records the part in
-/// `prompt` (a `PromptInfo`), unless the prompt already mentions the skill. Returns the text to
-/// insert, or `None`.
-pub fn mention(prompt: &mut Value, text: &str, cursor: u32, id: &SkillID) -> Option<String> {
-    if attachments(prompt, text)
-        .iter()
-        .any(|attachment| &attachment.id == id)
-    {
-        return None;
-    }
-    let mention = format!("@{}", id.0);
-    let part = json!({
-        "id": id.0,
-        "mention": { "start": cursor, "end": cursor + mention.width() as u32, "text": mention },
-    });
-    let skills = prompt
-        .as_object_mut()?
-        .entry("skills")
-        .or_insert_with(|| Value::Array(Vec::new()));
-    if let Value::Array(skills) = skills {
-        // Parts whose mention was edited away go, as their extmarks do in TS.
-        skills.retain(|part| mention_text(part).is_some_and(|mentioned| text.contains(mentioned)));
-        skills.push(part);
-    }
-    Some(format!("{mention} "))
-}
-
-/// The skill parts of `prompt` that `text` still mentions, with offsets where the text has them
-/// now (TS keeps them on extmarks).
-pub fn attachments(prompt: &Value, text: &str) -> Vec<PromptInputSkillAttachment> {
-    let parts = prompt
-        .get("skills")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    parts
-        .iter()
-        .filter_map(|part| {
-            let id = SkillID(part.get("id")?.as_str()?.to_owned());
-            let mention = mention_text(part)?;
-            let at = text.find(mention)?;
-            let start = offset(&text[..at]);
-            Some(PromptInputSkillAttachment {
-                id,
-                mention: Some(PromptMention {
-                    start: f64::from(start),
-                    end: f64::from(start + mention.width() as u32),
-                    text: mention.to_owned(),
-                }),
-            })
-        })
-        .collect()
-}
-
-fn mention_text(part: &Value) -> Option<&str> {
-    part.get("mention")?.get("text")?.as_str()
-}
-
-/// The textarea's cursor offset at the end of `text`: display width, a newline counting one.
-fn offset(text: &str) -> u32 {
-    let lines: Vec<&str> = text.split('\n').collect();
-    (lines.iter().map(|line| line.width()).sum::<usize>() + lines.len() - 1) as u32
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mention_records_the_part_and_attachments_follow_the_text() {
-        let mut prompt = json!({ "text": "" });
-        let id = SkillID("review".into());
-        assert_eq!(
-            mention(&mut prompt, "fix ", 4, &id).as_deref(),
-            Some("@review ")
-        );
-        // A second pick of the same skill while it is mentioned inserts nothing.
-        assert_eq!(mention(&mut prompt, "fix @review ", 12, &id), None);
-        let sent = attachments(&prompt, "please fix @review now");
-        assert_eq!(sent.len(), 1);
-        let mention = sent[0].mention.as_ref().unwrap();
-        assert_eq!((mention.start, mention.end), (11.0, 18.0));
-        assert_eq!(mention.text, "@review");
-        assert!(attachments(&prompt, "please fix now").is_empty());
-    }
 }

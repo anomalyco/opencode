@@ -17,6 +17,7 @@ use opencode_store::{CreateSession, Error, Prompt};
 use opencode_ui::toast::{ToastOptions, Variant};
 use serde_json::Value;
 
+use super::autocomplete::parts;
 use super::draft::Draft;
 use super::editor::{Inner, Mode};
 use crate::app::Tui;
@@ -38,6 +39,13 @@ pub fn submit(prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 }
 
 fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
+    if prompt
+        .autocomplete
+        .get()
+        .is_some_and(|complete| complete.visible().is_some())
+    {
+        return false;
+    }
     let text = prompt.textarea.text();
     let trimmed = text.trim();
     let queue = delivery == SessionInboxDelivery::Queue;
@@ -103,8 +111,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     // Snapshot, then clear before any request: text typed meanwhile survives, and history records
     // exactly what was sent.
     let entry = prompt.snapshot();
-    let skills =
-        Some(crate::dialogs::skill::attachments(&entry, &text)).filter(|skills| !skills.is_empty());
+    let (files, agents, skills) = (parts::files(&entry), parts::agents(&entry), parts::skills(&entry));
     if !trimmed.is_empty() {
         prompt.reset();
     }
@@ -117,7 +124,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 agent: Some(agent.clone()),
                 model: Some(model.clone()),
                 location: Some(LocationPublicRef {
-                    directory: AbsolutePath(tui.directory.clone()),
+                    directory: AbsolutePath(prompt.location(tui).directory),
                 }),
                 ..CreateSession::default()
             });
@@ -186,6 +193,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 session_id: target.clone(),
                 name,
                 text: arguments,
+                files,
+                agents,
                 skills,
                 delivery: Some(Some(delivery)),
                 ..SessionCommandInput::default()
@@ -212,6 +221,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 input: SessionPromptInput {
                     session_id: target.clone(),
                     text,
+                    files,
+                    agents,
                     skills,
                     delivery: Some(Some(delivery)),
                     ..SessionPromptInput::default()
