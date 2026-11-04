@@ -41,8 +41,9 @@ and uses `unicode-segmentation` for graphemes (TS `Intl.Segmenter`). The P-ORACL
   (display math, compact scripts).
 - `symbols.rs`: `symbols.ts`.
 - `lib.rs`: `plugin()`, `render()`, and `renderer()`, the Markdown adapter (`markdown.ts`). The formula is a
-  `Text` with no wrapping, as wide as the formula, inside a `ScrollBox` that scrolls only sideways, with one row
-  of top margin and hidden scrollbars. Structural glyphs (brackets, the radical, box drawing) use
+  `Text` with no wrapping, as wide as the formula, inside a `ScrollBox` that scrolls only sideways, with hidden
+  scrollbars. TS adds one row of top margin. The Rust Markdown already puts a blank row between blocks, so the
+  widget adds none (deviation `F13-latex-leading-row`). Structural glyphs (brackets, the radical, box drawing) use
   `theme.text.muted`. Everything else uses `theme.text.base`. Relations are bold. A source that does not parse
   returns `None`, so Markdown shows the source in its code view.
 
@@ -52,6 +53,11 @@ TS keeps the last frame that parsed while the fence streams, if the new source e
 returns `CodeBlock::previous` (the widget it returned last for that block) when the source does not parse, the
 document is streaming, and the source extends the source of that widget. It keeps a map from widget ID to source
 only for widgets made while streaming. It removes the entry when the block gets a new widget.
+
+When the message completes, `Markdown::streaming(false)` must run the renderer again, so that a retained preview
+over broken math turns back into the source. opentui-rust skipped unchanged blocks there. Its branch
+`rs-plugin-latex` (`markdown: run code-block renderers again when streaming ends`) reruns the renderers of
+custom blocks with their widgets. Mermaid's last-good diagram needs the same change.
 
 TS also checks that the fence is still open. The Rust `CodeBlock` does not say whether the fence closed, so a
 closed fence with a broken formula keeps the preview until the message completes. This is deviation
@@ -64,7 +70,8 @@ closed fence with a broken formula keeps the preview until the message completes
   textbook formulas, malformed input, and the option variants. `tests::layouts_match_typescript` requires all of
   them to be equal.
 - P-COMP: `parity/component/P.2-latex.tsx` renders `TextPart`'s `<markdown>` with the TS plugin's renderer over
-  fences from `markdown.test.ts`. The Rust test renders `opencode_ui::markdown::view` with this renderer and
-  compares every cell.
+  four documents: structures, the adapter cases of `markdown.test.ts`, a wide formula at 30 columns, and invalid
+  math next to an ordinary fence. `tests::transcript_fences_match_typescript` renders the same documents with
+  `opencode_ui::markdown::view` and this renderer. Every cell is equal, colors and attributes included.
 - Behavior tests port `markdown.test.ts`: fallback to source, streaming retention, discard on stop, and no
   reuse across fences.

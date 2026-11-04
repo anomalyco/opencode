@@ -1,0 +1,6 @@
+{
+  "structures": "Before the math.\n\n```latex\n\\frac{x+1}{y-1} = \\sqrt{\\frac{1}{2}}\n```\n\n```math\n\\begin{pmatrix}a & b \\\\ c & d\\end{pmatrix}^2\n```\n\n```latex\n\\sum_{i=1}^{n} i^2 \\le \\binom{n}{k}\n```\n\n```LATEX title=example\n\\begin{cases}x & x>0\\\\x^2+1 & x\\le0\\end{cases}\n```\n\nAfter the math.",
+  "adapter": "Structured math through the adapter:\n\n```latex\n\\sqrt[\\frac{1}{2}]{x}\n```\n\n```tex\n\\left\\|v\\right\\| + \\left(A\\rightarrow B\\right)\n```\n\n```latex\n\\begin{aligned}a&=b+c\\\\&=d\\end{aligned}\n```\n\n```latex\n\\displaylines{x=1\\\\y=2}\n```\n\n```latex\n\\cfrac[l]{1}{12345} \\quad \\underbrace{a+b+c}_{n}\n```\n\n```latex\n\\begin{array}{l|r}a&wide\\\\long&b\\end{array} \\text{中文}=x\n```",
+  "wide": "Wide:\n\n```latex\n\\text{Start a very long formula with enough content to overflow Finish}\n```\n\nEnd.",
+  "invalid": "Invalid math stays source:\n\n```latex\n\\frac{1}{\n```\n\n```latex\n\\unsupported{x}\n```\n\n```typescript\nconst x = 2\n```\n\nDone."
+}
