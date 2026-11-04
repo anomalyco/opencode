@@ -18,6 +18,17 @@ describe("ShellParse", () => {
     })
   })
 
+  test("keeps leading env assignments and redirects in saved command prefixes", async () => {
+    for (const [command, save] of [
+      ["FOO=bar git status", "FOO=bar git status *"],
+      ["2>/dev/null curl -s https://example.com", "2>/dev/null curl *"],
+      ["2> err cat", "2> err cat *"],
+    ]) {
+      const scanned = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+      expect(scanned.commands).toEqual([{ resource: command, save }])
+    }
+  })
+
   test("rejects malformed syntax with an explicit scanner error", async () => {
     const malformed = await Effect.runPromiseExit(ShellParse.scan('echo "', "/bin/bash", "/workspace"))
     expect(malformed).toMatchObject({

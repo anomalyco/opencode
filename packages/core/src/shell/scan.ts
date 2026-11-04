@@ -23,6 +23,8 @@ type Command = {
   redirectWordCount?: number
   // Exclusive prefix end relative to resource for commandless or group redirects.
   redirectPrefixEnd?: number
+  // Exclusive end relative to resource of leading env assignments or redirects before the executable words.
+  prefixEnd?: number
 }
 
 // Opaque describes a parsing limitation, not a permission decision.
@@ -175,6 +177,8 @@ type BashState = {
   nestedCommands: Command[]
   words: string[]
   rawWords: string[]
+  // Source offsets of each word's start, aligned with `words`.
+  wordStarts: number[]
   // Pending heredocs, shared with nested groups: a body starts after the next newline token at any nesting.
   heredocs: BashHeredoc[]
   structures: Array<{
@@ -295,6 +299,7 @@ function finishBashWord(state: BashState) {
     state.words.push(state.word)
     // Unquoted trailing continuations are ignored syntax, not part of the raw token.
     state.rawWords.push(state.input.slice(state.wordStart, state.wordEnd))
+    state.wordStarts.push(state.wordStart)
   }
   if (state.redirectTarget) {
     if (!state.dupRedirect || !/^(?:\d+-?|-)$/.test(state.input.slice(state.wordStart, state.wordEnd)))
@@ -384,10 +389,12 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   let owner: Command | undefined
   if (name >= 0 && !inHeader) {
     const resource = state.input.slice(state.commandStart, state.wordEnd).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
+    const commandStart = state.commandStart ?? state.wordStarts[name]
     const command: Command = {
       resource,
       words: state.words.slice(name),
       rawWords: state.rawWords.slice(name),
+      ...(state.wordStarts[name] > commandStart ? { prefixEnd: state.wordStarts[name] - commandStart } : {}),
       ...(name === 0 &&
       !state.hasRedirect &&
       BASH_DECLARATIONS.has(state.rawWords[0]) &&
@@ -476,6 +483,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   if (!inHeader && (state.words.length > 0 || state.hasRedirect)) bashStatement(state)
   state.words.length = 0
   state.rawWords.length = 0
+  state.wordStarts.length = 0
   state.commandWordIndex = -1
   state.commandStart = undefined
   state.dupRedirect = false
@@ -506,6 +514,7 @@ function scanBash(
     nestedCommands: [],
     words: [],
     rawWords: [],
+    wordStarts: [],
     heredocs: heredocs ?? [],
     structures: [],
     word: "",

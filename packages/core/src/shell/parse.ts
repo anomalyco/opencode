@@ -239,9 +239,11 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
                 const separator = /^\s+(?:`(?:\r\n|\r|\n)\s*)?/.exec(item.resource.slice(boundary))?.[0]
                 return `${item.resource.slice(0, boundary)}${separator ?? " "}*`
               })()
+      // Leading env assignments and redirects stay in the saved pattern so it covers the approved command.
+      const leading = item.prefixEnd === undefined ? "" : item.resource.slice(0, item.prefixEnd)
       output.commands.push({
         resource: item.resource,
-        save,
+        save: leading && !/[*?\\]/.test(leading) ? `${leading}${save}` : save,
       })
     }
     return Effect.succeed(output)
