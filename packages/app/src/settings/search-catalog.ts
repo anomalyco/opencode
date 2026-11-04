@@ -126,6 +126,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "question answers keyboard dock redesign",
   },
   {
+    tab: "experimental",
+    label: "settings.timeline.row.newMessagesDivider.title",
+    description: "settings.timeline.row.newMessagesDivider.description",
+    target: "settings-new-messages-divider",
+    keywords: "unread new messages divider return session",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",
