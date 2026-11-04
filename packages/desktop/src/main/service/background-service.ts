@@ -15,21 +15,35 @@ const RegisteredService = Schema.Struct({ version: Schema.optional(Schema.String
 export interface Interface {
   readonly connection: Effect.Effect<SidecarCredentials.Data>
   readonly reconnect: Effect.Effect<SidecarCredentials.Data>
+  /** Stops the registered background service and its terminals. */
+  readonly stop: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/BackgroundService") {}
+
+// A tray quit stops the service for good. A renderer that notices the disconnect must not make the
+// app start a replacement it would immediately leave behind.
+let stopping = false
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
+    const path = yield* Path.Path
 
-    return Service.of(
-      yield* BackgroundServiceState.make({
+    return Service.of({
+      ...(yield* BackgroundServiceState.make({
         initial: connect("initial").pipe(Effect.provide(context)),
-        reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
-      }),
-    )
+        reconnect: Effect.suspend(() => {
+          const cached = SidecarCredentials.get()
+
+          if (stopping && cached) return Effect.succeed(cached)
+
+          return connect("reconnect")
+        }).pipe(Effect.provide(context), Effect.orDie),
+      })),
+      stop: Effect.suspend(() => stopService(path)),
+    })
   }),
 )
 
@@ -46,14 +60,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file =
-    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-      ? path.join(
-          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "opencode",
-          "service-local.json",
-        )
-      : undefined
+  const file = registrationFile(path)
 
   const ensure = (required = version) =>
     client.Service.ensure({
@@ -119,6 +126,29 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   return ready
 })
+
+/** Stops the registered service so a full quit leaves no detached server or terminals behind. */
+const stopService = Effect.fn("BackgroundService.stop")(function* (path: Path.Path) {
+  stopping = true
+
+  if (!app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1")
+    process.env.XDG_STATE_HOME = app.getPath("userData")
+  const client = yield* Effect.promise(() => import("@opencode/client/service"))
+
+  yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path), pty: "clear" })).pipe(
+    Effect.catch((error) => Effect.logWarning("failed to stop v2 background service", { error })),
+  )
+})
+
+/** The registration file the service writes; `local` channels keep their own instance. */
+const registrationFile = (path: Path.Path) =>
+  process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+    ? path.join(
+        process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+        "opencode",
+        "service-local.json",
+      )
+    : undefined
 
 function endpoint(url: string | undefined) {
   if (!url || !URL.canParse(url)) return {}

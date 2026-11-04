@@ -155,6 +155,15 @@ function iconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
   return path.join(iconsDir(path, paths), `icon.${process.platform === "win32" ? "ico" : "png"}`)
 }
 
+/** The tray icon: a template on macOS, the app icon on Windows, and a status-area PNG on Linux. */
+export function trayIconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
+  if (process.platform === "darwin") return path.join(iconsDir(path, paths), "trayTemplate.png")
+
+  if (process.platform === "win32") return path.join(iconsDir(path, paths), "icon.ico")
+
+  return path.join(iconsDir(path, paths), "tray.png")
+}
+
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
   return titlebarOverlay(theme.mode ?? tone(), zoom)
 }

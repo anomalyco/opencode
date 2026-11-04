@@ -53,6 +53,12 @@ let relaunchHandler = () => {
   app.exit(0)
 }
 
+// Closing the last window hides it instead, so the tray keeps the app reachable. Only Windows and
+// Linux need this: macOS closes windows without quitting, and the Dock icon brings the app back.
+let hideOnClose = false
+
+let quitting = false
+
 export {
   getBackgroundColor,
   getPinchZoomEnabled,
@@ -76,8 +82,17 @@ export function setRelaunchHandler(handler: () => void) {
   }
 }
 
-export function setAppQuitting(quitting = true) {
-  registry.setQuitting(quitting)
+export function setAppQuitting(quittingValue = true) {
+  quitting = quittingValue
+  registry.setQuitting(quittingValue)
+}
+
+/**
+ * Hides the last window instead of closing it, so the tray stays the only way to reach a running
+ * app. Callers enable it only after the tray icon exists.
+ */
+export function setHideOnClose(enabled = true) {
+  hideOnClose = enabled && process.platform !== "darwin"
 }
 
 export function getLastFocusedWindow() {
@@ -222,7 +237,13 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
     registry.register(id, win)
     win.on("focus", () => registry.focused(id))
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
-    win.on("session-end", () => registry.setQuitting())
+    win.on("session-end", () => setAppQuitting())
+    win.on("close", (event) => {
+      // A tray quit closes windows itself, and a window with siblings still closes normally.
+      if (!hideOnClose || quitting || getMainWindows().length > 1) return
+      event.preventDefault()
+      win.hide()
+    })
     win.on("closed", () => {
       if (!registry.closed(id)) return
       runFork(
