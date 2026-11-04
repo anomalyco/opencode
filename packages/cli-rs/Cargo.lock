@@ -1053,7 +1053,15 @@ dependencies = [
 name = "opencode-store"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures-util",
+ "indexmap",
+ "log",
  "opencode-api",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
