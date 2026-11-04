@@ -1,5 +1,10 @@
-import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
-import { sessionNotFoundError } from "@/runtime/server/errors"
+import { createMemo, createRenderEffect, createSignal, on, onCleanup, untrack } from "solid-js"
+import {
+  createSessionResolutionState,
+  transitionSessionResolution,
+  type SessionResolutionEffect,
+  type SessionResolutionEvent,
+} from "./resolution-machine"
 
 type SessionStore<T> = {
   get: (id: string) => T | undefined
@@ -12,94 +17,74 @@ type SessionStore<T> = {
   }
 }
 
-type Resolution<T> = { id: string; store: SessionStore<T> } & (
-  | { state: "pending" }
-  | { state: "settled" }
-  | { state: "failed"; failure: unknown }
-)
-
-// Reactive target session for the session route, read from the data store.
-// All session tabs on a server share one route instance, so the target session ID
-// changes in place; the effect is only a trigger that starts resolution for the
-// current target, and each run cancels the previous one through onCleanup so a
-// late result from an abandoned target is dropped. Resolution is imperative rather
-// than a resource on purpose: a resource created here would be created inside the
-// router's navigation transition, and suspending that transition deadlocks the URL
-// commit and double-mounts the session header portals from the transition's shadow
-// render.
-//
-// The returned accessor is a pure derivation. The sync cache is authoritative, and
-// status only applies while it matches the current target (store + session ID): on
-// navigation or store replacement the memo re-evaluates before the trigger runs,
-// so trusting a previous target's settlement would fabricate a not-found for a
-// session that simply has not resolved yet. Resolve failures rethrow on read so
-// the enclosing SessionRouteErrorBoundary renders the scoped session error.
+// Drives the session route's resolution machine (resolution-machine.ts) from the data store.
+// All session tabs on a server share one route instance, so the target session ID changes in
+// place; each change is a new target for the machine, which rejects results from earlier ones.
+// Resolution is imperative rather than a resource on purpose: a resource created here would be
+// created inside the router's navigation transition, and suspending that transition deadlocks the
+// URL commit and double-mounts the session header portals from the transition's shadow render.
 export function createSessionResolution<T>(
   sessionID: () => string | undefined,
   sessions: () => SessionStore<T>,
   options?: { children?: boolean; connected?: () => boolean },
 ) {
-  const cached = createMemo(() => {
-    const id = sessionID()
+  const [state, setState] = createSignal(createSessionResolutionState<T, SessionStore<T>>())
+  const connected = createMemo(() => options?.connected?.() ?? true)
+  // Without a live connection or child sessions to load, cached metadata is already complete.
+  const refresh = !!options?.children || !!options?.connected
 
-    if (!id) return
+  const run = (effect: SessionResolutionEffect<SessionStore<T>>) => {
+    const store = effect.target.scope
+    const id = effect.target.sessionID
 
-    return sessions().get(id)
-  })
-
-  const [status, setStatus] = createSignal<Resolution<T>>()
-
-  // Start independent reads before constructing the selected view, including
-  // when its metadata is cached but its transcript has never been loaded.
-  createRenderEffect(
-    on([sessionID, sessions, () => options?.connected?.() ?? true] as const, ([id, store, connected]) => {
-      if (!id || !connected) return
-      let stale = false
-      onCleanup(() => {
-        stale = true
-      })
-      // The timeline owns message errors; metadata resolution stays independent. Queued inputs
-      // ride along so a reconnect refreshes them with the transcript instead of leaving the
-      // pre-disconnect queue on screen.
+    if (effect.type === "sync.transcript") {
       void store.message.sync(id).catch(() => undefined)
       void store.pending.sync(id).catch(() => undefined)
 
-      if (cached() && !options?.children && !options?.connected) {
-        setStatus({ id, store, state: "settled" })
+      return
+    }
+
+    store
+      .sync(id, options?.children ? { children: true } : undefined)
+      .then(() =>
+        dispatch({ type: "sync.settled", target: effect.target, attempt: effect.attempt, session: store.get(id) }),
+      )
+      .catch((error) => dispatch({ type: "sync.failed", target: effect.target, attempt: effect.attempt, error }))
+  }
+
+  const dispatch = (event: SessionResolutionEvent<T, SessionStore<T>>) => {
+    const result = transitionSessionResolution(untrack(state), event)
+    setState(() => result.state)
+    result.effects.forEach(run)
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  createRenderEffect(
+    on([sessionID, sessions] as const, ([id, store]) => {
+      if (!id) {
+        dispatch({ type: "target.changed", target: undefined, cached: undefined, connected: false, refresh })
 
         return
       }
 
-      setStatus({ id, store, state: "pending" })
-      store
-        .sync(id, options)
-        .then(() => {
-          if (!stale) setStatus({ id, store, state: "settled" })
-        })
-        .catch((failure) => {
-          if (!stale) setStatus({ id, store, state: "failed", failure })
-        })
+      const target = { scope: store, sessionID: id }
+      const cached = createMemo(() => store.get(id))
+      dispatch({ type: "target.changed", target, cached: cached(), connected: connected(), refresh })
+
+      // Owned by this target's run, so both are disposed before the next target is dispatched.
+      createRenderEffect(on(cached, (session) => dispatch({ type: "cache.changed", target, session }), { defer: true }))
+      createRenderEffect(
+        on(
+          connected,
+          (value) => {
+            if (value) dispatch({ type: "connected", target, refresh })
+          },
+          { defer: true },
+        ),
+      )
     }),
   )
 
-  return createMemo(() => {
-    const id = sessionID()
-
-    if (!id) return
-    const value = cached()
-
-    if (value) return value
-    const state = status()
-
-    if (!state || state.id !== id || state.store !== sessions()) return undefined
-
-    if (state.state === "failed") throw state.failure
-
-    // A session missing after settlement was deleted, possibly by another client.
-    // Match the resolve error so the boundary shows the
-    // session not found fallback.
-    if (state.state === "settled") throw sessionNotFoundError(id)
-
-    return undefined
-  })
+  return state
 }
