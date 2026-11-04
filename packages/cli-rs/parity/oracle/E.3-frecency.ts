@@ -6,6 +6,7 @@
 // The provider loads <state>/frecency.jsonl on mount, which rewrites it as TypeScript keeps it. Each path is
 // then opened once (`updateFrecency`). Prints the frequencies by absolute path, after the updates.
 
+import { statSync } from "node:fs"
 import { resolve } from "node:path"
 
 const [root, state, cwd] = process.argv.slice(2)
@@ -20,6 +21,7 @@ const { FrecencyProvider, useFrecency } = await load("./prompt/frecency")
 const paths: string[] = await Bun.stdin.json()
 
 let frecency: { updateFrecency(path: string): void; data(): Record<string, { frequency: number }> }
+const mounted = Date.now()
 const app = await testRender(() =>
   createComponent(TuiPathsProvider, {
     value: { cwd, home: state, state, worktree: cwd },
@@ -43,6 +45,8 @@ const until = async (done: () => Promise<boolean> | boolean) => {
 const file = Bun.file(`${state}/frecency.jsonl`)
 if ((await file.exists()) && (await file.text()).trim()) {
   await until(() => Object.keys(frecency!.data()).length > 0)
+  // The load's rewrite is not awaited, and an append that lands before it is lost: wait for it.
+  await until(() => statSync(file.name!).mtimeMs >= mounted)
 }
 const loaded = Object.keys(frecency!.data()).length
 for (const path of paths) frecency!.updateFrecency(path)
