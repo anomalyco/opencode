@@ -225,7 +225,7 @@ pub struct ModelRef {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProviderSettingsTimeout {
-    Number(f64),
+    Number(#[serde(serialize_with = "crate::ser::number")] f64),
     Bool(bool),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
@@ -1092,14 +1092,19 @@ pub type MoneyUSD = f64;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TokenUsageInfoCache {
+    #[serde(serialize_with = "crate::ser::number")]
     pub read: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub write: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TokenUsageInfo {
+    #[serde(serialize_with = "crate::ser::number")]
     pub input: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub output: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub reasoning: f64,
     pub cache: TokenUsageInfoCache,
 }
@@ -1149,15 +1154,33 @@ impl<'de> Deserialize<'de> for SessionInfoOutcome {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInfoTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub updated: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub busy: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub idle: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub viewed: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub archived: Option<f64>,
 }
 
@@ -1272,6 +1295,7 @@ pub struct SessionInfo {
     pub agent: Option<AgentID>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelRef>,
+    #[serde(serialize_with = "crate::ser::number")]
     pub cost: MoneyUSD,
     pub tokens: TokenUsageInfo,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1485,7 +1509,9 @@ impl PromptFileSource {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PromptMention {
+    #[serde(serialize_with = "crate::ser::number")]
     pub start: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub end: f64,
     pub text: String,
 }
@@ -1562,6 +1588,7 @@ pub struct SessionPromptInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInboxUserTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
 }
 
@@ -1889,8 +1916,13 @@ pub struct SessionMessageSkill {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageShellTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub completed: Option<f64>,
 }
 
@@ -1972,7 +2004,7 @@ impl<'de> Deserialize<'de> for SessionMessageShellStatus {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum SessionMessageShellExit {
-    Number(f64),
+    Number(#[serde(serialize_with = "crate::ser::number")] f64),
     String(String),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
@@ -2018,10 +2050,19 @@ pub struct SessionMessageShell {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub streamed: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub completed: Option<f64>,
 }
 
@@ -2196,10 +2237,19 @@ impl SessionMessageAssistantToolState {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantToolTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ran: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub completed: Option<f64>,
 }
 
@@ -2318,6 +2368,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantFinish {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantRetry {
     pub attempt: i64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub at: f64,
     pub error: SessionStructuredError,
 }
@@ -2340,7 +2391,11 @@ pub struct SessionMessageAssistant {
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -2416,7 +2471,11 @@ pub struct SessionMessageCompactionCompleted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
     pub summary: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -2432,7 +2491,11 @@ pub struct SessionMessageCompactionFailed {
     pub status: String,
     pub reason: SessionMessageCompactionRunningReason,
     pub error: SessionStructuredError,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -2775,7 +2838,7 @@ impl<'de> Deserialize<'de> for FormWhenOp {
 #[serde(untagged)]
 pub enum FormWhenValue {
     String(String),
-    Number(f64),
+    Number(#[serde(serialize_with = "crate::ser::number")] f64),
     Bool(bool),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
@@ -3082,7 +3145,7 @@ pub struct FormStatePending {
 #[serde(untagged)]
 pub enum FormValue {
     String(String),
-    Number(f64),
+    Number(#[serde(serialize_with = "crate::ser::number")] f64),
     Bool(bool),
     Array(Vec<String>),
     /// A shape this client does not know, kept as it arrived.
@@ -3262,7 +3325,9 @@ pub struct ExperimentalSessionStatsInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatsInfoRange {
+    #[serde(serialize_with = "crate::ser::number")]
     pub from: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub to: f64,
 }
 
@@ -3295,6 +3360,7 @@ pub struct SessionStatsToolUsage {
     #[serde(
         rename = "durationP50",
         default,
+        serialize_with = "crate::ser::option_number",
         skip_serializing_if = "Option::is_none"
     )]
     pub duration_p50: Option<f64>,
@@ -3356,6 +3422,7 @@ pub struct SessionStatsModelUsage {
     pub model: ModelRef,
     pub steps: i64,
     pub tokens: TokenUsageInfo,
+    #[serde(serialize_with = "crate::ser::number")]
     pub cost: MoneyUSD,
 }
 
@@ -3367,6 +3434,7 @@ pub struct SessionStatsInfo {
     pub prompts: i64,
     pub steps: i64,
     pub tokens: TokenUsageInfo,
+    #[serde(serialize_with = "crate::ser::number")]
     pub cost: MoneyUSD,
     pub tools: SessionStatsTools,
     #[serde(rename = "activeDays")]
@@ -3595,6 +3663,7 @@ pub struct SessionCreatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionCreated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3617,6 +3686,7 @@ pub struct SessionAgentSelectedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionAgentSelected {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3639,6 +3709,7 @@ pub struct SessionModelSelectedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionModelSelected {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3663,6 +3734,7 @@ pub struct SessionMovedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMoved {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3683,6 +3755,7 @@ pub struct SessionRenamedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionRenamed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3703,6 +3776,7 @@ pub struct SessionMetadataUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMetadataUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3723,6 +3797,7 @@ pub struct SessionPermissionsData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionPermissions {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3737,12 +3812,14 @@ pub struct SessionPermissions {
 pub struct SessionViewedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub idle: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionViewed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3762,6 +3839,7 @@ pub struct SessionArchivedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionArchived {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3775,6 +3853,7 @@ pub struct SessionArchived {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionUnarchived {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3796,6 +3875,7 @@ pub struct SessionDeletedDurable {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionDeleted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3865,6 +3945,7 @@ pub struct SessionForkedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionForked {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3886,6 +3967,7 @@ pub struct SessionInboxDeliveredData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInboxDelivered {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3986,6 +4068,7 @@ pub struct SessionInboxEnqueuedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxEnqueued {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -3999,6 +4082,7 @@ pub struct SessionInboxEnqueued {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInboxCancelled {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4021,6 +4105,7 @@ pub struct SessionInboxDeliveryChangedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxDeliveryChanged {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4034,6 +4119,7 @@ pub struct SessionInboxDeliveryChanged {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionExecutionStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4047,6 +4133,7 @@ pub struct SessionExecutionStarted {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionExecutionSucceeded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4067,6 +4154,7 @@ pub struct SessionExecutionFailedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionExecutionFailed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4133,6 +4221,7 @@ pub struct SessionExecutionInterruptedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionExecutionInterrupted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4155,6 +4244,7 @@ pub struct SessionInstructionsUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInstructionsUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4179,6 +4269,7 @@ pub struct SessionSyntheticData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionSynthetic {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4201,6 +4292,7 @@ pub struct SessionSkillActivatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionSkillActivated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4213,8 +4305,13 @@ pub struct SessionSkillActivated {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellInfoTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub started: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub completed: Option<f64>,
 }
 
@@ -4228,7 +4325,11 @@ pub struct ShellInfo {
     pub file: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub exit: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<String>,
@@ -4246,6 +4347,7 @@ pub struct SessionShellStartedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionShellStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4267,6 +4369,7 @@ pub struct SessionShellEndedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionShellEnded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4293,6 +4396,7 @@ pub struct SessionStepStartedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStepStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4314,6 +4418,7 @@ pub struct SessionStepStreamedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStepStreamed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4335,6 +4440,7 @@ pub struct SessionStepEndedData {
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
+    #[serde(serialize_with = "crate::ser::number")]
     pub cost: MoneyUSD,
     pub tokens: TokenUsageInfo,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4346,6 +4452,7 @@ pub struct SessionStepEndedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionStepEnded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4369,7 +4476,11 @@ pub struct SessionStepFailedData {
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -4382,6 +4493,7 @@ pub struct SessionStepFailedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStepFailed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4404,6 +4516,7 @@ pub struct SessionTextStartedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionTextStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4429,6 +4542,7 @@ pub struct SessionTextEndedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionTextEnded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4453,6 +4567,7 @@ pub struct SessionReasoningStartedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionReasoningStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4466,6 +4581,7 @@ pub struct SessionReasoningStarted {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionReasoningEnded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4489,6 +4605,7 @@ pub struct SessionToolInputStartedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolInputStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4512,6 +4629,7 @@ pub struct SessionToolInputEndedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolInputEnded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4538,6 +4656,7 @@ pub struct SessionToolCalledData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolCalled {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4566,6 +4685,7 @@ pub struct SessionToolSuccessData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolSuccess {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4596,6 +4716,7 @@ pub struct SessionToolFailedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolFailed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4620,6 +4741,7 @@ pub struct SessionRetryScheduledData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionRetryScheduled {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4642,6 +4764,7 @@ pub struct SessionCompactionStartedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCompactionStarted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4662,7 +4785,11 @@ pub struct SessionCompactionEndedData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
     pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -4671,6 +4798,7 @@ pub struct SessionCompactionEndedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCompactionEnded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4689,7 +4817,11 @@ pub struct SessionCompactionFailedData {
     pub error: SessionStructuredError,
     #[serde(rename = "inputID", default, skip_serializing_if = "Option::is_none")]
     pub input_id: Option<SessionMessageID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -4698,6 +4830,7 @@ pub struct SessionCompactionFailedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCompactionFailed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4718,6 +4851,7 @@ pub struct SessionRevertStagedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionRevertStaged {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4731,6 +4865,7 @@ pub struct SessionRevertStaged {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionRevertCleared {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4751,6 +4886,7 @@ pub struct SessionRevertCommittedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionRevertCommitted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4806,6 +4942,7 @@ pub struct SessionUsageRecordedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     pub source: SessionUsageRecordedDataSource,
+    #[serde(serialize_with = "crate::ser::number")]
     pub cost: MoneyUSD,
     pub tokens: TokenUsageInfo,
 }
@@ -4813,6 +4950,7 @@ pub struct SessionUsageRecordedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionUsageRecorded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -4873,6 +5011,7 @@ pub struct SessionMessageContentUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageContentUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -5593,6 +5732,7 @@ pub struct ModelVariant {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelInfoTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub released: f64,
 }
 
@@ -5607,7 +5747,9 @@ pub type MoneyUSDPerMillionTokens = f64;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelCostCache {
+    #[serde(serialize_with = "crate::ser::number")]
     pub read: MoneyUSDPerMillionTokens,
+    #[serde(serialize_with = "crate::ser::number")]
     pub write: MoneyUSDPerMillionTokens,
 }
 
@@ -5615,7 +5757,9 @@ pub struct ModelCostCache {
 pub struct ModelCost {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier: Option<ModelCostTier>,
+    #[serde(serialize_with = "crate::ser::number")]
     pub input: MoneyUSDPerMillionTokens,
+    #[serde(serialize_with = "crate::ser::number")]
     pub output: MoneyUSDPerMillionTokens,
     pub cache: ModelCostCache,
 }
@@ -5797,9 +5941,17 @@ pub struct GenerateImageOutput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateUsage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub input: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub output: Option<f64>,
 }
 
@@ -5809,7 +5961,11 @@ pub type GenerateNative = IndexMap<String, serde_json::Value>;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateImageResult {
     pub images: Vec<GenerateImageOutput>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<GenerateUsage>,
@@ -5989,12 +6145,14 @@ pub struct ExperimentalGenerateDecisionsInput {
 pub struct GeneratePredicateAnswer {
     pub r#type: String,
     pub name: String,
+    #[serde(serialize_with = "crate::ser::number")]
     pub probability: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GenerateChoiceAnswerProbabilitiesItem {
     pub value: GenerateChoiceValue,
+    #[serde(serialize_with = "crate::ser::number")]
     pub probability: f64,
 }
 
@@ -6004,6 +6162,7 @@ pub struct GenerateChoiceAnswer {
     pub name: String,
     pub choice: GenerateChoiceValue,
     pub probabilities: Vec<GenerateChoiceAnswerProbabilitiesItem>,
+    #[serde(serialize_with = "crate::ser::number")]
     pub confidence: f64,
 }
 
@@ -6011,6 +6170,7 @@ pub struct GenerateChoiceAnswer {
 pub struct GenerateScoreAnswerProbabilitiesItem {
     pub value: i64,
     pub label: String,
+    #[serde(serialize_with = "crate::ser::number")]
     pub probability: f64,
 }
 
@@ -6018,8 +6178,10 @@ pub struct GenerateScoreAnswerProbabilitiesItem {
 pub struct GenerateScoreAnswer {
     pub r#type: String,
     pub name: String,
+    #[serde(serialize_with = "crate::ser::number")]
     pub score: f64,
     pub probabilities: Vec<GenerateScoreAnswerProbabilitiesItem>,
+    #[serde(serialize_with = "crate::ser::number")]
     pub confidence: f64,
 }
 
@@ -6076,7 +6238,11 @@ impl GenerateDecisionAnswer {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateDecisionResult {
     pub answers: Vec<GenerateDecisionAnswer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<GenerateUsage>,
@@ -6147,7 +6313,11 @@ pub struct ExperimentalVoiceModelsOutput {
 pub struct VoiceWebRTCTransportInput {
     pub r#type: String,
     pub sdp: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub dcid: Option<f64>,
 }
 
@@ -6210,7 +6380,7 @@ pub struct VoiceWebSocketTransport {
     pub r#type: String,
     pub url: String,
     pub token: String,
-    #[serde(rename = "expiresAt")]
+    #[serde(rename = "expiresAt", serialize_with = "crate::ser::number")]
     pub expires_at: f64,
 }
 
@@ -6816,7 +6986,9 @@ impl<'de> Deserialize<'de> for IntegrationAttemptMode {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub expires: f64,
 }
 
@@ -7725,7 +7897,9 @@ impl From<&str> for PermissionSavedID {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PermissionSavedInfoTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub updated: f64,
 }
 
@@ -8037,6 +8211,7 @@ pub struct LocationShutdownData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocationShutdown {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8052,6 +8227,7 @@ pub struct ModelsDevRefreshedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelsDevRefreshed {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8067,6 +8243,7 @@ pub struct CredentialUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8087,6 +8264,7 @@ pub struct CredentialSwitchedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialSwitched {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8102,6 +8280,7 @@ pub struct IntegrationUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8117,6 +8296,7 @@ pub struct ProviderUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8132,6 +8312,7 @@ pub struct ModelUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8147,6 +8328,7 @@ pub struct AgentUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AgentUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8160,6 +8342,7 @@ pub struct AgentUpdated {
 pub struct SessionUsageUpdatedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub cost: MoneyUSD,
     pub tokens: TokenUsageInfo,
 }
@@ -8167,6 +8350,7 @@ pub struct SessionUsageUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionUsageUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8189,6 +8373,7 @@ pub struct SessionTextDeltaData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionTextDelta {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8201,6 +8386,7 @@ pub struct SessionTextDelta {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionReasoningDelta {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8223,6 +8409,7 @@ pub struct SessionToolInputDeltaData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolInputDelta {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8245,6 +8432,7 @@ pub struct SessionToolProgressData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionToolProgress {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8264,6 +8452,7 @@ pub struct SessionCompactionDeltaData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionCompactionDelta {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8325,6 +8514,7 @@ pub struct FilesystemChangedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FilesystemChanged {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8340,6 +8530,7 @@ pub struct ReferenceUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ReferenceUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8369,6 +8560,7 @@ pub struct PermissionAskedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PermissionAsked {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8390,6 +8582,7 @@ pub struct PermissionRepliedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PermissionReplied {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8405,6 +8598,7 @@ pub struct PluginUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8433,6 +8627,7 @@ pub struct ProjectUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProjectUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8451,6 +8646,7 @@ pub struct WorktreeUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WorktreeUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8473,6 +8669,7 @@ pub struct WorktreeResolvedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WorktreeResolved {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8489,6 +8686,7 @@ pub struct CommandUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CommandUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8504,6 +8702,7 @@ pub struct ConfigUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8519,6 +8718,7 @@ pub struct SkillUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SkillUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8618,6 +8818,7 @@ pub struct PtyCreatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PtyCreated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8630,6 +8831,7 @@ pub struct PtyCreated {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PtyUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8649,6 +8851,7 @@ pub struct PtyExitedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PtyExited {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8666,6 +8869,7 @@ pub struct PtyDeletedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PtyDeleted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8718,6 +8922,7 @@ pub struct PersistentPtyAddedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistentPtyAdded {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8738,6 +8943,7 @@ pub struct PersistentPtyRemovedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PersistentPtyRemoved {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8750,6 +8956,7 @@ pub struct PersistentPtyRemoved {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistentPtyUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8767,6 +8974,7 @@ pub struct ShellCreatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellCreated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8779,7 +8987,11 @@ pub struct ShellCreated {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellExitedData {
     pub id: ShellID,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub exit: Option<f64>,
     pub status: SessionMessageShellStatus,
 }
@@ -8787,6 +8999,7 @@ pub struct ShellExitedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellExited {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8804,6 +9017,7 @@ pub struct ShellDeletedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellDeleted {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8821,6 +9035,7 @@ pub struct FormCreatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormCreated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8841,6 +9056,7 @@ pub struct FormRepliedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormReplied {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8860,6 +9076,7 @@ pub struct FormCancelledData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormCancelled {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8875,6 +9092,7 @@ pub struct WebsearchUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebsearchUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8890,6 +9108,7 @@ pub struct ArtifactUpdatedData {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8978,6 +9197,7 @@ pub struct SessionStatusUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionStatusUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -8990,6 +9210,7 @@ pub struct SessionStatusUpdated {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionIdle {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9007,6 +9228,7 @@ pub struct TuiPromptAppendData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TuiPromptAppend {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9024,6 +9246,7 @@ pub struct TuiCommandExecuteData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TuiCommandExecute {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9092,6 +9315,7 @@ pub struct TuiToastShowData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TuiToastShow {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9104,6 +9328,7 @@ pub struct TuiToastShow {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TuiSessionSelect {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9121,6 +9346,7 @@ pub struct InstallationUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InstallationUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9133,6 +9359,7 @@ pub struct InstallationUpdated {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InstallationUpdateAvailable {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9151,6 +9378,7 @@ pub struct VcsBranchUpdatedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VcsBranchUpdated {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9168,6 +9396,7 @@ pub struct McpStatusChangedData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusChanged {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9180,6 +9409,7 @@ pub struct McpStatusChanged {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpResourcesChanged {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9192,6 +9422,7 @@ pub struct McpResourcesChanged {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventRpc {
     pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -9764,7 +9995,7 @@ pub struct PersistentPtyHandoff {
     #[serde(rename = "instanceID")]
     pub instance_id: String,
     pub ticket: String,
-    #[serde(rename = "expiresAt")]
+    #[serde(rename = "expiresAt", serialize_with = "crate::ser::number")]
     pub expires_at: f64,
 }
 
@@ -10288,9 +10519,19 @@ pub struct ScheduleInfo {
     pub until: Option<ScheduleCondition>,
     pub action: ScheduleActionPrompt,
     pub status: ScheduleStatus,
-    #[serde(rename = "nextDueAt", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "nextDueAt",
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub next_due_at: Option<f64>,
-    #[serde(rename = "endsAt", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "endsAt",
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ends_at: Option<f64>,
     #[serde(
         rename = "remainingRuns",
@@ -10303,6 +10544,7 @@ pub struct ScheduleInfo {
     #[serde(
         rename = "lastFiredAt",
         default,
+        serialize_with = "crate::ser::option_number",
         skip_serializing_if = "Option::is_none"
     )]
     pub last_fired_at: Option<f64>,
@@ -10501,7 +10743,9 @@ impl From<&str> for ArtifactID {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub updated: f64,
 }
 
@@ -10693,8 +10937,13 @@ pub struct ExperimentalJobListInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct JobTime {
+    #[serde(serialize_with = "crate::ser::number")]
     pub started: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub completed: Option<f64>,
 }
 
@@ -11210,13 +11459,15 @@ pub struct DebugHeapDumpInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DebugHeapDumpOutputMemory {
+    #[serde(serialize_with = "crate::ser::number")]
     pub rss: f64,
-    #[serde(rename = "heapTotal")]
+    #[serde(rename = "heapTotal", serialize_with = "crate::ser::number")]
     pub heap_total: f64,
-    #[serde(rename = "heapUsed")]
+    #[serde(rename = "heapUsed", serialize_with = "crate::ser::number")]
     pub heap_used: f64,
+    #[serde(serialize_with = "crate::ser::number")]
     pub external: f64,
-    #[serde(rename = "arrayBuffers")]
+    #[serde(rename = "arrayBuffers", serialize_with = "crate::ser::number")]
     pub array_buffers: f64,
 }
 
@@ -11399,7 +11650,11 @@ pub struct WebsearchQueryInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebSearchResultTime {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub published: Option<f64>,
 }
 
@@ -11443,9 +11698,10 @@ pub struct UsageLimitsInfoWorkspace {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct UsageLimitsMeter {
+    #[serde(serialize_with = "crate::ser::number")]
     pub percent: f64,
     pub limited: bool,
-    #[serde(rename = "resetsAt")]
+    #[serde(rename = "resetsAt", serialize_with = "crate::ser::number")]
     pub resets_at: f64,
 }
 
@@ -11583,14 +11839,20 @@ pub struct UsageLimitsBudgetModel {
     #[serde(rename = "modelID")]
     pub model_id: String,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub spent: Option<MoneyUSD>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageLimitsBudget {
     pub id: String,
+    #[serde(serialize_with = "crate::ser::number")]
     pub limit: MoneyUSD,
+    #[serde(serialize_with = "crate::ser::number")]
     pub spent: MoneyUSD,
     pub scope: UsageLimitsBudgetScope,
     pub per: UsageLimitsBudgetPer,
@@ -11600,12 +11862,13 @@ pub struct UsageLimitsBudget {
     #[serde(
         rename = "inputPriceAtLeast",
         default,
+        serialize_with = "crate::ser::option_number",
         skip_serializing_if = "Option::is_none"
     )]
     pub input_price_at_least: Option<MoneyUSDPerMillionTokens>,
     pub picked: bool,
     pub shared: bool,
-    #[serde(rename = "resetsAt")]
+    #[serde(rename = "resetsAt", serialize_with = "crate::ser::number")]
     pub resets_at: f64,
 }
 
@@ -12371,9 +12634,17 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValueVariantsItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub read: Option<MoneyUSDPerMillionTokens>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub write: Option<MoneyUSDPerMillionTokens>,
 }
 
@@ -12381,7 +12652,9 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache {
 pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObject {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier: Option<ModelCostTier>,
+    #[serde(serialize_with = "crate::ser::number")]
     pub input: MoneyUSDPerMillionTokens,
+    #[serde(serialize_with = "crate::ser::number")]
     pub output: MoneyUSDPerMillionTokens,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache: Option<ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache>,

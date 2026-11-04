@@ -62,6 +62,24 @@ await call("experimental.file.write", () =>
 )
 await call("event.subscribe", () => client.event.subscribe({ types: ["session.created", "rpc.x"] }))
 await call("session.remove", () => client.session.remove({ sessionID: "ses_2" }))
+// Numbers the schema leaves as plain numbers: whole values go out as `0` and `3`, fractions as they are.
+await call("session.prompt numbers", () =>
+  client.session.prompt({
+    sessionID: "ses_1",
+    text: "@build x",
+    agents: [
+      { name: "build", mention: { start: 0, end: 6, text: "@build" } },
+      { name: "plan", mention: { start: 1.5, end: -0, text: "@plan" } },
+    ],
+  }),
+)
+await call("session.form.reply numbers", () =>
+  client.session.form.reply({
+    sessionID: "ses_1",
+    formID: "frm_1",
+    answer: { count: 3, ratio: 2.5, big: 123456789012, tiny: 0.25, name: "x" },
+  }),
+)
 
 const requests = recorded.slice()
 

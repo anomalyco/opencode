@@ -10,6 +10,7 @@ pub mod id;
 pub mod memory;
 pub mod pty;
 pub mod query;
+pub mod ser;
 pub mod sse;
 pub mod transport;
 pub mod ws;

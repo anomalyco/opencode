@@ -121,6 +121,47 @@ async fn requests_match_the_typescript_client() {
             &none,
         )
         .await;
+    let mention = |start: f64, end: f64, text: &str| PromptMention {
+        start,
+        end,
+        text: text.to_owned(),
+    };
+    let _ = client
+        .session_prompt(
+            &SessionPromptInput {
+                session_id: "ses_1".into(),
+                text: "@build x".to_owned(),
+                agents: Some(vec![
+                    PromptAgentAttachment {
+                        name: "build".to_owned(),
+                        mention: Some(mention(0.0, 6.0, "@build")),
+                    },
+                    PromptAgentAttachment {
+                        name: "plan".to_owned(),
+                        mention: Some(mention(1.5, -0.0, "@plan")),
+                    },
+                ]),
+                ..Default::default()
+            },
+            &none,
+        )
+        .await;
+    let _ = client
+        .session_form_reply(
+            &SessionFormReplyInput {
+                session_id: "ses_1".to_owned(),
+                form_id: "frm_1".into(),
+                answer: indexmap::IndexMap::from([
+                    ("count".to_owned(), FormValue::Number(3.0)),
+                    ("ratio".to_owned(), FormValue::Number(2.5)),
+                    ("big".to_owned(), FormValue::Number(123456789012.0)),
+                    ("tiny".to_owned(), FormValue::Number(0.25)),
+                    ("name".to_owned(), FormValue::String("x".to_owned())),
+                ]),
+            },
+            &none,
+        )
+        .await;
 
     let actual = record.0.lock().unwrap();
     let expected = fixture()["requests"].as_array().unwrap().clone();
