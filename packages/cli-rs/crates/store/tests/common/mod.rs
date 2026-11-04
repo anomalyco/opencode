@@ -60,6 +60,8 @@ impl Req {
 pub enum Reply {
     Json(u16, Value),
     Text(u16, String),
+    /// The request fails before a response, as a failed `fetch` does.
+    Fail(String),
 }
 
 pub fn ok(value: Value) -> Reply {
@@ -100,6 +102,7 @@ impl Transport for Fake {
                     serde_json::to_vec(&value).unwrap(),
                 ),
                 Reply::Text(status, text) => (status, "text/plain", text.into_bytes()),
+                Reply::Fail(message) => return Err(message),
             };
             Ok(Response {
                 status,
