@@ -185,6 +185,7 @@ export const OpencodePlugin = define<
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
     const scope = yield* Scope.Scope
+    const settings = yield* ConsoleAccess.Options
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
@@ -192,7 +193,9 @@ export const OpencodePlugin = define<
       remote: typeof ConsoleConfig.Type | undefined
       connection: ActiveConnection
       organization: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined }
+      // Fingerprint of an API key, so a key replaced in place counts as a new sign-in.
+      access: string | undefined
+    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
@@ -209,7 +212,7 @@ export const OpencodePlugin = define<
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { remote: undefined, connection, organization: undefined }
+        return { remote: undefined, connection, organization: undefined, access: undefined }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
@@ -218,7 +221,7 @@ export const OpencodePlugin = define<
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ remote: undefined, connection, organization: undefined })
+            return Effect.succeed({ remote: undefined, connection, organization: undefined, access: undefined })
           return cache
             .get({
               key: `opencode-console:${workspaceKey(connection, credential)}`,
@@ -240,6 +243,7 @@ export const OpencodePlugin = define<
                 remote,
                 connection,
                 organization: organizationName(credential),
+                access: accessFingerprint(credential),
               })),
             )
         }),
@@ -253,8 +257,8 @@ export const OpencodePlugin = define<
             // A load that fails for the connection already in place keeps its last config: dropping it
             // would lift organization policy while personal credentials keep working.
             return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
-              : { remote: undefined, connection, organization: undefined }
+              ? { remote: snapshot.remote, connection, organization: snapshot.organization, access: snapshot.access }
+              : { remote: undefined, connection, organization: undefined, access: undefined }
           }),
         ),
       )
@@ -458,12 +462,16 @@ export const OpencodePlugin = define<
         { concurrency: 5, discard: true },
       )
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
-    const check = (maxAge?: Duration.Input): Effect.Effect<void> =>
+    // `wait` bounds only the load: a load still running carries on in `SharedCache`, retries included, and the next
+    // check applies its result, while the current snapshot stays in place.
+    const check = (maxAge?: Duration.Input, wait?: Duration.Input): Effect.Effect<void> =>
       loading.withPermit(
         Effect.gen(function* () {
-          const next = yield* load(maxAge)
+          const next =
+            wait === undefined
+              ? yield* load(maxAge)
+              : Option.getOrElse(yield* load(maxAge).pipe(Effect.timeoutOption(wait)), () => snapshot)
           if (!Equal.equals(snapshot, next)) yield* apply(next)
         }),
       )
@@ -497,18 +505,24 @@ export const OpencodePlugin = define<
       )
     })
     yield* guard(snapshot)
+    // A prompt after the machine slept or the host suspended refreshes stale Console config, and the MCP gateway
+    // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
+    // 3 seconds; the turn then runs on the config it has.
+    yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    // Only while connected: a signed-out location runs no timer and no credential lookups.
+    // Only while connected: a signed-out location runs no timer and no credential lookups. Hosts that suspend
+    // between prompts turn the timer off with the `console.poll` server option and rely on the prompt hook.
     const polling = yield* FiberHandle.make<void, never>()
     const poll = Effect.fnUntraced(function* () {
-      if (!snapshot.connection) return yield* FiberHandle.clear(polling)
+      if (!snapshot.connection || !settings.poll) return yield* FiberHandle.clear(polling)
       yield* FiberHandle.run(polling, Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever), {
         onlyIfMissing: true,
       })
     })
-    yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
+    // A switch applies only a changed snapshot, so one a prompt already applied doesn't reload MCP servers mid-turn.
+    yield* ProviderRefresh.onSwitch("opencode", check().pipe(Effect.andThen(poll())))
     yield* poll()
   }),
 })
@@ -543,6 +557,8 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
         }),
       ),
       Effect.scoped,
+      // A transient failure, which `SharedCache` retries.
+      Effect.timeout(Duration.seconds(5)),
     )
 }
 
@@ -580,7 +596,12 @@ function workspaceKey(
     ConsoleAccess.server(credential),
     IntegrationConnection.key(connection),
     credential.metadata?.orgID,
+    accessFingerprint(credential),
   ])
+}
+
+function accessFingerprint(credential: Credential.Key | Credential.OAuth) {
+  return credential.type === "key" ? SharedCache.fingerprint(credential.key) : undefined
 }
 
 function organizationName(credential: Credential.Value) {
