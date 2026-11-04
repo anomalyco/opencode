@@ -10,7 +10,7 @@ use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
     AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID,
     SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput, SessionPromptInput,
-    SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
+    SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
 };
 use opencode_store::inbox::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
@@ -220,22 +220,55 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         (Mode::Normal, None) => {
             // The store admits the prompt at once and rolls it back if the server rejects it; it
             // waits for a session being created.
-            let task = tui.data.prompt(Prompt {
-                input: SessionPromptInput {
+            let input = SessionPromptInput {
+                session_id: target.clone(),
+                text,
+                files,
+                agents,
+                skills,
+                delivery: Some(Some(delivery)),
+                ..SessionPromptInput::default()
+            };
+            let entry = failure.entry.clone();
+            let send = move |tui: &Tui| {
+                let task = tui.data.prompt(Prompt {
+                    input,
+                    gate: None,
+                    prepare: Some(Box::new(move || -> Gate { Box::pin(commit.run()) })),
+                });
+                tui.app.spawn(task, move |_, result| {
+                    failure.check("Failed to send prompt", result.map(drop))
+                });
+            };
+            // A staged revert is committed before the prompt is admitted: the committed event drops every
+            // inbox row at or after the boundary, which would include the new prompt.
+            if session.as_ref().is_some_and(|info| info.revert.is_some()) {
+                let client = tui.data.client().clone();
+                let input = SessionRevertCommitInput {
                     session_id: target.clone(),
-                    text,
-                    files,
-                    agents,
-                    skills,
-                    delivery: Some(Some(delivery)),
-                    ..SessionPromptInput::default()
-                },
-                gate: None,
-                prepare: Some(Box::new(move || -> Gate { Box::pin(commit.run()) })),
-            });
-            tui.app.spawn(task, move |_, result| {
-                failure.check("Failed to send prompt", result.map(drop))
-            });
+                };
+                let weak = prompt.this.clone();
+                tui.app.spawn(
+                    async move {
+                        client
+                            .session_revert_commit(&input, &RequestOptions::default())
+                            .await
+                            .map_err(Error::new)
+                    },
+                    move |_, result| {
+                        let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade())
+                        else {
+                            return;
+                        };
+                        match result {
+                            Ok(()) => send(&tui),
+                            Err(error) => fail(&weak, "Failed to commit revert", &error, &entry),
+                        }
+                    },
+                );
+            } else {
+                send(tui);
+            }
         }
     }
 
