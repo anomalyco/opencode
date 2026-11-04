@@ -181,10 +181,6 @@ export function transitionTimelineSearch(
   return changed({ ...state, retries: state.retries + 1 }, [schedule(state, !state.unfolded)])
 }
 
-export function isTimelineSearchOpen(state: TimelineSearchState) {
-  return state.status !== "closed"
-}
-
 export function timelineSearchView(state: TimelineSearchState): TimelineSearchView {
   if (state.status === "closed") return CLOSED_VIEW
   const match = state.matches[state.activeIndex]
