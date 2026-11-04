@@ -2,7 +2,7 @@
 //! surface behind a bar in the agent's color, then skill and file chips. Images (V16) are E.6b's,
 //! and the pending-steer and message dialogs are E.10b's and DLG38's.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use opencode_api::generated::{PromptFileSource, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
@@ -15,6 +15,7 @@ pub struct User {
     text: Text,
     skills: View,
     files: View,
+    color: Cell<Option<Color>>,
     rendered: RefCell<Option<SessionMessageUser>>,
 }
 
@@ -53,7 +54,6 @@ impl User {
             .column()
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
-            .border_color(cx.agent_color(cx.session_agent.unwrap_or("build")))
             .bg(raised)
             .child(&body);
         Self {
@@ -61,6 +61,7 @@ impl User {
             text,
             skills,
             files,
+            color: Cell::new(None),
             rendered: RefCell::default(),
         }
     }
@@ -70,6 +71,11 @@ impl User {
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageUser) {
+        // The bar takes the session's agent color, which changes when the agents load.
+        let color = cx.agent_color(cx.session_agent.unwrap_or("build"));
+        if self.color.replace(Some(color)) != Some(color) {
+            self.root.border_color(color);
+        }
         if self.rendered.borrow().as_ref() == Some(message) {
             return;
         }
