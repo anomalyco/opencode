@@ -142,14 +142,13 @@ impl Execute {
             inner.output.clear();
             inner.output.visible(preview.is_some());
             for (index, line) in preview.iter().flat_map(|text| text.split('\n')).enumerate() {
+                // TS sets `paddingLeft={3}` on the text too, but Core lays a text out without it.
                 inner.output.add(
-                    &View::new(&inner.app).padding_edge(Edge::Left, 3).child(
-                        &Text::new(
-                            &inner.app,
-                            format!("{}{line}", if index == 0 { "↳ " } else { "  " }),
-                        )
-                        .fg(inner.theme.text.feedback.error.base),
-                    ),
+                    &Text::new(
+                        &inner.app,
+                        format!("{}{line}", if index == 0 { "↳ " } else { "  " }),
+                    )
+                    .fg(inner.theme.text.feedback.error.base),
                 );
             }
             *inner.shown_output.borrow_mut() = preview;
