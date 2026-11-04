@@ -1605,9 +1605,9 @@ const EndpointExperimentalScheduleCreate =
     )
 
 const EndpointExperimentalScheduleList =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleListInput) =>
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalScheduleListInput) =>
     preserveEffect<ExperimentalScheduleListOutput>()(
-      raw["schedule.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
+      raw["schedule.list"]({ query: { sessionID: input?.["sessionID"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),

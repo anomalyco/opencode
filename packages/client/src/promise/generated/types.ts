@@ -4618,7 +4618,7 @@ export type ExperimentalScheduleCreateInput = {
 
 export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]
 
-export type ExperimentalScheduleListInput = { readonly sessionID: string }
+export type ExperimentalScheduleListInput = { readonly sessionID?: string | undefined }
 
 export type ExperimentalScheduleListOutput = { data: Array<ScheduleInfo> }["data"]
 

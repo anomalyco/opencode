@@ -1529,12 +1529,12 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
-        list: (input: ExperimentalScheduleListInput, requestOptions?: RequestOptions) =>
+        list: (input?: ExperimentalScheduleListInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalScheduleListOutput }>(
             {
               method: "GET",
               path: `/api/experimental/schedule`,
-              query: { sessionID: input["sessionID"] },
+              query: { sessionID: input?.["sessionID"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,

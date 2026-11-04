@@ -2398,10 +2398,10 @@ export type ExperimentalScheduleCreateOperation<E = never> = (
   input?: ExperimentalScheduleCreateInput,
 ) => Effect.Effect<ExperimentalScheduleCreateOutput, E>
 
-export type ExperimentalScheduleListInput = { readonly sessionID: Session.ID }
+export type ExperimentalScheduleListInput = { readonly sessionID?: Session.ID | undefined }
 export type ExperimentalScheduleListOutput = ReadonlyArray<Schedule.Info>
 export type ExperimentalScheduleListOperation<E = never> = (
-  input: ExperimentalScheduleListInput,
+  input?: ExperimentalScheduleListInput,
 ) => Effect.Effect<ExperimentalScheduleListOutput, E>
 
 export type ExperimentalScheduleGetInput = { readonly scheduleID: Schedule.ID }

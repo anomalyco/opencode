@@ -12157,7 +12157,7 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session, or a shell command that runs on its own, once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Schedule a prompt that wakes the Session, or a shell command that runs on its own, once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice.",
         "summary": "Create schedule",
         "requestBody": {
           "content": {
@@ -12180,7 +12180,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": false
           }
         ],
         "security": [],
@@ -12246,7 +12246,7 @@
             }
           }
         },
-        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "List schedules, oldest first: one Session's when sessionID is given, otherwise every schedule. Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice.",
         "summary": "List schedules"
       }
     },
@@ -12324,7 +12324,7 @@
             }
           }
         },
-        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice.",
         "summary": "Get schedule"
       },
       "delete": {
@@ -12386,7 +12386,7 @@
             }
           }
         },
-        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice.",
         "summary": "Delete schedule"
       }
     },
@@ -12464,7 +12464,7 @@
             }
           }
         },
-        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice.",
         "summary": "Pause schedule"
       }
     },
@@ -12542,7 +12542,7 @@
             }
           }
         },
-        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice.",
         "summary": "Resume schedule"
       }
     },

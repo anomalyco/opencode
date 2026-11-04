@@ -5,7 +5,8 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ScheduleNotFoundError, SessionNotFoundError } from "../errors.js"
 
-const EXPERIMENTAL = "Experimental: needs experimental.schedules in the Session's config and may change without notice."
+const EXPERIMENTAL =
+  "Experimental: needs experimental.schedules in the Session's config (or the global config for a schedule without a Session) and may change without notice."
 const errors = [ScheduleNotFoundError, ForbiddenError] as const
 const params = { scheduleID: Schedule.ID }
 const annotations = (identifier: string, summary: string, description: string) =>
@@ -41,10 +42,16 @@ export const ScheduleEndpoints = [
     ),
   ),
   HttpApiEndpoint.get("schedule.list", "/api/experimental/schedule", {
-    query: { sessionID: Session.ID },
+    query: { sessionID: Session.ID.pipe(optional) },
     success: Schema.Struct({ data: Schema.Array(Schedule.Info) }),
     error: [SessionNotFoundError, ForbiddenError],
-  }).annotateMerge(annotations("list", "List schedules", "List a Session's schedules, oldest first.")),
+  }).annotateMerge(
+    annotations(
+      "list",
+      "List schedules",
+      "List schedules, oldest first: one Session's when sessionID is given, otherwise every schedule.",
+    ),
+  ),
   HttpApiEndpoint.get("schedule.get", "/api/experimental/schedule/:scheduleID", {
     params,
     success: Schema.Struct({ data: Schedule.Info }),

@@ -9,22 +9,22 @@ import { missingSession } from "./session-error"
 
 /**
  * `schedule.*` in the `server.experimental` group. Session routes need experimental.schedules where the Session lives;
- * a create without a `sessionID` needs it in the global config.
+ * a create, read or list without a `sessionID` needs it in the global config.
  */
 export const makeSchedule = Effect.gen(function* () {
   const schedules = yield* Schedule.Service
 
-  const allowed = (sessionID: Session.ID) =>
+  const allowed = (sessionID?: Session.ID) =>
     schedules.enabled(sessionID).pipe(
       Effect.mapError(missingSession),
       Effect.flatMap((enabled) => (enabled ? Effect.void : Effect.fail(disabled()))),
     )
 
-  // A schedule whose Session is gone, or whose location has the flag off, reads as missing or forbidden like the rest.
+  // A schedule whose Session is gone reads as missing; one whose location (or the global config) has the flag off is
+  // forbidden like the rest.
   const find = (id: Schedule.ID) =>
     Effect.gen(function* () {
       const info = yield* schedules.get(id).pipe(Effect.mapError(missingSchedule))
-      if (info.sessionID === undefined) return yield* missingSchedule({ scheduleID: id })
       yield* allowed(info.sessionID).pipe(
         Effect.catchTag("SessionNotFoundError", () => Effect.fail(missingSchedule({ scheduleID: id }))),
       )
@@ -46,7 +46,7 @@ export const makeSchedule = Effect.gen(function* () {
           "Session.NotFoundError": (error) => Effect.fail(missingSession(error)),
         }),
       ),
-    list: (sessionID: Session.ID) =>
+    list: (sessionID?: Session.ID) =>
       allowed(sessionID).pipe(
         Effect.andThen(schedules.list({ sessionID })),
         Effect.map((data) => ({ data })),

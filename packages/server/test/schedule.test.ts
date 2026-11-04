@@ -84,6 +84,16 @@ it.live("manages schedules through the experimental API when enabled and honors 
         status: "active",
       })
       expect(standalone.nextDueAt).toBeDefined()
+      // A session-less row follows the global flag and reads without a Session.
+      expect(await api.experimental.schedule.get({ scheduleID: standalone.id })).toMatchObject({ id: standalone.id })
+      expect(await api.experimental.schedule.list()).toMatchObject([{ id: standalone.id }])
+      expect(await api.experimental.schedule.list({ sessionID: session.id })).toEqual([])
+      expect(await api.experimental.schedule.pause({ scheduleID: standalone.id })).toMatchObject({ status: "paused" })
+      expect(await api.experimental.schedule.resume({ scheduleID: standalone.id })).toMatchObject({ status: "active" })
+      await api.experimental.schedule.delete({ scheduleID: standalone.id })
+      await expect(api.experimental.schedule.get({ scheduleID: standalone.id })).rejects.toMatchObject({
+        _tag: "ScheduleNotFoundError",
+      })
       await expect(
         api.experimental.schedule.create({ when: { in: "5 minutes" }, run: "echo hi", prompt: "ping" }),
       ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
@@ -166,6 +176,74 @@ it.live("manages schedules through the experimental API when enabled and honors 
         prompt: "ping",
       })
       expect(mixed.status).toBe(400)
+    })
+  }).pipe(Effect.scoped),
+)
+
+it.live("session-less schedule reads follow the global flag", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-schedule-global-")).path
+    const global = path.join(dir, "global")
+    const enabled = path.join(dir, "enabled")
+    const dbPath = path.join(dir, "opencode.db")
+    yield* Effect.promise(async () => {
+      await Promise.all([global, enabled].map((item) => fs.mkdir(item, { recursive: true })))
+      await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+      await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+    })
+
+    // Seeded while the global flag is on; both schedules are an hour out so neither instance fires them.
+    const ids = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handler = yield* ServerFetch.make({
+          app: { version: "test" },
+          database: { path: dbPath },
+          config: { directory: global, project: true, claude: false },
+          models: { fetch: false },
+          fs: { filewatcher: false },
+        })
+        const api = client(handler)
+        return yield* Effect.promise(async () => {
+          const session = await api.session.create({ location: { directory: enabled } })
+          const standalone = await api.experimental.schedule.create({ when: { in: "1 hour" }, run: "true" })
+          const created = await api.experimental.schedule.create({
+            sessionID: session.id,
+            when: { in: "1 hour" },
+            prompt: "still here",
+          })
+          return { sessionID: session.id, standaloneID: standalone.id, createdID: created.id }
+        })
+      }),
+    )
+
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: false } })),
+    )
+
+    // A second ServerFetch reads the rewritten global config instead of the first instance's cached copy.
+    const handler = yield* ServerFetch.make({
+      app: { version: "test" },
+      database: { path: dbPath },
+      config: { directory: global, project: true, claude: false },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+    })
+    const api = client(handler)
+    yield* Effect.promise(async () => {
+      await expect(api.experimental.schedule.get({ scheduleID: ids.standaloneID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      await expect(api.experimental.schedule.pause({ scheduleID: ids.standaloneID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      await expect(api.experimental.schedule.delete({ scheduleID: ids.standaloneID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      await expect(api.experimental.schedule.list()).rejects.toMatchObject({ _tag: "ForbiddenError" })
+
+      // A schedule with a Session still follows the flag where that Session lives.
+      expect(await api.experimental.schedule.list({ sessionID: ids.sessionID })).toMatchObject([{ id: ids.createdID }])
+      expect(await api.experimental.schedule.get({ scheduleID: ids.createdID })).toMatchObject({ id: ids.createdID })
     })
   }).pipe(Effect.scoped),
 )
