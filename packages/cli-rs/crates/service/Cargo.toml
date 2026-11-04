@@ -12,11 +12,17 @@ workspace = true
 [dependencies]
 opencode-api.workspace = true
 opencode-local.workspace = true
+base64.workspace = true
 futures-util.workspace = true
+rand.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "process", "io-util", "rt"] }
 url.workspace = true
+uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
