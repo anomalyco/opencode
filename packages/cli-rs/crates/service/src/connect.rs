@@ -159,29 +159,18 @@ pub async fn resolve(
     let found = match discover::discover(transport.as_ref(), paths, env.channel.as_deref()).await {
         Ok(found) => found,
         Err(_) if options.standalone_fallback => return start_standalone(env).await,
-        Err(_) => {
-            let mut ensure_options = ensure::Options::new(
-                registration::Files::new(paths, &channels.channel).file,
-                paths.state.clone(),
-                &env.ts(),
-            );
-            ensure_options.env = service_config::process_env(config.env.as_ref())
-                .unwrap_or_default()
-                .into_iter()
-                .collect();
-            let on_start = options.on_start;
-            let ensured = ensure::ensure(transport.clone(), &ensure_options, &mut || {
-                if let Some(on_start) = on_start {
-                    on_start();
-                }
-            })
-            .await
-            .map_err(|error| Error::new(error.0))?;
-            discover::Found {
-                channel: discover::channel_of(&ensured.file),
-                service: ensured.service,
-                file: ensured.file,
-            }
+        Err(missing) => {
+            let file = registration::Files::new(paths, &channels.channel).file;
+            ensure_missing(
+                transport,
+                paths,
+                env,
+                &config,
+                file,
+                options.on_start,
+                missing,
+            )
+            .await?
         }
     };
     if env.print_logs {
@@ -206,6 +195,71 @@ pub async fn resolve(
             file: found.file,
         },
         warning: None,
+    })
+}
+
+/// Finds the registered service again, for a client that lost it (`managedService.reconnect`,
+/// `packages/cli/src/services/server-connection.ts:66-75`): discovered, waited for, or started
+/// quietly when none is registered.
+pub async fn reconnect(
+    transport: Arc<dyn Transport>,
+    paths: &Paths,
+    env: &Env,
+) -> Result<discover::Found, Error> {
+    match discover::discover(transport.as_ref(), paths, env.channel.as_deref()).await {
+        Ok(found) => Ok(found),
+        Err(missing) => {
+            let channel = Channels::from_vars(|name| match name {
+                "OPENCODE_CHANNEL" => env.channel.clone().map(Into::into),
+                _ => None,
+            })
+            .channel;
+            let config = ServiceConfig::new(paths, &channel)
+                .read()
+                .unwrap_or_default();
+            let file = registration::Files::new(paths, &channel).file;
+            ensure_missing(transport, paths, env, &config, file, None, missing).await
+        }
+    }
+}
+
+// `ensure` when discovery found no ready service: waits for a pending one, reports a failed one,
+// and starts the service in `file` only when no live service is registered. It never starts a
+// service beside one that is starting or not answering (O-21).
+async fn ensure_missing(
+    transport: Arc<dyn Transport>,
+    paths: &Paths,
+    env: &Env,
+    config: &service_config::Info,
+    file: PathBuf,
+    on_start: Option<fn()>,
+    missing: discover::Missing,
+) -> Result<discover::Found, Error> {
+    if missing.pending.is_none()
+        && let Some(reason) = missing.reason
+    {
+        return Err(Error::new(reason));
+    }
+    let mut ensure_options = ensure::Options::new(
+        missing.pending.unwrap_or(file),
+        paths.state.clone(),
+        &env.ts(),
+    );
+    ensure_options.env = service_config::process_env(config.env.as_ref())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let ensured = ensure::ensure(transport, &ensure_options, &mut || {
+        if let Some(on_start) = on_start {
+            on_start();
+        }
+    })
+    .await
+    .map_err(|error| Error::new(error.0))?;
+    Ok(discover::Found {
+        channel: discover::channel_of(&ensured.file),
+        service: ensured.service,
+        file: ensured.file,
     })
 }
 
@@ -452,6 +506,53 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("OPENCODE_TS_BIN"), "{text}");
+    }
+
+    const OTHER: &str = "http://127.0.0.1:4097/api/info";
+
+    // A registration of another channel whose service answers `replies` in order. The TS binary is
+    // missing, so starting a service fails with "Failed to start server".
+    async fn other_channel(replies: Vec<Reply>) -> Result<Connection, Error> {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths(dir.path());
+        std::fs::write(
+            paths.state.join("service-oc-x.json"),
+            r#"{"url":"http://127.0.0.1:4097","pid":9,"password":"p"}"#,
+        )
+        .unwrap();
+        let server: Arc<dyn Transport> = Arc::new(Server::default().replies(OTHER, replies));
+        resolve(server, &paths, &missing_ts(), &options(None)).await
+    }
+
+    #[tokio::test]
+    async fn a_starting_service_of_another_channel_is_waited_for() {
+        let starting = Reply::json(503, HEALTH);
+        let connection = other_channel(vec![starting.clone(), starting, Reply::json(200, HEALTH)])
+            .await
+            .unwrap();
+        assert_eq!(connection.endpoint.url, "http://127.0.0.1:4097");
+        assert!(matches!(connection.source, Source::Service { channel, .. } if channel == "oc-x"));
+    }
+
+    #[tokio::test]
+    async fn a_failed_or_incompatible_service_of_another_channel_is_reported() {
+        assert_eq!(
+            message(other_channel(vec![Reply::json(500, HEALTH)]).await),
+            "Background service failed to start"
+        );
+        assert!(
+            message(other_channel(vec![Reply::json(404, "")]).await)
+                .starts_with("Background service uses an incompatible health protocol.")
+        );
+    }
+
+    // Paused time: each probe times out at once.
+    #[tokio::test(start_paused = true)]
+    async fn an_unresponsive_service_of_another_channel_is_reported() {
+        assert_eq!(
+            message(other_channel(vec![Reply::Hang]).await),
+            "Background service at http://127.0.0.1:4097 (pid 9) is not responding. Stop it with `opencode service stop`, or pass --server."
+        );
     }
 
     #[tokio::test]
