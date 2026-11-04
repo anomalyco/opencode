@@ -1036,8 +1036,16 @@ dependencies = [
 name = "opencode-service"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "bytes",
+ "futures-util",
  "opencode-api",
  "opencode-local",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "url",
 ]
 
 [[package]]

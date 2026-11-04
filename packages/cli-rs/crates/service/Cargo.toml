@@ -12,3 +12,14 @@ workspace = true
 [dependencies]
 opencode-api.workspace = true
 opencode-local.workspace = true
+futures-util.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+url.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+bytes.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

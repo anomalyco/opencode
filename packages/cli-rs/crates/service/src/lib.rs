@@ -11,3 +11,6 @@ pub mod spawn;
 pub mod standalone;
 pub mod stop;
 pub mod ts_command;
+
+#[cfg(test)]
+mod testing;
