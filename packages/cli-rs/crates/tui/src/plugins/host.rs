@@ -44,7 +44,7 @@ pub fn builtins() -> Vec<Definition<Tui>> {
         super::sidebar_todo::plugin(),
         super::sidebar_footer::plugin(),
         crate::plugins::notifications::plugin(),
-        empty("opencode.plugins"), // E.18b
+        crate::dialogs::plugins::plugin(),
         super::stats::plugin(),
         empty("opencode.merman"), // P.3
         empty("opencode.latex"),  // P.2
