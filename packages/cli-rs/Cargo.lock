@@ -1123,6 +1123,7 @@ dependencies = [
 name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
+ "log",
  "opencode-ui",
  "opentui",
 ]
