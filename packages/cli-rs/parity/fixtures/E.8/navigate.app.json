@@ -538,8 +538,7 @@
       "until": "Answer 8 three.",
       "deviation": [
         "V01-plain-transcript",
-        "P01-read-only-prompt",
-        "T04-connection-footer"
+        "P01-read-only-prompt"
       ],
       "fixture": "E.8/navigate/open"
     },
@@ -554,7 +553,6 @@
       "deviation": [
         "V01-plain-transcript",
         "P01-read-only-prompt",
-        "T04-connection-footer",
         "V15-navigation"
       ],
       "fixture": "E.8/navigate/page-up"
@@ -569,8 +567,7 @@
       "until": "Question 1",
       "deviation": [
         "V01-plain-transcript",
-        "P01-read-only-prompt",
-        "T04-connection-footer"
+        "P01-read-only-prompt"
       ],
       "fixture": "E.8/navigate/first"
     },
@@ -584,8 +581,7 @@
       "until": "Answer 8 three.",
       "deviation": [
         "V01-plain-transcript",
-        "P01-read-only-prompt",
-        "T04-connection-footer"
+        "P01-read-only-prompt"
       ],
       "fixture": "E.8/navigate/last"
     },
@@ -599,8 +595,7 @@
       "until": "Jump to latest",
       "deviation": [
         "V01-plain-transcript",
-        "P01-read-only-prompt",
-        "T04-connection-footer"
+        "P01-read-only-prompt"
       ],
       "fixture": "E.8/navigate/last-user"
     }
