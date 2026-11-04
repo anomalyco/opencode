@@ -47,6 +47,8 @@ export class Machine {
   outcome: Completion | undefined
   /** Frames suspended at an `await`, by the slice cut off the stack, so a stall can point at the one that is stuck. */
   readonly parked = new Map<Array<Frame>, Parked>()
+  /** Names this run's host calls, so each has an idempotency key (`HostCall.key`). */
+  runId = ""
 
   private readonly queue: Array<Job> = []
   private head = 0
@@ -84,10 +86,7 @@ export class Machine {
       if (this.queued.length > 0) {
         const calls = this.queued
         this.queued = []
-        for (const call of calls) {
-          call.status = "inFlight"
-          this.running.set(call.id, call)
-        }
+        for (const call of calls) this.running.set(call.id, call)
         return { kind: "host", calls }
       }
       if (this.sliced) {
@@ -135,9 +134,25 @@ export class Machine {
     this.inbox.push({ call, completion })
   }
 
-  /** Whether a host call's outcome is waiting to be delivered. */
+  /** Whether `run` has something to do: a blocking call's outcome, or one waiting in the inbox while no job runs. */
   get ready(): boolean {
-    return this.inbox.length > 0 || this.input !== undefined
+    return this.input !== undefined || (this.root.stack.length === 0 && this.inbox.length > 0)
+  }
+
+  /** A host call handed to the driver and not yet completed, by id. */
+  call(id: number): HostCall | undefined {
+    return this.running.get(id)
+  }
+
+  /** The host calls handed to the driver and not yet completed, in the order they were made. */
+  calls(): Array<HostCall> {
+    return [...this.running.values()]
+  }
+
+  /** Drops jobs already run from the queue, so saved state holds only the ones still to run. */
+  compact(): void {
+    this.queue.splice(0, this.head)
+    this.head = 0
   }
 
   /**
@@ -174,7 +189,8 @@ export class Machine {
       readonly site: AstNode | undefined
     },
   ): HostCall {
-    const record = new HostCall(this.nextHostID++, request, call.label, false, call.result, call.resolving, call.site)
+    const id = this.nextHostID++
+    const record = new HostCall(id, `${this.runId}:${id}`, request, call.label, false, call.result, call.resolving, call.site)
     this.queued.push(record)
     return record
   }
@@ -305,8 +321,10 @@ export class Machine {
       return
     }
     if (signal instanceof Host) {
+      const id = this.nextHostID++
       const call = new HostCall(
-        this.nextHostID++,
+        id,
+        `${this.runId}:${id}`,
         signal.request,
         signal.request.kind,
         true,

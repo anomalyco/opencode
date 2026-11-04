@@ -21,9 +21,12 @@ import type { Machine } from "./machine.js"
 
 /**
  * Steps run by every machine task in this process, so tests can see that a program ran on the machine; `inspect`, when
- * a test sets it, sees the stack before every step.
+ * a test sets it, sees the stack (and the task) before every step.
  */
-export const stats: { steps: number; inspect: ((stack: ReadonlyArray<Frame>) => void) | undefined } = {
+export const stats: {
+  steps: number
+  inspect: ((stack: ReadonlyArray<Frame>, task: MachineTask) => void) | undefined
+} = {
   steps: 0,
   inspect: undefined,
 }
@@ -128,7 +131,7 @@ export class MachineTask {
     let value = input
     while (true) {
       stats.steps++
-      if (stats.inspect !== undefined) stats.inspect(stack)
+      if (stats.inspect !== undefined) stats.inspect(stack, this)
       if (!ok) {
         let error = value
         while (true) {

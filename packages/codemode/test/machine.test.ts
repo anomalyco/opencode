@@ -216,7 +216,7 @@ describe("machine", () => {
       [1, 2, 3].map((value) => ({
         request: { kind: "tool", path: ["echo"], args: [{ value }] },
         blocking: false,
-        status: "inFlight",
+        status: "queued",
       })),
     )
     // Nothing else can run until host work completes.
@@ -349,6 +349,7 @@ describe("machine", () => {
 describe("built-ins as data", () => {
   test("every frame on every stack is data at every step", async () => {
     const seenKinds = new Set<string>()
+    const previous = stats.inspect
     stats.inspect = (stack) => {
       const seen = new Set<unknown>()
       for (const frame of stack) {
@@ -402,7 +403,7 @@ describe("built-ins as data", () => {
       `)
       expect(result).toMatchObject({ all: [2, 4, 3], raced: "first", any: 8, tried: 12, thenned: 3, tool: 20 })
     } finally {
-      stats.inspect = undefined
+      stats.inspect = previous
     }
     for (const name of [
       "Array callback",

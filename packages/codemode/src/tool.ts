@@ -41,6 +41,27 @@ export type JsonSchema = {
 /** Either a validating Effect Schema or a render-only JSON Schema document. */
 export type SchemaType = Schema.Decoder<unknown> | JsonSchema
 
+/** A JSON handle a durable tool gives for work that outlives the fiber waiting on it. */
+export type Handle = Schema.Json
+
+/**
+ * How a durable tool runs work that can outlive a suspended run: `start` launches it under the idempotency `key` and
+ * returns a handle quickly; `attach` waits for its result (interrupting it detaches, never cancels); `lookup` finds the
+ * handle of work started under `key` when the run was saved before `start` returned; `cancel` stops the work.
+ */
+export type Durable<Input = unknown, Output = unknown, R = never> = {
+  readonly start: (input: Input, context: { readonly key: string }) => Effect.Effect<Handle, unknown, R>
+  readonly attach: (handle: Handle) => Effect.Effect<Output, unknown, R>
+  readonly lookup: (key: string) => Effect.Effect<Handle | undefined, unknown, R>
+  readonly cancel: (handle: Handle) => Effect.Effect<void, unknown, R>
+}
+
+/**
+ * Whether a call that was running when its run was suspended may run again on resume: `safe` re-runs it; `unsafe`
+ * (the default) rejects the program's promise instead, since the call may have partially run.
+ */
+export type Retry = "safe" | "unsafe"
+
 /** Executable tool exposed through CodeMode's `tools` object. */
 export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
@@ -48,19 +69,27 @@ export type Tool<R = never> = {
   readonly input: SchemaType
   readonly output: SchemaType | undefined
   readonly execute: (input: unknown) => Effect.Effect<unknown, unknown, R>
+  readonly durable?: Durable<unknown, unknown, R> | undefined
+  readonly retry?: Retry | undefined
 }
 
 type InputType<S> = S extends Schema.Decoder<unknown> ? S["Type"] : unknown
 
 type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unknown> ? S["Encoded"] : unknown
 
-/** Options for declaring one CodeMode tool. */
+/** Options for declaring one CodeMode tool: `execute`, `durable`, or both (`execute` then runs outside a run). */
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
   readonly description: string
   readonly input: I
   readonly output?: O
-  readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
-}
+  readonly retry?: Retry
+} & (
+  | {
+      readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
+      readonly durable?: Durable<InputType<I>, ResultType<O>, R>
+    }
+  | { readonly execute?: undefined; readonly durable: Durable<InputType<I>, ResultType<O>, R> }
+)
 
 export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | undefined): value is Tool<R> =>
   value !== undefined && Object.hasOwn(value, "_tag") && value._tag === "CodeModeTool"
@@ -70,14 +99,23 @@ export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | und
  *
  * Effect Schemas validate values; JSON Schemas only shape the model-visible signature.
  * Without `output`, results are exposed as `void`. Hosts remain responsible for authorization
- * and durable side effects.
+ * and durable side effects; a `durable` tool keeps its work running across a suspended run (see `Durable`).
  */
 export const make = <I extends SchemaType, const O extends SchemaType | undefined = undefined, R = never>(
   options: Options<I, O, R>,
-): Tool<R> => ({
-  _tag: "CodeModeTool",
-  description: options.description,
-  input: options.input,
-  output: options.output,
-  execute: (input) => options.execute(input as InputType<I>),
-})
+): Tool<R> => {
+  const durable = options.durable as Durable<unknown, unknown, R> | undefined
+  const execute = options.execute as ((input: unknown) => Effect.Effect<unknown, unknown, R>) | undefined
+  if (execute === undefined && durable === undefined) throw new TypeError("A tool needs `execute` or `durable`.")
+  return {
+    _tag: "CodeModeTool",
+    description: options.description,
+    input: options.input,
+    output: options.output,
+    execute:
+      execute ??
+      ((input) => Effect.flatMap(durable!.start(input, { key: crypto.randomUUID() }), (handle) => durable!.attach(handle))),
+    ...(durable === undefined ? {} : { durable }),
+    ...(options.retry === undefined ? {} : { retry: options.retry }),
+  }
+}

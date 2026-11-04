@@ -524,7 +524,7 @@ const elements = (target: Arr | Bytes): ArrayLike<Value> => (target instanceof A
 // Whether a callback method visits holes: only the find methods do, as undefined.
 const visitsHoles = (op: CallbackOp) => op.startsWith("find")
 const backwards = (op: CallbackOp) => op === "findLast" || op === "findLastIndex" || op === "reduceRight"
-const NEXT: unique symbol = Symbol("next")
+export const NEXT: unique symbol = Symbol("next")
 
 // Slots: what the method does, the receiver, the callback, its `this`, the fixed length, the next index, what it has
 // built so far (the values, or the accumulator), and the element the callback is looking at.

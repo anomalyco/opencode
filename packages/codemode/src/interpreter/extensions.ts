@@ -5,7 +5,7 @@ import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue } from "./intrinsics.js"
 import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
-import { type AstNode, PendingThrow, rangeError, Throw, typeError } from "./model.js"
+import { type AstNode, Lost, lostError, PendingThrow, rangeError, Throw, typeError } from "./model.js"
 import { native } from "./native.js"
 import {
   define,
@@ -223,6 +223,7 @@ const ExtensionCall = nativeKind("extension call", (task, frame, input) => {
   const invocation = slots[3] as ExtensionInvocation | undefined
   const args = slots[1] as ReadonlyArray<unknown>
   if (frame.phase === 2) return input as Value
+  if (slots[0] instanceof Lost) throw lostError(`The function ${label}`)
   if (frame.phase === 0 && invocation !== undefined && task.ctx.tools.hooks["extension.before"] !== undefined) {
     frame.phase = 1
     const call = { stage: "before", label, invocation, host: undefined, args, threw: false } as const

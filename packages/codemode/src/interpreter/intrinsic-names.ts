@@ -5,7 +5,8 @@ import { Obj, type Value } from "./objects.js"
 /**
  * Deterministic names for one runtime's intrinsic objects, so saved state can refer to a built-in by name instead of
  * copying it: a breadth-first walk from the global names (`Array.prototype.map`), then `%Name%` for built-in
- * prototypes the walk cannot reach (`%Generator%`) and what is reachable from them. The first path found names a value.
+ * prototypes the walk cannot reach (`%Generator%`) and what is reachable from them, then `@name` for the host's globals
+ * (extensions, a test harness) and what only they reach. The first path found names a value.
  *
  * The walk runs when the runtime is created, before any program can change a built-in; the names themselves are
  * spelled out only when asked for.
@@ -19,7 +20,11 @@ export class IntrinsicNames {
   private names: Array<string> | undefined
   private lookup: Map<string, Obj> | undefined
 
-  constructor(globals: ReadonlyArray<readonly [string, Value]>, builtins: Builtins) {
+  constructor(
+    globals: ReadonlyArray<readonly [string, Value]>,
+    builtins: Builtins,
+    hosts: ReadonlyArray<readonly [string, Value]> = [],
+  ) {
     let next = 0
     const visit = (value: Value, path: string | readonly [number, string | symbol]) => {
       if (!(value instanceof Obj) || this.index.has(value)) return
@@ -38,6 +43,10 @@ export class IntrinsicNames {
     drain()
     for (const [name, value] of Object.entries(builtins)) {
       visit(value, `%${name}%`)
+      drain()
+    }
+    for (const [name, value] of hosts) {
+      visit(value, `@${name}`)
       drain()
     }
   }

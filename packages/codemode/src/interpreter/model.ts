@@ -54,6 +54,22 @@ export class PendingThrow {
   }
 }
 
+/**
+ * A host value a restored run cannot have back: a function an extension returned, or what a host function returned,
+ * which have no data form. Using it fails with `lostError`.
+ */
+export class Lost {
+  constructor(readonly description: string) {}
+}
+
+/** What using a value lost to a suspend throws. */
+export const lostError = (description: string, node?: AstNode): PendingThrow =>
+  new PendingThrow(
+    "TypeError",
+    `${description} came from the host and was lost when the run was suspended; get it again after resuming.`,
+    node,
+  )
+
 const failure = (type: ErrorType, kind?: DiagnosticKind) => (message: string, node?: AstNode) =>
   new PendingThrow(type, message, node, kind)
 

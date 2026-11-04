@@ -12,7 +12,7 @@ import {
   outputTypeScript,
 } from "./tool-schema.js"
 import { isNamespace, type Namespace } from "./namespace.js"
-import { isTool, type Tool } from "./tool.js"
+import { type Handle, isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
 
 export const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
@@ -381,6 +381,20 @@ export type ToolRuntime<R = never> = {
   ) => Effect.Effect<Json | undefined, unknown, R>
   readonly search: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
+  /** The tool at `path`, if there is one, so a caller can see whether it is durable or safe to retry. */
+  readonly tool: (path: ReadonlyArray<string>) => Tool<R> | undefined
+  /** Admits a call to a durable tool, as `execute` does, and starts its work under `key`: its handle. */
+  readonly start: (path: ReadonlyArray<string>, args: Array<Json | undefined>, key: string) => Effect.Effect<Handle, unknown, R>
+  /** Waits for a durable tool's work: its output, as `execute` gives it. Interrupting it detaches. */
+  readonly attach: (
+    path: ReadonlyArray<string>,
+    args: Array<Json | undefined>,
+    handle: Handle,
+  ) => Effect.Effect<Json | undefined, unknown, R>
+  /** The handle of a durable tool's work started under `key`, if it was. */
+  readonly lookup: (path: ReadonlyArray<string>, key: string) => Effect.Effect<Handle | undefined, unknown, R>
+  /** Stops a durable tool's work. */
+  readonly cancel: (path: ReadonlyArray<string>, handle: Handle) => Effect.Effect<void, unknown, R>
 }
 
 /** Per-execution call state over tools prepared once for the runtime. */
@@ -388,8 +402,8 @@ export const make = <R>(
   prepared: Prepared<R>,
   maxToolCalls: number | undefined,
   hooks: Hooks<R> = {},
+  calls: Array<ToolCall> = [],
 ): ToolRuntime<R> => {
-  const calls: Array<ToolCall> = []
   const root = prepared.root
 
   const recordCall = (call: ToolCall): void => {
@@ -399,12 +413,12 @@ export const make = <R>(
     calls.push(call)
   }
 
-  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
+  const decode = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
     Effect.gen(function* () {
       const normalized = args.length === 0 ? [{}] : args
       if (normalized.length !== 1)
         throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
-      const input = yield* Effect.try({
+      return yield* Effect.try({
         try: () => decodeToolInput(tool, normalized[0]),
         catch: (cause) =>
           new ToolRuntimeError(
@@ -413,35 +427,53 @@ export const make = <R>(
             name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
+    })
+
+  // A tool's own failure becomes a ToolError; interruption passes through.
+  const failure = <A>(effect: Effect.Effect<A, unknown, R>) =>
+    effect.pipe(
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+        return Effect.fail(
+          toolError(
+            Cause.prettyErrors(cause)
+              .map((error) => (error.cause ? Formatter.format(error) : error.message || error.name))
+              .join("\n"),
+          ),
+        )
+      }),
+    )
+
+  // The same round trip a tool result would take through text: exact JSON.stringify semantics.
+  const output = (name: string, tool: Tool<R>, raw: unknown) =>
+    Effect.try({
+      try: (): Json | undefined => {
+        const text = JSON.stringify(decodeToolOutput(tool, raw))
+        return text === undefined ? undefined : JSON.parse(text)
+      },
+      catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
+    })
+
+  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
+    Effect.gen(function* () {
+      const input = yield* decode(name, tool, args)
       yield* Effect.sync(() => recordCall({ name }))
       return yield* hooked(
         { name, input },
         hooks["tool.before"],
         hooks["tool.after"],
         Effect.gen(function* () {
-          const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
-            Effect.catchCause((cause) => {
-              if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
-              return Effect.fail(
-                toolError(
-                  Cause.prettyErrors(cause)
-                    .map((error) => (error.cause ? Formatter.format(error) : error.message || error.name))
-                    .join("\n"),
-                ),
-              )
-            }),
-          )
-          // The same round trip a tool result would take through text: exact JSON.stringify semantics.
-          return yield* Effect.try({
-            try: (): Json | undefined => {
-              const text = JSON.stringify(decodeToolOutput(tool, raw))
-              return text === undefined ? undefined : JSON.parse(text)
-            },
-            catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
-          })
+          const raw = yield* failure(Effect.suspend(() => tool.execute(input)))
+          return yield* output(name, tool, raw)
         }),
       )
     })
+
+  const durableTool = (path: ReadonlyArray<string>) => {
+    const tool = lookup(root, canonicalSegments(path))?.tool
+    if (tool?.durable === undefined) throw new TypeError(`Tool '${canonicalSegments(path).join(".")}' is not durable.`)
+    return { name: canonicalSegments(path).join("."), tool, durable: tool.durable }
+  }
 
   return {
     calls,
@@ -456,6 +488,38 @@ export const make = <R>(
           return executeTool("search", makeSearchTool(prepared.searchIndex), args)
         return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args)
       }),
+    tool: (path) => lookup(root, canonicalSegments(path))?.tool,
+    start: (path, args, key) =>
+      Effect.suspend(() => {
+        const found = durableTool(path)
+        return Effect.gen(function* () {
+          const input = yield* decode(found.name, found.tool, args)
+          yield* Effect.sync(() => recordCall({ name: found.name }))
+          const before = hooks["tool.before"]
+          if (before !== undefined) yield* before({ name: found.name, input })
+          return yield* failure(Effect.suspend(() => found.durable.start(input, { key })))
+        })
+      }),
+    attach: (path, args, handle) =>
+      Effect.suspend(() => {
+        const found = durableTool(path)
+        const after = hooks["tool.after"]
+        const run = Effect.gen(function* () {
+          const raw = yield* failure(Effect.suspend(() => found.durable.attach(handle)))
+          return yield* output(found.name, found.tool, raw)
+        })
+        if (after === undefined) return run
+        // Detaching is not an outcome: `after` sees how the work ended, once it has.
+        return Effect.flatMap(decode(found.name, found.tool, args), (input) =>
+          Effect.onExit(run, (exit) => {
+            if (Exit.isSuccess(exit)) return after({ name: found.name, input }, { status: "success", value: exit.value })
+            if (Cause.hasInterruptsOnly(exit.cause)) return Effect.void
+            return after({ name: found.name, input }, { status: "failure", error: Cause.squash(exit.cause) })
+          }),
+        )
+      }),
+    lookup: (path, key) => Effect.suspend(() => failure(durableTool(path).durable.lookup(key))),
+    cancel: (path, handle) => Effect.suspend(() => failure(durableTool(path).durable.cancel(handle))),
   }
 }
 

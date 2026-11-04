@@ -1,7 +1,10 @@
 import { Effect, Schema } from "effect"
 import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
-import { executeProgram } from "./interpreter/execute.js"
+import type { Json } from "./data.js"
+import type { Outcome } from "./interpreter/driver.js"
+import { executeSetup, resumeProgram, type Run, type Setup, startProgram } from "./interpreter/execute.js"
+import type { Snapshot } from "./snapshot/snapshot.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
 import { scanTools } from "./scan.js"
@@ -9,6 +12,9 @@ import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime
 import type { Tools } from "./tools.js"
 
 export { scanTools }
+export { fromBytes, SnapshotError, toBytes } from "./snapshot/snapshot.js"
+export type { Header as SnapshotHeader, Snapshot } from "./snapshot/snapshot.js"
+export type { Outcome, Run }
 
 /** A tool call admitted during an execution. */
 export type {
@@ -52,8 +58,18 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
   /** Host functions and objects exposed as globals, also importable by Node module name; see `Extension.make`. */
   extensions?: Extensions
-  /** Resource limits enforced on each execution. */
+  /** Resource limits enforced on each execution. Time counts active time only, across every resume of a run. */
   limits?: ExecutionLimits
+  /** How `run.suspend` saves a run; see `Runtime.start`. */
+  suspend?: SuspendOptions
+}
+
+/** How suspending a run settles its host calls and saves its state. */
+export type SuspendOptions = {
+  /** Milliseconds to wait for running host calls to finish before detaching or abandoning them. Default 50. */
+  readonly graceMs?: number
+  /** The most bytes a saved state may take; a larger one fails the run instead of suspending it. */
+  readonly maxBytes?: number
 }
 
 /** The Effect environment an execution needs: what the tools and the extensions' Effect globals require. */
@@ -131,10 +147,47 @@ export const Result = Schema.Union([Success, Failure])
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type Result = typeof Result.Type
 
+/** A host call a suspended run was waiting on. */
+export type Pending = {
+  readonly id: number
+  /** The tool path, `search`, or an extension function's name. */
+  readonly path: string
+  readonly args: ReadonlyArray<Json>
+  /** The idempotency key, `<run id>:<id>`; a durable tool names its work by it. */
+  readonly key: string
+  /**
+   * `queued`: it never started. `starting`: it may have started, and its outcome is unknown. `started`: a durable
+   * tool's work, still running, reattached by its handle on resume.
+   */
+  readonly status: "queued" | "starting" | "started"
+}
+
+/** A run stopped by `run.suspend`: its whole state, to resume with `Runtime.resume`, and the calls it waits on. */
+export type Suspended = {
+  readonly ok: "suspended"
+  readonly state: Snapshot
+  readonly pending: ReadonlyArray<Pending>
+}
+
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
   readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
+  /**
+   * Starts a program as a run that can be suspended: `run.result` runs it, and `run.suspend` stops it at the next step
+   * boundary and saves its state. `runId` names its host calls' idempotency keys; a random one by default.
+   */
+  readonly start: (
+    code: string,
+    bindings?: Readonly<Record<string, DataValue>>,
+    options?: { readonly runId?: string },
+  ) => Run<R>
+  /**
+   * Continues a suspended run (its `state`, or that state as bytes) in this runtime, which must be the same build with
+   * the same extensions. `outcomes` settles pending calls whose outcome the host knows, by key. Throws a
+   * `SnapshotError` when the state can't be resumed here.
+   */
+  readonly resume: (state: Snapshot | Uint8Array, outcomes?: Readonly<Record<string, Outcome>>) => Run<R>
 }
 
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
@@ -178,14 +231,26 @@ export const make = <
       bound.add(name)
     }
   }
+  if (options.suspend?.graceMs !== undefined) validateLimit("graceMs" as keyof ExecutionLimits, options.suspend.graceMs, 0)
+  const setup: Setup<Environment<Provided, Extensions>> = {
+    prepared,
+    limits,
+    hooks: options.hooks ?? {},
+    globals: extensions.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, extensions),
+    lossy: extensions.length > 0,
+    suspend: options.suspend,
+  }
+  const data = (bindings: Readonly<Record<string, DataValue>> | undefined) =>
+    bindings === undefined
+      ? undefined
+      : (ctx: Parameters<typeof fromJson>[0]) =>
+          Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const)
   return {
     get catalog() {
       return prepared.catalog
     },
-    execute: (code, bindings) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
-        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-        ...extensionGlobals(ctx, extensions),
-      ]),
+    execute: (code, bindings) => executeSetup(setup, code, data(bindings)),
+    start: (code, bindings, runOptions) => startProgram(setup, code, data(bindings), runOptions?.runId),
+    resume: (state, outcomes) => resumeProgram(setup, state, outcomes),
   }
 }

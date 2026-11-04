@@ -25,12 +25,13 @@ export class Interpreter<R> {
   /** Names for this runtime's intrinsics, taken before any program code can change a built-in. */
   readonly intrinsics: IntrinsicNames
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
-  readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
+  readonly templates = new Map<TaggedTemplateExpression, Arr>()
   /** Makes the Effect an extension function's host work runs as; set by the extension bridge. */
   extensionWork: ((request: ExtensionRequest) => unknown) | undefined
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
   readonly sources = new Map<string, Source>()
-  private readonly globalScope: Map<string, Binding>
+  /** The global bindings: the intrinsics, the host's globals, and the program's bindings. */
+  readonly globalScope: Map<string, Binding>
   private readonly modules = new Map<string, Value>()
   private readonly namespaces = new Map<string, Obj>()
 
@@ -38,7 +39,10 @@ export class Interpreter<R> {
     readonly tools: ToolRuntime<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
+    /** The host's globals (extensions, a test harness): made again, the same way, when a saved run is restored. */
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
+    /** Data bound for this program, part of its saved state; host globals of the same name win. */
+    readonly bindings?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
     this.tools = options.tools
     this.builtins = options.builtins
@@ -48,8 +52,9 @@ export class Interpreter<R> {
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     const intrinsics = globals(this)
-    this.intrinsics = new IntrinsicNames(intrinsics, this.builtins)
-    for (const [name, value] of [...intrinsics, ...(options.globals?.(this) ?? [])]) {
+    const hosts = options.globals?.(this) ?? []
+    this.intrinsics = new IntrinsicNames(intrinsics, this.builtins, hosts)
+    for (const [name, value] of [...intrinsics, ...(options.bindings?.(this) ?? []), ...hosts]) {
       this.globalScope.set(name, { mutable: false, value })
     }
     nativeRule.sealed.add(this.builtins.Function)

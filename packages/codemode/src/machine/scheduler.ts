@@ -97,9 +97,18 @@ export type ExtensionRequest = {
  * promise in a later job; a blocking call stops the machine, and no other job runs until it ends.
  */
 export class HostCall {
-  status: "queued" | "inFlight" | "completed" = "queued"
+  /**
+   * Where the call is: `queued` (written ahead, not started), `starting` (the host may have started it; a durable
+   * tool's handle is not known yet), `started` (a durable tool returned `handle`, so its work can be reattached), or
+   * `completed`.
+   */
+  status: "queued" | "starting" | "started" | "completed" = "queued"
+  /** A durable tool's handle on its running work, once started. */
+  handle: Json | undefined = undefined
   constructor(
     readonly id: number,
+    /** The idempotency key, `<run id>:<id>`, which a durable tool also names its work by. */
+    readonly key: string,
     readonly request: HostRequest,
     /** What runs: a tool path, or an extension function's label. */
     readonly label: string,

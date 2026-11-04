@@ -129,7 +129,7 @@ function walkStep(task: MachineTask, frame: Frame, input: unknown): Out<Value> {
   }
 }
 
-const DESCEND: unique symbol = Symbol("descend")
+export const DESCEND: unique symbol = Symbol("descend")
 
 // Advances one level: its JSON once it is done, DESCEND after pushing a child level, or PENDING.
 function visit(
