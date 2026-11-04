@@ -25,7 +25,7 @@ pub fn show(local: &Rc<Local>) {
                 )
                 .collect();
             let mut props = SelectProps::new("Select variant", options);
-            props.render_filter = !cx.new_designs;
+            props.render_filter = false;
             props.flat = true;
             props.current = Some(local.variant().unwrap_or_else(|| "default".to_owned()));
             let weak = Rc::downgrade(&local);

@@ -11,7 +11,7 @@ use std::rc::{Rc, Weak};
 use opencode_local::cli_config::{CliConfig, Info, merge};
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::select::{FooterHint, SelectOption, SelectProps, Side, select};
+use opencode_ui::select::{Choice, Detail, SelectOption, SelectProps, select};
 use opencode_ui::theme::ModeSetting;
 use opentui::keymap::Disposer;
 use serde_json::{Map, Value};
@@ -51,7 +51,7 @@ pub struct Setting {
     pub title: &'static str,
     pub category: &'static str,
     pub path: &'static [&'static str],
-    /// Shown under the row under `new-designs`.
+    /// Shown below the list while the row is selected.
     pub description: &'static str,
     pub default: Lit,
     /// The values Left and Right cycle through; empty for the theme (the theme names) and numeric settings.
@@ -705,9 +705,13 @@ fn options(tui: &Tui) -> Vec<SelectOption<usize>> {
         .iter()
         .enumerate()
         .map(|(index, setting)| {
-            let mut option = SelectOption::new(setting.title, index)
-                .category(setting.category)
-                .footer(display(tui, setting));
+            let mut option = SelectOption::new(setting.title, index).category(setting.category);
+            option.choice = Some(Choice {
+                value: display(tui, setting),
+                // TS opens the theme list here; Enter cycles the theme until that dialog lands (E.18b).
+                open: setting.is_theme(),
+            });
+            option.detail = Some(Detail::Text(setting.description.to_owned()));
             if !setting.keywords.is_empty() {
                 option.search_text = Some(setting.keywords.join(" "));
             }
@@ -762,7 +766,12 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                 }
             };
             let mut props = SelectProps::new("Settings", options(&tui));
-            props.current = Some(current);
+            props.search_in_title = true;
+            props.title_placeholder = Some("Search settings".to_owned());
+            // The opening setting is focused without the current-item marker; changing a value keeps the
+            // selection where it is.
+            props.focus_target = Some(current);
+            props.preserve_selection = true;
             props.filter_threshold = 0.7;
             props.on_move = Some(Rc::new({
                 let selected = selected.clone();
@@ -776,14 +785,6 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                     }
                 }
             }));
-            if !cx.new_designs {
-                props.footer_hints = vec![FooterHint {
-                    title: "change".into(),
-                    label: "←/→".into(),
-                    side: Side::Left,
-                    group: None,
-                }];
-            }
             props.bindings = vec![
                 TuiCommand::inline("left", step(-1))
                     .title("Previous value")

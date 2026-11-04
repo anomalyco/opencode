@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::TuiCommand;
-use opencode_ui::select::{FooterHint, SelectOption, SelectProps, Side, select};
+use opencode_ui::select::{SelectOption, SelectProps, select};
 use serde_json::Value;
 
 use super::settings::{self, set_path};
@@ -21,13 +21,9 @@ pub struct Experiment {
 }
 
 /// In-flight features anyone can opt into. Each entry is temporary: an experiment either graduates (delete the
-/// entry, make the behavior unconditional) or dies (delete the entry and the branch it gated).
+/// entry, make the behavior unconditional) or dies (delete the entry and the branch it gated). `new-designs`
+/// graduated here: the Rust client draws only the new designs, though the TypeScript TUI still lists it.
 pub const EXPERIMENTS: &[Experiment] = &[
-    Experiment {
-        id: "new-designs",
-        title: "New designs",
-        description: "Preview the new TUI designs",
-    },
     Experiment {
         id: "client-mcp",
         title: "TUI tools",
@@ -79,14 +75,6 @@ pub fn show(tui: &Tui) {
                     }
                 }
             }));
-            if any && !cx.new_designs {
-                props.footer_hints = vec![FooterHint {
-                    title: "change".into(),
-                    label: "←/→".into(),
-                    side: Side::Left,
-                    group: None,
-                }];
-            }
             if any {
                 let bind = |key: &str, title: &str| {
                     let (weak, selected) = (weak.clone(), selected.clone());
