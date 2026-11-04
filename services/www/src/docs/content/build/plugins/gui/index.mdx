@@ -787,7 +787,30 @@ A panel's options:
 - `mobile` adds a narrow-screen view of the panel. With `cached: true`, the view stays mounted while the user shows
   another view. By default, the view mounts each time it shows.
 - `wide` asks for the wider session minimum while the side region is open.
+- `width` gives the panel a side region width of its own; see [Panel width](#panel-width).
 - `transient` panels' tabs are not restored.
+
+#### Panel width
+
+By default, every tab in the side region shares the conversation's width. Set `width` when your panel needs less room
+than a review or a browser, or more. Pass CSS pixels, or `"narrow"` for the narrowest the region goes.
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- The width applies while the side pane shows one of the panel's tabs. Other tabs keep the conversation's width.
+- When the user drags the divider on one of the panel's tabs, the host keeps that width for the panel, app-wide, in place
+  of `width`.
+- The host keeps the conversation at its minimum width and the region at least `"narrow"`.
+- `ctx.layout.side.width(panel)` reads the stored width, and `ctx.layout.side.resize(panel, width)` stores one, as a drag
+  does. A stored width applies even to a panel without `width`.
 
 A tab's options:
 
@@ -812,6 +835,7 @@ interface Panel {
   region: "side"
   mobile?: MobileView
   wide?: boolean
+  width?: number | "narrow"
   transient?: boolean
   list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
   render(props: PanelProps): JSX.Element
@@ -927,6 +951,28 @@ ctx.add(SettingsPage, {
   id as `target`.
 - A settings page has a `render`, so the host keeps it stable. Read its labels and entries from getters.
 
+Render the page with the app's settings components, so it looks like the app's own pages and search can reveal its
+rows:
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- A page of your own renders `SettingsLayout`, a section on a host page (`page`) renders `SettingsSection`, and rows
+  in a host section (`section`) render `SettingsRow`s.
+- A row's `id` is the `SettingEntry.id` that reveals it: search scrolls to the row and highlights it.
+- See [Settings components](#settings-components) for their props.
+
 #### Reference
 
 ```ts
@@ -976,6 +1022,16 @@ only while it is `true`:
 ctx.add(Slot, {
   at: "session.location.menu",
   render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+The project menu is a host menu: render its rows with `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup`, and `MenuSeparator`,
+so they navigate with the keyboard and close the menu like the host's rows. See [Menu rows](#menu-rows).
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
 })
 ```
 
@@ -1199,6 +1255,120 @@ interface ComposerPillRow {
 type ComposerPillTone = "success" | "warning" | "danger"
 ```
 
+### Code blocks
+
+`CodeBlock` renders the fenced code blocks of the languages you list as your own UI, in place of the highlighted code.
+Use it for content that reads better drawn than as source, such as a ` ```csv ` table or a ` ```latex `
+formula:
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages` are compared with the first word of the fence's info string, lowercased: ` ```CSV title="Q3" `
+  matches `csv`. The host resolves no aliases, so list each name you accept.
+- `render` receives the block's `code`, its `language` and the `session` that shows it. Return `undefined` or `null` to
+  keep the highlighted code, for example when the source does not parse.
+- A render that throws records the error under your plugin, and the block shows its code. Your other contributions
+  keep working.
+- When several plugins list a language, the first contributed renders it. Your renderer also replaces the app's own
+  Mermaid diagram when you list `mermaid`.
+
+#### Streaming
+
+The host renders a block only once its closing fence arrives. While the block streams, and in a message that stopped
+mid-block, the user sees the highlighted code; then your UI replaces it in place. Your render never sees half a block.
+
+#### Where it applies
+
+| Surface                                                        | Code block content |
+| -------------------------------------------------------------- | ------------------ |
+| Timeline: assistant text and tool output                       | Yes                |
+| Side panels on the session screen, e.g. the Markdown preview   | Yes                |
+| `ctx.ui.Markdown` rendered on the session screen               | Yes                |
+| `ctx.ui.Code`, and Markdown inside your own `CodeBlock` render | No                 |
+| Settings pages, dialogs and other surfaces off the screen      | No                 |
+
+#### Layout and performance
+
+- Blocks of languages no plugin lists cost nothing; only a block of a listed language renders your UI, and only while
+  its timeline row is on screen.
+- The block grows and shrinks with your UI. Give asynchronous content a minimum height, so the timeline shifts less
+  when it arrives.
+- The block keeps its Copy button, which copies the source, and your `CodeBlockAction` buttons over its top end corner.
+
+### Code block actions
+
+`CodeBlockAction` adds a button beside the Copy button of the code blocks of the languages you list. `run` receives the
+same block a `CodeBlock` render receives:
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- The button shows once the block's closing fence arrives, so it never acts on half a command.
+- Buttons reveal with Copy on hover or keyboard focus, before it, in ascending `order`.
+- Read `title` from a getter so it follows the locale.
+- A `run` that throws or rejects is logged under your plugin and changes nothing else.
+
+#### Reference
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
 ### Link handlers
 
 `LinkHandler` opens local file or custom links that users click in messages or composer chips. The handler with the
@@ -1327,6 +1497,58 @@ import css from "./panel.css?inline"
 ctx.add(Style, css)
 ```
 
+### Themes
+
+`Theme` adds a color theme to Settings › Appearance › Theme. It takes the same format as the app's own theme files, so
+a theme file imports as it is.
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+A theme file names itself and gives a light and a dark variant. Each variant starts from a `palette` or from `seeds`,
+never both, and can pin single tokens with `overrides`.
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- The picker lists plugin themes among the app's themes, alphabetically by `name`.
+- The host keys each theme as `<plugin id>:<theme id>`, so it never replaces an app theme or another plugin's.
+- Withdrawing the theme, or disabling the plugin, takes it out of the picker. A user who picked it keeps the choice: the
+  window shows the default theme until the theme returns.
+- At startup, the window shows the colors cached from the last run until the plugin contributes the theme again.
+
 ## Host APIs
 
 Host APIs are properties of `ctx`. None of them throw before the app interface mounts: reads return their documented
@@ -1421,6 +1643,8 @@ if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", backgro
 - `ready()` is `true` once the stored layout has loaded, and `narrow()` while the viewport is under 768px.
 - `side.opened(session)` is `true` while the side region is open, and `side.toggle(session)` opens or closes it.
 - `side.menu()` lists every plugin's `session.panel` [menu items](#menu-items) in `order`, for a launcher of your own.
+- `side.width(panel)` and `side.resize(panel, width)` read and store the side region width of one of your panels; see
+  [Panel width](#panel-width).
 - `sidebar.opened()` is the inner sidebar preference that every side panel shares.
 - `scroll` stores scroll offsets per session and key.
 - `settings(page?)` opens Settings. `project(server, title)` opens a project's directory picker and a new draft.
@@ -1452,6 +1676,8 @@ interface Layout {
     opened(session: SessionRef): boolean
     toggle(session: SessionRef): void
     menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
   }
   sidebar: {
     opened(): boolean
@@ -1969,6 +2195,86 @@ ctx.dialogs.open((dialog) => (
   sizes.
 - Escape and a click outside close the dialog. `closable: false` hides the header's close button.
 
+#### Menu rows
+
+`MenuItem`, `MenuSub`, `MenuGroup`, and `MenuSeparator` are rows for a menu the host renders, such as the
+`session.location.menu` slot. They navigate with the keyboard, show the host's muted icons and shortcut chips, and close
+the menu on a pick.
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem` takes the same fields as an entry of `Menu`'s `items`.
+- `MenuSub` opens its children in a submenu beside the row. `onOpenChange` tells you when, so you can load its rows
+  only while it is open.
+- `MenuGroup` puts rows under a heading, and `MenuSeparator` draws a line between rows.
+- `MenuItem`, `MenuSub`, and `MenuGroup` throw outside a menu: the host records the error and renders nothing of that
+  contribution.
+
+#### Selects
+
+`Select` picks one of a list of choices, as the app's settings rows pick a language. Its value is a string; the type of
+`options` narrows it.
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` is the select's accessible name; the selected option's `label` is what it shows.
+- A `value` that no option has shows `placeholder`. Picking the selected choice again does not call `onChange`.
+
+#### Settings components
+
+`SettingsLayout`, `SettingsSection`, and `SettingsRow` render a [settings page](#settings-pages) the way the app renders
+its own: the page header, sections with headings over bordered lists, and rows with a title, a description, and a
+control at the end.
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- Use `SettingsLayout` for a page of your own, `SettingsSection` for a section on a host page, and `SettingsRow` alone
+  for rows in a host section. Rows line up with the host's rows in every case.
+- `id` on a row is the `SettingEntry.id` that reveals it. Search that reveals the page's own id highlights the header.
+- `actions` sits at the end of the title row. A section's `footer` sits under its list, outside the border.
+- They take their look from the Settings screen's styles, so render them from a `SettingsPage`.
+
 #### Reference
 
 ```ts
@@ -1978,13 +2284,21 @@ interface Ui {
   IconButton(props: UiIconButtonProps): JSX.Element
   Tooltip(props: UiTooltipProps): JSX.Element
   Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
   Loader(props: UiLoaderProps): JSX.Element
   Dialog(props: UiDialogProps): JSX.Element
   Switch(props: UiSwitchProps): JSX.Element
   TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
   Keybind(props: UiKeybindProps): JSX.Element
   Markdown(props: UiMarkdownProps): JSX.Element
   Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
 }
 
 interface UiIconProps {
@@ -2055,6 +2369,19 @@ interface UiMenuGroup {
   items: UiMenuItem[]
 }
 
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
 interface UiLoaderProps {
   size?: "small" | "normal" | "large"
   class?: string
@@ -2106,6 +2433,43 @@ interface UiCodeProps {
   content: string
   language?: string
   class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
 }
 ```
 
@@ -2231,6 +2595,28 @@ interface NotifyResult {
   sound: boolean
 }
 ```
+
+### Usage data
+
+A session's token, cost and plan figures are in its server's data, the same reactive store the app reads for the
+header's "28k · $0.28". Read them there rather than from opencode's database.
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()` is the assistant step whose tokens fill the context window now, as the app's context ring uses. Compare its
+  `tokens` with the model's `limit.context` from `data.location.model.list`.
+- `limits()` holds the OpenCode Console budgets and Go plan allowance once `data.location.usage.sync(location)` has
+  loaded them. It is `null` when the server reports none.
 
 ### Tabs
 

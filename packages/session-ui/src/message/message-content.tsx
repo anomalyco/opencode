@@ -19,6 +19,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
+import { LinkedText } from "../components/linked-text"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
@@ -1034,7 +1035,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
         </Show>
         <Show when={error()}>
           <Card variant="error" class="error-card">
-            {error()}
+            <LinkedText text={error()} />
           </Card>
         </Show>
       </div>
