@@ -14,6 +14,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionBackgroundInput, SessionID, SessionInboxDelivery, SessionInfo, SessionInterruptInput,
 };
+use opencode_local::cli_config::Permissions;
 use opencode_local::jsonl::empty_prompt;
 use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
@@ -106,6 +107,8 @@ pub struct Inner {
     /// The mentions' extmarks and the parts they stand for (E.3).
     pub(crate) parts: parts::Parts,
     pub(crate) autocomplete: OnceCell<Autocomplete>,
+    /// `--prompt`, until it is submitted (`home.tsx:68-79`, `session/index.tsx:623-630`).
+    startup: RefCell<Option<String>>,
     pub(crate) this: Weak<Inner>,
 }
 
@@ -137,6 +140,7 @@ impl Prompt {
                 self.inner.interrupt.set(0);
             }
             self.inner.refresh(tui);
+            self.inner.submit_startup(tui);
         }
     }
 
@@ -283,6 +287,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         layers: RefCell::new(Vec::new()),
         parts: parts::Parts::default(),
         autocomplete: OnceCell::new(),
+        startup: RefCell::new(None),
         this: this.clone(),
     });
     connect(&inner);
@@ -301,6 +306,13 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
             .textarea
             .set_cursor_offset(cursor.min(inner.text_end()));
     }
+    if let Some(text) = tui.startup.take_prompt(session) {
+        let mut prompt = empty_prompt();
+        prompt["text"] = Value::String(text.clone());
+        inner.restore(prompt);
+        inner.textarea.set_cursor_offset(inner.text_end());
+        *inner.startup.borrow_mut() = Some(text);
+    }
     load_catalog(tui, &inner);
     // A model, agent, or variant choice (E.16) changes the metadata row.
     let weak = Rc::downgrade(&inner);
@@ -309,10 +321,12 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
             && let Some(tui) = inner.tui.upgrade()
         {
             inner.refresh(&tui);
+            inner.submit_startup(&tui);
         }
     });
     inner.layers.borrow_mut().push(local);
     inner.refresh(tui);
+    inner.submit_startup(tui);
     Prompt { inner }
 }
 
@@ -431,7 +445,35 @@ impl Inner {
         if let Some(catalog) = catalog {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
+            self.submit_startup(tui);
         }
+    }
+
+    /// Submits `--prompt` once everything a submit needs has loaded, if it is still the prompt's text.
+    fn submit_startup(&self, tui: &Tui) {
+        let ready = self.startup.borrow().is_some()
+            && self.catalog.borrow().is_some()
+            && (self.session.is_none() || self.session_info(tui).is_some())
+            && tui.local.ready()
+            && tui.local.catalog_ready()
+            && tui.local.agent().is_some()
+            && tui.local.current().is_some();
+        if !ready {
+            return;
+        }
+        let Some(text) = self.startup.take() else {
+            return;
+        };
+        if self.textarea.text() != text {
+            return;
+        }
+        // After the change that made it ready: a submit can navigate, which drops this prompt.
+        let weak = self.this.clone();
+        tui.app.defer(move |_| {
+            if let Some(prompt) = weak.upgrade() {
+                super::submit::submit(&prompt, SessionInboxDelivery::Steer);
+            }
+        });
     }
 
     /// Repaints the border, the metadata row, and the footer from the current state.
@@ -465,6 +507,7 @@ impl Inner {
                 let (model, provider) = catalog.labels(selection.model.as_ref());
                 Display {
                     agent: Some(metadata::titlecase(selection.agent.id.as_str())),
+                    auto: tui.config.permissions == Permissions::Autoaccept,
                     model,
                     provider,
                     variant: selection

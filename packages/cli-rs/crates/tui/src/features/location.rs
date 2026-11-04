@@ -144,7 +144,10 @@ fn not_found(error: &Error) -> bool {
 
 /// `session.environment` with the terminal's variables, once per session and connection.
 fn upload_environment(tui: &Tui, id: &SessionID) {
-    if !tui.startup.args.local || tui.location.uploaded.borrow().as_ref() == Some(id) {
+    let Some(variables) = tui.startup.args.environment.clone() else {
+        return;
+    };
+    if tui.location.uploaded.borrow().as_ref() == Some(id) {
         return;
     }
     *tui.location.uploaded.borrow_mut() = Some(id.clone());
@@ -152,14 +155,7 @@ fn upload_environment(tui: &Tui, id: &SessionID) {
     let id = id.clone();
     let weak = tui.weak();
     tui.app.spawn(
-        async move {
-            opencode_store::environment::upload(
-                &client,
-                &id,
-                opencode_store::environment::session_environment(),
-            )
-            .await
-        },
+        async move { opencode_store::environment::upload(&client, &id, variables).await },
         move |_, result| {
             if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
                 tui.toasts.error(error.to_string());

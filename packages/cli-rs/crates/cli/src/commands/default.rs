@@ -1,13 +1,12 @@
-//! The root command, which opens the TUI (T.1, to C.13): connect, read `cli.json`, and run the TUI
-//! until it quits. E.1 resolves `--session` and passes `--prompt` (`handlers/default.ts`); C.13 adds the
-//! remaining root flags.
+//! The root command, which opens the TUI (`handlers/default.ts`): enter the directory, connect, read
+//! `cli.json`, resolve `--session`, and run the TUI with the root flags until it quits.
 
 use std::sync::Arc;
 
 use opencode_api::generated::SessionID;
 use opencode_api::transport::Reqwest;
 use opencode_local::channel::Channels;
-use opencode_local::cli_config::{CliConfig, Permissions, Resolved};
+use opencode_local::cli_config::{CliConfig, Resolved};
 use opencode_local::paths::{self, Paths};
 use opencode_service::connect::{self, Env, Options, Source};
 use opencode_tui::{Args, Deps, Launch, Route, app::Roots};
@@ -36,7 +35,12 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             standalone: context.server.standalone,
             client_version: crate::help::VERSION.to_owned(),
             standalone_fallback: false,
-            on_start: Some(|| eprintln!("Starting background server...")),
+            // The Rust client never replaces a service, so TS's "Restarting background server (version
+            // mismatch)..." has no counterpart.
+            on_start: Some(|| {
+                log::info!("background service starting reason=missing");
+                eprintln!("Starting background server...");
+            }),
         },
     ))?;
     let client = connection.endpoint.client(transport)?;
@@ -44,11 +48,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         log::warn!("failed to read cli.json: {error}");
         Default::default()
     });
-    let mut config = Resolved::new(info, |name| std::env::var(name).ok());
-    // `--auto` wins over `session.permissions` (`context/permission.tsx`).
-    if args.permissions.auto() {
-        config.permissions = Permissions::Autoaccept;
-    }
+    let config = Resolved::new(info, |name| std::env::var(name).ok());
     // A `--session` ID the server does not know becomes the ID of the session the first prompt creates.
     let session = match &args.session {
         Some(id) => {
@@ -65,6 +65,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             .and_then(|value| opencode_tui::features::startup::env_route(&value))
             .unwrap_or(Route::Home),
     };
+    // Managed and standalone servers run here; an explicit `--server` may be on another machine.
     let local = context.server.server.is_none();
     let tui_args = Args {
         version: crate::help::VERSION.to_owned(),
@@ -74,6 +75,8 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             .and_then(|(id, found)| (!found).then(|| id.clone())),
         local,
         managed: matches!(connection.source, Source::Service { .. }),
+        auto: args.permissions.auto(),
+        environment: local.then(opencode_store::environment::session_environment),
         ..Args::default()
     };
     // The TUI's tasks run on this runtime: `App::runtime` uses the multi-threaded runtime it starts in.
@@ -88,7 +91,8 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
                 storage_channel: Channels::from_env().storage,
             }),
             route,
-            continue_: args.continue_ && args.session.is_none(),
+            // With `--session` too, TS opens that session, then the continued one replaces it.
+            continue_: args.continue_,
             events: true,
         },
         args: tui_args,
