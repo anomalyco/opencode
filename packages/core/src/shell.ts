@@ -22,6 +22,7 @@ import { SessionSchema } from "./session/schema.js"
 import { Config } from "./config.js"
 import { ToolOutput } from "./tool-output.js"
 import { ShellResult } from "./shell/result.js"
+import { ShellPhase } from "./shell/phase.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -47,15 +48,8 @@ type Active = {
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
-  timeoutFiber?: Fiber.Fiber<void>
-  timeout?: (duration: number) => Effect.Effect<void>
-}
-
-type Ended = {
-  status: "exited" | "timeout"
-  exit?: number
-  signal?: string
-  completed: number
+  phase: ShellPhase.State
+  timeout: (duration: number) => Effect.Effect<void>
 }
 
 /**
@@ -149,7 +143,9 @@ const layer = () =>
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           for (const command of commands.values()) {
-            if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+            const previous = command.phase
+            command.phase = ShellPhase.transition(previous, { type: "removed" })
+            if (previous.status === "running" && previous.timer) yield* Fiber.interrupt(previous.timer)
             // Teardown interrupts pending commands; it is not a terminal command failure.
             yield* Deferred.interrupt(command.done)
           }
@@ -170,14 +166,25 @@ const layer = () =>
         if (index !== -1) exitOrder.splice(index, 1)
         if (!command) return
         commands.delete(id)
-        if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+        const previous = command.phase
+        command.phase = ShellPhase.transition(previous, { type: "removed" })
+        if (previous.status === "running" && previous.timer) yield* Fiber.interrupt(previous.timer)
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(command.done, new NotFoundError({ id }))
         yield* Effect.promise(() => unlink(command.file).catch(() => {}))
-        // Every shell reports exactly one exit; removing a running one ends it as killed.
-        if (command.info.status === "running") yield* bus.publish(Shell.Event.Exited, { id, status: "killed" })
+        // Every shell reports exactly one exit. Removing a running one ends it as killed; one that
+        // already exited or timed out keeps that outcome even if its output was still draining.
+        if (previous.status === "running") yield* bus.publish(Shell.Event.Exited, { id, status: "killed" })
+        if (previous.status === "ending") yield* publishExited(id, previous.outcome)
         yield* bus.publish(Shell.Event.Deleted, { id })
       })
+
+      const publishExited = (id: Shell.ID, outcome: ShellPhase.Outcome) =>
+        bus.publish(Shell.Event.Exited, {
+          id,
+          ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
+          status: outcome.status,
+        })
 
       const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
         yield* require(id)
@@ -200,7 +207,7 @@ const layer = () =>
 
       const timeout = Effect.fn("Shell.timeout")(function* (id: Shell.ID, duration: number) {
         const command = yield* require(id)
-        if (command.info.status !== "running" || !command.timeout) return command.info
+        if (command.phase.status !== "running") return command.info
         yield* command.timeout(duration)
         return command.info
       })
@@ -327,6 +334,42 @@ const layer = () =>
                 size: 0,
                 newlines: 0,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
+                phase: { status: "running" },
+                // Replaces the timer from now; zero clears it. Commit the new phase before interrupting
+                // the old timer, and let a superseded timer that still wakes find its phase gone.
+                timeout: (duration) =>
+                  Effect.gen(function* () {
+                    const previous = command.phase
+                    if (previous.status !== "running") return
+                    const timer =
+                      duration === 0
+                        ? undefined
+                        : runFork(
+                            Effect.sleep(Duration.millis(duration)).pipe(
+                              Effect.andThen(
+                                Effect.withFiber((fiber) => {
+                                  const next = ShellPhase.transition(command.phase, {
+                                    type: "timed-out",
+                                    timer: fiber,
+                                    completed: Date.now(),
+                                  })
+                                  if (next === command.phase) return Effect.void
+                                  command.phase = next
+                                  // A recorded timeout must always kill. The kill runs detached, so removal
+                                  // or teardown neither cancels it nor waits for the process to die.
+                                  runFork(
+                                    handle
+                                      .kill({ forceKillAfter: Duration.seconds(3) })
+                                      .pipe(Effect.catch(() => Effect.void)),
+                                  )
+                                  return Effect.void
+                                }),
+                              ),
+                            ),
+                          )
+                    command.phase = ShellPhase.transition(previous, { type: "retimed", timer })
+                    if (previous.timer) yield* Fiber.interrupt(previous.timer)
+                  }),
               }
               commands.set(id, command)
 
@@ -363,54 +406,36 @@ const layer = () =>
                   }),
               )
 
-              // The process exit and the timeout race to record how the command ended; the first wins.
-              const ended = Deferred.makeUnsafe<Ended>()
-              const end = (outcome: Omit<Ended, "completed">) =>
-                Effect.suspend(() => Deferred.succeed(ended, { ...outcome, completed: Date.now() }))
-
-              command.timeout = (duration) =>
-                Effect.gen(function* () {
-                  if (Deferred.isDoneUnsafe(ended)) return
-                  if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-                  command.timeoutFiber = undefined
-                  if (duration === 0) return
-                  command.timeoutFiber = runFork(
-                    Effect.sleep(Duration.millis(duration)).pipe(
-                      // A recorded timeout must always kill. The kill runs detached, so interrupting this
-                      // timer (retime, remove, teardown) neither cancels it nor waits for the process to die.
-                      Effect.andThen(
-                        Effect.gen(function* () {
-                          if (!(yield* end({ status: "timeout" }))) return
-                          runFork(
-                            handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
-                          )
-                        }).pipe(Effect.uninterruptible),
-                      ),
-                    ),
-                  )
-                })
-
               yield* command.timeout(invocation.timeout)
 
               // The process exits even after a timeout kill, so this fiber always publishes the outcome.
               runFork(
                 Effect.gen(function* () {
-                  yield* handle.exitCode.pipe(
-                    Effect.flatMap((code) => end({ status: "exited", exit: code })),
+                  const exited = yield* handle.exitCode.pipe(
+                    Effect.map((code) => ({ status: "exited" as const, exit: code })),
                     Effect.catch((error) =>
-                      end({
-                        status: "exited",
+                      Effect.succeed({
+                        status: "exited" as const,
                         signal:
                           error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
                       }),
                     ),
                   )
-                  const outcome = yield* Deferred.await(ended)
+                  // A timeout recorded first keeps its outcome; the exit only ends a still-running command.
+                  const observed = command.phase
+                  command.phase = ShellPhase.transition(observed, {
+                    type: "exit-observed",
+                    outcome: { ...exited, completed: Date.now() },
+                  })
+                  if (observed.status === "running" && observed.timer) yield* Fiber.interrupt(observed.timer)
                   // Report the terminal status only once captured output is complete, so a reader that
                   // sees it never reads a partial file.
                   yield* outputDone.await
+                  const ending = command.phase
                   // A removed command already failed its waiters and published its exit and deletion.
-                  if (commands.get(id) !== command) return
+                  if (ending.status !== "ending") return
+                  command.phase = ShellPhase.transition(ending, { type: "output-drained" })
+                  const outcome = ending.outcome
                   command.info = produce(command.info, (draft) => {
                     draft.status = outcome.status
                     if (outcome.exit !== undefined) draft.exit = outcome.exit
@@ -420,22 +445,13 @@ const layer = () =>
                   // Resolve waiters before retention eviction, so an evicted command still reports its
                   // terminal Info rather than the removal NotFoundError.
                   yield* Deferred.succeed(command.done, command.info)
-                  yield* bus.publish(Shell.Event.Exited, {
-                    id,
-                    ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
-                    status: outcome.status,
-                  })
+                  yield* publishExited(id, outcome)
                   exitOrder.push(id)
                   while (exitOrder.length > EXITED_LIMIT) {
                     const oldest = exitOrder[0]
                     if (!oldest) break
                     yield* removeCommand(oldest)
                   }
-                  // Keep exited history data-only.
-                  const timeoutFiber = command.timeoutFiber
-                  command.timeout = undefined
-                  command.timeoutFiber = undefined
-                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 }),
               )
 
