@@ -1,0 +1,4034 @@
+[
+ {
+  "input": "",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/src/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/src/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/src",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/src",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/src/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/src/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/src",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/src",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada/src/app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/src/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/src/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/src",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/src",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada/src/app",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "home/ada/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "home/ada/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "home/ada/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "home/ada/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "home/ada/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "home/ada/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "home/ada",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "home/ada",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "double/slash",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "double/slash",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "home/ada/src/app",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "home/ada/src/app",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "home/ada/src/app/lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "home/ada/src/app/lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "home/ada/notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "home/ada/notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "home/ada",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "home/ada",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "double/slash",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "double/slash",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "home/ada/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "home/ada/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "home/ada/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "home/ada/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "home/ada/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "home/ada/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "home/ada",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "home/ada",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "double/slash",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "double/slash",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/home/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/home/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/home",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/home",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "src/app",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "src/app",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/home/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/home/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": ".",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": ".",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/home",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/home",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/home/ada",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/tmp/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/tmp/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "/tmp",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "/tmp",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/tmp/x/",
+  "home": "/home/ada",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/src/app",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/src/app",
+  "abbreviate": "/home/ada/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/src/app/lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/src/app/lib/main.rs",
+  "abbreviate": "/home/ada/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/tmp/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/tmp/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/notes.md",
+  "abbreviate": "/home/ada/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada",
+  "abbreviate": "/home/ada"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/tmp",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/tmp",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/tmp/x/",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "",
+  "abbreviate": ""
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/src/app",
+  "abbreviate": "~/src/app"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "/home/ada/src/app/lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "./lib/../lib/./main.rs",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "./lib/../lib/./main.rs"
+ },
+ {
+  "input": "../other/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/tmp/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "../other/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/tmp/other/file",
+  "abbreviate": "../other/file"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada/notes.md",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/ada",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~",
+  "abbreviate": "~"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/home/adam/file",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/home/adam/file",
+  "abbreviate": "/home/adam/file"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/etc/hosts",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/etc/hosts",
+  "abbreviate": "/etc/hosts"
+ },
+ {
+  "input": "/",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "/",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/",
+  "abbreviate": "/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "//double//slash/",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//double//slash/",
+  "abbreviate": "//double//slash/"
+ },
+ {
+  "input": "..",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "/tmp",
+  "abbreviate": ".."
+ },
+ {
+  "input": "..",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "/tmp",
+  "abbreviate": ".."
+ },
+ {
+  "input": "~/literal",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "~/literal",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "~/literal",
+  "abbreviate": "~/literal"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "C:\\Users\\ada\\file.txt",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/file.txt",
+  "abbreviate": "C:\\Users\\ada\\file.txt"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "\\\\server\\share\\file",
+  "base": "/tmp/x/",
+  "home": "/home/ada/",
+  "forwardSlashes": true,
+  "format": "//server/share/file",
+  "abbreviate": "\\\\server\\share\\file"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "x",
+  "abbreviate": "~/src/app/x"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "x",
+  "abbreviate": "~/src/app/x"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "..\\other",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "~/src/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "..\\other",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "~/src/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "D:\\data\\file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "D:/data/file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "C:\\",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "C:\\",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "C:\\",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "C:/",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\dir\\file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "//server/share/dir/file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "C:\\Users\\ada\\src\\app\\lib\\main.rs"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "C:\\Users\\ada\\src\\app\\lib\\main.rs"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "x",
+  "abbreviate": "c:\\users\\ada\\src\\app\\x"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "x",
+  "abbreviate": "c:\\users\\ada\\src\\app\\x"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "..\\other",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\src\\other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "..\\other",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/src/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\notes.md",
+  "abbreviate": "C:\\Users\\ada\\notes.md"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/notes.md",
+  "abbreviate": "C:\\Users\\ada\\notes.md"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "D:\\data\\file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "D:/data/file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "C:\\",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "C:\\",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\dir\\file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/dir/file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "C:\\Users\\ada\\src\\app",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "src\\app\\lib\\main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "src\\app\\x",
+  "abbreviate": "~/src/app/x"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "src/app/x",
+  "abbreviate": "~/src/app/x"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "..\\other",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "c:\\Users\\other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "..\\other",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "c:/Users/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "D:\\data\\file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "D:/data/file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "C:\\",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "C:\\",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "C:\\",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "C:/",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\dir\\file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "//server/share/dir/file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "c:/Users/ada",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "src\\app\\lib\\main.rs",
+  "abbreviate": "C:\\Users\\ada\\src\\app\\lib\\main.rs"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "src/app/lib/main.rs",
+  "abbreviate": "C:\\Users\\ada\\src\\app\\lib\\main.rs"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "src\\app\\x",
+  "abbreviate": "c:\\users\\ada\\src\\app\\x"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "src/app/x",
+  "abbreviate": "c:\\users\\ada\\src\\app\\x"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "..\\other",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "c:\\Users\\other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "..\\other",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "c:/Users/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "notes.md",
+  "abbreviate": "C:\\Users\\ada\\notes.md"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "notes.md",
+  "abbreviate": "C:\\Users\\ada\\notes.md"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "D:\\data\\file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "D:/data/file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "C:\\",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "C:\\",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\dir\\file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/dir/file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "c:/Users/ada",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "~/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "~/src/app/lib/main.rs",
+  "abbreviate": "~/src/app/lib/main.rs"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "~/src/app/x",
+  "abbreviate": "~/src/app/x"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "~/src/app/x",
+  "abbreviate": "~/src/app/x"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "..\\other",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "..\\other",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "//server/share/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "~/notes.md",
+  "abbreviate": "~/notes.md"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "D:\\data\\file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "D:/data/file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "C:\\",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "C:\\",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "C:\\",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "C:/",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": false,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "\\\\server\\share\\dir",
+  "home": "C:\\Users\\ada",
+  "forwardSlashes": true,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "abbreviate": "C:\\Users\\ada\\src\\app\\lib\\main.rs"
+ },
+ {
+  "input": "C:\\Users\\ada\\src\\app\\lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/src/app/lib/main.rs",
+  "abbreviate": "C:\\Users\\ada\\src\\app\\lib\\main.rs"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "c:\\users\\ada\\src\\app\\x",
+  "abbreviate": "c:\\users\\ada\\src\\app\\x"
+ },
+ {
+  "input": "c:\\users\\ada\\src\\app\\x",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "c:/users/ada/src/app/x",
+  "abbreviate": "c:\\users\\ada\\src\\app\\x"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib\\main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib\\main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "lib\\main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "lib/main.rs",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "lib/main.rs",
+  "abbreviate": "lib/main.rs"
+ },
+ {
+  "input": "..\\other",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "\\\\server\\share\\other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "..\\other",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "//server/share/other",
+  "abbreviate": "..\\other"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\Users\\ada\\notes.md",
+  "abbreviate": "C:\\Users\\ada\\notes.md"
+ },
+ {
+  "input": "C:\\Users\\ada\\notes.md",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/Users/ada/notes.md",
+  "abbreviate": "C:\\Users\\ada\\notes.md"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "D:\\data\\file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "D:\\data\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "D:/data/file",
+  "abbreviate": "D:\\data\\file"
+ },
+ {
+  "input": "C:\\",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "C:\\",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "C:\\",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "C:/",
+  "abbreviate": "C:\\"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "\\\\server\\share\\dir\\file",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "file",
+  "abbreviate": "\\\\server\\share\\dir\\file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": false,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ },
+ {
+  "input": "/home/ada/file",
+  "base": "\\\\server\\share\\dir",
+  "home": "",
+  "forwardSlashes": true,
+  "format": "/home/ada/file",
+  "abbreviate": "/home/ada/file"
+ }
+]
