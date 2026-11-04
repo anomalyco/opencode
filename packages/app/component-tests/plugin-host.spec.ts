@@ -1023,6 +1023,8 @@ story("a throwing effect or state reader fails only its own plugin; later plugin
       acme: host.status("acme"),
       broken: host.failure("broken")?.error.includes("instance broke"),
       later: host.status("later"),
+      // In the app, an error that reaches the boundary above the host replaces the whole window.
+      escaped: host.escaped(),
     }
 
     dispose()
@@ -1031,7 +1033,7 @@ story("a throwing effect or state reader fails only its own plugin; later plugin
     return outcome
   }, fixture)
 
-  expect(result).toEqual({ acme: "active", broken: true, later: "active" })
+  expect(result).toEqual({ acme: "active", broken: true, later: "active", escaped: [] })
 })
 
 story(

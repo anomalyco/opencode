@@ -513,12 +513,20 @@ function createHost(input: HostInput) {
       return void runWithOwner(owner, () =>
         createRoot((dispose) => {
           const root = getOwner()
-          const instance = createInstance(effect.definition, dispose, root, effect.messages)
 
-          // Setup and every scope under it read the plugin's context, e.g. `createKeyed` with a token.
-          if (root) root.context = { ...root.context, [PluginContext.id]: instance.context }
+          // Caught here: inside a root, Solid hands a throw to the nearest error boundary, the app's own, and never
+          // returns it to the caller.
+          try {
+            const instance = createInstance(effect.definition, dispose, root, effect.messages)
 
-          dispatch({ type: "created", id: effect.id, attempt: effect.attempt, instance, setup: effect.setup })
+            // Setup and every scope under it read the plugin's context, e.g. `createKeyed` with a token.
+            if (root) root.context = { ...root.context, [PluginContext.id]: instance.context }
+
+            dispatch({ type: "created", id: effect.id, attempt: effect.attempt, instance, setup: effect.setup })
+          } catch (cause) {
+            dispose()
+            dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause })
+          }
         }),
       )
 

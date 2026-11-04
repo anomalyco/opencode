@@ -25,6 +25,7 @@ import {
   createMemo,
   createRoot,
   createSignal,
+  ErrorBoundary,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -304,27 +305,38 @@ export function mountPlugins(input: {
     )
   }
 
+  // Errors that escape the host to the boundary above it, which in the app replaces the whole window.
+  const escaped: string[] = []
+
   const dispose = render(
     () => (
-      <PlatformProvider value={platform}>
-        <LanguageProvider locale="en">
-          <DialogProvider>
-            {/* With a bridge, main's plugin manager holds the enable settings, as in a desktop window. */}
-            <PluginHostProvider
-              definitions={definitions}
-              disabled={input.bridge ? undefined : disabled}
-              bridge={input.bridge}
-              apis={fakeApis(storage)}
-              whenMounted={mounted}
-              ipc={input.ipc}
-              ipcFailed={input.ipcFailed}
-              plugin={input.plugin}
-            >
-              <Capture />
-            </PluginHostProvider>
-          </DialogProvider>
-        </LanguageProvider>
-      </PlatformProvider>
+      <ErrorBoundary
+        fallback={(error) => {
+          escaped.push(String(error))
+
+          return null
+        }}
+      >
+        <PlatformProvider value={platform}>
+          <LanguageProvider locale="en">
+            <DialogProvider>
+              {/* With a bridge, main's plugin manager holds the enable settings, as in a desktop window. */}
+              <PluginHostProvider
+                definitions={definitions}
+                disabled={input.bridge ? undefined : disabled}
+                bridge={input.bridge}
+                apis={fakeApis(storage)}
+                whenMounted={mounted}
+                ipc={input.ipc}
+                ipcFailed={input.ipcFailed}
+                plugin={input.plugin}
+              >
+                <Capture />
+              </PluginHostProvider>
+            </DialogProvider>
+          </LanguageProvider>
+        </PlatformProvider>
+      </ErrorBoundary>
     ),
     container,
   )
@@ -347,6 +359,8 @@ export function mountPlugins(input: {
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),
     entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
+    /** Errors that reached the error boundary above the host. */
+    escaped: () => [...escaped],
   }
 }
 
