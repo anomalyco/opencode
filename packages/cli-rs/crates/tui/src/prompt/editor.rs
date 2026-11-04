@@ -144,6 +144,11 @@ impl Prompt {
         self.inner.mode.get()
     }
 
+    /// The prompt's state, for views beside it that read its mode and focus it (E.10b's queued undo).
+    pub(crate) fn weak(&self) -> Weak<Inner> {
+        Rc::downgrade(&self.inner)
+    }
+
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
         if changes.location(&self.inner.location(tui)) {
             self.inner.read_catalog(tui);

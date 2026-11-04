@@ -2,6 +2,7 @@
 //!
 //! ```text
 //! transcript    messages::list (E.6a), sticky to the bottom; a running reply shows its own progress there
+//! queued        queued::Queued (E.10b), the queued prompts dock
 //! permission    permission::Permission (E.9a); the prompt hides while it shows
 //! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
 //! prompt        prompt::editor::mount (E.2)
@@ -34,6 +35,7 @@ pub struct Session {
     transcript: messages::list::Transcript,
     _scroll: scroll::Controls,
     _actions: actions::Actions,
+    queued: queued::Queued,
     permission: permission::Permission,
     form: form::SessionForms,
     location: crate::routes::location_missing::LocationMissing,
@@ -50,6 +52,7 @@ impl Session {
         let form = form::SessionForms::new(tui, &id);
         let location = crate::routes::location_missing::LocationMissing::new(tui, &id);
         let prompt = crate::prompt::editor::mount(tui, Some(&id));
+        let queued = queued::Queued::new(tui, &id, prompt.weak());
         let column = View::new(app)
             .column()
             .grow(1.0)
@@ -60,6 +63,7 @@ impl Session {
             // `paddingBottom={1}` (`routes/session/index.tsx:1518`); T.1's status row used to fill it.
             .padding_edge(Edge::Bottom, 1)
             .child(transcript.root())
+            .child(queued.root())
             .child(permission.root())
             .child(form.root())
             .child(location.root())
@@ -75,6 +79,7 @@ impl Session {
             transcript,
             _scroll: scroll,
             _actions: actions,
+            queued,
             permission,
             form,
             location,
@@ -97,6 +102,8 @@ impl RouteView for Session {
         self.permission.sync(tui, changes);
         self.form.sync(tui, changes, self.permission.active());
         self.location.sync(tui);
+        let blocked = self.permission.active() || self.form.active();
+        self.queued.sync(tui, changes, blocked);
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
             if prompting {
