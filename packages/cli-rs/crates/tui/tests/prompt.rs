@@ -22,9 +22,18 @@ use serde_json::{Value, json};
 type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 
 /// Serves a session `ses_a` (agent `build`, model `p/m`), the location catalog, and the prompt
-/// writes; anything else is a 404.
+/// writes; a session reads as `SessionNotFoundError` until its create lands, which takes 200 ms;
+/// anything else is a 404.
 struct Fixture {
     seen: Seen,
+    created: Arc<Mutex<Vec<String>>>,
+}
+
+fn missing(id: &str) -> (u16, Value) {
+    (
+        404,
+        json!({ "_tag": "SessionNotFoundError", "sessionID": id, "message": format!("Session not found: {id}") }),
+    )
 }
 
 impl Transport for Fixture {
@@ -39,6 +48,12 @@ impl Transport for Fixture {
             .lock()
             .unwrap()
             .push((request.method.to_owned(), path.clone(), body.clone()));
+        let created = (request.method == "POST" && path == "/api/session").then(|| {
+            (
+                self.created.clone(),
+                body["id"].as_str().unwrap_or_default().to_owned(),
+            )
+        });
         let location = json!({ "directory": "/project" });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [session("ses_a")], "cursor": {} })),
@@ -72,6 +87,16 @@ impl Transport for Fixture {
                 }),
             ),
             ("POST", path) if path.ends_with("/interrupt") => (200, json!({ "interrupted": true })),
+            ("GET", path) if path.starts_with("/api/session/ses_") => {
+                let id = path.split('/').nth(3).unwrap_or_default();
+                let created = self.created.lock().unwrap().iter().any(|known| known == id);
+                match path.split('/').nth(4) {
+                    _ if !created => missing(id),
+                    None => (200, json!({ "data": session(id) })),
+                    Some("message") => (200, json!({ "data": [], "cursor": {} })),
+                    Some(_) => (200, json!({ "data": [] })),
+                }
+            }
             ("PATCH", path) if path.contains("/inbox/") => (204, Value::Null),
             ("POST", path)
                 if ["/model", "/agent", "/shell", "/command", "/background"]
@@ -88,6 +113,10 @@ impl Transport for Fixture {
             serde_json::to_vec(&body).unwrap()
         };
         Box::pin(async move {
+            if let Some((created, id)) = created {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                created.lock().unwrap().push(id);
+            }
             Ok(Response {
                 status,
                 headers: vec![("content-type".into(), "application/json".into())],
@@ -140,7 +169,10 @@ impl Setup {
         let seen = Seen::default();
         let client = Client::with_transport(
             "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone() }),
+            Arc::new(Fixture {
+                seen: seen.clone(),
+                created: Arc::default(),
+            }),
         )
         .unwrap();
         let app = TestApp::new(90, 24);
@@ -490,6 +522,11 @@ fn home_prompt_creates_a_session_and_opens_it() {
     });
     assert!(opened, "{:?}", setup.tui.route());
     setup.wait_for("Reply with ok");
+    // The new session reads nothing before its create lands, so no "Session not found" toast.
+    let toast = setup.app.wait_until(Duration::from_millis(500), || {
+        setup.app.text().contains("not found")
+    });
+    assert!(!toast, "{}", setup.app.text());
 }
 
 /// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
