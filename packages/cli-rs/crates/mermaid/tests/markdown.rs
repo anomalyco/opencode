@@ -26,6 +26,7 @@ fn streaming_fence_keeps_its_last_diagram() {
         language: "mermaid",
         info: "mermaid",
         code,
+        closed: false,
         conceal: true,
         streaming: true,
         previous,
