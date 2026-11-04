@@ -721,6 +721,10 @@ export const dict = {
   "titlebar.tabs": "Tabs",
 
   "common.closeTab": "Close tab",
+  "common.closeOtherTabs": "Close other tabs",
+  "common.closeTabsToRight": "Close tabs to the right",
+  "common.closeTabsToLeft": "Close tabs to the left",
+  "common.closeTabsBelow": "Close tabs below",
   "common.dismiss": "Dismiss",
   "common.moreCountSuffix": " (+{{count}} more)",
   "common.requestFailed": "Request failed",
