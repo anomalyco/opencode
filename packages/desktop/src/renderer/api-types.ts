@@ -58,6 +58,7 @@ export type ElectronAPI = {
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
   relaunch(): void
+  restartService(): Promise<void>
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>
   getPinchZoomEnabled(): Promise<boolean>

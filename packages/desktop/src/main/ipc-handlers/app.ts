@@ -81,6 +81,7 @@ export const appHandlers = AppRpcs.toLayer(
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      AppRestartService: () => background.stop.pipe(Effect.andThen(Effect.sync(lifecycle.relaunch))),
     })
   }),
 )

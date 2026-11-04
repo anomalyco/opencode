@@ -126,6 +126,9 @@ type PlatformBase = {
   /** Write text to the native clipboard (desktop only) */
   writeClipboardText?(text: string): Promise<void>
 
+  /** Stop the local background service and relaunch so a fresh one starts (desktop only) */
+  restartService?(): Promise<void>
+
   /** Export collected diagnostic logs (desktop only) */
   exportDebugLogs?(): Promise<string>
 

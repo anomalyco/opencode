@@ -262,9 +262,11 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const [store, setStore] = createStore<{
     actionError: string | undefined
     captureException: typeof captureException | undefined
+    restarting: boolean
   }>({
     actionError: undefined,
     captureException: undefined,
+    restarting: false,
   })
 
   function ensureFatalErrorRecorded() {
@@ -315,6 +317,20 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     return state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
   }
 
+  async function restart() {
+    setStore({ restarting: true, actionError: undefined })
+
+    // A service that failed to boot stays registered, so relaunching alone would reattach to it.
+    const service =
+      errorDescriptionKey(props.error) === "error.page.description.localServerStartup"
+        ? platform.restartService
+        : undefined
+
+    await (service ? service() : platform.restart()).catch((err) => {
+      setStore({ restarting: false, actionError: formatError(err, language.t) })
+    })
+  }
+
   async function exportDebugLogs() {
     const exportLogs = platform.exportDebugLogs
 
@@ -354,7 +370,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           hideLabel
         />
         <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
-          <Button size="large" onClick={platform.restart}>
+          <Button size="large" disabled={store.restarting} onClick={() => void restart()}>
             {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
           </Button>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
