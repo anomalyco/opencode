@@ -532,7 +532,6 @@ function SessionScreenContent(props: {
                 ref={sideContent}
                 data-slot="session-side-panel-content"
                 class="absolute inset-y-0 start-0 size-full [contain:layout_style] will-change-[opacity]"
-                style={{ "--session-side-content-width": screen.side.contentWidth() }}
               >
                 <div data-slot="session-side-region" class="absolute inset-0 min-h-0 overflow-visible">
                   <Show when={store.sideMounted}>
@@ -544,6 +543,7 @@ function SessionScreenContent(props: {
                         sidebar={sidebar}
                         present={sideMotion.present()}
                         size={screen.size}
+                        contentWidth={screen.side.contentWidth}
                         drag={drag}
                       />
                     </div>
