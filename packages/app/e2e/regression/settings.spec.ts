@@ -1916,6 +1916,44 @@ test("the add server dialog pairs from a one-time link and explains a spent one"
   )
 })
 
+test("a server check that answers after its dialog closed saves nothing and leaves the next dialog open", async ({
+  page,
+}) => {
+  const late = "http://127.0.0.1:4098"
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+  await mockOpenCodeServer(page, {
+    server: late,
+    directory: "/remote/late",
+    project: project({ id: "proj_late", directory: "/remote/late" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  const check = await holdRoute(page, /^http:\/\/127\.0\.0\.1:4098\/api\/info/)
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  await settings.getByRole("button", { name: "Add server" }).click()
+  const editor = page.getByRole("dialog", { name: "Add server" })
+  await editor.getByRole("button", { name: "Use password", exact: true }).click()
+  await editor.getByLabel("Server address", { exact: true }).fill(late)
+  await editor.getByRole("button", { name: "Add server", exact: true }).click()
+  await check.arrived
+  await page.keyboard.press("Escape")
+  await expect(editor).toHaveCount(0)
+
+  await settings.getByRole("button", { name: "Add server" }).click()
+  const link = editor.getByLabel("Pairing link", { exact: true })
+  await expect(link).toBeFocused()
+  const answered = page.waitForResponse(/^http:\/\/127\.0\.0\.1:4098\/api\/info/)
+  check.release()
+  await answered
+  // A round trip after the answer: the cancelled check had every chance to save and close by now.
+  await link.fill("still open")
+
+  await expect(link).toHaveValue("still open")
+  await expect(settings.getByText(late, { exact: true })).toHaveCount(0)
+})
+
 test("a pairing code with several addresses keeps the first one that works with its token", async ({ page }) => {
   // Both addresses reach one server. The second spends the code first, so the first answers 401, and the token works on
   // it as on every address of that server.

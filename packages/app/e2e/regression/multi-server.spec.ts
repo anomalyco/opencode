@@ -160,6 +160,14 @@ test("a remote session whose server signed the app out asks to sign in again, th
   await expect(signedOut).toBeVisible()
   await page.getByRole("button", { name: "Sign in again", exact: true }).click()
   const editor = page.getByRole("dialog", { name: "Edit server" })
+
+  // An empty address explains itself instead of closing the dialog.
+  await editor.getByRole("button", { name: "Use password", exact: true }).click()
+  await editor.getByLabel("Server address", { exact: true }).fill("")
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(editor.getByRole("alert")).toHaveText("Enter a valid HTTP or HTTPS server address.")
+  await editor.getByRole("button", { name: "Use pairing link", exact: true }).click()
+
   await editor.getByLabel("Pairing link", { exact: true }).fill(`${REMOTE_SERVER}/auth/connect/one-time-code`)
   await editor.getByRole("button", { name: "Save", exact: true }).click()
 
