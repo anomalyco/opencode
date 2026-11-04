@@ -1,7 +1,6 @@
 //! Scrolling, message navigation, the scrollbar, and groups (E.8) over a long fixture session.
 
-#[path = "support/wait.rs"]
-mod wait;
+use crate::support::wait;
 
 use std::collections::HashMap;
 use std::sync::Arc;
