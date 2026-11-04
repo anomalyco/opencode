@@ -1,0 +1,197 @@
+## CLI Usage
+
+```bash
+bun build <entry points>
+```
+
+### General Configuration
+
+<ParamField path="--production" type="boolean">
+  Set <code>NODE_ENV=production</code> and enable minification
+</ParamField>
+
+<ParamField path="--bytecode" type="boolean">
+  Use a bytecode cache when compiling
+</ParamField>
+
+<ParamField path="--target" type="string" default="browser">
+  Intended execution environment for the bundle. One of <code>browser</code>, <code>bun</code>, or <code>node</code>
+</ParamField>
+
+<ParamField path="--conditions" type="string">
+  Pass custom resolution conditions
+</ParamField>
+
+<ParamField path="--env" type="string" default="disable">
+  Inline environment variables into the bundle as <code>process.env.${name}</code>. To inline variables matching a
+  prefix, use a glob like <code>FOO_PUBLIC_*</code>
+</ParamField>
+
+### Output & File Handling
+
+<ParamField path="--outdir" type="string" default="dist">
+  Output directory (used when building multiple entry points)
+</ParamField>
+
+<ParamField path="--outfile" type="string">
+  Write output to a specific file
+</ParamField>
+
+<ParamField path="--sourcemap" type="string" default="none">
+  Generate source maps. One of <code>linked</code>, <code>inline</code>, <code>external</code>, or <code>none</code>
+</ParamField>
+
+<ParamField path="--banner" type="string">
+  Add a banner to the output (e.g. <code>"use client"</code> for React Server Components)
+</ParamField>
+
+<ParamField path="--footer" type="string">
+  Add a footer to the output (e.g. <code>// built with bun!</code>)
+</ParamField>
+
+<ParamField path="--format" type="string" default="esm">
+  Module format of the output bundle. One of <code>esm</code>, <code>cjs</code>, or <code>iife</code>. Defaults to{" "}
+  <code>cjs</code> when <code>--bytecode</code> is used.
+</ParamField>
+
+### File Naming
+
+<ParamField path="--entry-naming" type="string" default="[dir]/[name].[ext]">
+  Customize entry point filenames
+</ParamField>
+
+<ParamField path="--chunk-naming" type="string" default="[name]-[hash].[ext]">
+  Customize chunk filenames
+</ParamField>
+
+<ParamField path="--asset-naming" type="string" default="[name]-[hash].[ext]">
+  Customize asset filenames
+</ParamField>
+
+### Bundling Options
+
+<ParamField path="--root" type="string">
+  Root directory used when bundling multiple entry points
+</ParamField>
+
+<ParamField path="--splitting" type="boolean">
+  Enable code splitting for shared modules
+</ParamField>
+
+<ParamField path="--public-path" type="string">
+  Prefix to be added to import paths in bundled code
+</ParamField>
+
+<ParamField path="--external" type="string">
+  Exclude modules from the bundle (supports wildcards). Alias: <code>-e</code>
+</ParamField>
+
+<ParamField path="--packages" type="string" default="bundle">
+  How to treat dependencies: <code>external</code> or <code>bundle</code>
+</ParamField>
+
+<ParamField path="--no-bundle" type="boolean">
+  Transpile only — do not bundle
+</ParamField>
+
+<ParamField path="--css-chunking" type="boolean">
+  Chunk CSS files together to reduce duplication (only when multiple entry points import CSS)
+</ParamField>
+
+### Minification & Optimization
+
+<ParamField path="--emit-dce-annotations" type="boolean" default="true">
+  Re-emit Dead Code Elimination annotations. Disabled when <code>--minify-whitespace</code> is used
+</ParamField>
+
+<ParamField path="--minify" type="boolean">
+  Enable all minification options
+</ParamField>
+
+<ParamField path="--minify-syntax" type="boolean">
+  Minify syntax and inline constants
+</ParamField>
+
+<ParamField path="--minify-whitespace" type="boolean">
+  Minify whitespace
+</ParamField>
+
+<ParamField path="--minify-identifiers" type="boolean">
+  Minify variable and function identifiers
+</ParamField>
+
+<ParamField path="--keep-names" type="boolean">
+  Preserve original function and class names when minifying
+</ParamField>
+
+### Development Features
+
+<ParamField path="--watch" type="boolean">
+  Rebuild automatically when files change
+</ParamField>
+
+<ParamField path="--no-clear-screen" type="boolean">
+  Don’t clear the terminal when rebuilding with <code>--watch</code>
+</ParamField>
+
+<ParamField path="--react-fast-refresh" type="boolean">
+  Enable React Fast Refresh transform (for development testing)
+</ParamField>
+
+### Standalone Executables
+
+<ParamField path="--compile" type="boolean">
+  Generate a standalone Bun executable containing the bundle. Implies <code>--production</code>
+</ParamField>
+
+<ParamField path="--compile-exec-argv" type="string">
+  Prepend arguments to the standalone executable’s <code>execArgv</code>
+</ParamField>
+
+### Windows Executable Details
+
+<ParamField path="--windows-hide-console" type="boolean">
+  Prevent a console window from opening when running a compiled Windows executable
+</ParamField>
+
+<ParamField path="--windows-icon" type="string">
+  Set an icon for the Windows executable
+</ParamField>
+
+<ParamField path="--windows-title" type="string">
+  Set the Windows executable product name
+</ParamField>
+
+<ParamField path="--windows-publisher" type="string">
+  Set the Windows executable company name
+</ParamField>
+
+<ParamField path="--windows-version" type="string">
+  Set the Windows executable version (e.g. <code>1.2.3.4</code>)
+</ParamField>
+
+<ParamField path="--windows-description" type="string">
+  Set the Windows executable description
+</ParamField>
+
+<ParamField path="--windows-copyright" type="string">
+  Set the Windows executable copyright notice
+</ParamField>
+
+### Experimental & App Building
+
+<ParamField path="--app" type="boolean">
+  <b>(EXPERIMENTAL)</b> Build a web app for production using Bun Bake
+</ParamField>
+
+<ParamField path="--server-components" type="boolean">
+  <b>(EXPERIMENTAL)</b> Enable React Server Components
+</ParamField>
+
+<ParamField path="--debug-dump-server-files" type="boolean">
+  When <code>--app</code> is set, dump all server files to disk even for static builds
+</ParamField>
+
+<ParamField path="--debug-no-minify" type="boolean">
+  When <code>--app</code> is set, disable all minification
+</ParamField>

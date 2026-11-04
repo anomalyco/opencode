@@ -1,0 +1,61 @@
+---
+title: "bun link"
+description: "Link local packages for development"
+---
+
+import Link from "/snippets/cli/link.mdx";
+
+Use `bun link` in a local directory to register the current package as a "linkable" package.
+
+```bash terminal icon="terminal"
+cd /path/to/cool-pkg
+cat package.json
+bun link
+```
+
+```txt
+bun link v1.3.3 (7416672e)
+Success! Registered "cool-pkg"
+
+To use cool-pkg in a project, run:
+  bun link cool-pkg
+
+Or add it in dependencies in your package.json file:
+  "cool-pkg": "link:cool-pkg"
+```
+
+This package can now be "linked" into other projects using `bun link cool-pkg`. This will create a symlink in the `node_modules` directory of the target project, pointing to the local directory.
+
+```bash terminal icon="terminal"
+cd /path/to/my-app
+bun link cool-pkg
+```
+
+In addition, the `--save` flag can be used to add `cool-pkg` to the `dependencies` field of your app's package.json with a special version specifier that tells Bun to load from the registered local directory instead of installing from `npm`:
+
+```json package.json icon="file-json"
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "cool-pkg": "link:cool-pkg" // [!code ++]
+  }
+}
+```
+
+## Unlinking
+
+Use `bun unlink` in the root directory to unregister a local package.
+
+```bash terminal icon="terminal"
+cd /path/to/cool-pkg
+bun unlink
+```
+
+```txt
+bun unlink v1.3.3 (7416672e)
+```
+
+---
+
+<Link />

@@ -1,0 +1,98 @@
+{
+  "name": "web-tree-sitter",
+  "version": "0.25.10",
+  "description": "Tree-sitter bindings for the web",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tree-sitter/tree-sitter.git",
+    "directory": "lib/binding_web"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Max Brunsfeld",
+    "email": "maxbrunsfeld@gmail.com"
+  },
+  "maintainers": [
+    {
+      "name": "Amaan Qureshi",
+      "email": "amaanq12@gmail.com"
+    }
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./tree-sitter.js",
+      "require": "./tree-sitter.cjs",
+      "types": "./web-tree-sitter.d.ts"
+    },
+    "./tree-sitter.wasm": "./tree-sitter.wasm",
+    "./debug": {
+      "import": "./debug/tree-sitter.js",
+      "require": "./debug/tree-sitter.cjs",
+      "types": "./web-tree-sitter.d.ts"
+    },
+    "./debug/tree-sitter.wasm": "./debug/tree-sitter.wasm"
+  },
+  "types": "web-tree-sitter.d.ts",
+  "keywords": [
+    "incremental",
+    "parsing",
+    "tree-sitter",
+    "wasm"
+  ],
+  "files": [
+    "README.md",
+    "tree-sitter.cjs",
+    "tree-sitter.cjs.map",
+    "tree-sitter.js",
+    "tree-sitter.js.map",
+    "tree-sitter.wasm",
+    "tree-sitter.wasm.map",
+    "debug/tree-sitter.cjs",
+    "debug/tree-sitter.cjs.map",
+    "debug/tree-sitter.js",
+    "debug/tree-sitter.js.map",
+    "debug/tree-sitter.wasm",
+    "debug/tree-sitter.wasm.map",
+    "web-tree-sitter.d.ts",
+    "web-tree-sitter.d.ts.map",
+    "src/**/*.ts",
+    "lib/*.c",
+    "lib/*.h"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@types/node": "^22.13.1",
+    "@vitest/coverage-v8": "^3.0.5",
+    "dts-buddy": "^0.5.4",
+    "esbuild": "^0.24.2",
+    "eslint": "^9.19.0",
+    "source-map": "^0.7.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.22.0",
+    "vitest": "^3.0.4"
+  },
+  "peerDependencies": {
+    "@types/emscripten": "^1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/emscripten": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build:ts": "tsc -b . && node script/build.js",
+    "build:wasm": "cd ../../ && cargo xtask build-wasm",
+    "build:wasm:debug": "cd ../../ && cargo xtask build-wasm --debug",
+    "build": "npm run build:wasm && npm run build:ts",
+    "build:debug": "npm run build:wasm:debug && npm run build:ts -- --debug",
+    "build:dts": "node script/generate-dts.js",
+    "lint": "eslint src/*.ts script/*.ts test/*.ts",
+    "lint:fix": "eslint src/*.ts script/*.ts test/*.ts --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepack": "cp ../../LICENSE .",
+    "prepublishOnly": "tsx script/check-artifacts-fresh.ts"
+  }
+}

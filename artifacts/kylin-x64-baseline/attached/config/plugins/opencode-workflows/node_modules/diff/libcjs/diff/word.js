@@ -1,0 +1,289 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.wordsWithSpaceDiff = exports.wordDiff = void 0;
+exports.diffWords = diffWords;
+exports.diffWordsWithSpace = diffWordsWithSpace;
+const base_js_1 = __importDefault(require("./base.js"));
+const string_js_1 = require("../util/string.js");
+// Based on https://en.wikipedia.org/wiki/Latin_script_in_Unicode
+//
+// Chars/ranges counted as "word" characters by this regex are as follows:
+//
+// + U+00AD  Soft hyphen
+// + 00C0–00FF (letters with diacritics from the Latin-1 Supplement), except:
+//   - U+00D7  × Multiplication sign
+//   - U+00F7  ÷ Division sign
+// + Latin Extended-A, 0100–017F
+// + Latin Extended-B, 0180–024F
+// + IPA Extensions, 0250–02AF
+// + Spacing Modifier Letters, 02B0–02FF, except:
+//   - U+02C7  ˇ &#711;  Caron
+//   - U+02D8  ˘ &#728;  Breve
+//   - U+02D9  ˙ &#729;  Dot Above
+//   - U+02DA  ˚ &#730;  Ring Above
+//   - U+02DB  ˛ &#731;  Ogonek
+//   - U+02DC  ˜ &#732;  Small Tilde
+//   - U+02DD  ˝ &#733;  Double Acute Accent
+// + Latin Extended Additional, 1E00–1EFF
+const extendedWordChars = 'a-zA-Z0-9_\\u{AD}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}';
+// Each token is one of the following:
+// - A punctuation mark plus the surrounding whitespace
+// - A word plus the surrounding whitespace
+// - Pure whitespace (but only in the special case where the entire text
+//   is just whitespace)
+//
+// We have to include surrounding whitespace in the tokens because the two
+// alternative approaches produce horribly broken results:
+// * If we just discard the whitespace, we can't fully reproduce the original
+//   text from the sequence of tokens and any attempt to render the diff will
+//   get the whitespace wrong.
+// * If we have separate tokens for whitespace, then in a typical text every
+//   second token will be a single space character. But this often results in
+//   the optimal diff between two texts being a perverse one that preserves
+//   the spaces between words but deletes and reinserts actual common words.
+//   See https://github.com/kpdecker/jsdiff/issues/160#issuecomment-1866099640
+//   for an example.
+//
+// Keeping the surrounding whitespace of course has implications for .equals
+// and .join, not just .tokenize.
+// This regex does NOT fully implement the tokenization rules described above.
+// Instead, it gives runs of whitespace their own "token". The tokenize method
+// then handles stitching whitespace tokens onto adjacent word or punctuation
+// tokens.
+const tokenizeIncludingWhitespace = new RegExp(`[${extendedWordChars}]+|\\s+|[^${extendedWordChars}]`, 'ug');
+class WordDiff extends base_js_1.default {
+    equals(left, right, options) {
+        if (options.ignoreCase) {
+            left = left.toLowerCase();
+            right = right.toLowerCase();
+        }
+        return left.trim() === right.trim();
+    }
+    tokenize(value, options = {}) {
+        let parts;
+        if (options.intlSegmenter) {
+            const segmenter = options.intlSegmenter;
+            if (segmenter.resolvedOptions().granularity != 'word') {
+                throw new Error('The segmenter passed must have a granularity of "word"');
+            }
+            // We want `parts` to be an array whose elements alternate between being
+            // pure whitespace and being pure non-whitespace. This is ALMOST what the
+            // segments returned by a word-based Intl.Segmenter already look like,
+            // but not quite - see explanation in the docs of our custom segment()
+            // function.
+            parts = (0, string_js_1.segment)(value, segmenter);
+        }
+        else {
+            parts = value.match(tokenizeIncludingWhitespace) || [];
+        }
+        const tokens = [];
+        let prevPart = null;
+        parts.forEach(part => {
+            if ((/\s/).test(part)) {
+                if (prevPart == null) {
+                    tokens.push(part);
+                }
+                else {
+                    tokens.push(tokens.pop() + part);
+                }
+            }
+            else if (prevPart != null && (/\s/).test(prevPart)) {
+                if (tokens[tokens.length - 1] == prevPart) {
+                    tokens.push(tokens.pop() + part);
+                }
+                else {
+                    tokens.push(prevPart + part);
+                }
+            }
+            else {
+                tokens.push(part);
+            }
+            prevPart = part;
+        });
+        return tokens;
+    }
+    join(tokens) {
+        // Tokens being joined here will always have appeared consecutively in the
+        // same text, so we can simply strip off the leading whitespace from all the
+        // tokens except the first (and except any whitespace-only tokens - but such
+        // a token will always be the first and only token anyway) and then join them
+        // and the whitespace around words and punctuation will end up correct.
+        return tokens.map((token, i) => {
+            if (i == 0) {
+                return token;
+            }
+            else {
+                return token.replace((/^\s+/), '');
+            }
+        }).join('');
+    }
+    postProcess(changes, options) {
+        if (!changes || options.oneChangePerToken) {
+            return changes;
+        }
+        let lastKeep = null;
+        // Change objects representing any insertion or deletion since the last
+        // "keep" change object. There can be at most one of each.
+        let insertion = null;
+        let deletion = null;
+        changes.forEach(change => {
+            if (change.added) {
+                insertion = change;
+            }
+            else if (change.removed) {
+                deletion = change;
+            }
+            else {
+                if (insertion || deletion) { // May be false at start of text
+                    dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, change, options.intlSegmenter);
+                }
+                lastKeep = change;
+                insertion = null;
+                deletion = null;
+            }
+        });
+        if (insertion || deletion) {
+            dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, null, options.intlSegmenter);
+        }
+        return changes;
+    }
+}
+exports.wordDiff = new WordDiff();
+function diffWords(oldStr, newStr, options) {
+    // This option has never been documented and never will be (it's clearer to
+    // just call `diffWordsWithSpace` directly if you need that behavior), but
+    // has existed in jsdiff for a long time, so we retain support for it here
+    // for the sake of backwards compatibility.
+    if ((options === null || options === void 0 ? void 0 : options.ignoreWhitespace) != null && !options.ignoreWhitespace) {
+        return diffWordsWithSpace(oldStr, newStr, options);
+    }
+    return exports.wordDiff.diff(oldStr, newStr, options);
+}
+function dedupeWhitespaceInChangeObjects(startKeep, deletion, insertion, endKeep, segmenter) {
+    // Before returning, we tidy up the leading and trailing whitespace of the
+    // change objects to eliminate cases where trailing whitespace in one object
+    // is repeated as leading whitespace in the next.
+    // Below are examples of the outcomes we want here to explain the code.
+    // I=insert, K=keep, D=delete
+    // 1. diffing 'foo bar baz' vs 'foo baz'
+    //    Prior to cleanup, we have K:'foo ' D:' bar ' K:' baz'
+    //    After cleanup, we want:   K:'foo ' D:'bar ' K:'baz'
+    //
+    // 2. Diffing 'foo bar baz' vs 'foo qux baz'
+    //    Prior to cleanup, we have K:'foo ' D:' bar ' I:' qux ' K:' baz'
+    //    After cleanup, we want K:'foo ' D:'bar' I:'qux' K:' baz'
+    //
+    // 3. Diffing 'foo\nbar baz' vs 'foo baz'
+    //    Prior to cleanup, we have K:'foo ' D:'\nbar ' K:' baz'
+    //    After cleanup, we want K'foo' D:'\nbar' K:' baz'
+    //
+    // 4. Diffing 'foo baz' vs 'foo\nbar baz'
+    //    Prior to cleanup, we have K:'foo\n' I:'\nbar ' K:' baz'
+    //    After cleanup, we ideally want K'foo' I:'\nbar' K:' baz'
+    //    but don't actually manage this currently (the pre-cleanup change
+    //    objects don't contain enough information to make it possible).
+    //
+    // 5. Diffing 'foo   bar baz' vs 'foo  baz'
+    //    Prior to cleanup, we have K:'foo  ' D:'   bar ' K:'  baz'
+    //    After cleanup, we want K:'foo  ' D:' bar ' K:'baz'
+    //
+    // Our handling is unavoidably imperfect in the case where there's a single
+    // indel between keeps and the whitespace has changed. For instance, consider
+    // diffing 'foo\tbar\nbaz' vs 'foo baz'. Unless we create an extra change
+    // object to represent the insertion of the space character (which isn't even
+    // a token), we have no way to avoid losing information about the texts'
+    // original whitespace in the result we return. Still, we do our best to
+    // output something that will look sensible if we e.g. print it with
+    // insertions in green and deletions in red.
+    // Between two "keep" change objects (or before the first or after the last
+    // change object), we can have either:
+    // * A "delete" followed by an "insert"
+    // * Just an "insert"
+    // * Just a "delete"
+    // We handle the three cases separately.
+    if (deletion && insertion) {
+        const [oldWsPrefix, oldWsSuffix] = (0, string_js_1.leadingAndTrailingWs)(deletion.value, segmenter);
+        const [newWsPrefix, newWsSuffix] = (0, string_js_1.leadingAndTrailingWs)(insertion.value, segmenter);
+        if (startKeep) {
+            const commonWsPrefix = (0, string_js_1.longestCommonPrefix)(oldWsPrefix, newWsPrefix);
+            startKeep.value = (0, string_js_1.replaceSuffix)(startKeep.value, newWsPrefix, commonWsPrefix);
+            deletion.value = (0, string_js_1.removePrefix)(deletion.value, commonWsPrefix);
+            insertion.value = (0, string_js_1.removePrefix)(insertion.value, commonWsPrefix);
+        }
+        if (endKeep) {
+            const commonWsSuffix = (0, string_js_1.longestCommonSuffix)(oldWsSuffix, newWsSuffix);
+            endKeep.value = (0, string_js_1.replacePrefix)(endKeep.value, newWsSuffix, commonWsSuffix);
+            deletion.value = (0, string_js_1.removeSuffix)(deletion.value, commonWsSuffix);
+            insertion.value = (0, string_js_1.removeSuffix)(insertion.value, commonWsSuffix);
+        }
+    }
+    else if (insertion) {
+        // The whitespaces all reflect what was in the new text rather than
+        // the old, so we essentially have no information about whitespace
+        // insertion or deletion. We just want to dedupe the whitespace.
+        // We do that by having each change object keep its trailing
+        // whitespace and deleting duplicate leading whitespace where
+        // present.
+        if (startKeep) {
+            const ws = (0, string_js_1.leadingWs)(insertion.value, segmenter);
+            insertion.value = insertion.value.substring(ws.length);
+        }
+        if (endKeep) {
+            const ws = (0, string_js_1.leadingWs)(endKeep.value, segmenter);
+            endKeep.value = endKeep.value.substring(ws.length);
+        }
+        // otherwise we've got a deletion and no insertion
+    }
+    else if (startKeep && endKeep) {
+        const newWsFull = (0, string_js_1.leadingWs)(endKeep.value, segmenter), [delWsStart, delWsEnd] = (0, string_js_1.leadingAndTrailingWs)(deletion.value, segmenter);
+        // Any whitespace that comes straight after startKeep in both the old and
+        // new texts, assign to startKeep and remove from the deletion.
+        const newWsStart = (0, string_js_1.longestCommonPrefix)(newWsFull, delWsStart);
+        deletion.value = (0, string_js_1.removePrefix)(deletion.value, newWsStart);
+        // Any whitespace that comes straight before endKeep in both the old and
+        // new texts, and hasn't already been assigned to startKeep, assign to
+        // endKeep and remove from the deletion.
+        const newWsEnd = (0, string_js_1.longestCommonSuffix)((0, string_js_1.removePrefix)(newWsFull, newWsStart), delWsEnd);
+        deletion.value = (0, string_js_1.removeSuffix)(deletion.value, newWsEnd);
+        endKeep.value = (0, string_js_1.replacePrefix)(endKeep.value, newWsFull, newWsEnd);
+        // If there's any whitespace from the new text that HASN'T already been
+        // assigned, assign it to the start:
+        startKeep.value = (0, string_js_1.replaceSuffix)(startKeep.value, newWsFull, newWsFull.slice(0, newWsFull.length - newWsEnd.length));
+    }
+    else if (endKeep) {
+        // We are at the start of the text. Preserve all the whitespace on
+        // endKeep, and just remove whitespace from the end of deletion to the
+        // extent that it overlaps with the start of endKeep.
+        const endKeepWsPrefix = (0, string_js_1.leadingWs)(endKeep.value, segmenter);
+        const deletionWsSuffix = (0, string_js_1.trailingWs)(deletion.value, segmenter);
+        const overlap = (0, string_js_1.maximumOverlap)(deletionWsSuffix, endKeepWsPrefix);
+        deletion.value = (0, string_js_1.removeSuffix)(deletion.value, overlap);
+    }
+    else if (startKeep) {
+        // We are at the END of the text. Preserve all the whitespace on
+        // startKeep, and just remove whitespace from the start of deletion to
+        // the extent that it overlaps with the end of startKeep.
+        const startKeepWsSuffix = (0, string_js_1.trailingWs)(startKeep.value, segmenter);
+        const deletionWsPrefix = (0, string_js_1.leadingWs)(deletion.value, segmenter);
+        const overlap = (0, string_js_1.maximumOverlap)(startKeepWsSuffix, deletionWsPrefix);
+        deletion.value = (0, string_js_1.removePrefix)(deletion.value, overlap);
+    }
+}
+class WordsWithSpaceDiff extends base_js_1.default {
+    tokenize(value) {
+        // Slightly different to the tokenizeIncludingWhitespace regex used above in
+        // that this one treats each individual newline as a distinct token, rather
+        // than merging them into other surrounding whitespace. This was requested
+        // in https://github.com/kpdecker/jsdiff/issues/180 &
+        //    https://github.com/kpdecker/jsdiff/issues/211
+        const regex = new RegExp(`(\\r?\\n)|[${extendedWordChars}]+|[^\\S\\n\\r]+|[^${extendedWordChars}]`, 'ug');
+        return value.match(regex) || [];
+    }
+}
+exports.wordsWithSpaceDiff = new WordsWithSpaceDiff();
+function diffWordsWithSpace(oldStr, newStr, options) {
+    return exports.wordsWithSpaceDiff.diff(oldStr, newStr, options);
+}

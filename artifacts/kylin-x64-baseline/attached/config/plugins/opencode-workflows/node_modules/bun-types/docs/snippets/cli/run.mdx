@@ -1,0 +1,305 @@
+# CLI Usage
+
+```bash
+bun run <file or script>
+```
+
+### General Execution Options
+
+<ParamField path="--silent" type="boolean">
+  Don't print the script command
+</ParamField>
+
+<ParamField path="--if-present" type="boolean">
+  Exit without an error if the entrypoint does not exist
+</ParamField>
+
+<ParamField path="--eval" type="string">
+  Evaluate argument as a script. Alias: <code>-e</code>
+</ParamField>
+
+<ParamField path="--print" type="string">
+  Evaluate argument as a script and print the result. Alias: <code>-p</code>
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Display this menu and exit. Alias: <code>-h</code>
+</ParamField>
+
+### Workspace Management
+
+<ParamField path="--elide-lines" type="number" default="10">
+  Number of lines of script output shown when using --filter (default: 10). Set to 0 to show all lines
+</ParamField>
+
+<ParamField path="--filter" type="string">
+  Run a script in all workspace packages matching the pattern. Alias: <code>-F</code>
+</ParamField>
+
+<ParamField path="--workspaces" type="boolean">
+  Run a script in all workspace packages (from the <code>workspaces</code> field in <code>package.json</code>)
+</ParamField>
+
+<ParamField path="--parallel" type="boolean">
+  Run multiple scripts or workspace scripts concurrently with prefixed output
+</ParamField>
+
+<ParamField path="--sequential" type="boolean">
+  Run multiple scripts or workspace scripts one after another with prefixed output
+</ParamField>
+
+<ParamField path="--no-exit-on-error" type="boolean">
+  When using <code>--parallel</code> or <code>--sequential</code>, continue running other scripts when one fails
+</ParamField>
+
+### Runtime &amp; Process Control
+
+<ParamField path="--bun" type="boolean">
+  Force a script or package to use Bun's runtime instead of Node.js (via symlinking node). Alias: <code>-b</code>
+</ParamField>
+
+<ParamField path="--shell" type="string">
+  Control the shell used for <code>package.json</code> scripts. Supports either <code>bun</code> or <code>system</code>
+</ParamField>
+
+<ParamField path="--smol" type="boolean">
+  Use less memory, but run garbage collection more often
+</ParamField>
+
+<ParamField path="--expose-gc" type="boolean">
+  Expose <code>gc()</code> on the global object. Has no effect on <code>Bun.gc()</code>
+</ParamField>
+
+<ParamField path="--no-deprecation" type="boolean">
+  Suppress all reporting of the custom deprecation
+</ParamField>
+
+<ParamField path="--throw-deprecation" type="boolean">
+  Determine whether or not deprecation warnings result in errors
+</ParamField>
+
+<ParamField path="--title" type="string">
+  Set the process title
+</ParamField>
+
+<ParamField path="--zero-fill-buffers" type="boolean">
+  Boolean to force <code>Buffer.allocUnsafe(size)</code> to be zero-filled
+</ParamField>
+
+<ParamField path="--no-addons" type="boolean">
+  Throw an error if <code>process.dlopen</code> is called, and disable export condition <code>node-addons</code>
+</ParamField>
+
+<ParamField path="--unhandled-rejections" type="string">
+  One of <code>strict</code>, <code>throw</code>, <code>warn</code>, <code>none</code>, or{" "}
+  <code>warn-with-error-code</code>
+</ParamField>
+
+<ParamField path="--console-depth" type="number" default="2">
+  Set the default depth for <code>console.log</code> object inspection (default: 2)
+</ParamField>
+
+### Development Workflow
+
+<ParamField path="--watch" type="boolean">
+  Automatically restart the process on file change
+</ParamField>
+
+<ParamField path="--hot" type="boolean">
+  Enable auto reload in the Bun runtime, test runner, or bundler
+</ParamField>
+
+<ParamField path="--no-clear-screen" type="boolean">
+  Disable clearing the terminal screen on reload when --hot or --watch is enabled
+</ParamField>
+
+### Debugging
+
+<ParamField path="--inspect" type="string">
+  Activate Bun's debugger
+</ParamField>
+
+<ParamField path="--inspect-wait" type="string">
+  Activate Bun's debugger, wait for a connection before executing
+</ParamField>
+
+<ParamField path="--inspect-brk" type="string">
+  Activate Bun's debugger, set breakpoint on first line of code and wait
+</ParamField>
+
+### Dependency &amp; Module Resolution
+
+<ParamField path="--preload" type="string">
+  Import a module before other modules are loaded. Alias: <code>-r</code>
+</ParamField>
+
+<ParamField path="--require" type="string">
+  Alias of --preload, for Node.js compatibility
+</ParamField>
+
+<ParamField path="--import" type="string">
+  Alias of --preload, for Node.js compatibility
+</ParamField>
+
+<ParamField path="--no-install" type="boolean">
+  Disable auto install in the Bun runtime
+</ParamField>
+
+<ParamField path="--install" type="string" default="auto">
+  Configure auto-install behavior. One of <code>auto</code> (default, auto-installs when no node_modules),{" "}
+  <code>fallback</code> (missing packages only), <code>force</code> (always)
+</ParamField>
+
+<ParamField path="-i" type="boolean">
+  Auto-install dependencies during execution. Equivalent to --install=fallback
+</ParamField>
+
+<ParamField path="--prefer-offline" type="boolean">
+  Skip staleness checks for packages in the Bun runtime and resolve from disk
+</ParamField>
+
+<ParamField path="--prefer-latest" type="boolean">
+  Use the latest matching versions of packages in the Bun runtime, always checking npm
+</ParamField>
+
+<ParamField path="--conditions" type="string">
+  Pass custom conditions to resolve
+</ParamField>
+
+<ParamField path="--main-fields" type="string">
+  Main fields to lookup in <code>package.json</code>. Defaults to --target dependent
+</ParamField>
+
+<ParamField path="--preserve-symlinks" type="boolean">
+  Preserve symlinks when resolving files
+</ParamField>
+
+<ParamField path="--preserve-symlinks-main" type="boolean">
+  Preserve symlinks when resolving the main entry point
+</ParamField>
+
+<ParamField path="--extension-order" type="string" default=".tsx,.ts,.jsx,.js,.json">
+  Defaults to: <code>.tsx,.ts,.jsx,.js,.json</code>
+</ParamField>
+
+### Transpilation &amp; Language Features
+
+<ParamField path="--tsconfig-override" type="string">
+  Specify custom <code>tsconfig.json</code>. Default <code>$cwd/tsconfig.json</code>
+</ParamField>
+
+<ParamField path="--define" type="string">
+  Substitute K:V while parsing, e.g. <code>--define process.env.NODE_ENV:"development"</code>. Values are parsed as
+  JSON. Alias: <code>-d</code>
+</ParamField>
+
+<ParamField path="--drop" type="string">
+  Remove function calls, e.g. <code>--drop=console</code> removes all <code>console.*</code> calls
+</ParamField>
+
+<ParamField path="--loader" type="string">
+  Parse files with <code>.ext:loader</code>, e.g. <code>--loader .js:jsx</code>. Valid loaders: <code>js</code>,{" "}
+  <code>jsx</code>, <code>ts</code>, <code>tsx</code>, <code>json</code>, <code>toml</code>, <code>text</code>,{" "}
+  <code>file</code>, <code>wasm</code>, <code>napi</code>. Alias: <code>-l</code>
+</ParamField>
+
+<ParamField path="--no-macros" type="boolean">
+  Disable macros from being executed in the bundler, transpiler and runtime
+</ParamField>
+
+<ParamField path="--jsx-factory" type="string">
+  Changes the function called when compiling JSX elements using the classic JSX runtime
+</ParamField>
+
+<ParamField path="--jsx-fragment" type="string">
+  Changes the function called when compiling JSX fragments
+</ParamField>
+
+<ParamField path="--jsx-import-source" type="string" default="react">
+  Declares the module specifier to be used for importing the jsx and jsxs factory functions. Default: <code>react</code>
+</ParamField>
+
+<ParamField path="--jsx-runtime" type="string" default="automatic">
+  <code>automatic</code> (default) or <code>classic</code>
+</ParamField>
+
+<ParamField path="--jsx-side-effects" type="boolean">
+  Treat JSX elements as having side effects (disable pure annotations)
+</ParamField>
+
+<ParamField path="--ignore-dce-annotations" type="boolean">
+  Ignore tree-shaking annotations such as <code>@__PURE__</code>
+</ParamField>
+
+### Networking &amp; Security
+
+<ParamField path="--port" type="number">
+  Set the default port for <code>Bun.serve</code>
+</ParamField>
+
+<ParamField path="--fetch-preconnect" type="string">
+  Preconnect to a URL while code is loading
+</ParamField>
+
+<ParamField path="--max-http-header-size" type="number" default="16384">
+  Set the maximum size of HTTP headers in bytes. Default is 16KiB
+</ParamField>
+
+<ParamField path="--dns-result-order" type="string" default="verbatim">
+  Set the default order of DNS lookup results. Valid orders: <code>verbatim</code> (default), <code>ipv4first</code>,{" "}
+  <code>ipv6first</code>
+</ParamField>
+
+<ParamField path="--use-system-ca" type="boolean">
+  Use the system's trusted certificate authorities
+</ParamField>
+
+<ParamField path="--use-openssl-ca" type="boolean">
+  Use OpenSSL's default CA store
+</ParamField>
+
+<ParamField path="--use-bundled-ca" type="boolean">
+  Use bundled CA store
+</ParamField>
+
+<ParamField path="--redis-preconnect" type="boolean">
+  Preconnect to <code>$REDIS_URL</code> at startup
+</ParamField>
+
+<ParamField path="--sql-preconnect" type="boolean">
+  Preconnect to PostgreSQL at startup
+</ParamField>
+
+<ParamField path="--user-agent" type="string">
+  Set the default User-Agent header for HTTP requests
+</ParamField>
+
+### Global Configuration &amp; Context
+
+<ParamField path="--env-file" type="string">
+  Load environment variables from the specified file(s)
+</ParamField>
+
+<ParamField path="--cwd" type="string">
+  Absolute path to resolve files &amp; entry points from. This just changes the process' cwd
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Specify path to Bun config file. Default <code>$cwd/bunfig.toml</code>. Alias: <code>-c</code>
+</ParamField>
+
+## Examples
+
+Run a JavaScript or TypeScript file:
+
+```bash
+bun run ./index.js
+bun run ./index.tsx
+```
+
+Run a package.json script:
+
+```bash
+bun run dev
+bun run lint
+```

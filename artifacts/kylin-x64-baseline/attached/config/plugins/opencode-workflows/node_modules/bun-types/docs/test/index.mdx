@@ -1,0 +1,409 @@
+---
+title: "Test runner"
+description: "Bun's fast, built-in, Jest-compatible test runner with TypeScript support, lifecycle hooks, mocking, and watch mode"
+---
+
+import Test from "/snippets/cli/test.mdx";
+
+Bun ships with a fast, built-in, Jest-compatible test runner. Tests are executed with the Bun runtime, and support the following features.
+
+- TypeScript and JSX
+- Lifecycle hooks
+- Snapshot testing
+- UI & DOM testing
+- Watch mode with `--watch`
+- Script pre-loading with `--preload`
+
+<Note>
+  Bun aims for compatibility with Jest, but not everything is implemented. To track compatibility, see [this tracking
+  issue](https://github.com/oven-sh/bun/issues/1825).
+</Note>
+
+## Run tests
+
+```bash terminal icon="terminal"
+bun test
+```
+
+Tests are written in JavaScript or TypeScript with a Jest-like API. Refer to [Writing tests](/docs/test/writing-tests) for full documentation.
+
+```ts math.test.ts icon="/icons/typescript.svg"
+import { expect, test } from "bun:test";
+
+test("2 + 2", () => {
+  expect(2 + 2).toBe(4);
+});
+```
+
+The runner recursively searches the working directory for files that match the following patterns:
+
+- `*.test.{js|jsx|ts|tsx}`
+- `*_test.{js|jsx|ts|tsx}`
+- `*.spec.{js|jsx|ts|tsx}`
+- `*_spec.{js|jsx|ts|tsx}`
+
+You can filter the set of _test files_ to run by passing additional positional arguments to `bun test`. Any test file with a path that matches one of the filters will run. Commonly, these filters will be file or directory names; glob patterns are not yet supported.
+
+```bash terminal icon="terminal"
+bun test <filter> <filter> ...
+```
+
+To filter by _test name_, use the `-t`/`--test-name-pattern` flag.
+
+```sh terminal icon="terminal"
+# run all tests or test suites with "addition" in the name
+bun test --test-name-pattern addition
+```
+
+To run a specific file in the test runner, make sure the path starts with `./` or `/` to distinguish it from a filter name.
+
+```bash terminal icon="terminal"
+bun test ./test/specific-file.test.ts
+```
+
+The test runner runs all tests in a single process. It loads all `--preload` scripts (see [Lifecycle](/docs/test/lifecycle) for details), then runs all tests. If a test fails, the test runner will exit with a non-zero exit code.
+
+## CI/CD integration
+
+`bun test` supports a variety of CI/CD integrations.
+
+### GitHub Actions
+
+`bun test` automatically detects if it's running inside GitHub Actions and will emit GitHub Actions annotations to the console directly.
+
+No configuration is needed, other than installing `bun` in the workflow and running `bun test`.
+
+#### How to install `bun` in a GitHub Actions workflow
+
+To use `bun test` in a GitHub Actions workflow, add the following step:
+
+```yaml title=".github/workflows/test.yml" icon="file-code"
+jobs:
+  build:
+    name: build-app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies # (assuming your project has dependencies)
+        run: bun install # You can use npm/yarn/pnpm instead if you prefer
+      - name: Run tests
+        run: bun test
+```
+
+From there, you'll get GitHub Actions annotations.
+
+### JUnit XML reports (GitLab, etc.)
+
+To use `bun test` with a JUnit XML reporter, you can use the `--reporter=junit` in combination with `--reporter-outfile`.
+
+```sh terminal icon="terminal"
+bun test --reporter=junit --reporter-outfile=./bun.xml
+```
+
+This will continue to output to stdout/stderr as usual, and also write a JUnit
+XML report to the given path at the very end of the test run.
+
+JUnit XML is a popular format for reporting test results in CI/CD pipelines.
+
+## Timeouts
+
+Use the `--timeout` flag to specify a _per-test_ timeout in milliseconds. If a test times out, it will be marked as failed. The default value is `5000`.
+
+```bash terminal icon="terminal"
+# default value is 5000
+bun test --timeout 20
+```
+
+## Concurrent test execution
+
+By default, Bun runs all tests sequentially within each test file. You can enable concurrent execution to run async tests in parallel, significantly speeding up test suites with independent tests.
+
+### `--concurrent` flag
+
+Use the `--concurrent` flag to run all tests concurrently within their respective files:
+
+```sh terminal icon="terminal"
+bun test --concurrent
+```
+
+When this flag is enabled, all tests will run in parallel unless explicitly marked with `test.serial`.
+
+### `--max-concurrency` flag
+
+Control the maximum number of tests running simultaneously with the `--max-concurrency` flag:
+
+```sh terminal icon="terminal"
+# Limit to 4 concurrent tests
+bun test --concurrent --max-concurrency 4
+
+# Default: 20
+bun test --concurrent
+```
+
+This helps prevent resource exhaustion when running many concurrent tests. The default value is 20.
+
+### `test.concurrent`
+
+Mark individual tests to run concurrently, even when the `--concurrent` flag is not used:
+
+```ts title="math.test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+// These tests run in parallel with each other
+test.concurrent("concurrent test 1", async () => {
+  await fetch("/api/endpoint1");
+  expect(true).toBe(true);
+});
+
+test.concurrent("concurrent test 2", async () => {
+  await fetch("/api/endpoint2");
+  expect(true).toBe(true);
+});
+
+// This test runs sequentially
+test("sequential test", () => {
+  expect(1 + 1).toBe(2);
+});
+```
+
+### `test.serial`
+
+Force tests to run sequentially, even when the `--concurrent` flag is enabled:
+
+```ts title="math.test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+let sharedState = 0;
+
+// These tests must run in order
+test.serial("first serial test", () => {
+  sharedState = 1;
+  expect(sharedState).toBe(1);
+});
+
+test.serial("second serial test", () => {
+  // Depends on the previous test
+  expect(sharedState).toBe(1);
+  sharedState = 2;
+});
+
+// This test can run concurrently if --concurrent is enabled
+test("independent test", () => {
+  expect(true).toBe(true);
+});
+
+// Chaining test qualifiers
+test.failing.each([1, 2, 3])("chained qualifiers %d", input => {
+  expect(input).toBe(0); // This test is expected to fail for each input
+});
+```
+
+## Retry failed tests
+
+Use the `--retry` flag to automatically retry failed tests up to a given number of times. If a test fails and then passes on a subsequent attempt, it is reported as passing.
+
+```sh terminal icon="terminal"
+bun test --retry 3
+```
+
+Per-test `{ retry: N }` overrides the global `--retry` value:
+
+```ts
+// Uses the global --retry value
+test("uses global retry", () => {
+  /* ... */
+});
+
+// Overrides --retry with its own value
+test("custom retry", { retry: 1 }, () => {
+  /* ... */
+});
+```
+
+You can also set this in `bunfig.toml`:
+
+```toml title="bunfig.toml" icon="settings"
+[test]
+retry = 3
+```
+
+## Rerun tests
+
+Use the `--rerun-each` flag to run each test multiple times. This is useful for detecting flaky or non-deterministic test failures.
+
+```sh terminal icon="terminal"
+bun test --rerun-each 100
+```
+
+## Randomize test execution order
+
+Use the `--randomize` flag to run tests in a random order. This helps detect tests that depend on shared state or execution order.
+
+```sh terminal icon="terminal"
+bun test --randomize
+```
+
+When using `--randomize`, the seed used for randomization will be displayed in the test summary:
+
+```sh terminal icon="terminal"
+bun test --randomize
+```
+
+```txt
+# ... test output ...
+ --seed=12345
+ 2 pass
+ 8 fail
+Ran 10 tests across 2 files. [50.00ms]
+```
+
+### Reproducible random order with `--seed`
+
+Use the `--seed` flag to specify a seed for the randomization. This allows you to reproduce the same test order when debugging order-dependent failures.
+
+```sh terminal icon="terminal"
+# Reproduce a previous randomized run
+bun test --seed 123456
+```
+
+The `--seed` flag implies `--randomize`, so you don't need to specify both. Using the same seed value will always produce the same test execution order, making it easier to debug intermittent failures caused by test interdependencies.
+
+## Bail out with `--bail`
+
+Use the `--bail` flag to abort the test run early after a pre-determined number of test failures. By default Bun will run all tests and report all failures, but sometimes in CI environments it's preferable to terminate earlier to reduce CPU usage.
+
+```sh terminal icon="terminal"
+# bail after 1 failure
+bun test --bail
+
+# bail after 10 failure
+bun test --bail=10
+```
+
+## Watch mode
+
+Similar to `bun run`, you can pass the `--watch` flag to `bun test` to watch for changes and re-run tests.
+
+```bash terminal icon="terminal"
+bun test --watch
+```
+
+## Lifecycle hooks
+
+Bun supports the following lifecycle hooks:
+
+| Hook         | Description                 |
+| ------------ | --------------------------- |
+| `beforeAll`  | Runs once before all tests. |
+| `beforeEach` | Runs before each test.      |
+| `afterEach`  | Runs after each test.       |
+| `afterAll`   | Runs once after all tests.  |
+
+These hooks can be defined inside test files, or in a separate file that is preloaded with the `--preload` flag.
+
+```sh terminal icon="terminal"
+bun test --preload ./setup.ts
+```
+
+See [Test > Lifecycle](/docs/test/lifecycle) for complete documentation.
+
+## Mocks
+
+Create mock functions with the `mock` function.
+
+```ts title="math.test.ts" icon="/icons/typescript.svg"
+import { test, expect, mock } from "bun:test";
+const random = mock(() => Math.random());
+
+test("random", () => {
+  const val = random();
+  expect(val).toBeGreaterThan(0);
+  expect(random).toHaveBeenCalled();
+  expect(random).toHaveBeenCalledTimes(1);
+});
+```
+
+Alternatively, you can use `jest.fn()`, it behaves identically.
+
+```ts title="math.test.ts" icon="/icons/typescript.svg"
+import { test, expect, mock } from "bun:test"; // [!code --]
+import { test, expect, jest } from "bun:test"; // [!code ++]
+
+const random = mock(() => Math.random()); // [!code --]
+const random = jest.fn(() => Math.random()); // [!code ++]
+```
+
+See [Test > Mocks](/docs/test/mocks) for complete documentation.
+
+## Snapshot testing
+
+Snapshots are supported by `bun test`.
+
+```ts title="math.test.ts" icon="/icons/typescript.svg"
+// example usage of toMatchSnapshot
+import { test, expect } from "bun:test";
+
+test("snapshot", () => {
+  expect({ a: 1 }).toMatchSnapshot();
+});
+```
+
+To update snapshots, use the `--update-snapshots` flag.
+
+```sh terminal icon="terminal"
+bun test --update-snapshots
+```
+
+See [Test > Snapshots](/docs/test/snapshots) for complete documentation.
+
+## UI & DOM testing
+
+Bun is compatible with popular UI testing libraries:
+
+- [HappyDOM](https://github.com/capricorn86/happy-dom)
+- [DOM Testing Library](https://testing-library.com/docs/dom-testing-library/intro/)
+- [React Testing Library](https://testing-library.com/docs/react-testing-library/intro)
+
+See [Test > DOM Testing](/docs/test/dom) for complete documentation.
+
+## Performance
+
+Bun's test runner is fast.
+
+<Frame>![Running 266 React SSR tests faster than Jest can print its version number.](https://bun.com/images/buntest.jpeg)</Frame>
+
+## AI Agent Integration
+
+When using Bun's test runner with AI coding assistants, you can enable quieter output to improve readability and reduce context noise. This feature minimizes test output verbosity while preserving essential failure information.
+
+### Environment Variables
+
+Set any of the following environment variables to enable AI-friendly output:
+
+- `CLAUDECODE=1` - For Claude Code
+- `REPL_ID=1` - For Replit
+- `AGENT=1` - Generic AI agent flag
+
+### Behavior
+
+When an AI agent environment is detected:
+
+- Only test failures are displayed in detail
+- Passing, skipped, and todo test indicators are hidden
+- Summary statistics remain intact
+
+```bash terminal icon="terminal"
+# Example: Enable quiet output for Claude Code
+CLAUDECODE=1 bun test
+
+# Still shows failures and summary, but hides verbose passing test output
+```
+
+This feature is particularly useful in AI-assisted development workflows where reduced output verbosity improves context efficiency while maintaining visibility into test failures.
+
+---
+
+<Test />

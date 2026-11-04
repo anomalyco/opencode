@@ -1,0 +1,77 @@
+---
+title: "Lifecycle scripts"
+description: "How Bun handles package lifecycle scripts securely"
+---
+
+Packages on `npm` can define _lifecycle scripts_ in their `package.json`. Some of the most common are below, but there are [many others](https://docs.npmjs.com/cli/v10/using-npm/scripts).
+
+- `preinstall`: Runs before the package is installed
+- `postinstall`: Runs after the package is installed
+- `preuninstall`: Runs before the package is uninstalled
+- `prepublishOnly`: Runs before the package is published
+
+These scripts are arbitrary shell commands that the package manager is expected to read and execute at the appropriate time. But executing arbitrary scripts represents a potential security risk, so—unlike other `npm` clients—Bun does not execute arbitrary lifecycle scripts by default.
+
+---
+
+## `postinstall`
+
+The `postinstall` script is particularly important. It's widely used to build or install platform-specific binaries for packages that are implemented as [native Node.js add-ons](https://nodejs.org/api/addons.html). For example, `node-sass` is a popular package that uses `postinstall` to build a native binary for Sass.
+
+```json package.json icon="file-json"
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "node-sass": "^6.0.1"
+  }
+}
+```
+
+---
+
+## `trustedDependencies`
+
+Instead of executing arbitrary scripts, Bun uses a "default-secure" approach. You can add certain packages to an allow list, and Bun will execute lifecycle scripts for those packages. To tell Bun to allow lifecycle scripts for a particular package, add the package name to `trustedDependencies` array in your `package.json`.
+
+```json package.json icon="file-json"
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "trustedDependencies": ["node-sass"] // [!code ++]
+}
+```
+
+Once added to `trustedDependencies`, install/re-install the package. Bun will read this field and run lifecycle scripts for `my-trusted-package`.
+
+The top 500 npm packages with lifecycle scripts are allowed by default. You can see the full list [here](https://github.com/oven-sh/bun/blob/main/src/install/default-trusted-dependencies.txt).
+
+<Note>
+  The default trusted dependencies list only applies to packages installed from npm. For packages from other sources
+  (such as `file:`, `link:`, `git:`, or `github:` dependencies), you must explicitly add them to `trustedDependencies`
+  to run their lifecycle scripts, even if the package name matches an entry in the default list. This prevents malicious
+  packages from spoofing trusted package names through local file paths or git repositories.
+</Note>
+
+---
+
+## `--ignore-scripts`
+
+To disable lifecycle scripts for all packages, use the `--ignore-scripts` flag.
+
+```bash terminal icon="terminal"
+bun install --ignore-scripts
+```
+
+To make this the default for a project, set [`install.ignoreScripts`](/docs/runtime/bunfig#install-ignorescripts) in `bunfig.toml`:
+
+```toml bunfig.toml icon="settings"
+[install]
+ignoreScripts = true
+```
+
+Or in `.npmrc`:
+
+```ini .npmrc icon="npm"
+ignore-scripts=true
+```

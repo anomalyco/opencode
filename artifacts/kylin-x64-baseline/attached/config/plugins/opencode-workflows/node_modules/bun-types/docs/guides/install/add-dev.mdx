@@ -1,0 +1,28 @@
+---
+title: Add a development dependency
+sidebarTitle: Add a dev dependency
+mode: center
+---
+
+To add an npm package as a development dependency, use `bun add --development`.
+
+```sh terminal icon="terminal"
+bun add zod --dev
+bun add zod -d # shorthand
+```
+
+---
+
+This will add the package to `devDependencies` in `package.json`.
+
+```json
+{
+  "devDependencies": {
+    "zod": "^3.0.0" // [!code ++]
+  }
+}
+```
+
+---
+
+See [Docs > Package manager](/docs/pm/cli/install) for complete documentation of Bun's package manager.

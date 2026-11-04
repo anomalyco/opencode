@@ -1,0 +1,125 @@
+---
+title: Migrate from Jest to Bun's test runner
+sidebarTitle: Migrate from Jest
+mode: center
+---
+
+In many cases, Bun's test runner can run Jest test suites with no code changes. Just run `bun test` instead of `npx jest`, `yarn test`, etc.
+
+```sh terminal icon="terminal"
+npx jest # [!code --]
+yarn test # [!code --]
+bun test # [!code ++]
+```
+
+---
+
+There's often no need for code changes.
+
+- Bun internally re-writes imports from `@jest/globals` to use the `bun:test` equivalents.
+- If you're relying on Jest to inject `test`, `expect`, etc. as globals, Bun does that too.
+
+But if you'd rather switch to the `bun:test` imports, you can do that too.
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "@jest/globals"; // [!code --]
+import { test, expect } from "bun:test"; // [!code ++]
+```
+
+---
+
+Since Bun v1.2.19, you can enable **TypeScript support** for global test functions with a single triple-slash directive. This makes migrating from Jest even easier since you only need to add the directive once in your entire project:
+
+Add this directive to _just one file_ in your project, such as:
+
+- A `global.d.ts` file in your project root
+- Your test `preload.ts` setup file (if using `preload` in bunfig.toml)
+- Any single `.ts` file that TypeScript includes in your compilation
+
+```ts title="global.d.ts" icon="/icons/typescript.svg"
+/// <reference types="bun-types/test-globals" />
+```
+
+---
+
+Once added, all test files in your project automatically get TypeScript support for Jest globals:
+
+```ts math.test.ts icon="/icons/typescript.svg"
+describe("my test suite", () => {
+  test("should work", () => {
+    expect(1 + 1).toBe(2);
+  });
+
+  beforeAll(() => {
+    // setup code
+  });
+
+  afterEach(() => {
+    // cleanup code
+  });
+});
+```
+
+---
+
+Bun implements the vast majority of Jest's matchers, but compatibility isn't 100% yet. Refer to the full compatibility table at [Docs > Test runner > Writing tests](/docs/test/writing-tests#matchers).
+
+Some notable missing features:
+
+- `expect().toHaveReturned()`
+
+---
+
+If you're using `testEnvironment: "jsdom"` to run your tests in a browser-like environment, you should follow the [DOM testing with Bun and happy-dom](/docs/guides/test/happy-dom) guide to inject browser APIs into the global scope. This guide relies on [`happy-dom`](https://github.com/capricorn86/happy-dom), which is a leaner and faster alternative to [`jsdom`](https://github.com/jsdom/jsdom).
+
+At the moment jsdom does not work in Bun due to its internal use of V8 APIs. Track support for it [here](https://github.com/oven-sh/bun/issues/3554).
+
+```toml bunfig.toml icon="settings"
+[test]
+preload = ["./happy-dom.ts"]
+```
+
+---
+
+Replace `bail` in your Jest config with the `--bail` CLI flag.
+
+```sh terminal icon="terminal"
+bun test --bail=3
+```
+
+---
+
+Replace `collectCoverage` with the `--coverage` CLI flag.
+
+```sh terminal icon="terminal"
+bun test --coverage
+```
+
+---
+
+Replace `testTimeout` with the `--test-timeout` CLI flag.
+
+```sh terminal icon="terminal"
+bun test --timeout 10000
+```
+
+---
+
+Many other flags become irrelevant or obsolete when using `bun test`.
+
+- `transform` — Bun supports TypeScript & JSX. Other file types can be configured with [Plugins](/docs/runtime/plugins).
+- `extensionsToTreatAsEsm`
+- `haste` — Bun uses it's own internal source maps
+- `watchman`, `watchPlugins`, `watchPathIgnorePatterns` — use `--watch` to run tests in watch mode
+- `verbose` — set `logLevel: "debug"` in [`bunfig.toml`](/docs/runtime/bunfig#loglevel)
+
+---
+
+Settings that aren't mentioned here are not supported or have no equivalent. Please [file a feature request](https://github.com/oven-sh/bun) if something important is missing.
+
+---
+
+See also:
+
+- [Mark a test as a todo](/docs/guides/test/todo-tests)
+- [Docs > Test runner > Writing tests](/docs/test/writing-tests)

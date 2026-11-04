@@ -1,0 +1,27 @@
+---
+title: Add an optional dependency
+sidebarTitle: Add an optional dependency
+mode: center
+---
+
+To add an npm package as an optional dependency, use the `--optional` flag.
+
+```sh terminal icon="terminal"
+bun add zod --optional
+```
+
+---
+
+This will add the package to `optionalDependencies` in `package.json`.
+
+```json package.json icon="file-json"
+{
+  "optionalDependencies": {
+    "zod": "^3.0.0" // [!code ++]
+  }
+}
+```
+
+---
+
+See [Docs > Package manager](/docs/pm/cli/install) for complete documentation of Bun's package manager.

@@ -1,0 +1,1 @@
+{"version":3,"file":"escape.d.ts","sourceRoot":"","sources":["../../src/escape.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,gBAAgB,EAAE,MAAM,YAAY,CAAA;AAC7C;;;;;;;;GAQG;AACH,eAAO,MAAM,MAAM,MACd,MAAM,8BAGN,KAAK,gBAAgB,EAAE,sBAAsB,CAAC,WAQlD,CAAA"}

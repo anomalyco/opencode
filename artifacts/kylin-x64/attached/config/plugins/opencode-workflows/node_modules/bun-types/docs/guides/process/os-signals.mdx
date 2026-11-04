@@ -1,0 +1,31 @@
+---
+title: Listen to OS signals
+sidebarTitle: OS signals
+mode: center
+---
+
+Bun supports the Node.js `process` global, including the `process.on()` method for listening to OS signals.
+
+```ts
+process.on("SIGINT", () => {
+  console.log("Received SIGINT");
+});
+```
+
+---
+
+If you don't know which signal to listen for, you listen to the [`"beforeExit"`](https://nodejs.org/api/process.html#event-beforeexit) and [`"exit"`](https://nodejs.org/api/process.html#event-exit) events.
+
+```ts
+process.on("beforeExit", code => {
+  console.log(`Event loop is empty!`);
+});
+
+process.on("exit", code => {
+  console.log(`Process is exiting with code ${code}`);
+});
+```
+
+---
+
+See [Docs > API > Utils](/docs/runtime/utils) for more useful utilities.

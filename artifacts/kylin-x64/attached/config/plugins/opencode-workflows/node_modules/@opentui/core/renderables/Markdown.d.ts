@@ -1,0 +1,255 @@
+import { Renderable, type RenderableOptions } from "../Renderable.js";
+import { type RenderContext } from "../types.js";
+import { SyntaxStyle } from "../syntax-style.js";
+import type { BorderStyle } from "../lib/border.js";
+import { RGBA, type ColorInput } from "../lib/RGBA.js";
+import { type MarkedToken, type Token, type Tokens } from "marked";
+import { type TextTableColumnFitter, type TextTableColumnWidthMode, type TextTableContent } from "./TextTable.js";
+import type { TreeSitterClient } from "../lib/tree-sitter/index.js";
+import { type ParseState } from "./markdown-parser.js";
+import type { OptimizedBuffer } from "../buffer.js";
+export type MarkdownTableStyle = "grid" | "columns";
+export interface MarkdownTableOptions {
+    /**
+     * Visual style preset for markdown tables.
+     * - "grid": boxed table with visible borders.
+     * - "columns": borderless columns optimized for separated block output.
+     *
+     * Defaults to "columns" in `internalBlockMode: "top-level"`, otherwise "grid".
+     */
+    style?: MarkdownTableStyle;
+    /**
+     * Strategy for sizing table columns.
+     * - "content": columns fit to intrinsic content width.
+     * - "full": columns expand to fill available width.
+     */
+    widthMode?: TextTableColumnWidthMode;
+    /**
+     * Column fitting method when shrinking constrained tables.
+     */
+    columnFitter?: TextTableColumnFitter;
+    /**
+     * Wrapping strategy for table cell content.
+     */
+    wrapMode?: "none" | "char" | "word";
+    /**
+     * Padding applied on all sides of each table cell.
+     */
+    cellPadding?: number;
+    /**
+     * Horizontal padding applied on the left and right of each table cell.
+     */
+    cellPaddingX?: number;
+    /**
+     * Vertical padding applied above and below each table cell.
+     */
+    cellPaddingY?: number;
+    /**
+     * Enables/disables table border rendering.
+     */
+    borders?: boolean;
+    /**
+     * Overrides outer border visibility. Defaults to `borders`.
+     */
+    outerBorder?: boolean;
+    /**
+     * Border style for markdown tables.
+     */
+    borderStyle?: BorderStyle;
+    /**
+     * Border color for markdown tables. Defaults to conceal style color.
+     */
+    borderColor?: ColorInput;
+    /**
+     * Enables/disables selection support on markdown tables.
+     */
+    selectable?: boolean;
+}
+export interface MarkdownOptions extends RenderableOptions<MarkdownRenderable> {
+    content?: string;
+    syntaxStyle: SyntaxStyle;
+    fg?: ColorInput;
+    bg?: ColorInput;
+    /** Controls concealment for markdown syntax markers in markdown text blocks. */
+    conceal?: boolean;
+    /** Controls concealment inside fenced code blocks rendered by CodeRenderable. */
+    concealCode?: boolean;
+    treeSitterClient?: TreeSitterClient;
+    /**
+     * Enable streaming mode for incremental content updates.
+     *
+     * Semantics:
+     * - The trailing markdown block stays unstable while streaming is enabled.
+     * - Tables render all rows produced by the markdown parser (including trailing rows).
+     * - Incomplete table rows are normalized by the parser and rendered with empty cells
+     *   where data is missing.
+     *
+     * Expectations:
+     * - Keep this true while chunks are still being appended.
+     * - Set this to false once streaming is complete to finalize trailing token parsing.
+     */
+    streaming?: boolean;
+    /**
+     * Options for internally rendered markdown tables.
+     */
+    tableOptions?: MarkdownTableOptions;
+    /**
+     * Custom node renderer. Return a Renderable to override default rendering,
+     * or undefined/null to use default rendering.
+     */
+    renderNode?: (token: Token, context: RenderNodeContext) => Renderable | undefined | null;
+    /**
+     * Internal only.
+     * - "coalesced": combine ordinary markdown into larger render blocks.
+     * - "top-level": preserve top-level markdown blocks as separate render blocks.
+     */
+    internalBlockMode?: "coalesced" | "top-level";
+}
+export interface RenderNodeContext {
+    syntaxStyle: SyntaxStyle;
+    conceal: boolean;
+    concealCode: boolean;
+    treeSitterClient?: TreeSitterClient;
+    /** Creates default renderable for this token */
+    defaultRender: () => Renderable | null;
+}
+export type MarkdownCodeBlockRenderer = (token: Tokens.Code, context: RenderNodeContext) => Renderable | undefined | null;
+export type MarkdownCodeBlockRendererMap = ReadonlyMap<string, MarkdownCodeBlockRenderer> | Readonly<Record<string, MarkdownCodeBlockRenderer>>;
+export declare function createMarkdownCodeBlockRenderer(renderers: MarkdownCodeBlockRendererMap): MarkdownOptions["renderNode"];
+interface TableContentCache {
+    content: TextTableContent;
+    cellKeys: Uint32Array[];
+}
+export interface BlockState {
+    token: MarkedToken;
+    tokenRaw: string;
+    marginTop?: number;
+    renderable: Renderable;
+    tableContentCache?: TableContentCache;
+    tracksInterBlockMargin?: boolean;
+    /** Whether built-in reconciliation can update this renderable without replacing it. */
+    canUpdateInPlace: boolean;
+}
+export type { ParseState };
+export declare class MarkdownRenderable extends Renderable {
+    private _content;
+    private _syntaxStyle;
+    private _fg?;
+    private _bg?;
+    private _conceal;
+    private _concealCode;
+    private _treeSitterClient?;
+    private _tableOptions?;
+    private _renderNode?;
+    private _internalBlockMode;
+    _parseState: ParseState | null;
+    private _streaming;
+    _blockStates: BlockState[];
+    _stableBlockCount: number;
+    private _styleDirty;
+    private _linkifyMarkdownChunks;
+    protected _contentDefaultOptions: {
+        content: string;
+        conceal: true;
+        concealCode: false;
+        streaming: false;
+        internalBlockMode: "coalesced";
+    };
+    constructor(ctx: RenderContext, options: MarkdownOptions);
+    get content(): string;
+    set content(value: string);
+    get syntaxStyle(): SyntaxStyle;
+    set syntaxStyle(value: SyntaxStyle);
+    get fg(): RGBA | undefined;
+    set fg(value: ColorInput | undefined);
+    get bg(): RGBA | undefined;
+    set bg(value: ColorInput | undefined);
+    get conceal(): boolean;
+    set conceal(value: boolean);
+    get concealCode(): boolean;
+    set concealCode(value: boolean);
+    get streaming(): boolean;
+    set streaming(value: boolean);
+    get tableOptions(): MarkdownTableOptions | undefined;
+    set tableOptions(value: MarkdownTableOptions | undefined);
+    get renderNode(): MarkdownOptions["renderNode"] | undefined;
+    set renderNode(value: MarkdownOptions["renderNode"] | undefined);
+    get internalBlockMode(): "coalesced" | "top-level";
+    set internalBlockMode(value: "coalesced" | "top-level");
+    private getStyle;
+    private createChunk;
+    private createDefaultChunk;
+    private createInitialStyledText;
+    private renderInlineContent;
+    private renderInlineToken;
+    private renderInlineTokenWithStyle;
+    private applyMargins;
+    private createMarkdownCodeRenderable;
+    private getBlockquoteContent;
+    private getBlockquoteBorderColor;
+    private createBlockquoteRenderable;
+    private createListRenderable;
+    private getListItemInputs;
+    private applyListRenderable;
+    private createListItemRenderable;
+    private applyListItemRenderable;
+    private applyListItemChildren;
+    private getRenderableListItemTokens;
+    private applyListChildRenderable;
+    private destroyListItemChildrenAfter;
+    private applyListItemMarker;
+    private createListChildRenderable;
+    private createHorizontalRuleRenderable;
+    private createCodeRenderable;
+    private applyMarkdownCodeRenderable;
+    private applyBlockquoteRenderable;
+    private applyCodeBlockRenderable;
+    private shouldRenderSeparately;
+    private getInterBlockMargin;
+    private applyInterBlockMargin;
+    private createMarkdownBlockToken;
+    private normalizeMarkdownBlockRaw;
+    private normalizeScrollbackMarkdownBlockRaw;
+    private isCodeBlockOnlyRenderer;
+    private buildRenderableTokens;
+    private buildTopLevelRenderBlocks;
+    private shouldAddTopLevelMargin;
+    private isSeparatedTopLevelBlock;
+    private getTableRowsToRender;
+    private hashString;
+    private hashTableToken;
+    private getTableCellKey;
+    private createTableDataCellChunks;
+    private createTableHeaderCellChunks;
+    private buildTableContentCache;
+    private resolveTableStyle;
+    private usesBorderlessColumnSpacing;
+    private resolveTableRenderableOptions;
+    private applyTableRenderableOptions;
+    private applyTableOptionsToBlocks;
+    private createTextTableRenderable;
+    private createTableBlock;
+    private getStableBlockCount;
+    private syncTopLevelBlockState;
+    private getTopLevelBlockRaw;
+    private createTopLevelDefaultRenderable;
+    private createTopLevelRenderable;
+    private createDefaultRenderable;
+    private createCustomRenderable;
+    private createTopLevelCustomRenderable;
+    private renderCustomNode;
+    private destroyUnusedDefaultRenderable;
+    private updateBlockRenderable;
+    private updateTopLevelBlocks;
+    private canUpdateBlockRenderable;
+    private updateBlocks;
+    private clearBlockStates;
+    /**
+     * Re-render existing blocks without rebuilding the parse state or block structure.
+     * Used when only style/conceal changes - much faster than full rebuild.
+     */
+    private rerenderBlocks;
+    clearCache(): void;
+    refreshStyles(): void;
+    protected renderSelf(buffer: OptimizedBuffer, deltaTime: number): void;
+}

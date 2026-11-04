@@ -1,0 +1,87 @@
+{
+  "name": "@opentui/core",
+  "module": "index.node.js",
+  "main": "index.node.js",
+  "types": "index.d.ts",
+  "type": "module",
+  "version": "0.4.5",
+  "description": "OpenTUI is a TypeScript library on a native Zig core for building terminal user interfaces (TUIs)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opentui",
+    "directory": "packages/core"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "bun": "./index.bun.js",
+      "node": "./index.node.js",
+      "import": "./index.node.js"
+    },
+    "./testing": {
+      "bun": "./testing.bun.js",
+      "import": "./testing.js",
+      "types": "./testing.d.ts"
+    },
+    "./runtime-plugin": {
+      "types": "./runtime-plugin.d.ts",
+      "bun": "./runtime-plugin.js",
+      "node": "./runtime-plugin.node.js",
+      "default": "./runtime-plugin.node.js"
+    },
+    "./runtime-plugin-support": {
+      "types": "./runtime-plugin-support.d.ts",
+      "bun": "./runtime-plugin-support.js",
+      "node": "./runtime-plugin-support.node.js",
+      "default": "./runtime-plugin-support.node.js"
+    },
+    "./runtime-plugin-support/configure": {
+      "types": "./runtime-plugin-support-configure.d.ts",
+      "bun": "./runtime-plugin-support-configure.js",
+      "node": "./runtime-plugin-support-configure.node.js",
+      "default": "./runtime-plugin-support-configure.node.js"
+    },
+    "./yoga": {
+      "bun": "./yoga.bun.js",
+      "types": "./yoga.d.ts",
+      "import": "./yoga.js"
+    },
+    "./tree-sitter/update-assets": {
+      "types": "./lib/tree-sitter/update-assets.d.ts",
+      "bun": "./lib/tree-sitter/update-assets.js",
+      "import": "./lib/tree-sitter/update-assets.js"
+    },
+    "./parser.worker": {
+      "bun": "./parser.worker.js",
+      "node": "./parser.worker.js",
+      "import": "./parser.worker.js",
+      "require": "./parser.worker.js",
+      "types": "./lib/tree-sitter/parser.worker.d.ts"
+    },
+    "./node-assets": {
+      "types": "./node-assets.d.ts",
+      "import": "./node-assets.js"
+    }
+  },
+  "dependencies": {
+    "bun-ffi-structs": "0.2.4",
+    "diff": "9.0.0",
+    "marked": "17.0.1",
+    "string-width": "7.2.0",
+    "strip-ansi": "7.1.2"
+  },
+  "peerDependencies": {
+    "web-tree-sitter": "0.25.10"
+  },
+  "optionalDependencies": {
+    "@opentui/core-darwin-x64": "0.4.5",
+    "@opentui/core-darwin-arm64": "0.4.5",
+    "@opentui/core-linux-x64": "0.4.5",
+    "@opentui/core-linux-arm64": "0.4.5",
+    "@opentui/core-win32-x64": "0.4.5",
+    "@opentui/core-win32-arm64": "0.4.5",
+    "@opentui/core-linux-x64-musl": "0.4.5",
+    "@opentui/core-linux-arm64-musl": "0.4.5"
+  }
+}

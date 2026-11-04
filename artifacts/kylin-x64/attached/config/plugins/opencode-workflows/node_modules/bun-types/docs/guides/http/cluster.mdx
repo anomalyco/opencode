@@ -1,0 +1,69 @@
+---
+title: Start a cluster of HTTP servers
+description: Run multiple HTTP servers concurrently via the "reusePort" option to share the same port across multiple processes
+sidebarTitle: Start a cluster of HTTP servers
+mode: center
+---
+
+To run multiple HTTP servers concurrently, use the `reusePort` option in `Bun.serve()` which shares the same port across multiple processes.
+
+This automatically load balances incoming requests across multiple instances of Bun.
+
+```ts server.ts icon="/icons/typescript.svg"
+import { serve } from "bun";
+
+const id = Math.random().toString(36).slice(2);
+
+serve({
+  port: process.env.PORT || 8080,
+  development: false,
+
+  // Share the same port across multiple processes
+  // This is the important part!
+  reusePort: true,
+
+  async fetch(request) {
+    return new Response("Hello from Bun #" + id + "!\n");
+  },
+});
+```
+
+---
+
+<Note>
+  **Linux only** &mdash; Windows and macOS ignore the `reusePort` option. This is an operating system limitation with
+  `SO_REUSEPORT`, unfortunately.
+</Note>
+
+After saving the file, start your servers on the same port.
+
+Under the hood, this uses the Linux `SO_REUSEPORT` and `SO_REUSEADDR` socket options to ensure fair load balancing across multiple processes. [Learn more about `SO_REUSEPORT` and `SO_REUSEADDR`](https://lwn.net/Articles/542629/)
+
+```ts cluster.ts icon="/icons/typescript.svg"
+import { spawn } from "bun";
+
+const cpus = navigator.hardwareConcurrency; // Number of CPU cores
+const buns = new Array(cpus);
+
+for (let i = 0; i < cpus; i++) {
+  buns[i] = spawn({
+    cmd: ["bun", "./server.ts"],
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "inherit",
+  });
+}
+
+function kill() {
+  for (const bun of buns) {
+    bun.kill();
+  }
+}
+
+process.on("SIGINT", kill);
+process.on("exit", kill);
+```
+
+---
+
+Bun has also implemented the `node:cluster` module, but this is a faster and more limited alternative.

@@ -1,0 +1,12 @@
+import { CliRenderer, type CliRendererConfig } from "@opentui/core";
+import { type TestRendererOptions } from "@opentui/core/testing";
+import type { JSX } from "./jsx-runtime.js";
+export declare const render: (node: () => JSX.Element, rendererOrConfig?: CliRenderer | CliRendererConfig) => Promise<void>;
+export declare const testRender: (node: () => JSX.Element, renderConfig?: TestRendererOptions) => Promise<import("@opentui/core/testing").TestRendererSetup>;
+export * from "./src/reconciler.js";
+export * from "./src/elements/index.js";
+export * from "./src/scrollback.js";
+export * from "./src/time-to-first-draw.js";
+export * from "./src/plugins/slot.js";
+export * from "./src/types/elements.js";
+export { type JSX };

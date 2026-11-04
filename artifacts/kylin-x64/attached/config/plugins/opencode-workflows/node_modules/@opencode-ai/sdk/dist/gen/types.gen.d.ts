@@ -1,0 +1,3380 @@
+export type EventServerInstanceDisposed = {
+    type: "server.instance.disposed";
+    properties: {
+        directory: string;
+    };
+};
+export type EventInstallationUpdated = {
+    type: "installation.updated";
+    properties: {
+        version: string;
+    };
+};
+export type EventInstallationUpdateAvailable = {
+    type: "installation.update-available";
+    properties: {
+        version: string;
+    };
+};
+export type EventLspClientDiagnostics = {
+    type: "lsp.client.diagnostics";
+    properties: {
+        serverID: string;
+        path: string;
+    };
+};
+export type EventLspUpdated = {
+    type: "lsp.updated";
+    properties: {
+        [key: string]: unknown;
+    };
+};
+export type FileDiff = {
+    file: string;
+    before: string;
+    after: string;
+    additions: number;
+    deletions: number;
+};
+export type UserMessage = {
+    id: string;
+    sessionID: string;
+    role: "user";
+    time: {
+        created: number;
+    };
+    summary?: {
+        title?: string;
+        body?: string;
+        diffs: Array<FileDiff>;
+    };
+    agent: string;
+    model: {
+        providerID: string;
+        modelID: string;
+    };
+    system?: string;
+    tools?: {
+        [key: string]: boolean;
+    };
+};
+export type ProviderAuthError = {
+    name: "ProviderAuthError";
+    data: {
+        providerID: string;
+        message: string;
+    };
+};
+export type UnknownError = {
+    name: "UnknownError";
+    data: {
+        message: string;
+    };
+};
+export type MessageOutputLengthError = {
+    name: "MessageOutputLengthError";
+    data: {
+        [key: string]: unknown;
+    };
+};
+export type MessageAbortedError = {
+    name: "MessageAbortedError";
+    data: {
+        message: string;
+    };
+};
+export type ApiError = {
+    name: "APIError";
+    data: {
+        message: string;
+        statusCode?: number;
+        isRetryable: boolean;
+        responseHeaders?: {
+            [key: string]: string;
+        };
+        responseBody?: string;
+    };
+};
+export type AssistantMessage = {
+    id: string;
+    sessionID: string;
+    role: "assistant";
+    time: {
+        created: number;
+        completed?: number;
+    };
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError;
+    parentID: string;
+    modelID: string;
+    providerID: string;
+    mode: string;
+    path: {
+        cwd: string;
+        root: string;
+    };
+    summary?: boolean;
+    cost: number;
+    tokens: {
+        input: number;
+        output: number;
+        reasoning: number;
+        cache: {
+            read: number;
+            write: number;
+        };
+    };
+    finish?: string;
+};
+export type Message = UserMessage | AssistantMessage;
+export type EventMessageUpdated = {
+    type: "message.updated";
+    properties: {
+        info: Message;
+    };
+};
+export type EventMessageRemoved = {
+    type: "message.removed";
+    properties: {
+        sessionID: string;
+        messageID: string;
+    };
+};
+export type TextPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "text";
+    text: string;
+    synthetic?: boolean;
+    ignored?: boolean;
+    time?: {
+        start: number;
+        end?: number;
+    };
+    metadata?: {
+        [key: string]: unknown;
+    };
+};
+export type ReasoningPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "reasoning";
+    text: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    time: {
+        start: number;
+        end?: number;
+    };
+};
+export type FilePartSourceText = {
+    value: string;
+    start: number;
+    end: number;
+};
+export type FileSource = {
+    text: FilePartSourceText;
+    type: "file";
+    path: string;
+};
+export type Range = {
+    start: {
+        line: number;
+        character: number;
+    };
+    end: {
+        line: number;
+        character: number;
+    };
+};
+export type SymbolSource = {
+    text: FilePartSourceText;
+    type: "symbol";
+    path: string;
+    range: Range;
+    name: string;
+    kind: number;
+};
+export type FilePartSource = FileSource | SymbolSource;
+export type FilePart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "file";
+    mime: string;
+    filename?: string;
+    url: string;
+    source?: FilePartSource;
+};
+export type ToolStatePending = {
+    status: "pending";
+    input: {
+        [key: string]: unknown;
+    };
+    raw: string;
+};
+export type ToolStateRunning = {
+    status: "running";
+    input: {
+        [key: string]: unknown;
+    };
+    title?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    time: {
+        start: number;
+    };
+};
+export type ToolStateCompleted = {
+    status: "completed";
+    input: {
+        [key: string]: unknown;
+    };
+    output: string;
+    title: string;
+    metadata: {
+        [key: string]: unknown;
+    };
+    time: {
+        start: number;
+        end: number;
+        compacted?: number;
+    };
+    attachments?: Array<FilePart>;
+};
+export type ToolStateError = {
+    status: "error";
+    input: {
+        [key: string]: unknown;
+    };
+    error: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    time: {
+        start: number;
+        end: number;
+    };
+};
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError;
+export type ToolPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "tool";
+    callID: string;
+    tool: string;
+    state: ToolState;
+    metadata?: {
+        [key: string]: unknown;
+    };
+};
+export type StepStartPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "step-start";
+    snapshot?: string;
+};
+export type StepFinishPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "step-finish";
+    reason: string;
+    snapshot?: string;
+    cost: number;
+    tokens: {
+        input: number;
+        output: number;
+        reasoning: number;
+        cache: {
+            read: number;
+            write: number;
+        };
+    };
+};
+export type SnapshotPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "snapshot";
+    snapshot: string;
+};
+export type PatchPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "patch";
+    hash: string;
+    files: Array<string>;
+};
+export type AgentPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "agent";
+    name: string;
+    source?: {
+        value: string;
+        start: number;
+        end: number;
+    };
+};
+export type RetryPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "retry";
+    attempt: number;
+    error: ApiError;
+    time: {
+        created: number;
+    };
+};
+export type CompactionPart = {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "compaction";
+    auto: boolean;
+};
+export type Part = TextPart | {
+    id: string;
+    sessionID: string;
+    messageID: string;
+    type: "subtask";
+    prompt: string;
+    description: string;
+    agent: string;
+} | ReasoningPart | FilePart | ToolPart | StepStartPart | StepFinishPart | SnapshotPart | PatchPart | AgentPart | RetryPart | CompactionPart;
+export type EventMessagePartUpdated = {
+    type: "message.part.updated";
+    properties: {
+        part: Part;
+        delta?: string;
+    };
+};
+export type EventMessagePartRemoved = {
+    type: "message.part.removed";
+    properties: {
+        sessionID: string;
+        messageID: string;
+        partID: string;
+    };
+};
+export type Permission = {
+    id: string;
+    type: string;
+    pattern?: string | Array<string>;
+    sessionID: string;
+    messageID: string;
+    callID?: string;
+    title: string;
+    metadata: {
+        [key: string]: unknown;
+    };
+    time: {
+        created: number;
+    };
+};
+export type EventPermissionUpdated = {
+    type: "permission.updated";
+    properties: Permission;
+};
+export type EventPermissionReplied = {
+    type: "permission.replied";
+    properties: {
+        sessionID: string;
+        permissionID: string;
+        response: string;
+    };
+};
+export type SessionStatus = {
+    type: "idle";
+} | {
+    type: "retry";
+    attempt: number;
+    message: string;
+    next: number;
+} | {
+    type: "busy";
+};
+export type EventSessionStatus = {
+    type: "session.status";
+    properties: {
+        sessionID: string;
+        status: SessionStatus;
+    };
+};
+export type EventSessionIdle = {
+    type: "session.idle";
+    properties: {
+        sessionID: string;
+    };
+};
+export type EventSessionCompacted = {
+    type: "session.compacted";
+    properties: {
+        sessionID: string;
+    };
+};
+export type EventFileEdited = {
+    type: "file.edited";
+    properties: {
+        file: string;
+    };
+};
+export type Todo = {
+    /**
+     * Brief description of the task
+     */
+    content: string;
+    /**
+     * Current status of the task: pending, in_progress, completed, cancelled
+     */
+    status: string;
+    /**
+     * Priority level of the task: high, medium, low
+     */
+    priority: string;
+    /**
+     * Unique identifier for the todo item
+     */
+    id: string;
+};
+export type EventTodoUpdated = {
+    type: "todo.updated";
+    properties: {
+        sessionID: string;
+        todos: Array<Todo>;
+    };
+};
+export type EventCommandExecuted = {
+    type: "command.executed";
+    properties: {
+        name: string;
+        sessionID: string;
+        arguments: string;
+        messageID: string;
+    };
+};
+export type Session = {
+    id: string;
+    projectID: string;
+    directory: string;
+    parentID?: string;
+    summary?: {
+        additions: number;
+        deletions: number;
+        files: number;
+        diffs?: Array<FileDiff>;
+    };
+    share?: {
+        url: string;
+    };
+    title: string;
+    version: string;
+    time: {
+        created: number;
+        updated: number;
+        compacting?: number;
+    };
+    revert?: {
+        messageID: string;
+        partID?: string;
+        snapshot?: string;
+        diff?: string;
+    };
+};
+export type EventSessionCreated = {
+    type: "session.created";
+    properties: {
+        info: Session;
+    };
+};
+export type EventSessionUpdated = {
+    type: "session.updated";
+    properties: {
+        info: Session;
+    };
+};
+export type EventSessionDeleted = {
+    type: "session.deleted";
+    properties: {
+        info: Session;
+    };
+};
+export type EventSessionDiff = {
+    type: "session.diff";
+    properties: {
+        sessionID: string;
+        diff: Array<FileDiff>;
+    };
+};
+export type EventSessionError = {
+    type: "session.error";
+    properties: {
+        sessionID?: string;
+        error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError;
+    };
+};
+export type EventFileWatcherUpdated = {
+    type: "file.watcher.updated";
+    properties: {
+        file: string;
+        event: "add" | "change" | "unlink";
+    };
+};
+export type EventVcsBranchUpdated = {
+    type: "vcs.branch.updated";
+    properties: {
+        branch?: string;
+    };
+};
+export type EventTuiPromptAppend = {
+    type: "tui.prompt.append";
+    properties: {
+        text: string;
+    };
+};
+export type EventTuiCommandExecute = {
+    type: "tui.command.execute";
+    properties: {
+        command: ("session.list" | "session.new" | "session.share" | "session.interrupt" | "session.compact" | "session.page.up" | "session.page.down" | "session.half.page.up" | "session.half.page.down" | "session.first" | "session.last" | "prompt.clear" | "prompt.submit" | "agent.cycle") | string;
+    };
+};
+export type EventTuiToastShow = {
+    type: "tui.toast.show";
+    properties: {
+        title?: string;
+        message: string;
+        variant: "info" | "success" | "warning" | "error";
+        /**
+         * Duration in milliseconds
+         */
+        duration?: number;
+    };
+};
+export type Pty = {
+    id: string;
+    title: string;
+    command: string;
+    args: Array<string>;
+    cwd: string;
+    status: "running" | "exited";
+    pid: number;
+};
+export type EventPtyCreated = {
+    type: "pty.created";
+    properties: {
+        info: Pty;
+    };
+};
+export type EventPtyUpdated = {
+    type: "pty.updated";
+    properties: {
+        info: Pty;
+    };
+};
+export type EventPtyExited = {
+    type: "pty.exited";
+    properties: {
+        id: string;
+        exitCode: number;
+    };
+};
+export type EventPtyDeleted = {
+    type: "pty.deleted";
+    properties: {
+        id: string;
+    };
+};
+export type EventServerConnected = {
+    type: "server.connected";
+    properties: {
+        [key: string]: unknown;
+    };
+};
+export type Event = EventServerInstanceDisposed | EventInstallationUpdated | EventInstallationUpdateAvailable | EventLspClientDiagnostics | EventLspUpdated | EventMessageUpdated | EventMessageRemoved | EventMessagePartUpdated | EventMessagePartRemoved | EventPermissionUpdated | EventPermissionReplied | EventSessionStatus | EventSessionIdle | EventSessionCompacted | EventFileEdited | EventTodoUpdated | EventCommandExecuted | EventSessionCreated | EventSessionUpdated | EventSessionDeleted | EventSessionDiff | EventSessionError | EventFileWatcherUpdated | EventVcsBranchUpdated | EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventPtyCreated | EventPtyUpdated | EventPtyExited | EventPtyDeleted | EventServerConnected;
+export type GlobalEvent = {
+    directory: string;
+    payload: Event;
+};
+export type Project = {
+    id: string;
+    worktree: string;
+    vcsDir?: string;
+    vcs?: "git";
+    time: {
+        created: number;
+        initialized?: number;
+    };
+};
+export type BadRequestError = {
+    data: unknown;
+    errors: Array<{
+        [key: string]: unknown;
+    }>;
+    success: false;
+};
+export type NotFoundError = {
+    name: "NotFoundError";
+    data: {
+        message: string;
+    };
+};
+/**
+ * Custom keybind configurations
+ */
+export type KeybindsConfig = {
+    /**
+     * Leader key for keybind combinations
+     */
+    leader?: string;
+    /**
+     * Exit the application
+     */
+    app_exit?: string;
+    /**
+     * Open external editor
+     */
+    editor_open?: string;
+    /**
+     * List available themes
+     */
+    theme_list?: string;
+    /**
+     * Toggle sidebar
+     */
+    sidebar_toggle?: string;
+    /**
+     * Toggle session scrollbar
+     */
+    scrollbar_toggle?: string;
+    /**
+     * Toggle username visibility
+     */
+    username_toggle?: string;
+    /**
+     * View status
+     */
+    status_view?: string;
+    /**
+     * Export session to editor
+     */
+    session_export?: string;
+    /**
+     * Create a new session
+     */
+    session_new?: string;
+    /**
+     * List all sessions
+     */
+    session_list?: string;
+    /**
+     * Show session timeline
+     */
+    session_timeline?: string;
+    /**
+     * Share current session
+     */
+    session_share?: string;
+    /**
+     * Unshare current session
+     */
+    session_unshare?: string;
+    /**
+     * Interrupt current session
+     */
+    session_interrupt?: string;
+    /**
+     * Compact the session
+     */
+    session_compact?: string;
+    /**
+     * Scroll messages up by one page
+     */
+    messages_page_up?: string;
+    /**
+     * Scroll messages down by one page
+     */
+    messages_page_down?: string;
+    /**
+     * Scroll messages up by one line
+     */
+    messages_line_up?: string;
+    /**
+     * Scroll messages down by one line
+     */
+    messages_line_down?: string;
+    /**
+     * Scroll messages up by half page
+     */
+    messages_half_page_up?: string;
+    /**
+     * Scroll messages down by half page
+     */
+    messages_half_page_down?: string;
+    /**
+     * Navigate to first message
+     */
+    messages_first?: string;
+    /**
+     * Navigate to last message
+     */
+    messages_last?: string;
+    /**
+     * Navigate to next message
+     */
+    messages_next?: string;
+    /**
+     * Navigate to previous message
+     */
+    messages_previous?: string;
+    /**
+     * Navigate to last user message
+     */
+    messages_last_user?: string;
+    /**
+     * Copy message
+     */
+    messages_copy?: string;
+    /**
+     * Undo message
+     */
+    messages_undo?: string;
+    /**
+     * Redo message
+     */
+    messages_redo?: string;
+    /**
+     * Toggle code block concealment in messages
+     */
+    messages_toggle_conceal?: string;
+    /**
+     * Toggle tool details visibility
+     */
+    tool_details?: string;
+    /**
+     * List available models
+     */
+    model_list?: string;
+    /**
+     * Next recently used model
+     */
+    model_cycle_recent?: string;
+    /**
+     * Previous recently used model
+     */
+    model_cycle_recent_reverse?: string;
+    /**
+     * List available commands
+     */
+    command_list?: string;
+    /**
+     * List agents
+     */
+    agent_list?: string;
+    /**
+     * Next agent
+     */
+    agent_cycle?: string;
+    /**
+     * Previous agent
+     */
+    agent_cycle_reverse?: string;
+    /**
+     * Clear input field
+     */
+    input_clear?: string;
+    /**
+     * Forward delete
+     */
+    input_forward_delete?: string;
+    /**
+     * Paste from clipboard
+     */
+    input_paste?: string;
+    /**
+     * Submit input
+     */
+    input_submit?: string;
+    /**
+     * Insert newline in input
+     */
+    input_newline?: string;
+    /**
+     * Previous history item
+     */
+    history_previous?: string;
+    /**
+     * Next history item
+     */
+    history_next?: string;
+    /**
+     * Next child session
+     */
+    session_child_cycle?: string;
+    /**
+     * Previous child session
+     */
+    session_child_cycle_reverse?: string;
+    /**
+     * Suspend terminal
+     */
+    terminal_suspend?: string;
+    /**
+     * Toggle terminal title
+     */
+    terminal_title_toggle?: string;
+};
+export type AgentConfig = {
+    model?: string;
+    temperature?: number;
+    top_p?: number;
+    prompt?: string;
+    tools?: {
+        [key: string]: boolean;
+    };
+    disable?: boolean;
+    /**
+     * Description of when to use the agent
+     */
+    description?: string;
+    mode?: "subagent" | "primary" | "all";
+    /**
+     * Hex color code for the agent (e.g., #FF5733)
+     */
+    color?: string;
+    /**
+     * Maximum number of agentic iterations before forcing text-only response
+     */
+    maxSteps?: number;
+    permission?: {
+        edit?: "ask" | "allow" | "deny";
+        bash?: ("ask" | "allow" | "deny") | {
+            [key: string]: "ask" | "allow" | "deny";
+        };
+        webfetch?: "ask" | "allow" | "deny";
+        doom_loop?: "ask" | "allow" | "deny";
+        external_directory?: "ask" | "allow" | "deny";
+    };
+    [key: string]: unknown | string | number | {
+        [key: string]: boolean;
+    } | boolean | ("subagent" | "primary" | "all") | number | {
+        edit?: "ask" | "allow" | "deny";
+        bash?: ("ask" | "allow" | "deny") | {
+            [key: string]: "ask" | "allow" | "deny";
+        };
+        webfetch?: "ask" | "allow" | "deny";
+        doom_loop?: "ask" | "allow" | "deny";
+        external_directory?: "ask" | "allow" | "deny";
+    } | undefined;
+};
+export type ProviderConfig = {
+    api?: string;
+    name?: string;
+    env?: Array<string>;
+    id?: string;
+    npm?: string;
+    models?: {
+        [key: string]: {
+            id?: string;
+            name?: string;
+            release_date?: string;
+            attachment?: boolean;
+            reasoning?: boolean;
+            temperature?: boolean;
+            tool_call?: boolean;
+            cost?: {
+                input: number;
+                output: number;
+                cache_read?: number;
+                cache_write?: number;
+                context_over_200k?: {
+                    input: number;
+                    output: number;
+                    cache_read?: number;
+                    cache_write?: number;
+                };
+            };
+            limit?: {
+                context: number;
+                output: number;
+            };
+            modalities?: {
+                input: Array<"text" | "audio" | "image" | "video" | "pdf">;
+                output: Array<"text" | "audio" | "image" | "video" | "pdf">;
+            };
+            experimental?: boolean;
+            status?: "alpha" | "beta" | "deprecated";
+            options?: {
+                [key: string]: unknown;
+            };
+            headers?: {
+                [key: string]: string;
+            };
+            provider?: {
+                npm: string;
+            };
+        };
+    };
+    whitelist?: Array<string>;
+    blacklist?: Array<string>;
+    options?: {
+        apiKey?: string;
+        baseURL?: string;
+        /**
+         * GitHub Enterprise URL for copilot authentication
+         */
+        enterpriseUrl?: string;
+        /**
+         * Enable promptCacheKey for this provider (default false)
+         */
+        setCacheKey?: boolean;
+        /**
+         * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+         */
+        timeout?: number | false;
+        [key: string]: unknown | string | boolean | (number | false) | undefined;
+    };
+};
+export type McpLocalConfig = {
+    /**
+     * Type of MCP server connection
+     */
+    type: "local";
+    /**
+     * Command and arguments to run the MCP server
+     */
+    command: Array<string>;
+    /**
+     * Environment variables to set when running the MCP server
+     */
+    environment?: {
+        [key: string]: string;
+    };
+    /**
+     * Enable or disable the MCP server on startup
+     */
+    enabled?: boolean;
+    /**
+     * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+     */
+    timeout?: number;
+};
+export type McpOAuthConfig = {
+    /**
+     * OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted.
+     */
+    clientId?: string;
+    /**
+     * OAuth client secret (if required by the authorization server)
+     */
+    clientSecret?: string;
+    /**
+     * OAuth scopes to request during authorization
+     */
+    scope?: string;
+};
+export type McpRemoteConfig = {
+    /**
+     * Type of MCP server connection
+     */
+    type: "remote";
+    /**
+     * URL of the remote MCP server
+     */
+    url: string;
+    /**
+     * Enable or disable the MCP server on startup
+     */
+    enabled?: boolean;
+    /**
+     * Headers to send with the request
+     */
+    headers?: {
+        [key: string]: string;
+    };
+    /**
+     * OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.
+     */
+    oauth?: McpOAuthConfig | false;
+    /**
+     * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+     */
+    timeout?: number;
+};
+/**
+ * @deprecated Always uses stretch layout.
+ */
+export type LayoutConfig = "auto" | "stretch";
+export type Config = {
+    /**
+     * JSON schema reference for configuration validation
+     */
+    $schema?: string;
+    /**
+     * Theme name to use for the interface
+     */
+    theme?: string;
+    keybinds?: KeybindsConfig;
+    /**
+     * Log level
+     */
+    logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
+    /**
+     * TUI specific settings
+     */
+    tui?: {
+        /**
+         * TUI scroll speed
+         */
+        scroll_speed?: number;
+        /**
+         * Scroll acceleration settings
+         */
+        scroll_acceleration?: {
+            /**
+             * Enable scroll acceleration
+             */
+            enabled: boolean;
+        };
+        /**
+         * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+         */
+        diff_style?: "auto" | "stacked";
+    };
+    /**
+     * Command configuration, see https://opencode.ai/docs/commands
+     */
+    command?: {
+        [key: string]: {
+            template: string;
+            description?: string;
+            agent?: string;
+            model?: string;
+            subtask?: boolean;
+        };
+    };
+    watcher?: {
+        ignore?: Array<string>;
+    };
+    plugin?: Array<string>;
+    snapshot?: boolean;
+    /**
+     * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
+     */
+    share?: "manual" | "auto" | "disabled";
+    /**
+     * @deprecated Use 'share' field instead. Share newly created sessions automatically
+     */
+    autoshare?: boolean;
+    /**
+     * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
+     */
+    autoupdate?: boolean | "notify";
+    /**
+     * Disable providers that are loaded automatically
+     */
+    disabled_providers?: Array<string>;
+    /**
+     * When set, ONLY these providers will be enabled. All other providers will be ignored
+     */
+    enabled_providers?: Array<string>;
+    /**
+     * Model to use in the format of provider/model, eg anthropic/claude-2
+     */
+    model?: string;
+    /**
+     * Small model to use for tasks like title generation in the format of provider/model
+     */
+    small_model?: string;
+    /**
+     * Custom username to display in conversations instead of system username
+     */
+    username?: string;
+    /**
+     * @deprecated Use `agent` field instead.
+     */
+    mode?: {
+        build?: AgentConfig;
+        plan?: AgentConfig;
+        [key: string]: AgentConfig | undefined;
+    };
+    /**
+     * Agent configuration, see https://opencode.ai/docs/agent
+     */
+    agent?: {
+        plan?: AgentConfig;
+        build?: AgentConfig;
+        general?: AgentConfig;
+        explore?: AgentConfig;
+        [key: string]: AgentConfig | undefined;
+    };
+    /**
+     * Custom provider configurations and model overrides
+     */
+    provider?: {
+        [key: string]: ProviderConfig;
+    };
+    /**
+     * MCP (Model Context Protocol) server configurations
+     */
+    mcp?: {
+        [key: string]: McpLocalConfig | McpRemoteConfig;
+    };
+    formatter?: false | {
+        [key: string]: {
+            disabled?: boolean;
+            command?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            extensions?: Array<string>;
+        };
+    };
+    lsp?: false | {
+        [key: string]: {
+            disabled: true;
+        } | {
+            command: Array<string>;
+            extensions?: Array<string>;
+            disabled?: boolean;
+            env?: {
+                [key: string]: string;
+            };
+            initialization?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Additional instruction files or patterns to include
+     */
+    instructions?: Array<string>;
+    layout?: LayoutConfig;
+    permission?: {
+        edit?: "ask" | "allow" | "deny";
+        bash?: ("ask" | "allow" | "deny") | {
+            [key: string]: "ask" | "allow" | "deny";
+        };
+        webfetch?: "ask" | "allow" | "deny";
+        doom_loop?: "ask" | "allow" | "deny";
+        external_directory?: "ask" | "allow" | "deny";
+    };
+    tools?: {
+        [key: string]: boolean;
+    };
+    enterprise?: {
+        /**
+         * Enterprise URL
+         */
+        url?: string;
+    };
+    experimental?: {
+        hook?: {
+            file_edited?: {
+                [key: string]: Array<{
+                    command: Array<string>;
+                    environment?: {
+                        [key: string]: string;
+                    };
+                }>;
+            };
+            session_completed?: Array<{
+                command: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            }>;
+        };
+        /**
+         * Number of retries for chat completions on failure
+         */
+        chatMaxRetries?: number;
+        disable_paste_summary?: boolean;
+        /**
+         * Enable the batch tool
+         */
+        batch_tool?: boolean;
+        /**
+         * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
+         */
+        openTelemetry?: boolean;
+        /**
+         * Tools that should only be available to primary agents.
+         */
+        primary_tools?: Array<string>;
+    };
+};
+export type ToolIds = Array<string>;
+export type ToolListItem = {
+    id: string;
+    description: string;
+    parameters: unknown;
+};
+export type ToolList = Array<ToolListItem>;
+export type Path = {
+    state: string;
+    config: string;
+    worktree: string;
+    directory: string;
+};
+export type VcsInfo = {
+    branch: string;
+};
+export type TextPartInput = {
+    id?: string;
+    type: "text";
+    text: string;
+    synthetic?: boolean;
+    ignored?: boolean;
+    time?: {
+        start: number;
+        end?: number;
+    };
+    metadata?: {
+        [key: string]: unknown;
+    };
+};
+export type FilePartInput = {
+    id?: string;
+    type: "file";
+    mime: string;
+    filename?: string;
+    url: string;
+    source?: FilePartSource;
+};
+export type AgentPartInput = {
+    id?: string;
+    type: "agent";
+    name: string;
+    source?: {
+        value: string;
+        start: number;
+        end: number;
+    };
+};
+export type SubtaskPartInput = {
+    id?: string;
+    type: "subtask";
+    prompt: string;
+    description: string;
+    agent: string;
+};
+export type Command = {
+    name: string;
+    description?: string;
+    agent?: string;
+    model?: string;
+    template: string;
+    subtask?: boolean;
+};
+export type Model = {
+    id: string;
+    providerID: string;
+    api: {
+        id: string;
+        url: string;
+        npm: string;
+    };
+    name: string;
+    capabilities: {
+        temperature: boolean;
+        reasoning: boolean;
+        attachment: boolean;
+        toolcall: boolean;
+        input: {
+            text: boolean;
+            audio: boolean;
+            image: boolean;
+            video: boolean;
+            pdf: boolean;
+        };
+        output: {
+            text: boolean;
+            audio: boolean;
+            image: boolean;
+            video: boolean;
+            pdf: boolean;
+        };
+    };
+    cost: {
+        input: number;
+        output: number;
+        cache: {
+            read: number;
+            write: number;
+        };
+        experimentalOver200K?: {
+            input: number;
+            output: number;
+            cache: {
+                read: number;
+                write: number;
+            };
+        };
+    };
+    limit: {
+        context: number;
+        output: number;
+    };
+    status: "alpha" | "beta" | "deprecated" | "active";
+    options: {
+        [key: string]: unknown;
+    };
+    headers: {
+        [key: string]: string;
+    };
+};
+export type Provider = {
+    id: string;
+    name: string;
+    source: "env" | "config" | "custom" | "api";
+    env: Array<string>;
+    key?: string;
+    options: {
+        [key: string]: unknown;
+    };
+    models: {
+        [key: string]: Model;
+    };
+};
+export type ProviderAuthMethod = {
+    type: "oauth" | "api";
+    label: string;
+};
+export type ProviderAuthAuthorization = {
+    url: string;
+    method: "auto" | "code";
+    instructions: string;
+};
+export type Symbol = {
+    name: string;
+    kind: number;
+    location: {
+        uri: string;
+        range: Range;
+    };
+};
+export type FileNode = {
+    name: string;
+    path: string;
+    absolute: string;
+    type: "file" | "directory";
+    ignored: boolean;
+};
+export type FileContent = {
+    type: "text" | "binary";
+    content: string;
+    diff?: string;
+    patch?: {
+        oldFileName: string;
+        newFileName: string;
+        oldHeader?: string;
+        newHeader?: string;
+        hunks: Array<{
+            oldStart: number;
+            oldLines: number;
+            newStart: number;
+            newLines: number;
+            lines: Array<string>;
+        }>;
+        index?: string;
+    };
+    encoding?: "base64";
+    mimeType?: string;
+};
+export type File = {
+    path: string;
+    added: number;
+    removed: number;
+    status: "added" | "deleted" | "modified";
+};
+export type Agent = {
+    name: string;
+    description?: string;
+    mode: "subagent" | "primary" | "all";
+    builtIn: boolean;
+    topP?: number;
+    temperature?: number;
+    color?: string;
+    permission: {
+        edit: "ask" | "allow" | "deny";
+        bash: {
+            [key: string]: "ask" | "allow" | "deny";
+        };
+        webfetch?: "ask" | "allow" | "deny";
+        doom_loop?: "ask" | "allow" | "deny";
+        external_directory?: "ask" | "allow" | "deny";
+    };
+    model?: {
+        modelID: string;
+        providerID: string;
+    };
+    prompt?: string;
+    tools: {
+        [key: string]: boolean;
+    };
+    options: {
+        [key: string]: unknown;
+    };
+    maxSteps?: number;
+};
+export type McpStatusConnected = {
+    status: "connected";
+};
+export type McpStatusDisabled = {
+    status: "disabled";
+};
+export type McpStatusFailed = {
+    status: "failed";
+    error: string;
+};
+export type McpStatusNeedsAuth = {
+    status: "needs_auth";
+};
+export type McpStatusNeedsClientRegistration = {
+    status: "needs_client_registration";
+    error: string;
+};
+export type McpStatus = McpStatusConnected | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth | McpStatusNeedsClientRegistration;
+export type LspStatus = {
+    id: string;
+    name: string;
+    root: string;
+    status: "connected" | "error";
+};
+export type FormatterStatus = {
+    name: string;
+    extensions: Array<string>;
+    enabled: boolean;
+};
+export type OAuth = {
+    type: "oauth";
+    refresh: string;
+    access: string;
+    expires: number;
+    enterpriseUrl?: string;
+};
+export type ApiAuth = {
+    type: "api";
+    key: string;
+};
+export type WellKnownAuth = {
+    type: "wellknown";
+    key: string;
+    token: string;
+};
+export type Auth = OAuth | ApiAuth | WellKnownAuth;
+export type GlobalEventData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: "/global/event";
+};
+export type GlobalEventResponses = {
+    /**
+     * Event stream
+     */
+    200: GlobalEvent;
+};
+export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses];
+export type ProjectListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/project";
+};
+export type ProjectListResponses = {
+    /**
+     * List of projects
+     */
+    200: Array<Project>;
+};
+export type ProjectListResponse = ProjectListResponses[keyof ProjectListResponses];
+export type ProjectCurrentData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/project/current";
+};
+export type ProjectCurrentResponses = {
+    /**
+     * Current project
+     */
+    200: Project;
+};
+export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses];
+export type PtyListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/pty";
+};
+export type PtyListResponses = {
+    /**
+     * List of sessions
+     */
+    200: Array<Pty>;
+};
+export type PtyListResponse = PtyListResponses[keyof PtyListResponses];
+export type PtyCreateData = {
+    body?: {
+        command?: string;
+        args?: Array<string>;
+        cwd?: string;
+        title?: string;
+        env?: {
+            [key: string]: string;
+        };
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/pty";
+};
+export type PtyCreateErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type PtyCreateError = PtyCreateErrors[keyof PtyCreateErrors];
+export type PtyCreateResponses = {
+    /**
+     * Created session
+     */
+    200: Pty;
+};
+export type PtyCreateResponse = PtyCreateResponses[keyof PtyCreateResponses];
+export type PtyRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/pty/{id}";
+};
+export type PtyRemoveErrors = {
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type PtyRemoveError = PtyRemoveErrors[keyof PtyRemoveErrors];
+export type PtyRemoveResponses = {
+    /**
+     * Session removed
+     */
+    200: boolean;
+};
+export type PtyRemoveResponse = PtyRemoveResponses[keyof PtyRemoveResponses];
+export type PtyGetData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/pty/{id}";
+};
+export type PtyGetErrors = {
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type PtyGetError = PtyGetErrors[keyof PtyGetErrors];
+export type PtyGetResponses = {
+    /**
+     * Session info
+     */
+    200: Pty;
+};
+export type PtyGetResponse = PtyGetResponses[keyof PtyGetResponses];
+export type PtyUpdateData = {
+    body?: {
+        title?: string;
+        size?: {
+            rows: number;
+            cols: number;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/pty/{id}";
+};
+export type PtyUpdateErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type PtyUpdateError = PtyUpdateErrors[keyof PtyUpdateErrors];
+export type PtyUpdateResponses = {
+    /**
+     * Updated session
+     */
+    200: Pty;
+};
+export type PtyUpdateResponse = PtyUpdateResponses[keyof PtyUpdateResponses];
+export type PtyConnectData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/pty/{id}/connect";
+};
+export type PtyConnectErrors = {
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors];
+export type PtyConnectResponses = {
+    /**
+     * Connected session
+     */
+    200: boolean;
+};
+export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses];
+export type ConfigGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/config";
+};
+export type ConfigGetResponses = {
+    /**
+     * Get config info
+     */
+    200: Config;
+};
+export type ConfigGetResponse = ConfigGetResponses[keyof ConfigGetResponses];
+export type ConfigUpdateData = {
+    body?: Config;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/config";
+};
+export type ConfigUpdateErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type ConfigUpdateError = ConfigUpdateErrors[keyof ConfigUpdateErrors];
+export type ConfigUpdateResponses = {
+    /**
+     * Successfully updated config
+     */
+    200: Config;
+};
+export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses];
+export type ToolIdsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/experimental/tool/ids";
+};
+export type ToolIdsErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type ToolIdsError = ToolIdsErrors[keyof ToolIdsErrors];
+export type ToolIdsResponses = {
+    /**
+     * Tool IDs
+     */
+    200: ToolIds;
+};
+export type ToolIdsResponse = ToolIdsResponses[keyof ToolIdsResponses];
+export type ToolListData = {
+    body?: never;
+    path?: never;
+    query: {
+        directory?: string;
+        provider: string;
+        model: string;
+    };
+    url: "/experimental/tool";
+};
+export type ToolListErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type ToolListError = ToolListErrors[keyof ToolListErrors];
+export type ToolListResponses = {
+    /**
+     * Tools
+     */
+    200: ToolList;
+};
+export type ToolListResponse = ToolListResponses[keyof ToolListResponses];
+export type InstanceDisposeData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/instance/dispose";
+};
+export type InstanceDisposeResponses = {
+    /**
+     * Instance disposed
+     */
+    200: boolean;
+};
+export type InstanceDisposeResponse = InstanceDisposeResponses[keyof InstanceDisposeResponses];
+export type PathGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/path";
+};
+export type PathGetResponses = {
+    /**
+     * Path
+     */
+    200: Path;
+};
+export type PathGetResponse = PathGetResponses[keyof PathGetResponses];
+export type VcsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/vcs";
+};
+export type VcsGetResponses = {
+    /**
+     * VCS info
+     */
+    200: VcsInfo;
+};
+export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses];
+export type SessionListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/session";
+};
+export type SessionListResponses = {
+    /**
+     * List of sessions
+     */
+    200: Array<Session>;
+};
+export type SessionListResponse = SessionListResponses[keyof SessionListResponses];
+export type SessionCreateData = {
+    body?: {
+        parentID?: string;
+        title?: string;
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/session";
+};
+export type SessionCreateErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors];
+export type SessionCreateResponses = {
+    /**
+     * Successfully created session
+     */
+    200: Session;
+};
+export type SessionCreateResponse = SessionCreateResponses[keyof SessionCreateResponses];
+export type SessionStatusData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/session/status";
+};
+export type SessionStatusErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type SessionStatusError = SessionStatusErrors[keyof SessionStatusErrors];
+export type SessionStatusResponses = {
+    /**
+     * Get session status
+     */
+    200: {
+        [key: string]: SessionStatus;
+    };
+};
+export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses];
+export type SessionDeleteData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}";
+};
+export type SessionDeleteErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionDeleteError = SessionDeleteErrors[keyof SessionDeleteErrors];
+export type SessionDeleteResponses = {
+    /**
+     * Successfully deleted session
+     */
+    200: boolean;
+};
+export type SessionDeleteResponse = SessionDeleteResponses[keyof SessionDeleteResponses];
+export type SessionGetData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}";
+};
+export type SessionGetErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionGetError = SessionGetErrors[keyof SessionGetErrors];
+export type SessionGetResponses = {
+    /**
+     * Get session
+     */
+    200: Session;
+};
+export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses];
+export type SessionUpdateData = {
+    body?: {
+        title?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}";
+};
+export type SessionUpdateErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionUpdateError = SessionUpdateErrors[keyof SessionUpdateErrors];
+export type SessionUpdateResponses = {
+    /**
+     * Successfully updated session
+     */
+    200: Session;
+};
+export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses];
+export type SessionChildrenData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/children";
+};
+export type SessionChildrenErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionChildrenError = SessionChildrenErrors[keyof SessionChildrenErrors];
+export type SessionChildrenResponses = {
+    /**
+     * List of children
+     */
+    200: Array<Session>;
+};
+export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses];
+export type SessionTodoData = {
+    body?: never;
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/todo";
+};
+export type SessionTodoErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors];
+export type SessionTodoResponses = {
+    /**
+     * Todo list
+     */
+    200: Array<Todo>;
+};
+export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses];
+export type SessionInitData = {
+    body?: {
+        modelID: string;
+        providerID: string;
+        messageID: string;
+    };
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/init";
+};
+export type SessionInitErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionInitError = SessionInitErrors[keyof SessionInitErrors];
+export type SessionInitResponses = {
+    /**
+     * 200
+     */
+    200: boolean;
+};
+export type SessionInitResponse = SessionInitResponses[keyof SessionInitResponses];
+export type SessionForkData = {
+    body?: {
+        messageID?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/fork";
+};
+export type SessionForkResponses = {
+    /**
+     * 200
+     */
+    200: Session;
+};
+export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses];
+export type SessionAbortData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/abort";
+};
+export type SessionAbortErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionAbortError = SessionAbortErrors[keyof SessionAbortErrors];
+export type SessionAbortResponses = {
+    /**
+     * Aborted session
+     */
+    200: boolean;
+};
+export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses];
+export type SessionUnshareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/share";
+};
+export type SessionUnshareErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionUnshareError = SessionUnshareErrors[keyof SessionUnshareErrors];
+export type SessionUnshareResponses = {
+    /**
+     * Successfully unshared session
+     */
+    200: Session;
+};
+export type SessionUnshareResponse = SessionUnshareResponses[keyof SessionUnshareResponses];
+export type SessionShareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/share";
+};
+export type SessionShareErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionShareError = SessionShareErrors[keyof SessionShareErrors];
+export type SessionShareResponses = {
+    /**
+     * Successfully shared session
+     */
+    200: Session;
+};
+export type SessionShareResponse = SessionShareResponses[keyof SessionShareResponses];
+export type SessionDiffData = {
+    body?: never;
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+        messageID?: string;
+    };
+    url: "/session/{id}/diff";
+};
+export type SessionDiffErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionDiffError = SessionDiffErrors[keyof SessionDiffErrors];
+export type SessionDiffResponses = {
+    /**
+     * List of diffs
+     */
+    200: Array<FileDiff>;
+};
+export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses];
+export type SessionSummarizeData = {
+    body?: {
+        providerID: string;
+        modelID: string;
+    };
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/summarize";
+};
+export type SessionSummarizeErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionSummarizeError = SessionSummarizeErrors[keyof SessionSummarizeErrors];
+export type SessionSummarizeResponses = {
+    /**
+     * Summarized session
+     */
+    200: boolean;
+};
+export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses];
+export type SessionMessagesData = {
+    body?: never;
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+        limit?: number;
+    };
+    url: "/session/{id}/message";
+};
+export type SessionMessagesErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionMessagesError = SessionMessagesErrors[keyof SessionMessagesErrors];
+export type SessionMessagesResponses = {
+    /**
+     * List of messages
+     */
+    200: Array<{
+        info: Message;
+        parts: Array<Part>;
+    }>;
+};
+export type SessionMessagesResponse = SessionMessagesResponses[keyof SessionMessagesResponses];
+export type SessionPromptData = {
+    body?: {
+        messageID?: string;
+        model?: {
+            providerID: string;
+            modelID: string;
+        };
+        agent?: string;
+        noReply?: boolean;
+        system?: string;
+        tools?: {
+            [key: string]: boolean;
+        };
+        parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>;
+    };
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/message";
+};
+export type SessionPromptErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionPromptError = SessionPromptErrors[keyof SessionPromptErrors];
+export type SessionPromptResponses = {
+    /**
+     * Created message
+     */
+    200: {
+        info: AssistantMessage;
+        parts: Array<Part>;
+    };
+};
+export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses];
+export type SessionMessageData = {
+    body?: never;
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+        /**
+         * Message ID
+         */
+        messageID: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/message/{messageID}";
+};
+export type SessionMessageErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionMessageError = SessionMessageErrors[keyof SessionMessageErrors];
+export type SessionMessageResponses = {
+    /**
+     * Message
+     */
+    200: {
+        info: Message;
+        parts: Array<Part>;
+    };
+};
+export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses];
+export type SessionPromptAsyncData = {
+    body?: {
+        messageID?: string;
+        model?: {
+            providerID: string;
+            modelID: string;
+        };
+        agent?: string;
+        noReply?: boolean;
+        system?: string;
+        tools?: {
+            [key: string]: boolean;
+        };
+        parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>;
+    };
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/prompt_async";
+};
+export type SessionPromptAsyncErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors];
+export type SessionPromptAsyncResponses = {
+    /**
+     * Prompt accepted
+     */
+    204: void;
+};
+export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses];
+export type SessionCommandData = {
+    body?: {
+        messageID?: string;
+        agent?: string;
+        model?: string;
+        arguments: string;
+        command: string;
+    };
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/command";
+};
+export type SessionCommandErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionCommandError = SessionCommandErrors[keyof SessionCommandErrors];
+export type SessionCommandResponses = {
+    /**
+     * Created message
+     */
+    200: {
+        info: AssistantMessage;
+        parts: Array<Part>;
+    };
+};
+export type SessionCommandResponse = SessionCommandResponses[keyof SessionCommandResponses];
+export type SessionShellData = {
+    body?: {
+        agent: string;
+        model?: {
+            providerID: string;
+            modelID: string;
+        };
+        command: string;
+    };
+    path: {
+        /**
+         * Session ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/shell";
+};
+export type SessionShellErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionShellError = SessionShellErrors[keyof SessionShellErrors];
+export type SessionShellResponses = {
+    /**
+     * Created message
+     */
+    200: AssistantMessage;
+};
+export type SessionShellResponse = SessionShellResponses[keyof SessionShellResponses];
+export type SessionRevertData = {
+    body?: {
+        messageID: string;
+        partID?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/revert";
+};
+export type SessionRevertErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionRevertError = SessionRevertErrors[keyof SessionRevertErrors];
+export type SessionRevertResponses = {
+    /**
+     * Updated session
+     */
+    200: Session;
+};
+export type SessionRevertResponse = SessionRevertResponses[keyof SessionRevertResponses];
+export type SessionUnrevertData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/unrevert";
+};
+export type SessionUnrevertErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type SessionUnrevertError = SessionUnrevertErrors[keyof SessionUnrevertErrors];
+export type SessionUnrevertResponses = {
+    /**
+     * Updated session
+     */
+    200: Session;
+};
+export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses];
+export type PostSessionIdPermissionsPermissionIdData = {
+    body?: {
+        response: "once" | "always" | "reject";
+    };
+    path: {
+        id: string;
+        permissionID: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/session/{id}/permissions/{permissionID}";
+};
+export type PostSessionIdPermissionsPermissionIdErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type PostSessionIdPermissionsPermissionIdError = PostSessionIdPermissionsPermissionIdErrors[keyof PostSessionIdPermissionsPermissionIdErrors];
+export type PostSessionIdPermissionsPermissionIdResponses = {
+    /**
+     * Permission processed successfully
+     */
+    200: boolean;
+};
+export type PostSessionIdPermissionsPermissionIdResponse = PostSessionIdPermissionsPermissionIdResponses[keyof PostSessionIdPermissionsPermissionIdResponses];
+export type CommandListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/command";
+};
+export type CommandListResponses = {
+    /**
+     * List of commands
+     */
+    200: Array<Command>;
+};
+export type CommandListResponse = CommandListResponses[keyof CommandListResponses];
+export type ConfigProvidersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/config/providers";
+};
+export type ConfigProvidersResponses = {
+    /**
+     * List of providers
+     */
+    200: {
+        providers: Array<Provider>;
+        default: {
+            [key: string]: string;
+        };
+    };
+};
+export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses];
+export type ProviderListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/provider";
+};
+export type ProviderListResponses = {
+    /**
+     * List of providers
+     */
+    200: {
+        all: Array<{
+            api?: string;
+            name: string;
+            env: Array<string>;
+            id: string;
+            npm?: string;
+            models: {
+                [key: string]: {
+                    id: string;
+                    name: string;
+                    release_date: string;
+                    attachment: boolean;
+                    reasoning: boolean;
+                    temperature: boolean;
+                    tool_call: boolean;
+                    cost?: {
+                        input: number;
+                        output: number;
+                        cache_read?: number;
+                        cache_write?: number;
+                        context_over_200k?: {
+                            input: number;
+                            output: number;
+                            cache_read?: number;
+                            cache_write?: number;
+                        };
+                    };
+                    limit: {
+                        context: number;
+                        output: number;
+                    };
+                    modalities?: {
+                        input: Array<"text" | "audio" | "image" | "video" | "pdf">;
+                        output: Array<"text" | "audio" | "image" | "video" | "pdf">;
+                    };
+                    experimental?: boolean;
+                    status?: "alpha" | "beta" | "deprecated";
+                    options: {
+                        [key: string]: unknown;
+                    };
+                    headers?: {
+                        [key: string]: string;
+                    };
+                    provider?: {
+                        npm: string;
+                    };
+                };
+            };
+        }>;
+        default: {
+            [key: string]: string;
+        };
+        connected: Array<string>;
+    };
+};
+export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses];
+export type ProviderAuthData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/provider/auth";
+};
+export type ProviderAuthResponses = {
+    /**
+     * Provider auth methods
+     */
+    200: {
+        [key: string]: Array<ProviderAuthMethod>;
+    };
+};
+export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses];
+export type ProviderOauthAuthorizeData = {
+    body?: {
+        /**
+         * Auth method index
+         */
+        method: number;
+    };
+    path: {
+        /**
+         * Provider ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/provider/{id}/oauth/authorize";
+};
+export type ProviderOauthAuthorizeErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type ProviderOauthAuthorizeError = ProviderOauthAuthorizeErrors[keyof ProviderOauthAuthorizeErrors];
+export type ProviderOauthAuthorizeResponses = {
+    /**
+     * Authorization URL and method
+     */
+    200: ProviderAuthAuthorization;
+};
+export type ProviderOauthAuthorizeResponse = ProviderOauthAuthorizeResponses[keyof ProviderOauthAuthorizeResponses];
+export type ProviderOauthCallbackData = {
+    body?: {
+        /**
+         * Auth method index
+         */
+        method: number;
+        /**
+         * OAuth authorization code
+         */
+        code?: string;
+    };
+    path: {
+        /**
+         * Provider ID
+         */
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/provider/{id}/oauth/callback";
+};
+export type ProviderOauthCallbackErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type ProviderOauthCallbackError = ProviderOauthCallbackErrors[keyof ProviderOauthCallbackErrors];
+export type ProviderOauthCallbackResponses = {
+    /**
+     * OAuth callback processed successfully
+     */
+    200: boolean;
+};
+export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses];
+export type FindTextData = {
+    body?: never;
+    path?: never;
+    query: {
+        directory?: string;
+        pattern: string;
+    };
+    url: "/find";
+};
+export type FindTextResponses = {
+    /**
+     * Matches
+     */
+    200: Array<{
+        path: {
+            text: string;
+        };
+        lines: {
+            text: string;
+        };
+        line_number: number;
+        absolute_offset: number;
+        submatches: Array<{
+            match: {
+                text: string;
+            };
+            start: number;
+            end: number;
+        }>;
+    }>;
+};
+export type FindTextResponse = FindTextResponses[keyof FindTextResponses];
+export type FindFilesData = {
+    body?: never;
+    path?: never;
+    query: {
+        directory?: string;
+        query: string;
+        dirs?: "true" | "false";
+    };
+    url: "/find/file";
+};
+export type FindFilesResponses = {
+    /**
+     * File paths
+     */
+    200: Array<string>;
+};
+export type FindFilesResponse = FindFilesResponses[keyof FindFilesResponses];
+export type FindSymbolsData = {
+    body?: never;
+    path?: never;
+    query: {
+        directory?: string;
+        query: string;
+    };
+    url: "/find/symbol";
+};
+export type FindSymbolsResponses = {
+    /**
+     * Symbols
+     */
+    200: Array<Symbol>;
+};
+export type FindSymbolsResponse = FindSymbolsResponses[keyof FindSymbolsResponses];
+export type FileListData = {
+    body?: never;
+    path?: never;
+    query: {
+        directory?: string;
+        path: string;
+    };
+    url: "/file";
+};
+export type FileListResponses = {
+    /**
+     * Files and directories
+     */
+    200: Array<FileNode>;
+};
+export type FileListResponse = FileListResponses[keyof FileListResponses];
+export type FileReadData = {
+    body?: never;
+    path?: never;
+    query: {
+        directory?: string;
+        path: string;
+    };
+    url: "/file/content";
+};
+export type FileReadResponses = {
+    /**
+     * File content
+     */
+    200: FileContent;
+};
+export type FileReadResponse = FileReadResponses[keyof FileReadResponses];
+export type FileStatusData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/file/status";
+};
+export type FileStatusResponses = {
+    /**
+     * File status
+     */
+    200: Array<File>;
+};
+export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses];
+export type AppLogData = {
+    body?: {
+        /**
+         * Service name for the log entry
+         */
+        service: string;
+        /**
+         * Log level
+         */
+        level: "debug" | "info" | "error" | "warn";
+        /**
+         * Log message
+         */
+        message: string;
+        /**
+         * Additional metadata for the log entry
+         */
+        extra?: {
+            [key: string]: unknown;
+        };
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/log";
+};
+export type AppLogErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type AppLogError = AppLogErrors[keyof AppLogErrors];
+export type AppLogResponses = {
+    /**
+     * Log entry written successfully
+     */
+    200: boolean;
+};
+export type AppLogResponse = AppLogResponses[keyof AppLogResponses];
+export type AppAgentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/agent";
+};
+export type AppAgentsResponses = {
+    /**
+     * List of agents
+     */
+    200: Array<Agent>;
+};
+export type AppAgentsResponse = AppAgentsResponses[keyof AppAgentsResponses];
+export type McpStatusData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp";
+};
+export type McpStatusResponses = {
+    /**
+     * MCP server status
+     */
+    200: {
+        [key: string]: McpStatus;
+    };
+};
+export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses];
+export type McpAddData = {
+    body?: {
+        name: string;
+        config: McpLocalConfig | McpRemoteConfig;
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp";
+};
+export type McpAddErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type McpAddError = McpAddErrors[keyof McpAddErrors];
+export type McpAddResponses = {
+    /**
+     * MCP server added successfully
+     */
+    200: {
+        [key: string]: McpStatus;
+    };
+};
+export type McpAddResponse = McpAddResponses[keyof McpAddResponses];
+export type McpAuthRemoveData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp/{name}/auth";
+};
+export type McpAuthRemoveErrors = {
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type McpAuthRemoveError = McpAuthRemoveErrors[keyof McpAuthRemoveErrors];
+export type McpAuthRemoveResponses = {
+    /**
+     * OAuth credentials removed
+     */
+    200: {
+        success: true;
+    };
+};
+export type McpAuthRemoveResponse = McpAuthRemoveResponses[keyof McpAuthRemoveResponses];
+export type McpAuthStartData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp/{name}/auth";
+};
+export type McpAuthStartErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type McpAuthStartError = McpAuthStartErrors[keyof McpAuthStartErrors];
+export type McpAuthStartResponses = {
+    /**
+     * OAuth flow started
+     */
+    200: {
+        /**
+         * URL to open in browser for authorization
+         */
+        authorizationUrl: string;
+    };
+};
+export type McpAuthStartResponse = McpAuthStartResponses[keyof McpAuthStartResponses];
+export type McpAuthCallbackData = {
+    body?: {
+        /**
+         * Authorization code from OAuth callback
+         */
+        code: string;
+    };
+    path: {
+        name: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp/{name}/auth/callback";
+};
+export type McpAuthCallbackErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type McpAuthCallbackError = McpAuthCallbackErrors[keyof McpAuthCallbackErrors];
+export type McpAuthCallbackResponses = {
+    /**
+     * OAuth authentication completed
+     */
+    200: McpStatus;
+};
+export type McpAuthCallbackResponse = McpAuthCallbackResponses[keyof McpAuthCallbackResponses];
+export type McpAuthAuthenticateData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp/{name}/auth/authenticate";
+};
+export type McpAuthAuthenticateErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+    /**
+     * Not found
+     */
+    404: NotFoundError;
+};
+export type McpAuthAuthenticateError = McpAuthAuthenticateErrors[keyof McpAuthAuthenticateErrors];
+export type McpAuthAuthenticateResponses = {
+    /**
+     * OAuth authentication completed
+     */
+    200: McpStatus;
+};
+export type McpAuthAuthenticateResponse = McpAuthAuthenticateResponses[keyof McpAuthAuthenticateResponses];
+export type McpConnectData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp/{name}/connect";
+};
+export type McpConnectResponses = {
+    /**
+     * MCP server connected successfully
+     */
+    200: boolean;
+};
+export type McpConnectResponse = McpConnectResponses[keyof McpConnectResponses];
+export type McpDisconnectData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/mcp/{name}/disconnect";
+};
+export type McpDisconnectResponses = {
+    /**
+     * MCP server disconnected successfully
+     */
+    200: boolean;
+};
+export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses];
+export type LspStatusData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/lsp";
+};
+export type LspStatusResponses = {
+    /**
+     * LSP server status
+     */
+    200: Array<LspStatus>;
+};
+export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses];
+export type FormatterStatusData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/formatter";
+};
+export type FormatterStatusResponses = {
+    /**
+     * Formatter status
+     */
+    200: Array<FormatterStatus>;
+};
+export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses];
+export type TuiAppendPromptData = {
+    body?: {
+        text: string;
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/append-prompt";
+};
+export type TuiAppendPromptErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type TuiAppendPromptError = TuiAppendPromptErrors[keyof TuiAppendPromptErrors];
+export type TuiAppendPromptResponses = {
+    /**
+     * Prompt processed successfully
+     */
+    200: boolean;
+};
+export type TuiAppendPromptResponse = TuiAppendPromptResponses[keyof TuiAppendPromptResponses];
+export type TuiOpenHelpData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/open-help";
+};
+export type TuiOpenHelpResponses = {
+    /**
+     * Help dialog opened successfully
+     */
+    200: boolean;
+};
+export type TuiOpenHelpResponse = TuiOpenHelpResponses[keyof TuiOpenHelpResponses];
+export type TuiOpenSessionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/open-sessions";
+};
+export type TuiOpenSessionsResponses = {
+    /**
+     * Session dialog opened successfully
+     */
+    200: boolean;
+};
+export type TuiOpenSessionsResponse = TuiOpenSessionsResponses[keyof TuiOpenSessionsResponses];
+export type TuiOpenThemesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/open-themes";
+};
+export type TuiOpenThemesResponses = {
+    /**
+     * Theme dialog opened successfully
+     */
+    200: boolean;
+};
+export type TuiOpenThemesResponse = TuiOpenThemesResponses[keyof TuiOpenThemesResponses];
+export type TuiOpenModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/open-models";
+};
+export type TuiOpenModelsResponses = {
+    /**
+     * Model dialog opened successfully
+     */
+    200: boolean;
+};
+export type TuiOpenModelsResponse = TuiOpenModelsResponses[keyof TuiOpenModelsResponses];
+export type TuiSubmitPromptData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/submit-prompt";
+};
+export type TuiSubmitPromptResponses = {
+    /**
+     * Prompt submitted successfully
+     */
+    200: boolean;
+};
+export type TuiSubmitPromptResponse = TuiSubmitPromptResponses[keyof TuiSubmitPromptResponses];
+export type TuiClearPromptData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/clear-prompt";
+};
+export type TuiClearPromptResponses = {
+    /**
+     * Prompt cleared successfully
+     */
+    200: boolean;
+};
+export type TuiClearPromptResponse = TuiClearPromptResponses[keyof TuiClearPromptResponses];
+export type TuiExecuteCommandData = {
+    body?: {
+        command: string;
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/execute-command";
+};
+export type TuiExecuteCommandErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type TuiExecuteCommandError = TuiExecuteCommandErrors[keyof TuiExecuteCommandErrors];
+export type TuiExecuteCommandResponses = {
+    /**
+     * Command executed successfully
+     */
+    200: boolean;
+};
+export type TuiExecuteCommandResponse = TuiExecuteCommandResponses[keyof TuiExecuteCommandResponses];
+export type TuiShowToastData = {
+    body?: {
+        title?: string;
+        message: string;
+        variant: "info" | "success" | "warning" | "error";
+        /**
+         * Duration in milliseconds
+         */
+        duration?: number;
+    };
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/show-toast";
+};
+export type TuiShowToastResponses = {
+    /**
+     * Toast notification shown successfully
+     */
+    200: boolean;
+};
+export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses];
+export type TuiPublishData = {
+    body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/publish";
+};
+export type TuiPublishErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type TuiPublishError = TuiPublishErrors[keyof TuiPublishErrors];
+export type TuiPublishResponses = {
+    /**
+     * Event published successfully
+     */
+    200: boolean;
+};
+export type TuiPublishResponse = TuiPublishResponses[keyof TuiPublishResponses];
+export type TuiControlNextData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/control/next";
+};
+export type TuiControlNextResponses = {
+    /**
+     * Next TUI request
+     */
+    200: {
+        path: string;
+        body: unknown;
+    };
+};
+export type TuiControlNextResponse = TuiControlNextResponses[keyof TuiControlNextResponses];
+export type TuiControlResponseData = {
+    body?: unknown;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/tui/control/response";
+};
+export type TuiControlResponseResponses = {
+    /**
+     * Response submitted successfully
+     */
+    200: boolean;
+};
+export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses];
+export type AuthSetData = {
+    body?: Auth;
+    path: {
+        id: string;
+    };
+    query?: {
+        directory?: string;
+    };
+    url: "/auth/{id}";
+};
+export type AuthSetErrors = {
+    /**
+     * Bad request
+     */
+    400: BadRequestError;
+};
+export type AuthSetError = AuthSetErrors[keyof AuthSetErrors];
+export type AuthSetResponses = {
+    /**
+     * Successfully set authentication credentials
+     */
+    200: boolean;
+};
+export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses];
+export type EventSubscribeData = {
+    body?: never;
+    path?: never;
+    query?: {
+        directory?: string;
+    };
+    url: "/event";
+};
+export type EventSubscribeResponses = {
+    /**
+     * Event stream
+     */
+    200: Event;
+};
+export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses];
+export type ClientOptions = {
+    baseUrl: `${string}://${string}` | (string & {});
+};

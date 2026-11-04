@@ -1,0 +1,25 @@
+---
+title: Install a package under a different name
+sidebarTitle: Install with alias
+mode: center
+---
+
+To install an npm package under an alias:
+
+```sh terminal icon="terminal"
+bun add my-custom-name@npm:zod
+```
+
+---
+
+The `zod` package can now be imported as `my-custom-name`.
+
+```ts index.ts icon="/icons/typescript.svg"
+import { z } from "my-custom-name";
+
+z.string();
+```
+
+---
+
+See [Docs > Package manager](/docs/pm/cli/install) for complete documentation of Bun's package manager.

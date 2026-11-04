@@ -1,0 +1,43 @@
+---
+title: Build an HTTP server using Express and Bun
+sidebarTitle: Express with Bun
+mode: center
+---
+
+Express and other major Node.js HTTP libraries should work out of the box. Bun implements the [`node:http`](https://nodejs.org/api/http.html) and [`node:https`](https://nodejs.org/api/https.html) modules that these libraries rely on.
+
+<Note>
+  Refer to the [Runtime > Node.js APIs](/docs/runtime/nodejs-compat#node-http) page for more detailed compatibility
+  information.
+</Note>
+
+```sh terminal icon="terminal"
+bun add express
+```
+
+---
+
+To define an HTTP route and start a server with Express:
+
+```ts server.ts icon="/icons/typescript.svg"
+import express from "express";
+
+const app = express();
+const port = 8080;
+
+app.get("/", (req, res) => {
+  res.send("Hello World!");
+});
+
+app.listen(port, () => {
+  console.log(`Listening on port ${port}...`);
+});
+```
+
+---
+
+To start the server on `localhost`:
+
+```sh terminal icon="terminal"
+bun server.ts
+```
