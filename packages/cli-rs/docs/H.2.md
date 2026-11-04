@@ -37,7 +37,7 @@ export default defineApp({
     { path: "/api/session/ses_b/message", json: { data: [assistant("msg_2", "Done."), user("msg_1", "Why?")], cursor: {} } },
   ],
   steps: [
-    { checkpoint: "open", until: "Why?", deviation: "V01-plain-transcript" },
+    { checkpoint: "open", until: "Why?", deviation: ["V01-plain-transcript"] },
     { keys: ["ctrl+x", "n"] },
     { event: { type: "session.text.delta", data: { /* … */ } } },
     { type: "hello" },
@@ -66,10 +66,11 @@ export default defineApp({
     `{ x, y, width, height }` or a `line` regex, which blanks every match on every row. Masks are for
     nondeterministic text (the random prompt placeholder, durations, relative times). Plan 7.5: a mask over
     a whole widget needs a deviation file.
-  - `deviation`: the name of `parity/deviations/<name>.md`. The checkpoint may then differ: the Rust
-    runner prints the report and passes. Without a deviation file, a difference fails. A missing file
-    fails. A checkpoint that now matches prints a note to remove its deviation.
-- **`requests: { deviation }`** at the top level does the same for P-REQ.
+  - `deviation`: a list of names of `parity/deviations/<name>.md`, one per row that differs. The
+    checkpoint may then differ: the Rust runner prints a one-line summary and passes (`PARITY_VERBOSE=1`
+    prints the full report). A difference without a deviation fails, and so does a missing file. A
+    checkpoint that now matches prints a note to remove its deviations.
+- **`requests: { deviation }`** at the top level does the same for P-REQ, with one name.
 
 Scenario data uses fixed IDs and times, so no ID or time normalizer is needed in cells. Helpers in
 `parity/lib/app.ts` (`session`, `user`, `assistant`) build valid wire objects with fixed times.
@@ -88,15 +89,19 @@ Scenario data uses fixed IDs and times, so no ID or time normalizer is needed in
   "routes": [ … as in the scenario … ],
   "steps": [ … as in the scenario; each checkpoint gains "fixture": "H.2/session-open/open" … ],
   "requests": {
-    "writes": [ { "method": "POST", "path": "…", "query": {…}, "body": … } ],
+    "writes": [ { "method": "POST", "path": "…", "query": {…}, "body": …, "status": 204 } ],
     "reads": [ { "method": "GET", "path": "/api/vcs", "query": {…}, "status": 200, "json": … } ]
   }
 }
 ```
 
-- `reads` holds every GET the TS TUI sent with the response it got, sorted by method, path, and query, with
-  duplicates removed. The TS TUI starts many reads at once, so their order is not stable; sorting keeps two
-  replays byte-identical. `writes` keeps the order in which they were sent.
+- Each entry holds the request and the response it got (`status`, then `json`, or `text` and
+  `contentType`).
+- A read is a GET or a plugin RPC named `get` (`POST /api/rpc/<plugin>/get`; the goal footer posts one).
+  Everything else is a write. `isRead` in the TS runner and `is_read` in `opencode_parity::app` hold the rule.
+- `reads` are sorted by method, path, and query, with duplicates removed. The TS TUI starts many reads at
+  once, so their order is not stable; sorting keeps two replays byte-identical. `writes` keep the order in
+  which they were sent.
 - The event stream is not logged.
 - `directory` is the location the TS fixture serves (`tui-client.ts`, `directory`). Rust gets it as
   `Deps.directory`.
@@ -116,7 +121,8 @@ selects one. Each case:
 2. awaits `ready`, then runs the steps;
 3. at a checkpoint, polls every 30 ms with a 5 s wall-clock deadline, until the frame contains `until` and
    three polls in a row read the same cells, not only the same characters. Highlighting changes colors after
-   the text shows;
+   the text shows. A poll that meets a frame in progress (`OutputBusy`) is skipped. The process runs with
+   `TZ=UTC`, so dates in the cells are the same on every machine;
 4. writes the cell files and the recording.
 
 Replaying a scenario twice must give byte-identical files. That is the step's TS-against-TS proof.
@@ -142,7 +148,7 @@ It knows nothing of scenarios, so other tests can use it as a small fixture serv
 `crates/tui/tests/app.rs`, one test, `scenarios`, which runs every recording under `parity/fixtures/*/`
 (`PARITY_SCENARIO` selects one) and fails at the end with every failing scenario's report:
 
-1. builds `Memory` from the recording's routes, then its reads;
+1. builds `Memory` from the recording's routes, then its reads and writes by exact query, then by path;
 2. mounts the TUI on `TestApp::new(width, height)` with `opencode_tui::mount(app, Deps { events: true,
    directory, config, route, continue_ })`, the T.1 hook;
 3. runs the steps: `keys` with `TestApp::press`, `type` with `TestApp::type_text`, and `event` with
@@ -157,6 +163,17 @@ It knows nothing of scenarios, so other tests can use it as a small fixture serv
 
 `opencode_parity::app` (in `crates/parity/src/app.rs`) holds the recording types, masks, and both
 comparisons. It does not depend on the TUI, so the parity crate stays a leaf.
+
+## Adding a scenario (E.2, E.6a, E.9a, E.11a, …)
+
+1. Write `parity/scenarios/<step>/<name>.app.ts`.
+2. Record it: `PARITY_SCENARIO=<step>/<name> bun test --cwd packages/cli-rs/parity ./app/scenarios.test.tsx`.
+   Run it twice; `git status` must show no change after the second run.
+3. Replay it: `PARITY_SCENARIO=<step>/<name> bun run --cwd packages/cli-rs cargo test -p opencode-tui --test
+   app -- --nocapture`. On a difference, the runner writes the Rust cells to
+   `$TMPDIR/opencode-parity/<step>/<name>/<checkpoint>.json` for a diff against the recorded file.
+4. When a step makes a checkpoint match, remove the deviation names from the scenario. When no scenario
+   names a deviation file any more, delete the file.
 
 ## Out of scope
 
