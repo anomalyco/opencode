@@ -16,6 +16,7 @@ export function temporaryDirectory() {
 export function listen(
   socketPath: string,
   handle: (socket: net.Socket, request: Record<string, unknown>, token: string) => object | undefined,
+  onOwn?: (socket: net.Socket) => void,
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -25,6 +26,7 @@ export function listen(
         socket.once("close", () => sockets.delete(socket))
         void readRequest(socket)
           .then((envelope) => {
+            if (envelope.request.op === "own") onOwn?.(socket)
             const response =
               envelope.request.op === "own" ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
             if (response) socket.write(frame(response))
