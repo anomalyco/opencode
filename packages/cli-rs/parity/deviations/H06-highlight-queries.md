@@ -1,21 +1,37 @@
-# H06: highlight queries until U.4b
+# H06: grammars outside the default build, and grammar versions
 
-TypeScript: Core highlights code with nvim-treesitter's queries (`packages/tui/src/parsers-config.ts`). For
-TypeScript, that query names `import` and `export` `keyword.import` and `keyword.export`, and `function` `keyword.function`.
-It names member properties `property`, and it adds `@spell` to comments. The syntax style then gives `spell` the text
-color, so comments show in the text color, italic.
+TypeScript: Core highlights with its six bundled grammars and the TUI's 34 from `packages/tui/src/parsers-config.ts`.
+It downloads each grammar's WASM and highlight queries on first use, caches them under
+`~/.local/share/opentui/tree-sitter`, and rewrites `#lua-match?` to `#match?` as it loads them.
 
-Rust: opentui-rust bundles each grammar's own highlight query, which names those `keyword`, `property` and
-`comment`, and has no `@spell`. With the same syntax theme, those tokens come out in other colors or attributes. In
-`parity/fixtures/U.4a/code.json`, `diff.json` and `markdown-fences.json`, `import`, `export` and `function` are italic `syntax.keyword`
-instead of plain `syntax.keyword` and `syntax.function`, and comments are `syntax.comment` instead of `text.base`.
+Rust: `opencode_ui::grammars` links the grammars statically and registers them with the same queries. The queries are
+generated into `assets/queries` by `script/gen/grammars.ts`, which reads Core's cache first, as Core does, and applies
+Core's rewrite. They use Core's capture rules (`Grammar::core_captures`) and Core's theme fallback
+(`SyntaxTheme::first_part_fallback`). `crates/ui/tests/grammars.rs` and `content.rs` match the TypeScript renders cell
+for cell. Here is what still differs:
 
-The syntax theme itself matches: `code::syntax_theme` equals `generateSyntax` scope for scope
-(`parity/fixtures/U.4a/syntax.json`). The difference comes only from the capture names.
+- **The default build links 14 grammars:** JavaScript, TypeScript, TSX, Markdown, Zig, Rust, Python, Go, bash, HTML,
+  JSON, YAML, CSS, and diff. The other 23 need `--features opencode-ui/grammars-all`. Without that feature, their code
+  shows in the text color. Reason: each grammar is a C parser that compiles once per target directory, and this keeps
+  the default build small.
+- **Kotlin is not linked.** TS uses fwcd's `tree-sitter-kotlin` 0.3.8, and that crate needs tree-sitter older than
+  0.23. fwcd's `main` (0.4.0) builds, but the 0.3.8 query does not load against it (`Invalid node type "null"`). Kotlin
+  shows in the text color.
+- **Swift is not linked, and neither client highlights it.** The cached TS query fails against the 0.7.1 grammar in
+  web-tree-sitter too (`Bad node name 'nil_literal'`), so Core skips Swift.
+- **F#: two patterns are dropped.** They are `(_type (long_identifier (identifier) @type.builtin))` and the attribute
+  pattern that captures `@attribute` and `@constant`. tree-sitter 0.27 rejects them as impossible, but web-tree-sitter
+  0.25 loads them, so TS may highlight built-in type names and attributes that Rust leaves plain.
+- **Other grammar versions, all in `grammars-all`.** Vue uses `tree-sitter-vue-next` 0.1.0 (TS: anomalyco's fork
+  0.1.2). Clojure uses `tree-sitter-clojure-orchard` 0.2.9 (TS: anomalyco's fork 0.0.1). Vim uses `tree-sitter-vim` 0.4.0
+  (TS: 0.8.1). Nix uses `tree-sitter-nix` 0.3.0 (TS: a WASM build from ast-grep). The crates TS pins at these versions
+  need an older tree-sitter or do not exist on crates.io. The queries load against all four, so the node names agree.
+  The parses can still differ on syntax that the grammar versions handle differently.
+- **Rust and Markdown use opentui-rust's crate versions:** `tree-sitter-rust` 0.24.2 (TS: 0.24.0) and
+  `tree-sitter-md` 0.5.4 (TS: 0.5.1). Cargo allows one version per crate in a build.
+- **Markdown injections are opentui-rust's,** not the nvim-treesitter query Core uses. Core's query names a fence's
+  language with a directive only Core implements. The fences, HTML, front matter, and inline text inject the same
+  grammars, so the colors are Core's (`U.4a/markdown-fences`, `U.4b/markdown`).
 
-Separately, `SyntaxTheme::get` falls back from an unstyled `a.b.c` to the longest styled prefix (`a.b`), and Core
-falls back to `a`. No capture in the corpus shows this.
-
-Reason: an opentui-rust difference not yet aligned. U.4b links the grammars with the TypeScript queries and removes
-this file. `crates/ui/tests/content.rs` exempts only foreground and attributes on the listed rows, not text or
-backgrounds.
+Reason: static linking instead of runtime downloads (plan H06). The client cannot download and load WASM grammars
+without a WASM runtime, and the Rust crates exist for nearly every language.
