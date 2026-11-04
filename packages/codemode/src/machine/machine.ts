@@ -264,8 +264,8 @@ export class Machine {
   // --- Jobs ---
 
   // Starts a job on the root stack: parked frames resume with how their promise settled, an async-from-sync iterator
-  // closing its iterator runs as a frame, and a reaction or thenable that calls program code runs its work in a native
-  // frame. One that finishes at once leaves the stack empty.
+  // closing its iterator runs as a frame, and a reaction or thenable that calls program code runs as the frame its job
+  // kind makes. One that finishes at once leaves the stack empty.
   private begin(job: Job): void {
     if (job.kind === "thenable") return this.work(adoptThenable(this.ctx, job.promise, job.thenable, job.then))
     const reaction = job.reaction

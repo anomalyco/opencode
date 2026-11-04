@@ -92,7 +92,7 @@ export class MachineTask {
     return result
   }
 
-  /** Calls `callable`: a program function pushes a frame; a built-in answers at once or runs as a native frame. */
+  /** Calls `callable`: a program function pushes a frame; a built-in answers at once or runs as frames. */
   call(
     callable: Value,
     thisValue: Value,

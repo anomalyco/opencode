@@ -13,7 +13,7 @@ import {
 } from "./objects.js"
 import { describeValue } from "./references.js"
 
-/** A native function body: a value, a thrown `PendingThrow`, or interpreter work producing a value. */
+/** A native function body: a value, a thrown `PendingThrow`, or what the machine carries out as the call. */
 export type Impl = NativeCall
 
 export const native = (builtins: Builtins, options: NativeOptions): Native => new Native(builtins.Function, options)

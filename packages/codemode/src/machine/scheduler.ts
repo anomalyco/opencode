@@ -25,7 +25,7 @@ export type Combination = {
 
 /**
  * A settled promise's reaction, as data. It runs as a job (see `react` in promises.ts) and either finishes at once or
- * starts interpreter work. The kinds:
+ * starts a frame that calls program code. The kinds:
  * - `await`: resume the frames parked on the promise, cut off the stack at an `await`.
  * - `settle`: pass the outcome on to `target`.
  * - `handler`: `then`/`catch` handlers; the handler's result settles `derived`.
