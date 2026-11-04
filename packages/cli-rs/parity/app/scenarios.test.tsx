@@ -147,8 +147,7 @@ function startIde() {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: (request, server) =>
-      server.upgrade(request) ? undefined : new Response("websocket only", { status: 400 }),
+    fetch: (request, server) => (server.upgrade(request) ? undefined : new Response("websocket only", { status: 400 })),
     websocket: {
       message(socket, data) {
         const message = JSON.parse(String(data))
