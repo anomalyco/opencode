@@ -3,7 +3,7 @@
 //!
 //! The agent starts a private TypeScript server, as TS `Standalone.start()` does, and talks to it over
 //! HTTP. C.12 (`rs-acp-rest`) owns `tools`, `permission`, `elicitation`, `config_option`, `replay`,
-//! `compaction`, `directories`, and `login`.
+//! `compaction`, and `directories`. `acp --login` runs `auth login` in the CLI crate.
 
 pub mod agent;
 pub mod capabilities;
@@ -17,7 +17,6 @@ pub mod content;
 pub mod directories;
 pub mod elicitation;
 pub mod error;
-pub mod login;
 pub mod paths;
 pub mod permission;
 pub mod prompt;
