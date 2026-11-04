@@ -6,7 +6,16 @@ import { TranscriptTail } from "./tail"
 import { VoiceTools } from "./tools"
 import { VoiceFailure, VoiceTransport } from "./transport"
 import { delegatorInstructions } from "./spec"
-import type { ToolCall, VoiceEvent } from "./protocol"
+import type { VoiceEvent } from "./protocol"
+import {
+  createVoiceDelegationState,
+  delegating,
+  hasDelegation,
+  transitionVoiceDelegation,
+  type ToolOutput,
+  type VoiceDelegationEffect,
+  type VoiceDelegationEvent,
+} from "./machine"
 
 export type CallState = {
   status: "idle" | "connecting" | "connected" | "dropped"
@@ -19,14 +28,7 @@ export type CallState = {
   title: string
 }
 
-type Delegation = {
-  id: string
-  sessionID: string
-  transcript: string[]
-  calls: ToolCall[]
-  rounds: number
-  responseID?: string
-}
+const outcomes = ["completed", "failed", "incomplete", "cancelled"] as const
 
 export function createVoiceCall(input: {
   ctx: ServerCtx
@@ -68,8 +70,9 @@ export function createVoiceCall(input: {
     joining: false,
   }
 
-  const delegations = new Map<string, Delegation>()
-  const completed = new Set<string>()
+  let delegations = createVoiceDelegationState()
+  // Timers and tool aborts of open delegations; the machine decides when each ends.
+  const handles = new Map<string, { timer?: ReturnType<typeof setTimeout>; abort?: AbortController }>()
   const dirty = new Set<string>()
   const unlisten = input.ctx.sdk.event.on("session.idle", (event) => dirty.add(event.data.sessionID))
 
@@ -98,8 +101,7 @@ export function createVoiceCall(input: {
   function drop(failure: CallState["failure"] = "dropped") {
     if (state.ended) return
     state.ready = false
-    delegations.forEach((delegation) => tail.release(delegation.id))
-    delegations.clear()
+    dispatch({ type: "call.reset" })
     input.change({ status: "dropped", failure, level: 0 })
     void state.transport?.close()
     void input.platform.setVoiceCallActive?.(false).catch(() => undefined)
@@ -128,7 +130,7 @@ export function createVoiceCall(input: {
     const transport = new VoiceTransport({
       api: input.ctx.sdk.api,
       event: (event) => {
-        if (state.transport === transport && !transport.abort.signal.aborted) eventReceived(event, transport)
+        if (state.transport === transport && !transport.abort.signal.aborted) eventReceived(event)
       },
       levels: (mic, speaker) => {
         gates.user(!state.muted && mic > 0.015)
@@ -157,7 +159,7 @@ export function createVoiceCall(input: {
     input.change({ status: "connected", muted: state.muted })
   }
 
-  function eventReceived(event: VoiceEvent, transport: VoiceTransport) {
+  function eventReceived(event: VoiceEvent) {
     if (event.type === "session.input_transcript.delta" || event.type === "session.output_transcript.delta") {
       const speaker = event.type === "session.input_transcript.delta" ? "user" : "assistant"
       const caption = tail.append(speaker, event.delta ?? "")
@@ -173,83 +175,120 @@ export function createVoiceCall(input: {
     if (event.type === "session.delegation.created" && event.delegation) {
       const id = event.delegation.id
 
-      if (delegations.has(id)) return
-      delegations.set(id, { id, sessionID: state.viewing.id, transcript: tail.capture(id), calls: [], rounds: 0 })
+      // A repeated event must not capture the transcript again: that would clear this delegation's reservation.
+      if (hasDelegation(delegations, id)) return
+      dispatch({ type: "delegation.created", id, sessionID: state.viewing.id, transcript: tail.capture(id) })
 
       return
     }
 
     if (event.type !== "response.event" || !event.event) return
     const nested = event.event
-    // Like iOS, only infer the owner when there is exactly one request.
-    const id = event.delegation_id ?? (delegations.size === 1 ? delegations.keys().next().value : undefined)
-    const delegation = id ? delegations.get(id) : undefined
+    const routed = { delegationID: event.delegation_id, responseID: nested.response?.id }
 
-    if (!delegation) return
-
-    if (nested.type === "response.created") delegation.responseID = nested.response?.id
+    if (nested.type === "response.created") return dispatch({ type: "response.created", ...routed })
 
     if (nested.type === "response.output_item.done" && nested.item?.type === "function_call") {
       const item = nested.item
 
-      if (item.call_id && item.name && !delegation.calls.some((call) => call.call_id === item.call_id)) {
-        delegation.calls.push({ call_id: item.call_id, name: item.name, arguments: item.arguments ?? "{}" })
-      }
+      if (!item.call_id || !item.name) return
 
-      return
+      return dispatch({
+        type: "response.call",
+        ...routed,
+        call: { call_id: item.call_id, name: item.name, arguments: item.arguments ?? "{}" },
+      })
     }
 
-    if (!["response.completed", "response.failed", "response.incomplete", "response.cancelled"].includes(nested.type))
-      return
-    const key = nested.response?.id ?? delegation.responseID
+    const outcome = outcomes.find((item) => nested.type === `response.${item}`)
 
-    if (!key || completed.has(key)) return
-    completed.add(key)
-
-    if (nested.type !== "response.completed") {
-      drop("connection")
-
-      return
-    }
-
-    if (!delegation.calls.length) {
-      // Responses final text goes to Live directly; never append it again.
-      tools.answered(delegation.id)
-      tail.accept(delegation.id)
-      delegations.delete(delegation.id)
-      gates.answer()
-
-      return
-    }
-
-    const calls = delegation.calls.splice(0)
-    void runRound(delegation, calls, transport).catch(() => {
-      if (state.transport === transport && !transport.abort.signal.aborted) drop("connection")
-    })
+    if (outcome) dispatch({ type: "response.finished", ...routed, outcome })
   }
 
-  async function runRound(delegation: Delegation, calls: ToolCall[], transport: VoiceTransport) {
-    if (++delegation.rounds > 50) throw new VoiceFailure("connection")
-    // Serial execution preserves dependencies between tools in one round.
-    const outputs: { call_id: string; output: string }[] = []
+  function dispatch(event: VoiceDelegationEvent) {
+    const next = transitionVoiceDelegation(delegations, event)
+    delegations = next.state
+    next.effects.forEach(perform)
+  }
 
-    for (const call of calls) {
-      transport.abort.signal.throwIfAborted()
-      outputs.push({ call_id: call.call_id, output: await tools.run(call, delegation, transport.abort.signal) })
+  function perform(effect: VoiceDelegationEffect) {
+    if (effect.type === "deadline") {
+      const handle = handles.get(effect.id) ?? {}
+      clearTimeout(handle.timer)
+      handle.timer = setTimeout(
+        () => dispatch({ type: "delegation.timeout", id: effect.id, attempt: effect.attempt }),
+        effect.ms,
+      )
+      handles.set(effect.id, handle)
+
+      return
     }
 
-    transport.abort.signal.throwIfAborted()
-    outputs.forEach((output) =>
-      transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
-    )
-    transport.send({ type: "response.create" })
-    tools.replies.sessions.forEach((id) => dirty.add(id))
+    if (effect.type === "round") {
+      const transport = state.transport
+
+      if (!transport) return
+      const abort = new AbortController()
+      handles.set(effect.id, { ...handles.get(effect.id), abort })
+      void runRound(effect, AbortSignal.any([abort.signal, transport.abort.signal]))
+
+      return
+    }
+
+    if (effect.type === "outputs") {
+      const transport = state.transport
+
+      if (!transport) return
+      void Promise.resolve()
+        .then(() => {
+          effect.outputs.forEach((output) =>
+            transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
+          )
+          transport.send({ type: "response.create" })
+          tools.replies.sessions.forEach((id) => dirty.add(id))
+        })
+        .catch(() => {
+          if (state.transport === transport && !transport.abort.signal.aborted) drop("connection")
+        })
+
+      return
+    }
+
+    const handle = handles.get(effect.id)
+    clearTimeout(handle?.timer)
+    handle?.abort?.abort()
+    handles.delete(effect.id)
+
+    if (effect.outcome === "discarded") {
+      tools.discard(effect.id)
+      tail.release(effect.id)
+
+      return
+    }
+
+    // Responses final text goes to Live directly; never append it again.
+    tools.answered(effect.id)
+    tail.accept(effect.id)
+    gates.answer()
+  }
+
+  async function runRound(effect: Extract<VoiceDelegationEffect, { type: "round" }>, signal: AbortSignal) {
+    // open_session moves the rest of this request onto the session it opened.
+    const request = { ...effect.request }
+    // Serial execution preserves dependencies between tools in one round.
+    const outputs: ToolOutput[] = []
+
+    for (const call of effect.calls) {
+      outputs.push({ call_id: call.call_id, output: await tools.run(call, request, signal) })
+    }
+
+    dispatch({ type: "round.completed", id: effect.id, attempt: effect.attempt, sessionID: request.sessionID, outputs })
   }
 
   async function watch() {
     const transport = state.transport
 
-    if (!state.ready || !transport || state.watching || delegations.size || !dirty.size) return
+    if (!state.ready || !transport || state.watching || delegating(delegations) || !dirty.size) return
     state.watching = true
     await Promise.resolve()
       .then(async () => {
@@ -266,7 +305,12 @@ export function createVoiceCall(input: {
           if (!replies.length) continue
 
           for (const reply of replies) {
-            if (delegations.size || gates.delay() || transport !== state.transport || transport.abort.signal.aborted) {
+            if (
+              delegating(delegations) ||
+              gates.delay() ||
+              transport !== state.transport ||
+              transport.abort.signal.aborted
+            ) {
               dirty.add(sessionID)
 
               return
@@ -308,6 +352,7 @@ export function createVoiceCall(input: {
       state.ready = false
       unlisten()
       clearInterval(timer)
+      dispatch({ type: "call.reset" })
       await Promise.all([state.transport?.close(), input.platform.setVoiceCallActive?.(false).catch(() => undefined)])
     },
   }
