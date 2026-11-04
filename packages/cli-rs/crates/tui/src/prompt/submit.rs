@@ -40,6 +40,10 @@ pub fn submit(prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 }
 
 fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
+    // A staged worktree is being created; its submit runs once it exists (E.11b).
+    if prompt.staging.creating() {
+        return false;
+    }
     if prompt
         .autocomplete
         .get()
@@ -128,6 +132,33 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     if !trimmed.is_empty() {
         prompt.reset();
     }
+    // A staged new worktree is created first; then the prompt comes back and submits into it.
+    if prompt.session.is_none() {
+        let (pending, delivery) = (entry.clone(), delivery.clone());
+        let staged = super::r#move::create_staged(tui, prompt, move |tui, prompt, directory| {
+            let typed = prompt.textarea.text();
+            if !typed.is_empty() {
+                // Typed while the worktree was created: kept as home's draft.
+                let mut draft = prompt.snapshot();
+                draft["text"] = Value::String(typed);
+                tui.prompt.drafts.save(
+                    None,
+                    Draft {
+                        prompt: draft,
+                        cursor: u32::MAX,
+                    },
+                );
+            }
+            prompt.restore(pending);
+            prompt.textarea.set_cursor_offset(prompt.text_end());
+            if directory.is_some() {
+                submit(prompt, delivery);
+            }
+        });
+        if staged {
+            return true;
+        }
+    }
     let agent = selection.agent.id.clone();
     let model = model.model_ref();
     // `--session` with an unknown ID names the first session created here (`takeNewSessionID`).
@@ -144,7 +175,12 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 agent: Some(agent.clone()),
                 model: Some(model.clone()),
                 location: Some(LocationPublicRef {
-                    directory: AbsolutePath(prompt.location(tui).directory),
+                    directory: AbsolutePath(
+                        prompt
+                            .staging
+                            .directory()
+                            .unwrap_or_else(|| prompt.location(tui).directory),
+                    ),
                 }),
                 ..CreateSession::default()
             });
@@ -326,6 +362,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     }
 
     if created {
+        prompt.staging.finish(prompt);
         // Navigating replaces this prompt, so it runs after the key that submitted.
         let weak = tui.weak();
         tui.app.defer(move |_| {

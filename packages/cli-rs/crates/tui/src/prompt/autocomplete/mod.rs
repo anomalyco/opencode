@@ -53,14 +53,12 @@ pub enum Mode {
     Directory,
 }
 
-/// State every prompt shares: `frecency.jsonl`, directory recents, and the home location `/cd` set.
+/// State every prompt shares: `frecency.jsonl` and directory recents.
 #[derive(Clone, Default)]
 pub struct Shared {
     frecency: Arc<Mutex<Option<Frecency>>>,
     recents: Arc<Mutex<Option<Value>>>,
     loaded: Rc<Cell<bool>>,
-    /// The directory a home `/cd` moved to (TS `location.set` before a session exists).
-    pub home: Rc<RefCell<Option<String>>>,
 }
 
 impl Shared {
