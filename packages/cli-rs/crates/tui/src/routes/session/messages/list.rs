@@ -38,6 +38,7 @@ pub const TAIL_ROWS: usize = 40;
 /// Rows mounted per reveal near the top (`TRANSCRIPT_BACKFILL_CHUNK`).
 pub const BACKFILL_CHUNK: usize = 60;
 
+#[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
 
 struct Inner {
@@ -259,7 +260,9 @@ impl Transcript {
 
     /// Loads every older page in one publication (`session.first`), then mounts the head.
     pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
-        let Some(session) = self.session() else { return };
+        let Some(session) = self.session() else {
+            return;
+        };
         let data = tui.data.clone();
         let weak = self.0.this.clone();
         *self.0.start.borrow_mut() = Start::Top;
@@ -276,7 +279,9 @@ impl Transcript {
             },
             move |_, result| {
                 let Some(inner) = weak.upgrade() else { return };
-                let Some(tui) = inner.tui.upgrade() else { return };
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
                 done(&tui, result.map_err(|error| error.to_string()));
             },
         );
@@ -308,7 +313,9 @@ impl Inner {
         let weak = self.this.clone();
         *self.groups.refresh.borrow_mut() = Some(Rc::new(move || {
             let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else { return };
+            let Some(tui) = inner.tui.upgrade() else {
+                return;
+            };
             inner.render(&tui, |_| true);
         }));
         let weak = self.this.clone();
@@ -791,7 +798,9 @@ impl Spec {
     fn messages(&self) -> Vec<&str> {
         match self {
             Self::Message(id) | Self::Footer(id) | Self::Part { message: id, .. } => vec![id],
-            Self::TurnUsage { messages, .. } => messages.last().map(String::as_str).into_iter().collect(),
+            Self::TurnUsage { messages, .. } => {
+                messages.last().map(String::as_str).into_iter().collect()
+            }
             Self::Group(group) => group
                 .entries()
                 .into_iter()
@@ -1118,7 +1127,10 @@ mod tests {
             .map(|index| Spec::Message(format!("msg_{index:03}")))
             .collect();
         let weights = vec![1; 100];
-        assert_eq!(window_start(&Start::Tail, &specs, &weights), 100 - TAIL_ROWS);
+        assert_eq!(
+            window_start(&Start::Tail, &specs, &weights),
+            100 - TAIL_ROWS
+        );
         assert_eq!(window_start(&Start::Top, &specs, &weights), 0);
         let pinned = Start::Row(RowKey::Message("msg_010".into()));
         assert_eq!(window_start(&pinned, &specs, &weights), 10);
@@ -1131,6 +1143,9 @@ mod tests {
         // An open group costs its children: fewer rows fill the tail.
         let mut heavy = weights.clone();
         heavy[95] = 10;
-        assert_eq!(window_start(&Start::Tail, &specs, &heavy), 100 - TAIL_ROWS + 9);
+        assert_eq!(
+            window_start(&Start::Tail, &specs, &heavy),
+            100 - TAIL_ROWS + 9
+        );
     }
 }
