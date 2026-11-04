@@ -9,7 +9,7 @@ use futures_util::{Stream, StreamExt};
 use serde::de::DeserializeOwned;
 
 use crate::error::Error;
-use crate::generated::V2Event;
+use crate::generated::{SessionReasoningDelta, SessionTextDelta, V2Event};
 
 /// A future a transport returns.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -99,6 +99,37 @@ impl<T: DeserializeOwned + Send> SseResponse<T> {
 impl crate::events::Event for V2Event {
     fn kind(&self) -> &str {
         self.tag()
+    }
+
+    /// Joins adjacent deltas of one text or reasoning part (same session, message, and ordinal) or of
+    /// one tool input (same session, message, and tool call). The store only appends deltas, so the
+    /// joined event applies exactly as the two did.
+    fn merge(&mut self, next: &Self) -> bool {
+        match (self, next) {
+            (
+                Self::SessionTextDelta(SessionTextDelta { data: a, .. }),
+                Self::SessionTextDelta(SessionTextDelta { data: b, .. }),
+            )
+            | (
+                Self::SessionReasoningDelta(SessionReasoningDelta { data: a, .. }),
+                Self::SessionReasoningDelta(SessionReasoningDelta { data: b, .. }),
+            ) if a.session_id == b.session_id
+                && a.assistant_message_id == b.assistant_message_id
+                && a.ordinal == b.ordinal =>
+            {
+                a.delta.push_str(&b.delta);
+                true
+            }
+            (Self::SessionToolInputDelta(a), Self::SessionToolInputDelta(b))
+                if a.data.session_id == b.data.session_id
+                    && a.data.assistant_message_id == b.data.assistant_message_id
+                    && a.data.id == b.data.id =>
+            {
+                a.data.delta.push_str(&b.data.delta);
+                true
+            }
+            _ => false,
+        }
     }
 }
 
