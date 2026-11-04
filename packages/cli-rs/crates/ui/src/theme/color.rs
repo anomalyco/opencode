@@ -191,7 +191,7 @@ pub(crate) fn oklch_to_hex(color: Oklch) -> String {
 }
 
 /// Mixes `overlay` into `base` by `alpha`, as the TUI's `tint` does.
-pub(crate) fn tint(base: Color, overlay: Color, alpha: f64) -> Color {
+pub fn tint(base: Color, overlay: Color, alpha: f64) -> Color {
     let mix = |from: u8, to: u8| (unit(from) + (unit(to) - unit(from)) * alpha) * 255.0;
     from_floats(
         mix(base.r, overlay.r),

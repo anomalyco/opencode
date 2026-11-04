@@ -1,5 +1,6 @@
 //! The root command, which opens the TUI (T.1, to C.13): connect, read `cli.json`, and run the TUI
-//! until it quits. C.13 adds the remaining root flags.
+//! until it quits. E.1 resolves `--session` and passes `--prompt` (`handlers/default.ts`); C.13 adds the
+//! remaining root flags.
 
 use std::sync::Arc;
 
@@ -8,8 +9,8 @@ use opencode_api::transport::Reqwest;
 use opencode_local::channel::Channels;
 use opencode_local::cli_config::{CliConfig, Permissions, Resolved};
 use opencode_local::paths::{self, Paths};
-use opencode_service::connect::{self, Env, Options};
-use opencode_tui::{Deps, Launch, Route, app::Roots};
+use opencode_service::connect::{self, Env, Options, Source};
+use opencode_tui::{Args, Deps, Launch, Route, app::Roots};
 
 use super::Context;
 use crate::args::RootArgs;
@@ -47,11 +48,32 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     if args.permissions.auto() {
         config.permissions = Permissions::Autoaccept;
     }
-    let route = match &args.session {
-        Some(id) => Route::Session {
-            id: SessionID(id.clone()),
-        },
-        None => Route::Home,
+    // A `--session` ID the server does not know becomes the ID of the session the first prompt creates.
+    let session = match &args.session {
+        Some(id) => {
+            let id = SessionID(id.clone());
+            let found = runtime.block_on(opencode_store::target::find_session(&client, &id))?;
+            Some((id, found.is_some()))
+        }
+        None => None,
+    };
+    let route = match &session {
+        Some((id, true)) => Route::Session { id: id.clone() },
+        _ => std::env::var("OPENCODE_ROUTE")
+            .ok()
+            .and_then(|value| opencode_tui::features::startup::env_route(&value))
+            .unwrap_or(Route::Home),
+    };
+    let local = context.server.server.is_none();
+    let tui_args = Args {
+        version: crate::help::VERSION.to_owned(),
+        prompt: args.prompt.clone(),
+        new_session_id: session
+            .as_ref()
+            .and_then(|(id, found)| (!found).then(|| id.clone())),
+        local,
+        managed: matches!(connection.source, Source::Service { .. }),
+        ..Args::default()
     };
     // The TUI's tasks run on this runtime: `App::runtime` uses the multi-threaded runtime it starts in.
     let _guard = runtime.enter();
@@ -68,6 +90,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             continue_: args.continue_ && args.session.is_none(),
             events: true,
         },
+        args: tui_args,
         keep: Box::new(connection),
     })?;
     Ok(())
