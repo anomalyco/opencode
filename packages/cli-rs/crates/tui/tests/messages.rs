@@ -92,7 +92,13 @@ struct Harness {
     log: Arc<Mutex<Vec<String>>>,
 }
 
-fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, info: Info) -> Harness {
+fn open(
+    height: u16,
+    session: Value,
+    messages: Vec<Value>,
+    inbox: Vec<Value>,
+    info: Info,
+) -> Harness {
     // A message that does not decode would drop its whole page.
     for message in &messages {
         if let Err(error) = serde_json::from_value::<SessionMessageInfo>(message.clone()) {
@@ -204,8 +210,14 @@ fn compactions_show_their_status_summary_and_queue() {
     let h = open(40, session(json!({})), messages, inbox, Info::default());
     let screen = h.wait_for("Compaction queued");
     // A rule on each side of the status; the summary as Markdown under it.
-    assert!(screen.contains("─ Compaction · 1.3K in · 300 out ─"), "{screen}");
-    assert!(screen.contains("   The user asked about parsing."), "{screen}");
+    assert!(
+        screen.contains("─ Compaction · 1.3K in · 300 out ─"),
+        "{screen}"
+    );
+    assert!(
+        screen.contains("   The user asked about parsing."),
+        "{screen}"
+    );
     assert!(screen.contains("─ ✗ Compaction ─"), "{screen}");
     assert!(screen.contains("   context too large"), "{screen}");
     assert!(screen.contains("─ Compaction · cancelled ─"), "{screen}");
@@ -215,7 +227,14 @@ fn compactions_show_their_status_summary_and_queue() {
     // The running compaction waits for the turn, after the rest; the queued one comes last.
     in_order(
         &screen,
-        &["1.3K in", "Second question", "✗ Compaction", "cancelled", "⋯ Compaction", "◇"],
+        &[
+            "1.3K in",
+            "Second question",
+            "✗ Compaction",
+            "cancelled",
+            "⋯ Compaction",
+            "◇",
+        ],
     );
     assert!(
         h.log
@@ -250,7 +269,13 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
             "metadata": { "source": "subagent", "state": "completed", "agent": "explore", "childID": "ses_child" },
         }),
     ];
-    let h = open(50, session(json!({})), messages, Vec::new(), Info::default());
+    let h = open(
+        50,
+        session(json!({})),
+        messages,
+        Vec::new(),
+        Info::default(),
+    );
     let screen = h.wait_for("Explore finished");
     // The shell's output collapses to its tail; a nonzero exit is the block's error.
     assert!(screen.contains("┃  $ seq 15"), "{screen}");
@@ -259,11 +284,20 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
     assert!(!screen.contains("out 8\n"), "{screen}");
     assert!(screen.contains("┃  Command exited with code 1"), "{screen}");
     assert!(screen.contains("   → Skill rust"), "{screen}");
-    assert!(screen.contains("   Switched agent from Build to Plan"), "{screen}");
-    assert!(screen.contains("   Switched model to openai/gpt-5"), "{screen}");
+    assert!(
+        screen.contains("   Switched agent from Build to Plan"),
+        "{screen}"
+    );
+    assert!(
+        screen.contains("   Switched model to openai/gpt-5"),
+        "{screen}"
+    );
     assert!(screen.contains("   ↳ Moved to /elsewhere"), "{screen}");
     assert!(screen.contains("   ◈ Instructions updated"), "{screen}");
-    assert!(screen.contains("   ↳ Explore finished · Review   the"), "{screen}");
+    assert!(
+        screen.contains("   ↳ Explore finished · Review   the"),
+        "{screen}"
+    );
 
     // A click opens the whole output.
     h.app.click(10, h.row("$ seq 15"));
@@ -273,12 +307,10 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
 
     // A click on a subagent's completion opens its session.
     h.app.click(8, h.row("Explore finished"));
-    assert!(
-        h.app.wait_until(Duration::from_secs(5), || matches!(
-            h.tui.route(),
-            Route::Session { id } if id.0 == "ses_child"
-        ))
-    );
+    assert!(h.app.wait_until(Duration::from_secs(5), || matches!(
+        h.tui.route(),
+        Route::Session { id } if id.0 == "ses_child"
+    )));
 }
 
 #[test]
@@ -296,12 +328,20 @@ fn errors_notices_and_retries_follow_the_footer_rules() {
     });
     let messages = vec![
         user("msg_1", 1000, "Go"),
-        failed("msg_2", 2000, json!({ "type": "provider", "message": "bad request" })),
+        failed(
+            "msg_2",
+            2000,
+            json!({ "type": "provider", "message": "bad request" }),
+        ),
         json!({
             "id": "msg_3", "type": "idle", "outcome": "failed", "time": { "created": 2500 },
             "error": { "type": "execution", "message": "the runner crashed" },
         }),
-        failed("msg_4", 3000, json!({ "type": "provider.free-limit", "message": "free limit" })),
+        failed(
+            "msg_4",
+            3000,
+            json!({ "type": "provider.free-limit", "message": "free limit" }),
+        ),
         failed(
             "msg_5",
             4000,
@@ -309,11 +349,20 @@ fn errors_notices_and_retries_follow_the_footer_rules() {
         ),
         retrying,
     ];
-    let h = open(50, session(json!({})), messages, Vec::new(), Info::default());
+    let h = open(
+        50,
+        session(json!({})),
+        messages,
+        Vec::new(),
+        Info::default(),
+    );
     let screen = h.wait_for("Retry due");
     assert!(screen.contains("   Error: bad request"), "{screen}");
     assert!(screen.contains("   Error: the runner crashed"), "{screen}");
-    assert!(screen.contains("   You've used today's free messages."), "{screen}");
+    assert!(
+        screen.contains("   You've used today's free messages."),
+        "{screen}"
+    );
     assert!(
         screen.contains("   Upgrade to OpenCode Go → /connect · Switch model → /models"),
         "{screen}"
@@ -324,10 +373,19 @@ fn errors_notices_and_retries_follow_the_footer_rules() {
         screen.contains("  ┃ Paid models are paused. Switch to a free model with"),
         "{screen}"
     );
-    assert!(screen.contains("   ⚠ Retry due · attempt 2 · overloaded"), "{screen}");
+    assert!(
+        screen.contains("   ⚠ Retry due · attempt 2 · overloaded"),
+        "{screen}"
+    );
     in_order(
         &screen,
-        &["bad request", "runner crashed", "free messages", "Usage limit", "Retry due"],
+        &[
+            "bad request",
+            "runner crashed",
+            "free messages",
+            "Usage limit",
+            "Retry due",
+        ],
     );
 }
 
@@ -336,7 +394,11 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
     let messages = vec![
         user("msg_1", 1000, "Keep this"),
         user("msg_2", 2000, "Undo this"),
-        assistant("msg_3", 3000, json!([{ "type": "text", "text": "Edited the file" }])),
+        assistant(
+            "msg_3",
+            3000,
+            json!([{ "type": "text", "text": "Edited the file" }]),
+        ),
         user("msg_4", 4000, "And this"),
     ];
     let revert = json!({ "revert": {
@@ -379,7 +441,13 @@ fn a_long_running_shell_call_shows_the_background_hint() {
             }]),
         ),
     ];
-    let h = open(20, session(json!({})), messages, Vec::new(), Info::default());
+    let h = open(
+        20,
+        session(json!({})),
+        messages,
+        Vec::new(),
+        Info::default(),
+    );
     let screen = h.wait_for("to move running work to the background");
     assert!(
         screen.contains("   Press ctrl+b to move running work to the background"),
@@ -394,19 +462,16 @@ fn a_long_running_shell_call_shows_the_background_hint() {
             "executed": true, "content": [{ "type": "text", "text": "done" }],
         }),
     );
-    assert!(h.app.wait_until(Duration::from_secs(5), || !h
-        .app
-        .text()
-        .contains("background")));
+    assert!(h.app.wait_until(Duration::from_secs(5), || {
+        !h.app.text().contains("background")
+    }));
 }
 
 #[test]
 fn image_previews_show_three_and_count_the_rest() {
     // A 1x1 PNG.
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
-    let image = |name: &str, data: &str| {
-        json!({ "data": data, "mime": "image/png", "name": name, "source": { "type": "inline" } })
-    };
+    let image = |name: &str, data: &str| json!({ "data": data, "mime": "image/png", "name": name, "source": { "type": "inline" } });
     let mut message = user("msg_1", 1000, "Look at these");
     message["files"] = json!([
         image("a.png", png),
@@ -421,14 +486,26 @@ fn image_previews_show_three_and_count_the_rest() {
         }),
         ..Info::default()
     };
-    let h = open(24, session(json!({})), vec![message.clone()], Vec::new(), on);
+    let h = open(
+        24,
+        session(json!({})),
+        vec![message.clone()],
+        Vec::new(),
+        on,
+    );
     let screen = h.wait_for("+1 more");
     // An image that does not decode says so.
     assert!(screen.contains("No preview"), "{screen}");
     in_order(&screen, &["No preview", "+1 more", "Look at these"]);
 
     // Off by default: only the chips.
-    let h = open(24, session(json!({})), vec![message], Vec::new(), Info::default());
+    let h = open(
+        24,
+        session(json!({})),
+        vec![message],
+        Vec::new(),
+        Info::default(),
+    );
     let screen = h.wait_for("Look at these");
     assert!(!screen.contains("more"), "{screen}");
     assert!(screen.contains("file  a.png"), "{screen}");
@@ -440,7 +517,13 @@ fn a_live_free_limit_stop_restores_the_prompt_and_offers_go() {
         user("msg_1", 1000, "Write the tests"),
         assistant("msg_2", 2000, json!([])),
     ];
-    let h = open(30, session(json!({})), messages, Vec::new(), Info::default());
+    let h = open(
+        30,
+        session(json!({})),
+        messages,
+        Vec::new(),
+        Info::default(),
+    );
     h.wait_for("Write the tests");
     h.apply(
         "session.step.failed",
@@ -451,7 +534,15 @@ fn a_live_free_limit_stop_restores_the_prompt_and_offers_go() {
         }),
     );
     let screen = h.wait_for("Free limit reached");
-    assert!(screen.contains("You've used today's free messages."), "{screen}");
-    let prompt = h.tui.textarea.borrow().clone().expect("the prompt is focused");
+    assert!(
+        screen.contains("You've used today's free messages."),
+        "{screen}"
+    );
+    let prompt = h
+        .tui
+        .textarea
+        .borrow()
+        .clone()
+        .expect("the prompt is focused");
     assert_eq!(prompt.text(), "Write the tests");
 }
