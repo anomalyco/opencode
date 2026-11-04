@@ -77,9 +77,7 @@ impl Shell {
         let raised = theme.background.raised.base;
         let command = Text::new(cx.app, "").fg(theme.text.base);
         let header = View::new(cx.app).column();
-        let output = Text::new(cx.app, "")
-            .fg(theme.text.muted)
-            .visible(false);
+        let output = Text::new(cx.app, "").fg(theme.text.muted).visible(false);
         let body = View::new(cx.app)
             .column()
             .gap(1)
@@ -345,15 +343,22 @@ impl Inner {
                 let row = View::new(&self.app)
                     .row()
                     .gap(1)
-                    .child(&Spinner::new(&self.app).color(theme.text.base).animations(self.animations))
+                    .child(
+                        &Spinner::new(&self.app)
+                            .color(theme.text.base)
+                            .animations(self.animations),
+                    )
                     .child(&self.command.clone().grow(1.0).min_width(0));
                 self.header.add(&row);
             } else {
                 self.header.add(&self.command);
             }
         }
-        self.command
-            .wrap(if expanded { WrapMode::Word } else { WrapMode::Char });
+        self.command.wrap(if expanded {
+            WrapMode::Word
+        } else {
+            WrapMode::Char
+        });
         if expanded {
             self.command.max_height(Length::Undefined);
         } else {
@@ -414,9 +419,7 @@ pub fn collapse_shell_output(
         };
     }
     let lines = max_lines.saturating_sub(command_lines + 1).max(1);
-    let chars = max_chars
-        .saturating_sub(command.chars().count() + 2)
-        .max(1);
+    let chars = max_chars.saturating_sub(command.chars().count() + 2).max(1);
     let overflow = collapse_tool_output(output, lines, chars).1;
     Collapsed {
         input: command,
@@ -498,8 +501,14 @@ fn collapse_tail(output: &str, max_lines: usize, max_chars: usize) -> String {
     if lines.len() <= max_lines && output.chars().count() <= max_chars {
         return output.to_owned();
     }
-    let count = lines.len().saturating_sub(max_lines.saturating_sub(1)).max(1);
-    let label = format!("({count} earlier {})", if count == 1 { "line" } else { "lines" });
+    let count = lines
+        .len()
+        .saturating_sub(max_lines.saturating_sub(1))
+        .max(1);
+    let label = format!(
+        "({count} earlier {})",
+        if count == 1 { "line" } else { "lines" }
+    );
     if max_lines <= 1 {
         return label;
     }

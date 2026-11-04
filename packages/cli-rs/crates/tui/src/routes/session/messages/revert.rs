@@ -136,9 +136,8 @@ impl Inner {
         let muted = theme.text.muted;
         self.body.clear();
         let plural = if props.count == 1 { "" } else { "s" };
-        self.body.add(
-            &Text::new(app, format!("{} message{plural} reverted", props.count)).fg(muted),
-        );
+        self.body
+            .add(&Text::new(app, format!("{} message{plural} reverted", props.count)).fg(muted));
         if !props.files.is_empty() {
             let list = View::new(app)
                 .column()
@@ -191,7 +190,9 @@ impl Inner {
             async move {
                 client
                     .session_revert_clear(
-                        &SessionRevertClearInput { session_id: session },
+                        &SessionRevertClearInput {
+                            session_id: session,
+                        },
                         &RequestOptions::default(),
                     )
                     .await
