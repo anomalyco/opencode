@@ -55,6 +55,10 @@ impl Data {
         for follow in follows {
             self.follow(follow);
         }
+        for event in events.iter().filter(|event| is_signal(event)) {
+            // No receiver is not an error: views subscribe when they need to.
+            let _ = self.inner.signals.send(event.clone());
+        }
     }
 
     /// Every read goes through `refresh`, which checks the connection before building it. A
@@ -349,6 +353,18 @@ pub async fn run(
             }
         }
     }
+}
+
+fn is_signal(event: &V2Event) -> bool {
+    matches!(
+        event,
+        V2Event::TuiCommandExecute(_)
+            | V2Event::TuiToastShow(_)
+            | V2Event::TuiSessionSelect(_)
+            | V2Event::TuiPromptAppend(_)
+            | V2Event::SessionDeleted(_)
+            | V2Event::SessionMoved(_)
+    )
 }
 
 /// The `/api/event` stream of a client, for F.3's [`events::connect`].
