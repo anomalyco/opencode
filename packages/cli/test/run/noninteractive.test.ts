@@ -100,6 +100,50 @@ function executionFailed(message: string): V2Event {
   }
 }
 
+function idleMessage(outcome: "succeeded" | "failed" | "interrupted", id = "msg_idle") {
+  return {
+    id,
+    type: "idle",
+    outcome,
+    ...(outcome === "failed" ? { error: { type: "provider.transport", message: "Execution failed" } } : {}),
+    time: { created: 5 },
+  } satisfies SessionMessageInfo
+}
+
+// A step that failed and was retried, followed by the step that recovered.
+function recoveredMessages(outcome: "succeeded" | "failed" | "interrupted") {
+  return (messageID: string): SessionMessageInfo[] => [
+    idleMessage(outcome),
+    {
+      id: "msg_recovered",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+      content: [{ type: "text", text: "Recovered answer" }],
+      finish: "stop",
+      time: { created: 3, completed: 4 },
+    },
+    {
+      id: "msg_assistant",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+      content: [],
+      finish: "error",
+      error: { type: "provider.transport", message: "Recovered transport error" },
+      time: { created: 2, completed: 3 },
+    },
+    { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+  ]
+}
+
+function jsonLines(stdout: string) {
+  return stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+}
+
 function failedTool(inboxID: string): V2Event[] {
   return [
     prompted(inboxID),
@@ -219,6 +263,7 @@ async function run(input: {
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   jobs?: () => ExperimentalJobListOutput
+  inbox?: (sessionID: string) => unknown[]
   terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
@@ -258,7 +303,7 @@ async function run(input: {
   spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
   spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(input.jobs?.() ?? []) as never)
   spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
-  spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.session.inbox, "list").mockImplementation(({ sessionID }) => ok(input.inbox?.(sessionID) ?? []) as never)
   spyOn(sdk.session, "get").mockImplementation(
     ({ sessionID }) => ok({ id: sessionID, parentID: sessionID === "ses_child" ? "ses_1" : undefined }) as never,
   )
@@ -370,6 +415,7 @@ describe("runNonInteractivePrompt", () => {
       turn: (messageID) => [prompted(messageID)],
       wait: () => idle.promise,
       messages: (messageID) => [
+        idleMessage("succeeded"),
         {
           id: "msg_assistant",
           type: "assistant",
@@ -405,6 +451,7 @@ describe("runNonInteractivePrompt", () => {
   test("reports usage for a step that ends after the Session goes idle", async () => {
     const tokens = { input: 3, output: 5, reasoning: 7, cache: { read: 11, write: 13 } }
     const assistant = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
       {
         id: "msg_assistant",
         type: "assistant",
@@ -481,6 +528,83 @@ describe("runNonInteractivePrompt", () => {
       expect(output.exitCode).toBe(1)
       expect(output.stdout).toContain("selection unavailable")
     }
+  })
+
+  test("a recovered step failure exits 0, reports its retry, and still waits for background work", async () => {
+    const lists: ExperimentalJobListOutput[] = [[shellJob("sh_train", "python train.py")], []]
+    const retry = { attempt: 1, error: { type: "provider.transport", message: "Recovered transport error" } }
+    const output = await capture({
+      format: "json",
+      jobs: () => lists.shift() ?? [],
+      messages: recoveredMessages("succeeded"),
+      turn: (id) => [
+        prompted(id),
+        stepFailed("Recovered transport error"),
+        {
+          id: "evt_retry",
+          created: 3,
+          type: "session.retry.scheduled",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", at: 2003, ...retry },
+        },
+        settled(),
+        {
+          id: "evt_text",
+          created: 4,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_2", ordinal: 0, text: "Training finished." },
+        },
+        settled(),
+      ],
+    })
+    expect(output.exitCode).toBe(0)
+    expect(jsonLines(output.stdout).filter((event) => event.type === "error" || event.type === "retry")).toEqual([
+      { type: "retry", timestamp: 3, sessionID: "ses_1", messageID: "msg_assistant", nextRetryAt: 2003, ...retry },
+    ])
+    expect(output.stdout).toContain("Training finished.")
+    expect(lists).toEqual([])
+  })
+
+  for (const outcome of ["failed", "interrupted"] as const) {
+    test(`a final ${outcome} outcome exits 1 with one error when the live event is dropped`, async () => {
+      const output = await capture({
+        format: "json",
+        turn: (id) => [prompted(id)],
+        // Without the failed step, so only the idle marker can report the outcome.
+        messages: (id) => recoveredMessages(outcome)(id).filter((message) => message.id !== "msg_assistant"),
+        wait: () => Promise.resolve(),
+      })
+      expect(output.exitCode).toBe(1)
+      expect(jsonLines(output.stdout).filter((event) => event.type === "error")).toHaveLength(1)
+    })
+  }
+
+  test("only the first idle marker after the prompt decides the outcome", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (id) => [prompted(id)],
+      wait: () => Promise.resolve(),
+      messages: (messageID) => [
+        idleMessage("failed", "msg_later_idle"),
+        { id: "msg_other_prompt", type: "user", text: "another client", time: { created: 6 } },
+        ...recoveredMessages("succeeded")(messageID),
+        idleMessage("failed", "msg_previous_idle"),
+      ],
+    })
+    expect(output.exitCode).toBe(0)
+    expect(output.stdout).not.toContain('"type":"error"')
+  })
+
+  test("a prompt left in the inbox by a failure before promotion does not hang", async () => {
+    const output = await capture({
+      format: "json",
+      turn: () => [executionFailed("instructions unavailable")],
+      messages: () => [],
+      inbox: (sessionID) => (sessionID === "ses_1" ? [{ id: "msg_prompt" }] : []),
+    })
+    expect(output.exitCode).toBe(1)
+    expect(output.stdout).toContain("instructions unavailable")
   })
 
   test("cancels session and global form blockers and exits on pre-promotion interrupt", async () => {
