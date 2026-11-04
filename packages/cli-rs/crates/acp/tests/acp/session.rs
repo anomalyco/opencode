@@ -1,5 +1,4 @@
-//! `session.test.ts`. Left to C.12: the replayed `user_message_chunk` updates of `session/load` (the
-//! load case here checks everything else).
+//! `session.test.ts`.
 
 use serde_json::{Value, json};
 
@@ -105,6 +104,14 @@ async fn load_resume_and_fork_keep_the_selection_and_check_the_directory() {
         resume["agent"] = json!("plan");
         resume["model"] = json!({ "providerID": "test", "id": "second-model", "variant": "low" });
         state.sessions.insert("ses_resume".to_owned(), resume);
+        let history: Vec<Value> = (0..201)
+            .map(|index| json!({ "id": format!("msg_{index}"), "type": "user", "text": format!("message {index}"), "time": { "created": index } }))
+            .collect();
+        state.messages.insert("ses_loaded".to_owned(), history);
+        state.messages.insert(
+            "ses_resume".to_owned(),
+            vec![json!({ "id": "msg_resume", "type": "user", "text": "hidden", "time": { "created": 1 } })],
+        );
     }
     acp.initialize(json!({})).await;
     let params = |cwd: &str, id: &str| json!({ "cwd": cwd, "sessionId": id, "mcpServers": [] });
@@ -160,6 +167,30 @@ async fn load_resume_and_fork_keep_the_selection_and_check_the_directory() {
     assert_eq!(current_value(&forked, "effort"), json!("medium"));
     let forked_id = forked["sessionId"].as_str().unwrap();
     assert!(acp.server.state().sessions.contains_key(forked_id));
+    let replayed = |session_id: &str| -> Vec<Value> {
+        acp.updates()
+            .into_iter()
+            .filter(|item| {
+                item["sessionId"] == session_id
+                    && item["update"]["sessionUpdate"] == "user_message_chunk"
+            })
+            .map(|item| item["update"].clone())
+            .collect()
+    };
+    let loaded_ids: Vec<Value> = replayed("ses_loaded")
+        .iter()
+        .map(|update| update["messageId"].clone())
+        .collect();
+    let history: Vec<Value> = (0..201)
+        .map(|index| json!(format!("msg_{index}")))
+        .collect();
+    assert_eq!(loaded_ids, history);
+    assert!(replayed(forked_id).is_empty());
+    assert!(replayed("ses_resume").is_empty());
+    assert_eq!(
+        replayed("ses_loaded")[0],
+        json!({ "sessionUpdate": "user_message_chunk", "messageId": "msg_0", "content": { "type": "text", "text": "message 0" } })
+    );
 }
 
 // Labels what the agent sends from the request until the commands that follow it, in wire order.
@@ -193,6 +224,10 @@ async fn publishes_a_sessions_commands_after_the_response_that_attaches_it() {
         "ses_loaded".to_owned(),
         make_session("ses_loaded", "/workspace"),
     );
+    acp.server.state().messages.insert(
+        "ses_loaded".to_owned(),
+        vec![json!({ "id": "msg_0", "type": "user", "text": "hello", "time": { "created": 0 } })],
+    );
     acp.initialize(json!({})).await;
     let params = json!({ "cwd": "/workspace", "sessionId": "ses_loaded", "mcpServers": [] });
     let expected = vec![
@@ -209,10 +244,13 @@ async fn publishes_a_sessions_commands_after_the_response_that_attaches_it() {
         .await,
         expected
     );
-    // C.12: TS replays `user_message_chunk` before the response.
     assert_eq!(
         until_commands(&acp, "session/load", params.clone()).await,
-        expected
+        [
+            "user_message_chunk",
+            "response",
+            "available_commands_update"
+        ]
     );
     assert_eq!(
         until_commands(&acp, "session/resume", params.clone()).await,

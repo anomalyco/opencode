@@ -1,14 +1,13 @@
-//! `turn.test.ts`. Left to C.12: the permission titles built from tool input ("Deeper:
-//! /workspace/src/index.ts"); the routing, IDs, and replies are checked here.
+//! `turn.test.ts`.
 
 use std::sync::Arc;
 
 use serde_json::{Value, json};
 
 use crate::wire::{
-    WireOptions, assert_matches, child_created, delivered, durable_event, ephemeral_event, events,
-    lock, permission_asked, start_session, succeeded, text_delta, tool_called, tool_started,
-    tool_succeeded, turn,
+    Reply, WireOptions, assert_matches, child_created, delivered, durable_event, ephemeral_event,
+    events, lock, permission_asked, start_session, succeeded, text_delta, tool_called,
+    tool_started, tool_succeeded, turn,
 };
 
 fn child_work() -> WireOptions {
@@ -46,9 +45,9 @@ fn child_work() -> WireOptions {
                 ],
             )
         })),
-        permission: Some(Arc::new(
-            |_| json!({ "outcome": { "outcome": "selected", "optionId": "once" } }),
-        )),
+        permission: Some(Arc::new(|_| {
+            Reply::Result(json!({ "outcome": { "outcome": "selected", "optionId": "once" } }))
+        })),
         ..WireOptions::default()
     }
 }
@@ -104,11 +103,12 @@ async fn child_sessions(child_session_updates: bool, parent: Value, child: Value
     assert_matches(
         &json!(lock(&acp.permissions).clone()),
         &json!([
-            { "sessionId": acp.session_id, "toolCall": { "toolCallId": "ses_grandchild:call_read", "_meta": grandchild } },
+            { "sessionId": acp.session_id, "toolCall": { "toolCallId": "ses_grandchild:call_read", "title": "Deeper: /workspace/src/index.ts", "_meta": grandchild } },
             {
                 "sessionId": acp.session_id,
                 "toolCall": {
                     "toolCallId": "ses_background:perm_background",
+                    "title": "Research: /workspace/notes.md",
                     "_meta": { "opencode/child-session": { "id": "ses_background", "parentID": acp.session_id, "depth": 1, "title": "Research" } },
                 },
             },
