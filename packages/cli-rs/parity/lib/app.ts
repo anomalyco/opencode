@@ -22,8 +22,6 @@ export type Step =
   // A left-button drag from one cell to another, `[[x, y], [x, y]]`; TS moves in five steps, Rust one cell at a
   // time, and both end with the release on the target cell.
   | { drag: [[number, number], [number, number]] }
-  // A left click at a cell.
-  | { click: [number, number] }
   | {
       checkpoint: string
       // Text the TS frame contains once it is ready.
