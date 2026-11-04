@@ -5,7 +5,9 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::core::canvas::{Canvas, SizeError};
-use crate::core::text::{first_meaningful_line, js_trim, meaningful_lines, split_lines, strip_quotes, width};
+use crate::core::text::{
+    first_meaningful_line, js_trim, meaningful_lines, split_lines, strip_quotes, width,
+};
 use crate::{Kind, SyntaxError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -41,7 +43,8 @@ fn pattern(source: &str) -> Regex {
 static HEADER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^timeline(?:\s+(TD|LR))?$"));
 static TITLE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^title(?:\s+(.+))?$"));
 static SECTION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^section(?:\s+(.+))?$"));
-static ACCESSIBILITY: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^acc(?:Title|Descr)(?::|\s|$)"));
+static ACCESSIBILITY: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^acc(?:Title|Descr)(?::|\s|$)"));
 static ACC_BLOCK: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^accDescr\s*\{$"));
 
 pub fn is_timeline(content: &str) -> bool {
@@ -59,7 +62,12 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut current: Option<usize> = None;
     let mut in_description = false;
     for source in meaningful_lines(content) {
-        let line = js_trim(source.text.find("%%").map_or(source.text, |index| &source.text[..index]));
+        let line = js_trim(
+            source
+                .text
+                .find("%%")
+                .map_or(source.text, |index| &source.text[..index]),
+        );
         let n = source.number;
         if in_description {
             if line == "}" {
@@ -71,7 +79,11 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             in_description = true;
             continue;
         }
-        if line.is_empty() || line.starts_with('#') || ACCESSIBILITY.is_match(line) || HEADER.is_match(line) {
+        if line.is_empty()
+            || line.starts_with('#')
+            || ACCESSIBILITY.is_match(line)
+            || HEADER.is_match(line)
+        {
             continue;
         }
         if let Some(captures) = TITLE.captures(line) {
@@ -91,10 +103,17 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         }
         if let Some(rest) = line.strip_prefix(':') {
             let Some(index) = current else {
-                return Err(error(n, line, "Timeline continuation requires a preceding period"));
+                return Err(error(
+                    n,
+                    line,
+                    "Timeline continuation requires a preceding period",
+                ));
             };
             let events = parse_events(split_fields(rest), n, line)?;
-            if let Some(Entry::Period { events: existing, .. }) = entries.get_mut(index) {
+            if let Some(Entry::Period {
+                events: existing, ..
+            }) = entries.get_mut(index)
+            {
                 existing.extend(events);
             }
             continue;
@@ -104,7 +123,11 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         if period.is_empty() {
             return Err(error(n, line, "Timeline period cannot be empty"));
         }
-        let events = if fields.is_empty() { Vec::new() } else { parse_events(fields, n, line)? };
+        let events = if fields.is_empty() {
+            Vec::new()
+        } else {
+            parse_events(fields, n, line)?
+        };
         entries.push(Entry::Period { period, events });
         current = Some(entries.len() - 1);
     }
@@ -164,33 +187,69 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
             Entry::Section(label) => {
                 let lines = split_lines(label);
                 body_height += lines.len() as i32 + 1;
-                left_width = lines.iter().map(|line| width(line)).fold(left_width, i32::max);
+                left_width = lines
+                    .iter()
+                    .map(|line| width(line))
+                    .fold(left_width, i32::max);
                 layouts.push(None);
             }
             Entry::Period { period, events } => {
                 let period_lines = split_lines(period);
-                let event_lines: Vec<Vec<String>> = events.iter().map(|event| split_lines(event)).collect();
+                let event_lines: Vec<Vec<String>> =
+                    events.iter().map(|event| split_lines(event)).collect();
                 let event_height: i32 = event_lines.iter().map(|lines| lines.len() as i32).sum();
                 let height = (period_lines.len() as i32).max(event_height);
-                left_width = period_lines.iter().map(|line| width(line)).fold(left_width, i32::max);
-                right_width = event_lines.iter().flatten().map(|line| width(line)).fold(right_width, i32::max);
+                left_width = period_lines
+                    .iter()
+                    .map(|line| width(line))
+                    .fold(left_width, i32::max);
+                right_width = event_lines
+                    .iter()
+                    .flatten()
+                    .map(|line| width(line))
+                    .fold(right_width, i32::max);
                 body_height += height + 1;
-                layouts.push(Some(Layout { period_lines, event_lines, height }));
+                layouts.push(Some(Layout {
+                    period_lines,
+                    event_lines,
+                    height,
+                }));
             }
         }
     }
-    let title_lines = diagram.title.as_deref().map(split_lines).unwrap_or_default();
+    let title_lines = diagram
+        .title
+        .as_deref()
+        .map(split_lines)
+        .unwrap_or_default();
     let empty = diagram.entries.is_empty();
-    let body_width = if empty { 0 } else { left_width + SPINE_OFFSET + EVENT_OFFSET + right_width + 1 };
-    let title_width = title_lines.iter().map(|line| width(line)).max().unwrap_or(0);
+    let body_width = if empty {
+        0
+    } else {
+        left_width + SPINE_OFFSET + EVENT_OFFSET + right_width + 1
+    };
+    let title_width = title_lines
+        .iter()
+        .map(|line| width(line))
+        .max()
+        .unwrap_or(0);
     let grid_width = body_width.max(title_width);
-    let title_height = if title_lines.is_empty() { 0 } else { title_lines.len() as i32 + i32::from(!empty) };
+    let title_height = if title_lines.is_empty() {
+        0
+    } else {
+        title_lines.len() as i32 + i32::from(!empty)
+    };
     if grid_width == 0 {
         return Grid::new(0, 0, None);
     }
     let mut grid = Grid::new(grid_width, title_height + body_height, None)?;
     for (index, line) in title_lines.iter().enumerate() {
-        grid.text((grid_width - width(line)).div_euclid(2), index as i32, line, Some(Style::Title));
+        grid.text(
+            (grid_width - width(line)).div_euclid(2),
+            index as i32,
+            line,
+            Some(Style::Title),
+        );
     }
     if empty {
         return Ok(grid);
@@ -217,7 +276,12 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
                 }
             }
             join(&mut grid, y, Style::SectionFade);
-            grid.set(spine, y, if rail_started { "┤" } else { "┐" }, Some(Style::Spine));
+            grid.set(
+                spine,
+                y,
+                if rail_started { "┤" } else { "┐" },
+                Some(Style::Spine),
+            );
             grid.set(spine, y + lines.len() as i32, "│", Some(Style::Spine));
             rail_started = true;
             y += lines.len() as i32 + 1;
@@ -229,13 +293,23 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
         rail_started = true;
         grid.set(spine, y, "●", Some(Style::Spine));
         for (index, line) in layout.period_lines.iter().enumerate() {
-            grid.text(left_width - width(line), y + index as i32, line, Some(Style::Period));
+            grid.text(
+                left_width - width(line),
+                y + index as i32,
+                line,
+                Some(Style::Period),
+            );
         }
         join(&mut grid, y, Style::PeriodFade);
         let mut event_y = y;
         for lines in &layout.event_lines {
             for (index, line) in lines.iter().enumerate() {
-                grid.text(spine + EVENT_OFFSET, event_y + index as i32, line, Some(Style::Event));
+                grid.text(
+                    spine + EVENT_OFFSET,
+                    event_y + index as i32,
+                    line,
+                    Some(Style::Event),
+                );
             }
             event_y += lines.len() as i32;
         }

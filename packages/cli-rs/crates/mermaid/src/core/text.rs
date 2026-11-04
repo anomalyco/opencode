@@ -16,8 +16,16 @@ pub fn width(value: &str) -> i32 {
     value.graphemes(true).map(grapheme_width).sum()
 }
 
+/// A grapheme's width as `string-width` counts it: two for wide characters and emoji (by its first code point),
+/// none for zero-width ones, else one.
 pub fn grapheme_width(grapheme: &str) -> i32 {
-    grapheme.width().min(2) as i32
+    let Some(first) = grapheme.chars().next() else {
+        return 0;
+    };
+    if super::wide::is_wide(first) {
+        return 2;
+    }
+    i32::from(grapheme.width() > 0)
 }
 
 pub fn graphemes(value: &str) -> impl Iterator<Item = &str> {
@@ -42,9 +50,19 @@ pub struct TextBox {
     pub lines: Vec<String>,
 }
 
-pub fn measure_text_box(value: &str, padding_x: i32, padding_y: i32, min_inner_width: i32) -> TextBox {
+pub fn measure_text_box(
+    value: &str,
+    padding_x: i32,
+    padding_y: i32,
+    min_inner_width: i32,
+) -> TextBox {
     let lines = split_lines(value);
-    let inner = lines.iter().map(|line| width(line)).max().unwrap_or(0).max(min_inner_width);
+    let inner = lines
+        .iter()
+        .map(|line| width(line))
+        .max()
+        .unwrap_or(0)
+        .max(min_inner_width);
     TextBox {
         width: inner + padding_x * 2,
         height: lines.len() as i32 + padding_y * 2,
@@ -64,8 +82,10 @@ pub struct TextLine {
     pub runs: Vec<TextRun>,
 }
 
-static BREAK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<br\s*/?>").expect("break pattern"));
-static ITALIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)</?(?:i|em)\s*>").expect("italic pattern"));
+static BREAK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)<br\s*/?>").expect("break pattern"));
+static ITALIC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)</?(?:i|em)\s*>").expect("italic pattern"));
 
 /// Splits `<br>` lines and `<i>`/`<em>` runs (`parseDiagramTextLines`).
 pub fn parse_lines(value: &str) -> Vec<TextLine> {
@@ -78,21 +98,33 @@ pub fn parse_lines(value: &str) -> Vec<TextLine> {
             let mut offset = 0;
             for tag in ITALIC.find_iter(source) {
                 if tag.start() > offset {
-                    runs.push(TextRun { text: source[offset..tag.start()].to_string(), italic });
+                    runs.push(TextRun {
+                        text: source[offset..tag.start()].to_string(),
+                        italic,
+                    });
                 }
                 italic = !tag.as_str().starts_with("</");
                 offset = tag.end();
             }
             if offset < source.len() {
-                runs.push(TextRun { text: source[offset..].to_string(), italic });
+                runs.push(TextRun {
+                    text: source[offset..].to_string(),
+                    italic,
+                });
             }
-            TextLine { text: runs.iter().map(|run| run.text.as_str()).collect(), runs }
+            TextLine {
+                text: runs.iter().map(|run| run.text.as_str()).collect(),
+                runs,
+            }
         })
         .collect()
 }
 
 pub fn split_lines(value: &str) -> Vec<String> {
-    parse_lines(value).into_iter().map(|line| line.text).collect()
+    parse_lines(value)
+        .into_iter()
+        .map(|line| line.text)
+        .collect()
 }
 
 /// JavaScript's `String.prototype.trim`.
@@ -107,10 +139,13 @@ pub struct NumberedLine<'a> {
 
 /// Each line of `content`, trimmed, with its 1-based number (`numberedMermaidLines`).
 pub fn numbered_lines(content: &str) -> impl Iterator<Item = NumberedLine<'_>> {
-    content.split('\n').enumerate().map(|(index, line)| NumberedLine {
-        number: index + 1,
-        text: js_trim(line.strip_suffix('\r').unwrap_or(line)),
-    })
+    content
+        .split('\n')
+        .enumerate()
+        .map(|(index, line)| NumberedLine {
+            number: index + 1,
+            text: js_trim(line.strip_suffix('\r').unwrap_or(line)),
+        })
 }
 
 /// The lines that are neither blank nor `%%` comments.
@@ -128,7 +163,11 @@ pub fn strip_quotes(value: &str) -> String {
         || (trimmed.starts_with('\'') && trimmed.ends_with('\''));
     if quoted {
         // TS `slice(1, -1)`: a lone quote leaves nothing.
-        return decode(trimmed.get(1..trimmed.len().saturating_sub(1)).unwrap_or(""));
+        return decode(
+            trimmed
+                .get(1..trimmed.len().saturating_sub(1))
+                .unwrap_or(""),
+        );
     }
     decode(trimmed)
 }

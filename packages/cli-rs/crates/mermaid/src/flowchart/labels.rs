@@ -38,7 +38,10 @@ pub fn vertical_branch_label_gap(width: i32) -> i32 {
 
 fn inline_label_slot(segment: &Segment, width: i32) -> (i32, bool) {
     let slot = inset_span(segment_span(segment), LABEL_LINE_CLEARANCE);
-    (centered_span_start(slot, width), span_capacity(slot) >= width)
+    (
+        centered_span_start(slot, width),
+        span_capacity(slot) >= width,
+    )
 }
 
 fn segment_label_point(segment: &Segment, width: i32, height: i32) -> Point {
@@ -60,8 +63,16 @@ fn segment_label_point(segment: &Segment, width: i32, height: i32) -> Point {
     if span_capacity(slot) >= height {
         return clamp_point(point(segment.from.x + 1, centered_span_start(slot, height)));
     }
-    let center = shift_point(point_on_segment(segment, midpoint(segment_span(segment))), Direction::Right, 1);
-    clamp_point(shift_point(center, Direction::Up, (height - 1).div_euclid(2)))
+    let center = shift_point(
+        point_on_segment(segment, midpoint(segment_span(segment))),
+        Direction::Right,
+        1,
+    );
+    clamp_point(shift_point(
+        center,
+        Direction::Up,
+        (height - 1).div_euclid(2),
+    ))
 }
 
 fn best_label_segment(
@@ -70,7 +81,10 @@ fn best_label_segment(
     preferred_axis: Option<Axis>,
     preferred_segment: Option<usize>,
 ) -> Option<Segment> {
-    let segments: Vec<Segment> = points.windows(2).filter_map(|pair| segment_between(pair[0], pair[1])).collect();
+    let segments: Vec<Segment> = points
+        .windows(2)
+        .filter_map(|pair| segment_between(pair[0], pair[1]))
+        .collect();
     if let Some(segment) = preferred_segment.and_then(|index| segments.get(index)) {
         return Some(*segment);
     }
@@ -115,7 +129,10 @@ pub fn edge_label_layout(
     preferred_axis: Option<Axis>,
     preferred_segment: Option<usize>,
 ) -> LabelLayout {
-    let lines: Vec<String> = split_lines(label).iter().map(|line| pad_label_line(line)).collect();
+    let lines: Vec<String> = split_lines(label)
+        .iter()
+        .map(|line| pad_label_line(line))
+        .collect();
     let width = label_width(label);
     let height = lines.len() as i32;
     LabelLayout {
@@ -127,7 +144,10 @@ pub fn edge_label_layout(
 }
 
 pub fn route_label_layout(route: &Route) -> LabelLayout {
-    let lines: Vec<String> = split_lines(&route.edge.label).iter().map(|line| pad_label_line(line)).collect();
+    let lines: Vec<String> = split_lines(&route.edge.label)
+        .iter()
+        .map(|line| pad_label_line(line))
+        .collect();
     let width = label_width(&route.edge.label);
     let height = lines.len() as i32;
     LabelLayout {

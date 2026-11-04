@@ -8,11 +8,12 @@ pub mod core;
 pub mod flowchart;
 pub mod gantt;
 pub mod gitgraph;
-pub mod sequence;
-pub mod timeline;
 mod palette;
 mod plugin;
 mod render;
+pub mod sequence;
+pub mod state;
+pub mod timeline;
 
 pub use palette::Palette;
 pub use plugin::{ID, Renderer, plugin, widget};
@@ -53,7 +54,12 @@ pub struct SyntaxError {
 
 impl SyntaxError {
     pub fn new(kind: Kind, line: usize, source: &str, reason: &str) -> Self {
-        Self { kind, line, source: source.to_string(), reason: reason.to_string() }
+        Self {
+            kind,
+            line,
+            source: source.to_string(),
+            reason: reason.to_string(),
+        }
     }
 
     pub fn unsupported(kind: Kind, line: usize, source: &str) -> Self {
@@ -63,7 +69,14 @@ impl SyntaxError {
 
 impl std::fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} in {} diagram at line {}: \"{}\"", self.reason, self.kind.name(), self.line, self.source)
+        write!(
+            f,
+            "{} in {} diagram at line {}: \"{}\"",
+            self.reason,
+            self.kind.name(),
+            self.line,
+            self.source
+        )
     }
 }
 
@@ -80,6 +93,9 @@ pub fn detect(content: &str) -> Option<Kind> {
     }
     if sequence::parser::is_sequence(content) {
         return Some(Kind::Sequence);
+    }
+    if state::parser::is_state(content) {
+        return Some(Kind::State);
     }
     if timeline::is_timeline(content) {
         return Some(Kind::Timeline);
