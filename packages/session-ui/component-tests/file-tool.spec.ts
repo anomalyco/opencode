@@ -30,6 +30,45 @@ story("keeps grouped file choices when the Used group reopens", async ({ mount }
   }
 })
 
+story("renders error diagnostics on timeline write results while filtering warnings", async ({ mount }) => {
+  const root = await mount("current-session-file-changes--changing-files", {
+    args: { scenario: "diagnostics" },
+    globals: { direction: "rtl" },
+  })
+
+  const item = root.locator('[data-timeline-part-id="prt_write_diagnostics"] [data-slot="accordion-item"]')
+  const trigger = item.getByRole("button", { name: /probe\.go/ })
+  const diagnostics = item.locator('[data-component="diagnostics"]')
+
+  await expect(trigger).toHaveAttribute("aria-expanded", "false")
+  await expect(diagnostics).toBeVisible()
+  await expect(diagnostics.locator('[data-slot="diagnostic-location"]')).toHaveAttribute("dir", "ltr")
+  await expect(diagnostics.locator('[data-slot="diagnostic-location"]')).toHaveText("[6:14]")
+  await expect(diagnostics.locator('[data-slot="diagnostic-message"]')).toHaveAttribute("dir", "auto")
+  await expect(diagnostics.locator('[data-slot="diagnostic-message"]')).toHaveText("cannot use string as int")
+  await expect(root.getByText("x declared and not used")).toHaveCount(0)
+
+  await trigger.click()
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
+  await expect(item.getByRole("region")).toBeVisible()
+  await expect(diagnostics).toBeVisible()
+})
+
+story("matches edit diagnostics across absolute input paths and replaces stale snapshots", async ({ mount }) => {
+  const root = await mount("current-session-file-changes--changing-files", {
+    args: { scenario: "diagnosticsEdit" },
+  })
+
+  const item = root.locator('[data-scope="apply-patch"] [data-slot="accordion-item"]')
+
+  await expect(item).toHaveCount(1)
+  await expect(item.locator('[data-component="diagnostics"]')).toContainText("[1:14]")
+  await expect(item.locator('[data-component="diagnostics"]')).toContainText("type mismatch after edit")
+
+  await root.getByRole("button", { name: "Apply fix edit" }).click()
+  await expect(item.locator('[data-component="diagnostics"]')).toHaveCount(0)
+})
+
 for (const tool of ["edit", "write"]) {
   story(`${tool} preserves input fallback and disclosure through completion`, async ({ mount }) => {
     const root = await mount("current-session-file-changes--file-tool-fallbacks", { args: { tool } })
