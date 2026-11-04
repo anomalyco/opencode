@@ -68,12 +68,12 @@ pub(crate) fn prompts(messages: &[SessionMessageInfo]) -> Vec<(String, String, f
         .collect()
 }
 
-/// `Locale.time`: `toLocaleTimeString(undefined, { timeStyle: "short" })` in en-US, which puts a narrow no-break
-/// space before AM/PM.
+/// `Locale.time`: `toLocaleTimeString(undefined, { timeStyle: "short" })` in en-US. Bun's ICU puts a plain space
+/// before AM/PM.
 pub(crate) fn time(created: f64) -> String {
     Local
         .timestamp_millis_opt(created as i64)
         .single()
-        .map(|date| date.format("%-I:%M\u{202f}%p").to_string())
+        .map(|date| date.format("%-I:%M %p").to_string())
         .unwrap_or_default()
 }
