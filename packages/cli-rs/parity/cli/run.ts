@@ -28,6 +28,8 @@ import { diffRecords } from "./diff"
 
 export type CliCase = {
   args: string[]
+  // Runs this program on each side instead of the CLI (`args` and `server` are then unused).
+  command?: (side: Side) => string[]
   // A fake server for `--server`; omit it for commands that need no server (`--version`, help).
   server?: Options
   env?: Record<string, string>
@@ -49,7 +51,7 @@ export type CliRecord = Awaited<ReturnType<typeof runCli>>
 export async function runCli(side: Side, value: CliCase) {
   const box = await sandbox(value.env)
   const server = value.server ? await startFakeServer(value.server) : undefined
-  const proc = Bun.spawn(command(side, withServer(value.args, server?.url)), {
+  const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,
     stdin: value.stdin === undefined ? "ignore" : new TextEncoder().encode(value.stdin),
