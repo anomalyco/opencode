@@ -4,7 +4,10 @@
   "height": 30,
   "directory": "/tmp/opencode/packages/tui",
   "config": {
-    "animations": false
+    "animations": false,
+    "experimental": {
+      "new-designs": true
+    }
   },
   "args": {
     "sessionID": "ses_b",
@@ -211,7 +214,7 @@
         "path": "/api/session/ses_b/prompt",
         "query": {},
         "body": {
-          "id": "msg_1a8504ce4001Pwc3gd9raC2N44",
+          "id": "msg_1a85cd549001I5N41b4fYiZMuz",
           "text": "hello",
           "files": [],
           "agents": [],
