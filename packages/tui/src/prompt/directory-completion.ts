@@ -56,6 +56,13 @@ export function directoryAutocompleteSearch(query: string, directory: string, ho
   if (/^(?:\.\.\/)*\.\.$/.test(query))
     return { directory: path.resolve(directory, query), prefix: query + "/", query: "" }
   if (query.startsWith("/")) return directorySearch(query.slice(1), path.parse(directory).root, "/")
+  if (process.platform === "win32") {
+    const drive = /^([A-Za-z]:)[\\/](.*)$/.exec(query)
+    if (drive)
+      // Search the typed drive instead of the current directory. Completion text uses
+      // the canonical "/" separator, which Windows resolution accepts alongside "\".
+      return directorySearch(drive[2].replace(/\\/g, "/"), drive[1] + "\\", drive[1] + "/")
+  }
   return directorySearch(query, directory, "")
 }
 

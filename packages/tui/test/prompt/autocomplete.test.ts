@@ -162,6 +162,32 @@ describe("directoryAutocompleteSearch", () => {
       query: "pro",
     })
   })
+
+  test.skipIf(process.platform !== "win32")("searches the typed drive for drive-letter paths", () => {
+    expect(directoryAutocompleteSearch("c:\\code", "D:\\current", "/home/user")).toEqual({
+      directory: "c:\\",
+      prefix: "c:/",
+      query: "code",
+    })
+    expect(directoryAutocompleteSearch("C:\\code\\po", "D:\\current", "/home/user")).toEqual({
+      directory: "C:\\code",
+      prefix: "C:/code/",
+      query: "po",
+    })
+    expect(directoryAutocompleteSearch("d:\\", "C:\\current", "/home/user")).toEqual({
+      directory: "d:\\",
+      prefix: "d:/",
+      query: "",
+    })
+  })
+
+  test.skipIf(process.platform === "win32")("keeps literal backslashes as relative names on POSIX", () => {
+    expect(directoryAutocompleteSearch("foo\\bar", "/project", "/home/user")).toEqual({
+      directory: "/project",
+      prefix: "",
+      query: "foo\\bar",
+    })
+  })
 })
 
 describe("directoryAutocompleteResultValue", () => {
