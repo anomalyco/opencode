@@ -60,7 +60,7 @@ const ToolCall = Schema.Struct({
 const Assistant = Schema.StructWithRest(
   Schema.Struct({
     ...OpenAIChat.OpenAIChatMessage.cases.assistant.schema.fields,
-    tool_calls: optionalArray(ToolCall),
+    tool_calls: optionalArray(Schema.Union([ToolCall, OpenAIChat.OpenAIChatAssistantCustomToolCall])),
     thought_signature: Schema.optional(Schema.String),
   }),
   [JsonObject],

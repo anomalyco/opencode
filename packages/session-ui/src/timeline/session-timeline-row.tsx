@@ -5,6 +5,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { SessionTurn } from "@opencode/util/session-turn"
 import { Option, Predicate, Schema } from "effect"
 import {
   For,
@@ -90,6 +91,7 @@ export function createSessionTimelineRowRenderer(input: {
   shellToolDefaultOpen: Accessor<boolean>
   editToolDefaultOpen: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
+  foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
     set: (key: string, open: boolean) => void
@@ -107,6 +109,16 @@ export function createSessionTimelineRowRenderer(input: {
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
+
+  const turns = createMemo(() => {
+    const messages = [...input.projection.messageByID().values()]
+
+    return {
+      messages,
+      legacy: SessionTurn.legacy(messages),
+      indexes: new Map(messages.map((message, index) => [message.id, index])),
+    }
+  })
 
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
@@ -193,17 +205,17 @@ export function createSessionTimelineRowRenderer(input: {
 
     if (user?.type !== "user") return null
 
-    const completed = (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages).reduce<
-      number | undefined
-    >((latest, message) => {
-      if (message.time.completed === undefined) return latest
+    const message = input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.time.completed !== undefined)
 
-      return latest === undefined ? message.time.completed : Math.max(latest, message.time.completed)
-    }, undefined)
+    if (message?.time.completed === undefined || message.time.completed < user.time.created) return undefined
 
-    if (completed === undefined || completed < user.time.created) return undefined
-
-    return completed - user.time.created
+    return SessionTurn.duration(turns().messages, message, {
+      index: turns().indexes.get(message.id),
+      legacy: turns().legacy,
+    })
   }
 
   const copyContentID = (messageID: string) => {
@@ -454,6 +466,23 @@ export function createSessionTimelineRowRenderer(input: {
       return value.steps.length > 0 ? value : undefined
     })
 
+    const turnTokensPerSecond = createMemo(() => {
+      const current = ref()
+
+      if (!current || copyContentID(row().userMessageID) !== current.partID) return undefined
+
+      const messages = input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages
+
+      const last = messages.at(-1)
+
+      if (!last) return undefined
+
+      return SessionTurn.tokensPerSecond(turns().messages, last, {
+        index: turns().indexes.get(last.id),
+        legacy: turns().legacy,
+      })
+    })
+
     const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
 
     return (
@@ -467,6 +496,7 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}
@@ -566,7 +596,7 @@ export function createSessionTimelineRowRenderer(input: {
         label: i18n.t(outcomeNoticeKey(outcome), { actor }),
         data: message.description,
         outcome,
-        icon: source === "shell" && outcome === "completed" ? undefined : outcomeNoticeIcon(outcome),
+        icon: outcomeNoticeIcon(outcome),
       }
     }
 
@@ -937,6 +967,7 @@ export function createSessionTimelineRowRenderer(input: {
       })
 
       const context = createMemo(() => input.projection.userContextByID().get(current().userMessageID))
+      const previous = createMemo(() => input.projection.previousSelectionByID().get(current().userMessageID))
       const joined = run(current().userMessageID)
       const grow = arriving(current().userMessageID)
 
@@ -958,8 +989,12 @@ export function createSessionTimelineRowRenderer(input: {
                       voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
+                      previousSelection={previous()}
                       actions={input.actions}
                       run={joined()}
+                      fold={input.foldUserMessages?.()}
+                      expanded={input.disclosure.value(`user-expanded:${message().id}`)}
+                      onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />
                   </div>
                 </div>
@@ -998,6 +1033,29 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <Notice messageID={current().messageID} />
+        </Frame>
+      )
+    }
+
+    if (Predicate.isTagged(row(), "NewMessages")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "NewMessages")) throw new Error("Expected a new-messages timeline row")
+
+        return value
+      }
+
+      return (
+        <Frame row={current()}>
+          <div
+            data-slot="session-timeline-notice"
+            aria-hidden={current().read}
+            class={`w-full py-2 ${padding()}`}
+            classList={{ invisible: current().read }}
+          >
+            <TimelineSeparator label={i18n.t("ui.sessionTimeline.notice.newMessages")} />
+          </div>
         </Frame>
       )
     }
@@ -1167,12 +1225,19 @@ export function createSessionTimelineRowRenderer(input: {
       return value
     }
 
-    const freeLimit = createMemo(() => {
-      if (current().kind !== "free-limit") return
+    const usageLimit = createMemo(() => {
+      const kind = current().kind
+
+      if (kind !== "free-limit" && kind !== "go-limit") return
+
+      const keys =
+        kind === "go-limit"
+          ? ({ title: "ui.sessionTurn.goLimit.title", lineReset: "ui.sessionTurn.goLimit.lineReset" } as const)
+          : ({ title: "ui.sessionTurn.freeLimit.title", lineReset: "ui.sessionTurn.freeLimit.lineReset" } as const)
+
       const at = current().resetAt
 
-      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime()))
-        return i18n.t("ui.sessionTurn.freeLimit.title")
+      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime())) return i18n.t(keys.title)
 
       const now = Date.now()
       const sameDay = new Date(at).toDateString() === new Date(now).toDateString() && at - now < 86_400_000
@@ -1182,7 +1247,7 @@ export function createSessionTimelineRowRenderer(input: {
         sameDay ? { timeStyle: "short" } : { dateStyle: "medium", timeStyle: "short" },
       ).format(at)
 
-      return i18n.t("ui.sessionTurn.freeLimit.lineReset", { time })
+      return i18n.t(keys.lineReset, { time })
     })
 
     // A budget pauses paid models, or only the ones it covers, until it resets at the start of a month.
@@ -1247,7 +1312,7 @@ export function createSessionTimelineRowRenderer(input: {
                 </div>
               )}
             </Match>
-            <Match when={freeLimit()}>
+            <Match when={usageLimit()}>
               {(text) => (
                 <div
                   role="status"
@@ -1282,8 +1347,6 @@ function outcomeNoticeIcon(outcome: Outcome) {
   if (outcome === "error") return "warning"
 
   if (outcome === "cancelled") return "circle-ban-sign"
-
-  return "check"
 }
 
 function outcomeNoticeColor(outcome: Outcome | undefined) {

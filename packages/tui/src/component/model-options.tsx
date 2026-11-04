@@ -68,7 +68,7 @@ export function ModelDetail(props: {
       ...(props.model.variants.length > 0 ? ["Reasoning"] : []),
     ].filter(Boolean)
   const list = (items: string[]) => (
-    <text fg={theme.text.faint} wrapMode="none" flexShrink={0}>
+    <text fg={theme.text.muted} wrapMode="none" flexShrink={0}>
       <For each={items}>
         {(fact, index) => (
           <>
@@ -85,7 +85,7 @@ export function ModelDetail(props: {
       fallback={
         <box flexDirection="row" justifyContent={props.price === false ? "flex-start" : "space-between"} gap={2}>
           <Show when={props.price !== false}>
-            <text fg={theme.text.faint} wrapMode="none">
+            <text fg={theme.text.muted} wrapMode="none">
               {price()}
             </text>
           </Show>

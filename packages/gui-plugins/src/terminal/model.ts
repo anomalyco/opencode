@@ -1,97 +1,408 @@
-import { batch, createMemo, createRoot, getOwner, onCleanup, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createRoot, getOwner, runWithOwner, untrack, type Owner } from "solid-js"
+import { createStore, unwrap } from "solid-js/store"
+import { Predicate, Schema } from "effect"
+import {
+  ClientError,
+  isPtyFeatureUnsupportedError,
+  isServiceUnavailableError,
+  type PersistentPtyInfo,
+} from "@opencode/client"
 import {
   createKeyed,
-  type Mutable,
-  type Storage,
+  type Layout,
+  type Persisted,
   type ServerRef,
-  type MountedSession,
-  type Sessions,
+  type SessionRef,
+  type Storage,
+  type Toasts,
 } from "@opencode/plugin/gui"
-import { MAX_TERMINAL_SESSIONS, numberFromTitle, TerminalState, terminalTab, type LocalPTY } from "./state"
-import { defaultTitle } from "./title"
+import { defaultTitle, titleNumber } from "./title"
+import {
+  initialState,
+  serverAvailable,
+  sessionView,
+  transition,
+  viewItems,
+  viewTabs,
+  type Command,
+  type Event,
+  type State,
+} from "./machine"
 
-const STORE = "terminals"
+// The keys terminals were stored under before they lived on the server. Their PTY ids no longer exist anywhere.
+const LEGACY = { key: "terminals", from: "workspace:terminal" }
 
-// The raw key terminals used before plugins, in the same workspace storage file.
-const LEGACY = "workspace:terminal"
-
-const HANDOFF_MAX = 40
+const Selected = Schema.Struct({ id: Schema.optional(Schema.String) })
 
 export type TerminalModel = ReturnType<typeof createTerminalModel>
 
-export type TerminalWorkspace = ReturnType<typeof createWorkspace>
+export type TerminalSession = ReturnType<TerminalModel["load"]>
 
-type CacheEntry = {
-  value: TerminalWorkspace
-  dispose: VoidFunction
-}
-
-type FocusRequest = { request: number; id?: string; pending: boolean }
+type FocusRequest = { key: string; request: number; id?: string; pending: boolean }
 
 const importGhostty = () => import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
 
 /** The one ghostty-web load the window's terminals share; a failed load is retried by the next terminal. */
 type Ghostty = { shared?: ReturnType<typeof importGhostty> }
 
-const workspaceKey = (server: string, directory: string) => `${server}\0${directory}`
-
-const trimTerminal = (pty: Mutable<LocalPTY>) => {
-  if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return
-
-  pty.buffer = undefined
-  pty.cursor = undefined
-  pty.scrollY = undefined
-}
-
-export function createTerminalModel(input: { storage: Storage; sessions: Sessions }) {
+/**
+ * Mirrors each session's terminals from its server, like the TUI: the server's list is the only record of which
+ * terminals exist, refreshed on its terminal events and on every reconnect. Only the selected terminal per session is
+ * stored. Each server's support and lists follow the machine in `./machine`; this runs its requests.
+ */
+export function createTerminalModel(input: {
+  storage: Storage
+  layout: Pick<Layout, "open" | "stored">
+  toast: Pick<Toasts, "show">
+  t: (key: string) => string
+  /** The panel key of a terminal's side panel tab. */
+  tab: (ptyID: string) => string
+}) {
   const owner = getOwner()
-  const cache = new Map<string, CacheEntry>()
-  const [handoff] = input.storage.memory("handoff", { initial: { terminal: new Map<string, string[]>() } })
+  const lifetime = new AbortController()
+
+  // Survives plugin reloads, so restored terminals show at once; the first watch checks every server again.
+  const [machine, setMachine] = input.storage.memory<{ servers: Record<string, State> }>("servers", {
+    initial: { servers: {} },
+  })
+
+  const [state, setState] = createStore<{ focus?: FocusRequest }>({})
+
+  const sessions = new Map<string, SessionRef>()
+  const handles = new Map<string, ReturnType<typeof handle>>()
+  const selected = new Map<string, Persisted<typeof Selected.Type>>()
+  const watched = new Map<string, { data: ServerRef["data"]; stop: VoidFunction }>()
+  const cleared = new Set<string>()
+  const cleanups: VoidFunction[] = []
   const ghostty: Ghostty = {}
+  const focus = { request: 0 }
 
-  const prune = () => {
-    while (cache.size > MAX_TERMINAL_SESSIONS) {
-      const first = cache.keys().next().value
+  const serverState = (id: string) => machine.servers[id] ?? initialState
 
-      if (!first) return
+  /** Resolves once the requests the event started have answered and their answers were dispatched. */
+  const dispatch = (server: ServerRef, event: Event): Promise<void> => {
+    if (lifetime.signal.aborted) return Promise.resolve()
+    // Reads from reactive computations, such as `load`, must not subscribe them to every state change.
+    const previous = untrack(() => unwrap(machine.servers[server.id])) ?? initialState
+    const next = transition(previous, event)
 
-      const entry = cache.get(first)
+    if (next.state !== previous) setMachine((draft) => void (draft.servers[server.id] = next.state))
 
-      entry?.dispose()
-      cache.delete(first)
+    return Promise.all(next.commands.map((command) => run(server, command))).then(() => undefined)
+  }
+
+  const run = (server: ServerRef, command: Command): Promise<void> => {
+    if (command.type === "check-capability")
+      return server.client.server.info().then(
+        // Servers that predate the field omit it; they still offer terminals.
+        (info) =>
+          dispatch(server, {
+            type: "capability.checked",
+            attempt: command.attempt,
+            supported: info.capabilities?.persistentPty !== false,
+          }),
+        (error) => {
+          console.error("Failed to read server terminal support", error)
+
+          return dispatch(server, {
+            type: "capability.failed",
+            attempt: command.attempt,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        },
+      )
+
+    if (command.type === "load-list")
+      return server.client.experimental.persistentPty.list({ sessionID: command.sessionID }).then(
+        (items) =>
+          dispatch(server, { type: "list.loaded", sessionID: command.sessionID, attempt: command.attempt, items }),
+        (error) => {
+          if (isServiceUnavailableError(error))
+            return dispatch(server, {
+              type: "list.unavailable",
+              sessionID: command.sessionID,
+              attempt: command.attempt,
+            })
+          console.error("Failed to list terminals", error)
+
+          return dispatch(server, {
+            type: "list.failed",
+            sessionID: command.sessionID,
+            attempt: command.attempt,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        },
+      )
+
+    const session = sessions.get(`${server.id}\n${command.sessionID}`)
+
+    if (!session) return Promise.resolve()
+    dropLegacy(session)
+    // The strip shows only stored tabs, so terminals another client created join it at the end.
+    const stored = new Set(input.layout.stored(session))
+
+    command.items.forEach((info) => {
+      if (!stored.has(info.id)) input.layout.open(input.tab(info.id), session, { tab: "append" })
+    })
+
+    return Promise.resolve()
+  }
+
+  const available = (server: ServerRef) => {
+    watch(server)
+
+    return serverAvailable(serverState(server.id))
+  }
+
+  // A restarted server replaces its data under the same ref, so reads that track `server.data` subscribe again.
+  const watch = (server: ServerRef) => {
+    const data = server.data
+    const current = watched.get(server.id)
+
+    if (current?.data === data) return
+    current?.stop()
+
+    // Subscriptions end with the owner they start under, and this runs from whichever computation first read the
+    // server, so they belong to the model.
+    const stops = runWithOwner(owner, () => [
+      // The event stream opens with server.connected, so this runs for the first connection and every reconnect.
+      data.on("server.connected", () => void dispatch(server, { type: "server.connected" })),
+      data.on(
+        "persistent-pty.added",
+        (event) => void dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      ),
+      data.on(
+        "persistent-pty.removed",
+        (event) => void dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      ),
+      data.on(
+        "persistent-pty.updated",
+        (event) =>
+          void dispatch(server, {
+            type: "terminal.updated",
+            sessionID: event.data.sessionID,
+            terminal: event.data.terminal,
+          }),
+      ),
+    ])!
+
+    watched.set(server.id, { data, stop: () => stops.forEach((stop) => stop()) })
+    // Checks now rather than waiting for the stream: it may have connected already, and an answer a previous
+    // instance was waiting for never arrives here.
+    void dispatch(server, { type: "server.connected" })
+  }
+
+  const selection = (session: SessionRef) => {
+    const existing = selected.get(session.key)
+
+    if (existing) return existing
+
+    // Opened from reactive reads, so it belongs to the model rather than the computation that first asked.
+    const created = runWithOwner(owner, () =>
+      input.storage.store("selected", { schema: Selected, initial: {}, scope: { session } }),
+    )!
+
+    selected.set(session.key, created)
+
+    return created
+  }
+
+  const requestFocus = (key: string, id?: string, pending = false) => {
+    focus.request += 1
+    setState("focus", { key, request: focus.request, id, pending })
+
+    return focus.request
+  }
+
+  const cancelFocus = (request?: number) => {
+    if (request !== undefined && state.focus?.request !== request) return
+
+    setState("focus", undefined)
+  }
+
+  if (typeof document !== "undefined") {
+    const cancelOnOutsideFocus = (event: FocusEvent) => {
+      if (!state.focus) return
+
+      if (!(event.target instanceof Element)) return
+
+      // The side region focuses its selected tab trigger or root while switching tabs; only focus leaving it, or
+      // entering a field in it such as a tab's rename field, cancels.
+      if (event.target.closest("#terminal-panel, #review-panel") && !(event.target instanceof HTMLInputElement)) return
+
+      cancelFocus()
+    }
+
+    // Capture phase: a tab's rename field stops its focusin from bubbling.
+    document.addEventListener("focusin", cancelOnOutsideFocus, true)
+    cleanups.push(() => document.removeEventListener("focusin", cancelOnOutsideFocus, true))
+  }
+
+  const handle = (initial: SessionRef) => {
+    const key = initial.key
+    // A removed workspace forgets its session, while a component may still hold the handle.
+    const session = () => sessions.get(key) ?? initial
+    const view = () => sessionView(serverState(initial.server.id), initial.id)
+    const all = () => viewItems(view())
+    const get = (id: string) => all().find((info) => info.id === id)
+
+    const focusRequested = (id?: string) => {
+      if (!id || !state.focus || state.focus.pending || state.focus.key !== key) return false
+
+      return !state.focus.id || state.focus.id === id
+    }
+
+    return {
+      key,
+      server: () => session().server,
+      /** What the session's terminal panel shows: loading, failed, unsupported or the server's list. */
+      view,
+      /** The session's terminals, in the server's order. */
+      all,
+      get,
+      /** The strip's tab ids for the stored `open` ones. */
+      tabs: (open: readonly string[]) => viewTabs(view(), open),
+      /** Loads the session's terminals again after a failure. */
+      retry: () => dispatch(session().server, { type: "session.retry", sessionID: initial.id }),
+      /** The selected terminal, else the first one. */
+      active() {
+        const id = selection(session()).value?.id
+
+        return id && get(id) ? id : all()[0]?.id
+      },
+      select(id: string) {
+        selection(session()).set({ id })
+      },
+      /** Creates a terminal and selects it; resolves its id, or undefined when the server refuses. */
+      async new() {
+        const target = session()
+        const request = requestFocus(key, undefined, true)
+
+        await settled(target, owner)
+
+        // The next default title counts the terminals the server already has.
+        const known =
+          view().type === "ready"
+            ? all()
+            : await target.server.client.experimental.persistentPty.list({ sessionID: target.id }).catch(() => all())
+
+        const used = new Set(known.flatMap((info) => titleNumber(info.title) ?? []))
+        const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
+
+        const info = await target.server.client.experimental.persistentPty
+          .create({
+            sessionID: target.id,
+            args: [],
+            // A session that moved keeps its object; the server's record has the directory it runs in now.
+            cwd: target.server.data.session.get(target.id)?.location.directory ?? target.location?.directory,
+            title: defaultTitle(number),
+            env: {},
+          })
+          .catch((error) => {
+            cancelFocus(request)
+
+            // A server without the persistent terminal routes answers with a status its API never declares for them.
+            const outdated =
+              error instanceof ClientError &&
+              error.reason === "UnexpectedStatus" &&
+              Predicate.hasProperty(error.cause, "status") &&
+              (error.cause.status === 404 || error.cause.status === 405)
+
+            input.toast.show(
+              outdated
+                ? { variant: "error", title: input.t("create.unsupported") }
+                : {
+                    variant: "error",
+                    title: input.t("create.failed"),
+                    description: error instanceof Error ? error.message : String(error),
+                  },
+            )
+
+            return undefined
+          })
+
+        if (!info) return undefined
+
+        await dispatch(target.server, { type: "session.refresh", sessionID: target.id })
+        selection(target).set({ id: info.id })
+
+        if (state.focus?.request === request) setState("focus", { key, request, id: info.id, pending: false })
+
+        return info.id
+      },
+      /** Removes the terminal on the server; its tab leaves once the server lists it no longer. */
+      async close(id: string) {
+        const target = session()
+
+        await target.server.client.experimental.persistentPty
+          .remove({ ptyID: id })
+          .then(() => dispatch(target.server, { type: "session.refresh", sessionID: target.id }))
+          .catch((error) => console.error("Failed to close terminal", error))
+      },
+      /**
+       * Sets the terminal's title on the server; `null` clears it, so the shell's or the default title shows again.
+       * The current title, or clearing a terminal never renamed, sends nothing.
+       */
+      async rename(id: string, title: string | null) {
+        const target = session()
+        const previous = get(id)
+
+        if (!previous || title === previous.title || (title === null && previous.userTitle === null)) return
+
+        const replace = (terminal: PersistentPtyInfo) =>
+          void dispatch(target.server, { type: "terminal.replaced", sessionID: target.id, terminal })
+
+        // Only a new title is known before the server answers; a cleared one shows whatever the server falls back to.
+        if (title !== null) replace({ ...previous, title, userTitle: title })
+
+        await target.server.client.experimental.persistentPty
+          .update({ ptyID: id, title })
+          .then(replace)
+          .catch((error) => {
+            // A newer title from the server stays.
+            if (title !== null && get(id)?.userTitle === title) replace(previous)
+            input.toast.show(
+              isPtyFeatureUnsupportedError(error)
+                ? { variant: "error", title: input.t("rename.unsupported") }
+                : {
+                    variant: "error",
+                    title: input.t("rename.failed"),
+                    description: error instanceof Error ? error.message : String(error),
+                  },
+            )
+          })
+      },
+      requestFocus(id?: string) {
+        requestFocus(key, id)
+      },
+      focusRequested,
+      consumeFocus(id: string) {
+        if (focusRequested(id)) setState("focus", undefined)
+      },
+      cancelFocus() {
+        if (state.focus?.key === key) cancelFocus()
+      },
     }
   }
 
   return {
-    load(session: Pick<MountedSession, "server" | "directory">) {
-      // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
-      const key = workspaceKey(session.server.id, session.directory)
-      const existing = cache.get(key)
+    /** The server offers terminals. Servers that predate the capability count as offering them. */
+    available,
+    /** The session's terminals; the first load lists them from its server. */
+    load(session: SessionRef) {
+      sessions.set(session.key, session)
+      watch(session.server)
+      void dispatch(session.server, { type: "session.loaded", sessionID: session.id })
 
-      if (existing) {
-        cache.delete(key)
-        cache.set(key, existing)
+      const existing = handles.get(session.key)
 
-        return existing.value
-      }
+      if (existing) return existing
 
-      // A cached workspace keeps talking to its own server after the route moves on.
-      const server =
-        untrack(() => input.sessions.list()).find((ref) => ref.server.id === session.server.id)?.server ??
-        session.server
+      const created = handle(session)
 
-      const directory = session.directory
+      handles.set(session.key, created)
 
-      const entry = createRoot(
-        (dispose) => ({ value: createWorkspace({ storage: input.storage, server, directory, key }), dispose }),
-        owner,
-      )
-
-      cache.set(key, entry)
-      prune()
-
-      return entry.value
+      return created
     },
     ghostty() {
       if (ghostty.shared) return ghostty.shared
@@ -103,313 +414,61 @@ export function createTerminalModel(input: { storage: Storage; sessions: Session
 
       return ghostty.shared
     },
-    handoff: {
-      set(key: string, value: string[]) {
-        const map = handoff.terminal
-
-        map.delete(key)
-        map.set(key, value)
-
-        while (map.size > HANDOFF_MAX) {
-          const first = map.keys().next().value
-
-          if (first === undefined) return
-
-          map.delete(first)
-        }
-      },
-      get: (key: string) => handoff.terminal.get(key),
-    },
+    /** Forgets the terminal lists of a removed workspace's sessions. */
     remove(value: { readonly server: string; readonly directory: string }) {
-      cache.get(workspaceKey(value.server, value.directory))?.value.clear()
-      // Also drops terminals saved before plugins, which opening the store would otherwise import.
-      input.storage.remove(STORE, { scope: { server: value.server, directory: value.directory }, from: LEGACY })
+      input.storage.remove(LEGACY.key, { scope: value, from: LEGACY.from })
+
+      const removed = [...sessions.values()].filter(
+        (session) => session.server.id === value.server && session.location?.directory === value.directory,
+      )
+
+      removed.forEach((session) => {
+        sessions.delete(session.key)
+        handles.delete(session.key)
+        selected.delete(session.key)
+      })
+
+      const server = removed[0]?.server
+
+      if (server) void dispatch(server, { type: "sessions.removed", sessionIDs: removed.map((session) => session.id) })
     },
     dispose() {
-      for (const entry of cache.values()) {
-        entry.dispose()
-      }
-
-      cache.clear()
+      lifetime.abort()
+      watched.forEach((entry) => entry.stop())
+      watched.clear()
+      cleanups.forEach((cleanup) => cleanup())
     },
+  }
+
+  function dropLegacy(session: SessionRef) {
+    const directory = session.location?.directory
+
+    if (!directory) return
+
+    const id = `${session.server.id}\0${directory}`
+
+    if (cleared.has(id)) return
+
+    cleared.add(id)
+    input.storage.remove(LEGACY.key, { scope: { server: session.server.id, directory }, from: LEGACY.from })
   }
 }
 
-function createWorkspace(input: { storage: Storage; server: ServerRef; directory: string; key: string }) {
-  const location = { directory: input.directory }
+/** Resolves once the server has created the session. */
+function settled(session: SessionRef, owner: Owner | null) {
+  if (!session.pending) return Promise.resolve()
 
-  const stored = input.storage.store(STORE, {
-    schema: TerminalState,
-    initial: { all: [] },
-    scope: { server: input.server.id, directory: input.directory },
-    from: LEGACY,
-  })
-
-  // Empty until the stored terminals load; changes made before then apply over them in order.
-  const all = createMemo(() => stored.value?.all ?? [])
-  const active = createMemo(() => stored.value?.active)
-  const [ui, setUi] = createStore<{ focus?: FocusRequest }>({})
-  const focus = { request: 0 }
-
-  const requestFocus = (id?: string, pending = false) => {
-    focus.request += 1
-    setUi("focus", { request: focus.request, id, pending })
-
-    return focus.request
-  }
-
-  const focusRequested = (id?: string) => {
-    if (!id) return false
-
-    if (!ui.focus || ui.focus.pending) return false
-
-    return !ui.focus.id || ui.focus.id === id
-  }
-
-  const consumeFocus = (id: string) => {
-    if (!focusRequested(id)) return
-
-    setUi("focus", undefined)
-  }
-
-  const cancelFocus = (request?: number) => {
-    if (request !== undefined && ui.focus?.request !== request) return
-
-    setUi("focus", undefined)
-  }
-
-  if (typeof document !== "undefined") {
-    const cancelOnOutsideFocus = (event: FocusEvent) => {
-      if (!ui.focus) return
-
-      if (!(event.target instanceof Element)) return
-
-      // The side region focuses its selected tab trigger or root while switching tabs; only focus leaving it cancels.
-      if (event.target.closest("#terminal-panel, #review-panel")) return
-
-      cancelFocus()
-    }
-
-    document.addEventListener("focusin", cancelOnOutsideFocus)
-    onCleanup(() => document.removeEventListener("focusin", cancelOnOutsideFocus))
-  }
-
-  const pickNextTerminalNumber = () => {
-    const existingTitleNumbers = new Set(
-      all().flatMap((pty) => {
-        const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
-
-        if (direct !== undefined) return [direct]
-
-        const parsed = numberFromTitle(pty.title)
-
-        if (parsed === undefined) return []
-
-        return [parsed]
-      }),
-    )
-
-    return (
-      Array.from({ length: existingTitleNumbers.size + 1 }, (_, index) => index + 1).find(
-        (number) => !existingTitleNumbers.has(number),
-      ) ?? 1
-    )
-  }
-
-  const removeExited = (id: string) => {
-    const list = all()
-    const index = list.findIndex((x) => x.id === id)
-
-    if (index === -1) return
-
-    const next = active() === id ? (index === 0 ? list[1]?.id : list[0]?.id) : active()
-
-    stored.update((draft) => {
-      draft.active = next
-      draft.all.splice(index, 1)
-    })
-  }
-
-  // A restarted server replaces its data under the same ref, so the subscription follows it.
-  createKeyed(
-    () => input.server.data,
-    (data) =>
-      onCleanup(
-        data.on("pty.exited", (event) => {
-          if (event.location?.directory !== input.directory) return
-
-          removeExited(event.data.id)
-        }),
-      ),
+  return new Promise<void>((resolve) =>
+    createRoot(
+      (dispose) =>
+        createKeyed(
+          () => !session.pending,
+          () => {
+            dispose()
+            resolve()
+          },
+        ),
+      owner,
+    ),
   )
-
-  const update = (pty: Partial<LocalPTY> & { id: string }) => {
-    const index = all().findIndex((x) => x.id === pty.id)
-    const previous = index >= 0 ? all()[index] : undefined
-
-    if (index >= 0) {
-      stored.update((draft) => void Object.assign(draft.all[index], pty))
-    }
-
-    const doUpdate = async () => {
-      await input.server.client.pty.update({
-        ptyID: pty.id,
-        location,
-        title: pty.title,
-        size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
-      })
-    }
-
-    doUpdate().catch((error) => {
-      if (previous) {
-        const currentIndex = all().findIndex((item) => item.id === pty.id)
-
-        if (currentIndex >= 0) stored.update((draft) => void Object.assign(draft.all[currentIndex], previous))
-      }
-
-      console.error("Failed to update terminal", error)
-    })
-  }
-
-  const clone = async (id: string) => {
-    const index = all().findIndex((x) => x.id === id)
-    const pty = all()[index]
-
-    if (!pty) return
-
-    const data = await input.server.client.pty
-      .create({ location, title: pty.title })
-      .then((result) => result.data)
-      .catch((error) => {
-        console.error("Failed to clone terminal", error)
-
-        return undefined
-      })
-
-    if (!data?.id) return
-
-    const wasActive = active() === pty.id
-
-    stored.update((draft) => {
-      Object.assign(draft.all[index], {
-        id: data.id,
-        tab: terminalTab(pty),
-        title: data.title ?? pty.title,
-        titleNumber: pty.titleNumber,
-        buffer: undefined,
-        cursor: undefined,
-        scrollY: undefined,
-        rows: undefined,
-        cols: undefined,
-      })
-
-      if (wasActive) draft.active = data.id
-    })
-  }
-
-  return {
-    key: input.key,
-    // An accessor, so storing the workspace in a Solid store never unwraps the host's server data.
-    server: () => input.server,
-    directory: input.directory,
-    ready: () => stored.ready(),
-    all,
-    active,
-    clear() {
-      stored.set({ active: undefined, all: [] })
-    },
-    /** Creates a terminal and makes it the active one; resolves its id, or undefined when the server refuses. */
-    new() {
-      const nextNumber = pickNextTerminalNumber()
-      const focusRequest = requestFocus(undefined, true)
-
-      return input.server.client.pty
-        .create({ location, title: defaultTitle(nextNumber) })
-        .then((result) => {
-          const id = result.data?.id
-
-          if (!id) {
-            cancelFocus(focusRequest)
-
-            return undefined
-          }
-
-          batch(() => {
-            stored.update((draft) => {
-              draft.all.push({ id, title: result.data?.title ?? defaultTitle(nextNumber), titleNumber: nextNumber })
-              draft.active = id
-            })
-
-            if (ui.focus?.request === focusRequest) {
-              setUi("focus", { request: focusRequest, id, pending: false })
-            }
-          })
-
-          return id
-        })
-        .catch((error) => {
-          cancelFocus(focusRequest)
-          console.error("Failed to create terminal", error)
-
-          return undefined
-        })
-    },
-    update,
-    trim(id: string) {
-      const index = all().findIndex((x) => x.id === id)
-
-      if (index === -1) return
-
-      stored.update((draft) => {
-        trimTerminal(draft.all[index])
-      })
-    },
-    trimAll() {
-      stored.update((draft) => {
-        draft.all.forEach(trimTerminal)
-      })
-    },
-    clone,
-    /** The terminal whose side panel tab has this id. */
-    byTab: (tab: string) => all().find((pty) => terminalTab(pty) === tab),
-    open(id: string) {
-      stored.update((draft) => {
-        draft.active = id
-      })
-    },
-    requestFocus(id?: string) {
-      requestFocus(id)
-    },
-    focusRequested,
-    consumeFocus,
-    cancelFocus() {
-      cancelFocus()
-    },
-    async close(id: string) {
-      const index = all().findIndex((f) => f.id === id)
-
-      if (index !== -1) {
-        stored.update((draft) => {
-          if (draft.active === id) {
-            draft.active = index > 0 ? draft.all[index - 1]?.id : draft.all[1]?.id
-          }
-
-          draft.all.splice(index, 1)
-        })
-      }
-
-      await input.server.client.pty.remove({ ptyID: id, location }).catch((error) => {
-        console.error("Failed to close terminal", error)
-      })
-    },
-    move(id: string, to: number) {
-      const index = all().findIndex((f) => f.id === id)
-
-      if (index === -1) return
-
-      stored.update((draft) => {
-        draft.all.splice(to, 0, draft.all.splice(index, 1)[0])
-      })
-    },
-  }
 }

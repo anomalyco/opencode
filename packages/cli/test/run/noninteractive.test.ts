@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import {
   OpenCode,
   type EventSubscribeOutput,
+  type ExperimentalJobListOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
@@ -217,6 +218,7 @@ async function run(input: {
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
+  jobs?: () => ExperimentalJobListOutput
   terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
@@ -253,7 +255,13 @@ async function run(input: {
   )
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   let promptID = "msg_prompt"
-  spyOn(sdk.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
+  spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
+  spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(input.jobs?.() ?? []) as never)
+  spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
+  spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.session, "get").mockImplementation(
+    ({ sessionID }) => ok({ id: sessionID, parentID: sessionID === "ses_child" ? "ses_1" : undefined }) as never,
+  )
   spyOn(sdk.message, "list").mockImplementation(() =>
     ok({
       data: input.messages?.(promptID) ?? [{ id: promptID, type: "user", text: "hello", time: { created: 1 } }],
@@ -311,6 +319,21 @@ afterEach(() => {
   mock.restore()
   process.exitCode = 0
 })
+
+function shellJob(id: string, command: string): ExperimentalJobListOutput[number] {
+  return { kind: "shell", id, sessionID: "ses_1", status: "running", shellID: id, command, time: { started: 1 } }
+}
+
+const subagentJob: ExperimentalJobListOutput[number] = {
+  kind: "subagent",
+  id: "ses_child",
+  sessionID: "ses_1",
+  status: "running",
+  childSessionID: "ses_child",
+  agent: "explore",
+  description: "scan repo",
+  time: { started: 1 },
+}
 
 describe("runNonInteractivePrompt", () => {
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
@@ -373,7 +396,51 @@ describe("runNonInteractivePrompt", () => {
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line)),
-    ).toEqual([expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "projected answer" }) })])
+    ).toEqual([
+      expect.objectContaining({ type: "step_start", part: expect.objectContaining({ messageID: "msg_assistant" }) }),
+      expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "projected answer" }) }),
+    ])
+  })
+
+  test("reports usage for a step that ends after the Session goes idle", async () => {
+    const tokens = { input: 3, output: 5, reasoning: 7, cache: { read: 11, write: 13 } }
+    const assistant = (messageID: string): SessionMessageInfo[] => [
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        cost: 0.25,
+        tokens,
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const lines = async (turn: (messageID: string) => V2Event[]) =>
+      (await capture({ format: "json", turn, messages: assistant, wait: () => Promise.resolve() })).stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+
+    const missed = await lines((messageID) => [prompted(messageID), stepStarted()])
+    expect(missed.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+    expect(missed[2].part).toMatchObject({ messageID: "msg_assistant", reason: "stop", cost: 0.25, tokens })
+
+    const seen = await lines((messageID) => [
+      prompted(messageID),
+      stepStarted(),
+      {
+        id: "evt_step_ended",
+        created: 2,
+        type: "session.step.ended",
+        durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+        data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", finish: "stop", cost: 0.25, tokens },
+      },
+      settled(),
+    ])
+    expect(seen.filter((event) => event.type === "step_finish")).toHaveLength(1)
   })
 
   test("reports an observed execution failure before prompt promotion", async () => {
@@ -430,7 +497,10 @@ describe("runNonInteractivePrompt", () => {
     }
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" }, globalOptions)
+    expect(sdk.session.form.cancel).toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_pending_global" },
+      globalOptions,
+    )
     expect(sdk.form.list).toHaveBeenCalledWith({
       location: { directory: "/work tree" },
     })
@@ -445,7 +515,10 @@ describe("runNonInteractivePrompt", () => {
     })
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
     expect(sdk.form.list).not.toHaveBeenCalled()
-    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, expect.anything())
+    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_live" },
+      expect.anything(),
+    )
     expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
       { sessionID: "global", formID: "frm_pending_global" },
       expect.anything(),
@@ -479,7 +552,7 @@ describe("runNonInteractivePrompt", () => {
     ])
     expect(output.stderr).toBe("")
     const sdk = await run({ compatibility: "v1", turn: (messageID) => [prompted(messageID), settled()] })
-    expect(sdk.session.wait).not.toHaveBeenCalled()
+    expect(sdk.experimental.session.wait).not.toHaveBeenCalled()
     expect(sdk.message.list).not.toHaveBeenCalled()
   })
 
@@ -573,5 +646,54 @@ describe("runNonInteractivePrompt", () => {
     expect(events[0].part.state.metadata.metadata).toBeUndefined()
     expect(events[0].part.state.metadata.content).toBeUndefined()
     expect(output.stderr).toBe("")
+  })
+
+  test("waits for a background shell and streams the reply it wakes", async () => {
+    const lists: ExperimentalJobListOutput[] = [[shellJob("sh_train", "python train.py")], []]
+    const output = await capture({
+      format: "json",
+      jobs: () => lists.shift() ?? [],
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_text",
+          created: 2,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_2", ordinal: 0, text: "Training finished." },
+        },
+        settled(),
+      ],
+    })
+    expect(output.stdout).toContain("Training finished.")
+  })
+
+  test("waits for a background shell owned by a subagent", async () => {
+    const lists: ExperimentalJobListOutput[] = [[{ ...shellJob("sh_test", "pytest"), sessionID: "ses_child" }], []]
+    const sdk = await run({
+      jobs: () => lists.shift() ?? [],
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_child_done",
+          created: 2,
+          type: "session.execution.succeeded",
+          durable: { aggregateID: "ses_child", seq: 1, version: 1 },
+          data: { sessionID: "ses_child" },
+        },
+      ],
+    })
+    expect(sdk.experimental.job.list).toHaveBeenCalledWith({ sessionID: "ses_1", descendants: true })
+    expect(lists).toEqual([])
+  })
+
+  test("Ctrl-C while waiting on a background subagent exits with code 130", async () => {
+    const running = run({ turn: (id) => [prompted(id), settled()], jobs: () => [subagentJob] })
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(20).then(() => "waiting")])).toBe("waiting")
+    process.emit("SIGINT")
+    await running
+    expect(process.exitCode).toBe(130)
   })
 })

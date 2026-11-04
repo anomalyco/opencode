@@ -1,28 +1,3 @@
-[data-color-scheme="dark"] [data-slot="session-activity-chip"] {
-  background: var(--v2-background-bg-layer-01);
-}
-
-/* The composer buttons' overlays and focus ring, with overlays layered over the capsule's own surface. */
-[data-slot="session-activity-chip"] {
-  &:focus-visible {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2.5px;
-  }
-
-  @media (hover: hover) {
-    &:hover:not(:active, [data-expanded]) {
-      background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
-    }
-  }
-
-  &:is(:active, [data-expanded]) {
-    background-image: linear-gradient(
-      var(--v2-overlay-simple-overlay-pressed),
-      var(--v2-overlay-simple-overlay-pressed)
-    );
-  }
-}
-
 [data-slot="session-activity-summary"] {
   color: var(--v2-text-text-faint);
 
@@ -42,23 +17,27 @@
   min-width: max(var(--kb-popper-anchor-width, 0px), 240px);
   max-width: min(360px, calc(100vw - 56px));
   max-height: min(270px, var(--kb-popper-content-available-height, 270px));
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  align-content: start;
-  column-gap: 8px;
-  padding: 4px;
-  scroll-padding-block: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
   /* The capsule's hairline, so both insets round to the same device pixels. */
   border: 0.5px solid transparent;
   border-radius: 10px;
   background: var(--v2-background-bg-layer-01);
   text-align: start;
 
-  /* Match the queue panel's inset-ring pattern inside a clipped scrollport. */
-  :is([data-component="menu-v2-item"], [data-component="icon-button-v2"]):is(:focus-visible, [data-state="focus"]) {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: -2px;
+  /* The list's padding sits inside the scroller, so rows scroll to the panel's edge and the thumb overlays them. */
+  > [data-component="menu-scroll"] > [data-scrollable] {
+    padding: 4px;
+    scroll-padding-block: 4px;
+  }
+
+  [data-slot="menu-scroll-content"] {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-content: start;
+    column-gap: 8px;
   }
 
   [data-slot="menu-v2-item-content"] > span[dir] {
@@ -70,7 +49,7 @@
     unicode-bidi: isolate;
   }
 
-  /* With the panel's 4px padding, rows inset 10px like the capsule's content, at the end as at the start. */
+  /* With the list's 4px padding, rows inset 10px like the capsule's content, at the end as at the start. */
   [data-component="menu-v2-item"],
   [data-slot="menu-v2-item-content"] {
     display: grid;
@@ -89,7 +68,7 @@
     grid-column: 2 / 4;
   }
 
-  [data-slot="menu-v2-item-content"] > svg:first-child {
+  [data-slot="menu-v2-item-content"] > :is(svg, [data-slot="spinner-dots"]):first-child {
     flex: none;
     width: 16px;
     height: 16px;
@@ -148,13 +127,110 @@
     }
   }
 
+  /* One shell: a wider panel with its header row over the tail of its output. Switching views changes size at once. */
+  &[data-view="shell"] {
+    width: min(560px, calc(100vw - 56px));
+    max-width: none;
+    max-height: min(320px, var(--kb-popper-content-available-height, 320px));
+    padding: 4px;
+  }
+
+  [data-slot="session-activity-shell-header"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    padding-inline-end: 2px;
+
+    [data-component="menu-v2-item"],
+    [data-slot="menu-v2-item-content"] {
+      display: flex;
+      flex: none;
+    }
+
+    [data-component="menu-v2-item"] {
+      padding-inline: 6px;
+    }
+
+    /* Matches the list's glyph column, so the arrow sits where the row icons were. */
+    [data-slot="session-activity-back"] {
+      width: 28px;
+      justify-content: center;
+      --menu-v2-fg: var(--v2-icon-icon-muted);
+
+      [data-slot="menu-v2-item-content"] {
+        flex: none;
+      }
+
+      svg:dir(rtl) {
+        transform: scaleX(-1);
+      }
+    }
+
+    [data-slot="session-activity-shell-stop"][aria-disabled="true"] {
+      --menu-v2-fg: var(--v2-text-text-muted);
+    }
+  }
+
+  [data-slot="session-activity-shell-command"] {
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
+    text-align: left;
+  }
+
+  [data-slot="session-activity-shell-status"] {
+    flex: none;
+    padding-inline: 6px;
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    white-space: nowrap;
+    color: var(--v2-text-text-muted);
+
+    &[data-failed] {
+      color: var(--v2-state-fg-danger);
+    }
+  }
+
+  [data-slot="session-activity-shell-output"] {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--v2-background-bg-base);
+
+    pre {
+      margin: 0;
+      text-align: left;
+    }
+
+    code {
+      display: block;
+      font-family: var(--v2-font-family-code);
+      font-size: 13px;
+      font-weight: 440;
+      line-height: var(--line-height-compact);
+      letter-spacing: -0.04px;
+      color: var(--v2-text-text-base);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="session-activity-shell-empty"] {
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-muted);
+  }
+
   :root[data-motion="reduce"] & {
     animation: none;
-  }
-}
-
-@media (hover: none) {
-  [data-slot="session-activity-chip"] {
-    min-height: 44px;
   }
 }

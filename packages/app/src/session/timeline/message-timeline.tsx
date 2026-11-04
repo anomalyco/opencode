@@ -14,6 +14,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/plugin/gui"
 import { PluginSlot } from "@/runtime/plugin/render"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
@@ -21,6 +22,7 @@ import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
+import { createSelectedEffect } from "./selected-effect"
 import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
@@ -72,6 +74,7 @@ type MessageTimelineProps = {
   /** Hands the header's empty gap to the pane's window drag area. */
   registerHeaderGap?: (gap: HTMLElement) => () => void
   active?: boolean
+  caughtUp: boolean
   session: TimelineSessionSource
   view: MountedSession
   screen: SessionScreen
@@ -89,19 +92,25 @@ type MessageTimelineProps = {
   pinned: boolean
   centered: boolean
   reserveReviewToggle: boolean
-  setContentRef: (el: HTMLDivElement) => void
+  onContentResize: () => void
   bottomInset?: number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setRevealPart?: (fn: (target: string) => boolean) => void
-  setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  setScrollToEnd?: (fn: (behavior?: ScrollBehavior, read?: boolean) => void) => void
+  setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
-  const controller = createTimelineController({ session: props.session })
+  const controller = createTimelineController({
+    session: props.session,
+    active: () => props.active !== false,
+    caughtUp: () => props.caughtUp,
+  })
+
   const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
 
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
@@ -165,12 +174,16 @@ function MessageTimelineView(
     return server.ctx.projects.forSession(session)
   })
 
-  createEffect(() => {
-    const directory = project()?.worktree
+  createSelectedEffect(
+    project,
+    () => props.active !== false,
+    (project) => {
+      const directory = project?.worktree
 
-    if (!directory) return
-    void data.location.vcs.sync({ directory }).catch(() => undefined)
-  })
+      if (!directory) return
+      void data.location.vcs.sync({ directory }).catch(() => undefined)
+    },
+  )
   const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
@@ -183,10 +196,12 @@ function MessageTimelineView(
     projection,
     showHeader,
     pinned,
+    onReadEnd: props.data.newMessages.read,
+    onReadMarkPassed: props.data.newMessages.release,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
-    setContentRef: props.setContentRef,
+    onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
@@ -199,6 +214,7 @@ function MessageTimelineView(
       if (
         Predicate.isTagged(row, "TurnGap") ||
         Predicate.isTagged(row, "TurnDivider") ||
+        Predicate.isTagged(row, "NewMessages") ||
         Predicate.isTagged(row, "CompactionQueued") ||
         Predicate.isTagged(row, "Activity")
       )
@@ -246,6 +262,7 @@ function MessageTimelineView(
     setRevealMessage: props.setRevealMessage,
     setRevealPart: props.setRevealPart,
     setScrollToEnd: props.setScrollToEnd,
+    setPage: props.setPage,
     reveal: props.reveal,
   })
 
@@ -327,7 +344,10 @@ function MessageTimelineView(
     setTitle({ draft: "", editing: false, menuOpen: false, pendingRename: false })
   })
 
+  const settings = useSettings()
+
   const rowRenderer = createSessionTimelineRowRenderer({
+    foldUserMessages: settings.general.foldUserMessages,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,
@@ -537,7 +557,7 @@ function MessageTimelineView(
                   </Show>
                 </>
               }
-              actions={
+              actions={(fit) => (
                 <Show when={sessionID()} keyed>
                   {(_id) => (
                     <>
@@ -554,13 +574,16 @@ function MessageTimelineView(
                           get active() {
                             return props.active !== false
                           },
+                          get compact() {
+                            return fit.compact
+                          },
                         }}
                       />
                       <SessionHeaderSpacer visible={props.reserveReviewToggle} />
                     </>
                   )}
                 </Show>
-              }
+              )}
             >
               <Show when={parentID() && childTitle()}>
                 {(value) => (

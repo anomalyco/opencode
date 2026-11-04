@@ -1,8 +1,9 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
-import { createMemo, onCleanup, onMount } from "solid-js"
+import { createMemo, For, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
+import { CommentCard, commentCardTarget } from "../message/comment-card"
 import type { ReasoningMode } from "./projection"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
@@ -53,6 +54,67 @@ export const StreamingReasoningAndText = {
       description="The active turn contains a reasoning summary and a partial response."
       document={streamingDocument}
       width="560px"
+    />
+  ),
+}
+
+export const ResponseSpeed = {
+  args: { measured: true, steered: false },
+  render: (args: { measured: boolean; steered: boolean }) => (
+    <CurrentSessionTimelineStory
+      title="Response speed"
+      description="Hover the response, then its metadata line to reveal tokens per second across both model steps."
+      width="720px"
+      document={{
+        sessionID: CURRENT_SESSION_ID,
+        status: { type: "idle" },
+        diffs: [],
+        messages: [
+          {
+            id: "msg_speed_user",
+            type: "user",
+            text: "Check the timeline performance.",
+            time: { created: STORY_TIME },
+          },
+          {
+            id: "msg_speed_inspect",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [{ type: "text", text: "I'll inspect the timeline before checking the results." }],
+            tokens: { input: 1000, output: 270, reasoning: 30, cache: { read: 0, write: 0 } },
+            time: {
+              created: STORY_TIME + 100,
+              streamed: args.measured ? STORY_TIME + 3100 : undefined,
+              completed: STORY_TIME + 290_000,
+            },
+          },
+          ...(args.steered
+            ? [
+                {
+                  id: "msg_speed_steer",
+                  type: "user" as const,
+                  text: "Include narrow layouts in the check.",
+                  time: { created: STORY_TIME + 290_000 },
+                },
+              ]
+            : []),
+          {
+            id: "msg_speed_reply",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [{ type: "text", text: "The timeline checks passed. No performance regressions were found." }],
+            tokens: { input: 2000, output: 500, reasoning: 100, cache: { read: 0, write: 0 } },
+            time: {
+              created: STORY_TIME + 290_000,
+              streamed: STORY_TIME + 302_000,
+              completed: STORY_TIME + 302_000,
+            },
+          },
+          { id: "msg_speed_idle", type: "idle", outcome: "succeeded", time: { created: STORY_TIME + 302_000 } },
+        ],
+      }}
     />
   ),
 }
@@ -542,6 +604,79 @@ export const PromptWithAttachments = {
       width="480px"
     />
   ),
+}
+
+export const QuoteAttachments = {
+  render: () => (
+    <div
+      style={{
+        padding: "24px",
+        display: "grid",
+        "grid-template-columns": "minmax(0, 1fr)",
+        gap: "8px",
+        width: "360px",
+        "max-width": "100%",
+      }}
+    >
+      <CommentCard comment="Remove this" target={{ type: "quote", text: "The menu is hovered." }} wide />
+      <CommentCard
+        comment="Can we make this smaller?"
+        target={{
+          type: "quote",
+          text: "It has a 32px minimum, capped at the track height. The remaining space is reserved for the timeline content.",
+        }}
+        wide
+      />
+    </div>
+  ),
+}
+
+export const NoteAttachments = {
+  render: () => {
+    const [state, setState] = createStore({ selected: "None" })
+
+    const notes = [
+      { name: "Named", label: "button#save", title: "button#save", subtitle: "Browser annotation" },
+      { name: "Unnamed", label: "button", title: "button.icon-only", subtitle: "Browser annotation", comment: " \t " },
+      { name: "Legacy", label: "Legacy element" },
+      { name: "Whitespace", label: "Fallback element", title: " \n ", subtitle: " \t " },
+      { name: "Title only", label: "Original label", title: "button#save" },
+      {
+        name: "Commented",
+        label: "Original selector",
+        title: "Ignored title",
+        subtitle: "Browser annotation",
+        comment: "Fix this",
+      },
+      { name: "RTL subtitle", label: "زر الحفظ", title: "button#save", subtitle: "تعليق المتصفح", rtl: true },
+      { name: "RTL legacy", label: "العنصر الأصلي", rtl: true },
+      {
+        name: "Long selector",
+        label: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+        title: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+        subtitle: "Browser annotation",
+      },
+    ]
+
+    return (
+      <div style={{ padding: "24px", display: "flex", "flex-wrap": "wrap", gap: "24px", "max-width": "800px" }}>
+        <For each={notes}>
+          {(note) => (
+            <section aria-label={note.name} dir={note.rtl ? "rtl" : "ltr"}>
+              <h2 style={{ "font-size": "13px", "margin-bottom": "8px" }}>{note.name}</h2>
+              <CommentCard
+                target={commentCardTarget({ type: "note", icon: "code", ...note })}
+                comment={note.comment ?? ""}
+                tooltip
+                onClick={() => setState("selected", note.name)}
+              />
+            </section>
+          )}
+        </For>
+        <output aria-label="Selected attachment">{state.selected}</output>
+      </div>
+    )
+  },
 }
 
 export const VoiceMessages = {

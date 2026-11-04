@@ -32,6 +32,7 @@ import {
   type Plugin,
 } from "@opencode/plugin/gui"
 import { artifactKind } from "@opencode/util/artifact"
+import { uuid } from "@opencode/util/uuid"
 import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
 import type { OpenApp } from "./apps"
@@ -167,7 +168,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
       if (selected || layout.narrow())
         layout.open(`file:${selected ?? OPEN}`, session, { tab: "preview", background: options?.background })
-      else layout.open(`file:${OPEN}:${crypto.randomUUID()}`, session, { tab: "select" })
+      else layout.open(`file:${OPEN}:${uuid()}`, session, { tab: "select" })
 
       if (!options?.background && layout.narrow() && !layout.side.opened(session)) layout.side.toggle(session)
     })
@@ -527,7 +528,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const resolve = (files: Files, value: string, base?: string) => {
     const root = files.root.replaceAll("\\", "/").replace(/\/+$/, "")
 
-    if (/^[a-z]:\//i.test(value) || value.startsWith("/")) return files.resolve(value)
+    if (/^skill:\/\//i.test(value) || /^[a-z]:\//i.test(value) || value.startsWith("/")) return files.resolve(value)
 
     const relative = resolveArtifactPath(base ?? "", value)
 

@@ -1,14 +1,15 @@
 import { createMemo, type Accessor } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
-import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
 import { ServerConnection } from "@/runtime/server/registry"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 
-type ServerData = ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>["data"]
+type ServerData = ServerCtx["data"]
 
+// Without a server (no session in view) the session reads as idle and read.
 export function useSessionTabAvatarState(
-  server: Accessor<ServerConnection.Key>,
+  server: Accessor<ServerConnection.Key | undefined>,
   sessionId: Accessor<string>,
   root?: Accessor<boolean>,
   snapshot?: Accessor<SessionInfo | undefined>,

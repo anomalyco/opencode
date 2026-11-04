@@ -39,14 +39,18 @@ const TREE_UNSAFE_CSS = `
   /* Long rows scroll sideways rather than clip; every row is as wide as the widest one seen in this row set. */
   [data-file-tree-virtualized-list="true"] { width: max-content; min-width: max(100%, var(--file-tree-min-width, 0px)); }
   [data-item-section="spacing"] {
-    margin-left: 0; margin-right: 0;
-    margin-inline-start: calc(var(--trees-spacing-unit) * 0.5 + 1px);
-    margin-inline-end: calc(var(--trees-item-row-gap) * -1);
+    padding-left: 0;
+    padding-inline-start: calc(var(--trees-icon-width) / 2 - 0.5px);
   }
   [data-item-section="spacing-item"] {
     border-left: none; margin-right: 0;
     border-inline-start: 1px solid var(--trees-indent-guide-bg);
-    margin-inline-end: var(--trees-item-row-gap);
+    margin-inline-end: calc(var(--trees-level-gap) - 1px);
+    transform: none;
+  }
+  [data-item-section="spacing-item"] + [data-item-section="spacing-item"] {
+    margin-left: 0;
+    margin-inline-start: calc(var(--trees-item-row-gap) + var(--trees-icon-width) / 2 - 0.5px);
   }
   [data-type="item"][aria-expanded="false"] [data-item-section="icon"] > svg:first-child {
     transform: translateY(var(--trees-icon-nudge));

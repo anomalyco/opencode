@@ -26,7 +26,10 @@ function pending(id: string, sessionID: string) {
   return { id, sessionID, action: "shell", resources: ["git status"], metadata: {}, save: [] }
 }
 
-async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServerConfig> }) {
+async function setup(
+  page: Page,
+  input: { tabs: TabSeed[]; a?: Partial<MockServerConfig>; b?: Partial<MockServerConfig> },
+) {
   const replies: Reply[] = []
   const lists: URL[] = []
   const sessionGets: string[] = []
@@ -62,7 +65,7 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
       onSession: (id) => sessionGets.push(id),
       ...input.a,
     },
-    [REMOTE_SERVER]: config(REMOTE_SERVER, "Server B", directoryB, [sessionB]),
+    [REMOTE_SERVER]: { ...config(REMOTE_SERVER, "Server B", directoryB, [sessionB]), ...input.b },
   })
 
   await seed(page, { servers: [REMOTE_SERVER], tabs: input.tabs })
@@ -138,6 +141,31 @@ test("settings opened from a remote session sweep every server and keep the remo
   await page.keyboard.press("Escape")
   await expectPath(page, sessionHref(sessionB.id, REMOTE_SERVER))
   await expectSessionTitle(page, sessionB.title)
+})
+
+test("a remote session whose server signed the app out asks to sign in again, then opens", async ({ page }) => {
+  // The saved password is stale; the server's pairing link signs the app in again at the same address.
+  await setup(page, {
+    tabs: [],
+    b: { password: "session-token", pairing: { code: "one-time-code", token: "session-token" } },
+  })
+  await seed(page, {
+    storage: {
+      "opencode.global.dat:server": { list: [{ type: "http", http: { url: REMOTE_SERVER, password: "old-password" } }] },
+    },
+  })
+  await page.goto(sessionHref(sessionB.id, REMOTE_SERVER))
+
+  const signedOut = page.getByText("Signed out of this server", { exact: true })
+  await expect(signedOut).toBeVisible()
+  await page.getByRole("button", { name: "Sign in again", exact: true }).click()
+  const editor = page.getByRole("dialog", { name: "Edit server" })
+  await editor.getByLabel("Pairing link", { exact: true }).fill(`${REMOTE_SERVER}/auth/connect/one-time-code`)
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+
+  await expect(editor).toHaveCount(0)
+  await expectSessionTitle(page, sessionB.title)
+  await expect(signedOut).toHaveCount(0)
 })
 
 test("auto-accept responds for an unfocused server session and its child", async ({ page }) => {
@@ -233,7 +261,7 @@ test("a project's auto-accept choice overrides the default in both directions", 
       onPermissionReply: (reply) => replies.push(reply.permissionID),
     },
   })
-  await seed(page, { tabs: [api.id, web.id] })
+  await seed(page, { tabs: [api.id, web.id], usedProjects: { local: ["proj_api", "proj_web"] } })
   const dock = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
   const settings = page.getByTestId("settings-screen")
 

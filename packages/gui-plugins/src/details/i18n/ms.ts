@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Tiada plugin dikonfigurasikan",
   skills: "Kemahiran",
   "skills.empty": "Tiada kemahiran dikonfigurasikan",
-  lsp: "LSP",
-  "lsp.empty": "Tiada pelayan LSP dikonfigurasikan",
   failed: "Gagal",
   retry: "Cuba semula",
   connecting: "Menyambung…",

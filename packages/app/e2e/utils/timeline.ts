@@ -125,7 +125,6 @@ type TimelineServerInput = Partial<
     | "fileList"
     | "fileContent"
     | "findFiles"
-    | "pty"
     | "keepalive"
     | "onPermissionReply"
     | "shellCommands"
@@ -322,7 +321,7 @@ export async function setupTimeline(
 
   return {
     transport,
-    pty: mock.pty,
+    persistentPty: mock.persistentPty,
     send,
     async sendAll(sequence: { event: TimelineEvent; delay: number }[]) {
       for (const item of sequence) await send(item.event, item.delay)

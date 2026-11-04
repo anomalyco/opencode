@@ -11,6 +11,8 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
   /** Called while dragging when size crosses `collapseThreshold`. */
   onCollapseChange?: (collapsed: boolean) => void
   collapseThreshold?: number
+  /** Called with true on the first move of a drag and with false when it ends; a click without moving calls neither. */
+  onDraggingChange?: (dragging: boolean) => void
 }
 
 export function ResizeHandle(props: ResizeHandleProps) {
@@ -24,6 +26,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "onCollapse",
     "onCollapseChange",
     "collapseThreshold",
+    "onDraggingChange",
     "class",
     "classList",
   ])
@@ -47,8 +50,10 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const onResize = local.onResize
     const onCollapse = local.onCollapse
     const onCollapseChange = local.onCollapseChange
+    const onDraggingChange = local.onDraggingChange
     let current = startSize
     let collapsed = false
+    let moved = false
 
     document.body.style.userSelect = "none"
     document.body.style.overflow = "hidden"
@@ -56,6 +61,11 @@ export function ResizeHandle(props: ResizeHandleProps) {
     handle?.setAttribute("data-dragging", "")
 
     const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!moved) {
+        moved = true
+        onDraggingChange?.(true)
+      }
+
       const pos = local.direction === "horizontal" ? moveEvent.clientX : moveEvent.clientY
 
       const delta =
@@ -86,6 +96,8 @@ export function ResizeHandle(props: ResizeHandleProps) {
       document.removeEventListener("mousemove", onMouseMove)
       document.removeEventListener("mouseup", onMouseUp)
 
+      if (moved) onDraggingChange?.(false)
+
       if (collapsed) {
         onCollapse?.()
 
@@ -99,6 +111,12 @@ export function ResizeHandle(props: ResizeHandleProps) {
     document.addEventListener("mouseup", onMouseUp)
   }
 
+  // The handle holds the pointer until the button comes up, so hover stays on it rather than following the pointer
+  // across the panels it resizes, each crossing restyling their contents.
+  const handlePointerDown = (e: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    if (e.pointerType === "mouse" && e.button === 0) e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
   return (
     <div
       {...rest}
@@ -109,6 +127,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
+      onPointerDown={handlePointerDown}
       onMouseDown={handleMouseDown}
     />
   )

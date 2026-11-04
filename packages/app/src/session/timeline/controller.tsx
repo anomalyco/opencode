@@ -2,7 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { Button } from "@opencode/ui/button"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on } from "solid-js"
+import { createEffect, createMemo, on, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Predicate, Schema } from "effect"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
@@ -24,6 +24,7 @@ import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
+import { createNewMessages } from "./new-messages"
 
 const emptyMessages: SessionMessageInfo[] = []
 
@@ -56,7 +57,11 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: { session: TimelineSessionSource }) {
+export function createTimelineController(input: {
+  session: TimelineSessionSource
+  active: Accessor<boolean>
+  caughtUp: Accessor<boolean>
+}) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -68,15 +73,28 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const language = useLanguage()
   const platform = usePlatform()
 
-  const visibleMessages = createMemo(() => {
-    const id = input.session.identity.sessionID()
+  // Pending inputs hold with the history while the view is detached, so a hidden view never shows one against
+  // history it has not caught up with.
+  const pendingItems = createMemo<{ value: ReturnType<typeof data.session.pending.list> } | undefined>(
+    (previous) => {
+      if (previous && !input.active()) return previous
+      const id = input.session.identity.sessionID()
 
-    return visibleTimelineMessages(
+      return { value: id ? data.session.pending.list(id) : [] }
+    },
+    undefined,
+    { equals: (previous, next) => previous?.value === next?.value },
+  )
+
+  const pendingList = () => pendingItems()!.value
+
+  const visibleMessages = createMemo(() =>
+    visibleTimelineMessages(
       input.session.history.messages(),
-      id ? data.session.pending.list(id) : [],
+      pendingList(),
       input.session.data.info()?.revert?.messageID,
-    )
-  })
+    ),
+  )
 
   // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
   const projectedMessages = createMemo(() =>
@@ -95,24 +113,20 @@ export function createTimelineController(input: { session: TimelineSessionSource
     if (!id) return new Set<string>()
 
     return new Set(
-      data.session.pending
-        .list(id)
-        .flatMap((item) =>
-          (item.type === "user" &&
-            item.delivery === "steer" &&
-            data.session.pending.status(id, item.id) !== "starting") ||
-          item.type === "synthetic"
-            ? [item.id]
-            : [],
-        ),
+      pendingList().flatMap((item) =>
+        (item.type === "user" &&
+          item.delivery === "steer" &&
+          data.session.pending.status(id, item.id) !== "starting") ||
+        item.type === "synthetic"
+          ? [item.id]
+          : [],
+      ),
     )
   })
 
-  const queuedCompactionIDs = createMemo(() => {
-    const id = input.session.identity.sessionID()
-
-    return (id ? data.session.pending.list(id) : []).flatMap((item) => (item.type === "compaction" ? [item.id] : []))
-  })
+  const queuedCompactionIDs = createMemo(() =>
+    pendingList().flatMap((item) => (item.type === "compaction" ? [item.id] : [])),
+  )
 
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("session.tab.session"))
@@ -172,6 +186,17 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
+  const newMessages = createNewMessages({
+    scope: serverSDK.scope,
+    directory: sdk().directory,
+    sessionID: input.session.identity.sessionID()!,
+    messages: projectedMessages,
+    active: input.active,
+    enabled: settings.general.newMessagesDivider,
+    caughtUp: input.caughtUp,
+    pendingInputIDs,
+  })
+
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
@@ -182,6 +207,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
+    newMessages: newMessages.parts,
+    newMessagesRead: newMessages.dismissed,
   })
 
   const [pending, setPending] = createStore({ rename: false })
@@ -331,6 +358,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       childTitle,
       showHeader,
       projection,
+      newMessages,
       timelineDetail,
       reasoningMode,
       shellToolPartsExpanded,

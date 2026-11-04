@@ -15,10 +15,10 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { getFilename } from "@opencode/util/path"
 import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { inferHomeDirectory } from "@/runtime/server/global-sync/bootstrap"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ServerConnection, serverName } from "@/runtime/server/registry"
+import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { pathKey } from "@/workspaces/path-key"
 import type { LocationRef } from "@opencode/client/promise"
 import {
@@ -60,8 +60,8 @@ interface DirectoryPickerDialogProps {
 }
 
 export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
-  const global = useGlobal()
-  const serverCtx = global.ensureServerCtx(props.server)
+  const servers = useServers()
+  const serverCtx = useServer().ctx
   const sync = serverCtx.sync
   const sdk = serverCtx.sdk
   const dialog = useDialog()
@@ -121,7 +121,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""),
   )
 
-  const subtitle = createMemo(() => (ServerConnection.local(props.server) ? undefined : serverName(props.server)))
+  const subtitle = createMemo(() => (servers.local(props.server) ? undefined : serverName(props.server)))
 
   const location = createMemo(() => {
     const current = props.location ?? fallbackPath.latest
@@ -201,12 +201,15 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   const currentSuggestions = createMemo(() =>
     currentPickerSuggestions(suggestions.latest, state.input, suggestions.loading),
   )
+
   const resolvedResult = createMemo(() => policy.result(state.root, state.selected, state.rootValid))
+
   const fullSelectionPath = createMemo(() => {
     const value = resolvedResult()
 
     return value ? displayPickerPath(value, "", home()) : ""
   })
+
   const shortSelectionPath = createMemo(() => {
     const value = resolvedResult()
 
@@ -293,6 +296,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     for (const selectedPath of tree?.getSelectedPaths() ?? []) {
       if (selectedPath !== entry) tree?.getItem(selectedPath)?.deselect()
     }
+
     tree?.getItem(entry)?.select()
     tree?.focusPath(entry)
     // The tree measures newly expanded rows after this frame, so an immediate scroll clamps to the old height.
@@ -351,6 +355,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       for (const selectedPath of tree?.getSelectedPaths() ?? []) {
         tree?.getItem(selectedPath)?.deselect()
       }
+
       tree?.focusNearestPath(null)
       setState({
         selected: "",
@@ -450,6 +455,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   function activeSuggestionIndex() {
     if (!state.suggestionsOpen) return -1
+
     if (state.activeSuggestion >= 0) return state.activeSuggestion
     const raw = cleanPickerInput(state.input)
 

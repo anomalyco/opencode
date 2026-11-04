@@ -11,7 +11,7 @@ export function FileVisual(props: { path: string; temporary?: boolean; notFound?
         <FileIcon node={{ path: props.path, type: "file" }} mono class="absolute inset-0 size-4 tab-fileicon-mono" />
       </span>
       <span
-        class="text-14-medium truncate"
+        class="font-sans font-medium leading-[calc(var(--font-size-base)*1.5)] tracking-normal truncate"
         classList={{ italic: props.temporary, "line-through": props.notFound }}
         data-file-not-found={props.notFound ? "" : undefined}
       >

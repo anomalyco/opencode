@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import type { Eval } from "../interpreter/runner.js"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, PendingThrow, typeError, uriError } from "../interpreter/model.js"
 import {
@@ -43,7 +43,7 @@ const uriFunctions: Record<UriFunction, (value: string) => string> = {
 }
 
 export const uriGlobal = <R>(ctx: Interpreter<R>, name: UriFunction) =>
-  fn<R>(ctx.builtins, name, 1, (_, args) => {
+  fn(ctx.builtins, name, 1, (_, args) => {
     const value = coerceToString(args[0])
     try {
       return uriFunctions[name](value)
@@ -69,11 +69,11 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
       throw typeError(`new URL(...) received an invalid URL${base === undefined ? "" : " or base URL"}.`)
     }
   }
-  const url = constructor<R>(builtins, proto, {
+  const url = constructor(builtins, proto, {
     name: "URL",
     length: 1,
     call: requiresNew("URL"),
-    construct: (args, newTarget) => Effect.sync(() => construct(args, prototypeFrom(newTarget, proto))),
+    construct: (args, newTarget) => construct(args, prototypeFrom(newTarget, proto)),
   })
   const parse = (name: "canParse" | "parse"): Method => [
     name,
@@ -119,79 +119,69 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
   return url
 }
 
-const readPair = <R>(ctx: Interpreter<R>, value: Value, label: string): Effect.Effect<Array<string>, unknown, R> =>
-  Effect.gen(function* () {
-    const cursor = yield* ctx.iterate(value)
-    if (cursor === undefined) throw typeError(`${label} expects iterable [name, value] pairs.`)
-    const items: Array<string> = []
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) return items
-      items.push(
-        yield* preserveConsumerError(
-          cursor.close,
-          Effect.sync(() => coerceToString(step.value)),
-        ),
-      )
-    }
-  })
+function* readPair<R>(ctx: Interpreter<R>, value: Value, label: string): Eval<Array<string>> {
+  const cursor = yield* ctx.iterate(value)
+  if (cursor === undefined) throw typeError(`${label} expects iterable [name, value] pairs.`)
+  const items: Array<string> = []
+  while (true) {
+    const step = yield* cursor.next()
+    if (step.done) return items
+    items.push(yield* preserveConsumerError(cursor.close, pairString(step.value)))
+  }
+}
+
+// A step, so a failing conversion closes the pair's iterator.
+function* pairString(value: Value): Eval<string> {
+  return coerceToString(value)
+}
 
 /**
  * Reads a synchronous iterable of `[name, value]` pairs as strings; `undefined` when `init` is not iterable. As in
  * WebIDL, the whole sequence is converted before any pair's length is checked.
  */
-export const readPairs = <R>(
+export function* readPairs<R>(
   ctx: Interpreter<R>,
   init: Value,
   label: string,
-): Effect.Effect<Array<[string, string]> | undefined, unknown, R> =>
-  Effect.gen(function* () {
-    const cursor = yield* ctx.iterate(init)
-    if (cursor === undefined) return undefined
-    const pairs: Array<Array<string>> = []
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) {
-        if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
-        return pairs as Array<[string, string]>
-      }
-      pairs.push(yield* preserveConsumerError(cursor.close, readPair(ctx, step.value, label)))
+): Eval<Array<[string, string]> | undefined> {
+  const cursor = yield* ctx.iterate(init)
+  if (cursor === undefined) return undefined
+  const pairs: Array<Array<string>> = []
+  while (true) {
+    const step = yield* cursor.next()
+    if (step.done) {
+      if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
+      return pairs as Array<[string, string]>
     }
-  })
-
-const constructURLSearchParams = <R>(
-  ctx: Interpreter<R>,
-  init: Value,
-  proto: Obj,
-): Effect.Effect<URLSearchParamsObj, unknown, R> => {
-  const wrap = (params: URLSearchParams) => new URLSearchParamsObj(proto, params)
-  if (init === undefined) return Effect.succeed(wrap(new URLSearchParams()))
-  if (init instanceof URLSearchParamsObj) return Effect.succeed(wrap(new URLSearchParams(init.params)))
-  if (typeof init === "string") return Effect.succeed(wrap(new URLSearchParams(init)))
-  if (init === null || typeof init === "number" || typeof init === "boolean") {
-    return Effect.succeed(wrap(new URLSearchParams(coerceToString(init))))
+    pairs.push(yield* preserveConsumerError(cursor.close, readPair(ctx, step.value, label)))
   }
-  return Effect.gen(function* () {
-    const pairs = yield* readPairs(ctx, init, "new URLSearchParams(...)")
-    if (pairs !== undefined) return wrap(new URLSearchParams(pairs))
-    if (isRuntimeReference(init)) {
-      throw typeError("new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs.")
-    }
-    if (!(init instanceof Obj)) {
-      throw typeError(
-        "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams.",
-      )
-    }
-    return wrap(
-      new URLSearchParams(Object.fromEntries(entries(init).map(([key, value]) => [key, coerceToString(value)]))),
-    )
-  })
+}
+
+function* constructURLSearchParams<R>(ctx: Interpreter<R>, init: Value, proto: Obj): Eval<URLSearchParamsObj> {
+  const wrap = (params: URLSearchParams) => new URLSearchParamsObj(proto, params)
+  if (init === undefined) return wrap(new URLSearchParams())
+  if (init instanceof URLSearchParamsObj) return wrap(new URLSearchParams(init.params))
+  if (typeof init === "string") return wrap(new URLSearchParams(init))
+  if (init === null || typeof init === "number" || typeof init === "boolean") {
+    return wrap(new URLSearchParams(coerceToString(init)))
+  }
+  const pairs = yield* readPairs(ctx, init, "new URLSearchParams(...)")
+  if (pairs !== undefined) return wrap(new URLSearchParams(pairs))
+  if (isRuntimeReference(init)) {
+    throw typeError("new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs.")
+  }
+  if (!(init instanceof Obj)) {
+    throw typeError("new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams.")
+  }
+  return wrap(
+    new URLSearchParams(Object.fromEntries(entries(init).map(([key, value]) => [key, coerceToString(value)]))),
+  )
 }
 
 export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.URLSearchParams
-  const searchParams = constructor<R>(builtins, proto, {
+  const searchParams = constructor(builtins, proto, {
     name: "URLSearchParams",
     call: requiresNew("URLSearchParams"),
     construct: (args, newTarget) => constructURLSearchParams(ctx, args[0], prototypeFrom(newTarget, proto)),
@@ -276,14 +266,12 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "forEach",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         requireArgs("forEach", args, 1)
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "URLSearchParams.forEach")
-        return Effect.gen(function* () {
-          for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target], args[1])
-          return undefined
-        })
+        for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target], args[1])
+        return undefined
       },
     ],
   ])

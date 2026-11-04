@@ -45,10 +45,9 @@ export function DesktopFirstLaunchOnboarding(props: {
 
       console.info("[desktop-onboarding] starting first launch draft", { directory })
       const sidecar = ServerConnection.Key.make("sidecar")
-      const connection = server.list.find((connection) => ServerConnection.key(connection) === sidecar)
+      const ctx = global.serverCtx(sidecar)
 
-      if (connection) {
-        const ctx = global.ensureServerCtx(connection)
+      if (ctx) {
         // Load the initial provider/model state before the draft transition exposes the composer.
         await Promise.all([
           ctx.projects.add(directory),

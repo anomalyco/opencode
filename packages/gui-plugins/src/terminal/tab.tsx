@@ -1,30 +1,22 @@
 import type { JSX } from "solid-js"
 import { Show, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useSortable } from "@dnd-kit/solid/sortable"
+import type { PersistentPtyInfo } from "@opencode/client"
 import { Tabs } from "@opencode/ui/tabs"
 import { Menu } from "@opencode/ui/menu"
 import { usePlugin } from "@opencode/plugin/gui"
-import type { TerminalWorkspace } from "./model"
-import type { LocalPTY } from "./state"
+import type { TerminalSession } from "./model"
 import { terminalTabLabel } from "./title"
 import { focusTerminalById } from "./focus"
 
-export function SortableTerminalTab(props: {
-  terminal: LocalPTY
-  workspace: TerminalWorkspace
-  index: number
+/** A terminal's tab in the narrow-screen view. Without `rename` the terminal cannot be renamed. */
+export function TerminalTab(props: {
+  terminal: PersistentPtyInfo
+  session: TerminalSession
+  /** Receives the edited title, or `null` for an emptied field; unchanged titles are the receiver's to skip. */
+  rename?: (title: string | null) => void
 }): JSX.Element {
   const plugin = usePlugin()
-
-  const sortable = useSortable({
-    get id() {
-      return props.terminal.id
-    },
-    get index() {
-      return props.index
-    },
-  })
 
   const [store, setStore] = createStore({
     editing: false,
@@ -34,23 +26,23 @@ export function SortableTerminalTab(props: {
 
   let input: HTMLInputElement | undefined
   let blurFrame: number | undefined
+  let editFrame: number | undefined
   let editRequested = false
 
-  const label = () =>
-    terminalTabLabel({ title: props.terminal.title, titleNumber: props.terminal.titleNumber, t: plugin.t })
+  const label = () => terminalTabLabel({ title: props.terminal.title, t: plugin.t })
 
-  const close = () => void props.workspace.close(props.terminal.id)
+  const close = () => void props.session.close(props.terminal.id)
 
   const focus = () => {
     if (store.editing) return
-    props.workspace.requestFocus(props.terminal.id)
-    props.workspace.open(props.terminal.id)
+    props.session.requestFocus(props.terminal.id)
+    props.session.select(props.terminal.id)
 
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     focusTerminalById(props.terminal.id)
     const input = document.getElementById(`terminal-wrapper-${props.terminal.id}`)?.querySelector("textarea")
 
-    if (input === document.activeElement) props.workspace.consumeFocus(props.terminal.id)
+    if (input === document.activeElement) props.session.consumeFocus(props.terminal.id)
   }
 
   const edit = (e?: Event) => {
@@ -58,6 +50,8 @@ export function SortableTerminalTab(props: {
       e.stopPropagation()
       e.preventDefault()
     }
+
+    if (!props.rename) return
 
     const editing = store.editing
 
@@ -79,15 +73,15 @@ export function SortableTerminalTab(props: {
     })
   }
 
+  // Ending the edit unmounts the focused field, whose blur would save again, or save a cancelled title.
+  // The field renders inside the strip's tab trigger, so it keeps its keys, pointer and focus from the trigger: the
+  // tab list returns focus that enters it from outside to the trigger.
+  const isolate = (event: Event) => event.stopPropagation()
+
   const save = () => {
-    if (!store.blurEnabled) return
+    if (!store.editing || !store.blurEnabled) return
 
-    const value = store.title.trim()
-
-    if (value && value !== props.terminal.title) {
-      props.workspace.update({ id: props.terminal.id, title: value })
-    }
-
+    props.rename?.(store.title.trim() || null)
     setStore("editing", false)
   }
 
@@ -106,12 +100,13 @@ export function SortableTerminalTab(props: {
   }
 
   onCleanup(() => {
-    if (blurFrame === undefined) return
-    cancelAnimationFrame(blurFrame)
+    if (blurFrame !== undefined) cancelAnimationFrame(blurFrame)
+
+    if (editFrame !== undefined) cancelAnimationFrame(editFrame)
   })
 
   return (
-    <div ref={sortable.ref} class="h-full flex items-center outline-none focus:outline-none focus-visible:outline-none">
+    <div class="h-full flex items-center outline-none focus:outline-none focus-visible:outline-none">
       <Menu.Context>
         <Menu.Context.Trigger class="relative" as="div">
           <Tabs.Trigger
@@ -146,11 +141,19 @@ export function SortableTerminalTab(props: {
               <input
                 ref={input}
                 type="text"
+                aria-label={plugin.t("common.rename")}
                 value={store.title}
                 onInput={(e) => setStore("title", e.currentTarget.value)}
                 onBlur={save}
-                onKeyDown={keydown}
-                onMouseDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  isolate(e)
+                  keydown(e)
+                }}
+                onKeyUp={isolate}
+                onFocusIn={isolate}
+                onPointerDown={isolate}
+                onMouseDown={isolate}
+                onClick={isolate}
                 class="bg-transparent border-none outline-none min-w-0 flex-1 p-0 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-base [font-weight:440] [font-variation-settings:'slnt'_0] [font-variant-numeric:tabular-nums]"
               />
             </div>
@@ -162,10 +165,17 @@ export function SortableTerminalTab(props: {
               if (!editRequested) return
               e.preventDefault()
               editRequested = false
-              requestAnimationFrame(() => edit())
+
+              if (editFrame !== undefined) cancelAnimationFrame(editFrame)
+              editFrame = requestAnimationFrame(() => {
+                editFrame = undefined
+                edit()
+              })
             }}
           >
-            <Menu.Item onSelect={() => (editRequested = true)}>{plugin.t("common.rename")}</Menu.Item>
+            <Menu.Item disabled={!props.rename} onSelect={() => (editRequested = true)}>
+              {plugin.t("common.rename")}
+            </Menu.Item>
             <Menu.Item onSelect={close}>{plugin.t("common.close")}</Menu.Item>
           </Menu.Context.Content>
         </Menu.Context.Portal>

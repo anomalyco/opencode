@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
+import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalArray } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "google-video", name: "Google Veo", provider: "google" })
@@ -22,7 +22,7 @@ export type GoogleVideoOptions = {
   readonly personGeneration?: OpenString<"allow_all" | "allow_adult" | "dont_allow">
 } & Record<string, unknown>
 
-export type Request = VideoRequestFor<GoogleVideoOptions>
+export type Request = VideoRequest<VideoModel<GoogleVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas

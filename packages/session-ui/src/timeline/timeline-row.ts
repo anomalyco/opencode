@@ -1,4 +1,4 @@
-import { Data, Equal, Match } from "effect"
+import { Data, Match, Predicate } from "effect"
 
 export type PartRef = {
   messageID: string
@@ -45,6 +45,12 @@ export namespace TimelineRow {
     userMessageID: string
   }> {}
 
+  export class NewMessages extends Data.TaggedClass("NewMessages")<{
+    userMessageID: string
+    partID: string
+    read: boolean
+  }> {}
+
   export class AssistantPart extends Data.TaggedClass("AssistantPart")<{
     userMessageID: string
     group: PartGroup
@@ -58,14 +64,15 @@ export namespace TimelineRow {
   }> {}
 
   /**
-   * `free-limit` marks OpenCode Zen's daily free allowance running out. `budget-limit` marks an OpenCode Console budget
+   * `free-limit` marks OpenCode Zen's daily free allowance running out and `go-limit` an OpenCode Go subscription's
+   * usage limit. `budget-limit` marks an OpenCode Console budget
    * on all spend pausing paid models, and `model-budget-limit` one pausing only the models it covers. `resetAt` is when
    * the allowance or budget comes back, if known.
    */
   export class Error extends Data.TaggedClass("Error")<{
     userMessageID: string
     text: string
-    kind?: "free-limit" | "budget-limit" | "model-budget-limit"
+    kind?: "free-limit" | "go-limit" | "budget-limit" | "model-budget-limit"
     resetAt?: number
   }> {}
 
@@ -103,6 +110,7 @@ export namespace TimelineRow {
     | Shell
     | Notice
     | TurnDivider
+    | NewMessages
     | AssistantPart
     | Thinking
     | Error
@@ -117,6 +125,7 @@ export namespace TimelineRow {
     Shell: (row) => `shell:${row.messageID}`,
     Notice: (row) => `notice:${row.messageID}`,
     TurnDivider: (row) => `turn-divider:${row.userMessageID}`,
+    NewMessages: (row) => `new-messages:${row.partID}`,
     // Keyed by part identity alone: a page boundary can truncate the leading turn,
     // and its rows regroup under the real user message once older history loads.
     // The group key already carries the owning message and part IDs.
@@ -130,9 +139,63 @@ export namespace TimelineRow {
     Activity: () => "activity",
   })
 
+  // Every projection change compares each row with its previous version. Effect's structural `Equal.equals` hashes
+  // every nested group and ref of the new row first, which cost milliseconds per change on long sessions. A field added
+  // to a row needs a comparison here, or a change to only that field keeps the previous row.
+  const sameFields: (row: TimelineRow) => (other: TimelineRow) => boolean = Match.typeTags<TimelineRow>()({
+    TurnGap: () => (other: TimelineRow) => Predicate.isTagged(other, "TurnGap"),
+    UserMessage: () => (other: TimelineRow) => Predicate.isTagged(other, "UserMessage"),
+    Shell: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Shell") && other.messageID === row.messageID,
+    Notice: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Notice") && other.messageID === row.messageID,
+    TurnDivider: () => (other: TimelineRow) => Predicate.isTagged(other, "TurnDivider"),
+    NewMessages: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "NewMessages") && other.partID === row.partID && other.read === row.read,
+    AssistantPart: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "AssistantPart") &&
+      other.previousAssistantPart === row.previousAssistantPart &&
+      other.spacing === row.spacing &&
+      sameGroup(other.group, row.group),
+    Thinking: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Thinking") && sameRef(other.ref, row.ref),
+    Error: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Error") &&
+      other.text === row.text &&
+      other.kind === row.kind &&
+      other.resetAt === row.resetAt,
+    Retry: () => (other: TimelineRow) => Predicate.isTagged(other, "Retry"),
+    CompactionQueued: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "CompactionQueued") && other.inboxID === row.inboxID,
+    TurnDiff: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "TurnDiff") &&
+      other.messageID === row.messageID &&
+      other.from === row.from &&
+      other.files.length === row.files.length &&
+      other.files.every((file, index) => file === row.files[index]),
+    Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
+  })
+
   export function equals(a: TimelineRow, b: TimelineRow) {
-    return Equal.equals(a, b)
+    return a === b || (a.userMessageID === b.userMessageID && sameFields(a)(b))
   }
+}
+
+function sameGroup(a: PartGroup, b: PartGroup) {
+  if (a.key !== b.key) return false
+
+  if (a.type === "part") return b.type === "part" && sameRef(a.ref, b.ref)
+
+  return (
+    b.type === a.type &&
+    b.refs.length === a.refs.length &&
+    a.refs.every((ref, index) => {
+      const other = b.refs[index]
+
+      return other !== undefined && sameRef(ref, other)
+    })
+  )
+}
+
+function sameRef(a: PartRef, b: PartRef) {
+  return a.messageID === b.messageID && a.partID === b.partID
 }
 
 export type TimelineRowMap = {
@@ -141,6 +204,7 @@ export type TimelineRowMap = {
   Shell: { userMessageID: string; messageID: string }
   Notice: { userMessageID: string; messageID: string }
   TurnDivider: { userMessageID: string }
+  NewMessages: { userMessageID: string; partID: string; read: boolean }
   AssistantPart: {
     userMessageID: string
     group: PartGroup
@@ -152,7 +216,7 @@ export type TimelineRowMap = {
   Error: {
     userMessageID: string
     text: string
-    kind?: "free-limit" | "budget-limit" | "model-budget-limit"
+    kind?: "free-limit" | "go-limit" | "budget-limit" | "model-budget-limit"
     resetAt?: number
   }
   CompactionQueued: { userMessageID: string; inboxID: string }

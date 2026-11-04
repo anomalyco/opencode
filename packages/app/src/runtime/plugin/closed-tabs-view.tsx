@@ -28,12 +28,18 @@ function ClosedTabVisual(props: { entry: ClosedSideTab }): JSX.Element {
   const icon = () => (props.entry.icon && isIconName(props.entry.icon) ? props.entry.icon : "file-document")
 
   return (
-    <span class="flex min-w-0 items-center gap-2">
+    <span class="flex min-w-0 items-center gap-1.5">
       <Show
         when={props.entry.file}
         fallback={<Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
       >
-        {(file) => <FileIcon node={{ path: file(), type: "file" }} class="size-4 shrink-0" />}
+        {(file) => (
+          <FileIcon
+            node={{ path: file(), type: "file" }}
+            mono
+            class="size-4 shrink-0 text-v2-icon-icon-faint group-hover/closed-tab:text-v2-icon-icon-muted"
+          />
+        )}
       </Show>
       <span class="min-w-0 shrink truncate text-v2-text-text-base">
         {props.entry.file ? getFilename(props.entry.file) : props.entry.title}
@@ -71,7 +77,7 @@ export function ClosedTabsSection(props: { entries: readonly ClosedSideTab[]; on
             <button
               type="button"
               data-slot="side-recently-closed-row"
-              class="flex h-8 w-full shrink-0 items-center justify-between gap-4 rounded-[6px] px-2 text-start text-[13px] font-[440] hover:bg-v2-background-bg-layer-02"
+              class="group/closed-tab flex h-8 w-full shrink-0 items-center justify-between gap-4 rounded-[6px] px-2 text-start text-[13px] font-[440] hover:bg-v2-background-bg-layer-02"
               onClick={() => props.onReopen(entry.key)}
             >
               <ClosedTabVisual entry={entry} />
@@ -81,16 +87,24 @@ export function ClosedTabsSection(props: { entries: readonly ClosedSideTab[]; on
             </button>
           )}
         </For>
-        <Show when={props.entries.length > SECTION_LIMIT}>
+        <Show when={!state.expanded && props.entries.length > SECTION_LIMIT}>
           <button
             type="button"
             data-slot="side-recently-closed-more"
             class="flex h-8 w-fit items-center gap-1 rounded-[6px] px-2 text-[13px] font-[440] text-v2-text-text-muted hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
-            aria-expanded={state.expanded}
-            onClick={() => setState("expanded", (expanded) => !expanded)}
+            onClick={(event) => {
+              const section = event.currentTarget.parentElement
+              setState("expanded", true)
+              // Wait for the newly revealed rows to mount before moving focus off the removed button.
+              queueMicrotask(() => {
+                section
+                  ?.querySelectorAll<HTMLButtonElement>('[data-slot="side-recently-closed-row"]')
+                  [SECTION_LIMIT]?.focus()
+              })
+            }}
           >
-            {state.expanded ? language.t("session.tab.showLess") : language.t("session.tab.showMore")}
-            <Icon name="chevron-down" size="small" classList={{ "rotate-180": state.expanded }} />
+            {language.t("session.tab.showMore")}
+            <Icon name="chevron-down" size="small" />
           </button>
         </Show>
       </section>
@@ -112,7 +126,7 @@ function ClosedTabsItems(props: { entries: readonly ClosedSideTab[]; onReopen: (
         <For each={props.entries.slice(0, MENU_LIMIT)}>
           {(entry, index) => (
             <Menu.Item
-              class="!gap-6 max-w-80"
+              class="group/closed-tab !gap-6 max-w-80"
               onSelect={() => props.onReopen(entry.key)}
               shortcut={
                 <Show when={index() === 0 && keybind().length > 0}>

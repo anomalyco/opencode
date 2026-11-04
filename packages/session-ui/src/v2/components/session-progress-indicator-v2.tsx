@@ -3,7 +3,7 @@ import { Spinner } from "@opencode/ui/spinner"
 import "./session-progress-indicator-v2.css"
 
 // The app's one activity spinner, shared by the activity chip, subagent rows, task cards and loading tabs.
-export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
+export function SessionProgressIndicatorV2(props: ComponentProps<typeof Spinner>) {
   return (
     <Spinner
       {...props}

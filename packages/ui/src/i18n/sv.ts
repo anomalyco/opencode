@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.common.fileCount.one": "{{count}} fil",
   "ui.common.fileCount.other": "{{count}} filer",
   "ui.messagePart.compaction.started": "Sessionskomprimering startade",
@@ -108,10 +108,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Prenumerera på OpenCode Go för 10 USD/månad och få pålitlig tillgång till de bästa modellerna med öppen källkod.",
   "dialog.usageExceeded.freeTier.actionLabel": "Prenumerera",
-  "dialog.usageExceeded.accountRateLimit.title": "Gränsen för Go har nåtts",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Användningsgräns nådd. För att fortsätta använda den här modellen nu, aktivera användning från ditt tillgängliga saldo",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Öppna inställningar",
   "ui.sessionTurn.status.delegating": "Delegerar arbete",
   "ui.sessionTurn.status.planning": "Planerar nästa steg",
   "ui.sessionTurn.status.gatheringContext": "Utforskar",

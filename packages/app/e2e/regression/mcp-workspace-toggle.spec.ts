@@ -47,12 +47,11 @@ async function open(
   await expectSessionTitle(page, title)
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
 
-  const panel =
-    input.surface === "settings"
-      ? page.getByTestId("settings-screen")
-      : input.surface === "popover"
-        ? page.getByRole("group", { name: "MCP", exact: true })
-        : page.getByRole("dialog", { name: "MCPs", exact: true })
+  const panel = {
+    settings: page.getByTestId("settings-screen"),
+    popover: page.getByRole("group", { name: "MCP", exact: true }),
+    dialog: page.getByRole("dialog", { name: "MCPs", exact: true }),
+  }[input.surface]
 
   const show = async () => {
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
@@ -254,6 +253,49 @@ for (const surface of ["dialog"] as const) {
     await expect(view.toggle).toBeEnabled()
   })
 }
+
+test("the MCP list shrinks with matches and keeps its search anchored while scrolling", async ({ page }) => {
+  const view = await open(page, {
+    surface: "dialog",
+    mcp: ["figma-desktop", ...Array.from({ length: 24 }, (_, index) => `server-${String(index).padStart(2, "0")}`)].map(
+      (name) => ({ name, status: { status: "disabled" } }),
+    ),
+  })
+
+  const input = view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })
+  const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
+
+  const geometry = () =>
+    container.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      inputTop: element.querySelector('[role="combobox"]')!.getBoundingClientRect().top,
+    }))
+
+  await expect(input).toBeFocused()
+  await expect(view.panel.getByRole("option")).toHaveCount(25)
+  await input.hover()
+  const initial = await geometry()
+
+  await input.fill("figma-desktop")
+  await expect(view.panel.getByRole("option")).toHaveCount(1)
+  await expect.poll(async () => (await geometry()).height).toBeLessThan(initial.height - 100)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+
+  await input.clear()
+  await expect(view.panel.getByRole("option")).toHaveCount(25)
+  const scroll = view.panel.locator('[data-slot="search-list-scroll"]')
+
+  await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  await input.press("End")
+  const last = view.panel.getByRole("option", { name: "server-23", exact: true })
+
+  await expect(last).toHaveAttribute("aria-selected", "true")
+  await expect(last).toBeInViewport()
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+  await expect(input).toBeFocused()
+})
 
 test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) => {
   const connected = new Set<string>()

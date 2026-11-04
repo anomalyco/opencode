@@ -23,6 +23,11 @@ const soundSettings = {
     title: "settings.general.sounds.permissions.title",
     description: "settings.general.sounds.permissions.description",
   },
+  questions: {
+    action: "settings-sounds-questions",
+    title: "settings.general.sounds.questions.title",
+    description: "settings.general.sounds.questions.description",
+  },
   errors: {
     action: "settings-sounds-errors",
     title: "settings.general.sounds.errors.title",
@@ -31,7 +36,7 @@ const soundSettings = {
 } as const
 
 const SoundSetting: Component<{
-  kind: "agent" | "permissions" | "errors"
+  kind: "agent" | "permissions" | "questions" | "errors"
   channel: SoundSettingsController["agent"]
 }> = (props) => {
   const language = useLanguage()
@@ -101,6 +106,21 @@ export const SettingsNotifications: Component = () => {
             </SettingsRow>
 
             <SettingsRow
+              title={language.t("settings.general.notifications.questions.title")}
+              description={language.t("settings.general.notifications.questions.description")}
+            >
+              <div data-action="settings-notifications-questions">
+                <Switch
+                  hideLabel
+                  checked={settings.notifications.questions()}
+                  onChange={(checked) => settings.notifications.setQuestions(checked)}
+                >
+                  {language.t("settings.general.notifications.questions.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
               title={language.t("settings.general.notifications.errors.title")}
               description={language.t("settings.general.notifications.errors.description")}
             >
@@ -119,6 +139,7 @@ export const SettingsNotifications: Component = () => {
           <SettingsList>
             <SoundSetting kind="agent" channel={sounds.agent} />
             <SoundSetting kind="permissions" channel={sounds.permissions} />
+            <SoundSetting kind="questions" channel={sounds.questions} />
             <SoundSetting kind="errors" channel={sounds.errors} />
             <SettingsRow
               title={language.t("settings.general.sounds.interface.title")}

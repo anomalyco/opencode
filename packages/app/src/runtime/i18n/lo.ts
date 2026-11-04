@@ -740,6 +740,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "ການຍ້າຍຂໍ້ມູນ {{current}}/{{total}}",
   "home.workspaceTip": "ເລີ່ມ session ຕໍ່ໄປໃນພື້ນທີ່ການເຮັດວຽກໃຫມ່ເພື່ອຮັກສາການປ່ຽນແປງໃຫ້ຖືກແຍກອອກ",
   "session.tab.add": "ແຖບເພີ່ມ",
+  "session.tab.closeOthers": "ປິດແຖບອື່ນ",
   "session.queue.attachments.one": "ພ້ອມກັບໄຟລ໌ແນບ {{count}}",
   "session.queue.attachments.other": "ພ້ອມກັບໄຟລ໌ແນບ {{count}}",
   "settings.backToSettings": "ກັບໄປທີ່ການຕັ້ງຄ່າ",

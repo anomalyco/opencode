@@ -121,7 +121,13 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
 
   const request = input.request ?? { app: () => local.app, set: (app: OpenApp | undefined) => setLocal("app", app) }
 
-  const canOpen = createMemo(() => !!desktop && input.session.server.local)
+  const canOpen = createMemo(
+    () =>
+      !!desktop &&
+      input.session.server.local &&
+      !input.path().startsWith("skill://") &&
+      !input.path().startsWith("/builtin/"),
+  )
 
   const current = createMemo(
     () =>
@@ -269,11 +275,12 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
   )
 }
 
-function OpenInAppMenuItemsV2(props: {
+export function OpenInAppMenuItemsV2(props: {
   state: OpenInAppState
   path?: () => string
   reveal?: boolean
   selection?: boolean
+  copyPath?: boolean
   close?: () => void
 }) {
   const ctx = usePlugin()
@@ -331,16 +338,18 @@ function OpenInAppMenuItemsV2(props: {
           </Menu.RadioGroup>
         </Show>
       </Menu.Group>
-      <Menu.Separator />
-      <Menu.Item
-        onSelect={() => {
-          props.close?.()
-          props.state.copyPath(path())
-        }}
-      >
-        <Icon name="copy" size="small" class="text-icon-weak" />
-        {ctx.t("open.copyPath")}
-      </Menu.Item>
+      <Show when={props.copyPath !== false}>
+        <Menu.Separator />
+        <Menu.Item
+          onSelect={() => {
+            props.close?.()
+            props.state.copyPath(path())
+          }}
+        >
+          <Icon name="copy" size="small" class="text-icon-weak" />
+          {ctx.t("open.copyPath")}
+        </Menu.Item>
+      </Show>
     </>
   )
 }

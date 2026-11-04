@@ -72,7 +72,7 @@ const desktop = [
 ]
 
 export const dict = {
-  ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
+  ...Object.fromEntries(desktop.map((value, index) => [DESKTOP_NATIVE_KEYS[index], value])),
   "command.category.suggested": "Siūloma",
   "command.category.view": "Rodinys",
   "command.category.project": "Projektas",
@@ -751,6 +751,7 @@ export const dict = {
   "dialog.server.menu.remove": "Pašalinti",
   "home.workspaceTip": "Pradėkite kitą seansą naujoje darbo srityje, kad pakeitimai būtų atskirti",
   "session.tab.add": "Pridėti skirtuką",
+  "session.tab.closeOthers": "Uždaryti kitus skirtukus",
   "session.queue.attachments.one": "Plus {{count}} tvirtinimas",
   "session.queue.attachments.other": "Plus {{count}} priedai",
   "settings.backToSettings": "Atgal į nustatymus",

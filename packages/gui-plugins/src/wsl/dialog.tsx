@@ -486,6 +486,7 @@ function unavailable(error: string): WslServersState {
     opencodeChecks: {},
     pendingRestart: false,
     servers: [],
-    job: null,
+    hostJob: "idle",
+    distroJobs: {},
   }
 }

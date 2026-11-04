@@ -40,14 +40,42 @@ export const SettingsExperimental: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.newModelPicker.title")}
-              description={language.t("settings.experimental.row.newModelPicker.description")}
+              title={language.t("settings.experimental.row.foldUserMessages.title")}
+              description={language.t("settings.experimental.row.foldUserMessages.description")}
             >
-              <div data-action="settings-new-model-picker">
+              <div data-action="settings-fold-user-messages">
                 <Switch
-                  checked={settings.general.newModelPicker()}
-                  onChange={(checked) => settings.general.setNewModelPicker(checked)}
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
                 />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.newQuestionUI.title")}
+              description={language.t("settings.experimental.row.newQuestionUI.description")}
+            >
+              <div data-action="settings-new-question-ui">
+                <Switch
+                  checked={settings.general.newQuestionUI()}
+                  onChange={(checked) => settings.general.setNewQuestionUI(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.newQuestionUI.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.timeline.row.newMessagesDivider.title")}
+              description={language.t("settings.timeline.row.newMessagesDivider.description")}
+            >
+              <div data-action="settings-new-messages-divider">
+                <Switch
+                  checked={settings.general.newMessagesDivider()}
+                  onChange={settings.general.setNewMessagesDivider}
+                  hideLabel
+                >
+                  {language.t("settings.timeline.row.newMessagesDivider.title")}
+                </Switch>
               </div>
             </SettingsRow>
           </SettingsList>
