@@ -123,6 +123,21 @@ fn copy_on_select_copies_the_drag_and_ctrl_c_clears_it_then_exits() {
     assert_eq!(capture.0.copied.borrow().len(), 1);
 }
 
+/// TS keeps the dialog because its backdrop asks whether a selection exists when the press lands
+/// (`ui/dialog.tsx:51-53`); `crates/ui/src/dialog.rs` asks for selected text, which a press has none of yet.
+#[test]
+#[ignore = "the dialog kit closes on a drag inside the panel (crates/ui/src/dialog.rs; E.20 follow-up)"]
+fn a_drag_inside_a_dialog_copies_and_keeps_it_open() {
+    let capture = testing::capture();
+    let app = TestApp::new(100, 30);
+    let tui = mount(&app, info(json!({})), None);
+    tui.keymap.dispatch("help.show", None);
+    let (x, y) = find(&app, "Press ctrl+p");
+    app.drag((x, y), (x + 11, y));
+    assert_eq!(*capture.0.copied.borrow(), ["Press ctrl+p"]);
+    assert!(tui.dialogs.is_open(), "{}", app.text());
+}
+
 #[test]
 fn manual_copy_waits_for_ctrl_c_or_a_right_click_and_escape_clears() {
     let capture = testing::capture();
