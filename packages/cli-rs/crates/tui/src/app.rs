@@ -84,6 +84,8 @@ pub struct Tui {
     pub(crate) overlays: crate::features::overlays::Overlays,
     pub(crate) title: crate::features::title::Title,
     pub(crate) events: crate::features::events::Events,
+    /// Focus and program status (E.19a).
+    pub attention: crate::features::attention::notify::Attention,
     /// Session tabs (E.12).
     pub tabs: crate::tabs::Tabs,
     /// The tab strip or rail around the route, and the pane sizes (E.12).
@@ -168,6 +170,7 @@ impl Tui {
         }
         *self.view.borrow_mut() = Some(view);
         crate::features::title::route_changed(self);
+        crate::features::attention::program_status::sync(self);
         self.app.request_redraw();
     }
 
@@ -185,6 +188,7 @@ impl Tui {
         crate::features::events::sync(self, &changes);
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
+        crate::features::attention::program_status::sync(self);
     }
 
     /// Syncs the route view with everything, after state outside the store changed.
@@ -352,6 +356,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         overlays: Default::default(),
         title: Default::default(),
         events: Default::default(),
+        attention: Default::default(),
         tabs: Default::default(),
         frame: crate::frame::Frame::new(app, this.clone()),
         panels: Default::default(),
@@ -375,6 +380,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::features::events::install(&tui);
     crate::features::overlays::install(&tui);
     crate::features::title::install(&tui);
+    crate::features::attention::notify::install(&tui);
     let system = crate::features::system_commands::install(&tui);
     tui.layers.borrow_mut().extend(system);
     crate::features::links::install(&tui);
@@ -462,6 +468,7 @@ fn install_keys(tui: &Rc<Tui>) {
         commands: vec![
             command("app.exit", |tui| {
                 crate::features::title::clear(tui);
+                crate::features::attention::program_status::clear(tui);
                 tui.app.quit();
             })
             .title("Exit the app")
