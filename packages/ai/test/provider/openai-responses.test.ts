@@ -2331,6 +2331,26 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("decodes tool_search_call items whose arguments are objects", () =>
+    Effect.gen(function* () {
+      const item = { id: "ts_1", type: "tool_search_call", call_id: "call_ts1", execution: "client" }
+      const body = sseEvents(
+        { type: "response.output_item.added", output_index: 0, item: { ...item, status: "in_progress", arguments: {} } },
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: { ...item, status: "completed", arguments: { ids: ["lookup"] } },
+        },
+        { type: "response.output_item.added", output_index: 1, item: { type: "message", id: "msg_1" } },
+        { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
+        { type: "response.completed", response: { id: "resp_1" } },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("Hello")
+    }),
+  )
+
   it.effect("preserves standard refusal content as ordinary assistant text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
