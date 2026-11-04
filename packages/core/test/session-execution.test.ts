@@ -72,23 +72,35 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("settles an orphaned child claim so the child does not stay busy", () =>
+  it.effect("settles an orphaned child claim before its claimed parent resumes", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_orphan_parent")
       const child = Session.ID.make("ses_orphan_child")
-      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [parent], { time_suspended: 1 })
       // A child whose turn died with the previous process and has no background Job to recover it.
       yield* seedSessions(database, [child], { parent_id: parent, time_suspended: 1, time_busy: 1 })
       yield* TestClock.adjust("1 second")
 
+      const events: string[] = []
+      yield* bus.project(SessionEvent.Execution.Started, (event) =>
+        Effect.sync(() => void events.push(`started ${event.data.sessionID}`)),
+      )
+      yield* bus.project(SessionEvent.Execution.Failed, (event) =>
+        Effect.sync(() => void events.push(`failed ${event.data.sessionID}`)),
+      )
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, () => Effect.void)
+      const parentDrained = yield* Deferred.make<void>()
+      const context = yield* buildExecution(scope, () => Deferred.succeed(parentDrained, undefined))
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Deferred.await(parentDrained)
+      yield* Context.get(context, SessionExecution.Service).awaitIdle(parent)
 
-      expect((yield* claims(database))[child]).toBe(false)
+      expect(events).toEqual([`failed ${child}`, `started ${parent}`])
+      expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
       const info = yield* store.get(child)
       expect(info?.outcome).toBe("failed")
       expect(DateTime.toEpochMillis(info!.time.idle!)).toBeGreaterThan(DateTime.toEpochMillis(info!.time.busy!))
