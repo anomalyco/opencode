@@ -7,6 +7,7 @@ import {
   createRenderEffect,
   createResource,
   createRoot,
+  createSignal,
   ErrorBoundary,
   getOwner,
   on,
@@ -59,6 +60,18 @@ import {
 } from "./dialog-machine"
 import { PluginAlertDialog, PluginConfirmDialog, PluginPromptDialog, PluginSelectDialog } from "./dialogs"
 import { selectDisabled, selectHostReady, selectInstalled, selectMainFailed, selectServersReady } from "./machine"
+import {
+  createPluginHostState,
+  selectPluginDefinitions,
+  selectPluginFailure,
+  selectPluginInstance,
+  selectPluginInstances,
+  selectPluginSettled,
+  selectPluginStatus,
+  transitionPluginHost,
+  type PluginHostEffect,
+  type PluginHostEvent,
+} from "./instance-machine"
 import { createStartupGate } from "./startup"
 import { createSessionStore, whenLoaded } from "./stores"
 
@@ -75,6 +88,8 @@ type InstanceContext = SetupContext<Entry> & BuiltinContext
 type Instance = {
   definition: Entry
   context: InstanceContext
+  /** The instance's root, which owns setup and every scope under it. */
+  root: Owner | null
   dispose: () => void
   /** Runs `fn` when the instance goes away, as a cleanup a setup returns. */
   own(fn: Cleanup): Cleanup
@@ -107,19 +122,15 @@ export type HostApiFactories = {
   readonly [K in Exclude<keyof HostApis, "links" | "dialogs">]: HostApiFactory<HostApis[K]>
 }
 
-export type PluginStatus = "loading" | "active" | "failed" | "disabled"
-
-/** The last error a plugin raised: in its setup or an effect, or while one of its contributions rendered. */
-export type PluginFailure = { readonly phase: "setup" | "render"; readonly error: string }
-
 type Absent = Exclude<Live<never>, { readonly status: "active" }>
 
 type HostState = {
   entries: Record<string, Contribution[] | undefined>
   contracts: Record<string, number | undefined>
-  status: Record<string, PluginStatus | undefined>
-  failures: Record<string, PluginFailure | undefined>
 }
+
+// How long a plugin may load its window entry and global stores before it fails.
+const activationTimeout = 30_000
 
 type Stores = Record<string, Persisted<object> | ((session: SessionRef) => Persisted<object>)>
 
@@ -179,16 +190,17 @@ function createHost(input: HostInput) {
   const generations = new Map<string, number>()
 
   // Entries are indexed by registry and contracts versioned by token, so a change wakes only its own readers.
-  const [state, setState] = createStore<HostState>({ entries: {}, contracts: {}, status: {}, failures: {} })
+  const [state, setState] = createStore<HostState>({ entries: {}, contracts: {} })
 
-  const instances = new Map<string, Instance>()
+  // A plain signal: instances and definitions must not become store proxies.
+  const [machine, setMachine] = createSignal(createPluginHostState<Instance>())
+  // Events a transition's own effects raise (an instance created, a setup that reloads) wait behind those effects.
+  const queue: PluginHostEvent<Instance>[] = []
+  // Each loading plugin's activation timer.
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+
   const memos = new Map<string, Accessor<readonly Item<unknown>[]>>()
   const sequence = { value: 0 }
-  // An entry that finishes loading after the host is gone must not create a root nothing disposes.
-  const lifetime = { disposed: false }
-  // The current load of each plugin. Deactivating drops it and a reload replaces it, so an older load
-  // neither sets up nor reports a failure over its replacement.
-  const loads = new Map<string, object>()
 
   // The plugin that provides a token: the one whose id the token's id is, or prefixes.
   const providers = new Map<string, string | undefined>()
@@ -236,12 +248,20 @@ function createHost(input: HostInput) {
 
     if (!plugin) return inactive.disabled
 
-    if (main ? disabled()?.has(plugin) : state.status[plugin] === "disabled") return inactive.disabled
+    if (main) {
+      if (disabled()?.has(plugin)) return inactive.disabled
 
-    if (main ? selectMainFailed(startup.state(), plugin) : state.status[plugin] === "failed") return inactive.failed
+      return selectMainFailed(startup.state(), plugin) ? inactive.failed : pending
+    }
+
+    const status = selectPluginStatus(machine(), plugin)
+
+    if (status === "disabled") return inactive.disabled
+
+    if (status === "failed") return inactive.failed
 
     // A renderer provider that is up but does not provide the token (e.g. on this platform) is not coming.
-    if (!main && state.status[plugin] === "active") return inactive.disabled
+    if (status === "active") return inactive.disabled
 
     return pending
   }
@@ -395,7 +415,7 @@ function createHost(input: HostInput) {
                   fallback={(error) => {
                     onMount(() => {
                       handle.close()
-                      fail(plugin, error, "render")
+                      fail(plugin, error)
                     })
 
                     return null
@@ -447,99 +467,115 @@ function createHost(input: HostInput) {
     },
   } satisfies { readonly [K in keyof HostApis]: HostApiFactory<HostApis[K]> }
 
-  const activate = async (definition: Entry) => {
-    const load = definition.windowEntry
+  const dispatch = (event: PluginHostEvent<Instance>) => {
+    queue.push(event)
 
-    // A disabled plugin, e.g. one reloaded from settings, stays disabled: marking it loading would make the
-    // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
-    if (!load || disabled()?.has(definition.id) !== false) return
+    if (queue.length === 1) untrack(drain)
+  }
 
-    setState("status", definition.id, "loading")
+  const drain = () => {
+    const event = queue[0]
 
-    const attempt = {}
-    const current = () => loads.get(definition.id) === attempt
+    if (!event) return
 
-    loads.set(definition.id, attempt)
+    const next = transitionPluginHost(machine(), event)
 
-    // The current language's catalog loads with the entry, so the first render is already translated.
-    const [module, messages] = await Promise.all([
-      load().catch((cause: unknown) => {
-        if (current()) fail(definition.id, cause)
+    setMachine(next.state)
+    next.effects.forEach(run)
+    queue.shift()
+    drain()
+  }
 
-        return undefined
-      }),
-      loadMessages(definition.i18n, untrack(language.locale)),
-    ])
+  const run = (effect: PluginHostEffect<Instance>) => {
+    if (effect.type === "load")
+      // The current language's catalog loads with the entry, so the first render is already translated.
+      return void Promise.all([
+        Promise.try(effect.load),
+        Promise.try(() => loadMessages(effect.definition.i18n, language.locale())),
+      ]).then(
+        ([module, messages]) =>
+          dispatch({ type: "loaded", id: effect.id, attempt: effect.attempt, setup: module.default, messages }),
+        (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause }),
+      )
 
-    if (!current()) return
+    if (effect.type === "create")
+      return void runWithOwner(owner, () =>
+        createRoot((dispose) => {
+          const root = getOwner()
+          const instance = createInstance(effect.definition, dispose, root, effect.messages)
 
-    loads.delete(definition.id)
+          // Setup and every scope under it read the plugin's context, e.g. `createKeyed` with a token.
+          if (root) root.context = { ...root.context, [PluginContext.id]: instance.context }
 
-    if (!module || lifetime.disposed) return
+          dispatch({ type: "created", id: effect.id, attempt: effect.attempt, instance, setup: effect.setup })
+        }),
+      )
 
-    // Disabling mid-load deactivates, which drops this load before it gets here.
-    if (instances.has(definition.id)) return
+    if (effect.type === "prepare")
+      // Global stores load in their storage namespace's one read before setup, so setup reads them as plain values.
+      return void Promise.try(effect.instance.prepare).then(
+        () => dispatch({ type: "prepared", id: effect.id, attempt: effect.attempt }),
+        (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause }),
+      )
 
-    runWithOwner(owner, () =>
-      createRoot((dispose) => {
-        const root = getOwner()
-        const instance = createInstance(definition, dispose, root, messages)
+    if (effect.type === "start") return runWithOwner(effect.instance.root, () => start(effect))
 
-        instances.set(definition.id, instance)
+    if (effect.type === "dispose") return effect.instance.dispose()
 
-        // Setup and every scope under it read the plugin's context, e.g. `createKeyed` with a token.
-        if (root) root.context = { ...root.context, [PluginContext.id]: instance.context }
+    if (effect.type === "timer.start") {
+      clearTimeout(timers.get(effect.id))
+      timers.set(
+        effect.id,
+        setTimeout(() => dispatch({ type: "timeout", id: effect.id, attempt: effect.attempt }), activationTimeout),
+      )
 
-        const crash = (cause: unknown) => {
-          if (instances.get(definition.id) !== instance) return
+      return
+    }
 
-          batch(() => {
-            deactivate(definition.id)
-            fail(definition.id, cause)
-          })
-        }
+    if (effect.type === "timer.stop") {
+      clearTimeout(timers.get(effect.id))
+      timers.delete(effect.id)
 
-        // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
-        const setup = module.default as (ctx: InstanceContext) => Cleanup | void
+      return
+    }
 
-        const start = () =>
-          void Promise.try(() =>
-            // Errors from the plugin's own effects, at setup or later, fail the plugin and nothing else.
-            catchError(
-              () =>
-                untrack(() => {
-                  const returned = setup(instance.context)
+    if (effect.type === "forget")
+      return providers.forEach((plugin, token) => {
+        if (plugin === effect.id) providers.delete(token)
+      })
 
-                  // A returned cleanup runs when the plugin goes away, as server and TUI plugins' do.
-                  if (Predicate.isFunction(returned)) return void instance.own(returned)
+    console.error(`[plugin] ${effect.id}`, effect.cause)
+  }
 
-                  if (!Predicate.isPromiseLike(returned)) return
+  // Setup runs synchronously inside the plugin root so its effects and memos are owned.
+  const start = (effect: Extract<PluginHostEffect<Instance>, { type: "start" }>) => {
+    const failed = (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause })
+    const sync = { running: true }
+    // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
+    const setup = effect.setup as (ctx: InstanceContext) => Cleanup | void
 
-                  // Do not await invalid setup, but consume its eventual rejection after the instance is aborted.
-                  void Promise.resolve(returned).catch((cause: unknown) =>
-                    console.error(`[plugin] ${definition.id}`, cause),
-                  )
-                  throw new Error(
-                    "Window setup must be synchronous. Start async work with createKeyed or createLatest.",
-                  )
-                }),
-              (cause) => queueMicrotask(() => crash(cause)),
-            ),
-          ).then(() => {
-            if (instances.get(definition.id) !== instance) return
+    // Errors from the plugin's own effects, at setup or later, fail the plugin and nothing else. One raised during
+    // setup fails it before it starts; a later one waits for the effect that threw to finish.
+    catchError(
+      () =>
+        untrack(() => {
+          const returned = setup(effect.instance.context)
 
-            setState("status", definition.id, "active")
-          }, crash)
+          // A returned cleanup runs when the plugin goes away, as server and TUI plugins' do.
+          if (Predicate.isFunction(returned)) return void effect.instance.own(returned)
 
-        // Setup runs synchronously inside the plugin root so its effects and memos are owned.
-        if (windowStores(definition).length === 0) return start()
+          if (!Predicate.isPromiseLike(returned)) return
 
-        // Global stores load in their storage namespace's one read before setup, so setup reads them as plain values.
-        Promise.try(instance.prepare).then(() => {
-          if (instances.get(definition.id) === instance) runWithOwner(root, start)
-        }, crash)
-      }),
+          // Do not await invalid setup, but consume its eventual rejection after the instance is aborted.
+          void Promise.resolve(returned).catch((cause: unknown) => console.error(`[plugin] ${effect.id}`, cause))
+          throw new Error("Window setup must be synchronous. Start async work with createKeyed or createLatest.")
+        }),
+      (cause) => (sync.running ? failed(cause) : queueMicrotask(() => failed(cause))),
     )
+
+    sync.running = false
+    // A failure setup raised is queued ahead of this, so the machine ignores it.
+    dispatch({ type: "started", id: effect.id, attempt: effect.attempt })
   }
 
   const createInstance = (definition: Entry, dispose: () => void, root: Owner | null, initial: Messages): Instance => {
@@ -854,6 +890,7 @@ function createHost(input: HostInput) {
     return {
       definition,
       context: typed,
+      root,
       own,
       prepare() {
         const storage = typed.storage
@@ -908,89 +945,11 @@ function createHost(input: HostInput) {
     }
   }
 
-  const deactivate = (id: string) => {
-    loads.delete(id)
+  // A contribution that fails to render renders nothing; the plugin and its other contributions stay.
+  const fail = (id: string, cause: unknown) => dispatch({ type: "render.failed", id, cause })
 
-    const instance = instances.get(id)
-
-    if (!instance) return
-
-    instances.delete(id)
-    instance.dispose()
-  }
-
-  const fail = (id: string, cause: unknown, phase: PluginFailure["phase"] = "setup") => {
-    console.error(`[plugin] ${id}`, cause)
-    batch(() => {
-      // A contribution that fails to render renders nothing; the plugin and its other contributions stay.
-      if (phase === "setup") setState("status", id, "failed")
-
-      setState("failures", id, {
-        phase,
-        error: cause instanceof Error ? (cause.stack ?? cause.message) : String(cause),
-      })
-    })
-  }
-
-  const replaced = new Map<string, Entry>()
-  const latest = (definition: Entry) => replaced.get(definition.id) ?? definition
-
-  // The definition object each id was last listed with; a new object for a listed id replaces it.
-  const listed = new Map<string, Entry>()
-
-  // Forgets everything about a plugin whose definition left or was replaced, so the next pass starts it afresh.
-  const forget = (id: string) => {
-    deactivate(id)
-    replaced.delete(id)
-    providers.forEach((plugin, token) => {
-      if (plugin === id) providers.delete(token)
-    })
-    setState("status", id, undefined)
-    setState("failures", id, undefined)
-  }
-
-  // Publish every disabled status before starting enabled entries.
-  createMemo(() => {
-    const off = disabled()
-    const definitions = all()
-
-    if (!off) return
-
-    untrack(() =>
-      batch(() => {
-        const ids = new Set(definitions.map((definition) => definition.id))
-        Array.from(listed.keys()).forEach((id) => {
-          if (ids.has(id)) return
-          listed.delete(id)
-          forget(id)
-        })
-        definitions.forEach((definition) => {
-          const before = listed.get(definition.id)
-          listed.set(definition.id, definition)
-
-          if (before && before !== definition) forget(definition.id)
-        })
-        definitions
-          .filter((definition) => off.has(definition.id))
-          .forEach((definition) => {
-            deactivate(definition.id)
-            setState("status", definition.id, "disabled")
-            // A plugin that is off shows no error from its last run.
-            setState("failures", definition.id, undefined)
-          })
-        definitions
-          .filter((definition) => !off.has(definition.id))
-          .forEach((definition) => {
-            // A failed plugin waits for Reload or a new revision, as in main.
-            if (instances.has(definition.id)) return
-
-            if (state.status[definition.id] === "loading" || state.status[definition.id] === "failed") return
-
-            void activate(latest(definition))
-          })
-      }),
-    )
-  })
+  // A memo, so every disabled status publishes before render effects read it.
+  createMemo(() => dispatch({ type: "reconcile", definitions: all(), disabled: disabled() }))
 
   // Tells the startup gate as each plugin it waits for settles.
   createRenderEffect(() => {
@@ -998,19 +957,14 @@ function createHost(input: HostInput) {
 
     if (gate.status !== "activating") return
 
-    gate.pending.forEach((id) => {
-      const status = state.status[id]
+    const current = machine()
 
-      if (status === "active" || status === "failed" || status === "disabled")
-        startup.dispatch({ type: "plugin.settled", id })
+    gate.pending.forEach((id) => {
+      if (selectPluginSettled(current, id)) startup.dispatch({ type: "plugin.settled", id })
     })
   })
 
-  onCleanup(() => {
-    lifetime.disposed = true
-    loads.clear()
-    Array.from(instances.keys()).forEach(deactivate)
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     state,
@@ -1027,27 +981,19 @@ function createHost(input: HostInput) {
     list,
     items,
     links,
-    definitions: () => all().map(latest),
-    context: (id: string): Context | undefined => instances.get(id)?.context,
+    definitions: () => selectPluginDefinitions(machine(), all()),
+    /** Undefined while the plugin waits for the enable settings. Reactive. */
+    status: (id: string) => selectPluginStatus(machine(), id),
+    /** The plugin's last error, while it failed or a contribution of its running instance did. Reactive. */
+    failure: (id: string) => selectPluginFailure(machine(), id),
+    context: (id: string): Context | undefined => selectPluginInstance(machine(), id)?.context,
     fail,
     /** Starts loading every active plugin's declared session stores for a session that mounts. */
     preload(session: SessionRef) {
-      instances.forEach((instance) => instance.preload(session))
+      selectPluginInstances(untrack(machine)).forEach((instance) => instance.preload(session))
     },
     /** `next` replaces the definition, e.g. after a development hot update. */
-    reload(id: string, next?: Entry) {
-      const definition = next ?? untrack(all).find((item) => item.id === id)
-
-      if (!definition) return
-
-      if (next) replaced.set(id, next)
-
-      batch(() => {
-        deactivate(id)
-        setState("failures", id, undefined)
-        void activate(latest(definition))
-      })
-    },
+    reload: (id: string, next?: Entry) => dispatch({ type: "reload", id, next }),
   }
 }
 

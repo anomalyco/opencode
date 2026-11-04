@@ -1224,6 +1224,8 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
       // A bundle main could not read never reaches the window.
       { id: "garbled", builtin: false, enabled: true, error: "SyntaxError: garbled bundle" },
       { id: "flaky", builtin: false, enabled: true },
+      // A plugin whose GUI has no window entry runs only in main, so main's error is its only status.
+      { id: "main-only", builtin: false, enabled: true, error: "Error: main broke" },
     ]
 
     const listed = (id: string, features: PluginInfo["features"]): PluginInfo => ({
@@ -1275,6 +1277,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
         { id: "acme", windowEntry: async () => ({ default: () => {} }) },
         { id: "notes", windowEntry: async () => ({ default: () => {} }) },
         { id: "flaky", windowEntry: fails("flaky broke") },
+        { id: "main-only" },
       ],
     })
 
@@ -1292,6 +1295,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
     "flaky",
     "lint-rules",
     "notes",
+    "main-only",
     "garbled",
     "terminal",
   ])
@@ -1304,17 +1308,20 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
   await expect(plugins.getByText("SyntaxError: garbled bundle", { exact: true })).toBeVisible()
   await expect(plugins.getByText("Error: flaky broke", { exact: true })).toBeVisible()
   await expect(plugins.getByText("Error: terminal broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Error: main broke", { exact: true })).toBeVisible()
   await expect(plugins.getByRole("button", { name: "Show details" })).toHaveCount(2)
   const flaky = plugins.locator(".settings-extension-row").filter({ hasText: "flaky" })
   await flaky.getByRole("button", { name: "Show details" }).press("Enter")
   await expect(flaky.locator("pre")).toHaveText(/^Error: flaky broke\s+at /)
   await expect(flaky.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true")
-  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(2)
+  // Every plugin settled: none still says it loads.
+  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(3)
+  await expect(plugins.getByText("Loading", { exact: true })).toHaveCount(0)
   await expect(plugins.getByText("Built-in", { exact: true })).toHaveCount(1)
   // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
-  await expect(plugins.getByRole("switch")).toHaveCount(3)
+  await expect(plugins.getByRole("switch")).toHaveCount(4)
   await expect(plugins.getByRole("switch", { name: "terminal" })).toHaveCount(0)
-  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(4)
+  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(5)
   await expect(plugins.getByText("Active", { exact: true })).toHaveCount(0)
 
   // The fixture mounts below the story, out of the viewport, so the controls are driven from the keyboard.

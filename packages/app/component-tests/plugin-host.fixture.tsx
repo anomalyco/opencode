@@ -217,7 +217,7 @@ export function mountPluginHost() {
     reload: () => hosts[0]?.reload("fixture"),
     disable: () => setDisabled(new Set(["fixture"])),
     enable: () => setDisabled(new Set<string>()),
-    status: () => hosts[0]?.state.status.fixture,
+    status: () => hosts[0]?.status("fixture"),
     /** Contributions the host holds for a registry; readable after the host unmounts. */
     entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
   }
@@ -340,8 +340,8 @@ export function mountPlugins(input: {
     define: (next: readonly Entry[]) => setDefinitions(next),
     reload: (id: string) => hosts[0]?.reload(id),
     ready: () => hosts[0]?.ready() ?? false,
-    status: (id: string) => hosts[0]?.state.status[id],
-    failure: (id: string) => hosts[0]?.state.failures[id],
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
   }
 }
@@ -676,7 +676,7 @@ export function mountSessionRegion(input: {
     leave: () => setRouted(false),
     /** The session each composer attachment reached, in order. */
     attached,
-    status: (id: string) => hosts[0]?.state.status[id],
+    status: (id: string) => hosts[0]?.status(id),
     unmount: () => {
       dispose()
       container.remove()
@@ -728,7 +728,7 @@ export function mountThemes(input: { definitions: readonly Entry[]; pending?: tr
   )
 
   return {
-    status: (id: string) => hosts[0]?.state.status[id],
+    status: (id: string) => hosts[0]?.status(id),
     options: () => themes[0]?.ids().map((id) => ({ id, name: themes[0]?.name(id) })) ?? [],
     select: (id: string) => themes[0]?.setTheme(id),
     selected: () => themes[0]?.themeId(),
@@ -793,8 +793,8 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   )
 
   return {
-    status: (id: string) => hosts[0]?.state.status[id],
-    failure: (id: string) => hosts[0]?.state.failures[id],
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
       dispose()
       container.remove()
@@ -867,8 +867,8 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   return {
     show: (text: string, streaming = false) => setMessage({ text, streaming }),
     define: (next: readonly Entry[]) => setDefinitions(next),
-    status: (id: string) => hosts[0]?.state.status[id],
-    failure: (id: string) => hosts[0]?.state.failures[id],
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
       dispose()
       container.remove()
@@ -933,7 +933,7 @@ export function mountHostApis(input: { definitions: readonly Entry[] }) {
     /** Mounts the interface. */
     attach: () => void captured.apis?.attach(mounted),
     reload: (id: string) => hosts[0]?.reload(id),
-    status: (id: string) => hosts[0]?.state.status[id],
+    status: (id: string) => hosts[0]?.status(id),
     unmount: () => {
       dispose()
       container.remove()
