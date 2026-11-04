@@ -321,6 +321,11 @@ pub struct Viewer {
     state: RefCell<State>,
     parts: RefCell<Parts>,
     layer: RefCell<Option<Disposer>>,
+    /// The open file menu (`fileMenu`); new files close it.
+    pub(super) menu: RefCell<Option<super::file_menu::Menu>>,
+    /// The session's status last seen in `turn` mode, for the refetch when a turn ends.
+    pub(super) turn_status: Cell<Option<opencode_store::SessionStatus>>,
+    was_focused: Cell<bool>,
     passes: Cell<u32>,
     this: Weak<Viewer>,
 }
@@ -389,6 +394,9 @@ impl Viewer {
             }),
             parts: RefCell::default(),
             layer: RefCell::default(),
+            menu: RefCell::default(),
+            turn_status: Cell::new(None),
+            was_focused: Cell::new(false),
             passes: Cell::new(0),
             this: this.clone(),
         });
@@ -399,6 +407,7 @@ impl Viewer {
         }
         viewer.install(tui);
         viewer.load();
+        super::sources::watch(&viewer);
         viewer
     }
 
@@ -452,11 +461,19 @@ impl Viewer {
             .is_some_and(|current| std::ptr::eq(Rc::as_ptr(current), self))
     }
 
-    fn session(&self) -> Option<&SessionID> {
+    pub(super) fn session(&self) -> Option<&SessionID> {
         match &self.place {
             Place::Panel { session, .. } => Some(session),
             Place::Route { session, .. } => session.as_ref(),
         }
+    }
+
+    pub(super) fn tui(&self) -> Option<Rc<Tui>> {
+        self.tui.upgrade()
+    }
+
+    pub(super) fn weak(&self) -> Weak<Viewer> {
+        self.this.clone()
     }
 
     /// The sources this viewer offers: the VCS ones, and the last turn in a session.
@@ -496,16 +513,75 @@ impl Viewer {
         query(&self.state.borrow().location)
     }
 
-    /// `onSwitchSource`: remembers the source and loads it.
+    /// `onSwitchSource`: remembers the source and loads it, unless it is the one shown.
     pub fn switch_source(&self, mode: Mode) {
         self.shared.memory.borrow_mut().source = Some(mode);
+        if self.mode() == mode {
+            return;
+        }
         self.state.borrow_mut().mode = mode;
         self.load();
     }
 
-    /// Loads again, as after the base changed.
+    /// Loads again, as after the base changed or a turn ended.
     pub fn reload(&self) {
         self.load();
+    }
+
+    /// The base chosen for `key`, kept until the TUI exits.
+    pub fn chosen_base(&self, key: &str) -> Option<String> {
+        self.shared.memory.borrow().bases.get(key).cloned()
+    }
+
+    /// `onSelect` of the base dialog: remembers `reference` for `key`, and loads again when this viewer compares
+    /// with it.
+    pub fn choose_base(&self, key: &str, reference: String) {
+        let previous = self
+            .shared
+            .memory
+            .borrow_mut()
+            .bases
+            .insert(key.to_owned(), reference.clone());
+        if previous.as_ref() != Some(&reference)
+            && self.mode().needs_base()
+            && self.base_key() == key
+        {
+            self.load();
+        }
+    }
+
+    /// The base `key` reported, if it was looked up.
+    pub fn reported_base(&self, key: &str) -> Option<Option<Base>> {
+        self.state.borrow().reported.get(key).cloned()
+    }
+
+    /// `loadBase` for the base dialog: looks the reported base up once, when none is chosen or known.
+    pub fn ensure_base(&self) {
+        let key = self.base_key();
+        if self.chosen_base(&key).is_some() || self.reported_base(&key).is_some() {
+            return;
+        }
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let client = tui.data.client().clone();
+        let input = VcsBaseInput {
+            location: self.location(),
+        };
+        let weak = self.this.clone();
+        tui.app.spawn(
+            async move { client.vcs_base(&input, &RequestOptions::default()).await },
+            move |_, result| {
+                let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else {
+                    return;
+                };
+                let base = output.data.map(|base| Base {
+                    name: base.name,
+                    reference: base.r#ref,
+                });
+                viewer.state.borrow_mut().reported.insert(key, base);
+            },
+        );
     }
 
     /// Whether the panel is docked beside the session.
@@ -531,10 +607,17 @@ impl Viewer {
     }
 
     /// Whether the viewer has the input: always full screen, else while its panel has the focus.
+    /// A dialog takes the focus without changing the panel's focus state (TS `panel.focused`), so the state seen
+    /// before it opened holds while it is open.
     fn focused(&self, tui: &Tui) -> bool {
         match &self.place {
             Place::Panel { host, .. } if self.docked() => {
-                opencode_ui::dialog::focus_path(&tui.app).contains(&host.id())
+                if tui.dialogs.is_open() {
+                    return self.was_focused.get();
+                }
+                let focused = opencode_ui::dialog::focus_path(&tui.app).contains(&host.id());
+                self.was_focused.set(focused);
+                focused
             }
             _ => true,
         }
@@ -713,6 +796,7 @@ impl Viewer {
 
     /// New files: the tree opens fully, and the selection and reviewed marks start over.
     fn reset(&self) {
+        drop(self.menu.take());
         let files = self.files();
         let mut state = self.state.borrow_mut();
         state.tree = tree::build(files.iter().map(|file| file.file.as_str()));
@@ -1069,6 +1153,14 @@ impl Viewer {
         self.scroll_after_render(next, None);
     }
 
+    /// `openFileMenu`: a right-click on a file's heading or tree row focuses the panel and opens the menu there.
+    fn open_menu(&self, file: usize, x: u16, y: u16) {
+        if let (Some(tui), Place::Panel { host, .. }) = (self.tui.upgrade(), &self.place) {
+            tui.app.focus(host);
+        }
+        super::file_menu::open(self, file, x, y);
+    }
+
     /// Whether `file` is marked reviewed.
     pub fn is_reviewed(&self, file: usize) -> bool {
         let files = self.files();
@@ -1256,6 +1348,14 @@ impl Viewer {
                 .add(&self.footer(tui, &theme, docked, help.clone()));
         }
         if !show_tree && !compact && help.is_some() {
+            let shortcut = Text::new(app, "?").fg(theme.text.base).wrap(WrapMode::None);
+            let weak = self.this.clone();
+            shortcut.on_click(move |cx, _| {
+                cx.stop_propagation();
+                if let Some(viewer) = weak.upgrade() {
+                    super::help::open(&viewer);
+                }
+            });
             self.root.add(
                 &View::new(app)
                     .absolute()
@@ -1263,7 +1363,7 @@ impl Viewer {
                     .position(Edge::Right, 0)
                     .width(1)
                     .height(1)
-                    .child(&Text::new(app, "?").fg(theme.text.base).wrap(WrapMode::None)),
+                    .child(&shortcut),
             );
         }
         self.render_tree(tui);
@@ -1447,7 +1547,7 @@ impl Viewer {
                 {
                     cx.prevent_default();
                     cx.stop_propagation();
-                    super::file_menu::open(&viewer, file, event.x, event.y);
+                    viewer.open_menu(file, event.x, event.y);
                 }
             });
             let card = View::new(app)
@@ -1739,6 +1839,12 @@ impl Viewer {
                 super::sources::open(&viewer);
             }
         });
+        let weak = self.this.clone();
+        let on_menu: tree::OnMenu = Rc::new(move |file, x, y| {
+            if let Some(viewer) = weak.upgrade() {
+                viewer.open_menu(file, x, y);
+            }
+        });
         let pane = tree::pane(
             &tui.app,
             &theme,
@@ -1755,6 +1861,7 @@ impl Viewer {
             &tree,
             on_row,
             on_source,
+            on_menu,
         );
         slot.add(&pane);
     }
