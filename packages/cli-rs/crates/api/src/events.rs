@@ -14,6 +14,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
+use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -594,7 +595,21 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
             None,
         );
         log::info!("event stream connecting: attempt {attempt}");
-        let mut stream = self.source.open(Arc::new(move || touch.notify_one()));
+        // A reader that panics ends its stream like a failed one, so the loop reconnects.
+        let mut stream = AssertUnwindSafe(self.source.open(Arc::new(move || touch.notify_one())))
+            .catch_unwind()
+            .map(|item| match item {
+                Ok(item) => item.map_err(|error| error.to_string()),
+                Err(payload) => {
+                    let message = payload
+                        .downcast_ref::<&str>()
+                        .map(|message| message.to_string())
+                        .or_else(|| payload.downcast_ref::<String>().cloned())
+                        .unwrap_or_default();
+                    log::error!("event stream reader panicked: {message}");
+                    Err(format!("Event stream reader panicked: {message}"))
+                }
+            });
         let failed = |error: &str, connected_at| End::Failed {
             error: error.to_owned(),
             connected_at,
@@ -1313,6 +1328,61 @@ mod tests {
             assert!(
                 disconnected_at.elapsed() >= Duration::from_secs(1),
                 "reconnects after the delay"
+            );
+        }
+    }
+
+    // rs-ms1-accept problem 1: a reader panic ended the loop, and with it every later event.
+    #[tokio::test(start_paused = true)]
+    async fn a_reader_that_fails_or_panics_once_reconnects_and_keeps_delivering() {
+        #[derive(Clone)]
+        struct Panicking(Fake);
+        impl Source<Ev> for Panicking {
+            type Error = Failure;
+            fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
+                self.0
+                    .open(CancellationToken::new(), activity)
+                    .map(|item| {
+                        if item.as_ref().is_ok_and(|event| event.kind == "panic") {
+                            panic!("reader bug");
+                        }
+                        item
+                    })
+                    .boxed()
+            }
+        }
+        for (panic, error) in [
+            (true, "Event stream reader panicked: reader bug"),
+            (false, "Transport: reader failure"),
+        ] {
+            let fake = Fake::default();
+            let (connection, mut batches) = connect(Panicking(fake.clone()), options(10_000));
+            until(|| fake.count() == 1).await;
+            fake.at(0).push(ev(CONNECTED, 1));
+            fake.at(0).push(ev("session.updated", 1));
+            until(|| connection.state().status == Status::Connected).await;
+            if panic {
+                fake.at(0).push(ev("panic", 0));
+            } else {
+                fake.at(0).fail("Transport: reader failure");
+            }
+            until(|| fake.count() == 2).await;
+            assert!(records(&connection).contains(&disconnected(1, error)));
+
+            fake.at(1).push(ev(CONNECTED, 2));
+            fake.at(1).push(ev("session.updated", 2));
+            until(|| connection.state().status == Status::Connected).await;
+            let mut events = Vec::new();
+            drain(&mut batches, &mut events).await;
+            assert_eq!(
+                events,
+                vec![
+                    ev(CONNECTED, 1),
+                    ev("session.updated", 1),
+                    ev(CONNECTED, 2),
+                    ev("session.updated", 2)
+                ],
+                "{error}"
             );
         }
     }
