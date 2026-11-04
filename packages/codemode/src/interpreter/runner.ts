@@ -3,117 +3,51 @@ import type { Diagnostic } from "../codemode.js"
 import { locate, normalizeError } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { MAX_PENDING_PROMISES } from "./limits.js"
-import { type AstNode, type GeneratorRequestKind, PendingThrow, rangeError, typeError } from "./model.js"
+import { type AstNode, PendingThrow, rangeError, typeError } from "./model.js"
 import { type Callable, type GeneratorObj, get, Obj, PromiseObj, Resolver, type Value } from "./objects.js"
 import { react } from "./promises.js"
 import { fromJson, type Json } from "../data.js"
 import { typeofValue } from "./references.js"
 
-/**
- * Interpreter work: a generator that yields signals to the driver and returns its result. Work inside one activation
- * composes with `yield*`; a program call is a `Call`, so program recursion lives on the explicit stack below and never
- * grows the host stack.
- */
-export type Eval<A> = Generator<Signal, A, unknown>
-
-export type Completion =
-  | { readonly ok: true; readonly value: unknown }
-  | { readonly ok: false; readonly error: unknown }
-
-export const normal = (value: unknown): Completion => ({ ok: true, value })
-export const abrupt = (error: unknown): Completion => ({ ok: false, error })
-
-/** Run `body` as a new activation; a boundary marks where a suspended body splits off the stack. */
-export class Call {
-  constructor(
-    readonly body: Eval<unknown>,
-    readonly boundary?: Boundary,
-  ) {}
-}
-
-/** Push saved activations back on the stack and continue the top one with `input`. */
-export class Enter {
-  constructor(
-    readonly entries: Array<Entry>,
-    readonly input: Completion,
-  ) {}
-}
-
-/** Suspend the innermost async body until `value` settles; a stall while it waits is reported at `node`. */
-export class Await {
-  constructor(
-    readonly value: Value,
-    readonly node?: AstNode,
-  ) {}
-}
-
-/** Suspend the innermost generator body, producing `value`; it continues with the next request. */
-export class Yield {
-  constructor(readonly value: Value) {}
-}
-
-/** Block the current job on host work: no other job runs until it ends, as with a synchronous host call. */
-export class Host {
-  constructor(readonly effect: Effect.Effect<unknown, unknown>) {}
-}
-
-/**
- * Host work that was interrupted on its own. It settles its promise like a rejection, but program code cannot catch
- * it: handlers, `catch`, and `finally` are skipped, an unobserved one is not reported, and one that reaches the
- * program's body interrupts the execution.
- */
-export class Interruption {
-  constructor(readonly cause: Cause.Cause<unknown>) {}
-}
-
-/** Let the host run; the current job continues before any other job. */
-export const Slice: unique symbol = Symbol("codemode.slice")
-
-export type Signal = Call | Enter | Await | Yield | Host | typeof Slice
-
-/** What a generator body continues with: the `next`, `return`, or `throw` call that resumed it. */
-export type GeneratorRequest = { readonly kind: GeneratorRequestKind; readonly value: Value }
-
-/** Where the stack splits when the body above suspends, and what the activation below receives. */
-export interface Boundary {
-  /** An `await` above suspends here: an async function, an async generator, or the program. */
-  readonly async: boolean
-  /** A `yield` above suspends here. */
-  readonly generator: boolean
-  /** The body above returned or threw. */
-  finish(completion: Completion): Completion
-  /** The body above suspended at an `await`; its activations are saved in the continuation. */
-  suspended(): Completion
-  /** The body above yielded; `split` takes its activations off the stack when it suspends. */
-  yielded(value: Value, split: () => Array<Entry>): Completion
-}
-
-/** The boundary of an async body: the body's completion settles it, and the caller receives `result` at once. */
-export class AsyncBoundary implements Boundary {
-  readonly async = true
-  readonly generator = false
-  constructor(
-    private readonly settle: (completion: Completion) => void,
-    readonly result: Value,
-  ) {}
-  finish(completion: Completion): Completion {
-    this.settle(completion)
-    return normal(this.result)
-  }
-  suspended(): Completion {
-    return normal(this.result)
-  }
-  yielded(): Completion {
-    return abrupt(typeError("yield is only valid inside a generator."))
-  }
-}
-
-export type Entry = { readonly body: Eval<unknown>; readonly boundary: Boundary | undefined }
-
-/** Paused or running program code: activations on an explicit stack, innermost last. */
-export class Task {
-  constructor(readonly stack: Array<Entry>) {}
-}
+export {
+  abrupt,
+  AsyncBoundary,
+  type Body,
+  type Boundary,
+  Call,
+  type Completion,
+  Enter,
+  type Entry,
+  type Eval,
+  Await,
+  generatorBody,
+  type GeneratorRequest,
+  Host,
+  Interruption,
+  isEval,
+  MAX_CALL_DEPTH,
+  normal,
+  type Signal,
+  Slice,
+  Task,
+  Yield,
+} from "./signals.js"
+import {
+  abrupt,
+  AsyncBoundary,
+  Await,
+  type Body,
+  Call,
+  type Completion,
+  Enter,
+  type Eval,
+  Host,
+  Interruption,
+  normal,
+  type Signal,
+  Task,
+  Yield,
+} from "./signals.js"
 
 export type Start = { readonly task: Task; readonly input: Completion }
 
@@ -220,15 +154,9 @@ type Pause =
   | { readonly kind: "slice"; readonly input: Completion }
   | { readonly kind: "host"; readonly effect: Effect.Effect<unknown, unknown> }
 
-/** Most activations one task may hold, as the call-stack limit. */
-export const MAX_CALL_DEPTH = 10_000
 /** Interpreter steps between clock checks, and how long one slice may run before the host gets a turn. */
 const FUEL = 64
 const SLICE_MS = 1
-
-// Program values never have a `next` method of their own: an object's properties live in its property map.
-export const isEval = <A>(value: A | Eval<A>): value is Eval<A> =>
-  typeof value === "object" && value !== null && typeof (value as { readonly next?: unknown }).next === "function"
 
 /**
  * One execution's job queue. Program code runs only inside a job, one job at a time and each to completion, as in a
@@ -271,7 +199,7 @@ export class Runner<R> {
    * Runs the program as the first job until its body completes, then returns how it ended. Host work it started may
    * still be running; `interrupt` stops it.
    */
-  run(main: Eval<unknown>): Effect.Effect<Completion, unknown, R> {
+  run(main: Body): Effect.Effect<Completion, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       let outcome: Completion | undefined

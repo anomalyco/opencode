@@ -1,11 +1,24 @@
 import { type AstNode, type Binding, referenceError, typeError } from "./model.js"
-import type { Value } from "./objects.js"
+import type { Fn, Value } from "./objects.js"
 
 export class ScopeStack {
   private readonly scopes: Array<Map<string, Binding>>
 
-  constructor(scopes: Array<Map<string, Binding>>) {
+  constructor(
+    scopes: Array<Map<string, Binding>>,
+    /** The function whose activation this is; none for the program. */
+    readonly fn?: Fn,
+  ) {
     this.scopes = scopes
+  }
+
+  /** How many scopes are pushed, so an unwinding `try` can restore the chain it started with. */
+  get height(): number {
+    return this.scopes.length
+  }
+
+  truncate(height: number): void {
+    this.scopes.length = height
   }
 
   reserve(name: string, mutable: boolean, node: AstNode): void {
