@@ -37,23 +37,29 @@ interface Active {
   delivery: "send-attempted" | "provider-observed" | "terminal"
 }
 
+type ChannelState =
+  | { readonly status: "idle"; readonly checkpoint?: ChannelCheckpoint }
+  | { readonly status: "exchanging"; readonly active: Active; readonly staged?: ChannelCheckpoint }
+  // A completed exchange's checkpoint waits here until the caller's `complete` commits it.
+  | { readonly status: "staged"; readonly token: object; readonly checkpoint: ChannelCheckpoint }
+  | { readonly status: "closing" }
+
 interface Channel {
   readonly affinity: string
   readonly connection: WebSocketConnection
   readonly openedAt: number
-  active?: Active
-  closing: boolean
-  checkpoint?: ChannelCheckpoint
-  pending?: { readonly token: object; readonly checkpoint: ChannelCheckpoint }
+  state: ChannelState
   reader?: Fiber.Fiber<unknown, unknown>
 }
 
-interface State {
+type OwnerState =
+  | { readonly status: "socket"; readonly failures: number; readonly channel?: Channel }
+  | { readonly status: "http" }
+  | { readonly status: "closed" }
+
+interface Owner {
   readonly lock: Semaphore.Semaphore
-  closed: boolean
-  httpFallback: boolean
-  streamFailures: number
-  channel?: Channel
+  state: OwnerState
 }
 
 /** Selects the connection for one exchange. Its output feeds the affinity key, so changed headers reopen the socket. */
@@ -129,33 +135,49 @@ export const makeLayer = (connector: WebSocketConnector) =>
     Service,
     Effect.gen(function* () {
       const scope = yield* Scope.Scope
-      const states = new Map<SessionSchema.ID, State>()
+      const states = new Map<SessionSchema.ID, Owner>()
       const state = (sessionID: SessionSchema.ID) => {
         const current = states.get(sessionID)
         if (current) return current
-        const created = { lock: Semaphore.makeUnsafe(1), closed: false, httpFallback: false, streamFailures: 0 }
+        const created: Owner = { lock: Semaphore.makeUnsafe(1), state: { status: "socket", failures: 0 } }
         states.set(sessionID, created)
         return created
       }
 
-      const closeChannel = Effect.fn("SessionModelTransport.closeChannel")(function* (owner: State, channel: Channel) {
-        if (owner.channel === channel) owner.channel = undefined
-        if (channel.closing) return
-        channel.closing = true
+      // Only a Session still on the socket can fall back; a closed owner stays closed.
+      const useHttp = (owner: Owner) => {
+        if (owner.state.status === "socket") owner.state = { status: "http" }
+      }
+
+      const activeOf = (state: ChannelState) => (state.status === "exchanging" ? state.active : undefined)
+
+      // Detaches the channel and marks it closing before any effect runs. Returns the state it left,
+      // or nothing when the channel was already closing.
+      const retire = (owner: Owner, channel: Channel) => {
+        if (owner.state.status === "socket" && owner.state.channel === channel)
+          owner.state = { status: "socket", failures: owner.state.failures }
+        const previous = channel.state
+        if (previous.status === "closing") return
+        channel.state = { status: "closing" }
+        return previous
+      }
+
+      const closeChannel = Effect.fn("SessionModelTransport.closeChannel")(function* (owner: Owner, channel: Channel) {
+        const previous = retire(owner, channel)
+        if (!previous) return
+        const active = activeOf(previous)
         if (channel.reader) yield* Fiber.interrupt(channel.reader)
         yield* channel.connection.close
-        if (channel.active)
+        if (active)
           Queue.failCauseUnsafe(
-            channel.active.queue,
+            active.queue,
             Cause.fail(
               transportError("Session WebSocket closed", {
                 operation: "read",
                 code: "close",
                 phase: "close",
                 delivery:
-                  channel.active.delivery === "provider-observed" || channel.active.delivery === "terminal"
-                    ? "accepted"
-                    : "ambiguous",
+                  active.delivery === "provider-observed" || active.delivery === "terminal" ? "accepted" : "ambiguous",
               }),
             ),
           )
@@ -163,20 +185,20 @@ export const makeLayer = (connector: WebSocketConnector) =>
       })
 
       const poison = Effect.fn("SessionModelTransport.poison")(function* (
-        owner: State,
+        owner: Owner,
         channel: Channel,
         error: AIError,
       ) {
-        if (owner.channel === channel) owner.channel = undefined
-        if (channel.closing) return
-        channel.closing = true
+        const previous = retire(owner, channel)
+        if (!previous) return
+        const active = activeOf(previous)
         yield* Effect.logDebug("session websocket poisoned", {
           sessionTransport: "websocket",
           code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
-          active: channel.active !== undefined,
+          active: active !== undefined,
         })
-        if (channel.active) {
-          Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
+        if (active) {
+          Queue.failCauseUnsafe(active.queue, Cause.fail(error))
           yield* streamFailure(owner)
         }
         yield* metric("protocol_failure")
@@ -185,19 +207,23 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
       // A socket that keeps dying mid-exchange costs a retry every step; after enough consecutive
       // losses the Session stays on HTTP.
-      const streamFailure = Effect.fn("SessionModelTransport.streamFailure")(function* (owner: State) {
-        owner.streamFailures++
-        if (owner.streamFailures < MAX_STREAM_FAILURES) return
-        owner.httpFallback = true
+      const streamFailure = Effect.fn("SessionModelTransport.streamFailure")(function* (owner: Owner) {
+        if (owner.state.status !== "socket") return
+        const failures = owner.state.failures + 1
+        if (failures < MAX_STREAM_FAILURES) {
+          owner.state = { ...owner.state, failures }
+          return
+        }
+        owner.state = { status: "http" }
         yield* Effect.logWarning("session websocket failed repeatedly; using http", {
           sessionTransport: "websocket",
-          failures: owner.streamFailures,
+          failures,
         })
         yield* metric("fallback", { reason: "stream_failures" })
       })
 
       const open = Effect.fn("SessionModelTransport.open")(function* (
-        owner: State,
+        owner: Owner,
         exchange: WebSocketChannelExchange,
         key: string,
       ) {
@@ -219,7 +245,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 Effect.withSpan("SessionModelTransport.connect"),
               ),
             )
-            if (owner.closed) {
+            if (owner.state.status !== "socket") {
               yield* connection.close
               return yield* transportError("Session WebSocket owner closed while connecting", {
                 operation: "request",
@@ -232,13 +258,13 @@ export const makeLayer = (connector: WebSocketConnector) =>
               affinity: key,
               connection,
               openedAt: yield* Clock.currentTimeMillis,
-              closing: false,
+              state: { status: "idle" },
             }
-            owner.channel = channel
+            owner.state = { status: "socket", failures: owner.state.failures, channel }
             channel.reader = yield* connection.messages.pipe(
               Stream.runForEach((message) =>
                 Effect.gen(function* () {
-                  const active = channel.active
+                  const active = activeOf(channel.state)
                   if (!active)
                     return yield* transportError("WebSocket data arrived without an active exchange", {
                       url: exchange.connect.url,
@@ -258,7 +284,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 }),
               ),
               Effect.catch((error) =>
-                channel.closing
+                channel.state.status === "closing"
                   ? Effect.void
                   : poison(
                       owner,
@@ -267,7 +293,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                         phase:
                           error.reason._tag === "Transport" && error.reason.phase === "close" ? "close" : "receive",
                         delivery:
-                          channel.active?.delivery === "provider-observed" || channel.active?.delivery === "terminal"
+                          channel.state.status === "exchanging" && channel.state.active.delivery !== "send-attempted"
                             ? "accepted"
                             : error.reason._tag === "Transport" && error.reason.code === "1009"
                               ? "rejected"
@@ -293,19 +319,19 @@ export const makeLayer = (connector: WebSocketConnector) =>
       })
 
       const start = Effect.fn("SessionModelTransport.start")(function* (
-        owner: State,
+        owner: Owner,
         input: WebSocketChannelExchange,
         interceptor?: Interceptor,
         idleTimeout?: number | false,
       ) {
-        if (owner.closed)
+        if (owner.state.status === "closed")
           return yield* transportError("Session WebSocket owner is closed", {
             operation: "request",
             code: "owner-closed",
             phase: "queue",
             delivery: "not-sent",
           })
-        if (owner.httpFallback) return fallback(input)
+        if (owner.state.status === "http") return fallback(input)
         const selected = interceptor?.handshake
           ? yield* interceptor.handshake({ url: input.connect.url, headers: { ...input.connect.headers } })
           : undefined
@@ -314,7 +340,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
           : input
         const key = affinity(exchange)
         const now = yield* Clock.currentTimeMillis
-        const current = owner.channel
+        const current = owner.state.status === "socket" ? owner.state.channel : undefined
         const rotateAfterMs = exchange.connect.rotateAfterMs ?? ROTATE_AFTER_MS
         const rotation = current
           ? current.affinity !== key
@@ -334,20 +360,21 @@ export const makeLayer = (connector: WebSocketConnector) =>
           yield* closeChannel(owner, current)
         }
 
-        if (owner.channel)
+        const reused = owner.state.status === "socket" ? owner.state.channel : undefined
+        if (reused)
           yield* Effect.logDebug("session websocket reused", {
             sessionTransport: "websocket",
             phase: "connect",
           })
-        if (owner.channel) yield* metric("reuse")
-        const channel = owner.channel
-          ? owner.channel
+        if (reused) yield* metric("reuse")
+        const channel = reused
+          ? reused
           : yield* open(owner, exchange, key).pipe(
               Effect.catch((error) => {
                 if (error.reason._tag === "Transport" && error.reason.code === "owner-closed") return Effect.fail(error)
                 // Any connect failure, transient or not, pins the Session to HTTP until restart or move:
                 // a network that refuses the upgrade would otherwise charge every step for a failed connect.
-                owner.httpFallback = true
+                useHttp(owner)
                 return Effect.logWarning("session websocket connect failed; using http", {
                   sessionTransport: "websocket",
                   phase: "connect",
@@ -362,16 +389,16 @@ export const makeLayer = (connector: WebSocketConnector) =>
             )
         if (!channel) return fallback(exchange)
 
-        if (channel.pending) {
-          channel.pending = undefined
-          channel.checkpoint = undefined
-        }
+        // A checkpoint the previous caller never committed is dropped, and the request goes out full.
+        if (channel.state.status === "staged") channel.state = { status: "idle" }
 
-        const create = yield* exchange.driver.create(channel.checkpoint).pipe(
-          Effect.tapError(() => closeChannel(owner, channel)),
-          Effect.onInterrupt(() => closeChannel(owner, channel)),
-        )
-        if (create.mode === "full") channel.checkpoint = undefined
+        const create = yield* exchange.driver
+          .create(channel.state.status === "idle" ? channel.state.checkpoint : undefined)
+          .pipe(
+            Effect.tapError(() => closeChannel(owner, channel)),
+            Effect.onInterrupt(() => closeChannel(owner, channel)),
+          )
+        if (create.mode === "full" && channel.state.status === "idle") channel.state = { status: "idle" }
         const message = interceptor?.send
           ? yield* interceptor.send(create.message).pipe(Effect.onInterrupt(() => closeChannel(owner, channel)))
           : create.message
@@ -384,7 +411,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
           queue: yield* Queue.unbounded<string, AIError>(),
           delivery: "send-attempted",
         }
-        channel.active = active
+        if (channel.state.status === "idle") channel.state = { status: "exchanging", active }
         const sent = yield* channel.connection.sendText(message).pipe(
           Effect.withSpan("SessionModelTransport.send"),
           Effect.onInterrupt(() => closeChannel(owner, channel)),
@@ -434,20 +461,26 @@ export const makeLayer = (connector: WebSocketConnector) =>
               if (!observationTerminal(observation)) return
               terminal = observation
               active.delivery = "terminal"
-              const staged = observation.type === "completed" ? observation.checkpoint : undefined
-              if (staged) channel.pending = { token, checkpoint: staged }
-              if (observation.type !== "completed" || !staged) channel.checkpoint = undefined
+              if (channel.state.status === "exchanging" && channel.state.active === active)
+                channel.state = {
+                  status: "exchanging",
+                  active,
+                  staged: observation.type === "completed" ? observation.checkpoint : undefined,
+                }
             }),
           ),
           Stream.takeUntil(observationTerminal),
           Stream.mapEffect(observationFrame),
           Stream.ensuring(
             Effect.gen(function* () {
-              if (channel.active === active) channel.active = undefined
+              if (channel.state.status === "exchanging" && channel.state.active === active)
+                channel.state = channel.state.staged
+                  ? { status: "staged", token, checkpoint: channel.state.staged }
+                  : { status: "idle" }
               const pending = yield* Queue.size(active.queue)
               yield* Queue.shutdown(active.queue)
               if (terminal && pending === 0) {
-                owner.streamFailures = 0
+                if (owner.state.status === "socket") owner.state = { ...owner.state, failures: 0 }
                 yield* metric("terminal", { type: terminal.type })
                 if (terminal.type === "rejected") yield* metric("rejection", { recovery: terminal.recovery })
                 // The Codex backend stops serving a connection after any error frame: the next request is
@@ -457,8 +490,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 return
               }
               yield* metric("cancellation")
-              channel.checkpoint = undefined
-              channel.pending = undefined
               const error = terminal
                 ? transportError("WebSocket data arrived after the terminal event", {
                     url: exchange.connect.url,
@@ -484,7 +515,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
               error.reason.delivery !== "rejected"
             )
               return Stream.fail(error)
-            owner.httpFallback = true
+            useHttp(owner)
             return Stream.unwrap(
               Effect.logWarning("session websocket request too large; using http", {
                 sessionTransport: "websocket",
@@ -499,9 +530,9 @@ export const makeLayer = (connector: WebSocketConnector) =>
           }),
         )
         const complete = Effect.sync(() => {
-          if (owner.channel !== channel || channel.pending?.token !== token) return
-          channel.checkpoint = channel.pending.checkpoint
-          channel.pending = undefined
+          if (owner.state.status !== "socket" || owner.state.channel !== channel) return
+          if (channel.state.status !== "staged" || channel.state.token !== token) return
+          channel.state = { status: "idle", checkpoint: channel.state.checkpoint }
         })
         return { frames, complete, http: channel.connection.http }
       })
@@ -534,24 +565,21 @@ export const makeLayer = (connector: WebSocketConnector) =>
         },
       })
 
+      const closeOwner = (owner: Owner) => {
+        const channel = owner.state.status === "socket" ? owner.state.channel : undefined
+        owner.state = { status: "closed" }
+        return channel ? closeChannel(owner, channel) : Effect.void
+      }
       const close = Effect.fn("SessionModelTransport.close")(function* (sessionID: SessionSchema.ID) {
         const owner = states.get(sessionID)
         if (!owner) return
         states.delete(sessionID)
-        owner.closed = true
-        if (owner.channel) yield* closeChannel(owner, owner.channel)
+        yield* closeOwner(owner)
       })
       const closeAll = Effect.suspend(() => {
         const owners = Array.from(states.values())
         states.clear()
-        return Effect.forEach(
-          owners,
-          (owner) => {
-            owner.closed = true
-            return owner.channel ? closeChannel(owner, owner.channel) : Effect.void
-          },
-          { discard: true },
-        )
+        return Effect.forEach(owners, closeOwner, { discard: true })
       })
 
       yield* Effect.addFinalizer(() => closeAll)
