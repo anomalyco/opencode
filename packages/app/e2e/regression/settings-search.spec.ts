@@ -133,21 +133,29 @@ test("the narrow layout floats the results in the shared search list popover", a
     'No results for "zzzzzzzzzz"',
   )
 
-  // The message's text, not just its box, sits in the middle of the popover.
-  const offset = await body.evaluate((element) => {
+  // No results is one row, its text on the headers' spine and centred in the popover's height.
+  const empty = await body.evaluate((element) => {
     const range = document.createRange()
     range.selectNodeContents(element.querySelector('[role="status"]')!)
     const text = range.getBoundingClientRect()
     const box = element.getBoundingClientRect()
 
     return {
-      x: text.left + text.width / 2 - (box.left + box.width / 2),
+      height: box.height,
+      inset: text.left - box.left,
       y: text.top + text.height / 2 - (box.top + box.height / 2),
     }
   })
 
-  expect(Math.abs(offset.x)).toBeLessThan(1)
-  expect(Math.abs(offset.y)).toBeLessThan(1)
+  expect(empty.height).toBeLessThanOrEqual(48)
+  expect(Math.abs(empty.inset - 18)).toBeLessThan(1)
+  expect(Math.abs(empty.y)).toBeLessThan(1)
+
+  // The popover covers the page, so it closes when focus leaves the search and reopens with the field.
+  await view.search.press("Shift+Tab")
+  await expect(body).toBeHidden()
+  await view.search.focus()
+  await expect(body).toBeVisible()
 })
 
 test("a category's results stay under one run of headers when its groups interleave by rank", async ({ page }) => {
@@ -183,7 +191,7 @@ test("a long empty-state query keeps its closing quote beside the ellipsis while
   const status = view.settings.getByRole("status")
   const quoted = status.locator("bdi")
 
-  // Rects, not clientWidth: the centred quote is exactly as wide as its text, and clientWidth rounds.
+  // Rects, not clientWidth: the quote is exactly as wide as its text, and clientWidth rounds.
   const fits = () =>
     quoted.evaluate(
       (element) => element.getBoundingClientRect().width <= element.parentElement!.getBoundingClientRect().width + 0.5,

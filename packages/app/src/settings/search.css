@@ -66,11 +66,10 @@
   white-space: pre;
 }
 
-/* Centred like every search list's empty state, with even insets on the rows' text spine. */
+/* The search list's empty row already sits on the rows' text spine. */
 .settings-search [data-slot="search-list-empty"] .settings-search-empty {
-  justify-content: center;
   margin-block-start: 0;
-  padding-inline: 18px;
+  padding-inline: 0;
 }
 
 .settings-search-empty-quoted {
