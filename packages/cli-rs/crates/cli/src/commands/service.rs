@@ -31,18 +31,19 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> anyhow::Result<()> {
     };
     let local = Local::from_env()?;
     match command {
-        ServiceCommand::Start => {
-            print(&(block_on(local.ensure())??.service.endpoint.url + "\n"))
-        }
+        ServiceCommand::Start => print(&(block_on(local.ensure())??.service.endpoint.url + "\n")),
         ServiceCommand::Restart => print(&(block_on(local.restart())?? + "\n")),
         ServiceCommand::Status => {
             let found = block_on(local.discover())?;
             print(&(found.map_or("stopped".into(), |found| found.service.endpoint.url) + "\n"))
         }
         ServiceCommand::Stop => block_on(local.stop(true))?,
-        ServiceCommand::Get(get) => {
-            print(&(local.config().get(get.key.as_deref(), get.name.as_deref())? + "\n"))
-        }
+        ServiceCommand::Get(get) => print(
+            &(local
+                .config()
+                .get(get.key.as_deref(), get.name.as_deref())?
+                + "\n"),
+        ),
         ServiceCommand::Set(set) => {
             let edit = Edit::set(&set.key, &set.value, set.env_value.as_deref())?;
             if edit.needs_tunnel() {
@@ -55,7 +56,9 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> anyhow::Result<()> {
             }
             local.edit(&edit)
         }
-        ServiceCommand::Unset(unset) => local.edit(&Edit::unset(&unset.key, unset.name.as_deref())?),
+        ServiceCommand::Unset(unset) => {
+            local.edit(&Edit::unset(&unset.key, unset.name.as_deref())?)
+        }
     }
 }
 
@@ -124,9 +127,11 @@ impl Local {
                 if terminals {
                     // An explicit stop ends the persistent terminals; only a restart through the TUI hands
                     // them over. TS ignores a failure here.
-                    let _ =
-                        stop::shutdown_persistent_pty(self.transport.clone(), &found.service.endpoint)
-                            .await;
+                    let _ = stop::shutdown_persistent_pty(
+                        self.transport.clone(),
+                        &found.service.endpoint,
+                    )
+                    .await;
                 }
                 found.file
             }
