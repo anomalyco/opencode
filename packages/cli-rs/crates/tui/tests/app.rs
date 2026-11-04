@@ -12,7 +12,9 @@ use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_local::cli_config::{self, Resolved};
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
-use opencode_tui::{Args, Deps, Route};
+use opencode_plugin::{Definition, Placement, Setup, slot};
+use opencode_tui::{Args, Deps, Route, Tui};
+use opentui::prelude::*;
 use opentui::testing::TestApp;
 
 /// How long a checkpoint waits for its `until` text. Longer than any MS1 screen takes; a screen the Rust TUI
@@ -87,6 +89,14 @@ fn run(recording: &Recording) -> (bool, String) {
             ..Args::default()
         },
     );
+    // The Rust twins of the TS test plugins under parity/plugins, which the Rust TUI lists as skipped (P.1).
+    if recording
+        .env
+        .get("OPENCODE_PARITY_PLUGIN")
+        .is_some_and(|plugin| plugin == "slot")
+    {
+        opencode_tui::plugins::host::add(&tui, slot_plugin());
+    }
 
     let mut passed = true;
     let mut report = String::new();
@@ -164,6 +174,20 @@ fn run(recording: &Recording) -> (bool, String) {
     }
     drop(tui);
     (passed, report)
+}
+
+/// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`.
+fn slot_plugin() -> Definition<Tui> {
+    Definition::new("parity.slot", |cx: &mut Setup<'_, Tui>| {
+        cx.slot(Placement::append(slot::HOME_FOOTER), |tui, _| {
+            let app = &tui.app;
+            Box::new(
+                View::new(app)
+                    .padding_edge(Edge::Left, 2)
+                    .child(&Text::new(app, "slot plugin: home.footer").fg(tui.page().text.muted)),
+            )
+        });
+    })
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
