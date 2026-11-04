@@ -80,10 +80,28 @@ impl DeclaredError {
         }
     }
 
-    /// Decodes the body into a generated error type, such as `SessionNotFoundError`.
-    pub fn decode<T: DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+    /// Whether this is the declared error `T`, by its tag, as the TypeScript `is<Error>` guards check.
+    pub fn is<T: TaggedError>(&self) -> bool {
+        self.tag.as_deref() == Some(T::TAG)
+    }
+
+    /// Decodes the body into the generated error type `T`, such as `SessionNotFoundError`. A body with
+    /// another tag is an error, even when its fields would fit `T`.
+    pub fn decode<T: TaggedError>(&self) -> Result<T, serde_json::Error> {
+        if !self.is::<T>() {
+            return Err(serde::de::Error::custom(format!(
+                "expected declared error {}, found {}",
+                T::TAG,
+                self.tag.as_deref().unwrap_or("no tag")
+            )));
+        }
         serde_json::from_value(self.body.clone())
     }
+}
+
+/// A generated declared error type and the `_tag` (or `name`) that identifies it on the wire.
+pub trait TaggedError: DeserializeOwned {
+    const TAG: &'static str;
 }
 
 impl std::fmt::Display for DeclaredError {
