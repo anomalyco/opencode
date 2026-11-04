@@ -101,6 +101,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
                             opencode_store::Location::new(info.directory.0),
                         );
                         prompt.relocate(&tui);
+                        tui.local.sync(&opencode_store::Changes::default());
                     }
                 }
             },
