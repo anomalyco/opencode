@@ -1,5 +1,6 @@
 import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { DialogProvider } from "@opencode/ui/context/dialog"
+import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
 import {
   Panel,
@@ -545,8 +546,9 @@ export function mountPanelWidths(input: { definitions: readonly Entry[]; active:
 
 /**
  * Mounts the real host and HostApis, and the parts of the session screen that render plugin content for the routed
- * session: the side region (`createRegion`, `RegionContent`) with every panel's tabs stored, and the
- * `session.panel.end` slot, whose input the screen builds this way. `route(id)` routes a session the way the screen
+ * session: the side region (`createRegion`, `RegionContent`) with every panel's tabs stored, the
+ * `session.panel.end` slot, whose input the screen builds this way, and the `session.location.menu` slot inside a
+ * "Project menu" the way the session header's project menu holds it. `route(id)` routes a session the way the screen
  * does: a new session object each time, delivered through the same reactive inputs, while the one screen object
  * `ctx.screen` returns follows the route. Its composer records which session each attachment reached.
  */
@@ -627,6 +629,24 @@ export function mountSessionRegion(input: {
             screen,
           }}
         />
+        <Menu modal={false}>
+          {/* Without text, so the cases that read the region's text see only the plugins'. */}
+          <Menu.Trigger aria-label="Project menu" style={{ width: "16px", height: "16px" }} />
+          <Menu.Portal>
+            <Menu.Content>
+              <PluginSlot
+                at="session.location.menu"
+                input={{
+                  get session() {
+                    return view()
+                  },
+                  screen,
+                  shown: true,
+                }}
+              />
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
         <RegionContent
           pane={region.pane("side")}
           view={view()}

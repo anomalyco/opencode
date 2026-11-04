@@ -303,7 +303,7 @@ story("a plugin's toasts close when it goes away, and a handle closes only its o
   expect(result).toEqual({ kept: true, setups: 2 })
 })
 
-story("ctx.ui renders the app's own components in a plugin's contribution and dialog", async ({ page }) => {
+story("ctx.ui renders the app's components in a contribution, a host menu and a dialog", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountSessionRegion, until, createComponent, createSignal, Slot } = await import(fixture)
 
@@ -322,6 +322,7 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
               const ui = ctx.ui
               const [on, setOn] = createSignal(false)
               const [name, setName] = createSignal("")
+              const [period, setPeriod] = createSignal("day")
 
               const dialog = () =>
                 ctx.dialogs.open((handle) =>
@@ -374,6 +375,64 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
                   createComponent(ui.Keybind, { keys: ["Ctrl", "K"] }),
                   createComponent(ui.Markdown, { text: "# Fixture heading\n\nSome *text*." }),
                   createComponent(ui.Code, { content: "const fence = `\n```\n`", language: "ts" }),
+                  createComponent(ui.SettingsLayout, {
+                    title: "Fixture settings",
+                    description: "Fixture page description",
+                    get children() {
+                      return createComponent(ui.SettingsSection, {
+                        title: "Fixture section",
+                        footer: "Fixture footer",
+                        get children() {
+                          return createComponent(ui.SettingsRow, {
+                            id: "fixture-period",
+                            title: "Period",
+                            description: "How far back to count",
+                            get children() {
+                              return createComponent(ui.Select<"day" | "month">, {
+                                label: "Period",
+                                options: [
+                                  { value: "day", label: "Day" },
+                                  { value: "month", label: "Month" },
+                                ],
+                                get value() {
+                                  return period()
+                                },
+                                onChange: (value: "day" | "month") => {
+                                  setPeriod(value)
+                                  record(`select ${value}`)
+                                },
+                              })
+                            },
+                          })
+                        },
+                      })
+                    },
+                  }),
+                ],
+              })
+
+              ctx.add(Slot, {
+                at: "session.location.menu",
+                render: () => [
+                  createComponent(ui.MenuSeparator, {}),
+                  createComponent(ui.MenuItem, {
+                    label: "Usage",
+                    icon: "status",
+                    keys: ["U"],
+                    onSelect: () => record("usage"),
+                  }),
+                  createComponent(ui.MenuGroup, {
+                    label: "Fixture menu group",
+                    get children() {
+                      return createComponent(ui.MenuSub, {
+                        label: "Open in",
+                        onOpenChange: (open: boolean) => record(`sub ${open}`),
+                        get children() {
+                          return createComponent(ui.MenuItem, { label: "Editor", onSelect: () => record("editor") })
+                        },
+                      })
+                    },
+                  }),
                 ],
               })
             },
@@ -427,6 +486,43 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
   await expect(dialog.locator('[data-slot="dialog-close-button"]')).toHaveCount(1)
   await dialog.getByRole("button", { name: "Close fixture" }).click()
   await expect(dialog).toHaveCount(0)
+
+  // Settings components render the host's settings markup, and search finds the row by its id.
+  await expect(root.locator(".settings-tab-header h2.settings-tab-title")).toHaveText("Fixture settings")
+  const section = root.getByRole("region", { name: "Fixture section" })
+  await expect(section.locator("h3.settings-section-title")).toHaveText("Fixture section")
+  await expect(section).toContainText("Fixture footer")
+  const row = section.locator('[data-component="settings-list"] > [data-component="settings-row"]')
+  await expect(row).toHaveAttribute("data-action", "fixture-period")
+  await expect(row.locator('[data-slot="settings-row-description"]')).toHaveText("How far back to count")
+
+  const select = row.locator('[data-slot="settings-row-control"] [data-component="select-v2"]')
+  // The trigger is named by the label and the selected choice.
+  await expect(select).toHaveAccessibleName("Period Day")
+  await select.click()
+  await page.getByRole("option", { name: "Month" }).click()
+  await expect(select).toHaveAccessibleName("Period Month")
+
+  // Menu rows render inside the host's menu as its own rows: keyboard items, a group, and a submenu.
+  await root.getByRole("button", { name: "Project menu" }).click()
+  const project = page.getByRole("menu")
+  await expect(project.getByRole("separator")).toHaveCount(1)
+  const usage = project.getByRole("menuitem", { name: "Usage" })
+  await expect(usage).toHaveAttribute("data-component", "menu-v2-item")
+  await expect(usage.locator('use[href="#opencode-v2-icon-status"]')).toHaveCount(1)
+  await expect(usage.locator('[data-component="keybind-v2"]')).toHaveText("U")
+  await usage.click()
+  await expect(project).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Project menu" }).click()
+  await expect(page.getByRole("menu").getByText("Fixture menu group")).toBeVisible()
+  await page.getByRole("menuitem", { name: "Open in" }).hover()
+  await page.getByRole("menu", { name: "Open in" }).getByRole("menuitem", { name: "Editor" }).click()
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ui",
+    /^button;menu;submit acme;select month;usage;sub true;editor;/,
+  )
 })
 
 story(
