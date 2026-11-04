@@ -90,7 +90,8 @@ fn wait_for(app: &TestApp, text: &str) -> String {
 
 #[test]
 fn home_lists_sessions_and_enter_opens_the_transcript() {
-    let app = TestApp::new(80, 20);
+    // Tall enough for the palette's System group, which E.18a's commands joined.
+    let app = TestApp::new(80, 30);
     let tui = mount(&app, Route::Home);
 
     let home = wait_for(&app, "Fix the parser");
