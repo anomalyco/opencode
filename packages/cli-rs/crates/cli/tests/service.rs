@@ -113,7 +113,9 @@ esac
         for (name, value) in env {
             command.env(name, value);
         }
-        command.output().unwrap()
+        command
+            .output()
+            .unwrap_or_else(|error| panic!("opencode-rs {args:?}: {error}"))
     }
 
     fn log(&self) -> String {
@@ -146,7 +148,10 @@ impl Drop for Sandbox {
     fn drop(&mut self) {
         let needle = self.root.path().as_os_str().as_encoded_bytes().to_vec();
         for entry in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
-            let Some(pid) = entry.file_name().to_str().and_then(|pid| pid.parse::<i32>().ok())
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|pid| pid.parse::<i32>().ok())
             else {
                 continue;
             };
@@ -181,19 +186,28 @@ fn start_status_stop_and_restart() {
     let start = sandbox.run(&["service", "start"], &[]);
     assert!(start.status.success(), "{}", text(&start.stderr));
     let first = sandbox.registration().unwrap();
-    assert_eq!(text(&start.stdout), format!("{}\n", first["url"].as_str().unwrap()));
+    assert_eq!(
+        text(&start.stdout),
+        format!("{}\n", first["url"].as_str().unwrap())
+    );
     // A second start reuses the running service.
     let again = sandbox.run(&["service", "start"], &[]);
     assert_eq!(again.stdout, start.stdout);
     assert_eq!(sandbox.log().matches("serve --service").count(), 1);
-    assert_eq!(text(&sandbox.run(&["service", "status"], &[]).stdout), text(&start.stdout));
+    assert_eq!(
+        text(&sandbox.run(&["service", "status"], &[]).stdout),
+        text(&start.stdout)
+    );
 
     // Restart: the persistent terminals end, then SIGTERM, then a new service.
     let restart = sandbox.run(&["service", "restart"], &[]);
     assert!(restart.status.success(), "{}", text(&restart.stderr));
     let second = sandbox.registration().unwrap();
     assert_ne!(pid(&second), pid(&first));
-    assert_eq!(text(&restart.stdout), format!("{}\n", second["url"].as_str().unwrap()));
+    assert_eq!(
+        text(&restart.stdout),
+        format!("{}\n", second["url"].as_str().unwrap())
+    );
     assert_eq!(
         sandbox.requests(pid(&first)),
         ["POST /api/experimental/persistent-pty/shutdown", "SIGTERM"]
@@ -207,7 +221,10 @@ fn start_status_stop_and_restart() {
         sandbox.requests(pid(&second)),
         ["POST /api/experimental/persistent-pty/shutdown", "SIGTERM"]
     );
-    assert_eq!(text(&sandbox.run(&["service", "status"], &[]).stdout), "stopped\n");
+    assert_eq!(
+        text(&sandbox.run(&["service", "status"], &[]).stdout),
+        "stopped\n"
+    );
 }
 
 #[test]
@@ -218,13 +235,21 @@ fn set_stops_the_service_without_ending_terminals() {
     assert!(sandbox.run(&["service", "start"], &[]).status.success());
     let first = sandbox.registration().unwrap();
     // `set disabled false` does not stop the service.
-    assert!(sandbox.run(&["service", "set", "disabled", "false"], &[]).status.success());
+    assert!(
+        sandbox
+            .run(&["service", "set", "disabled", "false"], &[])
+            .status
+            .success()
+    );
     assert!(sandbox.registration().is_some());
     let set = sandbox.run(&["service", "set", "port", "5000"], &[]);
     assert!(set.status.success(), "{}", text(&set.stderr));
     assert!(sandbox.registration().is_none());
     assert_eq!(sandbox.requests(pid(&first)), ["SIGTERM"]);
-    assert_eq!(sandbox.config(), serde_json::json!({ "disabled": false, "port": 5000 }));
+    assert_eq!(
+        sandbox.config(),
+        serde_json::json!({ "disabled": false, "port": 5000 })
+    );
 }
 
 #[test]
@@ -235,9 +260,16 @@ fn set_remote_true_runs_the_typescript_command() {
     let set = sandbox.run(&["service", "set", "remote", "true"], &[]);
     assert!(set.status.success(), "{}", text(&set.stderr));
     assert_eq!(sandbox.log(), "service set remote true\n");
-    assert_eq!(text(&sandbox.run(&["service", "get", "remote"], &[]).stdout), "true\n");
+    assert_eq!(
+        text(&sandbox.run(&["service", "get", "remote"], &[]).stdout),
+        "true\n"
+    );
     // A failure of the TS command is the exit code.
-    std::fs::write(sandbox.path("opencode-ts"), "#!/bin/sh\necho tunnel failed >&2\nexit 4\n").unwrap();
+    std::fs::write(
+        sandbox.path("opencode-ts"),
+        "#!/bin/sh\necho tunnel failed >&2\nexit 4\n",
+    )
+    .unwrap();
     let failed = sandbox.run(&["service", "set", "remote", "true"], &[]);
     assert_eq!(failed.status.code(), Some(4));
     assert_eq!(text(&failed.stderr), "tunnel failed\n");
@@ -255,9 +287,15 @@ fn pair_remote_enables_remote_access_and_waits_for_the_tunnel() {
     assert!(pair.status.success(), "{}", text(&pair.stderr));
     let stdout = text(&pair.stdout);
     // `--yes` still shows the warning, then the tunnel link with its QR code.
-    assert!(stdout.contains("This will expose your OpenCode server to the internet."), "{stdout}");
+    assert!(
+        stdout.contains("This will expose your OpenCode server to the internet."),
+        "{stdout}"
+    );
     assert!(stdout.contains("expire in 5 minutes."), "{stdout}");
-    assert!(stdout.contains("  https://r0ute.t1.tunnel.test/auth/connect/CODE7\n\n  ██"), "{stdout}");
+    assert!(
+        stdout.contains("  https://r0ute.t1.tunnel.test/auth/connect/CODE7\n\n  ██"),
+        "{stdout}"
+    );
     assert!(!stdout.contains("127.0.0.1"), "{stdout}");
     assert_eq!(text(&pair.stderr), "");
     assert_eq!(
@@ -274,7 +312,10 @@ fn pair_remote_enables_remote_access_and_waits_for_the_tunnel() {
         serde_json::json!({ "remoteAccepted": true, "remote": { "route": "r0ute" } })
     );
     // Accepted once: a second pair does not ask, and remote access is already on.
-    let again = sandbox.run(&["pair", "--remote"], &[("FAKE_URLS", "https://r0ute.t1.tunnel.test")]);
+    let again = sandbox.run(
+        &["pair", "--remote"],
+        &[("FAKE_URLS", "https://r0ute.t1.tunnel.test")],
+    );
     assert!(again.status.success(), "{}", text(&again.stderr));
     assert!(!text(&again.stdout).contains("This will expose"));
     assert_eq!(sandbox.log().matches("service set remote true").count(), 1);
@@ -287,7 +328,10 @@ fn pair_prints_links_and_the_ssh_hint() {
     };
     let pair = sandbox.run(&["pair"], &[]);
     assert!(pair.status.success(), "{}", text(&pair.stderr));
-    let url = sandbox.registration().unwrap()["url"].as_str().unwrap().to_owned();
+    let url = sandbox.registration().unwrap()["url"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let port = url.rsplit(':').next().unwrap();
     assert_eq!(
         text(&pair.stdout),
@@ -357,13 +401,21 @@ fn interop_with_a_typescript_service() {
     .unwrap();
     let ts = |args: &[&str]| {
         let output = Command::new(&wrapper).args(args).output().unwrap();
-        assert!(output.status.success(), "ts {args:?}: {}", text(&output.stderr));
+        assert!(
+            output.status.success(),
+            "ts {args:?}: {}",
+            text(&output.stderr)
+        );
         text(&output.stdout)
     };
     let ts_bin = wrapper.to_str().unwrap();
     let rs = |args: &[&str]| {
         let output = sandbox.run(args, &[("OPENCODE_TS_BIN", ts_bin)]);
-        assert!(output.status.success(), "rs {args:?}: {}", text(&output.stderr));
+        assert!(
+            output.status.success(),
+            "rs {args:?}: {}",
+            text(&output.stderr)
+        );
         text(&output.stdout)
     };
     let url = format!("http://127.0.0.1:{port}\n");
@@ -383,7 +435,10 @@ fn interop_with_a_typescript_service() {
     let restarted = pid(&sandbox.registration().unwrap());
     assert_ne!(restarted, rust_started);
     assert_eq!(ts(&["service", "status"]), url);
-    eprintln!("rs start: pid {rust_started}; rs restart: pid {restarted}; ts status: {}", url.trim());
+    eprintln!(
+        "rs start: pid {rust_started}; rs restart: pid {restarted}; ts status: {}",
+        url.trim()
+    );
 
     let moved = free_port();
     assert_eq!(rs(&["service", "set", "port", &moved.to_string()]), "");
@@ -391,9 +446,15 @@ fn interop_with_a_typescript_service() {
     assert_eq!(ts(&["service", "get", "port"]), format!("{moved}\n"));
     assert_eq!(ts(&["service", "set", "hostname", "127.0.0.1"]), "");
     assert_eq!(rs(&["service", "get"]), ts(&["service", "get"]));
-    assert_eq!(rs(&["service", "get", "password"]), ts(&["service", "get", "password"]));
+    assert_eq!(
+        rs(&["service", "get", "password"]),
+        ts(&["service", "get", "password"])
+    );
 
-    assert_eq!(rs(&["service", "start"]), format!("http://127.0.0.1:{moved}\n"));
+    assert_eq!(
+        rs(&["service", "start"]),
+        format!("http://127.0.0.1:{moved}\n")
+    );
     assert_eq!(ts(&["service", "stop"]), "");
     assert_eq!(rs(&["service", "status"]), "stopped\n");
     eprintln!("rs set port {moved}, ts get port, rs start there, ts stop: ok");
