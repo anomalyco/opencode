@@ -295,12 +295,16 @@ export const slotDelta = <K extends StreamKey>(
       input: `${slot.tool.input}${delta.text}`,
       providerMetadata: slot.tool.providerMetadata ?? delta.providerMetadata,
     }
-    return { slots: new Map(slots).set(key, { ...slot, tool }), events: [inputDelta(tool, delta.text)] }
+    return {
+      slots: new Map(slots).set(key, { ...slot, freeform: slot.freeform || delta.freeform, tool }),
+      events: [inputDelta(tool, delta.text)],
+    }
   }
   const id = slot?.id ?? delta.id
   const name = slot?.name ?? delta.name
   const input = `${slot?.input ?? ""}${delta.text}`
-  const freeform = slot?.freeform ?? delta.freeform
+  // A call may only reveal that it is freeform after its first delta.
+  const freeform = (slot?.freeform ?? false) || delta.freeform
   const providerMetadata = slot?.providerMetadata ?? delta.providerMetadata
   if (!id || !name)
     return {

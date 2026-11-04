@@ -235,6 +235,23 @@ describe("freeform tools", () => {
         expect.objectContaining({ id: "call_1", name: "run", input: { code: 'ZZ"1\n' } }),
       ])
       expect(response.finishReason.normalized).toBe("tool-calls")
+
+      // The first delta may name the call before any `custom` payload arrives.
+      const split = yield* LLMClient.generate(ai.request({ model: chat, prompt: "Run it.", tools: lark })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({ id: "call_2", type: "custom" }),
+              chunk({ custom: { name: "run", input: "ZZ" } }),
+              chunk({ custom: { input: "12" } }),
+              { id: "chatcmpl_1", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+            ),
+          ),
+        ),
+      )
+      expect(split.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_2", name: "run", input: { code: "ZZ12" } }),
+      ])
     }),
   )
 
