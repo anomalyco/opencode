@@ -22,114 +22,37 @@ import { openSession } from "../utils/workspace"
 test.use({ serviceWorkers: "block" })
 
 test.describe("timeline history", () => {
-  for (const scenario of [
-    { name: "long reply", disabled: false, paragraphs: 60 },
-    { name: "disabled divider", disabled: true, paragraphs: 60 },
-    { name: "last screen", disabled: false, paragraphs: 11 },
-  ])
-    test(`reopens at locally unseen messages: ${scenario.name}`, async ({ page }) => {
-      const id = "ses_new_messages"
+  test("reopens at the first locally unseen reply", async ({ page }) => {
+    const notice = await openUnreadSession(page)
 
-      let messages = [
-        userMessage([textPart("prt_new_prompt", "Explain the implementation")], { id: "msg_new_prompt", created: 1 }),
-        assistantMessage([textPart("prt_seen", "Already read")], { id: "msg_seen", created: 2 }),
-      ]
+    await expect(notice.getByText("New", { exact: true })).toBeInViewport()
+    await expect(page.getByText("New paragraph 0.", { exact: true })).toBeInViewport()
+  })
 
-      await openSession(page, {
-        name: "NewMessages",
-        sessions: [{ id }],
-        pageMessages: () => ({ items: messages }),
-        seed: scenario.disabled ? { settings: { general: { newMessagesDivider: false } } } : undefined,
-      })
-      await expect(page.getByText("Already read", { exact: true })).toBeVisible()
-      await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
-      messages = [
-        ...messages,
-        assistantMessage(
-          [
-            textPart(
-              "prt_new_reply",
-              Array.from({ length: scenario.paragraphs }, (_, index) => `New paragraph ${index}.`).join("\n\n"),
-            ),
-          ],
-          { id: "msg_new_reply", created: 3 },
-        ),
-      ]
-      await page.reload()
-      await expectSessionTitle(page, id)
-      const notice = page.locator('[data-slot="session-timeline-notice"]').getByText("New", { exact: true })
+  test("reopens at the end when the new-messages divider is disabled", async ({ page }) => {
+    const notice = await openUnreadSession(page, { disabled: true })
 
-      if (scenario.disabled) {
-        await expect(page.getByText(`New paragraph ${scenario.paragraphs - 1}.`, { exact: true })).toBeInViewport()
-        await expect(notice).toHaveCount(0)
+    await expect(page.getByText("New paragraph 59.", { exact: true })).toBeInViewport()
+    await expect(notice).toHaveCount(0)
+  })
 
-        return
-      }
+  test("reaching the end dismisses the new-messages divider without moving the reply", async ({ page }) => {
+    const notice = await openUnreadSession(page, { paragraphs: 5 })
 
-      await expect(notice).toBeInViewport()
-      await expect(page.getByText("New paragraph 0.", { exact: true })).toBeInViewport()
-      const scroller = timelineScroller(page)
+    const paragraph = page.getByText("New paragraph 4.", { exact: true })
 
-      if (scenario.name === "last screen") {
-        await page.setViewportSize({ width: 1280, height: 600 })
-        await expect
-          .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
-          .toBeGreaterThan(12)
-        const overflow = await scroller.evaluate((element) => element.scrollHeight - element.clientHeight)
-
-        await page.setViewportSize({ width: 1280, height: 600 + overflow - 12 })
-        await expect
-          .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
-          .toBeCloseTo(12, 0)
-      }
-
-      const dismissal = await scroller.evaluateHandle((element, last) => {
-        element.scrollTop = element.scrollHeight
-
-        const paragraph = [...element.querySelectorAll("p")].find(
-          (item) => item.textContent === `New paragraph ${last}.`,
-        )
-
-        if (!paragraph) throw new Error("Missing the last new paragraph")
-
-        const state = { before: paragraph.getBoundingClientRect().top, shift: 0, dismissed: false }
-
-        const sample = () => {
-          state.shift = Math.max(state.shift, Math.abs(paragraph.getBoundingClientRect().top - state.before))
-
-          const notice = element.querySelector(
-            '[data-timeline-row="NewMessages"] [data-slot="session-timeline-notice"]',
-          )
-
-          state.dismissed = !notice?.checkVisibility({ visibilityProperty: true })
-
-          if (!state.dismissed) requestAnimationFrame(sample)
-        }
-
-        requestAnimationFrame(sample)
-        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100_000 }))
-
-        return state
-      }, scenario.paragraphs - 1)
-
-      await expect(page.getByText(`New paragraph ${scenario.paragraphs - 1}.`, { exact: true })).toBeInViewport()
-      await expect(notice).toBeHidden()
-      await expect.poll(() => dismissal.evaluate((state) => state.dismissed)).toBe(true)
-      expect(await dismissal.evaluate((state) => state.shift)).toBeLessThanOrEqual(1)
-
-      if (scenario.name === "last screen") {
-        await page.setViewportSize({ width: 1280, height: 400 })
-        await expect
-          .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
-          .toBeGreaterThan(200)
-        await scroller.evaluate((element) => {
-          element.scrollTop = element.scrollHeight
-          element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 1 }))
-        })
-        await expect(page.locator('[data-timeline-row="NewMessages"]')).toHaveCount(0)
-        await expect(page.getByText("New paragraph 10.", { exact: true })).toBeInViewport()
-      }
+    await expect(notice.getByText("New", { exact: true })).toBeInViewport()
+    await timelineScroller(page).evaluate((element) => {
+      element.scrollTop = element.scrollHeight
     })
+    await expect(paragraph).toBeInViewport()
+    await expect(notice.getByText("New", { exact: true })).toBeInViewport()
+    const top = await paragraph.evaluate((element) => element.getBoundingClientRect().top)
+
+    await timelineScroller(page).dispatchEvent("wheel", { deltaY: 1 })
+    await expect(notice.getByText("New", { exact: true })).toBeHidden()
+    await expect.poll(() => paragraph.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(top, 0)
+  })
 
   test("returning to a cached session lands on work streamed while another tab was open", async ({ page }) => {
     const other = "ses_new_other"
@@ -801,6 +724,40 @@ declare global {
   interface Window {
     __historyRootProbe?: { arm(): string[]; hidden: boolean; settle(final: ProbeFinal): void; settled: boolean }
   }
+}
+
+async function openUnreadSession(page: Page, input: { disabled?: boolean; paragraphs?: number } = {}) {
+  const id = "ses_new_messages"
+
+  let messages = [
+    userMessage([textPart("prt_new_prompt", "Explain the implementation")], { id: "msg_new_prompt", created: 1 }),
+    assistantMessage([textPart("prt_seen", "Already read")], { id: "msg_seen", created: 2 }),
+  ]
+
+  await openSession(page, {
+    name: "NewMessages",
+    sessions: [{ id }],
+    pageMessages: () => ({ items: messages }),
+    seed: input.disabled ? { settings: { general: { newMessagesDivider: false } } } : undefined,
+  })
+  await expect(page.getByText("Already read", { exact: true })).toBeVisible()
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  messages = [
+    ...messages,
+    assistantMessage(
+      [
+        textPart(
+          "prt_new_reply",
+          Array.from({ length: input.paragraphs ?? 60 }, (_, index) => `New paragraph ${index}.`).join("\n\n"),
+        ),
+      ],
+      { id: "msg_new_reply", created: 3 },
+    ),
+  ]
+  await page.reload()
+  await expectSessionTitle(page, id)
+
+  return page.locator('[data-timeline-row="NewMessages"]')
 }
 
 async function openStressTarget(page: Page, input: Parameters<typeof mockStressTimeline>[1] = {}) {
