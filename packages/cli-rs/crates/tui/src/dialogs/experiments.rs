@@ -23,13 +23,11 @@ pub struct Experiment {
 /// In-flight features anyone can opt into. Each entry is temporary: an experiment either graduates (delete the
 /// entry, make the behavior unconditional) or dies (delete the entry and the branch it gated). `new-designs`
 /// graduated here: the Rust client draws only the new designs, though the TypeScript TUI still lists it.
-pub const EXPERIMENTS: &[Experiment] = &[
-    Experiment {
-        id: "client-mcp",
-        title: "TUI tools",
-        description: "Let the agent open terminals in this TUI (requires server support)",
-    },
-];
+pub const EXPERIMENTS: &[Experiment] = &[Experiment {
+    id: "client-mcp",
+    title: "TUI tools",
+    description: "Let the agent open terminals in this TUI (requires server support)",
+}];
 
 fn options(tui: &Tui) -> Vec<SelectOption<&'static str>> {
     EXPERIMENTS

@@ -208,14 +208,14 @@ pub fn event(tui: &Tui, event: &V2Event) {
         _ => return,
     };
     if tui.terminals.available() && tui.terminals.lists.borrow().contains_key(&session.0) {
-        refresh(tui, session, |_| {});
+        refresh(tui, session, false, |_| {});
     }
 }
 
 /// The session frame of `session` mounted: list its terminals (`createResource` in the frame).
 pub fn session_mounted(tui: &Tui, session: &SessionID) {
     if tui.terminals.available() {
-        refresh(tui, session, |_| {});
+        refresh(tui, session, false, |_| {});
     }
 }
 
@@ -252,14 +252,15 @@ fn check(tui: &Tui) {
                 sessions.push(id.0);
             }
             for session in sessions {
-                refresh(&tui, &SessionID(session), |_| {});
+                refresh(&tui, &SessionID(session), false, |_| {});
             }
         },
     );
 }
 
-/// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after.
-fn refresh(tui: &Tui, session: &SessionID, then: impl FnOnce(&Tui) + 'static) {
+/// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after. A failure
+/// is logged; for a command (`toast`) it also shows "Unable to load terminal", as the TS commands do.
+fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) + 'static) {
     tui.terminals
         .lists
         .borrow_mut()
@@ -283,7 +284,9 @@ fn refresh(tui: &Tui, session: &SessionID, then: impl FnOnce(&Tui) + 'static) {
                 Ok(list) => list,
                 Err(error) => {
                     log::error!("Failed to refresh persistent terminal panes: {error}");
-                    tui.toasts.error("Unable to load terminal");
+                    if toast {
+                        tui.toasts.error("Unable to load terminal");
+                    }
                     return;
                 }
             };
@@ -367,7 +370,7 @@ fn create(tui: &Tui, session: &SessionID) {
             match result {
                 Ok(terminal) => {
                     let id = session.0.clone();
-                    refresh(&tui, &session, move |tui| {
+                    refresh(&tui, &session, true, move |tui| {
                         select(tui, &id, Some(&terminal.id.0), true);
                     });
                 }
@@ -397,7 +400,7 @@ fn toggle(tui: &Tui) {
         return;
     }
     let session = id.clone();
-    refresh(tui, &id, move |tui| {
+    refresh(tui, &id, true, move |tui| {
         match tui.terminals.list(&session.0).last() {
             Some(terminal) => select(tui, &session.0, Some(&terminal.id.0), true),
             None => create(tui, &session),
@@ -417,7 +420,7 @@ fn pick(tui: &Tui) {
     if let Some(picker) = picker {
         picker(tui);
     }
-    refresh(tui, &id, |_| {});
+    refresh(tui, &id, true, |_| {});
 }
 
 /// `terminal.close`.
