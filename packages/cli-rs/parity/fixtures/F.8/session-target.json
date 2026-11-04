@@ -1,0 +1,2902 @@
+{
+  "targets": [
+    {
+      "name": "adopts an explicit Session location and model",
+      "input": {
+        "session": "ses_resume"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/session/ses_resume",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_resume",
+                  "projectID": "project",
+                  "title": "ses_resume",
+                  "location": {
+                    "directory": "/session"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  },
+                  "model": {
+                    "providerID": "openai",
+                    "id": "gpt-5"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/session",
+                "project": {
+                  "id": "project",
+                  "directory": "/session",
+                  "canonical": "/session"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/session/ses_resume",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/session"
+              ]
+            ],
+            "body": null
+          }
+        ],
+        "prepared": {
+          "location": "/session",
+          "session": "ses_resume",
+          "model": {
+            "providerID": "openai",
+            "id": "gpt-5"
+          },
+          "agent": null
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_resume",
+            "location": "/session",
+            "model": {
+              "providerID": "openai",
+              "id": "gpt-5"
+            },
+            "agent": null,
+            "resume": true
+          }
+        }
+      }
+    },
+    {
+      "name": "creates a missing explicit Session with its ID",
+      "input": {
+        "session": "ses_chosen"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/session/ses_chosen",
+          "replies": [
+            {
+              "status": 404,
+              "body": {
+                "_tag": "SessionNotFoundError",
+                "sessionID": "ses_chosen",
+                "message": "Session not found: ses_chosen"
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_chosen",
+                  "projectID": "project",
+                  "title": "ses_chosen",
+                  "location": {
+                    "directory": "/project"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/session/ses_chosen",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session",
+            "query": [],
+            "body": {
+              "id": "ses_chosen",
+              "location": {
+                "directory": "/project"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/project",
+          "session": null,
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_chosen",
+            "location": "/project",
+            "model": null,
+            "agent": null,
+            "resume": false
+          }
+        }
+      }
+    },
+    {
+      "name": "does not create a missing explicit Session to fork",
+      "input": {
+        "session": "ses_chosen",
+        "fork": true
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/session/ses_chosen",
+          "replies": [
+            {
+              "status": 404,
+              "body": {
+                "_tag": "SessionNotFoundError",
+                "sessionID": "ses_chosen",
+                "message": "Session not found: ses_chosen"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/session/ses_chosen",
+            "query": [],
+            "body": null
+          }
+        ],
+        "prepared": null,
+        "outcome": {
+          "error": {
+            "kind": "not-found"
+          }
+        }
+      }
+    },
+    {
+      "name": "forks an explicit Session",
+      "input": {
+        "session": "ses_resume",
+        "fork": true,
+        "agent": "plan"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/session/ses_resume",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_resume",
+                  "projectID": "project",
+                  "title": "ses_resume",
+                  "location": {
+                    "directory": "/session"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session/ses_resume/fork",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_fork",
+                  "projectID": "project",
+                  "title": "ses_fork",
+                  "location": {
+                    "directory": "/session"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  },
+                  "agent": "build"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/session",
+                "project": {
+                  "id": "project",
+                  "directory": "/session",
+                  "canonical": "/session"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/session/ses_resume",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session/ses_resume/fork",
+            "query": [],
+            "body": {}
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/session"
+              ]
+            ],
+            "body": null
+          }
+        ],
+        "prepared": {
+          "location": "/session",
+          "session": "ses_fork",
+          "model": null,
+          "agent": "plan"
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_fork",
+            "location": "/session",
+            "model": null,
+            "agent": "plan",
+            "resume": true
+          }
+        }
+      }
+    },
+    {
+      "name": "paginates to continue the exact directory",
+      "input": {
+        "directory": "/project",
+        "continue": true
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": [
+                  {
+                    "id": "ses_0",
+                    "projectID": "project",
+                    "title": "ses_0",
+                    "location": {
+                      "directory": "/other/0"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_1",
+                    "projectID": "project",
+                    "title": "ses_1",
+                    "location": {
+                      "directory": "/other/1"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_2",
+                    "projectID": "project",
+                    "title": "ses_2",
+                    "location": {
+                      "directory": "/other/2"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_3",
+                    "projectID": "project",
+                    "title": "ses_3",
+                    "location": {
+                      "directory": "/other/3"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_4",
+                    "projectID": "project",
+                    "title": "ses_4",
+                    "location": {
+                      "directory": "/other/4"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_5",
+                    "projectID": "project",
+                    "title": "ses_5",
+                    "location": {
+                      "directory": "/other/5"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_6",
+                    "projectID": "project",
+                    "title": "ses_6",
+                    "location": {
+                      "directory": "/other/6"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_7",
+                    "projectID": "project",
+                    "title": "ses_7",
+                    "location": {
+                      "directory": "/other/7"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_8",
+                    "projectID": "project",
+                    "title": "ses_8",
+                    "location": {
+                      "directory": "/other/8"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_9",
+                    "projectID": "project",
+                    "title": "ses_9",
+                    "location": {
+                      "directory": "/other/9"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_10",
+                    "projectID": "project",
+                    "title": "ses_10",
+                    "location": {
+                      "directory": "/other/10"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_11",
+                    "projectID": "project",
+                    "title": "ses_11",
+                    "location": {
+                      "directory": "/other/11"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_12",
+                    "projectID": "project",
+                    "title": "ses_12",
+                    "location": {
+                      "directory": "/other/12"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_13",
+                    "projectID": "project",
+                    "title": "ses_13",
+                    "location": {
+                      "directory": "/other/13"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_14",
+                    "projectID": "project",
+                    "title": "ses_14",
+                    "location": {
+                      "directory": "/other/14"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_15",
+                    "projectID": "project",
+                    "title": "ses_15",
+                    "location": {
+                      "directory": "/other/15"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_16",
+                    "projectID": "project",
+                    "title": "ses_16",
+                    "location": {
+                      "directory": "/other/16"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_17",
+                    "projectID": "project",
+                    "title": "ses_17",
+                    "location": {
+                      "directory": "/other/17"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_18",
+                    "projectID": "project",
+                    "title": "ses_18",
+                    "location": {
+                      "directory": "/other/18"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_19",
+                    "projectID": "project",
+                    "title": "ses_19",
+                    "location": {
+                      "directory": "/other/19"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_20",
+                    "projectID": "project",
+                    "title": "ses_20",
+                    "location": {
+                      "directory": "/other/20"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_21",
+                    "projectID": "project",
+                    "title": "ses_21",
+                    "location": {
+                      "directory": "/other/21"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_22",
+                    "projectID": "project",
+                    "title": "ses_22",
+                    "location": {
+                      "directory": "/other/22"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_23",
+                    "projectID": "project",
+                    "title": "ses_23",
+                    "location": {
+                      "directory": "/other/23"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_24",
+                    "projectID": "project",
+                    "title": "ses_24",
+                    "location": {
+                      "directory": "/other/24"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_25",
+                    "projectID": "project",
+                    "title": "ses_25",
+                    "location": {
+                      "directory": "/other/25"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_26",
+                    "projectID": "project",
+                    "title": "ses_26",
+                    "location": {
+                      "directory": "/other/26"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_27",
+                    "projectID": "project",
+                    "title": "ses_27",
+                    "location": {
+                      "directory": "/other/27"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_28",
+                    "projectID": "project",
+                    "title": "ses_28",
+                    "location": {
+                      "directory": "/other/28"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_29",
+                    "projectID": "project",
+                    "title": "ses_29",
+                    "location": {
+                      "directory": "/other/29"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_30",
+                    "projectID": "project",
+                    "title": "ses_30",
+                    "location": {
+                      "directory": "/other/30"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_31",
+                    "projectID": "project",
+                    "title": "ses_31",
+                    "location": {
+                      "directory": "/other/31"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_32",
+                    "projectID": "project",
+                    "title": "ses_32",
+                    "location": {
+                      "directory": "/other/32"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_33",
+                    "projectID": "project",
+                    "title": "ses_33",
+                    "location": {
+                      "directory": "/other/33"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_34",
+                    "projectID": "project",
+                    "title": "ses_34",
+                    "location": {
+                      "directory": "/other/34"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_35",
+                    "projectID": "project",
+                    "title": "ses_35",
+                    "location": {
+                      "directory": "/other/35"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_36",
+                    "projectID": "project",
+                    "title": "ses_36",
+                    "location": {
+                      "directory": "/other/36"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_37",
+                    "projectID": "project",
+                    "title": "ses_37",
+                    "location": {
+                      "directory": "/other/37"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_38",
+                    "projectID": "project",
+                    "title": "ses_38",
+                    "location": {
+                      "directory": "/other/38"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_39",
+                    "projectID": "project",
+                    "title": "ses_39",
+                    "location": {
+                      "directory": "/other/39"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_40",
+                    "projectID": "project",
+                    "title": "ses_40",
+                    "location": {
+                      "directory": "/other/40"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_41",
+                    "projectID": "project",
+                    "title": "ses_41",
+                    "location": {
+                      "directory": "/other/41"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_42",
+                    "projectID": "project",
+                    "title": "ses_42",
+                    "location": {
+                      "directory": "/other/42"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_43",
+                    "projectID": "project",
+                    "title": "ses_43",
+                    "location": {
+                      "directory": "/other/43"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_44",
+                    "projectID": "project",
+                    "title": "ses_44",
+                    "location": {
+                      "directory": "/other/44"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_45",
+                    "projectID": "project",
+                    "title": "ses_45",
+                    "location": {
+                      "directory": "/other/45"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_46",
+                    "projectID": "project",
+                    "title": "ses_46",
+                    "location": {
+                      "directory": "/other/46"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_47",
+                    "projectID": "project",
+                    "title": "ses_47",
+                    "location": {
+                      "directory": "/other/47"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_48",
+                    "projectID": "project",
+                    "title": "ses_48",
+                    "location": {
+                      "directory": "/other/48"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  },
+                  {
+                    "id": "ses_49",
+                    "projectID": "project",
+                    "title": "ses_49",
+                    "location": {
+                      "directory": "/other/49"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  }
+                ],
+                "cursor": {
+                  "next": "page_2"
+                }
+              }
+            },
+            {
+              "status": 200,
+              "body": {
+                "data": [
+                  {
+                    "id": "ses_implicit",
+                    "projectID": "project",
+                    "title": "ses_implicit",
+                    "location": {
+                      "directory": "/project"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  }
+                ],
+                "cursor": {}
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/session",
+            "query": [
+              [
+                "archived",
+                "false"
+              ],
+              [
+                "directory",
+                "/project"
+              ],
+              [
+                "limit",
+                "50"
+              ],
+              [
+                "order",
+                "desc"
+              ],
+              [
+                "parentID",
+                "null"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/session",
+            "query": [
+              [
+                "archived",
+                "false"
+              ],
+              [
+                "cursor",
+                "page_2"
+              ],
+              [
+                "directory",
+                "/project"
+              ],
+              [
+                "limit",
+                "50"
+              ],
+              [
+                "order",
+                "desc"
+              ],
+              [
+                "parentID",
+                "null"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project"
+              ]
+            ],
+            "body": null
+          }
+        ],
+        "prepared": {
+          "location": "/project",
+          "session": "ses_implicit",
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_implicit",
+            "location": "/project",
+            "model": null,
+            "agent": null,
+            "resume": true
+          }
+        }
+      }
+    },
+    {
+      "name": "continues and forks the latest Session",
+      "input": {
+        "directory": "/project",
+        "continue": true,
+        "fork": true
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": [
+                  {
+                    "id": "ses_latest",
+                    "projectID": "project",
+                    "title": "ses_latest",
+                    "location": {
+                      "directory": "/project"
+                    },
+                    "cost": 0,
+                    "tokens": {
+                      "input": 0,
+                      "output": 0,
+                      "reasoning": 0,
+                      "cache": {
+                        "read": 0,
+                        "write": 0
+                      }
+                    },
+                    "time": {
+                      "created": 1,
+                      "updated": 1
+                    }
+                  }
+                ],
+                "cursor": {}
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session/ses_latest/fork",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_fork",
+                  "projectID": "project",
+                  "title": "ses_fork",
+                  "location": {
+                    "directory": "/project"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "query": {
+            "location[directory]": "/project"
+          },
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/session",
+            "query": [
+              [
+                "archived",
+                "false"
+              ],
+              [
+                "directory",
+                "/project"
+              ],
+              [
+                "limit",
+                "50"
+              ],
+              [
+                "order",
+                "desc"
+              ],
+              [
+                "parentID",
+                "null"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session/ses_latest/fork",
+            "query": [],
+            "body": {}
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project"
+              ]
+            ],
+            "body": null
+          }
+        ],
+        "prepared": {
+          "location": "/project",
+          "session": "ses_fork",
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_fork",
+            "location": "/project",
+            "model": null,
+            "agent": null,
+            "resume": true
+          }
+        }
+      }
+    },
+    {
+      "name": "creates a Session when there is none to continue",
+      "input": {
+        "directory": "/empty",
+        "continue": true,
+        "model": {
+          "providerID": "openai",
+          "id": "gpt-5",
+          "variant": "high"
+        }
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/empty",
+                "project": {
+                  "id": "project",
+                  "directory": "/empty",
+                  "canonical": "/empty"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": [],
+                "cursor": {
+                  "next": "more"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_new",
+                  "projectID": "project",
+                  "title": "ses_new",
+                  "location": {
+                    "directory": "/empty"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/empty"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/session",
+            "query": [
+              [
+                "archived",
+                "false"
+              ],
+              [
+                "directory",
+                "/empty"
+              ],
+              [
+                "limit",
+                "50"
+              ],
+              [
+                "order",
+                "desc"
+              ],
+              [
+                "parentID",
+                "null"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session",
+            "query": [],
+            "body": {
+              "model": {
+                "providerID": "openai",
+                "id": "gpt-5",
+                "variant": "high"
+              },
+              "location": {
+                "directory": "/empty"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/empty",
+          "session": null,
+          "model": {
+            "providerID": "openai",
+            "id": "gpt-5",
+            "variant": "high"
+          },
+          "agent": null
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_new",
+            "location": "/empty",
+            "model": {
+              "providerID": "openai",
+              "id": "gpt-5",
+              "variant": "high"
+            },
+            "agent": null,
+            "resume": false
+          }
+        }
+      }
+    },
+    {
+      "name": "attaches the terminal environment to the resolved local Session",
+      "input": {
+        "session": "ses_resume",
+        "environment": {
+          "PATH": "/terminal/bin"
+        }
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/session/ses_resume",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_resume",
+                  "projectID": "project",
+                  "title": "ses_resume",
+                  "location": {
+                    "directory": "/session"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/session",
+                "project": {
+                  "id": "project",
+                  "directory": "/session",
+                  "canonical": "/session"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "PUT",
+          "path": "/api/session/ses_resume/environment",
+          "replies": [
+            {
+              "status": 200
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/session/ses_resume",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/session"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "PUT",
+            "path": "/api/session/ses_resume/environment",
+            "query": [],
+            "body": {
+              "variables": {
+                "PATH": "/terminal/bin"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/session",
+          "session": "ses_resume",
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "error": {
+            "kind": "mutation"
+          }
+        }
+      }
+    },
+    {
+      "name": "prepares a fresh Session at the server Location before creation",
+      "input": {
+        "agent": "requested"
+      },
+      "prepare": {
+        "agent": "prepared"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/server",
+                "project": {
+                  "id": "project",
+                  "directory": "/server",
+                  "canonical": "/server"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_fresh",
+                  "projectID": "project",
+                  "title": "ses_fresh",
+                  "location": {
+                    "directory": "/server"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session",
+            "query": [],
+            "body": {
+              "agent": "prepared",
+              "location": {
+                "directory": "/server"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/server",
+          "session": null,
+          "model": null,
+          "agent": "requested"
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_fresh",
+            "location": "/server",
+            "model": null,
+            "agent": "prepared",
+            "resume": false
+          }
+        }
+      }
+    },
+    {
+      "name": "uses the agent resolved by the server for a fresh Session",
+      "input": {},
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_fresh",
+                  "projectID": "project",
+                  "title": "ses_fresh",
+                  "location": {
+                    "directory": "/project"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  },
+                  "agent": "review"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session",
+            "query": [],
+            "body": {
+              "location": {
+                "directory": "/project"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/project",
+          "session": null,
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "ok": {
+            "session": "ses_fresh",
+            "location": "/project",
+            "model": null,
+            "agent": "review",
+            "resume": false
+          }
+        }
+      }
+    },
+    {
+      "name": "does not retry an ambiguous Session creation",
+      "input": {},
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 502,
+              "body": "connection closed after create"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session",
+            "query": [],
+            "body": {
+              "location": {
+                "directory": "/project"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/project",
+          "session": null,
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "error": {
+            "kind": "mutation"
+          }
+        }
+      }
+    },
+    {
+      "name": "reports a failed environment upload as a mutation",
+      "input": {
+        "environment": {
+          "TERM": "xterm"
+        }
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/session",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "data": {
+                  "id": "ses_fresh",
+                  "projectID": "project",
+                  "title": "ses_fresh",
+                  "location": {
+                    "directory": "/project"
+                  },
+                  "cost": 0,
+                  "tokens": {
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": {
+                      "read": 0,
+                      "write": 0
+                    }
+                  },
+                  "time": {
+                    "created": 1,
+                    "updated": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "PUT",
+          "path": "/api/session/ses_fresh/environment",
+          "replies": [
+            {
+              "status": 502,
+              "body": "down"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/session",
+            "query": [],
+            "body": {
+              "location": {
+                "directory": "/project"
+              }
+            }
+          },
+          {
+            "method": "PUT",
+            "path": "/api/session/ses_fresh/environment",
+            "query": [],
+            "body": {
+              "variables": {
+                "TERM": "xterm"
+              }
+            }
+          }
+        ],
+        "prepared": {
+          "location": "/project",
+          "session": null,
+          "model": null,
+          "agent": null
+        },
+        "outcome": {
+          "error": {
+            "kind": "mutation"
+          }
+        }
+      }
+    },
+    {
+      "name": "reports a failed Session read",
+      "input": {
+        "session": "ses_broken"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/session/ses_broken",
+          "replies": [
+            {
+              "status": 502,
+              "body": "down"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/session/ses_broken",
+            "query": [],
+            "body": null
+          }
+        ],
+        "prepared": null,
+        "outcome": {
+          "error": {
+            "kind": "request"
+          }
+        }
+      }
+    }
+  ],
+  "worktrees": [
+    {
+      "name": "creates a worktree from the caller's checkout",
+      "input": {
+        "directory": "/project",
+        "name": "pr-12"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/worktree",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/worktrees/pr-12"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/worktree",
+            "query": [],
+            "body": {
+              "projectID": "project",
+              "from": "/project",
+              "name": "pr-12"
+            }
+          }
+        ],
+        "outcome": {
+          "ok": {
+            "root": "/worktrees/pr-12",
+            "directory": "/worktrees/pr-12"
+          }
+        }
+      }
+    },
+    {
+      "name": "keeps the caller's subfolder in the new worktree",
+      "input": {
+        "directory": "/project/packages/cli"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "query": {
+            "location[directory]": "/project/packages/cli"
+          },
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project/packages/cli",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "query": {
+            "location[directory]": "/worktrees/pr-12/packages/cli"
+          },
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/worktrees/pr-12/packages/cli",
+                "project": {
+                  "id": "project",
+                  "directory": "/worktrees/pr-12",
+                  "canonical": "/worktrees/pr-12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/worktree",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/worktrees/pr-12"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project/packages/cli"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/worktree",
+            "query": [],
+            "body": {
+              "projectID": "project",
+              "from": "/project"
+            }
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/worktrees/pr-12/packages/cli"
+              ]
+            ],
+            "body": null
+          }
+        ],
+        "outcome": {
+          "ok": {
+            "root": "/worktrees/pr-12",
+            "directory": "/worktrees/pr-12/packages/cli"
+          }
+        }
+      }
+    },
+    {
+      "name": "uses the worktree root when the subfolder is not in the worktree",
+      "input": {
+        "directory": "/project/scratch"
+      },
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "query": {
+            "location[directory]": "/project/scratch"
+          },
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project/scratch",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "query": {
+            "location[directory]": "/worktrees/pr-12/scratch"
+          },
+          "replies": [
+            {
+              "status": 502,
+              "body": "Location folder is missing"
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/worktree",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/worktrees/pr-12"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/project/scratch"
+              ]
+            ],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/worktree",
+            "query": [],
+            "body": {
+              "projectID": "project",
+              "from": "/project"
+            }
+          },
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [
+              [
+                "location[directory]",
+                "/worktrees/pr-12/scratch"
+              ]
+            ],
+            "body": null
+          }
+        ],
+        "outcome": {
+          "ok": {
+            "root": "/worktrees/pr-12",
+            "directory": "/worktrees/pr-12"
+          }
+        }
+      }
+    },
+    {
+      "name": "reports a failed worktree creation as a mutation",
+      "input": {},
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/location",
+          "replies": [
+            {
+              "status": 200,
+              "body": {
+                "directory": "/project",
+                "project": {
+                  "id": "project",
+                  "directory": "/project",
+                  "canonical": "/project"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "POST",
+          "path": "/api/worktree",
+          "replies": [
+            {
+              "status": 502,
+              "body": "x"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/api/location",
+            "query": [],
+            "body": null
+          },
+          {
+            "method": "POST",
+            "path": "/api/worktree",
+            "query": [],
+            "body": {
+              "projectID": "project",
+              "from": "/project"
+            }
+          }
+        ],
+        "outcome": {
+          "error": {
+            "kind": "mutation"
+          }
+        }
+      }
+    }
+  ],
+  "models": [
+    {
+      "value": "openai/gpt-5",
+      "ok": {
+        "providerID": "openai",
+        "id": "gpt-5"
+      }
+    },
+    {
+      "value": "openai/gpt-5#high",
+      "ok": {
+        "providerID": "openai",
+        "id": "gpt-5",
+        "variant": "high"
+      }
+    },
+    {
+      "value": "",
+      "ok": null
+    },
+    {
+      "value": "gpt-5",
+      "error": "Invalid model reference: gpt-5"
+    },
+    {
+      "value": "/gpt-5",
+      "error": "Invalid model reference: /gpt-5"
+    },
+    {
+      "value": "openai/",
+      "error": "Invalid model reference: openai/"
+    },
+    {
+      "value": "openai/gpt-5#",
+      "error": "Invalid model reference: openai/gpt-5#"
+    },
+    {
+      "value": "a#b/c",
+      "error": "Invalid model reference: a#b/c"
+    },
+    {
+      "value": "a/b#c#d",
+      "error": "Invalid model reference: a/b#c#d"
+    },
+    {
+      "value": "a/b/c",
+      "ok": {
+        "providerID": "a",
+        "id": "b/c"
+      }
+    }
+  ]
+}
