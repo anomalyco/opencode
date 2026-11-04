@@ -6,6 +6,7 @@ import { Cause, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
+import { App } from "../app.js"
 import { Config } from "../config.js"
 import { DatabaseBatch } from "../database/batch.js"
 import type { Database } from "../database/database.js"
@@ -266,11 +267,13 @@ export const enabled = Effect.gen(function* () {
 })
 
 /**
- * {@link enabled} as `session`'s location configures it, where its media is written. Off when that location can't
- * boot or load its config, which surfaces as defects too, so a broken location never fails the caller.
+ * {@link enabled} as `session`'s location configures it, where its media is written, for the build channel in `app`
+ * (location services don't carry it). Off when that location can't boot or load its config, which surfaces as
+ * defects too, so a broken location never fails the caller.
  */
-export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Info) =>
+export const enabledFor = (instances: Instance.Interface, app: App.Info, session: SessionSchema.Info) =>
   enabled.pipe(
+    Effect.provideService(App.Metadata, app),
     instances.provide(session),
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause)
