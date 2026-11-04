@@ -22,22 +22,21 @@ function start(workspace: NewSessionWorkspace, mcp: Record<string, boolean> = {}
 
 // Folds events through the machine and records each step's state and effect types.
 function replay(events: NewSessionStartEvent[], from = createNewSessionStartState()) {
-  return events.reduce(
-    (acc, event) => {
-      const result = transitionNewSessionStart(acc.state, event)
+  const initial: {
+    state: NewSessionStartState
+    steps: { state: NewSessionStartState["type"]; effects: string[] }[]
+    effects: NewSessionStartEffect[]
+  } = { state: from, steps: [], effects: [] }
 
-      return {
-        state: result.state,
-        steps: [...acc.steps, { state: result.state.type, effects: result.effects.map((effect) => effect.type) }],
-        effects: [...acc.effects, ...result.effects],
-      }
-    },
-    {
-      state: from,
-      steps: [] as { state: NewSessionStartState["type"]; effects: string[] }[],
-      effects: [] as NewSessionStartEffect[],
-    },
-  )
+  return events.reduce((acc, event) => {
+    const result = transitionNewSessionStart(acc.state, event)
+
+    return {
+      state: result.state,
+      steps: [...acc.steps, { state: result.state.type, effects: result.effects.map((effect) => effect.type) }],
+      effects: [...acc.effects, ...result.effects],
+    }
+  }, initial)
 }
 
 test("a failed session create on an existing checkout rolls back to the draft instead of promoting", () => {
