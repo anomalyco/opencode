@@ -708,7 +708,6 @@ fn options(tui: &Tui) -> Vec<SelectOption<usize>> {
             let mut option = SelectOption::new(setting.title, index).category(setting.category);
             option.choice = Some(Choice {
                 value: display(tui, setting),
-                // TS opens the theme list here; Enter cycles the theme until that dialog lands (E.18b).
                 open: setting.is_theme(),
             });
             option.detail = Some(Detail::Text(setting.description.to_owned()));
@@ -780,9 +779,19 @@ pub fn show(tui: &Tui, current: Option<&str>) {
             props.on_select = Some(Rc::new({
                 let weak = weak.clone();
                 move |option| {
-                    if let Some(tui) = weak.upgrade() {
-                        change(&tui, option.value, 1);
+                    let Some(tui) = weak.upgrade() else { return };
+                    // `open`: Enter on Theme opens the theme list, which comes back here.
+                    if SETTINGS[option.value].is_theme() {
+                        let weak = weak.clone();
+                        let back: Rc<dyn Fn()> = Rc::new(move || {
+                            if let Some(tui) = weak.upgrade() {
+                                show(&tui, Some("theme.name"));
+                            }
+                        });
+                        super::theme_list::show(&tui, Some(back));
+                        return;
                     }
+                    change(&tui, option.value, 1);
                 }
             }));
             props.bindings = vec![
