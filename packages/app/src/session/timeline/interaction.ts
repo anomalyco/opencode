@@ -1,13 +1,29 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createSignal, on, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { frameLoop } from "@opencode/ui/motion"
 import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
 import { createTimelineFollow } from "./follow"
+import {
+  canRequestFillProbe,
+  canRequestScrollPage,
+  canSeekHistory,
+  createTimelineHistoryState,
+  DISPOSED_HISTORY_EVENT,
+  FILL_REQUESTED_EVENT,
+  HISTORY_LOAD_TIMEOUT_MS,
+  HISTORY_RETRY_COOLDOWN_MS,
+  HISTORY_SCROLL_THRESHOLD,
+  SCROLL_TOP_EVENT,
+  SEEK_REQUESTED_EVENT,
+  transitionTimelineHistory,
+  type TimelineHistoryEffect,
+  type TimelineHistoryEvent,
+} from "./history-machine"
 import { createTimelineModel } from "./model"
 
 export function createSessionTimelineInteraction(session: SessionModel) {
@@ -63,9 +79,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   let messageMark = 0
   let scrollStateFrame: (() => void) | undefined
   let scrollStateTarget: HTMLDivElement | undefined
-  let fillFrame: (() => void) | undefined
-  let historyContinuationFrame: number | undefined
-  const historyRequests = new Set<string>()
+  const [historyState, setHistoryState] = createSignal(createTimelineHistoryState())
+  let historyProbe: (() => void) | undefined
+  let historyLoad: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
+  let historyCooldown: ReturnType<typeof setTimeout> | undefined
   const visibleUserMessages = timeline.visibleUserMessages
   const anchor = (id: string) => `message-${id}`
 
@@ -146,9 +163,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     sessionID: () => session.identity.params.id,
     messagesReady: timeline.ready,
     visibleUserMessages,
-    historyMore: timeline.history.more,
-    historyLoading: timeline.history.loading,
-    loadMore: loadOlder,
+    historySeekable: () => canSeekHistory(historyState()),
+    seekHistory: () => dispatchHistory(SEEK_REQUESTED_EVENT),
     currentMessageId: () => state.messageID,
     pendingMessage: () => state.pendingMessage,
     setPendingMessage: (value) => setState("pendingMessage", value),
@@ -226,67 +242,124 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
     if (!element) return
     scheduleScrollState(element)
-    fill()
-  }
-
-  async function loadOlder() {
-    const owner = session.ownership.capture()
-
-    if (timeline.history.loading() || historyRequests.has(owner.key)) return
-    historyRequests.add(owner.key)
-    const before = timeline.messages().length
-
-    try {
-      await timeline.history.loadOlder()
-    } finally {
-      historyRequests.delete(owner.key)
-    }
-
-    if (!owner.current() || timeline.messages().length <= before) return
-
-    if (follow.following() || !scroller || scroller.scrollTop >= 200 || !timeline.history.more()) return
-
-    if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
-    historyContinuationFrame = requestAnimationFrame(() => {
-      historyContinuationFrame = undefined
-      owner.run(onHistoryScroll)
-    })
+    requestFill()
   }
 
   const onHistoryScroll = () => {
     if (
-      historyRequests.has(session.ownership.key()) ||
-      timeline.history.loading() ||
-      follow.following() ||
       !scroller ||
-      scroller.scrollTop >= 200
+      scroller.scrollTop >= HISTORY_SCROLL_THRESHOLD ||
+      !canRequestScrollPage(untrack(historyState)) ||
+      untrack(follow.following)
     )
       return
-    void loadOlder()
+    dispatchHistory(SCROLL_TOP_EVENT)
   }
 
-  // Like the scroll state, measures in the shared frame loop's read phase.
-  const fill = () => {
-    if (fillFrame !== undefined) return
-    let short = false
-    fillFrame = frameLoop.addMeasured(
-      () => {
-        short =
-          !!session.identity.params.id &&
-          timeline.ready() &&
-          follow.following() &&
-          !timeline.history.loading() &&
-          !!scroller &&
-          scroller.scrollHeight <= scroller.clientHeight + 1
-      },
-      () => {
-        fillFrame = undefined
+  // Runs inside the virtualizer's ref and resize effects, so it reads untracked: they must not rerun on each phase.
+  const requestFill = () => {
+    if (!canRequestFillProbe(untrack(historyState)) || !untrack(follow.following)) return
+    dispatchHistory(FILL_REQUESTED_EVENT)
+  }
 
-        if (short && timeline.history.more()) void loadOlder()
+  function dispatchHistory(event: TimelineHistoryEvent) {
+    untrack(() => {
+      const current = historyState()
+      const next = transitionTimelineHistory(current, event)
 
-        return false
-      },
-    )
+      if (next.state !== current) setHistoryState(next.state)
+      next.effects.forEach(runHistory)
+    })
+  }
+
+  function runHistory(effect: TimelineHistoryEffect) {
+    if (effect.type === "probe.schedule") {
+      historyProbe?.()
+      let load = false
+      // Like the scroll state, measures in the shared frame loop's read phase.
+      historyProbe = frameLoop.addMeasured(
+        () => {
+          load =
+            !!scroller &&
+            (effect.probe === "fill"
+              ? follow.following() && scroller.scrollHeight <= scroller.clientHeight + 1
+              : !follow.following() && scroller.scrollTop < HISTORY_SCROLL_THRESHOLD)
+        },
+        () => {
+          historyProbe = undefined
+          dispatchHistory({ type: "probe.settled", attempt: effect.attempt, load })
+
+          return false
+        },
+      )
+
+      return
+    }
+
+    if (effect.type === "probe.cancel") {
+      historyProbe?.()
+      historyProbe = undefined
+
+      return
+    }
+
+    if (effect.type === "load.start") {
+      abortHistoryLoad()
+      const before = timeline.messages().length
+
+      const load = {
+        controller: new AbortController(),
+        timer: setTimeout(
+          () => dispatchHistory({ type: "page.timed-out", attempt: effect.attempt }),
+          HISTORY_LOAD_TIMEOUT_MS,
+        ),
+      }
+
+      // Every outcome settles in the machine, which drops a result whose attempt is no longer current.
+      const settle = (event: TimelineHistoryEvent) => {
+        clearTimeout(load.timer)
+
+        if (historyLoad === load) historyLoad = undefined
+        dispatchHistory(event)
+      }
+
+      historyLoad = load
+      timeline.history.loadMore(effect.sessionID, load.controller.signal).then(
+        () =>
+          settle({
+            type: "page.loaded",
+            attempt: effect.attempt,
+            added: timeline.messages().length - before,
+            more: timeline.history.more(),
+            following: follow.following(),
+          }),
+        () => settle({ type: "page.failed", attempt: effect.attempt }),
+      )
+
+      return
+    }
+
+    if (effect.type === "load.abort") {
+      abortHistoryLoad()
+
+      return
+    }
+
+    clearTimeout(historyCooldown)
+    historyCooldown = undefined
+
+    if (effect.type === "cooldown.cancel") return
+    historyCooldown = setTimeout(() => {
+      historyCooldown = undefined
+      dispatchHistory({ type: "cooldown.settled", attempt: effect.attempt })
+    }, HISTORY_RETRY_COOLDOWN_MS)
+  }
+
+  function abortHistoryLoad() {
+    if (!historyLoad) return
+    clearTimeout(historyLoad.timer)
+    historyLoad.controller.abort()
+    historyLoad = undefined
   }
 
   createEffect(
@@ -330,23 +403,17 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       { defer: true },
     ),
   )
-  createEffect(
-    on(
-      () =>
-        [
-          session.identity.params.id,
-          timeline.ready(),
-          timeline.history.more(),
-          timeline.history.loading(),
-          follow.following(),
-          visibleUserMessages().length,
-        ] as const,
-      ([id, ready, more, loading, following]) => {
-        if (id && ready && more && !loading && following) fill()
-      },
-      { defer: true },
-    ),
-  )
+  createEffect(() => {
+    const id = session.identity.params.id
+
+    dispatchHistory({
+      type: "sync",
+      target: id ? { sessionKey: session.identity.sessionKey(), sessionID: id } : undefined,
+      ready: timeline.ready(),
+      more: timeline.history.more(),
+      following: follow.following(),
+    })
+  })
   createResizeObserver(
     () => state.refs.dock,
     (_rect, _element, entry) => {
@@ -368,17 +435,15 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       if (stick) scrollToEnd()
 
       if (scroller) scheduleScrollState(scroller)
-      fill()
+      requestFill()
     },
   )
   onCleanup(() => {
-    if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
+    dispatchHistory(DISPOSED_HISTORY_EVENT)
 
     resumeFrame?.()
 
     scrollStateFrame?.()
-
-    fillFrame?.()
   })
 
   return {
@@ -406,7 +471,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       scheduleScrollState,
       contentResized: () => {
         if (scroller) scheduleScrollState(scroller)
-        fill()
+        requestFill()
       },
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
