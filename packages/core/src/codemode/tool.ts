@@ -18,6 +18,8 @@ import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+import { CodeModeFs } from "./fs.js"
+import { CodeModePath } from "./path.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -72,23 +74,28 @@ export type Inventory = {
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
-const description = [
-  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-  'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-  "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-].join("\n")
+const description = (fs: boolean) =>
+  [
+    "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+    fs
+      ? "`fetch` is available for HTTP requests, and Node's `fs` (with `fs.promises`) and `path` for files, also importable as `node:fs`, `fs/promises` and `node:path`. Other modules and packages, and timers, are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`."
+      : "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+    "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+    'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+    "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
+    "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+  ].join("\n")
 
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  /** The Location's file services, which turn on the experimental `fs` and `path` globals. */
+  fileServices?: Context.Context<CodeModeFs.Services>,
 ) => {
   return {
     name: "execute",
-    description,
+    description: description(fileServices !== undefined),
     input: CodeMode.Input,
     output: ExecuteOutput,
     execute: ({ code }, context) =>
@@ -118,36 +125,35 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory)
-          .execute(code)
-          .pipe(
-            Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
-                Effect.gen(function* () {
-                  const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  // The program sees the same failure text the model gets for a direct call.
-                  const executed = yield* executeTool(name, tool, input, {
-                    ...context,
-                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
-                    progress: () => Effect.void,
-                  }).pipe(
-                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
-                  )
-                  const content = resultContent(executed)
-                  const outputFileParts = outputFiles(content)
-                  if (outputFileParts.length > 0)
-                    yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                  return resultValue(executed)
-                }),
-              hooks: progressHooks(record),
-            }),
-            // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
-            Effect.onError(() =>
-              lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
-            ),
-            Effect.provideService(CodeModeExecution.Service, context),
-            Effect.provideService(Permission.Service, permission),
-          )
+        const program = fileServices
+          ? fsRuntime(inventory).execute(code).pipe(Effect.provideContext(fileServices))
+          : runtime(inventory).execute(code)
+        const result = yield* program.pipe(
+          Effect.provideService(Run, {
+            executeTool: (name, tool, input) =>
+              Effect.gen(function* () {
+                const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                // The program sees the same failure text the model gets for a direct call.
+                const executed = yield* executeTool(name, tool, input, {
+                  ...context,
+                  // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
+                  progress: () => Effect.void,
+                }).pipe(Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })))
+                const content = resultContent(executed)
+                const outputFileParts = outputFiles(content)
+                if (outputFileParts.length > 0)
+                  yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
+                return resultValue(executed)
+              }),
+            hooks: progressHooks(record),
+          }),
+          // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
+          Effect.onError(() =>
+            lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
+          ),
+          Effect.provideService(CodeModeExecution.Service, context),
+          Effect.provideService(Permission.Service, permission),
+        )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
@@ -210,6 +216,8 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
         case "fetch":
           return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
         default:
+          if (call.extension === "fs")
+            return start(call, { tool: "fs", status: "running", input: CodeModeFs.display(call.name, call.args) })
           return Effect.void
       }
     },
@@ -263,17 +271,38 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
 const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
+const fsRuntimes = new WeakMap<
+  Inventory,
+  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | CodeModeFs.Services>
+>()
 
-function runtime(inventory: Inventory) {
-  const cached = runtimes.get(inventory)
-  if (cached) return cached
-  const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
-    tools,
-    extensions: [CodeModeFetch.extension],
-    hooks: runHooks,
-  })
-  runtimes.set(inventory, created)
+const runtime = (inventory: Inventory) =>
+  cached(runtimes, inventory, (tools) =>
+    CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+      tools,
+      extensions: [CodeModeFetch.extension],
+      hooks: runHooks,
+    }),
+  )
+
+// The runtime with the experimental `fs` and `path` globals.
+const fsRuntime = (inventory: Inventory) =>
+  cached(fsRuntimes, inventory, (tools) =>
+    CodeMode.make<
+      typeof tools,
+      [typeof CodeModeFetch.extension, typeof CodeModeFs.extension, typeof CodeModePath.extension]
+    >({
+      tools,
+      extensions: [CodeModeFetch.extension, CodeModeFs.extension, CodeModePath.extension],
+      hooks: runHooks,
+    }),
+  )
+
+function cached<T>(cache: WeakMap<Inventory, T>, inventory: Inventory, make: (tools: Tools) => T) {
+  const found = cache.get(inventory)
+  if (found) return found
+  const created = make(inventoryTools(inventory))
+  cache.set(inventory, created)
   return created
 }
 

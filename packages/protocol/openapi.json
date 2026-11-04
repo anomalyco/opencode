@@ -16707,6 +16707,9 @@
               "schedules": {
                 "type": "boolean"
               },
+              "codemode_fs": {
+                "type": "boolean"
+              },
               "artifacts": {
                 "type": "boolean"
               },

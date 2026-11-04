@@ -37,6 +37,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
   }),
+  codemode_fs: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Give Code Mode programs Node's `fs` and `path` modules, with the same permissions as the read and write tools. Defaults to false.",
+  }),
   artifacts: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
   }),

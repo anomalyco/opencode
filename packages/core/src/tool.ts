@@ -9,6 +9,7 @@ import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
+import type { CodeModeFs } from "./codemode/fs.js"
 import { CodeModeTool } from "./codemode/tool.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
@@ -43,7 +44,11 @@ type Data = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  /** `codeModeFiles` turns on the experimental `fs` and `path` globals in Code Mode, acting through those services. */
+  readonly snapshot: (
+    permissions?: Permission.Ruleset,
+    codeModeFiles?: Context.Context<CodeModeFs.Services>,
+  ) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -185,6 +190,7 @@ const layer = Layer.effect(
       | {
           data: Data
           names: string
+          fs: boolean
           inventory: CodeModeTool.Inventory
           value: CodeModeCatalog.Inventory
           definition: ToolDefinition
@@ -248,7 +254,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, codeModeFiles) =>
         Effect.sync(() => {
           const data = state.get()
           const active = new Map<string, Tool.Info>()
@@ -267,13 +273,15 @@ const layer = Layer.effect(
           // Discovery is immutable for a registry revision and visible tool set. Keep executors
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.
-          const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
+          const fs = codeModeFiles !== undefined
+          const cached = catalog?.data === data && catalog.names === names && catalog.fs === fs ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
                 (name, tool, input, context) => run(tool, name, input, context),
                 permission,
+                codeModeFiles,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -284,6 +292,7 @@ const layer = Layer.effect(
             catalog = {
               data,
               names,
+              fs,
               inventory: codeModeInventory,
               value: codeModeCatalog,
               definition: codeModeDefinition,

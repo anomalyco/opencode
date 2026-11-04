@@ -217,14 +217,14 @@ export const extensionGlobals = <R>(
 }
 
 /**
- * Calls a host function and describes what the program waits on. A returned Effect or Promise settles later; a
- * returned value or a throw settles now.
+ * Calls a host function and describes what the program waits on. A returned Promise settles later; a returned value,
+ * a throw, or an Effect settles now, so a synchronous global that returns an Effect blocks on it like `readFileSync`.
  */
 const callHost = <R>(value: Function, args: ReadonlyArray<unknown>) => {
   try {
     const result: unknown = value.apply(undefined, args)
     // Extension.Services adds an Effect global's requirements to R.
-    if (Effect.isEffect(result)) return { async: true, effect: result as Effect.Effect<unknown, unknown, R> }
+    if (Effect.isEffect(result)) return { async: false, effect: result as Effect.Effect<unknown, unknown, R> }
     if (result instanceof Promise)
       return { async: true, effect: Effect.tryPromise({ try: () => result, catch: (reason) => reason }) }
     return { async: false, effect: Effect.succeed(result) }

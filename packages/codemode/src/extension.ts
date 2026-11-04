@@ -8,7 +8,9 @@ import type { Effect } from "effect"
  * function inside a result is callable the same way. Extension calls are not tool calls. A global may return a value,
  * a Promise, or an Effect, and an Effect's requirements join the runtime's environment.
  *
- * A global is synchronous unless it is an `async` function or is marked with `async`. The `extension.before` hook
+ * A global is synchronous unless it is an `async` function or is marked with `async`. A synchronous global that
+ * returns an Effect blocks the program until the Effect completes and returns its value, as `fs.readFileSync` does;
+ * an asynchronous one hands the program a promise. The `extension.before` hook
  * runs before the call, so a denied call never reaches the host; it fails the way the global would, by rejecting the
  * promise of an asynchronous global and by throwing from a synchronous one. Functions inside a global object are
  * called the same way, named by their path (`fs.readFile`).
@@ -20,13 +22,13 @@ export type Extension<Globals extends Readonly<Record<string, unknown>> = Readon
   readonly globals: Globals
 }
 
-/** The Effect environment required by an extension's Effect-returning functions, at the top level or one level in. */
+/** The Effect environment required by an extension's Effect-returning functions, at any depth (`fs.promises.readFile`). */
 export type Services<E> = E extends { readonly globals: infer Globals } ? GlobalServices<Globals[keyof Globals]> : never
 
 type GlobalServices<Global> = Global extends (...args: never) => unknown
   ? Requirements<Global>
   : Global extends object
-    ? Requirements<Global[keyof Global]>
+    ? GlobalServices<Global[keyof Global]>
     : never
 
 type Requirements<F> = F extends (...args: never) => infer Result ? Effect.Services<Result> : never

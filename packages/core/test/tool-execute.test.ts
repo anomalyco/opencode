@@ -1,16 +1,31 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
+import { pathToFileURL } from "url"
+import type { CodeModeFs } from "@opencode/core/codemode/fs"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
+import { FileAccess } from "@opencode/core/file-access"
+import { FileWrite } from "@opencode/core/file-write"
+import { Formatter } from "@opencode/core/formatter"
+import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Schema } from "effect"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { hostEnvironmentLayer } from "./fixture/environment"
+import { location } from "./fixture/location"
+import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
-import { permissionService } from "./lib/permission"
+import { permissionService, permissionLayer } from "./lib/permission"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -22,8 +37,28 @@ const context = {
 
 const allowAll = permissionService({ assert: () => Effect.void })
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+// The file services of a Location at `directory`, asking `permission` like the execute call's own.
+const fileServices = (directory: string, permission: Partial<Permission.Interface> = { assert: () => Effect.void }) =>
+  Effect.runSync(
+    Effect.context<CodeModeFs.Services>().pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Environment.node, FileAccess.node, FileWrite.node]), [
+          Environment.node.replace(hostEnvironmentLayer),
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          ),
+          Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
+          Permission.node.replace(permissionLayer(permission)),
+        ]),
+      ),
+    ),
+  )
+
+const createCodeMode = (
+  tools: ReadonlyMap<string, Info>,
+  permission = allowAll,
+  files?: Context.Context<CodeModeFs.Services>,
+) => CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, files)
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -140,6 +175,136 @@ describe("fetch permissions", () => {
 
     expect(result.output.output).toBe("rejected")
     expect(hits).toEqual([])
+  })
+})
+
+describe("fs", () => {
+  test("without the experimental flag there is no fs or path", async () => {
+    const result = await Effect.runPromise(
+      createCodeMode(new Map()).execute({ code: "return [typeof fs, typeof path]" }, context),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual(["undefined", "undefined"])
+  })
+
+  const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
+
+  test("fs reads and writes files in the session's directory, asking read and edit permission as the execute call", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    const asked: Array<Permission.AssertInput> = []
+    const record = { assert: (input: Permission.AssertInput) => Effect.sync(() => void asked.push(input)) }
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), permissionService(record), fileServices(tmp.path, record)).execute(
+        {
+          code: `import { readFile } from "node:fs/promises"
+            const text = await readFile("notes.txt", "utf8")
+            fs.writeFileSync("out/copy.txt", text + " world")
+            return [text, fs.readdirSync("out"), path.join("out", "..", "notes.txt")]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual(["hello", ["copy.txt"], "notes.txt"])
+    expect(await Bun.file(path.join(tmp.path, "out", "copy.txt")).text()).toBe("hello world")
+    expect(asked.map((input) => [input.action, input.resources, input.sessionID, input.source])).toEqual([
+      ["read", ["notes.txt"], context.sessionID, source],
+      ["edit", ["out/copy.txt"], context.sessionID, source],
+      ["read", ["out"], context.sessionID, source],
+    ])
+    expect(asked[1]?.metadata).toMatchObject({ files: [{ file: "out/copy.txt", status: "added", additions: 1 }] })
+    expect(result.output.toolCalls).toEqual([
+      { tool: "fs", status: "completed", input: { method: "readFile", path: "notes.txt" } },
+      { tool: "fs", status: "completed", input: { method: "writeFileSync", path: "out/copy.txt" } },
+      { tool: "fs", status: "completed", input: { method: "readdirSync", path: "out" } },
+    ])
+  })
+
+  test("fs follows Node for copy exclusivity, rename onto directories, nested listings, and file URLs", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "a.txt"), "a")
+    await Bun.write(path.join(tmp.path, "full/x.txt"), "x")
+    await Bun.write(path.join(tmp.path, "src/nested/b.txt"), "b")
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, fileServices(tmp.path)).execute(
+        {
+          code: `const code = (f) => { try { f() } catch (e) { return [e.code, typeof e.errno] } }
+            fs.mkdirSync("empty")
+            fs.mkdirSync("moved")
+            fs.renameSync("empty", "moved")
+            return [
+              code(() => fs.copyFileSync("a.txt", "full/x.txt", fs.constants.COPYFILE_EXCL)),
+              code(() => fs.renameSync("a.txt", "full")),
+              code(() => fs.renameSync("moved", "full")),
+              fs.readdirSync("src", { withFileTypes: true, recursive: true }).map((e) => [e.parentPath, e.name]),
+              fs.readFileSync(new URL(${JSON.stringify(pathToFileURL(path.join(tmp.path, "a.txt")).href)}), "utf8"),
+            ]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([
+      ["EEXIST", "number"],
+      ["EISDIR", "number"],
+      ["ENOTEMPTY", "number"],
+      [
+        ["src", "nested"],
+        [path.join("src", "nested"), "b.txt"],
+      ],
+      "a",
+    ])
+  })
+
+  test("a denied write never touches disk: the sync call throws and the promise rejects", async () => {
+    await using tmp = await tmpdir()
+    const denyEdits = {
+      assert: (input: Permission.AssertInput) =>
+        input.action === "edit"
+          ? Effect.fail(
+              new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+            )
+          : Effect.void,
+    }
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), permissionService(denyEdits), fileServices(tmp.path, denyEdits)).execute(
+        {
+          code: `let thrown
+            try { fs.writeFileSync("a.txt", "x") } catch (e) { thrown = e.message }
+            const [rejected] = await Promise.allSettled([fs.promises.writeFile("b.txt", "x")])
+            return [thrown, rejected.status, fs.existsSync("a.txt")]`,
+        },
+        context,
+      ),
+    )
+
+    const [thrown, status, exists] = JSON.parse(result.output.output)
+    expect(thrown).toContain("Permission denied")
+    expect([status, exists]).toEqual(["rejected", false])
+    expect(await fs.readdir(tmp.path)).toEqual([])
+  })
+
+  test("a missing file fails with a Node-shaped ENOENT error", async () => {
+    await using tmp = await tmpdir()
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, fileServices(tmp.path)).execute(
+        {
+          code: `try { await fs.promises.readFile("missing.txt") } catch (e) {
+              return [e instanceof Error, e.code, e.syscall, e.path, e.message]
+            }`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([
+      true,
+      "ENOENT",
+      "open",
+      "missing.txt",
+      "ENOENT: no such file or directory, open 'missing.txt'",
+    ])
   })
 })
 
