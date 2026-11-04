@@ -386,6 +386,11 @@ export const dict = {
   "dialog.mcp.error.disable": "Disable",
   "dialog.mcp.signIn": "Sign in",
   "dialog.mcp.signIn.open": "Sign in to {{name}}",
+  "dialog.mcp.signIn.description":
+    "Your browser opens so you can sign in to {{name}}. If it can't reach the machine running OpenCode, paste the URL it was redirected to below.",
+  "dialog.mcp.signIn.paste.label": "Redirect URL",
+  "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
+  "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
