@@ -1,11 +1,10 @@
-//! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`) and the hook
-//! tool rows hang on.
+//! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`). Tool rows
+//! are `tools::dispatch::Tool` (E.7a).
 
 use std::cell::{Cell, RefCell};
 
 use opencode_api::generated::{
-    SessionMessageAssistant, SessionMessageAssistantText, SessionMessageAssistantTool,
-    SessionMessageAssistantToolState,
+    SessionMessageAssistant, SessionMessageAssistantText,
 };
 use opentui::prelude::*;
 use opentui::widget::Markdown;
@@ -67,44 +66,6 @@ impl TextPart {
         if self.streaming.replace(streaming) != streaming {
             self.markdown.streaming(streaming);
         }
-    }
-}
-
-/// A tool call. E.7a replaces this stand-in with `tools::dispatch`: a row is created once per
-/// call, and `update` runs whenever its message changes, with the call's current state.
-pub struct Tool {
-    root: View,
-    line: Text,
-}
-
-impl Tool {
-    pub fn new(cx: &Context<'_>) -> Self {
-        let line = Text::new(cx.app, "").fg(cx.theme.text.muted);
-        let root = View::new(cx.app)
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&line);
-        Self { root, line }
-    }
-
-    pub fn root(&self) -> &View {
-        &self.root
-    }
-
-    pub fn update(
-        &self,
-        _cx: &Context<'_>,
-        _message: &SessionMessageAssistant,
-        tool: &SessionMessageAssistantTool,
-    ) {
-        let status = match &tool.state {
-            SessionMessageAssistantToolState::Streaming(_) => "pending",
-            SessionMessageAssistantToolState::Running(_) => "running",
-            SessionMessageAssistantToolState::Completed(_) => "completed",
-            SessionMessageAssistantToolState::Error(_) => "error",
-            SessionMessageAssistantToolState::Unknown(_) => "unknown",
-        };
-        self.line.set_text(format!("⚙ {} ({status})", tool.name));
     }
 }
 
