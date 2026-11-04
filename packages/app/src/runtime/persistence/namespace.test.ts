@@ -56,7 +56,7 @@ function host(initial: Record<string, Record<string, string>> = {}) {
     events,
     updates: () => calls.filter((call) => call.kind === "update"),
     setFail: (value: boolean | ((insert: Record<string, string>) => boolean)) =>
-      (fail = typeof value === "boolean" ? () => value : value),
+      (fail = value instanceof Function ? value : () => value),
     setGate: (value: Promise<void> | undefined) => (gate = value),
     replied: (index: number) => Promise.allSettled([replies[index]]),
     deliver: (target: NamespaceStorage, index: number) => {

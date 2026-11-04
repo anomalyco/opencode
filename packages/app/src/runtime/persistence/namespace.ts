@@ -58,7 +58,7 @@ export function createNamespaceStorage(driver: NamespaceDriver, name: string): N
     if (effect.type === "load") {
       load = driver.items(name).then(
         (loaded) => dispatch({ type: "load.succeeded", items: loaded.items, revision: loaded.revision }),
-        (error: unknown) => {
+        (error) => {
           console.error(`[persistence] load failed for ${name}`, error)
           dispatch({ type: "load.failed" })
         },
@@ -73,7 +73,7 @@ export function createNamespaceStorage(driver: NamespaceDriver, name: string): N
       .update(name, effect.insert, effect.remove)
       .then(
         (revision) => dispatch({ type: "batch.succeeded", batch, revision }),
-        (error: unknown) => {
+        (error) => {
           console.error(`[persistence] flush failed for ${name}`, error)
           dispatch({ type: "batch.failed", batch })
         },
