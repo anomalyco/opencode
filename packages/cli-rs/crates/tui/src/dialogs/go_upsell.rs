@@ -73,7 +73,8 @@ fn claim(draft: &mut Value, now: f64) -> Claim {
     if !draft.is_object() {
         *draft = json!({});
     }
-    draft["lastSeenAt"] = json!(now);
+    // `Date.now()` is a whole number of milliseconds.
+    draft["lastSeenAt"] = json!(now as i64);
     Claim::Claimed
 }
 
@@ -324,13 +325,19 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         .wrap(WrapMode::None);
     let compact = short || height < if narrow { 26 } else { 22 };
     if compact {
-        root.add(
-            &View::new(app)
-                .shrink(1.0)
-                .child(&used)
-                .child(&pitch)
-                .child(&link),
-        );
+        // TS's scrollbox takes its whole `maxHeight`, so the panel reaches the buttons at the bottom.
+        let top = if short { 1 } else { height / 4 + 1 };
+        let footer_rows = if narrow { ACTIONS.len() as u16 } else { 1 };
+        let gaps = if short { 1 } else { 4 };
+        let body = height.saturating_sub(top + footer_rows + gaps).max(2);
+        let scroll = ScrollBox::new(app)
+            .scrollbars(false)
+            .height(u32::from(body))
+            .shrink(1.0);
+        scroll.add(&used);
+        scroll.add(&pitch);
+        scroll.add(&link);
+        root.add(&scroll);
     } else {
         root.add(&View::new(app).child(&used).child(&pitch));
         root.add(
@@ -917,12 +924,12 @@ mod tests {
         let now = 10.0 * DAY_MS;
         let mut empty = json!({});
         assert_eq!(claim(&mut empty, now), Claim::Claimed);
-        assert_eq!(empty, json!({ "lastSeenAt": now }));
+        assert_eq!(empty, json!({ "lastSeenAt": now as i64 }));
         let mut recent = json!({ "lastSeenAt": now - 1000.0 });
         assert_eq!(claim(&mut recent, now), Claim::Recent(Some(now - 1000.0)));
         let mut old = json!({ "lastSeenAt": now - DAY_MS, "other": 1 });
         assert_eq!(claim(&mut old, now), Claim::Claimed);
-        assert_eq!(old, json!({ "lastSeenAt": now, "other": 1 }));
+        assert_eq!(old, json!({ "lastSeenAt": now as i64, "other": 1 }));
         let mut off = json!({ "dontShow": true, "lastSeenAt": 5.0 });
         assert_eq!(claim(&mut off, now), Claim::DontShow(Some(5.0)));
     }
