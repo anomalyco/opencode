@@ -14,7 +14,7 @@ import { tmpdir } from "node:os"
 import { rm } from "node:fs/promises"
 import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { startFakeServer, type Options } from "../lib/fake-server"
+import { startFakeServer, type FakeServer, type Options } from "../lib/fake-server"
 import {
   buildRust,
   command,
@@ -29,11 +29,13 @@ import {
 import { requestLog } from "../cli/run"
 import { diffRecords } from "../cli/diff"
 
-export type OscKind = "title" | "progress" | "clipboard" | "notify" | "other"
+export type OscKind = "title" | "progress" | "status" | "clipboard" | "notify" | "other"
 
 export type PtyStep = {
-  // Written to the terminal as is, for example "\x03" for Ctrl+C.
+  // Written to the terminal as is, for example "\x03" for Ctrl+C, or "\x1b[O" to report a focus loss.
   keys?: string
+  // Pushed to the `fallback: "tui"` event stream after the keys.
+  emit?: Parameters<FakeServer["emit"]>[0][]
   // Waits until an OSC sequence or the screen matches (a string matches as a substring).
   until?: { osc?: string | RegExp; screen?: string | RegExp }
   // Waits until the screen has not changed for this long.
@@ -52,6 +54,8 @@ export type PtyCase = {
   steps: PtyStep[]
   // The OSC kinds the comparison keeps. Terminal queries (colors, pointer shape) are `other`.
   osc?: OscKind[]
+  // Compare the OSC log one kind at a time, in the order of `osc`, when the order between kinds is not fixed.
+  oscByKind?: boolean
   // Wait for the program to exit after the last step and record the code; otherwise it is killed.
   exits?: boolean
   // Plan 7.5: line masks for checkpoints. Each match becomes `<masked>`; say why in `reason`.
@@ -100,6 +104,7 @@ export async function runPty(side: Side, value: PtyCase) {
   const failures: string[] = []
   for (const step of value.steps) {
     if (step.keys !== undefined) proc.terminal?.write(step.keys)
+    step.emit?.forEach((event) => server?.emit(event))
     const failure = await waitFor(step, { screen, osc: () => oscLog(output.text), exited })
     if (failure) {
       failures.push(failure)
@@ -122,6 +127,7 @@ export async function runPty(side: Side, value: PtyCase) {
     exit: value.exits ? (exit?.code ?? "timeout") : "killed",
     osc: oscLog(output.text)
       .filter((entry) => kinds.includes(entry.kind))
+      .toSorted((a, b) => (value.oscByKind ? kinds.indexOf(a.kind) - kinds.indexOf(b.kind) : 0))
       .map((entry) => normalize(`${entry.kind} ${entry.data}`, context)),
     checkpoints: Object.fromEntries(
       Object.entries(checkpoints).map(([name, lines]) => [
@@ -150,6 +156,8 @@ function oscKind(data: string): OscKind {
   const code = data.split(";")[0]
   if (["0", "1", "2"].includes(code)) return "title"
   if (data.startsWith("9;4;")) return "progress"
+  // `7501;?` asks whether the terminal has the program status protocol.
+  if (code === "7501") return data === "7501;?" ? "other" : "status"
   if (code === "52") return "clipboard"
   // `99;…:p=?;` asks the terminal which kitty notification features it has.
   if (code === "99" && /[:;]p=\?/.test(data)) return "other"
