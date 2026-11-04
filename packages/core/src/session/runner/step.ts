@@ -29,6 +29,7 @@ import { SessionRunnerRetry } from "./retry.js"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
+  Empty: {}
   Retry: { readonly error: SessionError.Error; readonly decision: SessionRunnerRetry.Decision }
   Continue: {
     readonly error: SessionError.Error
@@ -289,6 +290,7 @@ export const make = Effect.gen(function* () {
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         const needsContinuation = input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation
         if (record.finish?.finish === "length") return Outcome.OutputLimit({ needsContinuation })
+        if (record.finish?.finish === "stop" && record.empty) return Outcome.Empty()
         return Outcome.Completed({ needsContinuation })
       }),
     )

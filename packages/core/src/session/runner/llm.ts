@@ -40,6 +40,9 @@ const CONTINUE_AFTER_INCOMPLETE_STREAM =
 const CONTINUE_AFTER_OUTPUT_LIMIT =
   "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
 
+const CONTINUE_AFTER_EMPTY_RESPONSE =
+  "Your last response contained no answer or tool calls. Continue the task with the next action or a final answer."
+
 type DrainInput = Parameters<Interface["drain"]>[0]
 
 const layer = Layer.effect(
@@ -237,6 +240,7 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      let recoverEmpty = true
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -313,6 +317,15 @@ const layer = Layer.effect(
           ),
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
+          Empty: Effect.fnUntraced(function* () {
+            if (!recoverEmpty)
+              return yield* new StepFailedError({
+                error: { type: "empty-response", message: "The model returned no answer or tool calls after one retry" },
+              })
+            recoverEmpty = false
+            yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_EMPTY_RESPONSE })
+            assistantMessageID = SessionMessage.ID.create()
+          }),
           Completed: Effect.fnUntraced(function* (outcome) {
             // The Session is about to go idle, which leaves the background summary time to finish.
             if (!outcome.needsContinuation)
