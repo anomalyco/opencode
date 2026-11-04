@@ -85,3 +85,31 @@ story("keeps typed comment text while other lines and comments are used", async 
   await expect(review.getByText("edited comment", { exact: true })).toHaveCount(0)
   await expect(textbox).toHaveValue("draft text")
 })
+
+story("a focus request opens the comment and clears once the comment shows", async ({ mount }) => {
+  const root = await mount("components-session-review--focused-comment")
+  const comment = root.locator('[data-comment-id="comment-1"]')
+  const request = root.locator("output")
+
+  await expect(comment).toBeVisible()
+  await expect(comment).not.toHaveAttribute("data-open")
+  await root.getByRole("button", { name: "Focus comment", exact: true }).click()
+  await expect(comment).toHaveAttribute("data-open", "")
+  await expect(request).toHaveText("none")
+})
+
+story("a focus request for a comment that never renders clears after the reveal times out", async ({ mount, page }) => {
+  const root = await mount("components-session-review--focused-comment")
+  const request = root.locator("output")
+
+  await expect(root.locator('[data-comment-id="comment-1"]')).toBeVisible()
+  await page.clock.install()
+  await root.getByRole("button", { name: "Focus missing comment", exact: true }).click()
+
+  // The request used to clear on the next frame, before the comment could render.
+  await page.clock.runFor(1000)
+  await expect(request).toHaveText("missing")
+
+  await page.clock.runFor(1100)
+  await expect(request).toHaveText("none")
+})
