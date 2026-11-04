@@ -105,9 +105,10 @@ impl Transport for Fixture {
                 200,
                 json!({ "directory": "/project", "project": { "id": "project", "directory": "/project", "canonical": "/project" } }),
             ),
-            ("GET", "/api/provider" | "/api/integration" | "/api/form" | "/api/permission/request") => {
-                (200, json!({ "location": location, "data": [] }))
-            }
+            (
+                "GET",
+                "/api/provider" | "/api/integration" | "/api/form" | "/api/permission/request",
+            ) => (200, json!({ "location": location, "data": [] })),
             ("GET", "/api/vcs") => (
                 200,
                 json!({ "location": location, "data": { "branch": { "current": "main", "default": "main" } } }),
@@ -182,7 +183,10 @@ struct Setup {
 
 impl Setup {
     fn new() -> Self {
-        let home = tempfile::tempdir().unwrap();
+        Self::with_home(tempfile::tempdir().unwrap())
+    }
+
+    fn with_home(home: tempfile::TempDir) -> Self {
         let seen = Seen::default();
         let client = Client::with_transport(
             "http://opencode.local",
@@ -255,7 +259,11 @@ impl Setup {
         let found = self.app.wait_until(Duration::from_secs(5), || {
             self.requests(method, suffix).len() >= count
         });
-        assert!(found, "no {method} …{suffix}: {:?}", self.seen.lock().unwrap());
+        assert!(
+            found,
+            "no {method} …{suffix}: {:?}",
+            self.seen.lock().unwrap()
+        );
         self.requests(method, suffix)
     }
 
@@ -342,7 +350,10 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     let screen = setup.wait_for("@general");
     // Subagents and `all` agents; not primary or hidden ones.
     assert!(screen.contains("@explore"), "{screen}");
-    assert!(!screen.contains("@build") && !screen.contains("@secret"), "{screen}");
+    assert!(
+        !screen.contains("@build") && !screen.contains("@secret"),
+        "{screen}"
+    );
     setup.app.type_text("gen");
     setup.wait_gone("@explore");
     setup.app.press("return");
@@ -425,7 +436,14 @@ fn skills_and_references_are_listed_and_sent() {
     let setup = Setup::new();
     setup.app.type_text("@");
     let screen = setup.wait_for("@release-notes");
-    for row in ["Write release notes.", "@docs", "/refs/docs", "skill", "reference", "agent"] {
+    for row in [
+        "Write release notes.",
+        "@docs",
+        "/refs/docs",
+        "skill",
+        "reference",
+        "agent",
+    ] {
         assert!(screen.contains(row), "{row:?} missing:\n{screen}");
     }
     assert!(!screen.contains("@hidden"), "{screen}");
@@ -463,7 +481,10 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     let setup = Setup::new();
     setup.app.type_text("/cd ");
     let screen = setup.wait_for("packages/");
-    assert!(!screen.contains(".git") && !screen.contains("README"), "{screen}");
+    assert!(
+        !screen.contains(".git") && !screen.contains("README"),
+        "{screen}"
+    );
     let lists = setup.wait_request("GET", "/api/fs/list", 1);
     assert!(lists[0].0.contains("path=%2Fproject"), "{lists:?}");
     // Tab opens the directory; Enter takes the first row (the typed directory itself).
@@ -479,7 +500,10 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     assert_eq!(moves[0].1["directory"], "packages/tui/");
     let recents = setup.wait_file("latest/tui/directory-recents.json", "/project/packages/tui");
     let recents: Value = serde_json::from_str(&recents).unwrap();
-    assert_eq!(recents["projects"]["project"][0]["directory"], "/project/packages/tui");
+    assert_eq!(
+        recents["projects"]["project"][0]["directory"],
+        "/project/packages/tui"
+    );
 
     // An empty argument lists recents first; Ctrl+D twice forgets one.
     setup.app.type_text("/cd ");
@@ -510,7 +534,11 @@ fn escape_hides_and_ctrl_c_dismisses_the_command() {
     setup.wait_for("/agents");
     setup.app.press("up");
     setup.wait_gone("/agents");
-    assert!(setup.app.text().contains("/variants"), "{}", setup.app.text());
+    assert!(
+        setup.app.text().contains("/variants"),
+        "{}",
+        setup.app.text()
+    );
     setup.app.press("down");
     setup.wait_for("/agents");
 }
@@ -523,7 +551,112 @@ fn ints(value: &Value) -> Value {
             _ => value.clone(),
         },
         Value::Array(items) => Value::Array(items.iter().map(ints).collect()),
-        Value::Object(map) => Value::Object(map.iter().map(|(k, v)| (k.clone(), ints(v))).collect()),
+        Value::Object(map) => {
+            Value::Object(map.iter().map(|(k, v)| (k.clone(), ints(v))).collect())
+        }
         _ => value.clone(),
     }
+}
+
+/// Picks `@src/main.rs` from the file search.
+fn mention_main(setup: &Setup) {
+    setup.app.type_text("@ma");
+    setup.wait_for("src/main.rs");
+    setup.app.press("return");
+    setup.app.press("ctrl+c");
+}
+
+/// P-FILE: the TypeScript `FrecencyProvider` reads the `frecency.jsonl` the Rust prompt writes, and the Rust
+/// prompt reads what TypeScript writes.
+#[test]
+fn frecency_file_is_shared_with_typescript() {
+    let Some(root) = ts_root() else { return };
+    let setup = Setup::new();
+    mention_main(&setup);
+    mention_main(&setup);
+    let rust = setup.wait_file("frecency.jsonl", "\"frequency\":2");
+    assert_eq!(rust.lines().count(), 2, "{rust}");
+    let state = setup.home.path().join("state");
+
+    // TypeScript keeps the latest line per path and counts on from it.
+    let frequencies = typescript_frecency(&root, &state, json!(["src/main.rs", "README.md"]));
+    assert_eq!(
+        frequencies,
+        json!({ "/project/src/main.rs": 3, "/project/README.md": 1 })
+    );
+    let typescript = std::fs::read_to_string(state.join("frecency.jsonl")).unwrap();
+    // Its load rewrote the Rust lines to one per path, the Rust line kept as written.
+    assert_eq!(typescript.lines().next(), rust.lines().nth(1));
+    assert_eq!(typescript.lines().count(), 3, "{typescript}");
+
+    // A new Rust prompt reads the TypeScript file: its load rewrites it the same way, and it counts on.
+    let home = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(home.path().join("state")).unwrap();
+    std::fs::copy(
+        state.join("frecency.jsonl"),
+        home.path().join("state/frecency.jsonl"),
+    )
+    .unwrap();
+    let again = Setup::with_home(home);
+    mention_main(&again);
+    let written = again.wait_file("frecency.jsonl", "\"frequency\":4");
+    let last: Value = serde_json::from_str(written.lines().last().unwrap()).unwrap();
+    assert_eq!(
+        (last["path"].clone(), last["frequency"].clone()),
+        (json!("/project/src/main.rs"), json!(4))
+    );
+    // The load kept one line per path, then the pick appended one.
+    assert_eq!(written.lines().count(), 3, "{written}");
+}
+
+/// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
+fn ts_root() -> Option<std::path::PathBuf> {
+    let root = std::env::var_os("OPENCODE_TS_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
+    let present = root.join("node_modules").is_dir()
+        && std::process::Command::new("bun")
+            .arg("--version")
+            .output()
+            .is_ok();
+    if !present {
+        eprintln!(
+            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
+            root.display()
+        );
+    }
+    present.then_some(root)
+}
+
+/// Runs `parity/oracle/E.3-frecency.ts`: the real `FrecencyProvider` on `state`, with the cwd `/project`.
+fn typescript_frecency(root: &Path, state: &Path, paths: Value) -> Value {
+    use std::io::Write;
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/E.3-frecency.ts");
+    let mut child = std::process::Command::new("bun")
+        .arg("--cwd")
+        .arg(root.join("packages/tui"))
+        .args(["--preload", "@opentui/solid/preload"])
+        .arg(script)
+        .arg(root)
+        .arg(state)
+        .arg("/project")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(paths.to_string().as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
 }
