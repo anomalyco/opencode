@@ -77,7 +77,9 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
             let sessions = state.sessions();
             family(&sessions, &inner.session)
                 .into_iter()
-                .map(|(session, prefix)| entry(session, prefix, &inner.session, state.status(&session.id)))
+                .map(|(session, prefix)| {
+                    entry(session, prefix, &inner.session, state.status(&session.id))
+                })
                 .collect::<Vec<_>>()
         })
         .into_iter()
@@ -94,7 +96,11 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         return;
     }
     if state.centered.as_ref() != Some(&inner.session) && !state.entries.is_empty() {
-        let next = state.entries.iter().position(|entry| entry.current).unwrap_or(0);
+        let next = state
+            .entries
+            .iter()
+            .position(|entry| entry.current)
+            .unwrap_or(0);
         state.centered = Some(inner.session.clone());
         state.selected = next;
         state.scroll_to_index(next, true);
@@ -140,15 +146,22 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command("composer.subagent.select", "Navigate to subagent", |inner, tui| {
-            let session = {
-                let state = inner.subagents.borrow();
-                state.entries.get(state.selected).map(|entry| entry.session.clone())
-            };
-            if let Some(id) = session {
-                tui.navigate(Route::Session { id });
-            }
-        }),
+        command(
+            "composer.subagent.select",
+            "Navigate to subagent",
+            |inner, tui| {
+                let session = {
+                    let state = inner.subagents.borrow();
+                    state
+                        .entries
+                        .get(state.selected)
+                        .map(|entry| entry.session.clone())
+                };
+                if let Some(id) = session {
+                    tui.navigate(Route::Session { id });
+                }
+            },
+        ),
         command(
             "composer.subagent.toggle-activity",
             "Toggle active subagents",
@@ -163,27 +176,34 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             },
         )
         .bind(Bind::Key("ctrl+a".to_owned())),
-        command("composer.subagent.interrupt", "Interrupt subagent", |inner, tui| {
-            let session = {
-                let state = inner.subagents.borrow();
-                state
-                    .entries
-                    .get(state.selected)
-                    .filter(|entry| entry.running)
-                    .map(|entry| entry.session.clone())
-            };
-            let Some(session) = session else { return };
-            let client = tui.data.client().clone();
-            tui.app.runtime().spawn(async move {
-                let input = SessionInterruptInput {
-                    session_id: session,
-                    resume: None,
+        command(
+            "composer.subagent.interrupt",
+            "Interrupt subagent",
+            |inner, tui| {
+                let session = {
+                    let state = inner.subagents.borrow();
+                    state
+                        .entries
+                        .get(state.selected)
+                        .filter(|entry| entry.running)
+                        .map(|entry| entry.session.clone())
                 };
-                if let Err(error) = client.session_interrupt(&input, &RequestOptions::default()).await {
-                    log::warn!("failed to interrupt the subagent: {error}");
-                }
-            });
-        }),
+                let Some(session) = session else { return };
+                let client = tui.data.client().clone();
+                tui.app.runtime().spawn(async move {
+                    let input = SessionInterruptInput {
+                        session_id: session,
+                        resume: None,
+                    };
+                    if let Err(error) = client
+                        .session_interrupt(&input, &RequestOptions::default())
+                        .await
+                    {
+                        log::warn!("failed to interrupt the subagent: {error}");
+                    }
+                });
+            },
+        ),
     ]
 }
 
@@ -270,7 +290,12 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
     hints
 }
 
-fn entry(session: &SessionInfo, prefix: String, current: &SessionID, status: SessionStatus) -> Entry {
+fn entry(
+    session: &SessionInfo,
+    prefix: String,
+    current: &SessionID,
+    status: SessionStatus,
+) -> Entry {
     let title = crate::dialogs::session_list::title(session);
     let found = AGENT.captures(&title);
     let agent = match (&session.agent, &found) {
@@ -341,7 +366,10 @@ fn walk<'a>(
         };
         out.push((session, prefix));
         // A cycle in `parentID` would recurse forever; TS has the same walk, so stop at a session already listed.
-        if out[..out.len() - 1].iter().any(|(seen, _)| seen.id == session.id) {
+        if out[..out.len() - 1]
+            .iter()
+            .any(|(seen, _)| seen.id == session.id)
+        {
             continue;
         }
         let mut next = ancestors.to_vec();
@@ -402,17 +430,34 @@ mod tests {
     #[test]
     fn entries_take_the_agent_from_the_session_or_the_title() {
         let current = SessionID("x".into());
-        let titled = session("a", Some("root"), "Find the parser (@explore subagent)", 1.0);
+        let titled = session(
+            "a",
+            Some("root"),
+            "Find the parser (@explore subagent)",
+            1.0,
+        );
         let found = entry(&titled, String::new(), &current, SessionStatus::Running);
-        assert_eq!((found.agent.as_str(), found.title.as_str(), found.running), ("Explore", "Find the parser ()", true));
+        assert_eq!(
+            (found.agent.as_str(), found.title.as_str(), found.running),
+            ("Explore", "Find the parser ()", true)
+        );
         let mut named = session("b", Some("root"), "Review", 1.0);
         named.agent = Some(opencode_api::generated::AgentID("code-review".into()));
         let found = entry(&named, String::new(), &current, SessionStatus::Idle);
-        assert_eq!((found.agent.as_str(), found.title.as_str()), ("Code-Review", "Review"));
+        assert_eq!(
+            (found.agent.as_str(), found.title.as_str()),
+            ("Code-Review", "Review")
+        );
         let bare = session("x", Some("root"), "@general subagent", 1.0);
         let found = entry(&bare, String::new(), &current, SessionStatus::Idle);
-        assert_eq!((found.agent.as_str(), found.title.as_str(), found.current), ("General", "@general subagent", true));
+        assert_eq!(
+            (found.agent.as_str(), found.title.as_str(), found.current),
+            ("General", "@general subagent", true)
+        );
         let plain = session("c", Some("root"), "Plain", 1.0);
-        assert_eq!(entry(&plain, String::new(), &current, SessionStatus::Idle).agent, "Subagent");
+        assert_eq!(
+            entry(&plain, String::new(), &current, SessionStatus::Idle).agent,
+            "Subagent"
+        );
     }
 }

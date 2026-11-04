@@ -37,7 +37,11 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
     }
     // The effect selects the shown terminal when the tab shows and whenever the list or the shown one changes.
     let seen = (
-        state.entries.iter().map(|terminal| terminal.id.0.clone()).collect(),
+        state
+            .entries
+            .iter()
+            .map(|terminal| terminal.id.0.clone())
+            .collect(),
         state.visible.clone(),
     );
     if state.seen.as_ref() != Some(&seen) {
@@ -88,7 +92,10 @@ fn select(inner: &Rc<Inner>, tui: &Tui) {
     let terminal = {
         let state = inner.terminals.borrow();
         let Some(index) = state.selected else { return };
-        state.entries.get(index).map(|terminal| terminal.id.0.clone())
+        state
+            .entries
+            .get(index)
+            .map(|terminal| terminal.id.0.clone())
     };
     let session: SessionID = inner.session.clone();
     inner.close(tui);
@@ -152,20 +159,18 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
                 });
             }
         };
-        inner
-            .body
-            .add(&row(
-                tui,
-                theme,
-                state,
-                Label {
-                    text: label,
-                    status: None,
-                    truncate: true,
-                },
-                hover,
-                click,
-            ));
+        inner.body.add(&row(
+            tui,
+            theme,
+            state,
+            Label {
+                text: label,
+                status: None,
+                truncate: true,
+            },
+            hover,
+            click,
+        ));
     }
     Vec::new()
 }

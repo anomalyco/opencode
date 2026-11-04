@@ -70,7 +70,11 @@ impl Session {
             Rc::new(move |tui: &Tui, open: bool| {
                 rest.visible(!open);
                 if open {
-                    if tui.app.focused().is_some_and(|widget| widget.id() == textarea.id()) {
+                    if tui
+                        .app
+                        .focused()
+                        .is_some_and(|widget| widget.id() == textarea.id())
+                    {
                         tui.app.blur();
                     }
                 } else if prompt_root.is_visible() {

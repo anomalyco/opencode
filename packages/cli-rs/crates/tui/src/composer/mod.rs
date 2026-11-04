@@ -348,11 +348,8 @@ impl Inner {
         let reset = open
             && (!self.open.get() || *self.tabs.borrow() != tabs || self.default.get() != default);
         if reset {
-            self.active.set(
-                default
-                    .filter(|tab| tabs.contains(tab))
-                    .unwrap_or(tabs[0]),
-            );
+            self.active
+                .set(default.filter(|tab| tabs.contains(tab)).unwrap_or(tabs[0]));
         }
         *self.tabs.borrow_mut() = tabs;
         self.default.set(default);
@@ -519,13 +516,7 @@ fn row(
         .padding_edge(Edge::Left, 1)
         .padding_edge(Edge::Right, 1)
         .bg(background)
-        .child(
-            &View::new(app)
-                .row()
-                .grow(1.0)
-                .min_width(0)
-                .child(&text),
-        );
+        .child(&View::new(app).row().grow(1.0).min_width(0).child(&text));
     if let Some(status) = label.status {
         view.add(
             &Text::new(app, status)
