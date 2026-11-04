@@ -225,6 +225,14 @@ pub struct SelectProps<T> {
     pub preserve_selection: bool,
     pub actions: Vec<SelectAction<T>>,
     pub footer_hints: Vec<FooterHint>,
+    /// Hints read again at each render, after `footer_hints`, for hints that follow the caller's state.
+    pub dynamic_hints: Option<Rc<dyn Fn() -> Vec<FooterHint>>>,
+    /// Replaces the title text (TS `titleView`).
+    pub title_view: Option<AnyWidget>,
+    /// Drawn instead of `No items available`, built at each render (TS `emptyView`).
+    pub empty_view: Option<Rc<dyn Fn() -> AnyWidget>>,
+    /// Drawn instead of `No results found` (TS `noMatchView`).
+    pub no_match_view: Option<Rc<dyn Fn() -> AnyWidget>>,
     /// More commands for the dialog's layer (TS `bindings`).
     pub bindings: Vec<TuiCommand>,
     pub current: Option<T>,
@@ -257,6 +265,10 @@ impl<T: Clone + 'static> SelectProps<T> {
             preserve_selection: false,
             actions: Vec::new(),
             footer_hints: Vec::new(),
+            dynamic_hints: None,
+            title_view: None,
+            empty_view: None,
+            no_match_view: None,
             bindings: Vec::new(),
             current: None,
             focus_current: true,
@@ -369,6 +381,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
         cx,
         HeaderProps {
             title: props.title.clone(),
+            title_view: props.title_view.clone(),
             on_close,
             ..HeaderProps::default()
         },
@@ -964,16 +977,20 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let mut rows = Vec::new();
         let state = self.0.state.borrow();
         if state.grouped.is_empty() {
-            let text = if self.props().render_filter && !state.filter.is_empty() {
-                "No results found"
+            let no_match = self.props().render_filter && !state.filter.is_empty();
+            let (view, text) = if no_match {
+                (&self.props().no_match_view, "No results found")
             } else {
-                "No items available"
+                (&self.props().empty_view, "No items available")
             };
-            body.add(
-                &View::new(app)
-                    .padding_x(DIALOG_LIST_INSET)
-                    .child(&Text::new(app, text).fg(theme.text.muted)),
-            );
+            match view {
+                Some(view) => body.add(&view()),
+                None => body.add(
+                    &View::new(app)
+                        .padding_x(DIALOG_LIST_INSET)
+                        .child(&Text::new(app, text).fg(theme.text.muted)),
+                ),
+            };
         } else {
             let selected = state.flat.get(state.selected).copied();
             let flattened =
@@ -1109,7 +1126,8 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     }),
             ));
         }
-        for hint in &props.footer_hints {
+        let dynamic = props.dynamic_hints.as_ref().map(|hints| hints());
+        for hint in props.footer_hints.iter().chain(dynamic.iter().flatten()) {
             items.push((
                 hint.side,
                 hint.group.unwrap_or(Group::Secondary),
