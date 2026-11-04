@@ -48,16 +48,23 @@ describe("Mcp.normalizeUrl", () => {
     ["https://mcp.example.com/v1/../mcp", "https://mcp.example.com/mcp"],
     ["https://mcp.example.com/a%2fb%3f", "https://mcp.example.com/a%2Fb%3F"],
     ["  https://mcp.example.com/mcp  ", "https://mcp.example.com/mcp"],
+    ["https://x:y@api.githubcopilot.com/mcp", "https://api.githubcopilot.com/mcp"],
+    ["https://token@api.githubcopilot.com/mcp", "https://api.githubcopilot.com/mcp"],
+    ["https://api.githubcopilot.com./mcp", "https://api.githubcopilot.com/mcp"],
+    ["http://localhost.:5000/", "http://localhost:5000"],
   ])("%s", (raw, normalized) => {
     expect(Mcp.normalizeUrl(raw)).toBe(normalized)
   })
 
-  test.each(["stdio:npx foo", "not a url", "ftp://mcp.example.com", "https://user:secret@mcp.example.com/mcp"])(
-    "rejects %s",
-    (raw) => {
-      expect(Mcp.normalizeUrl(raw)).toBeUndefined()
-    },
-  )
+  test.each([
+    "stdio:npx foo",
+    "not a url",
+    "ftp://mcp.example.com",
+    "https://api.githubcopilot.com../mcp",
+    "https://./mcp",
+  ])("rejects %s", (raw) => {
+    expect(Mcp.normalizeUrl(raw)).toBeUndefined()
+  })
 })
 
 describe("Mcp.matchUrl", () => {
@@ -105,11 +112,28 @@ describe("Mcp.matchUrl", () => {
   test("matches a path wildcard against the whole path", () => {
     const pattern = "https://mcp.example.com/*/mcp"
     expect(Mcp.matchUrl("https://mcp.example.com/acme/mcp", pattern)).toBe(true)
+    expect(Mcp.matchUrl("https://mcp.example.com/acme/team/mcp", pattern)).toBe(true)
     expect(Mcp.matchUrl("https://mcp.example.com/acme/mcp/readonly", pattern)).toBe(false)
+  })
+
+  test("matches the base path of a trailing /* too", () => {
+    expect(Mcp.matchUrl("https://mcp.vercel.com/", "https://mcp.vercel.com/*")).toBe(true)
+    expect(Mcp.matchUrl("https://mcp.vercel.com/acme", "https://mcp.vercel.com/*")).toBe(true)
+    const pattern = "https://api.githubcopilot.com/mcp/*"
+    expect(Mcp.matchUrl("https://api.githubcopilot.com/mcp", pattern)).toBe(true)
+    expect(Mcp.matchUrl("https://api.githubcopilot.com/mcp/", pattern)).toBe(true)
+    expect(Mcp.matchUrl("https://api.githubcopilot.com/mcp/readonly", pattern)).toBe(true)
+    expect(Mcp.matchUrl("https://api.githubcopilot.com/mcp-other", pattern)).toBe(false)
+  })
+
+  test("ignores credentials and a trailing root dot on the host", () => {
+    const pattern = "https://api.githubcopilot.com/mcp"
+    expect(Mcp.matchUrl("https://x:y@api.githubcopilot.com/mcp", pattern)).toBe(true)
+    expect(Mcp.matchUrl("https://api.githubcopilot.com./mcp", pattern)).toBe(true)
+    expect(Mcp.matchUrl("https://api.githubcopilot.com/mcp", "https://user@api.githubcopilot.com./mcp")).toBe(true)
   })
 
   test("matches nothing for a pattern that is not an http(s) URL", () => {
     expect(Mcp.matchUrl("https://mcp.example.com/mcp", "github")).toBe(false)
-    expect(Mcp.matchUrl("https://mcp.example.com/mcp", "https://user@mcp.example.com/mcp")).toBe(false)
   })
 })

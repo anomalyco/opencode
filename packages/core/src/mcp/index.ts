@@ -423,18 +423,13 @@ export const layer = (options?: Options) =>
       const serverTools = (name: ServerName, entry: ServerEntry) => {
         const source = entry.connection.tools
         if (!source) return []
-        if (entry.tagged?.source !== source)
+        if (entry.tagged?.source !== source) {
+          const url = entry.config.type === "remote" ? Mcp.normalizeUrl(entry.config.url) : undefined
           entry.tagged = {
             source,
-            tools: source.map(
-              (tool): Tool => ({
-                ...tool,
-                server: name,
-                url: entry.config.type === "remote" ? Mcp.normalizeUrl(entry.config.url) : undefined,
-                codemode: entry.config.codemode,
-              }),
-            ),
+            tools: source.map((tool): Tool => ({ ...tool, server: name, url, codemode: entry.config.codemode })),
           }
+        }
         return entry.tagged.tools
       }
 

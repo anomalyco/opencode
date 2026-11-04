@@ -229,6 +229,40 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("keeps last-match order across interleaved mcp:<url>#<tool> statements", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([
+        document(tool("deny", "*"), tool("allow", `mcp:${github}#*`), tool("deny", `mcp:${github}#delete_*`)),
+      ])
+
+      expect((yield* call("gh", "get_issue", github)).effect).toBe("allow")
+      expect((yield* call("gh", "delete_repo", github)).effect).toBe("deny")
+      expect((yield* call("github", "get_issue", "https://evil.example/mcp")).effect).toBe("deny")
+      expect((yield* evaluate("shell", ["ls"])).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("lets an organization mcp:<url>#<tool> deny override a project <server>_<tool> allow", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([
+        organizationPolicy([tool("deny", `mcp:${github}#delete_*`)], "Acme"),
+        document(tool("allow", "gh_delete_repo:*")),
+      ])
+
+      expect(yield* call("gh", "delete_repo", github)).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
+    }),
+  )
+
+  it.effect("matches mcp:<url>#<tool> despite credentials, a root dot, or surrounding spaces", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(tool("deny", ` mcp:${github}#* `))])
+
+      expect((yield* call("gh", "get_issue", "https://x:y@api.githubcopilot.com/mcp")).effect).toBe("deny")
+      expect((yield* call("gh", "get_issue", "https://api.githubcopilot.com./mcp")).effect).toBe("deny")
+      expect((yield* call("gh", "get_issue", "https://mcp.example.com/mcp")).effect).toBe("allow")
+    }),
+  )
+
   it.effect("still matches MCP tools by <server>_<tool> name", () =>
     Effect.gen(function* () {
       yield* addPlugin([document(tool("deny", "github_delete_*:*"))])

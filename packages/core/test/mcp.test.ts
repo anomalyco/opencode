@@ -21,6 +21,7 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Config } from "@opencode/core/config"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -344,12 +345,15 @@ function resourceMcpLayer(
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const mcp = yield* Mcp.Service
+      // Close the plugins as shutdown, as Plugin does, so disposing the policy never starts the servers it removed.
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer((exit) => State.shutdown(Scope.close(scope, exit)))
       yield* State.batch(
         Effect.gen(function* () {
           yield* ConfigMcpPlugin.register(bus.subscribe())
           yield* registerIntegrationPolicy({ mcp, events: bus.subscribe() })
         }),
-      )
+      ).pipe(Scope.provide(scope))
     }),
   ).pipe(
     Layer.provideMerge(Mcp.layer(options)),
@@ -3057,12 +3061,12 @@ const policyDocument = (servers: Record<string, typeof ConfigMCP.Server.Type>, p
 testEffect(Layer.empty).live("connects an MCP server allowed by URL whatever its local name", () =>
   Effect.gen(function* () {
     const server = yield* resourceServer()
+    const spawns: ChildProcess.Command[] = []
     const document = policyDocument(
       {
-        // Disabled servers stay listed unless policy removes them, and never connect.
-        github: new ConfigMCP.Local({ type: "local", command: ["opencode-test-unused-mcp"], disabled: true }),
-        evil: new ConfigMCP.Remote({ type: "remote", url: "https://evil.example/mcp", disabled: true }),
-        gh: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+        github: new ConfigMCP.Local({ type: "local", command: ["opencode-test-unused-mcp"] }),
+        evil: new ConfigMCP.Remote({ type: "remote", url: "https://evil.example/mcp", oauth: false }),
+        gh: new ConfigMCP.Remote({ type: "remote", url: server.url.replace("://", "://x:y@"), oauth: false }),
       },
       [
         { action: "mcp.use", resource: "*", effect: "deny" },
@@ -3073,18 +3077,73 @@ testEffect(Layer.empty).live("connects an MCP server allowed by URL whatever its
       const service = yield* Mcp.Service
       expect(yield* settled(service, "gh")).toEqual({ status: "connected" })
       expect((yield* service.servers()).map((item) => item.name)).toEqual(["gh"])
-      // Tools carry the normalized URL so `tool.use` can match them by it.
-      expect((yield* service.tools()).map((tool) => tool.url)).toContain(server.url.replace(/\/$/, ""))
+      // Tools carry the normalized URL, without credentials, so `tool.use` can match them by it.
+      expect(new Set((yield* service.tools()).map((tool) => tool.url))).toEqual(
+        new Set([server.url.replace(/\/$/, "")]),
+      )
     }).pipe(
-      Effect.provide(resourceMcpLayer(server.url, undefined, undefined, { entries: () => Effect.succeed([document]) })),
+      Effect.provide(
+        resourceMcpLayer(server.url, undefined, undefined, {
+          entries: () => Effect.succeed([document]),
+          environment: recordingEnvironmentLayer(spawns),
+        }),
+      ),
     )
+    // The harness fails the test on any request to evil.example.
+    expect(spawns).toEqual([])
   }),
 )
+
+for (const override of [
+  new ConfigMCP.Local({ type: "local", command: ["opencode-test-unused-mcp"] }),
+  new ConfigMCP.Remote({ type: "remote", url: "https://evil.example/mcp", oauth: false }),
+]) {
+  testEffect(Layer.empty).live(
+    `removes a ${override.type} project server overriding an organization's allowed URL`,
+    () =>
+      Effect.gen(function* () {
+        const github = "https://api.githubcopilot.com/mcp"
+        const spawns: ChildProcess.Command[] = []
+        const organization = new ConfigIntegration.Document({
+          type: "document",
+          integrationID: Integration.ID.make("opencode"),
+          connection: { type: "env", name: "OPENCODE_API_KEY" },
+          organization: "Acme",
+          info: new Info({
+            mcp: new ConfigMCP.Info({ servers: { github: new ConfigMCP.Remote({ type: "remote", url: github }) } }),
+            policies: [
+              { action: "mcp.use", resource: "*", effect: "deny" },
+              { action: "mcp.use", resource: github, effect: "allow" },
+            ],
+          }),
+        })
+        // Later documents win for servers of the same name, so the project's `github` replaces the organization's.
+        const project = policyDocument({ github: override }, [])
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect(yield* service.servers()).toEqual([])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(github, undefined, undefined, {
+              entries: () => Effect.succeed([organization, project]),
+              environment: recordingEnvironmentLayer(spawns),
+            }),
+          ),
+        )
+        expect(spawns).toEqual([])
+      }),
+  )
+}
 
 for (const input of [
   {
     name: "denies a URL under any local name",
     policies: [{ action: "mcp.use", resource: "https://api.githubcopilot.com/mcp", effect: "deny" }],
+    servers: ["github", "linear"],
+  },
+  {
+    name: "trims a URL resource",
+    policies: [{ action: "mcp.use", resource: " https://api.githubcopilot.com/mcp", effect: "deny" }],
     servers: ["github", "linear"],
   },
   {
@@ -3114,6 +3173,12 @@ for (const input of [
         disabled: true,
       }),
       linear: new ConfigMCP.Remote({ type: "remote", url: "https://mcp.linear.app/mcp", disabled: true }),
+      with_credentials: new ConfigMCP.Remote({
+        type: "remote",
+        url: "https://x:y@api.githubcopilot.com/mcp",
+        disabled: true,
+      }),
+      root_dot: new ConfigMCP.Remote({ type: "remote", url: "https://api.githubcopilot.com./mcp", disabled: true }),
     },
     input.policies,
   )

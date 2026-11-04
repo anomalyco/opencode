@@ -67,9 +67,9 @@ export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schem
 export type ServerConfig = typeof ServerConfig.Type
 
 /**
- * A remote MCP server's identity for policy: lowercase origin without a default port, then the path without
- * trailing or repeated slashes and with unreserved characters decoded. The query and fragment are dropped.
- * Undefined unless `raw` is an `http:` or `https:` URL without credentials.
+ * A remote MCP server's identity for policy: lowercase origin without a default port or a trailing root dot, then
+ * the path without trailing or repeated slashes and with unreserved characters decoded. Credentials, the query and
+ * the fragment are dropped. Undefined unless `raw` is an `http:` or `https:` URL.
  */
 export function normalizeUrl(raw: string) {
   const url = parseUrl(raw)
@@ -80,7 +80,8 @@ export function normalizeUrl(raw: string) {
  * Whether a server URL matches a policy pattern. `*` matches every server, including local ones without a URL.
  * Otherwise the pattern is a URL compared component by component: the scheme exactly, the host (with any port)
  * as a `*` wildcard, then the path. A pattern without a path covers the whole host, a path with `*` must match
- * the whole path, and a literal path matches itself and the paths below it.
+ * the whole path (a trailing `/*` also matches the path before it), and a literal path matches itself and the
+ * paths below it.
  */
 export function matchUrl(serverUrl: string | undefined, pattern: string) {
   if (pattern.trim() === "*") return true
@@ -89,16 +90,24 @@ export function matchUrl(serverUrl: string | undefined, pattern: string) {
   if (!server || !expected || server.protocol !== expected.protocol) return false
   if (!wildcard(expected.host).test(server.host)) return false
   if (expected.path === "") return true
-  if (expected.path.includes("*")) return wildcard(expected.path).test(server.path)
+  if (expected.path.includes("*"))
+    return (
+      wildcard(expected.path).test(server.path) ||
+      (expected.path.endsWith("/*") && wildcard(expected.path.slice(0, -2)).test(server.path))
+    )
   return server.path === expected.path || server.path.startsWith(`${expected.path}/`)
 }
 
+// Credentials are not part of a server's identity, so they are dropped rather than rejected.
 function parseUrl(raw: string) {
   const url = URL.parse(raw.trim())
-  if (!url || (url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) return undefined
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) return undefined
+  // DNS and TLS treat a host with one trailing root dot as the same host.
+  const hostname = url.hostname.endsWith(".") ? url.hostname.slice(0, -1) : url.hostname
+  if (hostname === "" || hostname.endsWith(".")) return undefined
   return {
     protocol: url.protocol,
-    host: url.host,
+    host: url.port ? `${hostname}:${url.port}` : hostname,
     path: url.pathname
       .replace(/%[0-9a-f]{2}/gi, (code) => {
         const char = String.fromCharCode(Number.parseInt(code.slice(1), 16))

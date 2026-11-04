@@ -53,7 +53,7 @@ export function mcpDecision(
     policies.findLast(
       (policy) =>
         policy.action === action &&
-        (/^https?:\/\//i.test(policy.resource)
+        (/^https?:\/\//i.test(policy.resource.trim())
           ? Mcp.matchUrl(server.url, policy.resource)
           : Wildcard.match(server.name, policy.resource)),
     )?.effect ?? "allow"
@@ -70,8 +70,9 @@ export function toolMatch<Policy extends ConfigPolicy.Info>(
 ) {
   return policies.findLast((policy) => {
     if (policy.action !== "tool.use") return false
-    if (!policy.resource.startsWith("mcp:")) return Wildcard.match(`${check.action}:${check.resource}`, policy.resource)
-    const target = policy.resource.slice(4)
+    const resource = policy.resource.trim()
+    if (!resource.startsWith("mcp:")) return Wildcard.match(`${check.action}:${check.resource}`, policy.resource)
+    const target = resource.slice(4)
     const separator = target.indexOf("#")
     return (
       check.mcp !== undefined &&
