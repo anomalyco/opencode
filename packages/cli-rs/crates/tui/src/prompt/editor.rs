@@ -31,6 +31,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::autocomplete::{self, Autocomplete, parts};
 use super::draft::{Draft, Drafts};
+use super::editor_context::{self, LabelState, Selection};
 use super::history::{self, History};
 use super::metadata::{self, Catalog, Display, Preferences, Row};
 use crate::app::Tui;
@@ -62,6 +63,8 @@ pub struct Shared {
     pub preferences: Preferences,
     /// Frecency, directory recents, and the home `/cd` location (E.3).
     pub complete: autocomplete::Shared,
+    /// The IDE's file and selection (E.5).
+    pub editor: editor_context::Context,
 }
 
 impl Shared {
@@ -71,6 +74,7 @@ impl Shared {
             drafts: Drafts::default(),
             preferences: Preferences::load(app, state),
             complete: autocomplete::Shared::default(),
+            editor: editor_context::Context::default(),
         }
     }
 }
@@ -91,6 +95,12 @@ pub struct Inner {
     bottom: View,
     metadata: Row,
     footer: Text,
+    /// The editor context's file, on the footer's right (`prompt.footer.file`, E.5).
+    editor_file: Text,
+    /// The editor selection this prompt dismissed (`prompt.editor_context.clear`).
+    dismissed: RefCell<Option<String>>,
+    /// The editor context follows this session's directory.
+    followed: Cell<bool>,
     /// The pointer is over the footer's location (E.20).
     hovered: Cell<bool>,
     /// The running indicator: the spinner, one cell in from the footer's edge.
@@ -135,6 +145,9 @@ impl Prompt {
         let Some(session) = &self.inner.session else {
             return;
         };
+        if changes.session(session) {
+            self.inner.follow_directory(tui);
+        }
         if changes.session(session) || changes.status(session) {
             if changes.status(session) && !self.inner.running(tui) {
                 self.inner.interrupt.set(0);
@@ -252,12 +265,25 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .child(&spinner)
         .visible(false);
     let footer = Text::new(app, "").truncate(true).wrap(WrapMode::None);
-    let status = View::new(app)
+    let editor_file = Text::new(app, "")
+        .truncate(true)
+        .wrap(WrapMode::None)
+        .shrink(1.0);
+    let left = View::new(app)
         .row()
-        .shrink(0.0)
+        .grow(1.0)
+        .shrink(1.0)
+        .min_width(0)
         .gap(1)
         .child(&running)
         .child(&footer);
+    let status = View::new(app)
+        .row()
+        .shrink(0.0)
+        .justify(Justify::SpaceBetween)
+        .gap(2)
+        .child(&left)
+        .child(&editor_file);
     let root = View::new(app)
         .column()
         .shrink(0.0)
@@ -275,6 +301,9 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         bottom,
         metadata,
         footer,
+        editor_file,
+        dismissed: RefCell::new(None),
+        followed: Cell::new(false),
         hovered: Cell::new(false),
         running,
         spinner,
@@ -325,6 +354,29 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         }
     });
     inner.layers.borrow_mut().push(local);
+    let weak = Rc::downgrade(&inner);
+    let editor = tui.prompt.editor.subscribe(move || {
+        if let Some(inner) = weak.upgrade()
+            && let Some(tui) = inner.tui.upgrade()
+        {
+            inner.refresh(&tui);
+        }
+    });
+    inner.layers.borrow_mut().push(editor);
+    let weak = Rc::downgrade(&inner);
+    let mentions = tui.prompt.editor.on_mention(move |mention| {
+        if let Some(inner) = weak.upgrade()
+            && let Some(tui) = inner.tui.upgrade()
+        {
+            editor_context::insert_mention(&inner, &tui, mention);
+        }
+    });
+    inner.layers.borrow_mut().push(mentions);
+    // Home drops the last session's selection; a session follows its directory (`editor.reconnect`).
+    match session {
+        None => tui.prompt.editor.clear_selection(),
+        Some(_) => inner.follow_directory(tui),
+    }
     inner.refresh(tui);
     inner.submit_startup(tui);
     Prompt { inner }
@@ -409,6 +461,39 @@ impl Inner {
     pub(crate) fn session_info(&self, tui: &Tui) -> Option<SessionInfo> {
         let session = self.session.as_ref()?;
         tui.data.read(|state| state.session(session).cloned())
+    }
+
+    /// Points the editor context at the session's directory once the session is known.
+    fn follow_directory(&self, tui: &Tui) {
+        if self.followed.get() {
+            return;
+        }
+        if let Some(info) = self.session_info(tui) {
+            self.followed.set(true);
+            tui.prompt
+                .editor
+                .reconnect(tui, Some(&info.location.directory.0));
+        }
+    }
+
+    /// The editor selection the prompt shows and sends: none when `prompt.editor` is off or this prompt
+    /// dismissed it (`editorContext`).
+    pub(crate) fn editor_context(&self, tui: &Tui) -> Option<Selection> {
+        let enabled = tui
+            .config
+            .info
+            .prompt
+            .as_ref()
+            .and_then(|prompt| prompt.editor)
+            .unwrap_or(true);
+        let selection = tui.prompt.editor.selection().filter(|_| enabled)?;
+        (self.dismissed.borrow().as_deref() != Some(&selection.key())).then_some(selection)
+    }
+
+    /// `prompt.editor_context.clear`.
+    fn dismiss_editor_context(&self, tui: &Tui) {
+        *self.dismissed.borrow_mut() = self.editor_context(tui).map(|selection| selection.key());
+        tui.prompt.editor.clear_selection();
     }
 
     fn running(&self, tui: &Tui) -> bool {
@@ -566,6 +651,22 @@ impl Inner {
             vec![label.fg(color)]
         };
         self.footer.set_text(footer);
+        // The file label, highlighted until the selection is sent.
+        let state = tui.prompt.editor.label_state();
+        let file = self
+            .editor_context(tui)
+            .filter(|_| state != LabelState::None)
+            .map(|selection| {
+                let width = (self.app.size().0 / 3).clamp(12, 48) as usize;
+                opencode_ui::select::truncate_middle(&selection.label(), width)
+            })
+            .unwrap_or_default();
+        let color = if state == LabelState::Pending {
+            theme.accent().step(500)
+        } else {
+            theme.text.muted
+        };
+        self.editor_file.set_text(vec![file.fg(color)]);
         self.app.request_redraw();
     }
 
@@ -832,6 +933,30 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     arguments: false,
                 }),
                 autocomplete::cd::command(inner.this.clone()),
+                command(
+                    "prompt.editor_context.clear",
+                    "Remove editor context",
+                    "Prompt",
+                    |prompt, tui| {
+                        prompt.dismiss_editor_context(tui);
+                        tui.dialogs.clear();
+                        true
+                    },
+                )
+                .palette()
+                .enabled(when(|prompt, tui| prompt.editor_context(tui).is_some())),
+                command("prompt.editor", "Open editor", "Session", |prompt, tui| {
+                    if let Some(prompt) = prompt.rc() {
+                        super::external_editor::open(tui, &prompt);
+                    }
+                    true
+                })
+                .palette()
+                .slash(Slash {
+                    name: "editor".to_owned(),
+                    aliases: Vec::new(),
+                    arguments: false,
+                }),
             ],
             ..KeymapLayer::default()
         },
@@ -843,6 +968,8 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         KeymapLayer {
             bindings: bindings(&[
                 "prompt.submit",
+                "prompt.editor",
+                "prompt.editor_context.clear",
                 "prompt.skills",
                 "session.interrupt",
                 "session.background",
