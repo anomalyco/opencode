@@ -155,6 +155,9 @@ const NAMED: Record<string, string> = {
   left: "ARROW_LEFT",
   right: "ARROW_RIGHT",
   space: " ",
+  // The mock has no key codes for these; it writes the raw sequences.
+  pageup: "\u001b[5~",
+  pagedown: "\u001b[6~",
 }
 
 function press(setup: Setup, shortcut: string) {
