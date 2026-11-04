@@ -5,8 +5,10 @@ import { CodeMode, Tool } from "../src/index.js"
 import { parseProgram } from "../src/interpreter/execute.js"
 import { Interpreter } from "../src/interpreter/interpreter.js"
 import { createBuiltins } from "../src/interpreter/intrinsics.js"
+import { GeneratorObj, type Native, nativeRule, PromiseObj, type Value } from "../src/interpreter/objects.js"
 import { normal } from "../src/interpreter/signals.js"
 import { Frame } from "../src/machine/frame.js"
+import { AsyncFromSyncIterator } from "../src/machine/generators.js"
 import type { Machine } from "../src/machine/machine.js"
 import { stats } from "../src/machine/task.js"
 import { ToolRuntime } from "../src/tool-runtime.js"
@@ -56,6 +58,21 @@ const stop = (machine: Machine) => {
   for (;;) {
     const next = machine.run()
     if (next.kind !== "slice") return next
+  }
+}
+
+// The value bound to `name` where the program's body is parked, once the machine is stuck.
+const programBinding = (machine: Machine, name: string): Value => {
+  const slice = [...machine.parked.keys()].find((frames) => frames[0]!.kind.name === "Program")!
+  return slice.at(-1)!.scope.get(name, slice[0]!.node!)
+}
+
+// Frames as saved state: every one a `Frame`, none holding a host generator.
+const expectData = (frames: ReadonlyArray<Frame>) => {
+  expect(frames.length).toBeGreaterThan(0)
+  for (const frame of frames) {
+    expect(frame).toBeInstanceOf(Frame)
+    expect(frame.kind.opaque).toBeUndefined()
   }
 }
 
@@ -215,6 +232,86 @@ describe("machine", () => {
     expect(slices.map((frames) => frames[0]!.kind.name).sort()).toEqual(["Call", "Call", "Program"])
     expect(machine.depth).toBe(0)
     expect(machine.root.stack).toEqual([])
+  })
+
+  test("a suspended generator keeps its body as frames on the generator", () => {
+    const machine = machineFor(`
+      function* inner() { yield 4 }
+      function* g(x) { const log = []; try { log.push(yield x); yield* [2, 3]; yield* inner() } finally { log.push("f") } }
+      const fresh = g(0)
+      const array = g(1)
+      array.next()
+      array.next("a")
+      const nested = g(1)
+      for (let i = 0; i < 4; i++) nested.next()
+      await new Promise(() => {})
+    `)
+    expect(stop(machine).kind).toBe("stuck")
+    const generator = (name: string) => {
+      const value = programBinding(machine, name)
+      if (!(value instanceof GeneratorObj)) throw new Error(`${name} is not a generator`)
+      return value
+    }
+    expect(generator("fresh").state).toBe("suspendedStart")
+    expect(generator("fresh").frames.map((frame) => frame.kind.name)).toEqual(["GeneratorBody", "Call"])
+    for (const name of ["array", "nested"]) {
+      const frames = generator(name).frames
+      expect(generator(name).state).toBe("suspendedYield")
+      expectData(frames)
+      // The slice starts at the generator boundary and ends where `yield*` asked to yield.
+      expect(frames[0]!.kind.name).toBe("GeneratorBody")
+      expect(frames.map((frame) => frame.kind.name)).toContain("YieldDelegate")
+    }
+  })
+
+  test("an async generator paused at an await parks its frames as data", () => {
+    const machine = machineFor(`
+      async function* ag() { const v = await new Promise(() => {}); yield v }
+      const it = ag()
+      const first = it.next()
+      const second = it.next()
+      await new Promise(() => {})
+    `)
+    expect(stop(machine).kind).toBe("stuck")
+    const it = programBinding(machine, "it")
+    if (!(it instanceof GeneratorObj)) throw new Error("expected a generator")
+    expect(it.state).toBe("executing")
+    expect(it.queue.length).toBe(2)
+    const slices = [...machine.parked.keys()]
+    for (const frames of slices) expectData(frames)
+    expect(slices.map((frames) => frames[0]!.kind.name).sort()).toEqual(["GeneratorBody", "Program"])
+    expect(machine.root.stack).toEqual([])
+  })
+
+  test("for await over a synchronous iterable keeps its adapter and reactions as data", () => {
+    const machine = machineFor(`
+      const never = new Promise(() => {})
+      const log = []
+      const iterable = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: false, value: i++ ? never : 1 }) } } }
+      for await (const x of iterable) log.push(x)
+    `)
+    // No native function is made while the program runs: the adapter's methods are intrinsics.
+    const made: Array<Native> = []
+    nativeRule.observe = (native) => made.push(native)
+    try {
+      expect(stop(machine).kind).toBe("stuck")
+    } finally {
+      nativeRule.observe = undefined
+    }
+    expect(made).toEqual([])
+    const never = programBinding(machine, "never")
+    if (!(never instanceof PromiseObj)) throw new Error("expected a promise")
+    expect(never.reactions.map((reaction) => reaction.kind)).toEqual(["asyncFromSync"])
+    const reaction = never.reactions[0]!
+    for (const field of Object.values(reaction)) expect(typeof field).not.toBe("function")
+    if (reaction.kind !== "asyncFromSync") throw new Error("expected an adapter reaction")
+    expect(reaction.done).toBe(false)
+    // The iterator it would close on a rejection is the program's own, as a record.
+    expect(reaction.close).toMatchObject({ asynchronous: false })
+    for (const frames of machine.parked.keys()) expectData(frames)
+    const loop = [...machine.parked.keys()].flat().find((frame) => frame.kind.name === "ForOfStatement")!
+    const iterator = loop.slots[3] as { iterator: unknown }
+    expect(iterator.iterator).toBeInstanceOf(AsyncFromSyncIterator)
   })
 
   test("the machine does not import Effect", async () => {
