@@ -13,7 +13,6 @@ pub struct Confirm {
     active: String,
     inactive: String,
     initial_value: bool,
-    output: Output,
 }
 
 pub fn confirm(message: impl Into<String>) -> Confirm {
@@ -22,17 +21,18 @@ pub fn confirm(message: impl Into<String>) -> Confirm {
         active: "Yes".to_string(),
         inactive: "No".to_string(),
         initial_value: true,
-        output: Output::Stdout,
     }
 }
 
 impl Confirm {
+    #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     /// The label of `true` (default "Yes").
     pub fn active(mut self, label: impl Into<String>) -> Self {
         self.active = label.into();
         self
     }
 
+    #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     /// The label of `false` (default "No").
     pub fn inactive(mut self, label: impl Into<String>) -> Self {
         self.inactive = label.into();
@@ -45,18 +45,12 @@ impl Confirm {
         self
     }
 
-    pub fn output(mut self, output: Output) -> Self {
-        self.output = output;
-        self
-    }
-
     pub fn prompt(self) -> Result<bool, Cancelled> {
-        let output = self.output;
         let mut prompt = ConfirmPrompt {
             value: self.initial_value,
             options: self,
         };
-        core::run(&mut prompt, output, None)?;
+        core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.value)
     }
 }
