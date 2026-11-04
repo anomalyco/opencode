@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
+import { Cause, Clock, Deferred, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -309,6 +309,59 @@ describe("Integration", () => {
           }),
         }),
       )
+    }),
+  )
+
+  it.effect("lets an interrupted code completion be submitted again", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("chatgpt")
+      const started = yield* Deferred.make<void>()
+      let calls = 0
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
+          authorize: () =>
+            Effect.succeed({
+              mode: "code" as const,
+              url: "https://example.com/authorize",
+              instructions: "Paste the code",
+              callback: () =>
+                calls++ === 0
+                  ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never))
+                  : Effect.succeed(
+                      Credential.OAuth.make({
+                        type: "oauth",
+                        methodID,
+                        access: "access",
+                        refresh: "refresh",
+                        expires: 1,
+                      }),
+                    ),
+            }),
+        }),
+      )
+
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+      const first = yield* integrations.oauth
+        .complete({ integrationID, attemptID: attempt.attemptID, code: "1234" })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(first)
+      expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toEqual({
+        status: "pending",
+        time: attempt.time,
+      })
+
+      yield* integrations.oauth.complete({ integrationID, attemptID: attempt.attemptID, code: "1234" })
+      expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toEqual({
+        status: "complete",
+        time: attempt.time,
+      })
+      expect(yield* credentials.list(integrationID)).toHaveLength(1)
     }),
   )
 
