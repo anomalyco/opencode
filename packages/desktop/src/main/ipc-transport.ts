@@ -15,6 +15,8 @@ type PortBinding = {
 type Handoff = {
   readonly bind: (sender: WebContents, port: MessagePortMain) => void
   readonly sender: (clientId: number) => WebContents | undefined
+  /** Runs after a renderer port closes or is replaced, before a replacement port for its sender binds. */
+  readonly onDisconnect: (listener: (clientId: number) => void) => () => void
 }
 
 export class IpcPortHandoff extends Context.Service<IpcPortHandoff, Handoff>()("opencode/desktop/IpcPortHandoff") {}
@@ -27,6 +29,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
     const handoffs = yield* Queue.unbounded<readonly [WebContents, MessagePortMain]>()
     const bindings = new Map<number, PortBinding>()
     const senderBindings = new Map<number, number>()
+    const disconnected = new Set<(clientId: number) => void>()
 
     const protocol = Layer.effect(
       RpcServer.Protocol,
@@ -49,6 +52,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
             binding.sender.off("destroyed", binding.onClose)
             yield* binding.unbindEvents
             binding.port.close()
+            disconnected.forEach((listener) => listener(id))
             Queue.offerUnsafe(disconnects, id)
           })
 
@@ -118,6 +122,13 @@ export const IpcServerProtocolLive = Layer.unwrap(
           Queue.offerUnsafe(handoffs, [sender, port])
         },
         sender: (clientId) => bindings.get(clientId)?.sender,
+        onDisconnect: (listener) => {
+          disconnected.add(listener)
+
+          return () => {
+            disconnected.delete(listener)
+          }
+        },
       }),
     )
   }),

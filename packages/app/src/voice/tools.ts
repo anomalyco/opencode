@@ -11,7 +11,6 @@ type Request = { id: string; sessionID: string; transcript: string[] }
 
 export class VoiceTools {
   readonly replies = new ReplyWatch()
-  private calls = new Map<string, Promise<string>>()
   private observed = new Map<string, Map<string, string[]>>()
   /** When each session last received a delegation's full header in this call. */
   private explained = new Map<string, number>()
@@ -27,23 +26,20 @@ export class VoiceTools {
   ) {}
 
   run(call: ToolCall, request: Request, signal: AbortSignal) {
-    const existing = this.calls.get(call.call_id)
-
-    if (existing) return existing
-
-    const result = this.execute(call, request, signal)
+    return this.execute(call, request, signal)
       .then(JSON.stringify)
       .catch(() =>
         JSON.stringify({ error: "Tool request failed. Do not claim it succeeded or resend an uncertain admission." }),
       )
-
-    this.calls.set(call.call_id, result)
-
-    return result
   }
 
   answered(id: string) {
     this.observed.get(id)?.forEach((messages, sessionID) => this.replies.heard(sessionID, messages))
+    this.observed.delete(id)
+  }
+
+  /** A delegation that ended without an answer read nothing aloud, so its replies are still announced. */
+  discard(id: string) {
     this.observed.delete(id)
   }
 
