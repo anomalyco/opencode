@@ -15,5 +15,4 @@ that do not come from the root flags:
   foreground of space cells differs, which no terminal shows. Reason: one text keeps the row's truncation in
   one place (E.2); the difference is invisible.
 
-The prompt footer hints are `P01-read-only-prompt`'s, and the random home placeholder is masked
-(`T17-home-prompt`).
+The random home placeholder is masked (`T17-home-prompt`).

@@ -13,5 +13,5 @@ export default defineApp({
     { path: "/api/session/ses_new/inbox", json: { data: [] } },
     { method: "POST", path: "/api/session/ses_new/prompt", json: { data: inbox("ses_new") } },
   ],
-  steps: [{ checkpoint: "sent", until: "Demo Model", deviation: ["P01-read-only-prompt", "C01-startup-prompt-cells"] }],
+  steps: [{ checkpoint: "sent", until: "Demo Model", deviation: ["C01-startup-prompt-cells"] }],
 })
