@@ -14,20 +14,12 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
 
-// Unknown channels, such as branch preview builds, count as latest so a flag never turns on by accident.
-const channelRank = new Map([
-  ["local", 0],
-  ["dev", 0],
-  ["beta", 1],
-])
-const stageRank = { dev: 0, beta: 1, ga: 2 } satisfies { readonly [S in ConfigFlag.Stage]: number }
-
-export const onByDefault = (stage: ConfigFlag.Stage, channel: string) =>
-  (channelRank.get(channel) ?? 2) <= stageRank[stage]
+// Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.
+const onByDefault = (channel: string) => channel === "local" || channel === "dev"
 
 /**
  * Resolves every flag: `OPENCODE_FLAGS`, then `experimental.<key>` from the highest-priority document that sets
- * `experimental` (the same document every other `experimental` setting reads), then the stage default for `channel`.
+ * `experimental` (the same document every other `experimental` setting reads), then on for local and dev builds.
  * A remote kill switch belongs above `OPENCODE_FLAGS` here.
  */
 export function resolve(input: {
@@ -43,7 +35,7 @@ export function resolve(input: {
       .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
   )
   const experimental = Config.latest(input.entries, "experimental")
-  return Record.map(ConfigFlag.registry, (flag, key): State => {
+  return Record.map(ConfigFlag.registry, (description, key): State => {
     const override = env.get(key)
     const configured = experimental?.[key]
     const [enabled, source]: [boolean, ConfigFlag.Source] =
@@ -51,8 +43,8 @@ export function resolve(input: {
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [onByDefault(flag.stage, input.channel), "stage"]
-    return { key, description: flag.description, stage: flag.stage, enabled, source }
+          : [onByDefault(input.channel), "default"]
+    return { key, description, enabled, source }
   })
 }
 
@@ -63,7 +55,7 @@ export const resolver = Effect.gen(function* () {
   return (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, overrides })
 })
 
-/** Every flag with its stage and source, read from the Config in scope on each call. */
+/** Every flag with its value and where it came from, read from the Config in scope on each call. */
 export const all = Effect.gen(function* () {
   const config = yield* Effect.serviceOption(Config.Service)
   const entries = Option.isSome(config) ? yield* config.value.entries() : []

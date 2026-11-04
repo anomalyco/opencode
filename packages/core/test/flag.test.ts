@@ -15,22 +15,22 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
   })
 
 describe("Flag.resolve", () => {
-  test("defaults each stage by channel, treating unknown channels as latest", () => {
+  test("turns flags on by default only in local and dev builds", () => {
     const table = ["local", "dev", "beta", "latest", "my-branch", "unknown"].map((channel) => [
       channel,
-      ConfigFlag.Stage.literals.map((stage) => Flag.onByDefault(stage, channel)),
+      Flag.resolve({ entries: [], channel }).todo.enabled,
     ])
     expect(Object.fromEntries(table)).toEqual({
-      local: [true, true, true],
-      dev: [true, true, true],
-      beta: [false, true, true],
-      latest: [false, false, true],
-      "my-branch": [false, false, true],
-      unknown: [false, false, true],
+      local: true,
+      dev: true,
+      beta: false,
+      latest: false,
+      "my-branch": false,
+      unknown: false,
     })
   })
 
-  test("config overrides the stage default and OPENCODE_FLAGS overrides config", () => {
+  test("config overrides the default and OPENCODE_FLAGS overrides config", () => {
     const entries = [document({ todo: true, schedules: false })]
     const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -todo,unknown_flag" })
     expect(
@@ -39,7 +39,7 @@ describe("Flag.resolve", () => {
       [false, "env"],
       [false, "config"],
       [true, "env"],
-      [true, "stage"],
+      [true, "default"],
     ])
   })
 
@@ -48,14 +48,14 @@ describe("Flag.resolve", () => {
       entries: [document({ todo: true }), document({ subagent_depth: 2 }), document()],
       channel: "latest",
     })
-    expect([flags.todo.enabled, flags.todo.source]).toEqual([false, "stage"])
+    expect([flags.todo.enabled, flags.todo.source]).toEqual([false, "default"])
   })
 })
 
 const it = testEffect(
   Layer.mergeAll(
     Config.testLayer([document({ artifacts: true })]),
-    App.layer({ channel: "beta" }),
+    App.layer({ channel: "latest" }),
     Layer.succeed(Flag.Overrides, "schedules"),
   ),
 )
@@ -68,8 +68,7 @@ describe("Flag.enabled", () => {
       expect(yield* Flag.enabled("todo")).toBe(false)
       expect((yield* Flag.all).schedules).toEqual({
         key: "schedules",
-        description: ConfigFlag.registry.schedules.description,
-        stage: "dev",
+        description: ConfigFlag.registry.schedules,
         enabled: true,
         source: "env",
       })

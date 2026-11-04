@@ -72,7 +72,7 @@ const it = testEffect(
 )
 
 describe("PluginInternal flags", () => {
-  it.live("turns a dev-stage built-in tool on for a dev-channel server with no config", () =>
+  it.live("turns a flagged built-in tool on for a dev-channel server with no config", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
       const locations = yield* LocationServiceMap.Service

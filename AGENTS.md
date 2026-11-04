@@ -182,9 +182,9 @@ const table = sqliteTable("session", {
 
 ### Feature Flags
 
-- Gate risky behavior, or behavior that lands over several PRs, with a flag at `stage: "dev"` in `packages/schema/src/config/flag.ts`, and read it with `Flag.enabled("<key>")` from `@opencode/core/flag`.
-- `dev` flags are on in local and dev builds, `beta` flags also in beta builds, `ga` flags everywhere; `experimental.<key>` in config and `OPENCODE_FLAGS="key,-other"` override the default.
-- Promote a flag by changing its `stage`, and delete it once it has shipped as `ga`.
+- Gate risky behavior, or behavior that lands over several PRs, with a key and a description in `packages/schema/src/config/flag.ts`, and read it with `Flag.enabled("<key>")` from `@opencode/core/flag`.
+- Flags are on in local and dev builds and off in releases; `experimental.<key>` in config and `OPENCODE_FLAGS="key,-other"` override that.
+- Ship a feature by deleting its flag and the checks that read it.
 
 ## Testing
 
