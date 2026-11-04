@@ -73,22 +73,22 @@ function entry(theme: ResolvedTheme, modes: readonly string[]) {
   }
 }
 
-function load(source: ThemeDocumentSource, name: string, mode: "dark" | "light", newDesigns: boolean) {
-  const document = parseTheme(source, name, { newDesigns })
+// The Rust client implements the TUI under the `new-designs` experiment only, so every theme parses that way.
+const parse = (source: ThemeDocumentSource, name: string) => parseTheme(source, name, { newDesigns: true })
+
+function load(source: ThemeDocumentSource, name: string, mode: "dark" | "light") {
+  const document = parse(source, name)
   const modes = themeModes(document)
   return entry(resolveThemeDocument(document, mode), modes)
 }
 
 const builtins: Record<string, ReturnType<typeof entry>> = {}
-const sources = Object.entries(allThemes()).filter(([name]) => name !== "system")
-for (const newDesigns of [false, true]) {
-  const variant = newDesigns ? "newDesigns" : "current"
-  const list = newDesigns ? [...sources, ["opencode2", getOpenCode2Theme()] as const] : sources
-  for (const [name, source] of list) {
-    for (const mode of themeModes(parseTheme(source, name, { newDesigns }))) {
-      builtins[`${variant}/${name}/${mode}`] = load(source, name, mode, newDesigns)
-    }
-  }
+const sources = [
+  ["opencode2", getOpenCode2Theme()] as const,
+  ...Object.entries(allThemes()).filter(([name]) => name !== "system"),
+]
+for (const [name, source] of sources) {
+  for (const mode of themeModes(parse(source, name))) builtins[`${name}/${mode}`] = load(source, name, mode)
 }
 
 // Palettes for the generated system theme: dark and light defaults, pure black and white (the gray-scale special
@@ -107,10 +107,7 @@ const system: Record<string, ReturnType<typeof entry> & { terminal: string | nul
 for (const [name, palette] of Object.entries(palettes)) {
   const colors = palette as TerminalColors
   for (const mode of ["dark", "light"] as const) {
-    for (const newDesigns of [false, true]) {
-      const key = `${newDesigns ? "newDesigns" : "current"}/${name}/${mode}`
-      system[key] = { ...load(generateSystem(colors, mode), "system", mode, newDesigns), terminal: terminalMode(colors) ?? null }
-    }
+    system[`${name}/${mode}`] = { ...load(generateSystem(colors, mode), "system", mode), terminal: terminalMode(colors) ?? null }
   }
 }
 
@@ -139,7 +136,7 @@ const broken: Record<string, unknown> = {
 const errors = Object.fromEntries(
   Object.entries(broken).map(([name, source]) => {
     try {
-      const document = parseTheme(source as ThemeDocumentSource, name)
+      const document = parse(source as ThemeDocumentSource, name)
       themeModes(document).forEach((mode) => resolveThemeDocument(document, mode))
       return [name, { source, message: null }]
     } catch (error) {

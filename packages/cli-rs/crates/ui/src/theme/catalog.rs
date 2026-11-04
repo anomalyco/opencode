@@ -1,5 +1,6 @@
 //! Which themes exist and how one loads (`allThemes`, `parseTheme`, and `loadTheme` in `packages/tui/src/theme` and
-//! `context/theme.tsx`).
+//! `context/theme.tsx`), as the TUI does under the `new-designs` experiment: `opencode2` is listed first and V1
+//! themes take the new-designs migration.
 
 use std::borrow::Cow;
 use std::sync::LazyLock;
@@ -9,20 +10,17 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::document::{decode, modes};
-use super::{Theme, ThemeMode, resolve, v1, v1_new};
+use super::{Theme, ThemeMode, resolve, v1_new};
 
 #[derive(Deserialize)]
 struct Builtin {
     name: String,
-    current: Value,
-    #[serde(rename = "newDesigns")]
-    new_designs: Option<Value>,
+    document: Value,
 }
 
 #[derive(Deserialize)]
 struct Builtins {
     themes: Vec<Builtin>,
-    opencode2: Value,
 }
 
 static BUILTINS: LazyLock<Builtins> = LazyLock::new(|| {
@@ -68,50 +66,43 @@ impl Catalog {
         self.system = source;
     }
 
-    /// Theme names in list order: `opencode2` under the `new-designs` experiment, the built-ins, custom themes not
-    /// named like a built-in, then `system`.
-    pub fn names(&self, new_designs: bool) -> Vec<String> {
+    /// Theme names in list order: the built-ins (`opencode2` first), custom themes not named like a built-in, then
+    /// `system`.
+    pub fn names(&self) -> Vec<String> {
         let mut names = IndexSet::new();
-        if new_designs {
-            names.insert("opencode2".to_owned());
-        }
         names.extend(BUILTINS.themes.iter().map(|theme| theme.name.clone()));
         names.extend(self.custom.keys().cloned());
         names.insert("system".to_owned());
         names.into_iter().collect()
     }
 
-    pub fn has(&self, name: &str, new_designs: bool) -> bool {
-        !name.is_empty() && self.source(name, new_designs).is_some()
+    pub fn has(&self, name: &str) -> bool {
+        !name.is_empty() && self.source(name).is_some()
     }
 
-    pub fn source(&self, name: &str, new_designs: bool) -> Option<ThemeSource<'_>> {
+    pub fn source(&self, name: &str) -> Option<ThemeSource<'_>> {
         if name == "system" {
             let system = self.system.as_ref().or_else(|| self.custom.get("system"));
             return system
                 .map(ThemeSource::Custom)
-                .or_else(|| self.source("opencode", new_designs));
+                .or_else(|| self.source("opencode"));
         }
         if let Some(custom) = self.custom.get(name) {
             return Some(ThemeSource::Custom(custom));
         }
-        if let Some(builtin) = BUILTINS.themes.iter().find(|theme| theme.name == name) {
-            let document = if new_designs {
-                builtin.new_designs.as_ref()
-            } else {
-                None
-            };
-            return Some(ThemeSource::Builtin(document.unwrap_or(&builtin.current)));
-        }
-        (new_designs && name == "opencode2").then(|| ThemeSource::Builtin(&BUILTINS.opencode2))
+        BUILTINS
+            .themes
+            .iter()
+            .find(|theme| theme.name == name)
+            .map(|theme| ThemeSource::Builtin(&theme.document))
     }
 
     /// `loadTheme`: the theme `name` in `mode`, or in its first mode when it lacks `mode`.
-    pub fn load(&self, name: &str, mode: ThemeMode, new_designs: bool) -> Result<Loaded, String> {
+    pub fn load(&self, name: &str, mode: ThemeMode) -> Result<Loaded, String> {
         let source = self
-            .source(name, new_designs)
+            .source(name)
             .ok_or_else(|| format!("Theme \"{name}\" was not found"))?;
-        let document = parse(source, name, new_designs)?;
+        let document = parse(source, name)?;
         let modes = modes(&document);
         let requested = if modes.contains(&mode) {
             mode
@@ -131,22 +122,13 @@ fn is_theme_source(source: &Value) -> bool {
 }
 
 /// `parseTheme`: V1 sources migrate, V2 sources pass the schema and must resolve in every mode they define.
-fn parse<'a>(
-    source: ThemeSource<'a>,
-    name: &str,
-    new_designs: bool,
-) -> Result<Cow<'a, Value>, String> {
+fn parse<'a>(source: ThemeSource<'a>, name: &str) -> Result<Cow<'a, Value>, String> {
     let source = match source {
         ThemeSource::Builtin(document) => return Ok(Cow::Borrowed(document)),
         ThemeSource::Custom(source) => source,
     };
     if source.get("theme").is_some() {
-        let migrated = if new_designs {
-            v1_new::migrate(source)
-        } else {
-            v1::migrate(source)
-        };
-        return migrated.map(Cow::Owned);
+        return v1_new::migrate(source).map(Cow::Owned);
     }
     let document = decode(source).map_err(|issue| invalid(name, &issue.value()))?;
     for mode in modes(&document) {

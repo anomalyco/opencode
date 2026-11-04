@@ -596,12 +596,11 @@ pub fn set_path(root: &mut Value, path: &[&str], value: Value) {
 }
 
 /// Takes `info` as the current config and carries out what TS does reactively: the theme follows `theme.*`,
-/// the dialogs and theme list follow `new-designs`, and listeners run.
+/// and listeners run.
 fn apply(tui: &Tui, info: Info) {
     let before = tui.settings.info.replace(info.clone());
     let theme = |info: &Info| info.theme.clone().unwrap_or_default();
     let (old, new) = (theme(&before), theme(&info));
-    let designs = info.experiment("new-designs");
     let mut changed = false;
     {
         let mut state = tui.theme.borrow_mut();
@@ -618,12 +617,7 @@ fn apply(tui: &Tui, info: Info) {
             state.config_mode(setting);
             changed = true;
         }
-        if designs != before.experiment("new-designs") {
-            state.set_new_designs(designs);
-            changed = true;
-        }
     }
-    tui.dialogs.set_new_designs(designs);
     if changed {
         tui.theme_changed();
     }

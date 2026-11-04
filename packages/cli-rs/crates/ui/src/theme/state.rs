@@ -90,8 +90,6 @@ pub struct ThemeStateOptions {
     pub fallback: ThemeMode,
     /// The palette cached under `system-theme`, if any.
     pub palette: Option<TerminalColors>,
-    /// Whether the `new-designs` experiment is on.
-    pub new_designs: bool,
 }
 
 pub struct ThemeState {
@@ -101,7 +99,6 @@ pub struct ThemeState {
     active: String,
     terminal: Option<ThemeMode>,
     palette: Option<TerminalColors>,
-    new_designs: bool,
     current: super::Loaded,
     effects: Vec<Effect>,
     error: Option<ThemeError>,
@@ -117,7 +114,7 @@ impl ThemeState {
         }
         let catalog = Catalog::default();
         let current = catalog
-            .load("opencode", mode, options.new_designs)
+            .load("opencode", mode)
             .expect("the built-in opencode theme loads");
         let mut state = Self {
             catalog,
@@ -126,7 +123,6 @@ impl ThemeState {
             active: options.name.unwrap_or_else(|| "opencode".to_owned()),
             terminal: options.terminal,
             palette,
-            new_designs: options.new_designs,
             current,
             effects: Vec::new(),
             error: None,
@@ -166,11 +162,11 @@ impl ThemeState {
 
     /// Theme names in list order.
     pub fn names(&self) -> Vec<String> {
-        self.catalog.names(self.new_designs)
+        self.catalog.names()
     }
 
     pub fn has(&self, name: &str) -> bool {
-        self.catalog.has(name, self.new_designs)
+        self.catalog.has(name)
     }
 
     /// Switches to `name` and persists it; false when no such theme exists.
@@ -264,12 +260,6 @@ impl ThemeState {
         }
     }
 
-    /// The `new-designs` experiment was switched.
-    pub fn set_new_designs(&mut self, enabled: bool) {
-        self.new_designs = enabled;
-        self.reload();
-    }
-
     /// Effects queued since the last call.
     pub fn take_effects(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.effects)
@@ -328,14 +318,14 @@ impl ThemeState {
         } else {
             "opencode".to_owned()
         };
-        match self.catalog.load(&name, self.mode, self.new_designs) {
+        match self.catalog.load(&name, self.mode) {
             Ok(loaded) => self.current = loaded,
             Err(message) => {
                 self.error = Some(ThemeError { name, message });
                 self.active = "opencode".to_owned();
                 self.current = self
                     .catalog
-                    .load("opencode", self.mode, self.new_designs)
+                    .load("opencode", self.mode)
                     .expect("the built-in opencode theme loads");
             }
         }
@@ -353,7 +343,6 @@ mod tests {
             terminal: None,
             fallback: ThemeMode::Dark,
             palette: None,
-            new_designs: false,
         }
     }
 
@@ -427,9 +416,9 @@ mod tests {
                 names.first().map(String::as_str),
                 names.last().map(String::as_str)
             ),
-            (Some("aura"), Some("system"))
+            (Some("opencode2"), Some("system"))
         );
-        assert_eq!(names.len(), 34);
+        assert_eq!(names.len(), 35);
     }
 
     #[test]
