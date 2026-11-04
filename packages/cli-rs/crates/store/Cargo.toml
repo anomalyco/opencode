@@ -10,4 +10,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+futures-util.workspace = true
+indexmap.workspace = true
+log.workspace = true
 opencode-api.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
