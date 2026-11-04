@@ -4,11 +4,11 @@
 
 use opencode_api::generated::{ModelInfo, SessionID, SessionMessageCompaction, SessionMessageInfo};
 use opencode_plugin::{Definition, Placement, slot};
-use opencode_store::{Location, MessageExt, State};
+use opencode_store::{Catalog, Location, MessageExt, State};
 use opentui::prelude::*;
 
 use crate::app::Tui;
-use crate::routes::session::sidebar::Section;
+use crate::routes::session::sidebar::{Section, sync_catalogs};
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.context", |cx| {
@@ -20,6 +20,7 @@ pub fn plugin() -> Definition<Tui> {
 }
 
 fn view(tui: &Tui, session: &SessionID) -> Option<View> {
+    sync_catalogs(tui, session, &[Catalog::Model]);
     let (usage, cost) = tui
         .data
         .read(|state| (session_usage(state, session), state.cost(session)));

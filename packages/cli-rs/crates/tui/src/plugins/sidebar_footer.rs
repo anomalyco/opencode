@@ -7,12 +7,12 @@ use std::rc::Rc;
 
 use opencode_api::generated::SessionID;
 use opencode_plugin::{Definition, Placement, slot};
-use opencode_store::Location;
+use opencode_store::{Catalog, Location};
 use opentui::prelude::*;
 use serde_json::json;
 
 use crate::app::Tui;
-use crate::routes::session::sidebar::{Section, on_click};
+use crate::routes::session::sidebar::{Section, on_click, sync_catalogs};
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.footer", |cx| {
@@ -34,6 +34,7 @@ pub fn plugin() -> Definition<Tui> {
 }
 
 fn view(tui: &Tui, session: &SessionID, onboarding: &Rc<Onboarding>) -> View {
+    sync_catalogs(tui, session, &[Catalog::Integration, Catalog::Vcs]);
     let (location, integrations, branch) = tui.data.read(|state| {
         let location = state
             .session(session)

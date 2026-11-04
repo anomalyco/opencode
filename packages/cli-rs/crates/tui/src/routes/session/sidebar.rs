@@ -444,3 +444,17 @@ pub fn on_click(view: &impl Widget, down: bool, run: impl Fn() + 'static) {
         }
     });
 }
+
+/// Reads the session location's `catalogs` once per invalidation: TS reads a catalog the first time a view asks
+/// for it, and the sections ask before the session's location is known.
+pub fn sync_catalogs(tui: &Tui, session: &SessionID, catalogs: &[opencode_store::Catalog]) {
+    let location = tui.data.read(|state| {
+        state
+            .session(session)
+            .map(|info| opencode_store::Location::from(&info.location))
+    });
+    let Some(location) = location else { return };
+    for catalog in catalogs {
+        drop(tui.data.catalog_sync(*catalog, Some(&location)));
+    }
+}
