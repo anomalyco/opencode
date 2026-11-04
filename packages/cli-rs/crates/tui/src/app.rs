@@ -85,6 +85,7 @@ pub struct Tui {
 struct Files {
     config: CliConfig,
     storage: Option<Storage>,
+    state: std::path::PathBuf,
 }
 
 /// Posted when the store flushed; at most one is queued.
@@ -100,6 +101,16 @@ impl Tui {
 
     pub fn weak(&self) -> Weak<Tui> {
         self.this.clone()
+    }
+
+    /// TUI storage (`useStorage`), when the TUI has real roots.
+    pub fn storage(&self) -> Option<Storage> {
+        self.files.as_ref().and_then(|files| files.storage.clone())
+    }
+
+    /// The state directory (TS `useTuiPaths().state`), when the TUI has real roots.
+    pub fn state_dir(&self) -> Option<std::path::PathBuf> {
+        self.files.as_ref().map(|files| files.state.clone())
     }
 
     /// The page theme.
@@ -179,6 +190,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
         storage: Storage::new(&roots.paths.state, &roots.storage_channel)
             .inspect_err(|error| log::warn!("TUI storage is unavailable: {error}"))
             .ok(),
+        state: roots.paths.state.clone(),
     });
     let theme = ThemeState::new(theme_options(app, &deps.config.info, files.as_ref()));
 
@@ -324,12 +336,23 @@ fn install_keys(tui: &Rc<Tui>) {
                 .group("System")
                 .palette()
                 .slash(slash("help", &[])),
+            command("session.list", crate::dialogs::session_list::show)
+                .title("Switch session")
+                .group("Session")
+                .palette()
+                .suggested(has_sessions(&tui.weak()))
+                .slash(slash("sessions", &["resume", "continue"])),
             command("session.new", |tui| tui.navigate(Route::Home))
                 .title("New session")
                 .group("Session")
                 .palette()
                 .suggested(route_is_session(&tui.weak()))
                 .slash(slash("new", &[])),
+            command("open.menu", crate::dialogs::open::show)
+                .title("Open session or project")
+                .group("Session")
+                .palette()
+                .slash(slash("open", &["projects", "project"])),
             command(COMMAND_PALETTE_COMMAND, |tui| {
                 palette::show(&tui.dialogs, Vec::new())
             }),
@@ -352,7 +375,8 @@ fn install_keys(tui: &Rc<Tui>) {
     let layers = [
         commands,
         bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show"]),
-        bindings(Some(GLOBAL_MODE), &["session.new"]),
+        // `appGlobalBindingCommands` (`app.tsx:117`).
+        bindings(Some(GLOBAL_MODE), &["session.list", "session.new", "open.menu"]),
         exit,
     ];
     for layer in layers {
@@ -503,6 +527,14 @@ fn route_is_session(tui: &Weak<Tui>) -> Condition {
     Condition::When(Rc::new(move || {
         weak.upgrade()
             .is_some_and(|tui| matches!(*tui.route.borrow(), Route::Session { .. }))
+    }))
+}
+
+fn has_sessions(tui: &Weak<Tui>) -> Condition {
+    let weak = tui.clone();
+    Condition::When(Rc::new(move || {
+        weak.upgrade()
+            .is_some_and(|tui| tui.data.read(|state| !state.sessions().is_empty()))
     }))
 }
 
