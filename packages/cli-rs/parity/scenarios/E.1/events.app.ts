@@ -7,7 +7,7 @@ const here = { directory: "/tmp/opencode/packages/tui" }
 const event = (id: string, type: string, data: unknown, location: unknown = here) => ({
   event: { id, created: 3, type, location, data },
 })
-// The home prompt's placeholder row (T17-home-prompt) and the prompt footer hints (P01-read-only-prompt).
+// The home prompt's placeholder row (T17-home-prompt).
 const prompt = [
   {
     x: 16,
@@ -16,7 +16,6 @@ const prompt = [
     height: 1,
     reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
   },
-  { x: 50, y: 20, width: 50, height: 1, reason: "the prompt footer hints are E.14's (P01-read-only-prompt)" },
 ]
 
 export default defineApp({
@@ -48,7 +47,7 @@ export default defineApp({
     {
       checkpoint: "selected",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
+      deviation: ["V01-plain-transcript"],
     },
     {
       event: {
@@ -66,7 +65,7 @@ export default defineApp({
       checkpoint: "command",
       until: "Help",
       masks: [{ line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }],
-      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
+      deviation: ["T17-home-prompt"],
     },
   ],
 })

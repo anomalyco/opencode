@@ -183,8 +183,7 @@
       "checkpoint": "open",
       "until": "unused variable",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.7a/tools/open"
     }

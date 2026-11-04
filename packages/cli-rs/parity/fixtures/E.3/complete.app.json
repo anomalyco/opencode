@@ -118,8 +118,7 @@
       "checkpoint": "open",
       "until": "Why does the parser fail?",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.3/complete/open"
     },
@@ -131,7 +130,6 @@
       "until": "Review the working tree",
       "deviation": [
         "V01-plain-transcript",
-        "P01-read-only-prompt",
         "K04-unported-slash-commands"
       ],
       "fixture": "E.3/complete/slash"
@@ -145,8 +143,7 @@
       "checkpoint": "command",
       "until": "/review",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.3/complete/command"
     },
@@ -162,8 +159,7 @@
       "checkpoint": "mention",
       "until": "src/general.ts",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.3/complete/mention"
     },
@@ -176,8 +172,7 @@
       "checkpoint": "picked",
       "until": "ask @general",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.3/complete/picked"
     }
