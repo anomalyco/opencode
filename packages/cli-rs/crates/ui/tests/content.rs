@@ -17,7 +17,6 @@ use std::ops::RangeInclusive;
 
 const CORPUS: &str = include_str!("../../../parity/fixtures/U.4a/corpus.json");
 const SYNTAX: &str = include_str!("../../../parity/fixtures/U.4a/syntax.json");
-const V03: &str = "V03-markdown-widget";
 const H06: &str = "H06-highlight-queries";
 
 fn corpus(name: &str) -> String {
@@ -147,12 +146,7 @@ fn markdown_prose_matches_typescript() {
     assert_parity(
         &markdown_app(&corpus("prose"), true).render(),
         "U.4a/markdown-prose",
-        &[
-            // The italic color, and the colors of the link's ` (url)`, on the paragraph's two rows.
-            (2..=3, Allow::Highlight, V03),
-            // The `###` heading's color.
-            (15..=15, Allow::Highlight, V03),
-        ],
+        &[],
     );
 }
 
@@ -171,12 +165,7 @@ fn raw_markdown_matches_typescript() {
     assert_parity(
         &markdown_app(&corpus("prose"), false).render(),
         "U.4c/markdown-raw",
-        &[
-            // The italic color, and the colors of the link's brackets and URL.
-            (2..=3, Allow::Highlight, V03),
-            // The `###` heading's color.
-            (15..=15, Allow::Highlight, V03),
-        ],
+        &[],
     );
 }
 
