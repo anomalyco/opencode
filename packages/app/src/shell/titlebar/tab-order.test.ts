@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
+import { adjacentTabKey, mergeVisibleTabOrder, pinnedFirst } from "./tab-order"
 
 test("finds the nearest accepted tab in either direction, wrapping around", () => {
   const order = ["a", "b", "c", "d", "e"]
@@ -19,4 +19,17 @@ test("merges reordered visible tabs around hidden tabs", () => {
     "a",
     "b",
   ])
+})
+
+test("keeps pinned tabs above the rest without reordering either section", () => {
+  const pinned = new Set(["b", "d"])
+
+  expect(pinnedFirst(["a", "b", "c", "d", "e"], (key) => key, (key) => pinned.has(key))).toEqual([
+    "b",
+    "d",
+    "a",
+    "c",
+    "e",
+  ])
+  expect(pinnedFirst(["a", "b"], (key) => key, () => false)).toEqual(["a", "b"])
 })

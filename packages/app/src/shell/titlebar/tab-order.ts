@@ -22,3 +22,16 @@ export function mergeVisibleTabOrder(all: string[], current: string[], next: str
 
   return all.map((key) => (visible.has(key) ? (reordered.next().value ?? key) : key))
 }
+
+/** Pinned tabs hold the top of the strip; each section keeps its own stored order. */
+export function pinnedFirst<T>(tabs: T[], key: (tab: T) => string, pinned: (key: string) => boolean) {
+  const head: T[] = []
+  const tail: T[] = []
+
+  for (const tab of tabs) {
+    if (pinned(key(tab))) head.push(tab)
+    else tail.push(tab)
+  }
+
+  return [...head, ...tail]
+}
