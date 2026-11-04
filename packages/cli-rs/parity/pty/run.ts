@@ -42,6 +42,10 @@ export type PtyStep = {
   settle?: number
   // Records the screen under this name.
   checkpoint?: string
+  // With `checkpoint`, also records this many scrollback rows above the screen as `<name>:scrollback`.
+  scrollback?: number
+  // Resizes the pseudo-terminal and the emulator before the keys.
+  resize?: { cols: number; rows: number }
   timeout?: number
 }
 
@@ -79,7 +83,8 @@ export async function runPty(side: Side, value: PtyCase) {
   const box = await sandbox({ TERM: "xterm-256color", COLORTERM: "truecolor", ...value.env })
   const server = value.server ? await startFakeServer(value.server) : undefined
   await value.setup?.(box.root, server?.url)
-  const setup = await createTestRenderer({ width: cols, height: rows })
+  // Large enough for any `resize` step.
+  const setup = await createTestRenderer({ width: 300, height: 120 })
   const decoder = new TextDecoder()
   const output = { text: "" }
   const terminal = new EmbeddedTerminalRenderable(setup.renderer, {
@@ -105,9 +110,29 @@ export async function runPty(side: Side, value: PtyCase) {
     await setup.renderOnce()
     return terminal.screen().lines
   }
+  // The emulator's scrollback: scroll up, read the screen, scroll back down. `screen()` shows only the viewport,
+  // and the scroll command is not in the renderable's public API.
+  const native = terminal as unknown as {
+    lib: { contextEmbeddedTerminalScroll(context: unknown, handle: unknown, delta: number): void }
+    handle: { context: unknown }
+  }
+  const back = async (count: number) => {
+    native.lib.contextEmbeddedTerminalScroll(native.handle.context, native.handle, -count)
+    terminal.invalidate()
+    const lines = await screen()
+    native.lib.contextEmbeddedTerminalScroll(native.handle.context, native.handle, count)
+    terminal.invalidate()
+    await screen()
+    return lines
+  }
   const checkpoints: Record<string, string[]> = {}
   const failures: string[] = []
   for (const step of value.steps) {
+    if (step.resize) {
+      proc.terminal?.resize(step.resize.cols, step.resize.rows)
+      terminal.width = step.resize.cols
+      terminal.height = step.resize.rows
+    }
     if (step.keys !== undefined) proc.terminal?.write(step.keys)
     step.emit?.forEach((event) => server?.emit(event))
     const failure = await waitFor(step, { screen, osc: () => oscLog(output.text), exited })
@@ -116,6 +141,7 @@ export async function runPty(side: Side, value: PtyCase) {
       break
     }
     if (step.checkpoint) checkpoints[step.checkpoint] = await screen()
+    if (step.checkpoint && step.scrollback) checkpoints[`${step.checkpoint}:scrollback`] = await back(step.scrollback)
   }
   const exit =
     value.exits && !failures.length ? await Promise.race([exited, Bun.sleep(10_000).then(() => undefined)]) : undefined
