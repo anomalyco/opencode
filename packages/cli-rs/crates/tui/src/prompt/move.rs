@@ -372,7 +372,7 @@ fn create(
             {
                 data.location_sync_info(Some(&location))
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| worktrees::error_message(&error))?;
             }
             let project = data
                 .read(|state| {
@@ -391,7 +391,7 @@ fn create(
                 .client()
                 .worktree_create(&input, &RequestOptions::default())
                 .await
-                .map_err(|error| error.to_string())?
+                .map_err(|error| worktrees::error_message(&error))?
                 .directory
                 .0;
             if directory.is_empty() {
@@ -399,7 +399,7 @@ fn create(
             }
             data.location_sync_info(Some(&Location::new(directory.clone())))
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| worktrees::error_message(&error))?;
             Ok(directory)
         },
         move |_, result| {

@@ -181,7 +181,8 @@ fn file_row(
     name_width: i64,
 ) -> View {
     let path = crate::dialogs::open::truncate_file_path(&file.file, name_width);
-    let mut counts = vec![" ".fg(page.text.base)];
+    // TS leaves the space in the default foreground.
+    let mut counts = vec![" ".fg(Color::rgb(255, 255, 255))];
     if file.additions != 0 {
         counts.push(format!("+{}", file.additions).fg(page.diff.text.added));
     }
