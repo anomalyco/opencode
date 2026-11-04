@@ -416,7 +416,8 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
 
     // A line range goes into the name and the URI.
     setup.app.type_text("@src/main.rs#3-5");
-    setup.wait_for("src/main.rs#3-5");
+    // The list's row, not the typed text: until the search for it lands, Enter picks `#3`.
+    setup.wait_for("┃ src/main.rs#3-5 ");
     setup.app.press("return");
     setup.app.type_text("fix");
     setup.app.press("return");
