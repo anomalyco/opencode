@@ -320,6 +320,8 @@ function NewSessionLocation(props: {
   }
 
   const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
+  // Kobalte reads disabled from pointer handlers, where an inline && would create an unowned memo.
+  const pathFits = (directory: string) => fitted().text === directory && fitted().minimum <= layout.width
 
   return (
     <div class="relative flex min-h-9 min-w-0 items-center gap-3 ps-2 pe-1.5 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
@@ -430,7 +432,7 @@ function NewSessionLocation(props: {
             <Tooltip
               placement="top"
               value={directory}
-              disabled={fitted().text === directory && fitted().minimum <= layout.width}
+              disabled={pathFits(directory)}
               class="flex min-w-0 flex-1"
               contentClass="max-w-[calc(100vw-32px)] break-all"
             >

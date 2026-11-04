@@ -23,6 +23,8 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
   let trigger: HTMLButtonElement | undefined
 
   const creating = () => props.workspace.selection.value() === "create"
+  // Keep Kobalte's event-time reads from creating a new, unowned memo for an inline &&.
+  const tooltipDisabled = () => !creating() && !state.truncated
 
   // Fetch before opening and retain the result across closes, rather than showing a smaller loading panel.
   const [branches, branchActions] = createResource(
@@ -118,7 +120,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
             </div>
           </Show>
         }
-        disabled={!creating() && !state.truncated}
+        disabled={tooltipDisabled()}
         class="flex min-w-0 max-w-[220px]"
         contentClass="max-w-[calc(100vw-32px)] break-all"
       >

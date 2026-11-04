@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { captureConsoleWarnings } from "../utils/command-palette"
 import {
   newSessionLocation,
   newSessionWorktree,
@@ -207,6 +208,7 @@ for (const row of [
   },
 ]) {
   test(`the location path keeps its start and final two segments on ${row.name}`, async ({ page }) => {
+    const warnings = captureConsoleWarnings(page)
     await page.setViewportSize({ width: 600, height: 700 })
     await openDraft(page, { name: "A project with a long name", directory: row.directory })
     const path = page.locator('[data-slot="new-session-location-path"]')
@@ -214,6 +216,7 @@ for (const row of [
     await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
     await path.hover()
     await expect(page.getByRole("tooltip")).toHaveText(row.directory)
+    expect(warnings.filter((warning) => warning.includes("computations created outside"))).toEqual([])
 
     if (row.name !== "POSIX") return
     await expect(path).toHaveCSS("user-select", "text")
@@ -399,6 +402,7 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
 })
 
 test("the branch shortcut chooses a base branch and stays inactive on Local", async ({ page }) => {
+  const warnings = captureConsoleWarnings(page)
   const view = await openWorktreeDraft(page, {
     name: "BranchShortcut",
     vcs: () => ({ current: "dev", default: "dev" }),
@@ -416,6 +420,7 @@ test("the branch shortcut chooses a base branch and stays inactive on Local", as
   await base.hover()
   await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
   await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
+  expect(warnings.filter((warning) => warning.includes("computations created outside"))).toEqual([])
   await expect(view.editor).toBeFocused()
   await view.editor.press(shortcut)
   await expect(search).toBeFocused()
