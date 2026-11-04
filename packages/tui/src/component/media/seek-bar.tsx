@@ -1,4 +1,4 @@
-import type { BoxRenderable, MouseEvent, VideoMetadata, VideoRenderable } from "@opentui/core"
+import type { BoxRenderable, MouseEvent, TimerHandle, VideoMetadata, VideoRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js"
 import { useMedia, type MediaPlayback } from "../../context/media"
@@ -92,8 +92,10 @@ export function Toggle(props: { id?: string; on: boolean; run: () => void; child
   )
 }
 
-/** A paused seek decodes on the JS thread, so scrubbing and the hover preview seek at most this often. */
-const SCRUB_INTERVAL_MS = 30
+/** Scrubbing and the hover preview seek at most this often, or less often when seeks are slow. */
+const SEEK_INTERVAL_MS = 120
+/** The hover preview seeks once the pointer has rested this long. */
+const PREVIEW_REST_MS = 80
 
 /**
  * A one-row slider over the video: the elapsed part fills up to the playhead, a click seeks, and a drag scrubs with
@@ -105,7 +107,7 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
   const [hover, setHover] = createSignal<number>()
   const [scrubbing, setScrubbing] = createSignal(false)
   const duration = () => props.transport.metadata()?.duration ?? 0
-  const seek = createThrottle(props.transport.seek)
+  const seek = createSeekThrottle(props.transport.seek)
   let bar: BoxRenderable | undefined
   let resume = false
 
@@ -117,22 +119,24 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
     setHover(column(event))
     seek.push(timeAt(column(event)))
   }
-  // A few colour runs, not a span per cell, since this changes with every time update.
+  // The playhead's column, so the runs below change only when it moves, not with every time update.
+  const head = createMemo(() =>
+    duration() > 0 ? Math.round((Math.min(duration(), props.transport.time()) / duration()) * (width() - 1)) : 0,
+  )
+  // A few colour runs, not a span per cell.
   const runs = createMemo(() => {
     if (width() < 1) return []
-    const head =
-      duration() > 0 ? Math.round((Math.min(duration(), props.transport.time()) / duration()) * (width() - 1)) : 0
     const marker = scrubbing() ? undefined : hover()
     const formfield = theme.text.formfield
     const segments = [
-      { cell: "━", fg: formfield.selected, from: 0, to: head },
-      { cell: "●", fg: scrubbing() ? formfield.pressed : formfield.focused, from: head, to: head + 1 },
-      { cell: "─", fg: formfield.base, from: head + 1, to: width() },
+      { cell: "━", fg: formfield.selected, from: 0, to: head() },
+      { cell: "●", fg: scrubbing() ? formfield.pressed : formfield.focused, from: head(), to: head() + 1 },
+      { cell: "─", fg: formfield.base, from: head() + 1, to: width() },
     ]
     // The hover marker takes one cell of the fill or the track.
     return segments.flatMap((segment) => {
       const run = (from: number, to: number) => ({ text: segment.cell.repeat(to - from), fg: segment.fg })
-      if (marker === undefined || marker === head || marker < segment.from || marker >= segment.to)
+      if (marker === undefined || marker === head() || marker < segment.from || marker >= segment.to)
         return [run(segment.from, segment.to)]
       return [run(segment.from, marker), { text: "│", fg: formfield.hovered }, run(marker + 1, segment.to)]
     })
@@ -180,6 +184,7 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
           time={timeAt(hover()!)}
           column={hover()!}
           barWidth={width()}
+          scrubbing={scrubbing()}
           aspect={(props.transport.metadata()?.width ?? 16) / (props.transport.metadata()?.height || 9)}
         />
       </Show>
@@ -187,8 +192,18 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
   )
 }
 
-/** The frame and timecode at the hovered time, in a second silent, paused player of the same file. */
-function SeekPreview(props: { source: string; time: number; column: number; barWidth: number; aspect: number }) {
+/**
+ * The frame and timecode at the hovered time, in a second silent, paused player of the same file. While scrubbing,
+ * the main player shows the frame, so the preview hides and does not seek.
+ */
+function SeekPreview(props: {
+  source: string
+  time: number
+  column: number
+  barWidth: number
+  aspect: number
+  scrubbing: boolean
+}) {
   const media = useMedia()
   const theme = useTheme()
   let player: VideoRenderable | undefined
@@ -196,8 +211,12 @@ function SeekPreview(props: { source: string; time: number; column: number; barW
   const [failed, setFailed] = createSignal(false)
   const width = () => Math.max(12, Math.min(28, props.barWidth))
   const height = () => Math.max(3, Math.min(10, Math.round((width() - 2) / (props.aspect * media.cellAspect()))))
-  const seek = createThrottle((time) => player?.seek(time))
-  createEffect(() => ready() && seek.push(props.time))
+  const seek = createSeekThrottle((time) => player?.seek(time), PREVIEW_REST_MS)
+  createEffect(() => {
+    if (!ready()) return
+    if (props.scrubbing) return seek.cancel()
+    seek.push(props.time)
+  })
 
   return (
     <box
@@ -207,6 +226,7 @@ function SeekPreview(props: { source: string; time: number; column: number; barW
       left={Math.max(0, Math.min(props.barWidth - width(), props.column - Math.floor(width() / 2)))}
       width={width()}
       zIndex={10}
+      visible={!props.scrubbing}
       flexDirection="column"
       alignItems="center"
       border
@@ -237,19 +257,26 @@ export function formatTimecode(seconds: number) {
   return formatDuration(Math.floor(Math.max(0, seconds)))
 }
 
-/** Calls `run` with the latest value at most once per SCRUB_INTERVAL_MS, leading and trailing. */
-function createThrottle(run: (time: number) => void) {
-  let timer: ReturnType<typeof setTimeout> | undefined
+/**
+ * Calls `run` with the latest value `rest` ms after the last push, and at most once per interval: SEEK_INTERVAL_MS, or
+ * twice the time the last call took. A paused seek decodes on the JS thread, so slow seeks keep it at least half free.
+ */
+function createSeekThrottle(run: (time: number) => void, rest = 0) {
+  const clock = useRenderer().clock
+  let timer: TimerHandle | undefined
   let pending: number | undefined
+  let next = -Infinity
   const flush = () => {
     timer = undefined
     if (pending === undefined) return
-    run(pending)
+    const time = pending
     pending = undefined
-    timer = setTimeout(flush, SCRUB_INTERVAL_MS)
+    const started = clock.now()
+    run(time)
+    next = started + Math.max(SEEK_INTERVAL_MS, 2 * (clock.now() - started))
   }
   const cancel = () => {
-    clearTimeout(timer)
+    if (timer) clock.clearTimeout(timer)
     timer = undefined
     pending = undefined
   }
@@ -257,7 +284,12 @@ function createThrottle(run: (time: number) => void) {
   return {
     push(time: number) {
       pending = time
-      if (!timer) flush()
+      // Without a rest, a scheduled call keeps its time; with one, each push restarts the wait.
+      if (timer && !rest) return
+      if (timer) clock.clearTimeout(timer)
+      const wait = Math.max(rest, next - clock.now())
+      if (wait <= 0) return flush()
+      timer = clock.setTimeout(flush, wait)
     },
     cancel,
   }

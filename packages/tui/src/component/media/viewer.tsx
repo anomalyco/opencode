@@ -240,7 +240,10 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
             ["quality", transport().tier() ? `tier ${transport().tier()} · reduced to keep up` : "tier 0 · full size"],
           ]
         : []),
-      ["protocol", media.protocol()],
+      [
+        "protocol",
+        media.protocol() === "kitty" ? `kitty · ${renderer.kittyImageTransportStatus.effective}` : media.protocol(),
+      ],
       [
         "zoom",
         area && zoomed()
@@ -452,7 +455,13 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
           <For each={strip()}>
             {(item) => (
               <box flexDirection="column" width={TILE_WIDTH}>
-                <MediaTile item={item} width={TILE_WIDTH} height={TILE_HEIGHT} onOpen={() => go(items.indexOf(item))} />
+                <MediaTile
+                  item={item}
+                  width={TILE_WIDTH}
+                  height={TILE_HEIGHT}
+                  still
+                  onOpen={() => go(items.indexOf(item))}
+                />
                 <text fg={theme.text.formfield.selected} wrapMode="none" selectable={false}>
                   {items.indexOf(item) === index() ? "━".repeat(TILE_WIDTH) : ""}
                 </text>
