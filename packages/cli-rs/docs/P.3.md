@@ -6,7 +6,7 @@ Rows F12a (core and flowcharts) and F12b (sequence, state, gantt, gitgraph, time
 ## Library choice
 
 The run notes ask for a small plugin on a Rust library, and for a port of only the TS layout and drawing
-when no library draws close to TS. I looked at every Rust crate that turns Mermaid into terminal text
+when no library draws close to TS. I looked at the Rust crates that turn Mermaid into terminal text
 (crates.io, 2026-11):
 
 | Crate | What it is | Why not |
@@ -29,48 +29,62 @@ The parser is ported too, not taken from `merman-core`, for three reasons:
 2. The TS parsers are small (about 1,500 lines for all six kinds) next to the layout and routing
    (about 9,000), and their output types are what the layout takes. Mapping `merman-core`'s JSON model
    to them would be about as much code as the parsers, plus the gaps between the two grammars.
-3. `merman-core` is an alpha with a large dependency set; the plugin needs `fancy-regex` (the TS
-   flowchart edge pattern uses a lookahead), `unicode-width` and `unicode-segmentation` (TS
-   `string-width` and `Intl.Segmenter`), and `html-escape` (TS `entities.decodeHTMLStrict`).
+3. `merman-core` is an alpha with a large dependency set. The port needs only `fancy-regex` (the TS
+   flowchart edge pattern uses a lookahead), `unicode-segmentation` (TS `Intl.Segmenter`), and
+   `html-escape` (TS `entities.decodeHTMLStrict`).
 
-So the "library" is the port itself, kept as one crate with the TS module layout
-(`core`, `flowchart`, `sequence`, `state`, `gantt`, `gitgraph`, `timeline`) so a TS change maps to one
-Rust file.
+So the "library" is the port itself, kept as one crate with the TS module layout (`core`, `flowchart`,
+`sequence`, `state`, `gantt`, `gitgraph`, `timeline`) so a TS change maps to one Rust file.
+
+## Port notes
+
+- Text width follows TS `string-width` 7, not `unicode-width`: `core/wide.rs` lists the code points it counts
+  as two cells, generated from `string-width` itself. It includes emoji such as `▶` and `◀`, which decide
+  whether a wide state diagram folds.
+- `Math.round` is `floor(x + 0.5)`, and colors blend and round in bytes, as OpenTUI's `RGBA.fromInts` does.
+- TS compares edges, transitions, and bounds by object identity. Edges carry their parsed index, state
+  transitions their index in the visible model, and the state layout keeps one arena of boxes that both its
+  state and composite maps index, so a move shows through either map.
+- Gantt uses the plugin's options only (track style, thin line, labels on the left, spaced sections, faint
+  track); the other `GanttDiagramRenderOptions` are not reachable from the plugin.
 
 ## API
 
 - `opencode_mermaid::plugin::<H: Host>() -> Definition<H>`: registers the `mermaid` code-block renderer
   (P.1's `Setup::code_block`, the U.4c hook). The TUI's `host::builtins()` uses it for `opencode.merman`.
-- `opencode_mermaid::render(source, width, &Palette) -> Option<Diagram>`: the plan's
-  `render(lang, source, width, theme) -> cells`, as styled lines (`Vec<Vec<Run>>`) with their height.
-  `None` is TS's `undefined`: not a diagram, a syntax error that cannot fall back, or a canvas over
-  250,000 cells.
+- `opencode_mermaid::render(source, width, &Palette) -> Rendered`: the plan's
+  `render(lang, source, width, theme) -> cells`, as styled lines. `Rendered::Code` is TS's `undefined`;
+  `Rendered::Syntax { kind, prefix }` is a syntax error with the drawable prefix, if any.
+- `Renderer` adds the streaming fallback; `widget(app, &Diagram)` is the `Text` it returns.
 - `Palette::from_theme(&Theme)`: `resolveOpenCodeDiagramPalette`. TS takes the theme mode from the
-  context; the plugin API gives only the theme, so the mode is read from the page background
-  (light when its luminance is above one half), which is the mode that resolved the theme.
+  context; the plugin API passes only the theme, so a page background above half luminance means light.
 
 ## Widget
 
 TS's `StaticDiagramRenderable` is a `TextRenderable`: full width, the diagram's height, no wrap, not
-selectable, one row of top margin, and a left-drag that scrolls it sideways. The Rust widget is a
-`Text` with the same options. Horizontal drag scrolling is a follow-up when opentui-rust exposes mouse
-drag on `Text`.
+selectable, one row of top margin, and a left drag that scrolls it sideways. The Rust widget is a `Text`
+with the same options and drag scrolling, with two differences that keep the cells equal:
+
+- No top margin: Core's Markdown uses that margin as the gap before the block, while the Rust Markdown widget
+  puts the gap between blocks itself.
+- A white default fg, TS `TextRenderable`'s, which unstyled cells keep.
 
 ## Streaming
 
 TS keeps the last good diagram per fence (keyed by the block's id) and shows it while a later edit does
-not parse. The U.4c hook gives the widget it returned before as `CodeBlock::previous`; the plugin
-returns it again when the new source fails with a syntax error and the previous diagram was the same
-kind, so the same rule holds without a cache.
+not parse. The U.4c hook gives the widget it returned before as `CodeBlock::previous`; the renderer
+remembers each widget's diagram kind and returns the previous widget when the new source fails with a
+syntax error of the same kind. opentui-rust's Markdown re-runs renderers when streaming ends, so a kept
+preview does not outlive a broken fence.
 
 ## Proof
 
 - P-ORACLE `parity/oracle/P.3-mermaid.ts` collects every Mermaid source in
-  `packages/merman/src/**/*.test.ts` (template literals whose first meaningful line is a diagram
-  header), renders each through TS's `prepareDiagram` path at 120 and 80 columns with the `opencode`
-  dark palette, and writes the styled lines (text, fg, bg, attributes per run) or `null` to
-  `parity/fixtures/P.3/corpus.json`. `crates/mermaid/tests/oracle.rs` renders the same sources in Rust
-  and compares every run.
-- P-COMP `parity/component/P.3-markdown.tsx`: a Markdown message with a `mermaid` fence through the real
-  TS plugin renderer, compared cell by cell with the Rust Markdown widget and this plugin.
-- Each difference that stays has a file under `parity/deviations/`.
+  `packages/merman/src/**/*.test.ts` and the layout-audit fixtures (template literals whose first
+  meaningful line is a diagram header: 248 sources), renders each through TS's
+  `createMermaidCodeBlockRenderer` at 120 and 60 columns with the `opencode` dark palette, and writes the
+  styled lines (text, fg, bg, attributes per run) or `null` to `parity/fixtures/P.3/corpus.json`.
+  `crates/mermaid/tests/oracle.rs` renders the same sources in Rust and compares every run: 496 of 496 equal.
+- P-COMP `parity/component/P.3-markdown.tsx`: `TextPart`'s Markdown with a flowchart and a sequence fence
+  through the real TS renderer, compared cell by cell in `crates/mermaid/tests/markdown.rs`.
+- Deviation: `parity/deviations/F12b-diagram-layout-errors.md` (a layout dead end shows the code; TS throws).
