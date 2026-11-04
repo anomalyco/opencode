@@ -34,6 +34,7 @@ pub struct Session {
     root: View,
     header: Text,
     transcript: messages::list::Transcript,
+    _scroll: scroll::Controls,
     working: Spinner,
     permission: permission::Permission,
     form: form::SessionForms,
@@ -46,6 +47,7 @@ impl Session {
         let theme = tui.page();
         let header = Text::new(app, "").fg(theme.text.base).bold().truncate(true);
         let transcript = messages::list::Transcript::new(tui);
+        let scroll = scroll::Controls::new(tui, &transcript);
         let working = Spinner::new(app)
             .color(theme.text.muted)
             .label("Thinking")
@@ -82,6 +84,7 @@ impl Session {
             root,
             header,
             transcript,
+            _scroll: scroll,
             working,
             permission,
             form,
