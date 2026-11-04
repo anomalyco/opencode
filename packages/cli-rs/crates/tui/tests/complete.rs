@@ -380,7 +380,7 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
     assert_eq!(sent[0].1["text"], "please ask @general now");
     assert_eq!(
-        ints(&sent[0].1["agents"]),
+        sent[0].1["agents"],
         json!([{ "name": "general", "mention": { "start": 11, "end": 19, "text": "@general" } }])
     );
     assert_eq!(sent[0].1["files"], json!([]));
@@ -421,7 +421,7 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
     assert_eq!(sent[0].1["text"], "@src/main.rs @src/main.rs#3-5 fix");
     assert_eq!(
-        ints(&sent[0].1["files"]),
+        sent[0].1["files"],
         json!([
             { "uri": "file:///project/src/main.rs", "name": "src/main.rs",
               "mention": { "start": 0, "end": 12, "text": "@src/main.rs" } },
@@ -466,12 +466,12 @@ fn skills_and_references_are_listed_and_sent() {
     setup.app.press("return");
     let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
     assert_eq!(
-        ints(&sent[0].1["files"]),
+        sent[0].1["files"],
         json!([{ "uri": "file:///refs/docs", "name": "docs",
                  "mention": { "start": 0, "end": 5, "text": "@docs" } }])
     );
     assert_eq!(
-        ints(&sent[0].1["skills"]),
+        sent[0].1["skills"],
         json!([{ "id": "release-notes", "mention": { "start": 6, "end": 20, "text": "@release-notes" } }])
     );
 }
@@ -541,21 +541,6 @@ fn escape_hides_and_ctrl_c_dismisses_the_command() {
     );
     setup.app.press("down");
     setup.wait_for("/agents");
-}
-
-/// `value` with whole floats as integers: the generated `PromptMention` offsets are `f64`.
-fn ints(value: &Value) -> Value {
-    match value {
-        Value::Number(number) => match number.as_f64() {
-            Some(float) if float.fract() == 0.0 => json!(float as i64),
-            _ => value.clone(),
-        },
-        Value::Array(items) => Value::Array(items.iter().map(ints).collect()),
-        Value::Object(map) => {
-            Value::Object(map.iter().map(|(k, v)| (k.clone(), ints(v))).collect())
-        }
-        _ => value.clone(),
-    }
 }
 
 /// Picks `@src/main.rs` from the file search.
