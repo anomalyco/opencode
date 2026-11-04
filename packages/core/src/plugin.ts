@@ -59,7 +59,9 @@ const layer = Layer.effect(
       return { code, revision: gui.revision, options: gui.options } satisfies Plugin.GuiBundle
     })
     const hostContext = yield* Effect.context<Effect.Services<ReturnType<typeof PluginHost.make>>>()
-    const load = Effect.fnUntraced(function* (plugin: Definition) {
+    // Loads `plugin` into the slot for `requested`. `fallback` is the requested revision's setup error when
+    // restoring an older revision.
+    const load = Effect.fnUntraced(function* (plugin: Definition, requested: Definition, fallback?: string) {
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) }
       const inherit = yield* State.inherit()
       let disabled: Disabled | undefined
@@ -98,13 +100,21 @@ const layer = Layer.effect(
         ),
         Effect.exit,
       )
-      if (disabled) return { status: "disabled", failure: disabled } as const
-      if (Exit.isSuccess(exit)) return { status: "active", activation } as const
-      yield* Effect.logWarning("failed to load plugin", {
-        "plugin.id": plugin.id,
-        cause: exit.cause,
-      })
-      return { status: "setup-failed", error: Cause.pretty(exit.cause) } as const
+      // Store the slot in the same synchronous step that reads `disabled`; later failures find it in `active`.
+      const slot: Slot = disabled
+        ? { status: "disabled", plugin: requested, failure: disabled }
+        : Exit.isFailure(exit)
+          ? { status: "setup-failed", plugin: requested, error: fallback ?? Cause.pretty(exit.cause) }
+          : fallback === undefined
+            ? { status: "active", plugin: requested, activation }
+            : { status: "fallback", plugin: requested, activation, error: fallback }
+      active.set(requested.id, slot)
+      if (Exit.isFailure(exit) && !disabled)
+        yield* Effect.logWarning("failed to load plugin", {
+          "plugin.id": plugin.id,
+          cause: exit.cause,
+        })
+      return slot
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (
@@ -166,25 +176,11 @@ const layer = Layer.effect(
                       active.set(definition.id, { ...slot, plugin: definition })
                       continue
                     }
-                    const result = yield* load(definition)
-                    active.set(definition.id, { ...result, plugin: definition })
+                    const result = yield* load(definition, definition)
                     if (result.status !== "setup-failed") continue
-
                     if (slot?.status !== "active" && slot?.status !== "fallback") continue
-                    const restored = yield* load(slot.activation.plugin)
-                    if (restored.status === "active") {
-                      active.set(definition.id, {
-                        status: "fallback",
-                        plugin: definition,
-                        activation: restored.activation,
-                        error: result.error,
-                      })
-                      continue
-                    }
-                    if (restored.status === "disabled") {
-                      active.set(definition.id, { ...restored, plugin: definition })
-                      continue
-                    }
+                    const restored = yield* load(slot.activation.plugin, definition, result.error)
+                    if (restored.status !== "setup-failed") continue
                     yield* Effect.logError("failed to restore plugin; deactivating", {
                       "plugin.id": definition.id,
                     })
