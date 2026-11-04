@@ -5,6 +5,8 @@ const options = [
   { id: "btw.ask", trigger: "btw", arguments: true, type: "builtin" as const },
   { id: "custom.btw", trigger: "custom", type: "custom" as const },
   { id: "model.choose", trigger: "model", type: "builtin" as const },
+  { id: "custom.rename", trigger: "rename", type: "custom" as const },
+  { id: "session.rename", trigger: "rename", arguments: true, type: "builtin" as const },
 ]
 
 test.each([
@@ -14,6 +16,7 @@ test.each([
   { text: "/btwx nope", result: undefined },
   { text: "/custom nope", result: undefined },
   { text: "/model opus", result: undefined },
+  { text: "/rename my workflow", result: undefined },
   { text: "ask /btw later", result: undefined },
 ])("parses $text as a client argument command", (row) => {
   expect(parseClientSlashCommand(options, row.text)).toEqual(row.result)

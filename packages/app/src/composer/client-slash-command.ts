@@ -16,7 +16,7 @@ export function parseSlashCommand(text: string) {
 export function parseClientSlashCommand(options: readonly ClientSlashCommand[], text: string) {
   const command = parseSlashCommand(text)
 
-  if (!command) return
+  if (!command || options.some((item) => item.type === "custom" && item.trigger === command.name)) return
   const option = options.find((item) => item.type === "builtin" && item.arguments && item.trigger === command.name)
 
   if (!option) return

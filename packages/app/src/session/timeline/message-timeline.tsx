@@ -312,9 +312,14 @@ function MessageTimelineView(
             category: language.t("command.category.session"),
             title: language.t("command.session.rename"),
             keybind: "ctrl+r",
+            slash: "rename",
+            slashArguments: true,
             disabled: !sessionID() || !!parentID() || title.editing,
             skip: (event) => pluginScoped(event.target),
-            onSelect: openTitleEditor,
+            onSelect: (_source, input) => {
+              if (!input) return openTitleEditor()
+              void props.action.rename(input)
+            },
           },
           {
             id: "session.delete",
