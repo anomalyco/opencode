@@ -79,6 +79,7 @@ async function record(name: string, file: string) {
   for (const step of scenario.steps) {
     if ("keys" in step) step.keys.forEach((key) => press(setup, key))
     if ("type" in step) await setup.mockInput.typeText(step.type)
+    if ("click" in step) await setup.mockMouse.click(...step.click)
     if ("event" in step) setup.events.emit(step.event as never)
     if (!("checkpoint" in step)) {
       steps.push(step)

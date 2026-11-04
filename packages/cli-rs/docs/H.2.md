@@ -56,6 +56,8 @@ export default defineApp({
     `backspace`, `space`, `up`, `down`, `left`, `right`, `pageup`, `pagedown`, a character, with `ctrl+`,
     `shift+`, `alt+`. TS sends them with `mockInput` in kitty mode.
   - `type`: text, one key press per character.
+  - `click`: `[x, y]`, a left press and release at a cell. TS sends it with `mockMouse.click`, Rust with
+    `TestApp::click`.
   - `event`: one `/api/event` event. TS emits it on `createEventStream`; Rust sends it on the in-memory event
     stream. The stream starts with `server.connected` on both sides, as the TS fixture does.
   - `checkpoint`: a named screen, compared cell by cell.
@@ -153,8 +155,8 @@ It knows nothing of scenarios, so other tests can use it as a small fixture serv
 1. builds `Memory` from the recording's routes, then its reads and writes by exact query, then by path;
 2. mounts the TUI on `TestApp::new(width, height)` with `opencode_tui::mount(app, Deps { events: true,
    directory, config, route, continue_ })`, the T.1 hook;
-3. runs the steps: `keys` with `TestApp::press`, `type` with `TestApp::type_text`, and `event` with
-   `Memory::emit`;
+3. runs the steps: `keys` with `TestApp::press`, `type` with `TestApp::type_text`, `click` with
+   `TestApp::click`, and `event` with `Memory::emit`;
 4. at a checkpoint, waits until no request is in flight and two renders 25 ms apart are equal (and `until`
    shows, for up to 2 s), then compares with `opencode_parity::app::compare_checkpoint`;
 5. compares P-REQ (`opencode_parity::app::compare_requests`):
