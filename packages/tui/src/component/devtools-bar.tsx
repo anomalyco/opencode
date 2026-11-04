@@ -6,7 +6,7 @@ import path from "node:path"
 import { monitorEventLoopDelay } from "node:perf_hooks"
 import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show, type ParentProps } from "solid-js"
 import { useClient } from "../context/client"
-import { useConfig } from "../config"
+import { copyMode, useConfig } from "../config"
 import { useData } from "../context/data"
 import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
@@ -89,7 +89,7 @@ export function DevToolsBar() {
       if (!panel() || keymap.mode.current() !== "base") return
       if (event.name !== "escape" && !(event.ctrl && event.name === "c")) return
       if (renderer.getSelection()?.getSelectedText()) {
-        if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) !== "select") return
+        if (!["select", "both"].includes(copyMode(config.data))) return
         renderer.clearSelection()
         event.preventDefault()
         event.stopPropagation()
