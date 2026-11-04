@@ -472,7 +472,7 @@ export function createDirectorySearch(args: {
     const input = scoped(value)
     const location = args.location()
 
-    if (!input || !location) return [] as string[]
+    if (!input || !location) return []
     const raw = normalizePickerDrive(value)
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
@@ -480,31 +480,40 @@ export function createDirectorySearch(args: {
     if (!pathInput) {
       const relative = pickerRelativePath(location.directory, input.directory)
 
-      const results =
+      const found =
         relative === undefined
-          ? []
-          : await args.sdk.api.file
+          ? Promise.resolve<string[]>([])
+          : args.sdk.api.file
               .find({ location, query: joinPickerPath(relative, query), type: "directory", limit: 50 })
               .then((result) =>
                 result.data
                   .map((entry) => pickerAbsolutePath(entry.path, result.location.directory))
                   .filter((path) => treePathWithin(input.directory, path)),
               )
-              .catch(() => [])
+              .catch((): string[] => [])
+
+      const listed = (
+        query
+          ? match(input.directory, query, 50)
+          : directories(input.directory).then((items) => items.map((item) => item.absolute))
+      ).catch((): string[] => [])
+
+      // Search results can miss directories the index has not seen; keep the listing matches too.
+      const merged = (await Promise.all([listed, found])).flat()
 
       if (!active()) return []
 
-      if (results.length) {
-        return results.slice(0, 50)
-      }
+      const unique = merged.reduce((output, path) => {
+        const absolute = canonicalPickerPath(path)
+        const insensitive = /^[A-Za-z]:\//.test(absolute) || absolute.startsWith("//")
+        const key = insensitive ? absolute.toLowerCase() : absolute
 
-      const fallback = query
-        ? await match(input.directory, query, 50)
-        : (await directories(input.directory)).map((item) => item.absolute)
+        if (!output.has(key)) output.set(key, absolute)
 
-      if (!active()) return []
+        return output
+      }, new Map<string, string>())
 
-      return fallback
+      return Array.from(unique.values()).slice(0, 50)
     }
 
     const segments = query.replace(/^\/+/, "").split("/")

@@ -2,13 +2,29 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect"
+import {
+  Cause,
+  Clock,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect"
+import { ChildProcess } from "effect/process"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
+import { Environment } from "../environment/index.js"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
+import { gitExecutable } from "../util/git-executable.js"
 import { Protected } from "./protected.js"
 
 export interface Interface {
@@ -49,10 +65,122 @@ function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInpu
   })
 }
 
+const DIRECTORY_CONCURRENCY = 8
+const DIRECTORY_DEADLINE = Duration.seconds(3)
+
+type DirectoryState = "empty" | "content" | "unknown"
+type DirectoryVisit = { readonly state: DirectoryState; readonly added: readonly string[] }
+
+// ripgrep only reports files, so directories without an indexed file are missing from the index.
+// Walk the tree and stage only the directories that are provably empty: a failed listing makes a
+// directory "unknown", and an unknown child makes its parent unknown too. Known directories (already
+// indexed as a file's parent) are always descended so empty children under them are still found,
+// while a non-known directory that holds visible files is pruned so ignored subtrees stay out of the
+// index. Additions are staged per subtree and returned to the caller, which publishes them after
+// evaluating git ignore rules: a pruned or unknown subtree contributes nothing, and a walk cut off by
+// the caller's deadline returns no discovered directories (the index keeps rg-derived parents only).
+function walkDirectories(input: {
+  readonly files: Environment.Files
+  readonly directory: string
+  readonly home: boolean
+  readonly next: ReturnType<typeof emptyIndex>
+}): Effect.Effect<readonly string[]> {
+  const permits = Semaphore.makeUnsafe(DIRECTORY_CONCURRENCY)
+  return Effect.gen(function* () {
+    const protectedNames = input.home ? Protected.names() : undefined
+    const visit: (absolute: string, relative: string, known: boolean) => Effect.Effect<DirectoryVisit> = (
+      absolute,
+      relative,
+      known,
+    ) =>
+      Effect.gen(function* () {
+        const entries = yield* permits
+          .withPermit(input.files.list(absolute))
+          .pipe(Effect.match({ onFailure: () => undefined, onSuccess: (entries) => entries }))
+        // A known directory already holds an indexed file, so it is non-empty whether or not it lists.
+        if (!entries) return { state: known ? ("content" as const) : ("unknown" as const), added: [] }
+        const visible = entries.filter((entry) => entry.type === "file" && !entry.name.startsWith("."))
+        const children = entries.filter(
+          (entry) =>
+            entry.type === "directory" &&
+            !entry.name.startsWith(".") &&
+            !(relative === "" && protectedNames?.has(entry.name)),
+        )
+        if (!known && visible.length > 0) return { state: "content" as const, added: [] }
+        const results = yield* Effect.forEach(
+          children,
+          (entry) => {
+            const child = relative === "" ? entry.name : `${relative}/${entry.name}`
+            const childKnown = input.next.directories.has(`${child}${path.sep}`)
+            return visit(path.join(absolute, entry.name), child, childKnown).pipe(
+              Effect.map((result) => ({ key: `${child}${path.sep}`, known: childKnown, ...result })),
+            )
+          },
+          { concurrency: DIRECTORY_CONCURRENCY },
+        )
+        const added = results.flatMap((result) => {
+          if (result.state === "empty") return [result.key, ...result.added]
+          return result.known ? result.added : []
+        })
+        if (known) return { state: "content" as const, added }
+        return results.every((result) => result.state === "empty")
+          ? { state: "empty" as const, added }
+          : { state: "content" as const, added: [] }
+      })
+    const discovered = yield* visit(input.directory, "", true)
+    return discovered.added
+  })
+}
+
+// ripgrep has no directory-aware ignore query, so ask git's matcher about the staged candidates.
+// Ignored directories can look structurally empty (only symlinks, hidden entries, or empty scope
+// folders), so publishing them without evaluating ignore rules leaks node_modules-style trees.
+function filterIgnoredDirectories(input: {
+  readonly environment: Environment.Interface
+  readonly location: Location.Interface
+  readonly directories: readonly string[]
+}): Effect.Effect<readonly string[]> {
+  return Effect.gen(function* () {
+    if (input.directories.length === 0) return []
+    const paths = new Map(input.directories.map((key) => [key.replaceAll(path.sep, "/"), key]))
+    const payload = [...paths.keys()].join("\0") + "\0"
+    const result = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* input.environment.spawner.spawn(
+          ChildProcess.make(
+            input.location.workspaceID ? "git" : gitExecutable(),
+            ["check-ignore", "--no-index", "--stdin", "-z"],
+            {
+              cwd: input.location.directory,
+              extendEnv: true,
+              stdin: Stream.make(new TextEncoder().encode(payload)),
+              stderr: "ignore",
+            },
+          ),
+        )
+        const stdout = yield* Stream.decodeText(handle.stdout).pipe(Stream.mkString)
+        const exitCode = yield* handle.exitCode
+        return { stdout, exitCode }
+      }),
+    ).pipe(Effect.exit)
+    // Exit code 1 means "nothing ignored". Anything else (spawn failure, defect, or another exit
+    // code) cannot prove the candidates are unignored, so fail closed and keep only the file index.
+    const usable = Exit.isSuccess(result) && (result.value.exitCode === 0 || result.value.exitCode === 1)
+    if (!usable) {
+      if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) return yield* Effect.interrupt
+      yield* Effect.logWarning("directory search could not evaluate ignore rules")
+      return []
+    }
+    const ignored = new Set(result.value.stdout.split("\0").filter(Boolean))
+    return [...paths].flatMap(([posix, key]) => (ignored.has(posix) ? [] : [key]))
+  })
+}
+
 const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
+    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
@@ -80,6 +208,22 @@ const ripgrepLayer = Layer.effect(
                 next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
             })
           }),
+      })
+      const discovered = yield* walkDirectories({
+        files: environment.files,
+        directory: location.directory,
+        home,
+        next,
+      }).pipe(Effect.timeoutOption(DIRECTORY_DEADLINE))
+      const candidates = Option.getOrElse(discovered, () => [])
+      // Only git-backed locations have ignore rules to evaluate for directory candidates; ripgrep's
+      // own .ignore/.rgignore rules are not consulted outside a repository.
+      const directories =
+        location.vcs?.type === "git"
+          ? yield* filterIgnoredDirectories({ environment, location, directories: candidates })
+          : candidates
+      directories.forEach((key) => {
+        next.directories.set(key, previous.directories.get(key) ?? fuzzysort.prepare(key))
       })
       index = next
       initialized = true
@@ -235,7 +379,11 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Location.node, Ripgrep.node, Environment.node],
+  })
 }
 
 export const node = configured()
