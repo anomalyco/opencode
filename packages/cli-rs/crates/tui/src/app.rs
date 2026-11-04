@@ -77,6 +77,8 @@ pub struct Tui {
     /// The model and agent state (E.16).
     pub local: Rc<crate::dialogs::model::Local>,
     pub startup: Startup,
+    /// The plugins (P.1).
+    pub plugins: crate::plugins::host::Plugins,
     pub epilogue: crate::features::epilogue::Epilogue,
     pub(crate) location: crate::features::location::LocationState,
     pub(crate) overlays: crate::features::overlays::Overlays,
@@ -310,6 +312,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         deps.config.info.clone(),
         files.as_ref().map(|files| files.config.clone()),
     );
+    let plugins = crate::plugins::host::registry(&deps.config.info);
     let tui = Rc::new_cyclic(|this| Tui {
         local: crate::dialogs::model::Local::new(
             app,
@@ -335,6 +338,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         ),
         settings,
         startup: Startup::new(args),
+        plugins,
         epilogue: Default::default(),
         location: Default::default(),
         overlays: Default::default(),
@@ -363,6 +367,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::dialogs::mcp::install(&tui);
     crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
+    crate::plugins::host::install(&tui);
     tui.navigate(deps.route);
     crate::features::startup::run(&tui, deps.continue_);
     tui
