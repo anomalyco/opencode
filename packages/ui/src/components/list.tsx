@@ -1,8 +1,9 @@
 import { type FilteredListProps, useFilteredList } from "@opencode/ui/hooks"
-import { createEffect, For, type JSX, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
+import { listActive, listScrollTarget } from "../hooks/list-machine"
 import { Icon, type IconProps } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextField } from "./text-field"
@@ -28,11 +29,6 @@ export interface ListAddProps {
   render: () => JSX.Element
 }
 
-export interface ListAddProps {
-  class?: string
-  render: () => JSX.Element
-}
-
 export interface ListProps<T> extends FilteredListProps<T> {
   class?: string
   children: (item: T) => JSX.Element
@@ -40,9 +36,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   loadingMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   onMove?: (item: T | undefined) => void
-  onFilter?: (value: string) => void
   activeIcon?: IconProps["name"]
-  filter?: string
   search?: ListSearchProps | boolean
   itemWrapper?: (item: T, node: JSX.Element) => JSX.Element
   divider?: boolean
@@ -60,16 +54,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const i18n = useI18n()
   let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
 
-  const [store, setStore] = createStore({
-    mouseActive: false,
-    scrollRef: undefined as HTMLDivElement | undefined,
-    internalFilter: "",
-  })
-
-  const scrollRef = () => store.scrollRef
-  const setScrollRef = (el: HTMLDivElement | undefined) => setStore("scrollRef", el)
-  const internalFilter = () => store.internalFilter
-  const setInternalFilter = (value: string) => setStore("internalFilter", value)
+  const [scrollRef, setScrollRef] = createSignal<HTMLDivElement>()
 
   const scrollIntoView = (container: HTMLDivElement, node: HTMLElement, block: "center" | "nearest") => {
     const containerRect = container.getBoundingClientRect()
@@ -92,121 +77,43 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     container.scrollTop = Math.max(0, Math.min(target, max))
   }
 
-  const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
+  const list = useFilteredList<T>(props)
+  const keys = createMemo(() => list.state().keys)
+  const highlight = createMemo(() => list.state().highlight)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
   const searchAction = () => searchProps().action
   const addProps = () => props.add
   const showAdd = () => !!addProps()
 
-  const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
-
-  const applyFilter = (value: string, options?: { ref?: boolean }) => {
-    const prev = filter()
-    setInternalFilter(value)
-    onInput(value)
-    props.onFilter?.(value)
-
-    if (!options?.ref) return
-
-    // Force a refetch even if the value is unchanged.
-    // This is important for programmatic changes like Tab completion.
-    if (prev === value) {
-      void refetch()
-
-      return
-    }
-
-    queueMicrotask(() => refetch())
-  }
+  createEffect(on(list.filter, () => scrollRef()?.scrollTo(0, 0), { defer: true }))
 
   createEffect(() => {
-    if (props.filter === undefined) return
-
-    if (props.filter === internalFilter()) return
-    setInternalFilter(props.filter)
-    onInput(props.filter)
-  })
-
-  createEffect(
-    on(
-      filter,
-      () => {
-        scrollRef()?.scrollTo(0, 0)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(() => {
-    const all = flat()
-
-    if (store.mouseActive || all.length === 0) return
+    const target = listScrollTarget({ keys: keys(), highlight: highlight() })
     const scroll = scrollRef()
 
-    if (!scroll) return
+    if (!scroll || target.type === "none") return
 
-    if (active() === props.key(all[0])) {
-      scroll.scrollTo(0, 0)
+    if (target.type === "top") return scroll.scrollTo(0, 0)
+    const element = findByKey(scroll, target.key)
 
-      return
-    }
-
-    const key = active()
-
-    if (!key) return
-    const element = findByKey(scroll, key)
-
-    if (!element) return
-    scrollIntoView(scroll, element, "center")
+    if (element) scrollIntoView(scroll, element, "center")
   })
 
-  createEffect(() => {
-    const all = flat()
-    const current = active()
-    const item = all.find((x) => props.key(x) === current)
-    props.onMove?.(item)
-  })
+  const activeItem = createMemo(() => listActive(list.state())?.item)
 
-  const handleSelect = (item: T | undefined, index: number) => {
-    props.onSelect?.(item, index)
-  }
+  createEffect(() => props.onMove?.(activeItem()))
 
   const handleKey = (e: KeyboardEvent) => {
-    setStore("mouseActive", false)
-
-    if (e.key === "Escape") return
-
-    const all = flat()
-    const selected = all.find((x) => props.key(x) === active())
-    const index = selected ? all.indexOf(selected) : -1
-    props.onKeyEvent?.(e, selected)
-
-    if (e.defaultPrevented) return
-
-    if (e.key === "Enter" && !e.isComposing) {
-      e.preventDefault()
-
-      if (selected) handleSelect(selected, index)
-    } else if (props.search) {
-      if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")) {
-        onKeyDown(e)
-
-        return
-      }
-
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        onKeyDown(e)
-      }
-    } else {
-      onKeyDown(e)
-    }
+    if (e.key !== "Escape") props.onKeyEvent?.(e, activeItem())
+    list.onKeyDown(e, { search: !!props.search, claimed: e.key === "Escape" || e.defaultPrevented })
   }
 
   props.ref?.({
     onKeyDown: handleKey,
     setScrollRef,
-    setFilter: (value) => applyFilter(value, { ref: true }),
+    // Forces a reload even when the value is unchanged, for programmatic changes like Tab completion.
+    setFilter: (value) => list.dispatch({ type: "query.change", value, force: true }),
   })
 
   const renderAdd = () => {
@@ -251,11 +158,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   }
 
   const emptyMessage = () => {
-    if (grouped.loading) return props.loadingMessage ?? i18n.t("ui.list.loading")
+    if (list.grouped.loading) return props.loadingMessage ?? i18n.t("ui.list.loading")
 
     if (props.emptyMessage) return props.emptyMessage
 
-    const query = filter()
+    const query = list.filter()
 
     if (!query) return i18n.t("ui.list.empty")
 
@@ -304,8 +211,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 ref={(el: HTMLInputElement | HTMLTextAreaElement) => {
                   inputRef = el
                 }}
-                value={internalFilter()}
-                onChange={(value) => applyFilter(value)}
+                value={list.filter()}
+                onChange={(value) => list.onInput(value)}
                 onKeyDown={handleKey}
                 placeholder={searchProps().placeholder}
                 spellcheck={false}
@@ -314,12 +221,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 autocapitalize="off"
               />
             </div>
-            <Show when={internalFilter()}>
+            <Show when={list.filter()}>
               <IconButton
                 icon={<Icon name="circle-x" />}
                 variant="ghost"
                 onClick={() => {
-                  setInternalFilter("")
+                  list.clear()
                   queueMicrotask(() => inputRef?.focus())
                 }}
                 aria-label={i18n.t("ui.list.clearFilter")}
@@ -331,16 +238,16 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
         <Show
-          when={flat().length > 0 || showAdd()}
+          when={list.flat().length > 0 || showAdd()}
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">{emptyMessage()}</div>
             </div>
           }
         >
-          <For each={grouped.latest}>
+          <For each={list.grouped.latest}>
             {(group, groupIndex) => {
-              const isLastGroup = () => groupIndex() === grouped.latest.length - 1
+              const isLastGroup = () => groupIndex() === list.grouped.latest.length - 1
 
               return (
                 <div data-slot="list-group">
@@ -354,20 +261,19 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                           <button
                             data-slot="list-item"
                             data-key={props.key(item)}
-                            data-active={props.key(item) === active()}
+                            data-active={props.key(item) === list.active()}
                             data-selected={item === props.current}
-                            onClick={() => handleSelect(item, i())}
+                            onClick={() => props.onSelect?.(item, i())}
                             onKeyDown={handleKey}
                             type="button"
-                            onMouseMove={(event) => {
-                              if (!moved(event)) return
-                              setStore("mouseActive", true)
-                              setActive(props.key(item))
-                            }}
-                            onMouseLeave={() => {
-                              if (!store.mouseActive) return
-                              setActive(null)
-                            }}
+                            onMouseMove={(event) =>
+                              list.dispatch({
+                                type: "pointer.move",
+                                key: props.key(item),
+                                moved: event.movementX !== 0 || event.movementY !== 0,
+                              })
+                            }
+                            onMouseLeave={() => list.dispatch({ type: "pointer.leave" })}
                           >
                             {props.children(item)}
                             <Show when={item === props.current}>
@@ -401,7 +307,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               )
             }}
           </For>
-          <Show when={grouped.latest.length === 0 && showAdd()}>
+          <Show when={list.grouped.latest.length === 0 && showAdd()}>
             <div data-slot="list-group">
               <div data-slot="list-items">{renderAdd()}</div>
             </div>
