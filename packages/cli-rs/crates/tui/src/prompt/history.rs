@@ -1,69 +1,84 @@
 //! Prompt history (E.2, row P03): `<state>/prompt-history.jsonl`, shared by every prompt of the app
 //! (`prompt/history.tsx`), and Up and Down in the prompt (`component/prompt/index.tsx:1022-1096`).
 //!
-//! F.5's `jsonl::History` owns the format and the cursor. Loading and appending touch the file, so
-//! they run on blocking threads; stepping only reads memory and runs on the UI thread.
+//! F.5's `jsonl::History` owns the format and the cursor in memory; stepping and appending run on the
+//! UI thread. The file, which the TS TUI shares, is touched on one worker thread in order: the load
+//! first, then each new entry under the file's lock (`jsonl::save_history`).
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use opencode_local::jsonl;
+use opencode_local::serial::Serial;
 use opentui::native::EditorQuery;
 use opentui::prelude::*;
 use serde_json::Value;
 
 use super::editor::Inner;
 
-/// The app's prompt history. Without a state directory nothing is kept, as nothing is written.
+/// The app's prompt history. Without a state directory it lives in memory only.
 #[derive(Clone, Default)]
 pub struct History {
-    slot: Arc<Mutex<Option<jsonl::History>>>,
-    /// Entries not appended yet, in submit order.
-    queue: Arc<Mutex<Vec<Value>>>,
-    state: Option<PathBuf>,
+    memory: Arc<Mutex<Memory>>,
+    file: Option<(PathBuf, Serial)>,
+}
+
+#[derive(Default)]
+struct Memory {
+    history: jsonl::History,
+    /// Entries appended before the file was read, `None` once it is; they go after its entries.
+    early: Option<Vec<Value>>,
 }
 
 impl History {
-    /// Loads `<state>/prompt-history.jsonl` on a blocking thread; until then the history is empty.
-    pub fn load(app: &App, state: Option<PathBuf>) -> Self {
-        let history = Self {
-            state,
-            ..Self::default()
+    /// Loads `<state>/prompt-history.jsonl` on the worker; until then the history holds what was
+    /// appended meanwhile.
+    pub fn load(_app: &App, state: Option<PathBuf>) -> Self {
+        let Some(state) = state else {
+            return Self::default();
         };
-        history.write(app);
-        history
+        let memory = Arc::new(Mutex::new(Memory {
+            early: Some(Vec::new()),
+            ..Memory::default()
+        }));
+        let writer = Serial::new("prompt-history.jsonl");
+        let slot = memory.clone();
+        let file = state.clone();
+        writer.run(move || {
+            let mut history = jsonl::History::load(&file);
+            let Ok(mut memory) = slot.lock() else { return };
+            for entry in memory.early.take().unwrap_or_default() {
+                history.append(entry);
+            }
+            memory.history = history;
+        });
+        Self {
+            memory,
+            file: Some((state, writer)),
+        }
     }
 
     /// `move(direction, input)`.
     pub fn step(&self, direction: i64, input: &str) -> Option<Value> {
-        self.slot.lock().ok()?.as_mut()?.step(direction, input)
+        self.memory.lock().ok()?.history.step(direction, input)
     }
 
-    /// `append(entry)`, written on a blocking thread.
-    pub fn append(&self, app: &App, entry: Value) {
-        if self.state.is_none() {
-            return;
-        }
-        if let Ok(mut queue) = self.queue.lock() {
-            queue.push(entry);
-        }
-        self.write(app);
-    }
-
-    /// Loads the file if no task has yet, then appends every queued entry. Blocking tasks run in any order,
-    /// so each one takes the whole queue while it holds the history: entries land in submit order, and one
-    /// submitted before the load finished is not lost.
-    fn write(&self, app: &App) {
-        let Some(state) = self.state.clone() else {
+    /// `append(entry)`: in memory at once, and written after the load and every earlier entry.
+    pub fn append(&self, _app: &App, entry: Value) {
+        let Ok(mut memory) = self.memory.lock() else {
             return;
         };
-        let (slot, queue) = (self.slot.clone(), self.queue.clone());
-        app.runtime().spawn_blocking(move || {
-            let Ok(mut slot) = slot.lock() else { return };
-            let history = slot.get_or_insert_with(|| jsonl::History::load(&state));
-            let entries = queue.lock().map(|mut queue| std::mem::take(&mut *queue));
-            for entry in entries.unwrap_or_default() {
-                history.append(entry);
+        let added = memory.history.append(entry.clone());
+        if let Some(early) = memory.early.as_mut().filter(|_| added) {
+            early.push(entry.clone());
+        }
+        drop(memory);
+        let Some((state, writer)) = self.file.clone().filter(|_| added) else {
+            return;
+        };
+        writer.run(move || {
+            if let Err(error) = jsonl::save_history(&state, &entry) {
+                log::warn!("prompt-history.jsonl: {error}");
             }
         });
     }
