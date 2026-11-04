@@ -110,6 +110,7 @@ function SessionScreenContent(props: {
   const bottomOpen = createMemo(() => bottomTabs() && session.layout.view().bottom.opened())
 
   const drag = createPaneDrag({
+    identity: session.layout.tabKey,
     shown: (pane) => (pane === "bottom" ? bottomOpen() : region.pane(pane).keys().length > 0),
     drop: (key, target) =>
       batch(() => {
