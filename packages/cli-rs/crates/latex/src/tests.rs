@@ -179,23 +179,41 @@ fn streaming_keeps_the_last_formula_that_parsed() {
     assert!(!frames[2].contains("\\frac"), "{}", frames[2]);
 }
 
+/// `markdown.test.ts`: "discards an incomplete preview when the stream ends: close". The document still streams.
+#[test]
+fn closing_the_fence_drops_a_retained_preview() {
+    let frames = stream(&["```latex\nx^2", " + \\frac{1}{", "\n```"], false);
+    assert!(
+        frames[1].contains("x²") && !frames[1].contains('\\'),
+        "{}",
+        frames[1]
+    );
+    assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
+}
+
 /// `markdown.test.ts`: "discards an incomplete preview when the stream ends: stop", and "does not leave a stale
 /// formula when a stream ends with invalid math".
 #[test]
 fn stopping_drops_a_retained_preview() {
-    for broken in [" + \\frac{1}{", " + \\unsupported{x}\n```"] {
-        let frames = stream(&["```latex\nx^2", broken], true);
-        assert!(
-            frames[1].contains("x²") && !frames[1].contains("\\"),
-            "{}",
-            frames[1]
-        );
-        assert!(
-            frames[2].contains(broken.trim_end_matches("\n```").trim()),
-            "{}",
-            frames[2]
-        );
-    }
+    let frames = stream(&["```latex\nx^2", " + \\frac{1}{"], true);
+    assert!(
+        frames[1].contains("x²") && !frames[1].contains('\\'),
+        "{}",
+        frames[1]
+    );
+    assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
+    // The closing fence arrives with the broken math, so the source shows before the stream ends too.
+    let frames = stream(&["```latex\nx^2", " + \\unsupported{x}\n```"], true);
+    assert!(
+        frames[1].contains("x^2 + \\unsupported{x}"),
+        "{}",
+        frames[1]
+    );
+    assert!(
+        frames[2].contains("x^2 + \\unsupported{x}"),
+        "{}",
+        frames[2]
+    );
 }
 
 /// `markdown.test.ts`: "does not reuse another fence's preview or keep a removed fence's preview".
