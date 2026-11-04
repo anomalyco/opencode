@@ -27,7 +27,8 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
         failed(tui, "Set $VISUAL or $EDITOR to open an external editor");
         return;
     };
-    let snapshot = prompt.snapshot();
+    // The editor gets the pasted text, not the `[Pasted ~N lines]` labels (`expandPromptInputPastedText`).
+    let snapshot = super::paste::expand_prompt(&prompt.snapshot());
     let cwd = working_directory(tui, prompt);
     let weak = Rc::downgrade(prompt);
     tui.app.release_terminal(move |_| {
