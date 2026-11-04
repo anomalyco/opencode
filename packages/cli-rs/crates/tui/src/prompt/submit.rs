@@ -101,6 +101,9 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
             ToastOptions::new(Variant::Warning, "Connect an integration to send prompts")
                 .duration(std::time::Duration::from_secs(3)),
         );
+        if !tui.local.connected() {
+            crate::dialogs::integration::show(&tui.local, None);
+        }
         return false;
     };
     let uses_model = prompt.session.is_none() || mode != Mode::Shell;
