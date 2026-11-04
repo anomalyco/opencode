@@ -8,6 +8,8 @@
 // The provider loads <state>/prompt-history.jsonl first, which rewrites the file as TypeScript
 // serializes it. Prints one JSON array of results.
 
+import { statSync } from "node:fs"
+
 const [root, state] = process.argv.slice(2)
 if (!root || !state) throw new Error("usage: E.2-history.ts <ts-root> <state>")
 
@@ -20,6 +22,7 @@ const { PromptHistoryProvider, usePromptHistory } = await load("./prompt/history
 const ops = await Bun.stdin.json()
 
 let history: { move(direction: 1 | -1, input: string): { text: string } | undefined; append(item: unknown): void }
+const mounted = Date.now()
 const app = await testRender(() =>
   createComponent(TuiPathsProvider, {
     value: { cwd: state, home: state, state, worktree: state },
@@ -49,6 +52,8 @@ if ((await file.exists()) && (await file.text()).trim()) {
   })
   // Back to the end, where the ops start.
   if (newest) history!.move(1, newest.text)
+  // The load's rewrite is not awaited, and an append that lands before it is lost: wait for it.
+  await until(() => statSync(file.name!).mtimeMs >= mounted)
 }
 
 const output: unknown[] = []
