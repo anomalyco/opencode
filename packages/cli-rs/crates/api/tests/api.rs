@@ -167,7 +167,7 @@ async fn declared_errors_decode_and_other_statuses_do_not() {
         Some("Session not found: ses_1")
     );
     assert_eq!(error.reason(), "SessionNotFoundError");
-    assert_eq!(declared.decode::<Value>().unwrap()["sessionID"], "ses_1");
+    assert_eq!(declared.body["sessionID"], "ses_1");
 
     let script = Script::new(502, "text/plain", "bad gateway");
     let error = client(&script)

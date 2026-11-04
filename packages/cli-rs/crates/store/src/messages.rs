@@ -203,24 +203,14 @@ pub(crate) fn from_event(id: &EventID) -> SessionMessageID {
 
 /// Empties inline `data:` file payloads, keeping `data:<mime>;base64,` so the item still says
 /// what it was (`omitFileData`).
-pub(crate) fn omit_file_data(content: &mut [Value]) {
+pub(crate) fn omit_file_data(content: &mut [ToolContent]) {
     for item in content {
-        if item.get("type").and_then(Value::as_str) != Some("file") {
+        let ToolContent::File(file) = item else {
             continue;
+        };
+        if file.uri.starts_with("data:") {
+            file.uri = format!("data:{};base64,", file.mime);
         }
-        if !item
-            .get("uri")
-            .and_then(Value::as_str)
-            .is_some_and(|uri| uri.starts_with("data:"))
-        {
-            continue;
-        }
-        let mime = item
-            .get("mime")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        item["uri"] = Value::String(format!("data:{mime};base64,"));
     }
 }
 
@@ -934,7 +924,7 @@ fn running_compaction(transcript: &Transcript) -> Option<usize> {
     })
 }
 
-fn merge_native(target: &mut Option<SessionMessageNative>, next: &Option<SessionMessageNative1>) {
+fn merge_native(target: &mut Option<SessionMessageNative>, next: &Option<SessionMessageNative>) {
     if let Some(next) = next {
         target
             .get_or_insert_default()

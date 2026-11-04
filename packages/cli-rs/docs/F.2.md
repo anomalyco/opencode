@@ -22,7 +22,8 @@ writes `crates/api/src/generated/{types,methods}.rs`.
 | `Boolean` | `bool` |
 | `Unknown`, `Any`, `Schema.Json`, other declarations | `serde_json::Value` |
 | `Uint8Array` (binary bodies and responses) | `bytes::Bytes` |
-| Array with rest only | `Vec<T>`; a tuple becomes a Rust tuple |
+| Array with rest only, or `Schema.NonEmptyArray(T)` (`[T, ...T[]]`) | `Vec<T>`; a tuple becomes a Rust tuple |
+| `Ref_1` that differs from `Ref` only in what Rust cannot see | the type of `Ref` (see below) |
 | Fields of type `Never` | dropped (they can only be absent) |
 
 Fields:
@@ -32,6 +33,14 @@ Fields:
   `Option<Option<T>>` with `de::double_option`, so absent (`None`) and `null` (`Some(None)`) stay
   distinct.
 - Unknown fields are ignored (no `deny_unknown_fields`), so a newer server's additions decode.
+
+Twins: a schema reached both through REST (after the JSON transport) and through the event stream comes
+out as `Ref` and `Ref_1`. `Types.sameRust` compares them as Rust would decode them: it ignores
+annotations and checks other than `isInt`, treats `Unknown`, `Any`, and declarations alike, treats
+`null` and `undefined` members alike, and drops the JSON transport's `"Infinity"`, `"-Infinity"`, and
+`"NaN"` literals beside a number. Equal twins share the type of `Ref`, as httpapi-codegen collapses
+them. Twins that really differ (`Session.Inbox.MovePayload` has `LocationRef` on one side and
+`LocationPublicRef` on the other) keep two types.
 
 ## Unions
 
@@ -51,10 +60,22 @@ of four kinds:
    or a missing tag is `Unknown`. `Serialize` writes the member as it is. Member structs keep the tag
    field as a `String`, so a variant shared by several tags still knows its tag.
 
+   A member may itself be a union of objects. With one shared tag (`Session.Message.Compaction`, tagged
+   inside by `status`), `tag()` returns that tag. With several (`Session.Event.Durable` inside
+   `SessionLogItem`), every tag routes to the member, the inner enum must be tagged by the same key
+   (the emitter fails otherwise), and `tag()` delegates to it.
+
    `#[serde(tag = "...")]` is not used: serde rejects a payload on `#[serde(other)]`, and it cannot
    route a prefix (`plan.review-carbon.md`, carbon-3).
 4. **Anything else** (`String | Object`, `Boolean | Object`, objects told apart by required fields). An
-   `#[serde(untagged)]` enum with variants in schema order and a last `Unknown(serde_json::Value)`.
+   enum with variants in schema order and a last `Unknown(serde_json::Value)`, serialized untagged. Its
+   generated `Deserialize` tries the members in order. It skips an object member when one of its
+   required literal fields holds another value: the Rust field is a plain `bool` or `String`, so
+   without the check `Config.LSP.Entry` would read `{ command, disabled: false }` as `{ disabled: true }`.
+
+Declared errors: every generated `*Error` struct implements `error::TaggedError` with its `_tag` (or
+`name`). `DeclaredError::decode::<T>()` rejects a body with another tag, as the TypeScript `is<Error>`
+guards do, and `DeclaredError::is::<T>()` checks only the tag.
 
 ## Methods
 
