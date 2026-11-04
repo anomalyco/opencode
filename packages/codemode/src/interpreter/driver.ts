@@ -173,10 +173,12 @@ export class Driver<R> {
   // Starts host work now; its outcome goes back to the machine: a blocking call's continues the job that made it, a
   // concurrent call's waits in the inbox and settles its promise in a later job, in completion order.
   private launch(call: HostCall): void {
+    // A call that was running when its run was suspended was admitted then; running it again is not a new call.
+    const again = call.status !== "queued"
     call.status = "starting"
     const request = call.request
     if (request.kind === "tool" && this.tools.tool(request.path)?.durable !== undefined) {
-      return this.fork(call.id, this.tools.start(request.path, request.args, call.key), (handle) => {
+      return this.fork(call.id, this.tools.start(request.path, request.args, call.key, again), (handle) => {
         const current = this.machine.call(call.id)
         if (current === undefined) return
         current.status = "started"
@@ -184,8 +186,8 @@ export class Driver<R> {
         this.attach(current)
       })
     }
-    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args))
-    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args))
+    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args, again))
+    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args, again))
     // An extension's work, made by the extension bridge with the program's services in its requirements.
     return this.fork(call.id, this.machine.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>)
   }

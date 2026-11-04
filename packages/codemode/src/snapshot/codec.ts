@@ -447,7 +447,7 @@ class Encoder {
     }
     if (object instanceof Native) {
       // A host function made while the program ran: an extension's result. Its name says what was lost.
-      this.lose(`the function ${String(object.props.get("name") && "value" in object.props.get("name")! ? (object.props.get("name") as { value: unknown }).value : "")}`)
+      this.lose(`the function ${functionName(object)}`)
       return { t: "LostNative", ...this.fields(object, byName.get("Fn")!, ["length"]) }
     }
     const proto = Object.getPrototypeOf(object)
@@ -733,11 +733,10 @@ class Decoder {
       case "LostNative": {
         this.fillClass(target, record, byName.get("Fn")!, false, ["length"])
         const native = target as unknown as { tag: string; call: unknown; construct: unknown; callback: boolean }
-        const slot = (target as unknown as Obj).props.get("name")
-        const name = slot !== undefined && "value" in slot && typeof slot.value === "string" ? slot.value : ""
+        const name = functionName(target as unknown as Obj)
         native.tag = "Function"
         native.call = (_: unknown, __: unknown, site: AstNode | undefined) => {
-          throw lostError(`The function ${name || "(anonymous)"}`, site)
+          throw lostError(`The function ${name}`, site)
         }
         native.construct = undefined
         native.callback = true
@@ -871,6 +870,13 @@ class Decoder {
     }
     return invalid(`unknown tag ${String(value[0])}.`)
   }
+}
+
+const functionName = (fn: Obj): string => {
+  const slot = fn.props.get("name")
+  return slot !== undefined && "value" in slot && typeof slot.value === "string" && slot.value !== ""
+    ? slot.value
+    : "(anonymous)"
 }
 
 const base64 = (bytes: Uint8Array): string => {

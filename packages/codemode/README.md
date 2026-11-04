@@ -97,6 +97,55 @@ denies it: the host function is never called, and the program catches the failur
 fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
 throws.
 
+### Suspending and resuming a run
+
+`runtime.start(code, bindings?, { runId? })` starts a run that can be suspended: `run.result` runs it, and
+`run.suspend` stops it at the next step boundary and saves its state. Both give the same outcome, a `Result` or:
+
+```ts
+type Suspended = {
+  ok: "suspended"
+  state: CodeMode.Snapshot // JSON; CodeMode.toBytes / CodeMode.fromBytes convert it
+  pending: Array<{ id; path; args; key; status: "queued" | "starting" | "started" }>
+}
+
+const run = runtime.start(source)
+const fiber = yield* Effect.forkChild(run.result)
+const suspended = yield* run.suspend
+// later, in this process or another one built from the same version:
+const result = yield* runtime.resume(suspended.state, { [key]: { ok: true, value } }).result
+```
+
+Suspending waits briefly (`suspend.graceMs`, 50 ms by default) for running tool calls to finish, so their outcomes are
+saved. A durable tool's work keeps running and is reattached on resume; any other call still running has an unknown
+outcome: on resume it runs again if its tool declares `retry: "safe"`, and otherwise its promise rejects with an error
+the program can catch. `resume`'s second argument settles pending calls whose outcome the host already knows, by key.
+Every call has an idempotency key, `<runId>:<id>`.
+
+A state resumes only on the same build of this package, with the same extensions; `resume` throws a
+`CodeMode.SnapshotError` otherwise, or when the state is malformed. A state larger than `suspend.maxBytes` fails the run
+instead of suspending it. Built-ins are saved by name and only their changes are copied. Functions an extension returned have no data form: after a resume, calling one
+throws a `TypeError`. `timeoutMs` counts active time across every resume, and `maxToolCalls` counts every call of the run.
+
+A durable tool runs its work under the call's key and returns a JSON handle:
+
+```ts
+const build = Tool.make({
+  description: "Run a build",
+  input: Schema.Struct({ target: Schema.String }),
+  output: Schema.Struct({ ok: Schema.Boolean }),
+  durable: {
+    start: (input, { key }) => jobs.start(key, input), // launch the work, return a handle quickly
+    attach: (handle) => jobs.wait(handle), // its output; interrupting this detaches, never cancels
+    lookup: (key) => jobs.find(key), // a handle for work started before the run was saved, if any
+    cancel: (handle) => jobs.stop(handle), // a run that ends with the call still running cancels it
+  },
+})
+```
+
+Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests with every run saved to bytes and restored into a
+brand-new runtime at every host call and every few steps.
+
 ### `Extension.make`
 
 Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the

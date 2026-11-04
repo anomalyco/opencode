@@ -231,7 +231,11 @@ export const make = <
       bound.add(name)
     }
   }
-  if (options.suspend?.graceMs !== undefined) validateLimit("graceMs" as keyof ExecutionLimits, options.suspend.graceMs, 0)
+  for (const [name, value] of Object.entries(options.suspend ?? {})) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+      throw new RangeError(`suspend.${name} must be a safe integer greater than or equal to 0.`)
+    }
+  }
   const setup: Setup<Environment<Provided, Extensions>> = {
     prepared,
     limits,

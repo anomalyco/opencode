@@ -375,16 +375,23 @@ export class ToolRuntimeError extends Error {
 export type ToolRuntime<R = never> = {
   readonly calls: Array<ToolCall>
   readonly hooks: Hooks<R>
+  /** Runs a tool call. `again` runs one admitted before, re-run on resume: it is not counted a second time. */
   readonly execute: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
+    again?: boolean,
   ) => Effect.Effect<Json | undefined, unknown, R>
-  readonly search: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>
+  readonly search: (args: Array<Json | undefined>, again?: boolean) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   /** The tool at `path`, if there is one, so a caller can see whether it is durable or safe to retry. */
   readonly tool: (path: ReadonlyArray<string>) => Tool<R> | undefined
   /** Admits a call to a durable tool, as `execute` does, and starts its work under `key`: its handle. */
-  readonly start: (path: ReadonlyArray<string>, args: Array<Json | undefined>, key: string) => Effect.Effect<Handle, unknown, R>
+  readonly start: (
+    path: ReadonlyArray<string>,
+    args: Array<Json | undefined>,
+    key: string,
+    again?: boolean,
+  ) => Effect.Effect<Handle, unknown, R>
   /** Waits for a durable tool's work: its output, as `execute` gives it. Interrupting it detaches. */
   readonly attach: (
     path: ReadonlyArray<string>,
@@ -454,10 +461,10 @@ export const make = <R>(
       catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
     })
 
-  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
+  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, again = false) =>
     Effect.gen(function* () {
       const input = yield* decode(name, tool, args)
-      yield* Effect.sync(() => recordCall({ name }))
+      if (!again) yield* Effect.sync(() => recordCall({ name }))
       return yield* hooked(
         { name, input },
         hooks["tool.before"],
@@ -479,22 +486,23 @@ export const make = <R>(
     calls,
     hooks,
     keys: (path) => namespaceKeys(root, path),
-    search: (args) => Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args)),
-    execute: (path, args) =>
+    search: (args, again) =>
+      Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args, again)),
+    execute: (path, args, again) =>
       Effect.suspend(() => {
         const segments = canonicalSegments(path)
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", makeSearchTool(prepared.searchIndex), args)
-        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args)
+          return executeTool("search", makeSearchTool(prepared.searchIndex), args, again)
+        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, again)
       }),
     tool: (path) => lookup(root, canonicalSegments(path))?.tool,
-    start: (path, args, key) =>
+    start: (path, args, key, again) =>
       Effect.suspend(() => {
         const found = durableTool(path)
         return Effect.gen(function* () {
           const input = yield* decode(found.name, found.tool, args)
-          yield* Effect.sync(() => recordCall({ name: found.name }))
+          if (!again) yield* Effect.sync(() => recordCall({ name: found.name }))
           const before = hooks["tool.before"]
           if (before !== undefined) yield* before({ name: found.name, input })
           return yield* failure(Effect.suspend(() => found.durable.start(input, { key })))
