@@ -262,6 +262,20 @@ impl<'de> Deserialize<'de> for ProviderCompaction {
     }
 }
 
+impl ProviderCompaction {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Summary(value) => value.r#type.as_str(),
+            Self::Native(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// `Provider.CacheTTL`
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -690,6 +704,22 @@ impl<'de> Deserialize<'de> for PluginSource {
     }
 }
 
+impl PluginSource {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Builtin(value) => value.r#type.as_str(),
+            Self::Package(value) => value.r#type.as_str(),
+            Self::Local(value) => value.r#type.as_str(),
+            Self::Sdk(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginFeatures {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -732,6 +762,20 @@ impl<'de> Deserialize<'de> for PluginState {
             Some("active") => crate::de::variant(value).map(Self::Active),
             Some("failed") => crate::de::variant(value).map(Self::Failed),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl PluginState {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Active(value) => value.status.as_str(),
+            Self::Failed(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -992,6 +1036,20 @@ impl<'de> Deserialize<'de> for SessionForkBoundary {
             Some("before") => crate::de::variant(value).map(Self::Before),
             Some("through") => crate::de::variant(value).map(Self::Through),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionForkBoundary {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Before(value) => value.r#type.as_str(),
+            Self::Through(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -1381,6 +1439,20 @@ impl<'de> Deserialize<'de> for PromptFileSource {
             Some("inline") => crate::de::variant(value).map(Self::Inline),
             Some("uri") => crate::de::variant(value).map(Self::Uri),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl PromptFileSource {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Inline(value) => value.r#type.as_str(),
+            Self::Uri(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -2013,6 +2085,22 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantToolState {
     }
 }
 
+impl SessionMessageAssistantToolState {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Streaming(value) => value.status.as_str(),
+            Self::Running(value) => value.status.as_str(),
+            Self::Completed(value) => value.status.as_str(),
+            Self::Error(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantToolTime {
     pub created: f64,
@@ -2053,6 +2141,21 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantContentItem {
             Some("reasoning") => crate::de::variant(value).map(Self::Reasoning),
             Some("tool") => crate::de::variant(value).map(Self::Tool),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionMessageAssistantContentItem {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Text(value) => value.r#type.as_str(),
+            Self::Reasoning(value) => value.r#type.as_str(),
+            Self::Tool(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -2265,6 +2368,21 @@ impl<'de> Deserialize<'de> for SessionMessageCompaction {
     }
 }
 
+impl SessionMessageCompaction {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Running(value) => value.status.as_str(),
+            Self::Completed(value) => value.status.as_str(),
+            Self::Failed(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageIdle {
     pub id: SessionMessageID,
@@ -2358,6 +2476,22 @@ impl<'de> Deserialize<'de> for SessionInboxInfo {
             Some("compaction") => crate::de::variant(value).map(Self::Compaction),
             Some("move") => crate::de::variant(value).map(Self::Move),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionInboxInfo {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::User(value) => value.r#type.as_str(),
+            Self::Synthetic(value) => value.r#type.as_str(),
+            Self::Compaction(value) => value.r#type.as_str(),
+            Self::Move(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -2554,6 +2688,21 @@ impl<'de> Deserialize<'de> for FormState {
     }
 }
 
+impl FormState {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Pending(value) => value.status.as_str(),
+            Self::Answered(value) => value.status.as_str(),
+            Self::Cancelled(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormDetail {
     pub id: FormID,
@@ -2733,6 +2882,21 @@ impl<'de> Deserialize<'de> for SessionStatsTools {
             Some("summary") => crate::de::variant(value).map(Self::Summary),
             Some("detail") => crate::de::variant(value).map(Self::Detail),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionStatsTools {
+    /// The `mode` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::None(value) => value.mode.as_str(),
+            Self::Summary(value) => value.mode.as_str(),
+            Self::Detail(value) => value.mode.as_str(),
+            Self::Unknown(value) => value
+                .get("mode")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -3368,6 +3532,22 @@ impl<'de> Deserialize<'de> for SessionInboxItem {
             Some("compaction") => crate::de::variant(value).map(Self::Compaction),
             Some("move") => crate::de::variant(value).map(Self::Move),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionInboxItem {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::User(value) => value.r#type.as_str(),
+            Self::Synthetic(value) => value.r#type.as_str(),
+            Self::Compaction(value) => value.r#type.as_str(),
+            Self::Move(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -4293,6 +4473,22 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantTool1State {
     }
 }
 
+impl SessionMessageAssistantTool1State {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Streaming(value) => value.status.as_str(),
+            Self::Running(value) => value.status.as_str(),
+            Self::Completed(value) => value.status.as_str(),
+            Self::Error(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageAssistantTool1 {
     pub r#type: String,
@@ -4325,6 +4521,21 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantContentEncoded {
             Some("reasoning") => crate::de::variant(value).map(Self::Reasoning),
             Some("tool") => crate::de::variant(value).map(Self::Tool),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionMessageAssistantContentEncoded {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Text(value) => value.r#type.as_str(),
+            Self::Reasoning(value) => value.r#type.as_str(),
+            Self::Tool(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -4514,6 +4725,65 @@ impl<'de> Deserialize<'de> for SessionEventDurable {
                 crate::de::variant(value).map(Self::SessionMessageContentUpdated)
             }
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionEventDurable {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::SessionCreated(value) => value.r#type.as_str(),
+            Self::SessionAgentSelected(value) => value.r#type.as_str(),
+            Self::SessionModelSelected(value) => value.r#type.as_str(),
+            Self::SessionMoved(value) => value.r#type.as_str(),
+            Self::SessionRenamed(value) => value.r#type.as_str(),
+            Self::SessionMetadataUpdated(value) => value.r#type.as_str(),
+            Self::SessionPermissions(value) => value.r#type.as_str(),
+            Self::SessionViewed(value) => value.r#type.as_str(),
+            Self::SessionArchived(value) => value.r#type.as_str(),
+            Self::SessionUnarchived(value) => value.r#type.as_str(),
+            Self::SessionDeleted(value) => value.r#type.as_str(),
+            Self::SessionForked(value) => value.r#type.as_str(),
+            Self::SessionInboxDelivered(value) => value.r#type.as_str(),
+            Self::SessionInboxEnqueued(value) => value.r#type.as_str(),
+            Self::SessionInboxCancelled(value) => value.r#type.as_str(),
+            Self::SessionInboxDeliveryChanged(value) => value.r#type.as_str(),
+            Self::SessionExecutionStarted(value) => value.r#type.as_str(),
+            Self::SessionExecutionSucceeded(value) => value.r#type.as_str(),
+            Self::SessionExecutionFailed(value) => value.r#type.as_str(),
+            Self::SessionExecutionInterrupted(value) => value.r#type.as_str(),
+            Self::SessionInstructionsUpdated(value) => value.r#type.as_str(),
+            Self::SessionSynthetic(value) => value.r#type.as_str(),
+            Self::SessionSkillActivated(value) => value.r#type.as_str(),
+            Self::SessionShellStarted(value) => value.r#type.as_str(),
+            Self::SessionShellEnded(value) => value.r#type.as_str(),
+            Self::SessionStepStarted(value) => value.r#type.as_str(),
+            Self::SessionStepStreamed(value) => value.r#type.as_str(),
+            Self::SessionStepEnded(value) => value.r#type.as_str(),
+            Self::SessionStepFailed(value) => value.r#type.as_str(),
+            Self::SessionTextStarted(value) => value.r#type.as_str(),
+            Self::SessionTextEnded(value) => value.r#type.as_str(),
+            Self::SessionReasoningStarted(value) => value.r#type.as_str(),
+            Self::SessionReasoningEnded(value) => value.r#type.as_str(),
+            Self::SessionToolInputStarted(value) => value.r#type.as_str(),
+            Self::SessionToolInputEnded(value) => value.r#type.as_str(),
+            Self::SessionToolCalled(value) => value.r#type.as_str(),
+            Self::SessionToolSuccess(value) => value.r#type.as_str(),
+            Self::SessionToolFailed(value) => value.r#type.as_str(),
+            Self::SessionRetryScheduled(value) => value.r#type.as_str(),
+            Self::SessionCompactionStarted(value) => value.r#type.as_str(),
+            Self::SessionCompactionEnded(value) => value.r#type.as_str(),
+            Self::SessionCompactionFailed(value) => value.r#type.as_str(),
+            Self::SessionRevertStaged(value) => value.r#type.as_str(),
+            Self::SessionRevertCleared(value) => value.r#type.as_str(),
+            Self::SessionRevertCommitted(value) => value.r#type.as_str(),
+            Self::SessionUsageRecorded(value) => value.r#type.as_str(),
+            Self::SessionMessageContentUpdated(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -5200,6 +5470,21 @@ impl<'de> Deserialize<'de> for GenerateDecisionPart {
     }
 }
 
+impl GenerateDecisionPart {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Text(value) => value.r#type.as_str(),
+            Self::Json(value) => value.r#type.as_str(),
+            Self::File(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GeneratePredicateQuestion {
     pub r#type: String,
@@ -5266,6 +5551,21 @@ impl<'de> Deserialize<'de> for GenerateDecisionQuestion {
             Some("choice") => crate::de::variant(value).map(Self::Choice),
             Some("score") => crate::de::variant(value).map(Self::Score),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl GenerateDecisionQuestion {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Predicate(value) => value.r#type.as_str(),
+            Self::Choice(value) => value.r#type.as_str(),
+            Self::Score(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -5346,6 +5646,22 @@ impl<'de> Deserialize<'de> for GenerateDecisionAnswer {
             Some("score") => crate::de::variant(value).map(Self::Score),
             Some("error") => crate::de::variant(value).map(Self::Error),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl GenerateDecisionAnswer {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Predicate(value) => value.r#type.as_str(),
+            Self::Choice(value) => value.r#type.as_str(),
+            Self::Score(value) => value.r#type.as_str(),
+            Self::Error(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -5454,6 +5770,20 @@ impl<'de> Deserialize<'de> for VoiceTransportInput {
     }
 }
 
+impl VoiceTransportInput {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Webrtc(value) => value.r#type.as_str(),
+            Self::Websocket(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// Input of [`Client::experimental_voice_session`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalVoiceSessionInput {
@@ -5494,6 +5824,20 @@ impl<'de> Deserialize<'de> for VoiceTransport {
             Some("webrtc") => crate::de::variant(value).map(Self::Webrtc),
             Some("websocket") => crate::de::variant(value).map(Self::Websocket),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl VoiceTransport {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Webrtc(value) => value.r#type.as_str(),
+            Self::Websocket(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -5785,6 +6129,23 @@ impl<'de> Deserialize<'de> for IntegrationMethod {
     }
 }
 
+impl IntegrationMethod {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Oauth(value) => value.r#type.as_str(),
+            Self::Command(value) => value.r#type.as_str(),
+            Self::Key(value) => value.r#type.as_str(),
+            Self::External(value) => value.r#type.as_str(),
+            Self::Env(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// `Credential.ID`
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -5900,6 +6261,20 @@ impl<'de> Deserialize<'de> for ConnectionInfo {
             Some("credential") => crate::de::variant(value).map(Self::Credential),
             Some("env") => crate::de::variant(value).map(Self::Env),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl ConnectionInfo {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Credential(value) => value.r#type.as_str(),
+            Self::Env(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -6112,6 +6487,22 @@ impl<'de> Deserialize<'de> for IntegrationAttemptStatus {
     }
 }
 
+impl IntegrationAttemptStatus {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Pending(value) => value.status.as_str(),
+            Self::Complete(value) => value.status.as_str(),
+            Self::Failed(value) => value.status.as_str(),
+            Self::Expired(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationOauthStatusOutput {
     pub location: LocationPublicRef,
@@ -6223,6 +6614,22 @@ impl<'de> Deserialize<'de> for IntegrationCommandAttemptStatus {
     }
 }
 
+impl IntegrationCommandAttemptStatus {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Pending(value) => value.status.as_str(),
+            Self::Complete(value) => value.status.as_str(),
+            Self::Failed(value) => value.status.as_str(),
+            Self::Expired(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandStatusOutput {
     pub location: LocationPublicRef,
@@ -6299,6 +6706,23 @@ impl<'de> Deserialize<'de> for McpServerStatus {
             Some("failed") => crate::de::variant(value).map(Self::Failed),
             Some("needs_auth") => crate::de::variant(value).map(Self::NeedsAuth),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl McpServerStatus {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Connected(value) => value.status.as_str(),
+            Self::Pending(value) => value.status.as_str(),
+            Self::Disabled(value) => value.status.as_str(),
+            Self::Failed(value) => value.status.as_str(),
+            Self::NeedsAuth(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -6499,6 +6923,20 @@ impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfig {
     }
 }
 
+impl ExperimentalMcpAddInputConfig {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Local(value) => value.r#type.as_str(),
+            Self::Remote(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// Input of [`Client::experimental_mcp_add`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalMcpAddInput {
@@ -6596,6 +7034,21 @@ impl<'de> Deserialize<'de> for CredentialValue {
             Some("key") => crate::de::variant(value).map(Self::Key),
             Some("external") => crate::de::variant(value).map(Self::External),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl CredentialValue {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Oauth(value) => value.r#type.as_str(),
+            Self::Key(value) => value.r#type.as_str(),
+            Self::External(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -7152,18 +7605,10 @@ pub struct RpcOutput {
 /// Output of [`Client::rpc_call`].
 pub type RpcCallOutput = RpcOutput;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum EventSubscribeInputTypesItem {
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
 /// Input of [`Client::event_subscribe`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventSubscribeInput {
-    pub types: Option<Vec<EventSubscribeInputTypesItem>>,
+    pub types: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7182,6 +7627,9 @@ pub struct LocationShutdown {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelsDevRefreshedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelsDevRefreshed {
     pub id: EventID,
     pub created: f64,
@@ -7190,8 +7638,11 @@ pub struct ModelsDevRefreshed {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: ModelsDevRefreshedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct CredentialUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialUpdated {
@@ -7202,7 +7653,7 @@ pub struct CredentialUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: CredentialUpdatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7226,6 +7677,9 @@ pub struct CredentialSwitched {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct IntegrationUpdatedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationUpdated {
     pub id: EventID,
     pub created: f64,
@@ -7234,8 +7688,11 @@ pub struct IntegrationUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: IntegrationUpdatedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ProviderUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderUpdated {
@@ -7246,8 +7703,11 @@ pub struct ProviderUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: ProviderUpdatedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelUpdated {
@@ -7258,8 +7718,11 @@ pub struct ModelUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: ModelUpdatedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AgentUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AgentUpdated {
@@ -7270,7 +7733,7 @@ pub struct AgentUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: AgentUpdatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7452,6 +7915,9 @@ pub struct FilesystemChanged {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ReferenceUpdatedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ReferenceUpdated {
     pub id: EventID,
     pub created: f64,
@@ -7460,7 +7926,7 @@ pub struct ReferenceUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: ReferenceUpdatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7514,6 +7980,9 @@ pub struct PermissionReplied {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PluginUpdatedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginUpdated {
     pub id: EventID,
     pub created: f64,
@@ -7522,7 +7991,7 @@ pub struct PluginUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: PluginUpdatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7595,6 +8064,9 @@ pub struct WorktreeResolved {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct CommandUpdatedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CommandUpdated {
     pub id: EventID,
     pub created: f64,
@@ -7603,8 +8075,11 @@ pub struct CommandUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: CommandUpdatedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ConfigUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigUpdated {
@@ -7615,8 +8090,11 @@ pub struct ConfigUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: ConfigUpdatedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SkillUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SkillUpdated {
@@ -7627,7 +8105,7 @@ pub struct SkillUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: SkillUpdatedData,
 }
 
 /// `Pty.ID`
@@ -7989,6 +8467,9 @@ pub struct FormCancelled {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct WebsearchUpdatedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebsearchUpdated {
     pub id: EventID,
     pub created: f64,
@@ -7997,8 +8478,11 @@ pub struct WebsearchUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: WebsearchUpdatedData,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ArtifactUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactUpdated {
@@ -8009,7 +8493,7 @@ pub struct ArtifactUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: LocationShutdownData,
+    pub data: ArtifactUpdatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8062,6 +8546,21 @@ impl<'de> Deserialize<'de> for SessionStatus {
             Some("retry") => crate::de::variant(value).map(Self::Retry),
             Some("busy") => crate::de::variant(value).map(Self::Busy),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionStatus {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Idle(value) => value.r#type.as_str(),
+            Self::Retry(value) => value.r#type.as_str(),
+            Self::Busy(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -8299,6 +8798,9 @@ pub struct V2EventRpc {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct V2EventServerConnectedData {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventServerConnected {
     pub id: EventID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8306,7 +8808,7 @@ pub struct V2EventServerConnected {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationPublicRef>,
     pub r#type: String,
-    pub data: LocationShutdownData,
+    pub data: V2EventServerConnectedData,
 }
 
 /// `V2Event`, tagged by `type`.
@@ -8590,6 +9092,116 @@ impl<'de> Deserialize<'de> for V2Event {
             Some("server.connected") => crate::de::variant(value).map(Self::ServerConnected),
             Some(tag) if tag.starts_with("rpc.") => crate::de::variant(value).map(Self::Rpc),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl V2Event {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::LocationShutdown(value) => value.r#type.as_str(),
+            Self::ModelsDevRefreshed(value) => value.r#type.as_str(),
+            Self::CredentialUpdated(value) => value.r#type.as_str(),
+            Self::CredentialSwitched(value) => value.r#type.as_str(),
+            Self::IntegrationUpdated(value) => value.r#type.as_str(),
+            Self::ProviderUpdated(value) => value.r#type.as_str(),
+            Self::ModelUpdated(value) => value.r#type.as_str(),
+            Self::AgentUpdated(value) => value.r#type.as_str(),
+            Self::SessionCreated(value) => value.r#type.as_str(),
+            Self::SessionAgentSelected(value) => value.r#type.as_str(),
+            Self::SessionModelSelected(value) => value.r#type.as_str(),
+            Self::SessionMoved(value) => value.r#type.as_str(),
+            Self::SessionRenamed(value) => value.r#type.as_str(),
+            Self::SessionMetadataUpdated(value) => value.r#type.as_str(),
+            Self::SessionPermissions(value) => value.r#type.as_str(),
+            Self::SessionViewed(value) => value.r#type.as_str(),
+            Self::SessionArchived(value) => value.r#type.as_str(),
+            Self::SessionUnarchived(value) => value.r#type.as_str(),
+            Self::SessionUsageUpdated(value) => value.r#type.as_str(),
+            Self::SessionDeleted(value) => value.r#type.as_str(),
+            Self::SessionForked(value) => value.r#type.as_str(),
+            Self::SessionInboxDelivered(value) => value.r#type.as_str(),
+            Self::SessionInboxEnqueued(value) => value.r#type.as_str(),
+            Self::SessionInboxCancelled(value) => value.r#type.as_str(),
+            Self::SessionInboxDeliveryChanged(value) => value.r#type.as_str(),
+            Self::SessionExecutionStarted(value) => value.r#type.as_str(),
+            Self::SessionExecutionSucceeded(value) => value.r#type.as_str(),
+            Self::SessionExecutionFailed(value) => value.r#type.as_str(),
+            Self::SessionExecutionInterrupted(value) => value.r#type.as_str(),
+            Self::SessionInstructionsUpdated(value) => value.r#type.as_str(),
+            Self::SessionSynthetic(value) => value.r#type.as_str(),
+            Self::SessionSkillActivated(value) => value.r#type.as_str(),
+            Self::SessionShellStarted(value) => value.r#type.as_str(),
+            Self::SessionShellEnded(value) => value.r#type.as_str(),
+            Self::SessionStepStarted(value) => value.r#type.as_str(),
+            Self::SessionStepStreamed(value) => value.r#type.as_str(),
+            Self::SessionStepEnded(value) => value.r#type.as_str(),
+            Self::SessionStepFailed(value) => value.r#type.as_str(),
+            Self::SessionTextStarted(value) => value.r#type.as_str(),
+            Self::SessionTextDelta(value) => value.r#type.as_str(),
+            Self::SessionTextEnded(value) => value.r#type.as_str(),
+            Self::SessionReasoningStarted(value) => value.r#type.as_str(),
+            Self::SessionReasoningDelta(value) => value.r#type.as_str(),
+            Self::SessionReasoningEnded(value) => value.r#type.as_str(),
+            Self::SessionToolInputStarted(value) => value.r#type.as_str(),
+            Self::SessionToolInputDelta(value) => value.r#type.as_str(),
+            Self::SessionToolInputEnded(value) => value.r#type.as_str(),
+            Self::SessionToolCalled(value) => value.r#type.as_str(),
+            Self::SessionToolProgress(value) => value.r#type.as_str(),
+            Self::SessionToolSuccess(value) => value.r#type.as_str(),
+            Self::SessionToolFailed(value) => value.r#type.as_str(),
+            Self::SessionRetryScheduled(value) => value.r#type.as_str(),
+            Self::SessionCompactionStarted(value) => value.r#type.as_str(),
+            Self::SessionCompactionDelta(value) => value.r#type.as_str(),
+            Self::SessionCompactionEnded(value) => value.r#type.as_str(),
+            Self::SessionCompactionFailed(value) => value.r#type.as_str(),
+            Self::SessionRevertStaged(value) => value.r#type.as_str(),
+            Self::SessionRevertCleared(value) => value.r#type.as_str(),
+            Self::SessionRevertCommitted(value) => value.r#type.as_str(),
+            Self::FilesystemChanged(value) => value.r#type.as_str(),
+            Self::ReferenceUpdated(value) => value.r#type.as_str(),
+            Self::PermissionAsked(value) => value.r#type.as_str(),
+            Self::PermissionReplied(value) => value.r#type.as_str(),
+            Self::PluginUpdated(value) => value.r#type.as_str(),
+            Self::ProjectUpdated(value) => value.r#type.as_str(),
+            Self::WorktreeUpdated(value) => value.r#type.as_str(),
+            Self::WorktreeResolved(value) => value.r#type.as_str(),
+            Self::CommandUpdated(value) => value.r#type.as_str(),
+            Self::ConfigUpdated(value) => value.r#type.as_str(),
+            Self::SkillUpdated(value) => value.r#type.as_str(),
+            Self::PtyCreated(value) => value.r#type.as_str(),
+            Self::PtyUpdated(value) => value.r#type.as_str(),
+            Self::PtyExited(value) => value.r#type.as_str(),
+            Self::PtyDeleted(value) => value.r#type.as_str(),
+            Self::PersistentPtyAdded(value) => value.r#type.as_str(),
+            Self::PersistentPtyRemoved(value) => value.r#type.as_str(),
+            Self::PersistentPtyUpdated(value) => value.r#type.as_str(),
+            Self::ShellCreated(value) => value.r#type.as_str(),
+            Self::ShellExited(value) => value.r#type.as_str(),
+            Self::ShellDeleted(value) => value.r#type.as_str(),
+            Self::FormCreated(value) => value.r#type.as_str(),
+            Self::FormReplied(value) => value.r#type.as_str(),
+            Self::FormCancelled(value) => value.r#type.as_str(),
+            Self::WebsearchUpdated(value) => value.r#type.as_str(),
+            Self::ArtifactUpdated(value) => value.r#type.as_str(),
+            Self::SessionStatus(value) => value.r#type.as_str(),
+            Self::SessionIdle(value) => value.r#type.as_str(),
+            Self::TuiPromptAppend(value) => value.r#type.as_str(),
+            Self::TuiCommandExecute(value) => value.r#type.as_str(),
+            Self::TuiToastShow(value) => value.r#type.as_str(),
+            Self::TuiSessionSelect(value) => value.r#type.as_str(),
+            Self::InstallationUpdated(value) => value.r#type.as_str(),
+            Self::InstallationUpdateAvailable(value) => value.r#type.as_str(),
+            Self::VcsBranchUpdated(value) => value.r#type.as_str(),
+            Self::McpStatusChanged(value) => value.r#type.as_str(),
+            Self::McpResourcesChanged(value) => value.r#type.as_str(),
+            Self::Rpc(value) => value.r#type.as_str(),
+            Self::ServerConnected(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -9051,6 +9663,22 @@ impl<'de> Deserialize<'de> for ScheduleWhen {
     }
 }
 
+impl ScheduleWhen {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::In(value) => value.r#type.as_str(),
+            Self::At(value) => value.r#type.as_str(),
+            Self::Every(value) => value.r#type.as_str(),
+            Self::Cron(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ScheduleConditionShell {
     pub r#type: String,
@@ -9086,6 +9714,20 @@ impl<'de> Deserialize<'de> for ScheduleCondition {
             Some("shell") => crate::de::variant(value).map(Self::Shell),
             Some("code") => crate::de::variant(value).map(Self::Code),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl ScheduleCondition {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.r#type.as_str(),
+            Self::Code(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -9689,6 +10331,21 @@ impl<'de> Deserialize<'de> for JobInfo {
     }
 }
 
+impl JobInfo {
+    /// The `kind` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.kind.as_str(),
+            Self::Subagent(value) => value.kind.as_str(),
+            Self::Image(value) => value.kind.as_str(),
+            Self::Unknown(value) => value
+                .get("kind")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// Output of [`Client::experimental_job_list`].
 pub type ExperimentalJobListOutput = Vec<JobInfo>;
 
@@ -9810,6 +10467,20 @@ impl<'de> Deserialize<'de> for ReferenceSource {
             Some("local") => crate::de::variant(value).map(Self::Local),
             Some("git") => crate::de::variant(value).map(Self::Git),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl ReferenceSource {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Local(value) => value.r#type.as_str(),
+            Self::Git(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -10232,6 +10903,21 @@ impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2 {
             Some("running") => crate::de::variant(value).map(Self::Running),
             Some("error") => crate::de::variant(value).map(Self::Error),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl ExperimentalMigrationV1StatusOutput2 {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Variant1(value) => value.status.as_str(),
+            Self::Running(value) => value.status.as_str(),
+            Self::Error(value) => value.status.as_str(),
+            Self::Unknown(value) => value
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }
@@ -11375,6 +12061,20 @@ impl<'de> Deserialize<'de> for ConfigEntry {
             Some("document") => crate::de::variant(value).map(Self::Document),
             Some("directory") => crate::de::variant(value).map(Self::Directory),
             _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl ConfigEntry {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Document(value) => value.r#type.as_str(),
+            Self::Directory(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
         }
     }
 }

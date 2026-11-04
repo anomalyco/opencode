@@ -48,6 +48,16 @@ impl Error {
     }
 }
 
+impl From<crate::sse::Error> for Error {
+    fn from(error: crate::sse::Error) -> Self {
+        match error {
+            crate::sse::Error::Transport(cause) => Self::Transport(cause),
+            crate::sse::Error::MalformedResponse(cause) => Self::MalformedResponse(cause),
+            crate::sse::Error::EventTooLarge => Self::SseEventTooLarge,
+        }
+    }
+}
+
 /// A declared error body. The tag is `_tag`, else `name`; the message is `message`, else `data.message`,
 /// as `declared` in the TypeScript client.
 #[derive(Debug, Clone, PartialEq)]

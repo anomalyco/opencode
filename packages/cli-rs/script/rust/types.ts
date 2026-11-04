@@ -89,6 +89,8 @@ export class Types {
       case "Never":
         return "()"
       case "Objects":
+        // An empty object says nothing about its role, so it keeps its own name instead of sharing one.
+        if (r.propertySignatures.length === 0 && r.indexSignatures.length === 0) return this.objects(r, this.name(hint), hint)
         return this.shaped(r, () => this.objects(r, this.name(hint), hint))
       case "Arrays":
         return this.arrays(r, hint)
@@ -232,7 +234,7 @@ export class Types {
         return wrap(values.every(Number.isInteger) ? "i64" : "f64")
       return wrap("serde_json::Value")
     }
-    if (resolved.every((member) => member._tag === "Literal" || member._tag === "String")) return wrap("String")
+    if (resolved.every((member) => ["Literal", "String", "TemplateLiteral"].includes(member._tag))) return wrap("String")
     if (resolved.every((member) => member._tag === "Objects")) {
       const tagged = this.discriminator(resolved as Array<Objects>)
       if (tagged !== undefined) return wrap(this.tagged(rest, tagged, ref ?? hint, ref))
@@ -324,9 +326,13 @@ export class Types {
       ),
     ])
     const ordered = [...arms.filter((arm) => !arm.includes("starts_with")), ...arms.filter((arm) => arm.includes("starts_with"))]
+    const tagMethod =
+      kind === "boolean"
+        ? ""
+        : `\n\nimpl ${name} {\n    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map((variant) => `            Self::${variant}(value) => value.${snake(tag.key)}.as_str(),`).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }\n}`
     const doc = ref === undefined ? "" : `/// \`${ref}\`, tagged by \`${tag.key}\`.\n`
     this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n        match value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::${access}) {\n${ordered.join("\n")}\n            _ => Ok(Self::Unknown(value)),\n        }\n    }\n}`,
+      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n        match value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::${access}) {\n${ordered.join("\n")}\n            _ => Ok(Self::Unknown(value)),\n        }\n    }\n}${tagMethod}`,
     )
     return name
   }

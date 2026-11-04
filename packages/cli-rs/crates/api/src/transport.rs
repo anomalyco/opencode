@@ -6,6 +6,10 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
+use serde::de::DeserializeOwned;
+
+use crate::error::Error;
+use crate::generated::V2Event;
 
 /// A future a transport returns.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -77,6 +81,24 @@ impl<T> SseResponse<T> {
             response,
             event: PhantomData,
         }
+    }
+}
+
+impl<T: DeserializeOwned + Send> SseResponse<T> {
+    /// The events, decoded by [`crate::sse::events`]. `activity` runs for every received chunk,
+    /// keepalive comments included. The stream ends after the first error.
+    pub fn events(
+        self,
+        activity: impl FnMut() + Send + 'static,
+    ) -> impl Stream<Item = Result<T, Error>> + Send {
+        crate::sse::events(self.response.body, activity).map(|item| item.map_err(Error::from))
+    }
+}
+
+/// Lets F.3's connection loop and shared subscription carry the generated event type.
+impl crate::events::Event for V2Event {
+    fn kind(&self) -> &str {
+        self.tag()
     }
 }
 
