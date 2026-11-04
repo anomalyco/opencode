@@ -54,7 +54,7 @@ export function createHomeController() {
     const conn = servers.visible.find((conn) => ServerConnection.key(conn) === current.server)
 
     if (!conn) return
-    const ctx = global.serverCtx(conn)
+    const ctx = global.serverCtx(current.server)
 
     if (!ctx?.sync.project.ready()) return
 
@@ -67,12 +67,12 @@ export function createHomeController() {
   }
 
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
-    global.serverCtx(conn)?.projects.touch(directory)
+    global.serverCtx(ServerConnection.key(conn))?.projects.touch(directory)
     void tabs.newDraft({ server: ServerConnection.key(conn), directory })
   }
 
   function openProjectSession(conn: ServerConnection.Any, directory: string, session: SessionInfo) {
-    const ctx = global.serverCtx(conn)
+    const ctx = global.serverCtx(ServerConnection.key(conn))
 
     if (!ctx) return
     void ctx.data.session.message.sync(session.id).catch(() => undefined)
@@ -94,7 +94,7 @@ export function createHomeController() {
       list: () => servers.visible,
       health: (conn: ServerConnection.Any) => global.servers.health[ServerConnection.key(conn)],
       label: servers.label,
-      context: (conn: ServerConnection.Any) => global.serverCtx(conn),
+      context: (conn: ServerConnection.Any) => global.serverCtx(ServerConnection.key(conn)),
       focused: focusedServer,
       focusedContext: focusedServerCtx,
       focusedSync,
@@ -103,7 +103,7 @@ export function createHomeController() {
       list: projects,
       selected: selectedProject,
       newSession: newSessionProject,
-      forServer: (conn: ServerConnection.Any) => global.serverCtx(conn)?.projects.used() ?? [],
+      forServer: (conn: ServerConnection.Any) => global.serverCtx(ServerConnection.key(conn))?.projects.used() ?? [],
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
 
@@ -111,7 +111,7 @@ export function createHomeController() {
 
         if (
           !global
-            .serverCtx(conn)
+            .serverCtx(key)
             ?.projects.used()
             .some((project) => project.worktree === directory)
         )
@@ -119,7 +119,7 @@ export function createHomeController() {
         setSelection(toggleHomeProjectSelection(selection(), key, directory))
       },
       add: async (conn: ServerConnection.Any, directories: string[]) => {
-        const ctx = global.serverCtx(conn)
+        const ctx = global.serverCtx(ServerConnection.key(conn))
 
         if (!ctx) return
         const project = await addProjects(ctx, directories)

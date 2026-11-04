@@ -23,7 +23,7 @@ export function HomeCommandPalette(props: {
   const global = useGlobal()
   const language = useLanguage()
   // A server that rejects our credentials lists no sessions; commands and settings still work.
-  const server = () => global.serverCtx(props.server)
+  const server = () => global.serverCtx(ServerConnection.key(props.server))
   const state: PaletteHighlight = { cleanup: undefined, committed: false }
   const settings = createSettingsPaletteEntries()
 

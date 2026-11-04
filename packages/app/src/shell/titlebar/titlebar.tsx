@@ -422,7 +422,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
 
-                  const projects = conn ? global.serverCtx(conn)?.projects : undefined
+                  const projects = conn ? global.serverCtx(ServerConnection.key(conn))?.projects : undefined
 
                   const project =
                     projects?.list().find((item) => item.worktree === selection.directory) ??

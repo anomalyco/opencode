@@ -23,7 +23,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
   )
 
   const loaders = servers.flatMap((conn) => {
-    const ctx = global.serverCtx(conn)
+    const ctx = global.serverCtx(ServerConnection.key(conn))
 
     if (!ctx) return []
 
@@ -89,13 +89,13 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     const open = () => {
       dialog.close()
 
-      if (conn && directory) global.serverCtx(conn)?.projects.touch(directory)
+      if (conn && directory) global.serverCtx(server)?.projects.touch(directory)
       void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId })))
     }
 
     if (!props.archived) return open()
 
-    const ctx = conn ? global.serverCtx(conn) : undefined
+    const ctx = conn ? global.serverCtx(server) : undefined
 
     if (!ctx) return
 

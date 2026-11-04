@@ -13,7 +13,9 @@ import {
 type Ctx = { readonly name: string }
 
 const url = "http://remote.test"
+
 const key = ServerKey.make(url)
+
 const ssh = ServerKey.make("ssh:box")
 
 // The registry hands out the same connection object until it changes, as the store does.
@@ -106,6 +108,7 @@ test("a listed server starts one controller and reads it once it is live", () =>
   expect(listed.effects).toEqual([{ type: "create", key, attempt: 1, conn: http("pw1") }])
 
   const ctx = { name: "ctx1" }
+
   const created = transitionServerControllers(listed.state, {
     type: "controller.created",
     key,
@@ -180,6 +183,7 @@ test("a server that accepts the rejected credentials again gets a controller; a 
     unauthorized,
     reported(http("pw1"), { healthy: false, unauthorized: false }),
   )
+
   expect(offline.state).toBe(unauthorized)
   expect(offline.effects).toEqual([])
 

@@ -56,7 +56,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
     if (servers.list.length <= 1) return listed(projectServerCtx)
 
     return ready().flatMap((connection) => {
-      const ctx = global.serverCtx(connection)
+      const ctx = global.serverCtx(ServerConnection.key(connection))
 
       return ctx ? listed(ctx, promptServer(connection)) : []
     })
@@ -69,7 +69,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
 
     if (!connection) return
 
-    global.serverCtx(connection)?.projects.touch(directory)
+    global.serverCtx(ServerConnection.key(connection))?.projects.touch(directory)
     tabs.updateDraft(props.draftId, {
       server: ServerConnection.key(connection),
       directory,
@@ -92,7 +92,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
         const directory = Array.isArray(result) ? result[0] : result
 
         if (!directory) return
-        void global.serverCtx(connection)?.projects.add(directory)
+        void global.serverCtx(ServerConnection.key(connection))?.projects.add(directory)
         selectProject(directory, serverKey)
       },
     })

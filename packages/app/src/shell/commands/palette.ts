@@ -367,6 +367,7 @@ export function createKnownServerSessions(context: Accessor<ServerCtx | undefine
     const server = context()
 
     if (!server) return []
+
     // Reuse the Home index already loaded before opening the palette; do not fetch an index for search.
     const cached =
       queryClient.getQueryData<SessionInfo[]>(["home-sessions", server.sdk.server]) ??

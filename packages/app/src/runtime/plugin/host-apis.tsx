@@ -892,7 +892,7 @@ export function createPluginAttachment(apis: HostApis) {
 
             if (!directory) return
             const key = ServerConnection.key(server)
-            void global.serverCtx(server)?.projects.add(directory)
+            void global.serverCtx(key)?.projects.add(directory)
             void tabs.newDraft({ server: key, directory })
           },
         }),

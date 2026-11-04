@@ -33,7 +33,7 @@ export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any }
   const global = useGlobal()
 
   return (
-    <Show when={global.serverCtx(props.conn)} keyed>
+    <Show when={global.serverCtx(ServerConnection.key(props.conn))} keyed>
       {(ctx) => (
         <context.provider conn={props.conn} ctx={ctx}>
           {props.children}

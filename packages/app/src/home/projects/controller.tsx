@@ -151,12 +151,12 @@ export function createHomeProjectsController(home: HomeController) {
         })
       },
       hasUnread: (conn: ServerConnection.Any, project: LocalProject) => {
-        const notification = global.serverCtx(conn)?.notification
+        const notification = global.serverCtx(ServerConnection.key(conn))?.notification
 
         return !!notification && directories(project).some((directory) => notification.project.hasUnread(directory))
       },
       clearNotifications: (conn: ServerConnection.Any, project: LocalProject) => {
-        const notification = global.serverCtx(conn)?.notification
+        const notification = global.serverCtx(ServerConnection.key(conn))?.notification
         directories(project).forEach((directory) => notification?.project.markViewed(directory))
       },
       choose: (conn: ServerConnection.Any) => {

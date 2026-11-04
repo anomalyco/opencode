@@ -67,6 +67,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
         // new one registers under the same server key.
         result.effects.forEach((effect) => {
           if (effect.type === "dispose") return effect.dispose()
+
           const created = createRoot(
             (dispose) => ({
               ctx: createServerController(
@@ -80,6 +81,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
             }),
             owner,
           )
+
           dispatch({ type: "controller.created", key: effect.key, attempt: effect.attempt, ...created })
         })
       })
@@ -130,8 +132,8 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       /** Runs each keyed sound and system notification once across windows; notifications only while none has focus. */
       notifications: notificationCoordinator,
       /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
-      serverCtx(target: ServerConnection.Key | ServerConnection.Any) {
-        return selectServerCtx(controllers(), typeof target === "string" ? target : ServerConnection.key(target))
+      serverCtx(key: ServerConnection.Key) {
+        return selectServerCtx(controllers(), key)
       },
     }
   },
@@ -369,7 +371,7 @@ export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>)
   return () => {
     const conn = server()
 
-    return conn ? global.serverCtx(conn) : undefined
+    return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
   }
 }
 

@@ -100,7 +100,7 @@ function NewSessionLocationDialog(props: {
   const context = (project: PromptProject) => {
     const target = connection(project)
 
-    return target ? global.serverCtx(target) : undefined
+    return target ? global.serverCtx(ServerConnection.key(target)) : undefined
   }
 
   const [listed, listedActions] = createResource(

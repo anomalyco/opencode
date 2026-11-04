@@ -120,7 +120,7 @@ export function SettingsScreen() {
 
   const project = (server: ServerConnection.Any, directory: string) =>
     global
-      .serverCtx(server)
+      .serverCtx(ServerConnection.key(server))
       ?.projects.list()
       .find((item) => item.worktree === directory)
 

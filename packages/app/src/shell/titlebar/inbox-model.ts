@@ -60,7 +60,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   // A server that rejects our credentials has no controller, so it lists nothing until it signs in again.
   const connections = createMemo(() =>
     servers.visible.flatMap((conn) => {
-      const ctx = global.serverCtx(conn)
+      const ctx = global.serverCtx(ServerConnection.key(conn))
 
       return ctx ? [{ conn, ctx }] : []
     }),

@@ -50,11 +50,11 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         serverCtx.sync.project.meta(props.project.worktree, patch)
       })
       .then(complete)
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         showToast({
           variant: "error",
           title: language.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+          description: cause instanceof Error ? cause.message : language.t("common.requestFailed"),
         })
       })
       .finally(() => setStore("saving", (value) => value - 1))
@@ -90,10 +90,10 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
   function selectFile(file: File) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
-    reader.onload = (event) => {
-      const result = event.target?.result
+    reader.onload = () => {
+      const result = reader.result
 
-      if (typeof result !== "string") return
+      if (!result || result instanceof ArrayBuffer) return
       setStore("iconOverride", result)
       setStore("iconHover", false)
       saveIcon(store.color, result)
