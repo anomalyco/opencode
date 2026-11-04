@@ -4,7 +4,10 @@
   "height": 24,
   "directory": "/tmp/opencode/packages/tui",
   "config": {
-    "animations": false
+    "animations": false,
+    "experimental": {
+      "new-designs": true
+    }
   },
   "args": {},
   "routes": [],
