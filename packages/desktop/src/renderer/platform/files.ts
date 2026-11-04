@@ -27,10 +27,12 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
   const openDirectoryPickerDialog: Extract<Platform, { platform: "desktop" }>["openDirectoryPickerDialog"] = async (
     options,
   ) => {
-    return api.openDirectoryPicker({
+    const result = await api.openDirectoryPicker({
       multiple: options?.multiple ?? false,
       title: options?.title,
     })
+    console.info("[directory-picker] renderer received native picker result", JSON.stringify({ options, result }))
+    return result
   }
 
   const openAttachmentPickerDialog: NonNullable<Platform["openAttachmentPickerDialog"]> = async (options, onFile) => {

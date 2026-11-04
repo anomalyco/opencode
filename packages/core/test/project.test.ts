@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
+import { eq } from "drizzle-orm"
 import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -10,6 +11,8 @@ import { Database } from "@opencode/core/database/database"
 import { Project } from "@opencode/core/project"
 import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { WorktreeTable } from "@opencode/core/worktree/sql"
+import { Worktree } from "@opencode/schema/worktree"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Hash } from "@opencode/util/hash"
 import { initGit } from "./fixture/git"
@@ -214,7 +217,7 @@ describe("Project archiving", () => {
     }),
   )
 
-  it.live("moves the canonical directory to a surviving clone instead of archiving", () =>
+  it.live("keeps a project unarchived while a linked worktree survives", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       const main = path.join(tmp.path, "repo")
@@ -237,7 +240,7 @@ describe("Project archiving", () => {
       yield* project.sweep()
 
       const info = (yield* project.list()).find((item) => item.id === initial.id)
-      expect(info?.canonical).toBe(yield* real(clone))
+      expect(info?.canonical).toBe(abs(main))
       expect(info?.time.archived).toBeUndefined()
     }),
   )
@@ -449,11 +452,15 @@ describe("Project.resolve", () => {
         Effect.forkScoped({ startImmediately: true }),
       )
 
-      for (const directory of [clone, linked, main, clone]) {
+      const cloned = yield* project.resolve(abs(clone))
+      expect(cloned.id).not.toBe(initial.id)
+      expect(cloned.canonical).toBe(abs(clone))
+
+      for (const directory of [linked, main, linked]) {
         const resolved = yield* project.resolve(abs(directory))
         expect(resolved.id).toBe(initial.id)
         expect(resolved.directory).toBe(abs(directory))
-        expect(resolved.canonical).toBe(abs(directory === clone ? clone : main))
+        expect(resolved.canonical).toBe(abs(main))
         expect((yield* project.list()).find((item) => item.id === initial.id)?.canonical).toBe(abs(main))
       }
       yield* Effect.yieldNow
@@ -462,7 +469,38 @@ describe("Project.resolve", () => {
     }),
   )
 
-  it.live("returns git global for repo with no commits and no remote", () =>
+  it.live("splits legacy clone directory records when resolving an independent clone", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const main = path.join(tmp.path, "repo")
+      const clone = path.join(tmp.path, "clone")
+      const legacyID = remoteID("github.com/owner/repo")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main, { commit: true, remote: "git@github.com:owner/repo.git" })
+        await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+        await Bun.write(path.join(main, ".git", "opencode"), legacyID)
+        await Bun.write(path.join(clone, ".git", "opencode"), legacyID)
+      })
+      const db = (yield* Database.Service).db
+      yield* db.insert(ProjectTable).values({ id: legacyID, worktree: abs(main), vcs: "git", sandboxes: [] }).run()
+      yield* db.insert(WorktreeTable).values([
+        { project_id: legacyID, directory: abs(main) },
+        { project_id: legacyID, directory: abs(clone), strategy: Worktree.StrategyID.make("git") },
+      ]).run()
+
+      const project = yield* Project.Service
+      const original = yield* project.resolve(abs(main))
+      const separated = yield* project.resolve(abs(clone))
+
+      expect(original.id).toBe(legacyID)
+      expect(separated.id).not.toBe(legacyID)
+      expect((yield* db.select().from(WorktreeTable).where(eq(WorktreeTable.directory, abs(main))).get())?.project_id).toBe(legacyID)
+      expect((yield* db.select().from(WorktreeTable).where(eq(WorktreeTable.directory, abs(clone))).get())?.project_id).toBe(separated.id)
+    }),
+  )
+
+  it.live("uses a local identity for a Git repository with no commits or remote", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path))
@@ -470,7 +508,8 @@ describe("Project.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(Project.ID.make("global"))
+      expect(result.id).not.toBe(Project.ID.make("global"))
+      expect((yield* project.resolve(abs(tmp.path))).id).toBe(result.id)
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
@@ -478,7 +517,7 @@ describe("Project.resolve", () => {
     }),
   )
 
-  it.live("falls back to root commit when origin is missing", () =>
+  it.live("uses a local identity when origin is missing", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
@@ -486,7 +525,7 @@ describe("Project.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      expect(result.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
@@ -494,7 +533,7 @@ describe("Project.resolve", () => {
     }),
   )
 
-  it.live("prefers normalized origin over root commit", () =>
+  it.live("does not derive identity from origin or root commit", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:Acme/App.git" }))
@@ -502,14 +541,14 @@ describe("Project.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(remoteID("github.com/Acme/App"))
+      expect(result.id).not.toBe(remoteID("github.com/Acme/App"))
       expect(result.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.vcs?.type).toBe("git")
     }),
   )
 
-  it.live("normalizes ssh and https remotes to the same id", () =>
+  it.live("keeps independent clone IDs when remotes normalize to the same URL", () =>
     Effect.gen(function* () {
       const ssh = yield* tmpdirScoped()
       const https = yield* tmpdirScoped()
@@ -520,12 +559,11 @@ describe("Project.resolve", () => {
       const a = yield* project.resolve(abs(ssh.path))
       const b = yield* project.resolve(abs(https.path))
 
-      expect(a.id).toBe(remoteID("github.com/owner/repo"))
-      expect(b.id).toBe(a.id)
+      expect(a.id).not.toBe(b.id)
     }),
   )
 
-  it.live("ignores file remotes and falls back to root commit", () =>
+  it.live("ignores file remotes when choosing local identity", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: `file://${tmp.path}` }))
@@ -533,7 +571,7 @@ describe("Project.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      expect(result.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
     }),
   )
 
@@ -547,7 +585,7 @@ describe("Project.resolve", () => {
       const result = yield* project.resolve(abs(tmp.path))
 
       expect(result.previous).toBe(Project.ID.make("old-id"))
-      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.id).not.toBe(Project.ID.make("old-id"))
     }),
   )
 
@@ -650,13 +688,13 @@ describe("Project.resolve", () => {
       yield* Effect.promise(() => $`git worktree add ${worktree} -b test-${Date.now()}`.cwd(tmp.path).quiet())
       const project = yield* Project.Service
       const db = (yield* Database.Service).db
-      const id = remoteID("github.com/owner/repo")
+      const id = Project.ID.make("old-id")
       yield* db
         .insert(ProjectTable)
         .values({
           id,
-          worktree: abs("/stale-worktree"),
-          vcs: "hg",
+          worktree: abs(tmp.path),
+          vcs: "git",
           name: "Preserved name",
           icon_color: "#123456",
           commands: { start: "bun dev" },
@@ -702,42 +740,36 @@ describe("Project.resolve", () => {
         await initRepo(tmp.path, { commit: true })
         await fs.mkdir(nested, { recursive: true })
       })
-      const rootSha = Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path)))
       const { layer, spawns } = counted()
       yield* Effect.gen(function* () {
         const project = yield* Project.Service
-        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        const initial = yield* project.resolve(abs(nested))
+        expect(initial.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
         expect(spawns()).toBeGreaterThan(0)
 
+        yield* project.resolve(abs(nested))
         const before = spawns()
-        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
-        expect((yield* project.resolve(abs(tmp.path))).id).toBe(rootSha)
+        expect((yield* project.resolve(abs(nested))).id).toBe(initial.id)
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(initial.id)
         expect(spawns()).toBe(before)
 
         yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(tmp.path).quiet())
-        expect((yield* project.resolve(abs(nested))).id).toBe(remoteID("github.com/owner/repo"))
+        expect((yield* project.resolve(abs(nested))).id).toBe(initial.id)
         expect(spawns()).toBeGreaterThan(before)
       }).pipe(Effect.provide(layer))
     }),
   )
 
-  testEffect(Layer.empty).live("does not cache a transient git failure", () =>
+  testEffect(Layer.empty).live("keeps local identity independent of remote configuration", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
-      let failRemote = true
-      const { layer } = counted((args) => {
-        if (!failRemote || !args.includes("remote")) return false
-        failRemote = false
-        return true
-      })
+      const { layer } = counted()
       yield* Effect.gen(function* () {
         const project = yield* Project.Service
-        // Falls back like dev: the remote spawn failed, so identity comes from the root commit.
-        expect((yield* project.resolve(abs(tmp.path))).id).toBe(
-          Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
-        )
-        expect((yield* project.resolve(abs(tmp.path))).id).toBe(remoteID("github.com/owner/repo"))
+        const first = yield* project.resolve(abs(tmp.path))
+        expect(first.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(first.id)
       }).pipe(Effect.provide(layer))
     }),
   )

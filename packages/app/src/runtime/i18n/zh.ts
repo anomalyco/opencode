@@ -692,6 +692,7 @@ export const dict = {
   "session.queue.remove": "移除",
   "session.queue.reorder": "重新排列已排队的提示词",
   "session.new.worktree.creating": "正在创建 worktree",
+  "session.new.workspace.create": "创建沙箱",
   "settings.backToApp": "返回应用",
   "settings.appearance.row.tabs.title": "标签页",
   "settings.appearance.row.tabs.description": "选择会话标签页的排列方式",

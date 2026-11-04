@@ -4,6 +4,7 @@ import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from
 import { ChildProcess } from "effect/process"
 import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
+import { randomUUID } from "node:crypto"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
@@ -17,6 +18,7 @@ import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
+import { SessionTable } from "./session/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -146,6 +148,42 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       yield* upsertProject(db, project).pipe(Effect.orDie)
+      // Older versions grouped independent clones by remote URL. When one of those
+      // directories is resolved with its new local ID, move only records whose actual
+      // checkout directory belongs to this clone; keep the old Project and its settings.
+      const previousOwners = yield* db
+        .select({ projectID: WorktreeTable.project_id })
+        .from(WorktreeTable)
+        .where(eq(WorktreeTable.directory, project.directory))
+        .all()
+        .pipe(Effect.orDie)
+      const previousIDs = new Set([
+        ...previousOwners.map((owner) => owner.projectID),
+        ...(project.previous ? [project.previous] : []),
+      ])
+      for (const previousID of previousIDs) {
+        if (previousID === project.id) continue
+        const sessions = yield* db
+          .select({ id: SessionTable.id, directory: SessionTable.directory })
+          .from(SessionTable)
+          .where(eq(SessionTable.project_id, previousID))
+          .all()
+          .pipe(Effect.orDie)
+        for (const session of sessions) {
+          if (!FSUtil.contains(project.directory, session.directory)) continue
+          yield* db
+            .update(SessionTable)
+            .set({ project_id: project.id })
+            .where(eq(SessionTable.id, session.id))
+            .run()
+            .pipe(Effect.orDie)
+        }
+        yield* db
+          .delete(WorktreeTable)
+          .where(and(eq(WorktreeTable.project_id, previousID), eq(WorktreeTable.directory, project.directory)))
+          .run()
+          .pipe(Effect.orDie)
+      }
       const unarchived = yield* db
         .update(ProjectTable)
         .set({ time_archived: null, time_updated: sql`${ProjectTable.time_updated}` })
@@ -153,7 +191,7 @@ const layer = Layer.effect(
         .returning()
         .get()
         .pipe(Effect.orDie)
-      // Clones share a project ID; only replace a canonical directory that is gone.
+      // A project's canonical directory is stable; replace it only when it is gone.
       const replaced =
         previous &&
         previous.canonical !== project.canonical &&
@@ -314,43 +352,7 @@ const layer = Layer.effect(
       )
     })
 
-    const remote = Effect.fnUntraced(function* (repo: Git.Repository) {
-      const origin = yield* git.remote.get(repo)
-      if (!origin) return undefined
-      const normalized = url(origin)
-      if (!normalized) return undefined
-      return ID.make(Hash.fast(`git-remote:${normalized}`))
-    })
-
-    function url(input: string) {
-      const value = input.trim()
-      if (!value) return undefined
-
-      const parsed = URL.parse(value)
-      if (parsed) {
-        if (parsed.protocol === "file:") return undefined
-        return parts(parsed.hostname, parsed.pathname)
-      }
-      const scp = value.match(/^([^@/:]+@)?([^/:]+):(.+)$/)
-      if (scp) return parts(scp[2], scp[3])
-      return undefined
-    }
-
-    function parts(host: string, name: string) {
-      const pathname = name
-        .replace(/^\/+/, "")
-        .replace(/\.git\/?$/, "")
-        .replace(/\/+$/, "")
-      if (!host || !pathname) return undefined
-      return `${host.toLowerCase()}/${pathname}`
-    }
-
-    const rootCommit = Effect.fnUntraced(function* (repo: Git.Repository) {
-      const root = (yield* git.history.rootCommits(repo))[0]
-      return root ? ID.make(root) : undefined
-    })
-
-    // Failures resolve like dev (no remote / no root / own worktree) but aren't cached.
+    // If Git metadata cannot be inspected, use a path fallback and do not cache the failure.
     const gitDiscover = Effect.fnUntraced(function* (dotGit: AbsolutePath) {
       const repo = yield* git.repo.discover(AbsolutePath.make(path.dirname(dotGit)))
       if (!repo) return { resolved: undefined, cacheable: false }
@@ -361,10 +363,6 @@ const layer = Layer.effect(
           return value
         })
       const previous = yield* cached(repo.commonDirectory)
-      const id =
-        (yield* remote(repo).pipe(fallback(undefined))) ??
-        previous ??
-        (yield* rootCommit(repo).pipe(fallback(undefined)))
       const canonical =
         repo.gitDirectory === repo.commonDirectory
           ? repo.worktree
@@ -372,6 +370,42 @@ const layer = Layer.effect(
               Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
               fallback(repo.worktree),
             )
+      // Persist identity in the common Git directory: linked worktrees share it, independent
+      // clones get their own marker, and renaming the repository keeps the same identity.
+      const marker = path.join(repo.commonDirectory, "opencode-project-id")
+      const stored = yield* fs.readFileString(marker).pipe(
+        Effect.map((value) => value.trim()),
+        Effect.orElseSucceed(() => undefined),
+      )
+      let id: ID
+      if (stored) {
+        id = ID.make(stored)
+      } else {
+        // Keep the existing ID for the checkout already recorded as this project's
+        // canonical directory. Other clones with the same legacy remote ID get a new ID.
+        const legacy = yield* db
+          .select({ id: ProjectTable.id })
+          .from(ProjectTable)
+          .where(and(eq(ProjectTable.worktree, canonical), eq(ProjectTable.vcs, "git")))
+          .get()
+          .pipe(Effect.orDie)
+        const candidate = legacy?.id ?? randomUUID()
+        const created = yield* fs.writeFileString(marker, candidate, { flag: "wx" }).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        )
+        const value = created
+          ? candidate
+          : yield* fs.readFileString(marker).pipe(
+              Effect.map((item) => item.trim()),
+              Effect.orElseSucceed(() => undefined),
+            )
+        if (value) id = ID.make(value)
+        else {
+          cacheable = false
+          id = ID.make(Hash.fast(`git-common-directory:${repo.commonDirectory}`))
+        }
+      }
       const resolved: Resolved = {
         previous,
         id: id ?? ID.global,

@@ -1,4 +1,4 @@
-import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { createEffect, createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
@@ -62,6 +62,7 @@ export type HomeProjectsViewProps = {
   onHideServer: (server: ServerConnection.Any) => void
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onOpenProjectNewSession: (server: ServerConnection.Any, directory: string) => void
+  onCreateSandbox: (server: ServerConnection.Any, project: LocalProject) => void
   canImportSession: boolean
   onImportSession: (server: ServerConnection.Any, project: LocalProject) => void
   onEditProject: (server: ServerConnection.Any, project: LocalProject) => void
@@ -521,6 +522,22 @@ function HomeProjectList(props: HomeProjectListProps) {
 
   // The server orders projects by recent activity. While the pointer is over the list, rows keep their places so
   // nothing moves under the cursor; new projects join at the end and the server order returns on leave.
+  createEffect(() => {
+    console.info(
+      "[project-render-debug] HomeProjectList input",
+      JSON.stringify({
+        server: ServerConnection.key(props.server),
+        count: props.items.length,
+        items: props.items.map((project) => ({
+          id: project.id,
+          worktree: project.worktree,
+          name: project.name,
+          sandboxes: project.sandboxes ?? [],
+        })),
+      }),
+    )
+  })
+
   const worktrees = createMemo<string[]>((previous) => {
     const next = props.items.map((project) => project.worktree)
 
@@ -660,6 +677,11 @@ function HomeProjectRow(
               <Show when={props.canImportSession}>
                 <Menu.Item onSelect={() => props.onImportSession(props.server, props.project)}>
                   {props.language.t("command.session.import")}
+                </Menu.Item>
+              </Show>
+              <Show when={props.project.vcs === "git"}>
+                <Menu.Item onSelect={() => props.onCreateSandbox(props.server, props.project)}>
+                  {props.language.t("session.new.workspace.create")}
                 </Menu.Item>
               </Show>
               <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>

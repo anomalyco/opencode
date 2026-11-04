@@ -32,6 +32,7 @@ export function HomeProjects(props: {
       onHideServer={props.projects.server.hide}
       onSelectProject={props.projects.project.select}
       onOpenProjectNewSession={props.projects.project.openNewSession}
+      onCreateSandbox={props.projects.project.createSandbox}
       canImportSession={props.projects.project.canImportSession}
       onImportSession={props.projects.project.importSession}
       onEditProject={props.projects.project.edit}

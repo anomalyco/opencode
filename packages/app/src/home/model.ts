@@ -23,6 +23,26 @@ export function createHomeController() {
   const focusedSync = () => focusedServerCtx()?.sync
   // Home lists the server's projects this client has used.
   const projects = createMemo(() => focusedServerCtx()?.projects.used() ?? [])
+  createEffect(() => {
+    const list = projects()
+    console.info(
+      "[project-render-debug] home project state",
+      JSON.stringify({
+        server: selection().server,
+        selectedDirectory: selection().directory,
+        count: list.length,
+        projects: list.map((project) => ({
+          id: project.id,
+          worktree: project.worktree,
+          name: project.name,
+          sandboxes: project.sandboxes ?? [],
+        })),
+        duplicateIds: [...new Set(list.map((project) => project.id).filter(Boolean))]
+          .map((id) => ({ id, worktrees: list.filter((project) => project.id === id).map((project) => project.worktree) }))
+          .filter((entry) => entry.worktrees.length > 1),
+      }),
+    )
+  })
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
 
   const newSessionProject = createMemo(() => selectedProject() ?? focusedServerCtx()?.projects.last() ?? projects()[0])
@@ -117,7 +137,9 @@ export function createHomeController() {
         setSelection(toggleHomeProjectSelection(selection(), key, directory))
       },
       add: async (conn: ServerConnection.Any, directories: string[]) => {
+        console.info("[directory-picker] adding projects", JSON.stringify({ directories, server: ServerConnection.key(conn) }))
         const project = await addProjects(global.ensureServerCtx(conn), directories)
+        console.info("[directory-picker] project add completed", JSON.stringify({ requestedDirectories: directories, project: project && { id: project.id, worktree: project.worktree, sandboxes: project.sandboxes } }))
 
         if (!project) return
         setSelection({ server: ServerConnection.key(conn), directory: project.worktree })
