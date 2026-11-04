@@ -59,6 +59,7 @@ fn main() -> ExitCode {
             if global.print_logs {
                 set_print_logs();
             }
+            commands::acp::before_logger(&cli);
             telemetry::install(telemetry::Options::from_env(global.log_level));
             signals::install();
             let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
