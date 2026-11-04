@@ -13,9 +13,14 @@ const withFind = "stream with Find open"
 const find = '[data-component="timeline-search-bar"] input'
 
 // A phrase only the reply's last delta holds, so Find stays on the reply while every delta rescans the transcript.
+// One input event: typed key by key, its prefixes would match the history and seek the timeline away from the reply.
 async function openFind(page: Page) {
   await page.press("ControlOrMeta+f", { until: find })
-  await page.type(find, "benchmark-complete")
+  await page.eval(() => {
+    const input = document.querySelector<HTMLInputElement>('[data-component="timeline-search-bar"] input')!
+    input.value = "benchmark-complete"
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+  })
   await page.waitFor('[data-slot="timeline-search-count"]', { text: "0/0" })
 }
 
