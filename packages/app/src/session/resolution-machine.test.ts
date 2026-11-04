@@ -4,9 +4,11 @@ import {
   createSessionResolutionState,
   sessionRouteView,
   transitionSessionResolution,
+  type SessionResolutionEffect,
   type SessionResolutionEvent,
   type SessionResolutionState,
   type SessionResolutionTransition,
+  type SessionRouteView,
 } from "./resolution-machine"
 
 type Session = { id: string }
@@ -17,10 +19,13 @@ type State = SessionResolutionState<Session, string>
 
 const target = (sessionID: string, scope = "server-a") => ({ scope, sessionID })
 
-function open(sessionID: string, input: { cached?: Session; connected?: boolean; refresh?: boolean } = {}): Event {
+function open(
+  sessionID: string,
+  input: { cached?: Session; connected?: boolean; refresh?: boolean; scope?: string } = {},
+): Event {
   return {
     type: "target.changed",
-    target: target(sessionID),
+    target: target(sessionID, input.scope),
     cached: input.cached,
     connected: input.connected ?? true,
     refresh: input.refresh ?? true,
@@ -82,14 +87,14 @@ test("ignores results from an earlier visit to the same session", () => {
 
 test("a replaced session store is a new target", () => {
   const ready = replay([open("ses_a", { cached: { id: "ses_a" } })])
-  const replaced = transitionSessionResolution(ready.state, { ...open("ses_a"), target: target("ses_a", "server-b") })
+  const replaced = transitionSessionResolution(ready.state, open("ses_a", { scope: "server-b" }))
   expect(replaced.state).toEqual({ status: "resolving", target: target("ses_a", "server-b"), attempt: 2 })
 
   const stale: Event = { type: "cache.changed", target: target("ses_a"), session: undefined }
   expect(transitionSessionResolution(replaced.state, stale).state).toBe(replaced.state)
 })
 
-test.each([
+test.each<{ name: string; event: Event; effects: SessionResolutionEffect<string>["type"][] }>([
   {
     name: "a cached session without refresh loads only its transcript",
     event: open("ses_a", { cached: { id: "ses_a" }, refresh: false }),
@@ -145,7 +150,7 @@ const resolved: State = { status: "ready", target: target("ses_a"), session: { i
 
 const missing: State = { status: "not-found", target: target("ses_a"), attempt: 1 }
 
-test.each<{ name: string; health: ServerHealth; state: State; view: string }>([
+test.each<{ name: string; health: ServerHealth; state: State; view: SessionRouteView<Session>["type"] }>([
   {
     name: "incompatible wins over a resolved session",
     health: { healthy: true, incompatible: true },

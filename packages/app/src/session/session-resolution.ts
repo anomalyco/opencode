@@ -1,4 +1,4 @@
-import { createMemo, createRenderEffect, createSignal, on, onCleanup, untrack } from "solid-js"
+import { createComputed, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import {
   createSessionResolutionState,
   transitionSessionResolution,
@@ -60,7 +60,10 @@ export function createSessionResolution<T>(
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  createRenderEffect(
+  // Computations, not render effects: the route hands the resolved session to its subtree through a
+  // non-keyed <Match>, so a deleted session must leave `ready` before that subtree's render effects
+  // run, or they read the narrowed value after the match has gone (a "Stale read from <Match>").
+  createComputed(
     on([sessionID, sessions] as const, ([id, store]) => {
       if (!id) {
         dispatch({ type: "target.changed", target: undefined, cached: undefined, connected: false, refresh })
@@ -73,8 +76,8 @@ export function createSessionResolution<T>(
       dispatch({ type: "target.changed", target, cached: cached(), connected: connected(), refresh })
 
       // Owned by this target's run, so both are disposed before the next target is dispatched.
-      createRenderEffect(on(cached, (session) => dispatch({ type: "cache.changed", target, session }), { defer: true }))
-      createRenderEffect(
+      createComputed(on(cached, (session) => dispatch({ type: "cache.changed", target, session }), { defer: true }))
+      createComputed(
         on(
           connected,
           (value) => {
