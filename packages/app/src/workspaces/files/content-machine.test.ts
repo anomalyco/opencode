@@ -46,13 +46,6 @@ const missing = (attempt: number, opened = false): FileContentEvent => ({
   opened,
 })
 
-const timedOut = (attempt: number): FileContentEvent => ({
-  type: "load.timed-out",
-  path: "a.ts",
-  attempt,
-  error: "Request failed",
-})
-
 function replay(events: FileContentEvent[], state = createFileContentState("/repo")) {
   return events.reduce<{ state: FileContentState; effects: readonly FileContentEffect[] }>(
     (step, event) => transitionFileContent(step.state, event),
@@ -189,27 +182,11 @@ describe("file content machine", () => {
     ])
   })
 
-  test("a timed-out first load fails, aborts its read and ignores its late reply", () => {
-    const step = replay([requested(), timedOut(1)])
+  test("a read the server never answered fails, and a late reply to it changes nothing", () => {
+    const step = replay([requested(), failed(1, "Request failed")])
 
     expect(entry(step.state)).toEqual({ status: "error", error: "Request failed" })
-    expect(step.effects).toEqual([
-      { type: "abort", path: "a.ts", attempt: 1 },
-      { type: "settle", path: "a.ts" },
-      { type: "toast", message: "Request failed" },
-    ])
     expect(transitionFileContent(step.state, succeeded(1, before)).state).toBe(step.state)
-    expect(transitionFileContent(step.state, failed(1)).state).toBe(step.state)
-  })
-
-  test("a timed-out refresh keeps its content and ends the cycle even with a change pending", () => {
-    const step = replay([requested(), succeeded(1, before), requested(true, true), requested(true, true), timedOut(2)])
-
-    expect(entry(step.state)).toEqual({ status: "ready", content: before, stale: true })
-    expect(step.effects).toEqual([
-      { type: "abort", path: "a.ts", attempt: 2 },
-      { type: "settle", path: "a.ts" },
-    ])
   })
 
   test("eviction forgets a loaded file and steps a refresh down to a first load", () => {

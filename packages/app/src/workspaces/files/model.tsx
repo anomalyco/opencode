@@ -14,11 +14,10 @@ import { createPathHelpers } from "./path"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { usePlatform } from "@/runtime/platform/platform"
 import { fileStreamUrl } from "@/runtime/server/api"
-import { fileContentFromBytes, streamedFileContent, streamedKinds } from "./artifact"
+import { fileContentFromBytes, headStreamedFile, streamedFileContent, streamedKinds } from "./artifact"
 import { approxBytes, createFileContentCache } from "./content-cache"
 import {
   createFileContentState,
-  FILE_LOAD_TIMEOUT_MS,
   selectFileLoading,
   selectFileMissing,
   selectFileState,
@@ -57,11 +56,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const cache = createFileContentCache()
     const [store, setStore] = createStore({ machine: createFileContentState(untrack(scope)) })
 
-    // The edges of the reads the machine started: a read's abort and timeout, and the callers awaiting each path.
-    const reads = new Map<
-      string,
-      { attempt: number; controller: AbortController; timer: ReturnType<typeof setTimeout> }
-    >()
+    // The edges of the reads the machine started: each path's read in flight, and the callers awaiting each path.
+    const reads = new Map<string, AbortController>()
 
     const waiters = new Map<string, PromiseWithResolvers<void>>()
 
@@ -122,21 +118,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const execute = (effect: FileContentEffect) => {
       if (effect.type === "read") return start(effect.directory, effect.path, effect.attempt)
 
-      if (effect.type === "abort") {
-        const active = reads.get(effect.path)
-
-        if (active?.attempt !== effect.attempt) return
-        release(effect.path, effect.attempt)
-        abort(active.controller)
-
-        return
-      }
-
       if (effect.type === "abort.all") {
-        reads.forEach((active) => {
-          clearTimeout(active.timer)
-          abort(active.controller)
-        })
+        reads.forEach(abort)
         reads.clear()
         waiters.forEach((waiter) => waiter.resolve())
         waiters.clear()
@@ -173,16 +156,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     }
 
-    // Each read is bounded: a wedged connection times out instead of leaving the tab loading forever.
     const start = (directory: string, file: string, attempt: number) => {
       const controller = new AbortController()
-
-      const timer = setTimeout(
-        () => dispatch({ type: "load.timed-out", path: file, attempt, error: language.t("common.requestFailed") }),
-        FILE_LOAD_TIMEOUT_MS,
-      )
-
-      reads.set(file, { attempt, controller, timer })
+      reads.set(file, controller)
 
       // Files outside the workspace are read from their own directory, like markdown images.
       // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
@@ -200,15 +176,20 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         )
         .then(
           (content) => {
-            release(file, attempt)
+            release(file, controller)
 
             if (content) return dispatch({ type: "load.succeeded", path: file, attempt, content })
 
             dispatch({ type: "load.missing", path: file, attempt, error: file, opened: opened(file) })
           },
           (error) => {
-            release(file, attempt)
-            const message = formatServerError(error, language.t, language.t("error.chain.unknown"))
+            release(file, controller)
+
+            // The media HEAD gave up on a server that sent no response.
+            const message =
+              error instanceof DOMException && error.name === "TimeoutError"
+                ? language.t("common.requestFailed")
+                : formatServerError(error, language.t, language.t("error.chain.unknown"))
 
             if (isFileNotFoundError(error)) {
               dispatch({ type: "load.missing", path: file, attempt, error: message, opened: opened(file) })
@@ -221,12 +202,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         )
     }
 
-    const release = (file: string, attempt: number) => {
-      const active = reads.get(file)
-
-      if (active?.attempt !== attempt) return
-      clearTimeout(active.timer)
-      reads.delete(file)
+    const release = (file: string, controller: AbortController) => {
+      if (reads.get(file) === controller) reads.delete(file)
     }
 
     const opened = (file: string) => attachment.files.opened().includes(file)
@@ -247,7 +224,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
     // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. A failed HEAD has no
-    // body; the full read that follows reports the server's error.
+    // body; the full read that follows reports the server's error. The API's request queue bounds the download's wait
+    // for a response, and its body may take as long as it needs.
     const read = (file: string, request: { path: string; location: { directory: string } }, signal: AbortSignal) => {
       const download = () =>
         serverSDK.api.file.read(request, { signal }).then((data) => fileContentFromBytes(file, data))
@@ -258,7 +236,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       if (!url) return download()
 
-      return (platform.fetch ?? fetch)(url, { method: "HEAD", signal }).then((response) =>
+      return headStreamedFile(platform.fetch ?? fetch, url, signal).then((response) =>
         response.ok ? streamedFileContent(file, url, response) : download(),
       )
     }

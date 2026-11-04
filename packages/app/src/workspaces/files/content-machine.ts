@@ -2,11 +2,11 @@ import type { FileContent } from "@opencode/plugin/gui"
 import { getFilename } from "@opencode/util/path"
 import type { FileState } from "./types"
 
-export const FILE_LOAD_TIMEOUT_MS = 30_000
-
 // One normalized path's content lifecycle in the provider's directory. An unloaded or evicted file has no entry.
 // `rerun` records a change reported while a read was in flight: that read's result is outdated, so one more read runs
-// when it settles. `stale` records a failed refresh, so the next plain load reads again.
+// when it settles. `stale` records a failed refresh, so the next plain load reads again. A read has no deadline of its
+// own: the transport gives up on a server that sends no response, which arrives here as `load.failed`, and a large file
+// may download for as long as it needs.
 export type FileEntryState =
   | { readonly status: "loading"; readonly attempt: number; readonly silent: boolean; readonly rerun: boolean }
   | { readonly status: "ready"; readonly content: FileContent; readonly stale: boolean }
@@ -44,14 +44,12 @@ export type FileContentEvent =
       readonly opened: boolean
     }
   | { readonly type: "load.failed"; readonly path: string; readonly attempt: number; readonly error: string }
-  | { readonly type: "load.timed-out"; readonly path: string; readonly attempt: number; readonly error: string }
   | { readonly type: "cache.evicted"; readonly paths: readonly string[] }
   | { readonly type: "scope.changed"; readonly directory: string }
   | { readonly type: "disposed" }
 
 export type FileContentEffect =
   | { readonly type: "read"; readonly directory: string; readonly path: string; readonly attempt: number }
-  | { readonly type: "abort"; readonly path: string; readonly attempt: number }
   | { readonly type: "abort.all" }
   | { readonly type: "settle"; readonly path: string }
   | { readonly type: "cache.store"; readonly path: string; readonly content: FileContent }
@@ -66,10 +64,7 @@ export type FileContentTransition = {
 
 type ActiveState = Extract<FileContentState, { status: "active" }>
 
-type ResultEvent = Extract<
-  FileContentEvent,
-  { type: "load.succeeded" | "load.missing" | "load.failed" | "load.timed-out" }
->
+type ResultEvent = Extract<FileContentEvent, { type: "load.succeeded" | "load.missing" | "load.failed" }>
 
 export function createFileContentState(directory: string): FileContentState {
   return { status: "active", directory, issued: 0, files: {} }
@@ -138,9 +133,8 @@ function complete(state: ActiveState, event: ResultEvent) {
     ])
   }
 
-  // A failure that a later change already outdated is not reported: read again and keep what the tab shows. A hung
-  // read ends the cycle even so, since the next read would likely hang as well.
-  if (entry.rerun && event.type !== "load.timed-out") return start(state, event.path, shown, entry.silent)
+  // A failure that a later change already outdated is not reported: read again and keep what the tab shows.
+  if (entry.rerun) return start(state, event.path, shown, entry.silent)
 
   const toast: FileContentEffect[] = entry.silent ? [] : [{ type: "toast", message: event.error }]
 
@@ -152,9 +146,6 @@ function complete(state: ActiveState, event: ResultEvent) {
     ])
   }
 
-  const aborted: FileContentEffect[] =
-    event.type === "load.timed-out" ? [{ type: "abort", path: event.path, attempt: event.attempt }] : []
-
   // A failed refresh keeps the content it had; the next plain load reads again.
   return changed(
     put(
@@ -162,7 +153,7 @@ function complete(state: ActiveState, event: ResultEvent) {
       event.path,
       shown ? { status: "ready", content: shown, stale: true } : { status: "error", error: event.error },
     ),
-    [...aborted, { type: "settle", path: event.path }, ...toast],
+    [{ type: "settle", path: event.path }, ...toast],
   )
 }
 
