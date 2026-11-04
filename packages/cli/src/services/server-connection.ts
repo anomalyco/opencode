@@ -12,6 +12,8 @@ export type Args = {
   readonly server?: string
   readonly standalone?: boolean
   readonly mismatch?: "replace" | "ignore" | "error"
+  /** Start the background service when none is running. When false, use a standalone server instead. */
+  readonly autostart?: boolean
   readonly onStart?: EnsureOptions["onStart"]
 }
 
@@ -58,6 +60,11 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
+  if (args.autostart === false) {
+    const endpoint = yield* Service.discover({ ...options, version: undefined })
+    if (!endpoint) return { endpoint: yield* Standalone.start() } satisfies Resolved
+    return { endpoint, service: managedService(options) } satisfies Resolved
+  }
   return {
     endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
     service: managedService(options),

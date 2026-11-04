@@ -14,7 +14,11 @@ import { Session } from "@opencode/core/session"
 import { Credential } from "@opencode/core/credential"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { WebSearch } from "@opencode/core/websearch"
+import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
+import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { Effect, Schema } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { organizationPolicy } from "../fixture/policy"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -62,7 +66,7 @@ const consoleCredential = (org: string) =>
 
 const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
@@ -131,7 +135,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       const bus = yield* Bus.Service
       const test = yield* Config.Test
       const plugin = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugin)
+      const host = yield* PluginHost.make(plugin, "test")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
       yield* ConfigPolicyPlugin.Plugin.effect(host)
       expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
@@ -239,7 +243,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       const catalog = yield* Provider.Service
       const bus = yield* Bus.Service
       const test = yield* Config.Test
-      const host = yield* PluginHost.make(yield* Plugin.Service)
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
       const opencode = Integration.ID.make("opencode")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
       yield* ConfigPolicyPlugin.Plugin.effect(host)
@@ -262,7 +266,7 @@ describe("integration policy", () => {
       const catalog = yield* Provider.Service
       const credentials = yield* Credential.Service
       const websearch = yield* WebSearch.Service
-      const host = yield* PluginHost.make(yield* Plugin.Service)
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
       const search = (id: string) => ({
         id: WebSearch.ID.make(id),
         name: id,
@@ -309,13 +313,13 @@ describe("integration policy", () => {
 
       // Only the required organization's connection works, and with it everything that organization supplies.
       yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: consoleCredential(orgID) })
-      yield* eventually(available().pipe(Effect.map((ids) => ids.length > 0)))
+      yield* waitUntil(available().pipe(Effect.map((ids) => ids.length > 0)))
       expect(yield* available()).toEqual(["acme-gateway", "opencode"])
       expect(yield* searches()).toEqual(["opencode"])
 
       // Switching back to the personal account revokes it again.
       yield* credentials.activate(personal.id)
-      yield* eventually(available().pipe(Effect.map((ids) => ids.length === 0)))
+      yield* waitUntil(available().pipe(Effect.map((ids) => ids.length === 0)))
       expect(yield* searches()).toEqual([])
     }).pipe(Effect.provide(Config.testLayer([lockdown()]))),
   )
@@ -384,6 +388,27 @@ describe("integration policy", () => {
       }),
     )
 
+  it.effect("removes built-in and plugin web search providers that websearch.use denies", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
+      // TinyFish needs no API key, so it is offered until a policy removes it.
+      yield* Effect.all([WebSearchExa.Plugin.effect(host), WebSearchTinyFish.Plugin.effect(host)]).pipe(
+        Effect.provide(FetchHttpClient.layer),
+      )
+      yield* host.websearch.transform((editor) =>
+        editor.add({ id: WebSearch.ID.make("acme-search"), name: "Acme Search", execute: () => Effect.succeed([]) }),
+      )
+      yield* addPlugin([
+        document(
+          { action: "websearch.use", resource: "*", effect: "deny" },
+          { action: "websearch.use", resource: "exa", effect: "allow" },
+        ),
+      ])
+      expect((yield* websearch.providers()).map((item): string => item.id)).toEqual(["exa"])
+    }),
+  )
+
   it.effect("converts legacy statements in Console config before enforcement sees them", () =>
     Effect.sync(() => {
       const remote = Schema.decodeUnknownSync(ConfigIntegration.Remote)({
@@ -399,21 +424,4 @@ describe("integration policy", () => {
       ])
     }),
   )
-})
-
-const eventually = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for policy reload")
-})
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for policy reload")
 })

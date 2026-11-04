@@ -95,9 +95,9 @@
   }
 
   [data-slot="question-hint"] {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 440;
-    line-height: var(--line-height-tight);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-faint);
     overflow-wrap: anywhere;
   }

@@ -70,18 +70,16 @@ const loadSystemCertificates = Effect.try({
   catch: (error) => error,
 }).pipe(Effect.catch((error) => Effect.logWarning("failed to load system certificates", { error })))
 
+// Bun reads lowercase `no_proxy` alone whenever it is set, so both spellings get the same merged list.
 function ensureLoopbackNoProxy() {
-  const loopback = ["127.0.0.1", "localhost", "::1"]
+  const noProxy = [
+    ...new Set(
+      [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1,localhost,::1"].flatMap((value) =>
+        (value ?? "").split(",").flatMap((entry) => entry.trim() || []),
+      ),
+    ),
+  ].join(",")
 
-  ;["NO_PROXY", "no_proxy"].forEach((key) => {
-    const items = (process.env[key] ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-
-    loopback.forEach((host) => {
-      if (!items.some((value) => value.toLowerCase() === host)) items.push(host)
-    })
-    process.env[key] = items.join(",")
-  })
+  process.env.NO_PROXY = noProxy
+  process.env.no_proxy = noProxy
 }

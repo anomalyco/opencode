@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Socket } from "effect/socket"
-import { LLM, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
+import { ai, Message, ToolRuntime } from "../../src/effect.js"
 import {
   LLMClient,
   WebSocketTransport,
@@ -13,7 +13,7 @@ import {
 } from "../../src/route.js"
 import { configure } from "../../src/providers/openai.js"
 import { decodeJson } from "../../src/protocols/shared.js"
-import { weatherRuntimeTool, weatherTool, weatherToolName } from "../recorded-scenarios.js"
+import { weatherRuntimeTool, weatherTool } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
 const model = configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.5")
@@ -115,7 +115,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
   recorded.effect.with("continues a tool call over one socket", { tags: ["tool", "continuation"] }, () =>
     Effect.gen(function* () {
       const channel = yield* makeChannel
-      const request = LLM.request({
+      const request = ai.request({
         id: "recorded_openai_responses_websocket_tool",
         model,
         system: "Call get_weather once, then reply exactly: Paris is sunny.",
@@ -127,15 +127,16 @@ describe("OpenAI Responses WebSocket recorded", () => {
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
       const call = first.toolCalls[0]
       if (!call) yield* Effect.die("Expected get_weather tool call")
-      const result = yield* ToolRuntime.dispatch({ [weatherToolName]: weatherRuntimeTool }, call)
+      const result = yield* ToolRuntime.dispatch([weatherRuntimeTool], call)
       const second = yield* LLMClient.generate(
-        LLMRequest.update(request, {
+        {
+          ...request,
           messages: [
             ...request.messages,
             first.message,
             Message.tool({ id: call.id, name: call.name, result: result.result }),
           ],
-        }),
+        },
         { webSocket: channel.executor },
       )
 
@@ -153,7 +154,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
   recorded.effect.with("reconstructs full context after reconnect", { tags: ["reconnect", "full-context"] }, () =>
     Effect.gen(function* () {
       const channel = yield* makeChannel
-      const request = LLM.request({
+      const request = ai.request({
         id: "recorded_openai_responses_websocket_reconnect",
         model,
         system: "Follow the user's exact reply instruction.",
@@ -164,9 +165,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
       yield* channel.reconnect()
       const second = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          messages: [...request.messages, first.message, Message.user("Reply exactly: Beta.")],
-        }),
+        { ...request, messages: [...request.messages, first.message, Message.user("Reply exactly: Beta.")] },
         { webSocket: channel.executor },
       )
 
@@ -186,7 +185,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
   recorded.effect.with("recovers from explicit continuation rejection", { tags: ["continuation", "recovery"] }, () =>
     Effect.gen(function* () {
       const channel = yield* makeChannel
-      const request = LLM.request({
+      const request = ai.request({
         id: "recorded_openai_responses_websocket_rejection",
         model,
         system: "Follow the user's exact reply instruction.",
@@ -195,9 +194,10 @@ describe("OpenAI Responses WebSocket recorded", () => {
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
-      const continuation = LLMRequest.update(request, {
+      const continuation = {
+        ...request,
         messages: [...request.messages, first.message, Message.user("Reply exactly: Recovered.")],
-      })
+      }
       yield* channel.reconnect(true)
       const rejected = yield* LLMClient.generate(continuation, { webSocket: channel.executor }).pipe(Effect.flip)
       const recovered = yield* LLMClient.generate(continuation, { webSocket: channel.executor })

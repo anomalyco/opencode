@@ -159,6 +159,19 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("reports whether a request is already allowed without asking", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const service = yield* Permission.Service
+      expect(yield* service.allows(assertion())).toBe(false)
+      expect(yield* service.list()).toEqual([])
+      yield* setRules([{ action: "read", resource: "*", effect: "allow" }])
+      expect(yield* service.allows(assertion())).toBe(true)
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* service.allows(assertion())).toBe(false)
+    }),
+  )
+
   test("matches Windows rule resources against slash-normalized file access resources", () => {
     const rules: Permission.Ruleset = [
       { action: "external_directory", resource: "C:\\Users\\x\\proj\\*", effect: "allow" },

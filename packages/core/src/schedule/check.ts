@@ -120,8 +120,7 @@ export const authorize = Effect.fnUntraced(function* (
   when: ScheduleSchema.When,
   check: ScheduleSchema.StoredCheck,
 ) {
-  const plugins = yield* Plugin.Service
-  yield* plugins.awaitActivation
+  yield* Plugin.awaitActivation
   switch (check.condition.type) {
     case "shell":
       return yield* authorizeShell(session, name, when, check.mode, check.condition)
@@ -138,8 +137,7 @@ export const evaluate = Effect.fnUntraced(function* (
   context: RunContext,
 ) {
   const run = Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    yield* plugins.awaitActivation
+    yield* Plugin.awaitActivation
     switch (check.condition.type) {
       case "shell":
         return yield* runShell(session, check.condition, prevState)
@@ -158,7 +156,14 @@ export const evaluate = Effect.fnUntraced(function* (
   )
 })
 
-const resolveCodeTools = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) {
+const wakeOutcome = (wake: boolean, state: Schema.Json, message: string | undefined) => ({
+  ok: true as const,
+  wake,
+  state,
+  ...(wake && message !== undefined ? { message } : {}),
+})
+
+const codeActions = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) {
   const mcp = yield* McpTool.Service
   const tools = yield* Tool.Service
   if (paths.length > 0) yield* mcp.flush
@@ -177,7 +182,7 @@ const resolveCodeTools = Effect.fnUntraced(function* (paths: ReadonlyArray<strin
     }
     resolved.push(found)
   }
-  return { tools, resolved }
+  return { tools, actions: Array.dedupe(resolved.map((tool) => tool.options?.permission ?? tool.id)) }
 })
 
 const authorizeCode = Effect.fnUntraced(function* (
@@ -201,8 +206,7 @@ const authorizeCode = Effect.fnUntraced(function* (
     agent: agent.id,
   })
 
-  const { resolved } = yield* resolveCodeTools(paths)
-  const actions = Array.dedupe(resolved.map((tool) => tool.options?.permission ?? tool.id))
+  const actions = (yield* codeActions(paths)).actions
 
   if (actions.length === 0) {
     yield* permission.assert({
@@ -258,10 +262,10 @@ const runCode = Effect.fnUntraced(function* (
   if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure.message }
   const paths = scanned.success
 
-  const resolvedExit = yield* Effect.result(resolveCodeTools(paths))
-  if (Result.isFailure(resolvedExit)) return { ok: false as const, error: resolvedExit.failure }
+  const resolved = yield* Effect.result(codeActions(paths))
+  if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure }
 
-  const actions = Array.dedupe(resolvedExit.success.resolved.map((tool) => tool.options?.permission ?? tool.id))
+  const actions = resolved.success.actions
   const unattended: Permission.Ruleset = ["execute", ...actions].map((action) => ({
     action,
     resource: "*",
@@ -289,7 +293,7 @@ const runCode = Effect.fnUntraced(function* (
     input: { state: prevState, now: context.now, runs: context.checks },
   }
 
-  const result = yield* resolvedExit.success.tools
+  const result = yield* resolved.success.tools
     .check({
       code: condition.code,
       tools: paths,
@@ -328,12 +332,7 @@ const runCode = Effect.fnUntraced(function* (
   const state = decoded.success.state === undefined ? prevState : decoded.success.state
   const trimmed = decoded.success.message?.trim()
   const message = trimmed ? trimmed : undefined
-  return {
-    ok: true as const,
-    wake: decoded.success.wake,
-    state,
-    ...(decoded.success.wake && message !== undefined ? { message } : {}),
-  }
+  return wakeOutcome(decoded.success.wake, state, message)
 })
 
 const scanShell = Effect.fnUntraced(function* (command: string) {
@@ -463,12 +462,7 @@ const runShell = Effect.fnUntraced(function* (
     condition.is !== undefined || condition.matches !== undefined || condition.changes === true
 
   if (!hasPredicate) {
-    return {
-      ok: true as const,
-      wake: output.exitCode === 0,
-      state: null,
-      ...(output.exitCode === 0 && message !== undefined ? { message } : {}),
-    }
+    return wakeOutcome(output.exitCode === 0, null, message)
   }
 
   if (output.exitCode !== 0) {
@@ -480,23 +474,15 @@ const runShell = Effect.fnUntraced(function* (
   }
 
   if (condition.is !== undefined) {
-    const wake = trimmed === condition.is.trim()
-    return { ok: true as const, wake, state: null, ...(wake && message !== undefined ? { message } : {}) }
+    return wakeOutcome(trimmed === condition.is.trim(), null, message)
   }
 
   if (condition.matches !== undefined) {
-    const wake = new RegExp(condition.matches).test(output.stdout)
-    return { ok: true as const, wake, state: null, ...(wake && message !== undefined ? { message } : {}) }
+    return wakeOutcome(new RegExp(condition.matches).test(output.stdout), null, message)
   }
 
   const prevStdout = isRecord(prevState) && typeof prevState.stdout === "string" ? prevState.stdout : null
-  const wake = prevStdout !== null && output.stdout !== prevStdout
-  return {
-    ok: true as const,
-    wake,
-    state: { stdout: output.stdout },
-    ...(wake && message !== undefined ? { message } : {}),
-  }
+  return wakeOutcome(prevStdout !== null && output.stdout !== prevStdout, { stdout: output.stdout }, message)
 })
 
 function utf8Decode(bytes: Uint8Array): string {

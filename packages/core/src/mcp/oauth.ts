@@ -17,9 +17,10 @@ import {
 } from "@modelcontextprotocol/client"
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
 import { Cause, Deferred, Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
+import type { AddressInfo } from "node:net"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
-import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
@@ -39,24 +40,30 @@ const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
 // Bun's and Node's fetch types both apply here and the SDK's FetchLike wants Bun's Response, so the
 // overload is picked by annotation and clone() is pinned to the type it was called on. A tool call
 // can stay silent for minutes, so Bun's idle deadline is off; the MCP execution timeout still applies.
-const base: FetchLike = noTimeoutFetch
 const share = (pending: ReturnType<FetchLike>) => pending.then((response) => response.clone() as typeof response)
 
-const send: FetchLike = (url, init) => {
-  const key = refreshKey(url, init)
-  if (key === undefined) return base(url, init)
-  const current = refreshes.get(key)
-  if (current) return share(current)
-  const pending = base(url, init).finally(() => {
-    if (refreshes.get(key) === pending) refreshes.delete(key)
-  })
-  refreshes.set(key, pending)
-  return share(pending)
-}
+// Requests use `FetchHttpClient.Fetch`, which an embedder can replace, rather than the global fetch.
+const sender = Effect.gen(function* () {
+  const fetch = yield* FetchHttpClient.Fetch
+  const base: FetchLike = (url, init) => fetch(url, { ...init, timeout: false } as BunFetchRequestInit)
+  const send: FetchLike = (url, init) => {
+    const key = refreshKey(url, init)
+    if (key === undefined) return base(url, init)
+    const current = refreshes.get(key)
+    if (current) return share(current)
+    const pending = base(url, init).finally(() => {
+      if (refreshes.get(key) === pending) refreshes.delete(key)
+    })
+    refreshes.set(key, pending)
+    return share(pending)
+  }
+  return send
+})
 
 export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
   Effect.gen(function* () {
     const run = Effect.runPromiseWith(yield* Effect.context())
+    const send = yield* sender
     const request: FetchLike = (url, init) => {
       const grant = init?.body instanceof URLSearchParams ? init.body.get("grant_type") : undefined
       const operation = grant === "refresh_token" ? "refresh" : grant === "authorization_code" ? "exchange" : undefined
@@ -106,7 +113,7 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
 
 // A configured authorization server document stands in for RFC 9728 discovery: the SDK reuses this
 // state instead of probing the resource server, whose well-known path may not exist.
-export const configuredDiscovery = async (input: {
+const configuredDiscovery = async (input: {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly fetchFn: FetchLike
 }): Promise<OAuthDiscoveryState | undefined> => {
@@ -123,7 +130,7 @@ export const configuredDiscovery = async (input: {
   }
 }
 
-export interface Store {
+interface Store {
   readonly tokens: () => Promise<StoredOAuthTokens | undefined>
   readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
   readonly clientInformation: () => Promise<StoredOAuthClientInformation | undefined>
@@ -132,9 +139,10 @@ export interface Store {
   readonly saveCodeVerifier: (verifier: string) => Promise<void>
 }
 
-export interface Options {
+interface Options {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly store: Store
+  readonly fetch: FetchLike
   /** Absent on connect: the provider then refuses to register a client or redirect, ending in needs_auth. */
   readonly redirect?: {
     readonly url: string
@@ -146,7 +154,7 @@ export interface Options {
   readonly invalidate?: OAuthClientProvider["invalidateCredentials"]
 }
 
-export const provider = (options: Options): OAuthClientProvider => {
+const provider = (options: Options): OAuthClientProvider => {
   const oauth = options.config.oauth || undefined
   const client = oauth?.client_id ? { client_id: oauth.client_id, client_secret: oauth.client_secret } : undefined
   const redirect = options.redirect
@@ -159,7 +167,7 @@ export const provider = (options: Options): OAuthClientProvider => {
   return {
     redirectUrl,
     discoveryState: async () => {
-      discovery ??= await configuredDiscovery({ config: options.config, fetchFn: send })
+      discovery ??= await configuredDiscovery({ config: options.config, fetchFn: options.fetch })
       return discovery
     },
     saveDiscoveryState: (state) => {
@@ -184,6 +192,7 @@ export const provider = (options: Options): OAuthClientProvider => {
       redirect_uris: [redirectUrl],
       client_name: "opencode",
       client_uri: "https://opencode.ai",
+      logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: client?.client_secret ? "client_secret_post" : "none",
@@ -201,7 +210,9 @@ export const provider = (options: Options): OAuthClientProvider => {
     redirectToAuthorization: (url) => {
       if (!redirect) throw refuse("user authorization")
       if (url.protocol !== "http:" && url.protocol !== "https:")
-        throw new Error(`MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`)
+        throw new Error(
+          `MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`,
+        )
       return redirect.open(url)
     },
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
@@ -214,7 +225,7 @@ export const provider = (options: Options): OAuthClientProvider => {
   }
 }
 
-export const memoryStore = (): Store => {
+const memoryStore = (): Store => {
   let tokens: StoredOAuthTokens | undefined
   let client: StoredOAuthClientInformation | undefined
   let verifier: string | undefined
@@ -237,7 +248,7 @@ export const memoryStore = (): Store => {
 export const clientFromCredential = (credential: Credential.OAuth) =>
   credential.metadata?.client as StoredOAuthClientInformation | undefined
 
-export const toCredential = (input: {
+const toCredential = (input: {
   readonly methodID: Integration.MethodID
   readonly serverUrl: string
   readonly tokens: StoredOAuthTokens
@@ -259,7 +270,7 @@ export const toCredential = (input: {
     },
   })
 
-export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
+const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   const metadata = credential.metadata ?? {}
   return {
     access_token: credential.access,
@@ -277,8 +288,9 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
 }) {
   const credentials = yield* Credential.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
+  const fetch = yield* sender
   const found = (yield* credentials.list(input.integrationID)).at(-1)
-  if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore() })
+  if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore(), fetch })
   const id = found.id
   const methodID = found.value.methodID
   const read = async () => {
@@ -289,6 +301,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   let presented = found.value.refresh
   return provider({
     config: input.config,
+    fetch,
     invalidate: async (scope) => {
       if (scope === "verifier" || scope === "discovery") return
       const oauth = await read()
@@ -387,7 +400,9 @@ export const authorize = (input: {
       if (!value) return fail("Missing authorization code", "missing_code")
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
-        !Effect.runSync(Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }))
+        !Effect.runSync(
+          Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }),
+        )
       )
         response.writeHead(409).end("OAuth callback already received")
     })
@@ -397,12 +412,7 @@ export const authorize = (input: {
     const port = yield* Effect.callback<number, Error>((resume) => {
       server.once("error", (error) => resume(Effect.fail(error)))
       server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        const address = server.address()
-        resume(
-          address && typeof address === "object"
-            ? Effect.succeed(address.port)
-            : Effect.fail(new Error("Could not determine MCP OAuth callback port")),
-        )
+        resume(Effect.succeed((server.address() as AddressInfo).port))
       })
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
@@ -453,6 +463,7 @@ export const authorize = (input: {
     const oauthProvider = provider({
       config: input.config,
       store,
+      fetch: fetchFn,
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
