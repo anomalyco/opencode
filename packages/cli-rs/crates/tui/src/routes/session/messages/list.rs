@@ -13,10 +13,11 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::generated::{
-    SessionID, SessionMessageAssistant, SessionMessageAssistantContentItem,
+    AgentInfo, ModelInfo, ModelRef, SessionID, SessionMessageAssistant, SessionMessageAssistantContentItem,
     SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID, SessionMessageInfo,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, TurnTokens, Visibility};
+use opencode_store::location::{Catalog, Location};
 use opencode_store::{Changes, LoadMore, MessageExt};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
@@ -53,6 +54,7 @@ struct Inner {
     new_designs: bool,
     hide_thinking: Cell<bool>,
     session: RefCell<Option<SessionID>>,
+    location: RefCell<Option<Location>>,
     specs: RefCell<Vec<Spec>>,
     rows: RefCell<HashMap<RowKey, Row>>,
     /// The keys of the scroll box's children, in order.
@@ -134,6 +136,7 @@ impl Transcript {
                 session.thinking.unwrap_or(Visibility::Hide) == Visibility::Hide,
             ),
             session: RefCell::default(),
+            location: RefCell::default(),
             specs: RefCell::default(),
             rows: RefCell::default(),
             mounted: RefCell::default(),
@@ -151,11 +154,15 @@ impl Transcript {
     }
 
     pub fn sync(&self, tui: &Tui, session: &SessionID, changes: &Changes) {
-        if !changes.any_message(session) && !changes.session(session) {
+        self.0.session.replace(Some(session.clone()));
+        let location = self.0.location(tui);
+        let catalogs = location
+            .as_ref()
+            .is_some_and(|location| changes.location(location));
+        if !changes.any_message(session) && !changes.session(session) && !catalogs {
             return;
         }
-        self.0.session.replace(Some(session.clone()));
-        let force = changes.messages(session) || changes.session(session);
+        let force = changes.messages(session) || changes.session(session) || catalogs;
         self.0.render(tui, |message| {
             force || changes.message(session, &SessionMessageID(message.to_owned()))
         });
@@ -169,6 +176,25 @@ impl Transcript {
 }
 
 impl Inner {
+    /// The session's location, once its info is known. The first call reads the location's agents and
+    /// models, whose names and colors the footer and user rows show (`local.agent.color`, `ctx.models`).
+    fn location(&self, tui: &Tui) -> Option<Location> {
+        if let Some(location) = self.location.borrow().clone() {
+            return Some(location);
+        }
+        let session = self.session.borrow().clone()?;
+        let location = tui.data.read(|state| {
+            state
+                .session(&session)
+                .map(|info| Location::new(info.location.directory.as_str()))
+        })?;
+        for catalog in [Catalog::Agent, Catalog::Model] {
+            drop(tui.data.catalog_sync(catalog, Some(&location)));
+        }
+        *self.location.borrow_mut() = Some(location.clone());
+        Some(location)
+    }
+
     fn install(&self, tui: &Tui) {
         // Keep the reader's row in place when rows mount above it.
         let weak = self.this.clone();
@@ -265,7 +291,21 @@ impl Inner {
                 None => messages,
             };
             let specs = reduce(messages, self.turn_tokens.is_some());
+            let catalogs = self
+                .location
+                .borrow()
+                .as_ref()
+                .and_then(|location| state.location(Some(location)));
             let cx = Context {
+                agents: catalogs
+                    .and_then(|data| data.agent.as_deref())
+                    .unwrap_or_default()
+                    .iter()
+                    .filter(|agent| !agent.hidden)
+                    .collect(),
+                models: catalogs
+                    .and_then(|data| data.model.as_deref())
+                    .unwrap_or_default(),
                 app: &tui.app,
                 theme: &self.theme,
                 syntax: &self.syntax,
@@ -478,6 +518,9 @@ pub struct Context<'a> {
     /// The terminal width.
     pub width: u16,
     pub session_agent: Option<&'a str>,
+    /// The location's agents that are not hidden, and its models.
+    pub agents: Vec<&'a AgentInfo>,
+    pub models: &'a [ModelInfo],
     /// The visible messages, oldest first, and each one's position.
     pub messages: &'a [SessionMessageInfo],
     pub index: HashMap<&'a str, usize>,
@@ -497,11 +540,36 @@ impl Context<'_> {
         }
     }
 
-    /// `local.agent.color`. Agents are not in the store yet (F.8), so every agent takes the first
-    /// categorical color, as TS does for an agent it does not list.
-    pub fn agent_color(&self, _agent: &str) -> Color {
+    /// `local.agent.color`: the agent's own color, else the categorical color at its position among
+    /// the visible agents; an agent the location does not list takes the first.
+    pub fn agent_color(&self, agent: &str) -> Color {
         let step = if self.new_designs { 400 } else { 200 };
-        self.theme.categorical()[0].step(step)
+        let mut colors: Vec<Color> = Vec::new();
+        for scale in self.theme.categorical() {
+            let color = scale.step(step);
+            if !colors.contains(&color) {
+                colors.push(color);
+            }
+        }
+        let Some(index) = self.agents.iter().position(|item| item.id.as_str() == agent) else {
+            return colors[0];
+        };
+        self.agents[index]
+            .color
+            .as_ref()
+            .and_then(|color| hex(color.as_str()))
+            .unwrap_or(colors[index % colors.len()])
+    }
+
+    /// The model's name, else `provider/model` (`AssistantFooter`'s `model`).
+    pub fn model_name(&self, model: &ModelRef) -> String {
+        self.models
+            .iter()
+            .find(|item| item.provider_id == model.provider_id && item.id == model.id)
+            .map_or_else(
+                || format!("{}/{}", model.provider_id.as_str(), model.id),
+                |item| item.name.clone(),
+            )
     }
 }
 
@@ -798,6 +866,23 @@ impl Row {
             _ => {}
         }
     }
+}
+
+/// `RGBA.fromHex` for `#rgb`, `#rrggbb`, and `#rrggbbaa`.
+fn hex(value: &str) -> Option<Color> {
+    let digits = value.strip_prefix('#').unwrap_or(value);
+    let digits: String = match digits.len() {
+        3 => digits.chars().flat_map(|digit| [digit, digit]).collect(),
+        6 | 8 => digits.to_owned(),
+        _ => return None,
+    };
+    let value = u32::from_str_radix(&digits, 16).ok()?;
+    Some(if digits.len() == 8 {
+        let [r, g, b, a] = value.to_be_bytes();
+        Color::rgba(r, g, b, a)
+    } else {
+        Color::hex(value)
+    })
 }
 
 /// Every style of `syntax` with `foreground` as its color.

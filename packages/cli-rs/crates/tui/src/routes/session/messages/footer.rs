@@ -85,7 +85,7 @@ impl Footer {
         )];
         if width >= 28 {
             spans.push(Span::styled(
-                format!(" · {}", model_name(&message.model)),
+                format!(" · {}", cx.model_name(&message.model)),
                 muted,
             ));
         }
@@ -111,12 +111,6 @@ impl Footer {
         self.line_box
             .margin_edge(Edge::Top, if spaced { 1 } else { 0 });
     }
-}
-
-/// The model's display name. The model catalog is not in the store yet (F.8), so it is
-/// `provider/model`, as TS shows a model it does not list.
-fn model_name(model: &ModelRef) -> String {
-    format!("{}/{}", model.provider_id.as_str(), model.id)
 }
 
 /// A turn's token usage: one collapsed summary line that a click opens into the per-step table.
