@@ -110,14 +110,25 @@ fn open_confirm(kit: &Kit, log: &Rc<RefCell<Vec<&'static str>>>) {
 }
 
 #[test]
-fn confirm_matches_typescript_before_and_after_left() {
+fn confirm_matches_typescript_and_enter_confirms_after_left() {
     let kit = kit(70, 16);
     let log = Rc::default();
     open_confirm(&kit, &log);
     assert_fixture(&kit.app.render(), "U.3/confirm");
+    // Left moved between the legacy buttons; the footer has no choice to move.
     kit.app.press("left");
     assert_fixture(&kit.app.render(), "U.3/confirm-left");
     kit.app.press("return");
+    assert_eq!(*log.borrow(), ["confirm"]);
+    assert!(!kit.dialogs.is_open());
+}
+
+#[test]
+fn confirm_cancels_on_escape() {
+    let kit = kit(70, 16);
+    let log = Rc::default();
+    open_confirm(&kit, &log);
+    kit.app.press("escape");
     assert_eq!(*log.borrow(), ["cancel"]);
     assert!(!kit.dialogs.is_open());
 }

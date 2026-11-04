@@ -2,7 +2,6 @@
 
 use crate::dialog::{
     DialogCx, DialogOptions, Dialogs, FooterAction, FooterProps, HeaderProps, header, layout,
-    legacy_button,
 };
 use crate::keymap::{COMMAND_PALETTE_COMMAND, KeymapLayer, TuiCommand};
 use opentui::prelude::*;
@@ -52,7 +51,6 @@ pub fn help(cx: &Rc<DialogCx>) -> View {
             ],
             ..FooterProps::default()
         }),
-        Some(legacy_button(cx, "ok", 3, close(&cx.dialogs))),
     )
 }
 
