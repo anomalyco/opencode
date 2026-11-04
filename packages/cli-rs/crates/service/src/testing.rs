@@ -21,13 +21,21 @@ impl Reply {
 
 #[derive(Default)]
 pub struct Server {
-    replies: HashMap<String, Reply>,
+    replies: Mutex<HashMap<String, Vec<Reply>>>,
     requests: Mutex<Vec<(String, Option<String>)>>,
 }
 
 impl Server {
-    pub fn reply(mut self, url: &str, reply: Reply) -> Self {
-        self.replies.insert(url.to_owned(), reply);
+    pub fn reply(self, url: &str, reply: Reply) -> Self {
+        self.replies(url, [reply])
+    }
+
+    /// Replies to `url` in order; the last one repeats.
+    pub fn replies(self, url: &str, replies: impl IntoIterator<Item = Reply>) -> Self {
+        self.replies
+            .lock()
+            .unwrap()
+            .insert(url.to_owned(), replies.into_iter().collect());
         self
     }
 
@@ -48,11 +56,11 @@ impl Transport for Server {
             .lock()
             .unwrap()
             .push((request.url.to_string(), authorization));
-        let reply = self
-            .replies
-            .get(request.url.as_str())
-            .cloned()
-            .unwrap_or(Reply::Refused);
+        let reply = match self.replies.lock().unwrap().get_mut(request.url.as_str()) {
+            Some(replies) if replies.len() > 1 => replies.remove(0),
+            Some(replies) => replies[0].clone(),
+            None => Reply::Refused,
+        };
         Box::pin(async move {
             match reply {
                 Reply::Refused => Err("connection refused".to_owned()),
