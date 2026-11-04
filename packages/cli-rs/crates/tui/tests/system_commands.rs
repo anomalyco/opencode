@@ -123,10 +123,8 @@ fn copy_on_select_copies_the_drag_and_ctrl_c_clears_it_then_exits() {
     assert_eq!(capture.0.copied.borrow().len(), 1);
 }
 
-/// TS keeps the dialog because its backdrop asks whether a selection exists when the press lands
-/// (`ui/dialog.tsx:51-53`); `crates/ui/src/dialog.rs` asks for selected text, which a press has none of yet.
+/// The backdrop asks whether a selection exists when the press lands, as TS does (`ui/dialog.tsx:51-53`).
 #[test]
-#[ignore = "the dialog kit closes on a drag inside the panel (crates/ui/src/dialog.rs; E.20 follow-up)"]
 fn a_drag_inside_a_dialog_copies_and_keeps_it_open() {
     let capture = testing::capture();
     let app = TestApp::new(100, 30);
@@ -213,10 +211,8 @@ fn the_location_opens_the_working_directory_dialog() {
     assert!(!app.text().contains("Working directory"));
 }
 
-/// Headless frames keep no hyperlink ids (`Session::link_id` answers `None` on every cell), so the open itself
-/// is proven under a PTY (step report); here only the clicks that must not open are checked.
 #[test]
-fn modified_clicks_and_drags_on_a_link_do_not_open_it() {
+fn a_plain_click_opens_a_link_and_modified_clicks_and_drags_do_not() {
     let capture = testing::capture();
     let app = TestApp::new(80, 24);
     let _tui = mount(&app, info(json!({})), None);
@@ -237,11 +233,14 @@ fn modified_clicks_and_drags_on_a_link_do_not_open_it() {
     app.mouse(MouseEventKind::Up(MouseButton::Left), 1, y);
     app.drag((0, y), (3, y));
     assert!(capture.0.opened.borrow().is_empty());
-    let headless = opencode_tui::features::links::link_at(app.app(), 1, y);
+    assert_eq!(
+        opencode_tui::features::links::link_at(app.app(), 1, y).as_deref(),
+        Some("https://opencode.ai/docs")
+    );
+    // A plain click opens it.
     app.advance(Duration::from_millis(600));
     app.click(1, y);
-    let opened = if headless.is_some() { 1 } else { 0 };
-    assert_eq!(capture.0.opened.borrow().len(), opened);
+    assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/docs"]);
 }
 
 #[test]
