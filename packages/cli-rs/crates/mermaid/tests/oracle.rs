@@ -47,7 +47,7 @@ fn merged(runs: Vec<(usize, String)>) -> Vec<(usize, String)> {
 }
 
 /// The diagram kinds the port covers so far.
-const PORTED: &[&str] = &["flowchart"];
+const PORTED: &[&str] = &["flowchart", "sequence"];
 
 /// The kind a source's header names, independent of the Rust detector under test.
 fn header_kind(source: &str) -> &'static str {

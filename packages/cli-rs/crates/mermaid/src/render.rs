@@ -2,9 +2,9 @@
 
 use opentui::prelude::Color;
 
-use crate::core::canvas::{Canvas, TRIM_BOTH};
+use crate::core::canvas::{Canvas, TRIM_BOTH, TRIM_NONE, Trim};
 use crate::core::color::ramp;
-use crate::flowchart;
+use crate::{flowchart, sequence};
 use crate::{Kind, Palette, SyntaxError, detect};
 
 /// One styled run of a diagram row.
@@ -81,6 +81,11 @@ fn prepare(kind: Kind, source: &str, palette: &Palette, max_width: i32) -> Resul
             let grid = flowchart::drawing::draw(&diagram, &options).map_err(|_| Failure::Unrenderable)?;
             flowchart_lines(&grid, palette)
         }
+        Kind::Sequence => {
+            let diagram = sequence::parser::parse(source).map_err(Failure::Syntax)?;
+            let grid = sequence::drawing::draw(&diagram, true).map_err(|_| Failure::Unrenderable)?;
+            sequence_lines(&grid, palette)
+        }
         _ => return Err(Failure::Unrenderable),
     };
     Ok(Diagram { kind, lines })
@@ -101,16 +106,44 @@ fn flowchart_lines(grid: &flowchart::drawing::Grid, palette: &Palette) -> Vec<Ve
         Style::DatabaseFade(step) => database_fades[usize::from(step)],
     };
     let bg = |style: Style| (style == Style::Label).then_some(palette.label_background);
-    runs(grid, |cell| (cell.style, cell.attributes), |style| style.map(fg), |style| style.and_then(bg))
+    runs(grid, TRIM_BOTH, |cell| (cell.style, cell.attributes), |style| style.map(fg), |style| style.and_then(bg))
+}
+
+fn sequence_lines(grid: &sequence::drawing::Grid, palette: &Palette) -> Vec<Vec<Run>> {
+    use sequence::drawing::Style;
+    let participant = palette.primary;
+    let lifeline = palette.muted;
+    let request_fades = ramp(5, lifeline, palette.request);
+    let response_fades = ramp(5, lifeline, palette.response);
+    let lifeline_ramp = ramp(3, participant, lifeline);
+    let fg = |style: Style| match style {
+        Style::Participant => participant,
+        Style::Lifeline => lifeline,
+        Style::Group => palette.secondary,
+        Style::Request => palette.request,
+        Style::Response => palette.response,
+        Style::RequestFade(step) => request_fades[usize::from(step)],
+        Style::ResponseFade(step) => response_fades[usize::from(step)],
+        Style::LifelineRamp(step) => lifeline_ramp[usize::from(step)],
+        Style::Fragment | Style::FragmentLabel => palette.secondary,
+        Style::Note | Style::NoteBadge => palette.note,
+    };
+    let bg = |style: Style| match style {
+        Style::Note | Style::NoteBadge => Some(palette.note_background),
+        Style::FragmentLabel => Some(palette.background),
+        _ => None,
+    };
+    runs(grid, TRIM_NONE, |cell| cell.style, |style| style.map(fg), |style| style.and_then(bg))
 }
 
 fn runs<S: Copy + PartialEq, K: PartialEq>(
     grid: &Canvas<S>,
+    trim: Trim,
     key: impl Fn(&crate::core::canvas::Cell<S>) -> K,
     fg: impl Fn(Option<S>) -> Option<Color>,
     bg: impl Fn(Option<S>) -> Option<Color>,
 ) -> Vec<Vec<Run>> {
-    grid.runs(TRIM_BOTH, key)
+    grid.runs(trim, key)
         .into_iter()
         .map(|row| {
             row.into_iter()
