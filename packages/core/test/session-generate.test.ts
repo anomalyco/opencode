@@ -10,7 +10,7 @@ import {
   ToolDefinition,
   TransportError,
   type LLMRequest,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import type { StreamOptions } from "@opencode/ai/route"
@@ -335,7 +335,7 @@ it.effect(
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
-      expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
+      expect(requests[0]?.headers).toMatchObject({ "X-Session-Id": sessionID })
       expect(requests[0]?.promptCacheKey).toBe(sessionID)
       const instructionUpdates = requests[0]?.messages.flatMap((message) =>
         message.role === "system"

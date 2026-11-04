@@ -8,7 +8,8 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "marked": "catalog:"

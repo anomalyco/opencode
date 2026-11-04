@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { go } from "fuzzysort"
-import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/dialog-model"
+import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/model-options"
 
 describe("prioritizeFavorites", () => {
   test("uses the favorite order captured when the dialog opened", () => {
@@ -28,7 +28,7 @@ describe("sortModelOptions", () => {
     const options = [
       { providerID: "anthropic", title: "Claude Haiku 4.5" },
       { providerID: "opencode", title: "Claude Haiku 3" },
-      { providerID: "anthropic", title: "Claude Haiku Free", footer: "Free" },
+      { providerID: "anthropic", title: "Claude Haiku Free", free: true },
     ].map((item) => ({ ...item, providerID: mode === "provider" ? "anthropic" : item.providerID }))
     const matches = mode === "search" ? go("haik", options, { key: "title" }).map((item) => item.obj) : options
     const titles = sortModelOptions(matches, mode === "provider").map((item) => item.title)
@@ -52,7 +52,7 @@ describe("sortModelOptions", () => {
     const sorted = sortModelOptions(
       [
         { providerID: "opencode-go", title: "Go model" },
-        { providerID: "opencode", title: "Free Zen model", footer: "Free" },
+        { providerID: "opencode", title: "Free Zen model", free: true },
         { providerID: "anthropic", title: "Anthropic model" },
       ],
       false,
@@ -96,7 +96,7 @@ describe("sortModelOptions", () => {
       providerName: "OpenCode Zen",
       releaseDate: index === 0 ? 1000 : 5000 - index,
       title,
-      footer: "Free",
+      free: true,
     }))
 
     expect(sortModelOptions(options, false).map((model) => model.title)).toEqual(serverOrder)

@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "디버그 표시줄 전환",
+  providerAriaLabel: "공급자 성능 진단",
+  na: "해당 없음",
+  "duration.label": "TIME",
+  "duration.tip": "최근 턴을 시작한 프롬프트부터 응답이 완료될 때까지 걸린 시간입니다.",
+  "tps.label": "TPS",
+  "tps.tip": "최근 턴의 모델 요청 전체에서 초당 출력 및 추론 토큰 수입니다. 도구 시간은 제외됩니다.",
+  "focus.label": "FOCUS",
+  "focus.tip": "모든 대화형 요소에 포커스 스타일 강제 적용",
+  "focus.on": "켬",
+  "focus.off": "끔",
+  "direction.label": "DIR",
+  "direction.tip": "선택한 언어를 변경하지 않고 전체 앱의 레이아웃 방향 강제 설정",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

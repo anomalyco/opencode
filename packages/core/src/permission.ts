@@ -3,6 +3,7 @@ export * as Permission from "./permission.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Permission } from "@opencode/schema/permission"
+import type { Tool } from "@opencode/schema/tool"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { Agent } from "./agent.js"
@@ -24,48 +25,54 @@ export type ID = typeof ID.Type
 export const Source = Permission.Source
 export type Source = typeof Source.Type
 
-const RequestFields = {
-  sessionID: Permission.Request.fields.sessionID,
-  action: Permission.Request.fields.action,
-  resources: Permission.Request.fields.resources,
-  save: Permission.Request.fields.save,
-  metadata: Permission.Request.fields.metadata,
-  source: Permission.Request.fields.source,
-}
-
 export const Request = Permission.Request
 export type Request = typeof Request.Type
 
 export const Reply = Permission.Reply
 export type Reply = typeof Reply.Type
 
-export const AssertInput = Schema.Struct({
-  id: ID.pipe(Schema.optional),
-  ...RequestFields,
-  agent: Agent.ID.pipe(Schema.optional),
-}).annotate({ identifier: "Permission.AssertInput" })
-export type AssertInput = typeof AssertInput.Type
+export interface AssertInput extends Omit<Request, "id" | "message"> {
+  readonly id?: ID
+  readonly agent?: Agent.ID
+}
 
-export const ReplyInput = Schema.Struct({
-  requestID: ID,
-  reply: Reply,
-  message: Schema.String.pipe(Schema.optional),
-}).annotate({ identifier: "Permission.ReplyInput" })
-export type ReplyInput = typeof ReplyInput.Type
+/** The requester fields of a permission request made by a tool call. */
+export const invocation = (context: Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">) => ({
+  sessionID: context.sessionID,
+  agent: context.agent,
+  source: { type: "tool" as const, messageID: context.messageID, id: context.id },
+})
 
-export const AskResult = Schema.Struct({
-  id: ID,
-  effect: Permission.Effect,
-}).annotate({ identifier: "Permission.AskResult" })
-export type AskResult = typeof AskResult.Type
+export interface ReplyInput {
+  readonly requestID: ID
+  readonly reply: Reply
+  readonly message?: string
+}
+
+export interface AskResult {
+  readonly id: ID
+  readonly effect: Permission.Effect
+}
 
 export { Event } from "@opencode/schema/permission"
+
+/**
+ * Rules that settle a request which would otherwise ask, for work nobody is present to answer, such as a schedule's
+ * check. A request they do not allow is denied. Configured denies still win, as they are evaluated first.
+ */
+export const Unattended = Context.Reference<Permission.Ruleset | undefined>("@opencode/Permission/Unattended", {
+  defaultValue: () => undefined,
+})
 
 export class DeclinedError extends Schema.TaggedError<DeclinedError>()("Permission.DeclinedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedError<CorrectedError>()("Permission.CorrectedError", {
   feedback: Schema.String,
-}) {}
+}) {
+  override get message() {
+    return this.feedback
+  }
+}
 
 export class BlockedError extends Schema.TaggedError<BlockedError>()("Permission.BlockedError", {
   rules: Permission.Ruleset,
@@ -121,6 +128,10 @@ export interface Interface {
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
+  /** Fails only when the rules deny the request; never asks the user. */
+  readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
+  /** True only when the rules already allow the request; never asks the user. */
+  readonly allows: (input: AssertInput) => Effect.Effect<boolean, SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
@@ -208,8 +219,20 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
-      yield* logEvaluation(input, event.effect, rule, all)
-      return { effect: event.effect, message: event.message, rules: all }
+      const unattended = yield* Unattended
+      if (event.effect !== "ask" || unattended === undefined) {
+        yield* logEvaluation(input, event.effect, rule, all)
+        return { effect: event.effect, message: event.message, rules: all }
+      }
+      const settled = [...all, ...unattended]
+      const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
+      yield* logEvaluation(input, allowed ? "allow" : "deny", rule, all)
+      if (allowed) return { effect: "allow" as const, rules: all }
+      return {
+        effect: "deny" as const,
+        message: `Permission ${input.action} needs approval, and nobody is present to give it`,
+        rules: all,
+      }
     })
 
     function request(input: AssertInput, message?: string): Request {
@@ -295,6 +318,22 @@ const layer = Layer.effect(
       }),
     )
 
+    const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (input: AssertInput) {
+      const result = yield* evaluateInput(input)
+      if (result.effect !== "deny") return
+      return yield* new BlockedError({
+        rules: relevant(input, result.rules),
+        permission: input.action,
+        resources: input.resources,
+        reason: result.message,
+      })
+    })
+
+    const allows = Effect.fn("Permission.allows")(function* (input: AssertInput) {
+      if (closed) return false
+      return (yield* evaluateInput(input)).effect === "allow"
+    })
+
     const reply = Effect.fn("Permission.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
@@ -357,7 +396,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, reply, get, forSession, list, close })
+    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, close })
   }),
 )
 

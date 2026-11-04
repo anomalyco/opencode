@@ -1,4 +1,5 @@
 import { useI18n } from "@opencode/ui/context/i18n"
+import { abort } from "@opencode/util/abort"
 import { checksum } from "@opencode/util/encode"
 import {
   type ComponentProps,
@@ -6,6 +7,7 @@ import {
   createResource,
   createSignal,
   createUniqueId,
+  For,
   onCleanup,
   type Setter,
   splitProps,
@@ -39,13 +41,18 @@ import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
   useMarkdown,
+  type MarkdownCodeBlock,
+  type MarkdownCodeBlockMatch,
+  type MarkdownCodeBlocks,
   type OpenMarkdownLocalFile,
   type ReadMarkdownImage,
   type MarkdownLocalFileExists,
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markdownClipboardHtml } from "./markdown-clipboard"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -73,6 +80,10 @@ const renderedMarkdown = new WeakMap<
   HTMLDivElement,
   { renderer: ReturnType<typeof createMarkdownRenderer>; raw: string }
 >()
+
+type InlineCodeCheck = { pending?: Promise<void> }
+
+const inlineCodeChecks = new WeakMap<HTMLDivElement, InlineCodeCheck>()
 
 function escape(text: string) {
   return text
@@ -197,20 +208,26 @@ function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
   host.removeAttribute("data-copied")
 }
 
-function disposeCopyButton(host: HTMLElement) {
+// The Solid roots a code block holds besides its Copy button: plugin content and action buttons.
+const codeHostDisposers = new WeakMap<HTMLElement, () => void>()
+
+const codeHostSelector =
+  '[data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'
+
+function disposeCodeHost(host: HTMLElement) {
   copyButtonState.get(host)?.dispose()
   copyButtonState.delete(host)
+  codeHostDisposers.get(host)?.()
+  codeHostDisposers.delete(host)
 }
 
-function disposeCopyButtons(root: Element) {
+function disposeCodeHosts(root: Element) {
   const hosts = [
-    ...(root instanceof HTMLElement && root.getAttribute("data-slot") === "markdown-copy-button" ? [root] : []),
-    ...Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
-      (el): el is HTMLElement => el instanceof HTMLElement,
-    ),
+    ...(root instanceof HTMLElement && root.matches(codeHostSelector) ? [root] : []),
+    ...Array.from(root.querySelectorAll(codeHostSelector)).filter((el): el is HTMLElement => el instanceof HTMLElement),
   ]
 
-  hosts.forEach(disposeCopyButton)
+  hosts.forEach(disposeCodeHost)
 }
 
 function disposeRenderedMarkdown(root: Element) {
@@ -222,6 +239,7 @@ function disposeRenderedMarkdown(root: Element) {
   blocks.forEach((block) => {
     renderedMarkdown.get(block)?.renderer.dispose()
     renderedMarkdown.delete(block)
+    inlineCodeChecks.delete(block)
   })
 }
 
@@ -293,6 +311,130 @@ function clearMermaid(wrapper: HTMLElement) {
   wrapper.querySelector('[data-component="markdown-mermaid"]')?.remove()
 }
 
+type CodePlugins = { blocks: MarkdownCodeBlocks; match: MarkdownCodeBlockMatch }
+
+type CodeMount = { match: MarkdownCodeBlockMatch; source: string; content?: HTMLElement }
+
+const codeMounts = new WeakMap<HTMLElement, CodeMount>()
+
+// Content for a block's language replaces its code only once the closing fence arrived, so it never receives half a
+// block; until then, and when the content declines or fails, the block shows its code (or the built-in diagram).
+// Blocks of other languages take the plain path.
+function decorateCode(wrapper: HTMLElement, code: HTMLElement, complete: boolean, plugins: CodePlugins | undefined) {
+  const previous = codeMounts.get(wrapper)
+
+  if (!plugins && !previous) return decorateMermaid(wrapper, code, complete)
+
+  const language = codeLanguage(wrapper.dataset.language)
+  const claimed = !!plugins?.match.render.has(language)
+  const acted = complete && !!plugins?.match.actions.has(language)
+
+  if (!previous && !acted && !(claimed && complete))
+    return claimed ? clearMermaid(wrapper) : decorateMermaid(wrapper, code, complete)
+
+  const source = (code.textContent ?? "").replace(/\n$/, "")
+
+  if (previous?.match === plugins?.match && previous?.source === source) return
+
+  if (previous) clearCodeMount(wrapper, previous)
+
+  if (!plugins || (!claimed && !acted)) return decorateMermaid(wrapper, code, complete)
+
+  if (!complete) return clearMermaid(wrapper)
+
+  const block = { code: source, language }
+  const mount: CodeMount = { match: plugins.match, source }
+  codeMounts.set(wrapper, mount)
+
+  if (acted)
+    wrapper.insertBefore(
+      createCodeActions(plugins.blocks, block),
+      wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]'),
+    )
+
+  if (!claimed) return decorateMermaid(wrapper, code, complete)
+
+  clearMermaid(wrapper)
+  const content = document.createElement("div")
+  content.dataset.slot = "markdown-code-content"
+  mount.content = content
+  wrapper.dataset.codeContent = ""
+  wrapper.appendChild(content)
+
+  const dispose = plugins.blocks.render(content, block, () => {
+    if (mount.content === content) showCode(wrapper, code, mount)
+  })
+
+  // The content already failed while it rendered.
+  if (mount.content !== content) return dispose?.()
+
+  if (!dispose) return showCode(wrapper, code, mount)
+
+  codeHostDisposers.set(content, dispose)
+}
+
+// Matches the language the worker's parser puts in a block's class, so streamed and completed blocks agree.
+function codeLanguage(language: string | undefined) {
+  return (language ?? "").toLowerCase().replace(/[^\w#+.-]/g, "")
+}
+
+function showCode(wrapper: HTMLElement, code: HTMLElement, mount: CodeMount) {
+  const content = mount.content
+  mount.content = undefined
+  delete wrapper.dataset.codeContent
+
+  if (content) {
+    disposeCodeHost(content)
+    content.remove()
+  }
+
+  decorateMermaid(wrapper, code, true)
+}
+
+function clearCodeMount(wrapper: HTMLElement, mount: CodeMount) {
+  codeMounts.delete(wrapper)
+  mount.content = undefined
+  delete wrapper.dataset.codeContent
+  wrapper
+    .querySelectorAll<HTMLElement>(
+      ':scope > [data-slot="markdown-code-actions"], :scope > [data-slot="markdown-code-content"]',
+    )
+    .forEach((host) => {
+      disposeCodeHost(host)
+      host.remove()
+    })
+}
+
+function createCodeActions(blocks: MarkdownCodeBlocks, block: MarkdownCodeBlock) {
+  const host = document.createElement("div")
+  host.setAttribute("data-slot", "markdown-code-actions")
+
+  codeHostDisposers.set(
+    host,
+    render(
+      () => (
+        <For each={blocks.actions(block.language)}>
+          {(action) => (
+            <Tooltip placement="top" value={action.title}>
+              <IconButton
+                type="button"
+                size="normal"
+                variant="ghost-muted"
+                aria-label={action.title}
+                icon={<Icon name={action.icon} />}
+                onClick={() => action.run(block)}
+              />
+            </Tooltip>
+          )}
+        </For>
+      ),
+      host,
+    ),
+  )
+
+  return host
+}
+
 function markCodeLinks(root: HTMLDivElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
 
@@ -326,6 +468,16 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
+// Tables scroll inside a rounded frame.
+function wrapTables(root: HTMLDivElement) {
+  root.querySelectorAll("table").forEach((table) => {
+    const wrapper = document.createElement("div")
+    wrapper.dataset.component = "markdown-table"
+    table.replaceWith(wrapper)
+    wrapper.appendChild(table)
+  })
+}
+
 const publicFaviconHost = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
 
 const privateFaviconSuffix = /\.(?:alt|example|internal|invalid|local|localhost|onion|test|ts\.net)$/
@@ -339,14 +491,13 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
 
     if (url.protocol !== "http:" && url.protocol !== "https:") return
 
-    if (url.hostname.toLowerCase() === "github.com") return
-
     const favicon = document.createElement("span")
     favicon.className = "markdown-link-favicon"
     favicon.setAttribute("aria-hidden", "true")
     const host = url.hostname.toLowerCase()
 
-    if (
+    if (host === "github.com") favicon.dataset.github = ""
+    else if (
       publicFaviconHost.test(host) &&
       !privateFaviconSuffix.test(host) &&
       host !== "home.arpa" &&
@@ -354,6 +505,7 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
     ) {
       const image = document.createElement("img")
       image.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.host)}&sz=32`
+      favicon.style.setProperty("--markdown-link-favicon", `url("${image.src}")`)
       image.alt = ""
       image.setAttribute("data-markdown-favicon", "")
       image.width = 14
@@ -366,13 +518,19 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
   })
 }
 
+// The globe stands in only until the favicon loads, then the favicon replaces it so a transparent one hides it.
+function showFavicon(image: HTMLImageElement) {
+  image.dataset.loaded = ""
+  image.parentElement?.setAttribute("data-loaded", "")
+}
+
 function setupExternalLinkFavicons(root: HTMLDivElement) {
   const loaded = (event: Event) => {
     const image = event.target
 
     if (!(image instanceof HTMLImageElement) || !image.hasAttribute("data-markdown-favicon")) return
 
-    if (image.naturalWidth > 0) image.dataset.loaded = ""
+    if (image.naturalWidth > 0) showFavicon(image)
   }
 
   root.addEventListener("load", loaded, true)
@@ -386,9 +544,13 @@ function markInlineCode(
   source: HTMLDivElement,
   target: HTMLDivElement,
   live: boolean,
+  signal: AbortSignal,
   localFileExists?: MarkdownLocalFileExists,
 ) {
-  const checked = new Set<string>()
+  const check: InlineCodeCheck = {}
+  inlineCodeChecks.set(target, check)
+  const checked = new Map<string, boolean | Promise<boolean>>()
+  const pending: Promise<void>[] = []
 
   for (const code of source.querySelectorAll<HTMLElement>(":not(pre) > code")) {
     delete code.dataset.inlineCodeKind
@@ -398,18 +560,45 @@ function markInlineCode(
     if (kind === "url") code.dataset.inlineCodeKind = kind
 
     // Code inside a link already goes where the link does.
-    if (kind !== "path" || live || !localFileExists || code.closest("a") || checked.has(text)) continue
+    if (kind !== "path" || live || !localFileExists || code.closest("a")) continue
 
-    checked.add(text)
-    void Promise.resolve(localFileExists(text))
-      .then((exists) => {
-        if (!exists) return
-        target.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((node) => {
-          if (!node.closest("a") && (node.textContent ?? "").trim() === text) node.dataset.inlineCodeKind = "path"
+    const previous = checked.get(text)
+
+    if (previous !== undefined) {
+      if (previous === true) code.dataset.inlineCodeKind = "path"
+
+      continue
+    }
+
+    const exists = localFileExists(text)
+    checked.set(text, exists)
+
+    // Decorate the source before it is inserted or copied into a live Markdown renderer.
+    if (exists === true || exists === false) {
+      if (exists) code.dataset.inlineCodeKind = "path"
+
+      continue
+    }
+
+    pending.push(
+      exists
+        .then((exists) => {
+          if (!exists || signal.aborted || inlineCodeChecks.get(target) !== check) return
+          target.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((node) => {
+            if (!node.closest("a") && (node.textContent ?? "").trim() === text) node.dataset.inlineCodeKind = "path"
+          })
         })
-      })
-      .catch(() => undefined)
+        .catch(() => undefined),
+    )
   }
+
+  if (pending.length === 0) return
+
+  check.pending = Promise.all(pending).then(() => {
+    if (inlineCodeChecks.get(target) === check) inlineCodeChecks.delete(target)
+  })
+
+  return check.pending
 }
 
 function localLinkTarget(target: EventTarget | null) {
@@ -506,8 +695,24 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
       clearTimeout(timeout)
     }
 
-    disposeCopyButtons(root)
+    disposeCodeHosts(root)
   }
+}
+
+// Selections that leave this message keep the browser's copy, since surrounding UI may hold hidden content.
+function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
+  const selection = window.getSelection()
+
+  if (event.defaultPrevented || !event.clipboardData || !selection || selection.isCollapsed) return
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+
+  if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", selection.toString())
+  event.clipboardData.setData(
+    "text/html",
+    `<meta charset="utf-8">${ranges.map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
+  )
 }
 
 function initialResult(
@@ -576,6 +781,12 @@ export function Markdown(
   const lifetime = new AbortController()
   const activeCodeKeys = new Set<string>()
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
+  const settledMarkdown = new Map<string, Exclude<RenderedBlock, { mode: "code" }>>()
+  let renderedBlocks: RenderedBlock[] = []
+  let lastRender: { base: string | undefined; blocks: Block[]; rendered: RenderedBlock[] } | undefined
+  let appliedLabels: CopyLabels | undefined
+  // The code block languages the blocks were decorated for; false before the first run.
+  let decoratedMatch: MarkdownCodeBlockMatch | undefined | false = false
   let streamed = false
 
   const [projection] = createResource(
@@ -650,43 +861,88 @@ export function Markdown(
 
       if (!streamed && initial.ready && initial.text === src.text) return initial
 
-      const base = src.key ?? checksum(src.text)
+      const base = src.key ?? (!streamed ? checksum(src.text) : undefined)
 
-      return Promise.all(
-        src.projection.blocks.map(async (block, index) => {
-          const key = base ? `${base}:${index}:${block.mode}` : undefined
-          const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
+      const render = async (block: Block, index: number): Promise<RenderedBlock> => {
+        const key = base ? `${base}:${index}:${block.mode}` : undefined
+        const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
 
-          if (block.mode === "code") {
-            const cached = completedCode.get(blockKey)
+        if (block.mode === "code") {
+          const cached = completedCode.get(blockKey)
 
-            if (block.complete && cached?.raw === block.raw) return cached
-            const result = await code(block.src, block.language, blockKey, block.complete)
+          if (block.complete && cached?.raw === block.raw) return cached
+          const result = await code(block.src, block.language, blockKey, block.complete)
 
-            const rendered = {
-              key: blockKey,
-              mode: block.mode,
-              raw: block.raw,
-              hash: String(block.raw.length),
-              complete: !!block.complete,
-              ...result,
-            }
-
-            if (block.complete) completedCode.set(blockKey, rendered)
-
-            return rendered
-          }
-
-          const ready = block.mode === "full" ? getReadyMarkdown(block, key) : undefined
-
-          return {
+          const rendered = {
             key: blockKey,
             mode: block.mode,
-            ...(ready ?? (await renderCachedMarkdown(block, key, lifetime.signal))),
+            raw: block.raw,
+            hash: String(block.raw.length),
+            complete: !!block.complete,
+            ...result,
           }
-        }),
+
+          if (block.complete) completedCode.set(blockKey, rendered)
+
+          return rendered
+        }
+
+        if (block.mode === "full") {
+          const settled = settledMarkdown.get(blockKey)
+
+          if (settled && (settled.src ?? settled.raw) === block.src) {
+            if (key) {
+              const cached = getCachedMarkdown(key)
+
+              if (cached) touchCachedMarkdown(key, cached)
+            }
+
+            return settled
+          }
+        }
+
+        const ready = block.mode === "full" ? getReadyMarkdown(block, key) : undefined
+        const entry = ready ?? (await renderCachedMarkdown(block, key, lifetime.signal))
+
+        if (block.mode === "full") {
+          const settled = {
+            key: blockKey,
+            mode: block.mode,
+            ...entry,
+          }
+
+          settledMarkdown.set(blockKey, settled)
+
+          return settled
+        }
+
+        return {
+          key: blockKey,
+          mode: block.mode,
+          ...entry,
+        }
+      }
+
+      // The worker keeps an unchanged block as the same object, so the block the last render made from it is reused.
+      // Rendering every block of the answer again on each delta cost a promise and two key strings per block.
+      const previous = lastRender?.base === base ? lastRender : undefined
+
+      const queued = src.projection.blocks.map((block, index) =>
+        previous?.blocks[index] === block ? previous.rendered[index]! : render(block, index),
       )
-        .then((blocks) => ({ text: src.text, blocks, ready: true }) satisfies RenderResult)
+
+      return Promise.all(
+        queued.flatMap((item, index) =>
+          item instanceof Promise ? [item.then((block) => [index, block] as const)] : [],
+        ),
+      )
+        .then((done) => {
+          const resolved = new Map(done)
+          const blocks = queued.map((item, index) => (item instanceof Promise ? resolved.get(index)! : item))
+          lastRender = { base, blocks: src.projection.blocks, rendered: blocks }
+
+          return { text: src.text, blocks, ready: true } satisfies RenderResult
+        })
         .catch(
           () =>
             (lifetime.signal.aborted
@@ -713,6 +969,7 @@ export function Markdown(
   let linkCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
+  let fragmentLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -733,9 +990,20 @@ export function Markdown(
     }
 
     delete container.dataset.markdownReady
+    const codeBlocks = markdown?.codeBlocks
+    const match = codeBlocks?.current()
+
+    const plugins =
+      codeBlocks && match && (match.render.size > 0 || match.actions.size > 0)
+        ? { blocks: codeBlocks, match }
+        : undefined
+
+    const redecorate = decoratedMatch !== false && decoratedMatch !== match
+    decoratedMatch = match
 
     if (content.length === 0) {
-      disposeCopyButtons(container)
+      renderedBlocks = []
+      disposeCodeHosts(container)
       disposeRenderedMarkdown(container)
       container.innerHTML = ""
       images?.update(container)
@@ -756,15 +1024,37 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) =>
-      updateBlock(container, index, block, labels, !!markdown?.openSession, markdown?.localFileExists),
-    )
+    const sessionLinks = markdown?.sessionTitle
+    const localFileExists = markdown?.localFileExists
+
+    const pending = content.flatMap((block, index) => {
+      const current = container.children[index]
+
+      const check =
+        renderedBlocks[index] === block && current instanceof HTMLDivElement
+          ? inlineCodeChecks.get(current)?.pending
+          : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
+
+      return check ? [check] : []
+    })
+
+    renderedBlocks = content
+
+    // Blocks kept from earlier runs follow a plugin that starts or stops handling their language.
+    if (redecorate)
+      container.querySelectorAll<HTMLElement>('[data-component="markdown-code"]').forEach((wrapper) => {
+        const code = wrapper.querySelector<HTMLElement>(":scope > pre > code")
+
+        if (code) decorateCode(wrapper, code, wrapper.parentElement?.dataset.markdownComplete !== "false", plugins)
+      })
+
+    if (sessionLinks) markSessionLinks(container, sessionLinks)
 
     while (container.children.length > content.length) {
       const child = container.lastElementChild
 
       if (!child) break
-      disposeCopyButtons(child)
+      disposeCodeHosts(child)
       disposeRenderedMarkdown(child)
       child.remove()
     }
@@ -772,11 +1062,17 @@ export function Markdown(
     images?.update(container)
     previewImages(container)
     container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
-      if (image.complete && image.naturalWidth > 0) image.dataset.loaded = ""
+      if (image.complete && image.naturalWidth > 0) showFavicon(image)
     })
-    container
-      .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-      .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+
+    // A button gets the labels of the run that creates it, so the others only need new ones when the language changes.
+    // Relabelling every button on each streamed delta re-rendered each one's tooltip and icon button.
+    if (appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied)
+      container
+        .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
+        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+
+    appliedLabels = labels
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
@@ -788,14 +1084,29 @@ export function Markdown(
 
     if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
 
+    if (!fragmentLinkCleanup) fragmentLinkCleanup = setupFragmentLinks(container)
+
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
 
-    if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
+    if (!result?.ready || result.text !== local.text) return
+
+    if (local.streaming || pending.length === 0) {
+      container.dataset.markdownReady = ""
+
+      return
+    }
+
+    // Cold timelines already wait for Markdown readiness before measuring and revealing their content. Include
+    // path classification so the first visible frame uses the final blue-link styling and padding.
+    void Promise.all(pending).then(() => {
+      if (lifetime.signal.aborted || renderedBlocks !== content || result.text !== local.text) return
+      container.dataset.markdownReady = ""
+    })
   })
 
   onCleanup(() => {
-    lifetime.abort()
+    abort(lifetime)
     images?.dispose()
 
     if (copyCleanup) copyCleanup()
@@ -803,6 +1114,8 @@ export function Markdown(
     if (linkCleanup) linkCleanup()
 
     if (sessionLinkCleanup) sessionLinkCleanup()
+
+    if (fragmentLinkCleanup) fragmentLinkCleanup()
 
     if (faviconCleanup) faviconCleanup()
     const container = root()
@@ -812,6 +1125,8 @@ export function Markdown(
     if (streamed) disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
+    settledMarkdown.clear()
+    renderedBlocks = []
   })
 
   return (
@@ -824,6 +1139,7 @@ export function Markdown(
         [local.class ?? ""]: !!local.class,
       }}
       ref={setRoot}
+      onCopy={copySelection}
       {...others}
     />
   )
@@ -877,13 +1193,15 @@ function updateBlock(
   index: number,
   block: RenderedBlock,
   labels: CopyLabels,
-  sessionLinks: boolean,
+  plugins: CodePlugins | undefined,
+  sessionLinks: ((id: string) => string | undefined) | undefined,
+  signal: AbortSignal,
   localFileExists?: MarkdownLocalFileExists,
 ) {
   const current = container.children[index]
 
   if (block.mode === "code") {
-    updateCodeBlock(container, current, block, labels)
+    updateCodeBlock(container, current, block, labels, plugins)
 
     return
   }
@@ -897,10 +1215,11 @@ function updateBlock(
     // A block that finishes streaming keeps its DOM and the user's selection; only its file paths get checked now.
     if (existing.dataset.markdownMode === "live" && block.mode !== "live") {
       existing.dataset.markdownMode = block.mode
-      markInlineCode(existing, existing, false, localFileExists)
+
+      return markInlineCode(existing, existing, false, signal, localFileExists)
     }
 
-    return
+    return inlineCodeChecks.get(existing)?.pending
   }
 
   const next = existing ?? document.createElement("div")
@@ -913,25 +1232,26 @@ function updateBlock(
   // Keep live renderers in control of their DOM, including after completion.
   const source = rendered || block.mode === "live" ? document.createElement("div") : next
 
-  if (source === next) disposeCopyButtons(next)
+  if (source === next) disposeCodeHosts(next)
   source.innerHTML = block.html
-  markInlineCode(source, next, block.mode === "live", localFileExists)
+  const pending = markInlineCode(source, next, block.mode === "live", signal, localFileExists)
   markCodeLinks(source)
+  wrapTables(source)
 
-  if (sessionLinks) markSessionLinks(source)
+  if (sessionLinks) markSessionLinks(source, sessionLinks)
   markExternalLinkFavicons(source)
 
   if (rendered) {
-    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+    rendered.renderer.update(source, block.mode === "live", rendered.raw !== block.raw)
     rendered.raw = block.raw
 
-    return
+    return pending
   }
 
   if (block.mode === "live") {
     next.replaceChildren()
     renderedMarkdown.set(next, {
-      renderer: createMarkdownRenderer(next, source.innerHTML, true),
+      renderer: createMarkdownRenderer(next, source, true),
       raw: block.raw,
     })
   }
@@ -950,21 +1270,23 @@ function updateBlock(
       pre.replaceWith(wrapper)
       wrapper.appendChild(pre)
       wrapper.appendChild(createCopyButton(labels))
-      decorateMermaid(wrapper, code, true)
+      decorateCode(wrapper, code, true, plugins)
     })
   }
 
-  if (existing) return
+  if (existing) return pending
 
   if (!current) {
     container.appendChild(next)
 
-    return
+    return pending
   }
 
-  disposeCopyButtons(current)
+  disposeCodeHosts(current)
   disposeRenderedMarkdown(current)
   current.replaceWith(next)
+
+  return pending
 }
 
 function updateCodeBlock(
@@ -972,6 +1294,7 @@ function updateCodeBlock(
   current: Element | undefined,
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
+  plugins: CodePlugins | undefined,
 ) {
   const existing =
     current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && renderedCodeTokens.has(current)
@@ -1020,7 +1343,7 @@ function updateCodeBlock(
       raw: block.raw,
     })
 
-    if (wrapper instanceof HTMLElement) decorateMermaid(wrapper, code, block.complete)
+    if (wrapper instanceof HTMLElement) decorateCode(wrapper, code, block.complete, plugins)
 
     return
   }
@@ -1029,14 +1352,14 @@ function updateCodeBlock(
   wrapper.setAttribute("data-component", "markdown-code")
   applyCodeMetadata(wrapper, block.language)
   const pre = document.createElement("pre")
-  pre.className = "shiki OpenCode"
+  pre.className = "highlights"
   const codeElement = document.createElement("code")
   codeElement.className = `language-${block.language}`
   ;[...block.stable, ...block.unstable].map(createTokenSpan).forEach((span) => codeElement.appendChild(span))
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
   wrapper.appendChild(createCopyButton(labels))
-  decorateMermaid(wrapper, codeElement, block.complete)
+  decorateCode(wrapper, codeElement, block.complete, plugins)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,
@@ -1047,7 +1370,7 @@ function updateCodeBlock(
   })
 
   if (current) {
-    disposeCopyButtons(current)
+    disposeCodeHosts(current)
     disposeRenderedMarkdown(current)
     current.replaceWith(next)
 

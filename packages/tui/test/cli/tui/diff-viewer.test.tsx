@@ -2486,6 +2486,8 @@ test.each([100, 160])("the sidebar source picker switches VCS sources at %i colu
       (frame) => !frame.includes("Diff source") && frame.includes("Uncommitted") && frame.includes("const first"),
     )
     expect(viewer.vcsDiffInput()).toEqual({ location: { directory: "/repo/session" }, mode: "working", context: "12" })
+    // The header resized with the new label; render once more so the click hits its new position.
+    await viewer.app.flush()
     await viewer.app.mockMouse.click(source().x, source().y)
     await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
     viewer.app.mockInput.pressKey("HOME")

@@ -11,6 +11,8 @@ export default $config({
         input.stage === "beta"
           ? {}
           : {
+              // Production state was written by 6.15.0; the default 6.13 provider can't read it back.
+              cloudflare: "6.15.0",
               aws: {
                 version: "7.30.0",
                 region: "us-east-1",
@@ -36,7 +38,7 @@ export default $config({
 
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    const stats = stage.deployAws ? await import("./infra/stats.js") : undefined
+    const stats = stage.deployStats ? await import("./infra/stats.js") : undefined
     await import("./infra/console.js")
     await import("./infra/share.js")
 

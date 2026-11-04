@@ -96,7 +96,7 @@ export function DialogHeader(
     closeLabel?: string
     onClose?: () => void
     gap?: number
-    /** Faint line below the title. Shown only under the "new-designs" experiment. */
+    /** Muted line below the title. Shown only under the "new-designs" experiment. */
     description?: string
   }>,
 ) {
@@ -112,7 +112,7 @@ export function DialogHeader(
       )}
       {props.children}
       <text
-        fg={newDesigns() ? theme.text.faint : theme.text.muted}
+        fg={theme.text.muted}
         flexShrink={0}
         onMouseUp={() => (props.onClose ?? dialog.clear)()}
       >
@@ -124,7 +124,7 @@ export function DialogHeader(
     <Show when={newDesigns() && props.description} fallback={row()}>
       <box>
         {row()}
-        <text fg={theme.text.faint} wrapMode="word">
+        <text fg={theme.text.muted} wrapMode="word">
           {props.description}
         </text>
       </box>
@@ -147,6 +147,8 @@ export function DialogLayout(
     legacyFooter?: JSX.Element
     /** Side padding in cells. Defaults to DIALOG_INSET. */
     inset?: number
+    /** Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1. */
+    footerGap?: number
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
@@ -154,7 +156,7 @@ export function DialogLayout(
   return (
     <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
       {props.header}
-      <box>{props.children}</box>
+      <box paddingBottom={newDesigns() && props.footer ? (props.footerGap ?? 1) - 1 : 0}>{props.children}</box>
       <Show when={newDesigns() || props.legacyFooter === undefined} fallback={props.legacyFooter}>
         <Show when={props.footer}>
           {(footer) => (
@@ -185,7 +187,7 @@ export type DialogFooterAction = {
   command?: string
   onTrigger?: () => void
   disabled?: boolean
-  /** Overrides the title color, e.g. for a "✓ copied" confirmation. */
+  /** Overrides the title and key color, e.g. for a "copied ✓" confirmation. */
   color?: RGBA
 }
 
@@ -276,7 +278,7 @@ function DialogFooterItem(props: { action: DialogFooterAction; variant: "primary
         {props.action.title}
       </span>
       <Show when={props.action.key}>
-        <span style={{ fg: props.action.disabled ? theme.text.action.primary.disabled : key }}>
+        <span style={{ fg: props.action.disabled ? theme.text.action.primary.disabled : (props.action.color ?? key) }}>
           {" " + props.action.key}
         </span>
       </Show>
@@ -295,7 +297,7 @@ function DialogFooterItem(props: { action: DialogFooterAction; variant: "primary
         onMouseOut={() => setHovered(false)}
         onMouseUp={trigger}
       >
-        <text>{label(theme.text.faint)}</text>
+        <text>{label(theme.text.muted)}</text>
       </box>
     </Show>
   )

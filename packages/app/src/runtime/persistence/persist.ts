@@ -2,7 +2,7 @@ import type { AsyncStorage, PersistenceSyncAPI, SyncStorage } from "@solid-primi
 import { getOwner, onCleanup, untrack } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 
-export const persistSaveDelay = 100
+const persistSaveDelay = 100
 
 const pending = new Set<() => void>()
 

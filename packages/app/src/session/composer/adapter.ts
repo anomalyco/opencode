@@ -1,5 +1,5 @@
 import type { Accessor } from "solid-js"
-import type { ActiveComposerAdapter, ComposerControls } from "@/composer/adapter"
+import type { ActiveComposerAdapter, ComposerControls, ComposerSession } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -12,6 +12,7 @@ export function createActiveComposerAdapter(input: {
   controls: Accessor<ComposerControls>
   submitted: () => void
   setEditor: (element: HTMLDivElement) => void
+  background: NonNullable<ComposerSession["background"]>
 }) {
   const id = input.sessionID
 
@@ -38,6 +39,7 @@ export function createActiveComposerAdapter(input: {
       data,
       current: () => data.session.get(id),
       admitted: (messageID) => data.session.input.has(id, messageID) || !!data.session.message.get(id, messageID),
+      background: input.background,
     }),
     interrupt: () =>
       server.api.session

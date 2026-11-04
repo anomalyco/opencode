@@ -135,6 +135,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                     }
                     const foreground = () => {
                       if (row.kind === "directory") return theme.text.muted
+                      if (selected()) return theme.text.action.primary.selected
                       return reviewed() ? theme.text.muted : theme.text.base
                     }
                     const background = () => {

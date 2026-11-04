@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
@@ -45,6 +45,30 @@ describe("Credential", () => {
       expect(yield* credentials.list(integrationID)).toEqual([
         expect.objectContaining({ id: created.id, label: "Personal" }),
       ])
+    }),
+  )
+
+  it.effect("reads key form answers stored in configuration before v2.1 as metadata", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const db = (yield* Database.Service).db
+      const integrationID = Integration.ID.make("azure")
+      // A row from an earlier release, which the current schema would otherwise strip.
+      const legacy = {
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "older" },
+        configuration: { resourceName: "answered" },
+      }
+      yield* db.run(
+        sql`INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred_legacy', ${integrationID}, 'Legacy', ${JSON.stringify(legacy)}, 1, 0, 0)`,
+      )
+
+      expect((yield* credentials.get(Credential.ID.make("cred_legacy")))?.value).toEqual({
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "answered" },
+      })
     }),
   )
 

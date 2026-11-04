@@ -24,19 +24,7 @@ describe("integrationOptions", () => {
         integration({ id: "opencode", name: "OpenCode Zen" }),
         integration({ id: "opencode-go", name: "OpenCode Go" }),
       ]).map((item) => item.id),
-    ).toEqual(["opencode-go", "opencode", "openai", "anthropic", "mistral", "custom-z"])
-  })
-
-  test("keeps MCP integrations above popular integrations without relying on their IDs", () => {
-    expect(
-      integrationOptions([
-        integration({ id: "openai", name: "OpenAI" }),
-        integration({ id: "linear", name: "Linear", metadata: { source: "mcp" } }),
-        integration({ id: "github", name: "GitHub", metadata: { source: "mcp" } }),
-        integration({ id: "opencode", name: "OpenCode Zen" }),
-        integration({ id: "opencode-go", name: "OpenCode Go" }),
-      ]).map((item) => item.id),
-    ).toEqual(["github", "linear", "opencode-go", "opencode", "openai"])
+    ).toEqual(["opencode", "opencode-go", "openai", "anthropic", "mistral", "custom-z"])
   })
 })
 

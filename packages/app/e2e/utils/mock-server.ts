@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { Permission } from "@opencode/schema/permission"
+import { Model } from "@opencode/schema/model"
 import { Worktree } from "@opencode/schema/worktree"
-import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
+import { Effect, Layer, Option, Predicate, Schema } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SERVER } from "./app"
@@ -11,11 +12,14 @@ import {
   MockBadRequest,
   MockInternal,
   MockNotFound,
+  MockPtyFeatureUnsupported,
   MockPtyNotFound,
+  MockServiceUnavailable,
   MockShellNotFound,
   MockUnauthorized,
   MockUnsupported,
 } from "./mock-api"
+import { createPersistentPty, type MockPersistentPtyConfig, type MockServerEvent } from "./persistent-pty"
 import { installSseTransport } from "./sse-transport"
 
 type Resolvable<T> = T | (() => T)
@@ -43,6 +47,8 @@ export type MockFileContent =
 
 export interface MockServerConfig {
   server?: string
+  // The machine name `/api/info` reports; omitted like a server that predates it.
+  hostname?: string
   provider: Resolvable<MockProviderCatalog>
   integrations?: Resolvable<unknown[]>
   // Runs on POST /api/credential/:id/activate; the fixture swaps its integrations and catalog to the new account.
@@ -64,8 +70,12 @@ export interface MockServerConfig {
   configEntries?: unknown[]
   directory: string
   project: unknown
-  // Replaces the `/api/project` inventory, which defaults to `[project]`.
+  // Replaces the `/api/project` inventory, which defaults to `[project]`. A location inside a listed project
+  // resolves to that project; any other location resolves to `project`.
   projects?: Resolvable<unknown[]>
+  // Runs on GET /api/location for a named directory before it answers, as the server registers the project of a
+  // directory it resolves.
+  onLocationGet?: (directory: string) => void
   sessions: MockSession[]
   pageMessages: (
     sessionId: string,
@@ -75,12 +85,11 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
-  vcs?: { current: string; default: string }
+  vcs?: { current: string; default: string } | ((directory: string) => { current: string; default: string })
+  branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
   vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
-  // Benchmark latency only. Tests hold message pages with `beforeMessagesResponse`.
-  messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
@@ -128,16 +137,17 @@ export interface MockServerConfig {
   fileList?: (path: string) => unknown[] | Promise<unknown[]>
   fileContent?: (path: string) => MockFileContent | Promise<MockFileContent>
   // Paths become directory entries.
-  findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown[]
+  findFiles?: (input: { query: string; dirs?: string; limit?: number; directory: string }) => unknown[]
   sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
-  // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
-  // `directory` is the owning workspace (Location); `cwd` is the reported working directory (default: `directory`).
-  pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string; cwd?: string }[] }
+  onBackground?: (input: { sessionID: string }) => void
+  // Serves the session-scoped persistent PTY routes and their connect WebSockets (`e2e/utils/persistent-pty.ts`).
+  // Without it, the server has a working daemon and no terminals; `capability: false` makes the routes answer 503.
+  persistentPty?: MockPersistentPtyConfig
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
   // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
@@ -146,39 +156,7 @@ export interface MockServerConfig {
   pairing?: { code: string; token: string }
 }
 
-export type MockPtyInfo = {
-  id: string
-  title: string
-  command: string
-  args: string[]
-  cwd: string
-  status: "running" | "exited"
-  pid: number
-}
-
-export type MockPtySocket = {
-  id: string
-  url: URL
-  input: string[]
-  closed: boolean
-  send(data: string): void
-  close(code: number, reason: string): Promise<void>
-}
-
-export type MockPty = {
-  list: MockPtyInfo[]
-  created: MockPtyInfo[]
-  removed: string[]
-  updates: { id: string; body: unknown }[]
-  tokens: { id: string; headers: Record<string, string>; ticket: string }[]
-  sockets: MockPtySocket[]
-  // WebSockets closed with 1008 because the PTY, its workspace, or an unused issued ticket did not match.
-  rejected: { id: string; url: URL; reason: string }[]
-  // Writes output to the newest open socket, optionally for one PTY.
-  send(data: string, id?: string): void
-}
-
-// The page relays events as opaque values; benchmarks also push their own payloads.
+// The page relays events as opaque values.
 type MockStream = { push: (payloads: readonly unknown[]) => void }
 
 type MockStreamState = {
@@ -191,11 +169,11 @@ type MockStreamState = {
 type MockSendCommand = { type: "send"; deliveries: { payload: unknown }[]; burst: boolean }
 
 type MockStreamWindow = Window & {
-  // Set to any value by benchmarks that bring their own event stream.
+  // Set to any value by a harness that brings its own event stream, such as the strobe benchmarks' event source.
   __testSseTransport?: unknown
   // `installSseTransport` registrations.
   __testSseTransports?: Record<string, { command: (input: MockSendCommand) => void }>
-  // Per-origin mock event streams; in-page benchmark probes push through them directly.
+  // Per-origin mock event streams, which `push` delivers through.
   __mockServerStreams?: Record<string, MockStream>
 }
 
@@ -206,7 +184,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   await page.addInitScript(
     ({ server, retry, keepalive: idle }) => {
-      // SAFETY: only this script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
+      // SAFETY: only this script, `installSseTransport`, and the benchmarks' event source write these globals, in the declared shapes.
       const host = window as MockStreamWindow
 
       if (host.__testSseTransport || host.__testSseTransports?.[server] || host.__mockServerStreams?.[server]) return
@@ -296,10 +274,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   // Delivers events on this server's mock stream; buffered until the app connects.
   // An origin served by an SSE transport receives the events as one burst on its active connection.
-  const push = (payloads: readonly OpenCodeEvent[]) =>
+  const push = (payloads: readonly MockServerEvent[]) =>
     page.evaluate<void, { server: string; payloads: readonly unknown[] }>(
       ({ server, payloads }) => {
-        // SAFETY: only the init script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
+        // SAFETY: only the init script, `installSseTransport`, and the benchmarks' event source write these globals, in the declared shapes.
         const host = window as MockStreamWindow
         const stream = host.__mockServerStreams?.[server]
 
@@ -313,7 +291,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     )
 
   // Server-side events the mock publishes itself; delivery failures other than a missing document fail the test.
-  const emit = (events: OpenCodeEvent[]) =>
+  const emit = (events: MockServerEvent[]) =>
     void push(events).catch((cause: unknown) => {
       if (page.isClosed() || retryableDelivery(cause)) return
       throw cause
@@ -440,40 +418,13 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     })
   }
 
-  if (config.pty) {
-    const host = new URL(server).host
-    await page.routeWebSocket(
-      (url) => url.host === host && /^\/api\/pty\/[^/]+\/connect$/.test(url.pathname),
-      (ws) => {
-        const url = new URL(ws.url())
-        const id = decodeURIComponent(url.pathname.split("/")[3]!)
-        const reason = transport.pty.admit(id, url)
+  const host = new URL(server).host
+  await page.routeWebSocket(
+    (url) => url.host === host && /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/.test(url.pathname),
+    (ws) => transport.persistentPty.connect(ws),
+  )
 
-        if (reason) {
-          transport.pty.rejected.push({ id, url, reason })
-
-          return ws.close({ code: 1008, reason })
-        }
-
-        const socket: MockPtySocket = {
-          id,
-          url,
-          input: [],
-          closed: false,
-          send: (data) => ws.send(data),
-          close: (code, reason) => ws.close({ code, reason }),
-        }
-
-        ws.onMessage((message) => socket.input.push(message.toString()))
-        ws.onClose(() => {
-          socket.closed = true
-        })
-        transport.pty.sockets.push(socket)
-      },
-    )
-  }
-
-  return { server, pty: transport.pty, push }
+  return { server, persistentPty: transport.persistentPty, push }
 }
 
 // Answers every Location-scoped request for `directory` as the server does once that folder is deleted.
@@ -491,6 +442,28 @@ export function mockMissingLocation(page: Page, directory: string) {
   )
 }
 
+// Answers the first model list as a cold Location does when its plugins outlast the server's wait.
+export function mockPluginsActivating(page: Page) {
+  const pending = { model: true }
+
+  return page.route(/\/api\/model(\?|$)/, (route) => {
+    if (!pending.model) return route.fallback()
+    pending.model = false
+
+    return route.fulfill({
+      status: 503,
+      // SAFETY: the server's wire body for a plugin wait timeout, which the client decodes into its own error.
+      json: {
+        // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+        _tag: "ServiceUnavailableError",
+        message: "Location plugins did not finish activating",
+        service: "plugin",
+      },
+      headers: { "access-control-allow-origin": "*" },
+    })
+  })
+}
+
 // Mocks several servers on one page. Each origin gets its own handler and its own SSE transport for events.
 export async function mockServers(page: Page, servers: Record<string, Omit<MockServerConfig, "server" | "events">>) {
   return Object.fromEntries(
@@ -504,15 +477,15 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
 
         const mock = await mockOpenCodeServer(page, { ...config, server: origin })
 
-        return [origin, { transport, pty: mock.pty }] as const
+        return [origin, { transport, persistentPty: mock.persistentPty }] as const
       }),
     ),
   )
 }
 
 // `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
-export function createMockServerHandler(config: MockServerConfig, emit: (events: OpenCodeEvent[]) => void = () => {}) {
-  const pty = createPty(config)
+function createMockServerHandler(config: MockServerConfig, emit: (events: MockServerEvent[]) => void = () => {}) {
+  const persistentPty = createPersistentPty({ config: config.persistentPty, directory: config.directory }, emit)
 
   const web = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(MockApi).pipe(
@@ -521,7 +494,7 @@ export function createMockServerHandler(config: MockServerConfig, emit: (events:
           cursors: new Map<string, string>(),
           nextCursor: 0,
           sessionCreates: 0,
-          pty,
+          persistentPty,
           emit,
           mcp: new Map<string, MockMcpStatus>(),
           attempts: new Map<string, number>(),
@@ -532,7 +505,7 @@ export function createMockServerHandler(config: MockServerConfig, emit: (events:
     { disableLogger: true },
   )
 
-  return { ...web, pty }
+  return { ...web, persistentPty }
 }
 
 const corsHeaders = {
@@ -577,91 +550,6 @@ function retryableDelivery(cause: unknown) {
   ].some((text) => message.includes(text))
 }
 
-const PTY_TICKET = "e2e-ticket"
-
-function createPty(config: MockServerConfig) {
-  const info = (id: string, title: string, cwd = config.directory): MockPtyInfo => ({
-    id,
-    title,
-    command: "cmd.exe",
-    args: [],
-    cwd,
-    status: "running",
-    pid: 1,
-  })
-
-  // Core scopes PTYs by Location, which can differ from the process cwd, so ownership is kept apart from `cwd`.
-  const owners = new Map((config.pty?.initial ?? []).map((item) => [item.id, item.directory ?? config.directory]))
-  // Issued, not yet used connect tickets, each bound to one PTY and workspace.
-  const tickets: { id: string; directory: string; ticket: string }[] = []
-  const issued = { count: 0 }
-  const owns = (item: MockPtyInfo, directory: string) => owners.get(item.id) === directory
-
-  const pty: MockPty = {
-    list: (config.pty?.initial ?? []).map((item) => info(item.id, item.title, item.cwd ?? item.directory)),
-    created: [],
-    removed: [],
-    updates: [],
-    tokens: [],
-    sockets: [],
-    rejected: [],
-    send(data, id) {
-      const socket = pty.sockets.findLast((item) => !item.closed && (id === undefined || item.id === id))
-
-      if (!socket) throw new Error(`No open PTY socket${id ? ` for ${id}` : ""}`)
-      socket.send(data)
-    },
-  }
-
-  return Object.assign(pty, {
-    info,
-    // The first `${prefix}<n>` no initial, created, or removed PTY has used.
-    allocate() {
-      const prefix = config.pty?.prefix ?? "pty_"
-      const used = new Set([...pty.list, ...pty.created].map((item) => item.id).concat(pty.removed))
-
-      const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find(
-        (value) => !used.has(`${prefix}${value}`),
-      )!
-
-      return { id: `${prefix}${number}`, number }
-    },
-    add(created: MockPtyInfo, directory: string) {
-      owners.set(created.id, directory)
-      pty.created.push(created)
-      pty.list.push(created)
-    },
-    find: (id: string, directory: string) => pty.list.find((item) => item.id === id && owns(item, directory)),
-    owned: (directory: string) => pty.list.filter((item) => owns(item, directory)),
-    // Unique per server; the first stays `e2e-ticket` so single-terminal specs can assert a fixed value.
-    issue(id: string, directory: string) {
-      issued.count += 1
-      const ticket = issued.count === 1 ? PTY_TICKET : `${PTY_TICKET}-${issued.count}`
-      tickets.push({ id, directory, ticket })
-
-      return ticket
-    },
-    // Returns why a connect URL is refused: the PTY must exist, belong to the requested workspace, and carry the exact
-    // unused ticket issued for that PTY and workspace. Admission consumes the ticket.
-    admit(id: string, url: URL) {
-      const found = pty.list.find((item) => item.id === id)
-
-      if (!found) return "PTY not found"
-      const directory = url.searchParams.get("location[directory]") || config.directory
-
-      if (!owns(found, directory)) return "PTY belongs to another workspace"
-      const ticket = url.searchParams.get("ticket")
-
-      const index = tickets.findIndex(
-        (item) => item.id === id && item.directory === directory && item.ticket === ticket,
-      )
-
-      if (index < 0) return "No unused ticket was issued for this PTY"
-      tickets.splice(index, 1)
-    },
-  })
-}
-
 // Every directory this server's configuration names: its own, project and inventory worktrees, and session locations.
 function ownedDirectories(config: MockServerConfig) {
   const projects = [config.project, ...(config.projects ? resolve(config.projects) : [])].flatMap((item) =>
@@ -704,32 +592,33 @@ function mockHandlers(
     cursors: Map<string, string>
     nextCursor: number
     sessionCreates: number
-    pty: ReturnType<typeof createPty>
-    emit: (events: OpenCodeEvent[]) => void
+    persistentPty: ReturnType<typeof createPersistentPty>
+    emit: (events: MockServerEvent[]) => void
     // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
     mcp: Map<string, MockMcpStatus>
     attempts: Map<string, number>
   },
 ) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
-  const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
   const configEntries = config.configEntries ?? []
 
-  const ptyEnabled = Effect.suspend(() =>
-    config.pty ? Effect.void : Effect.fail(new MockNotFound({ message: "PTY is not enabled for this mock server" })),
+  // Without a persistent PTY config the mock is a server with a working daemon and no terminals, since the desktop
+  // lists a session's terminals whenever its side panel renders.
+  const persistentPtyEnabled = Effect.suspend(() =>
+    state.persistentPty.capability !== false
+      ? Effect.void
+      : Effect.fail(new MockServiceUnavailable({ message: "opencode-pty is not available", service: "opencode-pty" })),
   )
 
-  // PTYs are scoped to the workspace (`location[directory]`) they were created in, like the real server.
-  const findPty = (id: string, request: { url: string }) =>
-    ptyEnabled.pipe(
+  const findPersistentPty = (id: string) =>
+    persistentPtyEnabled.pipe(
       Effect.andThen(() =>
         Effect.suspend(() => {
-          const directory = requestDirectory(config, request)
-          const found = state.pty.find(id, directory)
+          const found = state.persistentPty.find(id)
 
           return found
             ? Effect.succeed(found)
-            : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY not found: ${id}` }))
+            : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY session not found: ${id}` }))
         }),
       ),
     )
@@ -846,8 +735,13 @@ function mockHandlers(
           Effect.succeed({
             version: "2.0.0",
             pid: 1,
+            hostname: config.hostname,
             urls: config.server ? [config.server] : [],
             paths: { tmp: "/tmp/opencode" },
+            capabilities:
+              state.persistentPty.capability === undefined
+                ? undefined
+                : { persistentPty: state.persistentPty.capability },
           }),
         config: () => Effect.succeed(configEntries),
         reference: () => Effect.succeed({ location: location(config), data: [] }),
@@ -970,6 +864,8 @@ function mockHandlers(
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
         websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
+        // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
+        usageLimits: () => Effect.succeed({ location: location(config), data: null }),
         worktreeList: () =>
           Effect.sync(() => {
             if (config.worktrees) return resolve(config.worktrees)
@@ -991,7 +887,14 @@ function mockHandlers(
         },
         // Discovery against a static inventory changes nothing, and the app refreshes whenever worktree settings open.
         worktreeRefresh: () => noContent,
-        location: (ctx) => Effect.sync(() => location(config, requestDirectory(config, ctx.request))),
+        location: (ctx) =>
+          Effect.sync(() => {
+            const requested = new URL(ctx.request.url, "http://localhost").searchParams.get("location[directory]")
+
+            if (requested) config.onLocationGet?.(requested)
+
+            return location(config, requested || config.directory)
+          }),
         permissionRequests: () =>
           Effect.suspend(() =>
             config.permissionListFailures?.()
@@ -1002,10 +905,14 @@ function mockHandlers(
                 }),
           ),
         formRequests: () => Effect.succeed({ location: location(config), data: resolve(config.forms ?? []) }),
-        vcs: () =>
+        vcs: (ctx) =>
           Effect.succeed({
-            location: location(config),
-            data: { branch: config.vcs ?? { current: "main", default: "main" } },
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: {
+              branch: Predicate.isFunction(config.vcs)
+                ? config.vcs(requestDirectory(config, ctx.request))
+                : (config.vcs ?? { current: "main", default: "main" }),
+            },
           }),
         vcsInit: (ctx) => {
           if (!config.onVcsInit) return unsupported("initialize VCS", "onVcsInit")
@@ -1028,7 +935,26 @@ function mockHandlers(
           }).pipe(Effect.andThen(noContent))
         },
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
-        vcsBranches: () => Effect.succeed({ location: location(config), data: ["main"] }),
+        vcsBranches: (ctx) => {
+          const query = new URL(ctx.request.url, "http://localhost").searchParams
+          const search = query.get("search") ?? ""
+          const limit = Number(query.get("limit") ?? 50)
+
+          return Effect.promise(() =>
+            Promise.resolve(
+              config.branches?.({
+                directory: requestDirectory(config, ctx.request),
+                search,
+                limit,
+              }) ?? ["main"],
+            ),
+          ).pipe(
+            Effect.map((items) => ({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: items.filter((branch) => branch.toLowerCase().includes(search.toLowerCase())).slice(0, limit),
+            })),
+          )
+        },
         vcsDiff: (ctx) =>
           Effect.sync(() => ({
             location: location(config),
@@ -1043,18 +969,23 @@ function mockHandlers(
         fsFind: (ctx) =>
           Effect.promise(() =>
             Promise.resolve(
-              config.findFiles?.({ query: ctx.query.query ?? "", dirs: ctx.query.type, limit: ctx.query.limit }),
+              config.findFiles?.({
+                query: ctx.query.query ?? "",
+                dirs: ctx.query.type,
+                limit: ctx.query.limit,
+                directory: requestDirectory(config, ctx.request),
+              }),
             ),
           ).pipe(
             Effect.map((entries) => ({
-              location: location(config),
+              location: location(config, requestDirectory(config, ctx.request)),
               data: Array.isArray(entries)
                 ? entries.map((entry) =>
                     Predicate.isString(entry)
                       ? {
                           name: entry.split(/[\\/]/).at(-1) ?? entry,
                           path: entry,
-                          absolute: `${config.directory}/${entry}`,
+                          absolute: `${requestDirectory(config, ctx.request)}/${entry}`,
                           type: "directory",
                           ignored: false,
                         }
@@ -1063,6 +994,8 @@ function mockHandlers(
                 : entries,
             })),
           ),
+        fsWatch: () => Effect.void,
+        fsUnwatch: () => Effect.void,
         fsWrite: (ctx) => {
           const write = config.onFileWrite
 
@@ -1108,67 +1041,56 @@ function mockHandlers(
           }),
         // Like the server, which also answers 204 for a shell that already ended.
         shellRemove: () => noContent,
-        ptyList: (ctx) =>
-          ptyEnabled.pipe(
+        persistentPtyList: (ctx) =>
+          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+        persistentPtyCreate: (ctx) =>
+          persistentPtyEnabled.pipe(
             Effect.map(() => {
-              const directory = requestDirectory(config, ctx.request)
+              const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+              const directory = session ? currentSession(session, config.directory).location.directory : undefined
 
-              return { location: location(config, directory), data: state.pty.owned(directory) }
+              return {
+                data: state.persistentPty.create(ctx.params.sessionID, {
+                  ...ctx.payload,
+                  cwd: ctx.payload.cwd ?? directory,
+                }),
+              }
             }),
           ),
-        ptyCreate: (ctx) =>
-          ptyEnabled.pipe(
-            Effect.map(() => {
-              const next = state.pty.allocate()
-              const directory = requestDirectory(config, ctx.request)
-
-              const created = state.pty.info(
-                next.id,
-                ctx.payload.title ?? `Terminal ${next.number}`,
-                ctx.payload.cwd ?? directory,
-              )
-
-              state.pty.add(created, directory)
-
-              return { location: location(config, directory), data: created }
-            }),
+        persistentPtyGet: (ctx) => findPersistentPty(ctx.params.ptyID).pipe(Effect.map((data) => ({ data }))),
+        persistentPtyUpdate: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.flatMap((found) =>
+              ctx.payload.title !== undefined && !state.persistentPty.renameSupported
+                ? Effect.fail(
+                    new MockPtyFeatureUnsupported({
+                      feature: "rename",
+                      message: "Terminal renaming will be available after OpenCode's terminal service restarts",
+                    }),
+                  )
+                : Effect.sync(() => ({ data: state.persistentPty.update(found.id, ctx.payload) })),
+            ),
           ),
-        ptyGet: (ctx) =>
-          findPty(ctx.params.ptyID, ctx.request).pipe(
-            Effect.map((data) => ({ location: location(config, requestDirectory(config, ctx.request)), data })),
-          ),
-        ptyUpdate: (ctx) =>
-          findPty(ctx.params.ptyID, ctx.request).pipe(
+        persistentPtyRemove: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
             Effect.map((found) => {
-              state.pty.updates.push({ id: found.id, body: ctx.payload })
-
-              if (ctx.payload.title) found.title = ctx.payload.title
-
-              return { location: location(config, requestDirectory(config, ctx.request)), data: found }
-            }),
-          ),
-        ptyRemove: (ctx) =>
-          findPty(ctx.params.ptyID, ctx.request).pipe(
-            Effect.map((found) => {
-              state.pty.removed.push(found.id)
-              state.pty.list.splice(state.pty.list.indexOf(found), 1)
+              state.persistentPty.remove(found.id)
 
               return HttpApiSchema.NoContent.make()
             }),
           ),
-        ptyConnectToken: (ctx) =>
-          findPty(ctx.params.ptyID, ctx.request).pipe(
-            Effect.map((found) => {
-              const directory = requestDirectory(config, ctx.request)
-              const ticket = state.pty.issue(found.id, directory)
-              state.pty.tokens.push({
-                id: found.id,
-                headers: Object.fromEntries(Object.entries(ctx.request.headers)),
-                ticket,
-              })
-
-              return { location: location(config, directory), data: { ticket, expires_in: 60 } }
-            }),
+        persistentPtySnapshot: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => ({ data: state.persistentPty.snapshot(found.id) })),
+          ),
+        persistentPtyConnectToken: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => ({
+              data: {
+                ticket: state.persistentPty.issue(found.id, Object.fromEntries(Object.entries(ctx.request.headers))),
+                expires_in: 60,
+              },
+            })),
           ),
         sessionList: (ctx) => {
           const sessions = config.sessions
@@ -1185,6 +1107,10 @@ function mockHandlers(
 
               return session.parentID === ctx.query.parentID
             })
+            .filter(
+              (session) =>
+                !!currentSession(session, config.directory).time.archived === (ctx.query.archived === "true"),
+            )
             .filter((session) =>
               ctx.query.search === undefined
                 ? true
@@ -1203,14 +1129,36 @@ function mockHandlers(
             cursor: { next: offset + limit < ordered.length ? String(offset + limit) : undefined },
           })
         },
-        sessionActive: () =>
-          Effect.succeed({
-            data: Object.fromEntries(
-              Object.entries(resolve(config.sessionStatus ?? {})).flatMap(([id, status]) =>
-                status.type === "idle" ? [] : [[id, { type: "running" }]],
+        // The goal plugin's pill reads each routed session's goal; no scenario sets one.
+        rpcCall: (ctx) =>
+          ctx.params.rpcID === "opencode.goal" && ctx.params.method === "get"
+            ? Effect.succeed({ output: null })
+            : Effect.fail(
+                new MockUnsupported({
+                  message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC`,
+                }),
               ),
+        sessionActive: () => {
+          const status = resolve(config.sessionStatus ?? {})
+
+          return Effect.succeed({
+            data: Object.fromEntries(
+              [
+                ...Object.entries(status).flatMap(([id, value]) => (value.type === "idle" ? [] : [id])),
+                ...Object.entries(config.sessionPermissions ?? {}).flatMap(([id, list]) =>
+                  currentPermissions(list).length > 0 && status[id]?.type !== "idle" ? [id] : [],
+                ),
+                ...resolve(config.forms ?? []).flatMap((form) =>
+                  Predicate.isObject(form) &&
+                  Predicate.isString(form.sessionID) &&
+                  status[form.sessionID]?.type !== "idle"
+                    ? [form.sessionID]
+                    : [],
+                ),
+              ].map((id) => [id, { type: "running" as const }]),
             ),
-          }),
+          })
+        },
         sessionGet: (ctx) =>
           Effect.suspend(() => {
             config.onSession?.(ctx.params.sessionID)
@@ -1222,6 +1170,7 @@ function mockHandlers(
           }),
         sessionRemove: () => noContent,
         sessionShell: () => noContent,
+        sessionView: () => noContent,
         sessionForm: (ctx) =>
           Effect.succeed({
             data: resolve(config.forms ?? []).filter(
@@ -1230,7 +1179,8 @@ function mockHandlers(
           }),
         sessionFormReply: () => noContent,
         sessionFormCancel: () => noContent,
-        sessionBackground: () => noContent,
+        sessionBackground: (ctx) =>
+          Effect.sync(() => config.onBackground?.({ sessionID: ctx.params.sessionID })).pipe(Effect.andThen(noContent)),
         sessionInbox: (ctx) =>
           Effect.sync(() => ({
             data: resolve(config.inbox ?? []).filter(
@@ -1334,10 +1284,20 @@ function mockHandlers(
         },
         sessionRename: (ctx) =>
           Effect.sync(() => {
-            const title = Option.getOrUndefined(decodeSessionRename(ctx.payload))?.title
+            const update = Option.getOrUndefined(decodeSessionUpdate(ctx.payload))
+
             const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
 
-            if (session && title !== undefined) session.title = title
+            if (!session || !update) return
+
+            if (update.title !== undefined) session.title = update.title
+
+            if (update.archived !== undefined) {
+              session.time = {
+                ...currentSession(session, config.directory).time,
+                archived: update.archived ? Date.now() : undefined,
+              }
+            }
           }).pipe(Effect.andThen(noContent)),
         sessionCommand: (ctx) => {
           const recordCommand = config.onCommand
@@ -1367,7 +1327,6 @@ function mockHandlers(
         messageGet: (ctx) =>
           Effect.gen(function* () {
             config.onMessage?.({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })
-            yield* delay
 
             const message =
               config.message?.(ctx.params.sessionID, ctx.params.messageID) ??
@@ -1392,7 +1351,6 @@ function mockHandlers(
               yield* Effect.promise(() => config.beforeMessagesResponse!({ sessionID: ctx.params.sessionID, before }))
             }
 
-            yield* delay
             const pageData = config.pageMessages(ctx.params.sessionID, ctx.query.limit ?? 50, before)
             config.onMessages?.({ sessionID: ctx.params.sessionID, before, phase: "end" })
             const cursor = pageData.cursor ? `cursor_${++state.nextCursor}` : undefined
@@ -1409,8 +1367,20 @@ function mockHandlers(
   )
 }
 
-// The requested workspace (directory) inside the configured project.
+// The requested workspace (directory) inside its listed project, else inside the configured project.
 function location(config: MockServerConfig, directory = config.directory) {
+  const listed = (config.projects ? resolve(config.projects) : [])
+    .flatMap((item) => Option.toArray(decodeProject(item)))
+    .find((item) =>
+      [item.canonical ?? item.worktree, ...(item.sandboxes ?? [])].some(
+        (root) => root !== undefined && (directory === root || directory.startsWith(`${root}/`)),
+      ),
+    )
+
+  const root = listed ? (listed.canonical ?? listed.worktree) : undefined
+
+  if (listed && root) return { directory, project: { id: listed.id, directory: root, canonical: root } }
+
   return {
     directory,
     project: { id: projectSeed(config)?.id, directory: config.directory, canonical: config.directory },
@@ -1453,11 +1423,11 @@ function currentModels(catalog: MockProviderCatalog) {
           modelID: model.api?.id ?? model.id,
           providerID: provider.id,
           name: model.name,
-          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          capabilities: model.capabilities ?? { tools: true, input: ["text"], output: ["text"] },
           variants: Object.entries(model.variants ?? {}).map(([id, settings]) =>
             Predicate.isObject(settings) ? { id, settings } : { id },
           ),
-          time: { released: Date.now() },
+          time: model.time ?? { released: Date.now() },
           cost: [{ input: model.cost?.input ?? 0, output: model.cost?.output ?? 0, cache: { read: 0, write: 0 } }],
           status: "active",
           enabled: true,
@@ -1548,7 +1518,9 @@ const decodeSessionCreate = Schema.decodeUnknownOption(
   Schema.Struct({ id: lenient(Schema.String), title: lenient(Schema.String), parentID: lenient(Schema.String) }),
 )
 
-const decodeSessionRename = Schema.decodeUnknownOption(Schema.Struct({ title: Schema.String }))
+const decodeSessionUpdate = Schema.decodeUnknownOption(
+  Schema.Struct({ title: Schema.optionalKey(Schema.String), archived: Schema.optionalKey(Schema.Boolean) }),
+)
 
 const decodeRevertStage = Schema.decodeUnknownOption(Schema.Struct({ messageID: Schema.String }))
 
@@ -1588,7 +1560,9 @@ const decodeModel = Schema.decodeUnknownOption(
     api: lenient(Schema.Struct({ id: Schema.String })),
     limit: lenient(Schema.Struct({ context: lenient(Schema.Number), output: lenient(Schema.Number) })),
     cost: lenient(Schema.Struct({ input: lenient(Schema.Number), output: lenient(Schema.Number) })),
+    capabilities: lenient(Model.Capabilities),
     variants: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+    time: lenient(Schema.Struct({ released: Schema.Number })),
   }),
 )
 

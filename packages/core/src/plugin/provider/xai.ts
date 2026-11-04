@@ -70,7 +70,7 @@ const device = (app: App.Info) =>
           ),
         ),
       ),
-    refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID }), app),
+    refresh: (value) => refresh(deviceMethodID, value, app),
   }) satisfies IntegrationOAuthMethodRegistration
 
 export const XAIPlugin = define({

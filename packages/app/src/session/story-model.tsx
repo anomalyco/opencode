@@ -6,9 +6,16 @@ import {
   SessionComposerRegion,
   type SessionComposerRegionViewController,
 } from "@/session/composer/session-composer-region"
+import { SessionActivityChips, type SessionActivityItem } from "@/session/composer/activity-chips"
+import { SessionComposerLane } from "@/session/composer/composer-lane"
+import { SessionTodoPill } from "@/session/composer/todo-pill"
+import type { Todo } from "@/session/composer/todos"
+import { SettingsProvider } from "@/settings/model"
+import { SubagentBar } from "@/session/composer/subagent-bar"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
+import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { createComposerEditor } from "@/composer/editor/interaction"
@@ -16,7 +23,7 @@ import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Show } from "solid-js"
+import { children, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { WebSearchRequestModel } from "./requests/websearch"
@@ -58,8 +65,10 @@ const storyComposerModel = {
 
 const modelSelection = {
   ready: modelReady,
+  key: () => ({ providerID: storyComposerModel.provider.id, modelID: storyComposerModel.id }),
   current: () => storyComposerModel,
   recent: () => [storyComposerModel],
+  favorite: { list: () => [], toggle() {} },
   list: () => [storyComposerModel],
   cycle() {},
   set() {},
@@ -80,10 +89,22 @@ export type SessionPreviewProps = {
   description: string
   document: SessionDocument
   draft?: string
-  request?: { type: "permission"; value: PermissionRequest } | { type: "question" | "websearch"; value: FormInfo }
+  request?:
+    | { type: "permission"; value: PermissionRequest }
+    | { type: "question" | "websearch" | "elicitation"; value: FormInfo }
   reviewOpened?: boolean
-  child?: { parentID: string }
-  terminal?: { title: string; lines: string[] }
+  child?: Omit<ComponentProps<typeof SubagentBar>, "onBack">
+  activity?: {
+    subagents: SessionActivityItem[]
+    shells: SessionActivityItem[]
+    shell?: ComponentProps<typeof SessionActivityChips>["shell"]
+    onOpen?: (item: SessionActivityItem) => void
+    onStop?: (item: SessionActivityItem) => Promise<boolean>
+  }
+  todos?: { items: Todo[]; open?: boolean }
+  timelineDetail?: TimelineDetail
+  /** Content for the side panel, shown beside the timeline while present. */
+  side?: JSX.Element
 }
 
 export function SessionPreview(props: SessionPreviewProps) {
@@ -114,7 +135,7 @@ export function SessionPreview(props: SessionPreviewProps) {
   )
 }
 
-function createPromptController(input: {
+export function createPromptController(input: {
   initial: string
   placeholder: string
   status: () => SessionStatus
@@ -160,7 +181,7 @@ function createPromptController(input: {
   return {
     controller: {
       ...interaction,
-      model: { selection: modelSelection, paid: true, loading: false },
+      model: { selection: modelSelection, providerName: storyComposerModel.provider.name, paid: true, loading: false },
     } satisfies ComposerModel,
     setValue(value: string) {
       draft[1]("prompt", [{ type: "text", content: value, start: 0, end: value.length }])
@@ -171,6 +192,7 @@ function createPromptController(input: {
 
 function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void }) {
   const language = useLanguage()
+  const side = children(() => props.side)
 
   const [state, setState] = createStore<{
     activity: string
@@ -186,7 +208,12 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
 
   const prompt = createPromptController({
     initial: props.draft ?? "",
-    placeholder: language.t("prompt.placeholder.normal"),
+    placeholder: language.t(
+      props.document.status.type === "idle"
+        ? "ui.promptInput.placeholder.normal"
+        : "ui.promptInput.placeholder.followUp",
+      { slash: "/", at: "@" },
+    ),
     status: () => props.document.status,
     onActivity: (activity) => setState("activity", activity),
     onSubmit: (text) => setState("activity", `Submitted locally: ${text}`),
@@ -196,6 +223,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   const region = {
     state: {
       questionRequest: () => (state.request?.type === "question" ? state.request.value : undefined),
+      elicitationRequest: () => (state.request?.type === "elicitation" ? state.request.value : undefined),
       websearch: {
         request: () => (state.request?.type === "websearch" ? state.request.value : undefined),
         options: () => [
@@ -230,16 +258,14 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
       setState("request", undefined)
       setState("activity", "Submitted the answer locally")
     },
-    openParent: () => setState("activity", "Opened the parent Session locally"),
-    setPromptRef() {},
     setDockRef() {},
-    parentID: () => props.child?.parentID,
     child: () => !!props.child,
     showComposer: () => true,
   } satisfies SessionComposerRegionViewController
 
+  // Contain the composer region's z-index as the app's session chat panel does, so portaled menus open above it.
   return (
-    <div class="mx-auto h-screen min-h-[640px] w-full max-w-[1440px]">
+    <div class="mx-auto h-screen min-h-[640px] w-full max-w-[1440px] isolate">
       <SessionRouteFrame padded>
         <SessionPanelFrame raised>
           <main class="flex min-h-0 flex-1 flex-col">
@@ -255,31 +281,76 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
               <div class="flex min-h-0 flex-1">
                 <section
                   classList={{
-                    "min-w-0 flex-1 flex-col bg-background-base": true,
+                    "min-w-0 flex-1 flex-col bg-v2-background-bg-base": true,
                     flex: !state.reviewOpened,
                     "hidden md:flex": state.reviewOpened,
                   }}
                 >
-                  <div class="min-h-0 flex-1 overflow-y-auto py-6">
-                    <SessionTimeline
-                      document={props.document}
-                      editToolDefaultOpen
-                      shellToolDefaultOpen
-                      class="mx-auto w-full max-w-[840px]"
-                    />
+                  {/* The padding is inside the scroller, so a tall dock below can shrink the timeline to nothing. */}
+                  <div data-slot="story-timeline" class="min-h-0 flex-1 overflow-y-auto">
+                    <div class="py-6">
+                      <SessionTimeline
+                        document={props.document}
+                        timelineDetail={props.timelineDetail}
+                        editToolDefaultOpen
+                        shellToolDefaultOpen
+                        class="mx-auto w-full max-w-[840px]"
+                      />
+                    </div>
                   </div>
                   <SessionComposerRegion
                     controller={region}
+                    subagent={
+                      <Show when={props.child}>
+                        {(child) => (
+                          <SubagentBar
+                            {...child()}
+                            onBack={() => setState("activity", "Opened the parent Session locally")}
+                          />
+                        )}
+                      </Show>
+                    }
+                    above={
+                      <SettingsProvider>
+                        <SessionComposerLane>
+                          <SessionActivityChips
+                            subagents={props.activity?.subagents ?? []}
+                            shells={props.activity?.shells ?? []}
+                            onOpen={(item) =>
+                              props.activity?.onOpen
+                                ? props.activity.onOpen(item)
+                                : setState("activity", `Opened ${item.label ?? item.key}`)
+                            }
+                            shell={props.activity?.shell ?? storyShell}
+                            onStop={(item) => {
+                              if (props.activity?.onStop) return props.activity.onStop(item)
+                              setState("activity", `Stopped ${item.label ?? item.key}`)
+
+                              return Promise.resolve(true)
+                            }}
+                            // The story's only editor is its composer.
+                            onEmpty={() => document.querySelector<HTMLElement>('[contenteditable="true"]')?.focus()}
+                          />
+                          <Show when={props.todos} keyed>
+                            {(todos) => <SessionTodoPill todos={todos.items} defaultOpen={todos.open} />}
+                          </Show>
+                        </SessionComposerLane>
+                      </SettingsProvider>
+                    }
                     composer={<Composer model={prompt.controller} borderUnderlay />}
                   />
                 </section>
-                <Show when={state.reviewOpened}>
+                <Show when={side()}>
+                  <aside class="flex w-[400px] min-w-0 flex-none flex-col border-l border-v2-border-border-base">
+                    {side()}
+                  </aside>
+                </Show>
+                <Show when={!side() && state.reviewOpened}>
                   <aside
                     id="review-panel"
-                    class="min-w-0 flex-1 flex flex-col gap-2 border-l border-border-weak-base md:max-w-[52%]"
+                    class="min-w-0 flex-1 flex flex-col gap-2 border-l border-v2-border-border-base md:max-w-[52%]"
                   >
                     <div class="min-h-0 flex-1" />
-                    <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
                   </aside>
                 </Show>
               </div>
@@ -294,36 +365,6 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   )
 }
 
-// A static copy of the dock frame the extension host draws around the terminal panel.
-function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewProps["terminal"]> }) {
-  return (
-    <aside
-      id="terminal-panel"
-      data-component="terminal-panel"
-      data-opened="true"
-      data-size-animated="true"
-      role="region"
-      aria-label={props.terminal.title}
-      aria-hidden="false"
-      class="relative shrink-0 overflow-hidden bg-v2-background-bg-base w-full rounded-[10px] shadow-[var(--v2-elevation-raised)] will-change-[height]"
-      style={{ height: "220px", "--terminal-panel-height": "220px" }}
-    >
-      <div
-        data-slot="terminal-panel-content"
-        class="absolute inset-x-0 top-0 flex flex-col overflow-hidden"
-        style={{ height: "220px" }}
-      >
-        <div class="h-10 shrink-0 flex items-center border-b border-border-weaker-base px-3 text-13-medium text-text-strong">
-          {props.terminal.title}
-        </div>
-        <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
-          {props.terminal.lines.join("\n")}
-        </pre>
-      </div>
-    </aside>
-  )
-}
-
 function SessionSurfaceHeader(props: {
   title: string
   description: string
@@ -335,7 +376,7 @@ function SessionSurfaceHeader(props: {
   const language = useLanguage()
 
   return (
-    <header class="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border-weak-base px-4 py-2">
+    <header class="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-v2-border-border-base px-4 py-2">
       <div class="flex min-w-0 items-center gap-3">
         <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background-stronger text-icon-base">
           <Icon name="folder" />
@@ -361,4 +402,19 @@ function SessionSurfaceHeader(props: {
       </div>
     </header>
   )
+}
+
+// Background shells in stories print a fixed transcript and report a clean exit once they leave the list.
+const storyShell: ComponentProps<typeof SessionActivityChips>["shell"] = {
+  directory: "/story",
+  output: (input) => {
+    const output = `$ ${input.id}\nReady.\n`
+    const cursor = input.cursor ?? 0
+
+    return Promise.resolve({
+      location: { directory: "/story" },
+      data: { output: output.slice(cursor), cursor: output.length, size: output.length, truncated: false },
+    })
+  },
+  ended: () => Promise.resolve({ status: "exited", exit: 0 }),
 }

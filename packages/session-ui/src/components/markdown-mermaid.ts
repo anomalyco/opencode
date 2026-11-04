@@ -1,23 +1,18 @@
-let loaded: ReturnType<typeof loadMermaid> | undefined
-
 let sequence = 0
 
 export async function renderMermaidSvg(source: string) {
-  const mermaid = await (loaded ??= loadMermaid())
+  const pele = await import("pele/lazy")
 
-  if (!(await mermaid.parse(source, { suppressErrors: true }))) return
+  if (!pele.detectType(source)) return
 
-  return (await mermaid.render(`markdown-mermaid-${sequence++}`, source)).svg
-}
-
-async function loadMermaid() {
-  const { default: mermaid } = await import("mermaid")
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    theme: document.documentElement.dataset.colorScheme === "light" ? "default" : "dark",
-    flowchart: { htmlLabels: false },
+  const result = await pele.renderAsync(source, {
+    idPrefix: `markdown-mermaid-${sequence++}-`,
+    // Pele sizes boxes from measured label widths, so it must measure the font the CSS applies.
+    fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans"),
+    fontSize: 14,
+    images: false,
+    linkRel: "noopener noreferrer",
   })
 
-  return mermaid
+  return result.svg
 }

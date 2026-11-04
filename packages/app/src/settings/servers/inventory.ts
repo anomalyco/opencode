@@ -1,35 +1,21 @@
 import { createMemo } from "solid-js"
-import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
-import { useExtensionServers, type ExtensionServer } from "@/runtime/extension/servers"
-import type { ServerCtx } from "@/runtime/server/runtime"
-import { pathKey } from "@/workspaces/path-key"
-
-export function settingsProjects(context: {
-  projects: Pick<ServerCtx["projects"], "list" | "closed">
-  sync: { data: Pick<ServerCtx["sync"]["data"], "project"> }
-}) {
-  const tracked = context.projects.list()
-  const paths = new Set(tracked.map((project) => pathKey(project.worktree)))
-  const closed = new Set(context.projects.closed().map(pathKey))
-
-  return [
-    ...tracked,
-    // Inventory reads must not allocate directory stores: async cache hydration can trigger an eviction/reload loop.
-    ...context.sync.data.project
-      .filter((project) => !paths.has(pathKey(project.worktree)) && !closed.has(pathKey(project.worktree)))
-      .map((project) => ({ ...project, expanded: false })),
-  ]
-}
+import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { usePluginServers, type PluginServer } from "@/runtime/plugin/servers"
+import type { ServerHealth } from "@/runtime/server/health"
 
 export type SettingsServer = {
   key: ServerConnection.Key
   name: string
   connection?: ServerConnection.Any
-  /** The extension entry of a contributed server, e.g. SSH or WSL. */
-  source?: ExtensionServer
+  /** The plugin entry of a contributed server, e.g. SSH or WSL. */
+  source?: PluginServer
 }
 
-export function settingsServers(connections: readonly ServerConnection.Any[], sources: readonly ExtensionServer[]) {
+export function settingsServers(
+  connections: readonly ServerConnection.Any[],
+  sources: readonly PluginServer[],
+  label: (connection: ServerConnection.Any) => string,
+) {
   const byKey = new Map(sources.map((item) => [item.key, item]))
   const connected = new Set<string>(connections.map(ServerConnection.key))
 
@@ -40,34 +26,35 @@ export function settingsServers(connections: readonly ServerConnection.Any[], so
 
       return {
         key,
-        name: source?.entry.name ?? (serverName(connection) || key),
+        name: source?.entry.name ?? (label(connection) || key),
         connection: source && source.entry.state !== "ready" ? undefined : connection,
         source,
       }
     }),
-    ...sources
-      .filter((item) => !connected.has(item.key))
-      .map(
-        (item): SettingsServer => ({
-          key: ServerConnection.Key.make(item.key),
-          name: item.entry.name,
-          source: item,
-        }),
-      ),
+    ...sources.flatMap((item): SettingsServer[] =>
+      connected.has(item.key)
+        ? []
+        : [{ key: ServerConnection.Key.make(item.key), name: item.entry.name, source: item }],
+    ),
   ]
 }
 
 // A restored settings route must not be redirected against a partial list: contributed servers load asynchronously.
 export function useSettingsServersLoaded() {
   const servers = useServers()
-  const extensions = useExtensionServers()
+  const plugins = usePluginServers()
 
-  return () => servers.hydrated() && extensions.ready()
+  return () => servers.hydrated() && plugins.ready()
 }
 
 export function useSettingsServers() {
   const servers = useServers()
-  const extensions = useExtensionServers()
+  const plugins = usePluginServers()
 
-  return createMemo(() => settingsServers(servers.list, extensions.entries()))
+  return createMemo(() => settingsServers(servers.list, plugins.entries(), servers.label))
+}
+
+/** Whether a server's pages can load: it runs and its last health check did not fail. */
+export function settingsServerReachable(server: SettingsServer, health: ServerHealth | undefined) {
+  return !!server.connection && health?.healthy !== false
 }

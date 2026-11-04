@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("spaces an error between a shell result and expanded updates", async ({ mount }) => {
   const timeline = await mount("current-session-error-spacing--error-and-updates")
@@ -82,6 +82,15 @@ story("centers the error icon on the first line of short and wrapped errors", as
 
   expect(geometry.map((card) => card.lines > 1)).toEqual([false, true])
   geometry.forEach((card) => expect(card.offset).toBeCloseTo(0, 0))
+})
+
+story("links URLs in an error without splitting them at a colon", async ({ mount }) => {
+  const timeline = await mount("current-session-error-card--linked-error")
+  const card = timeline.locator('[data-kind="session-error-card"]')
+  const url = "http://localhost:11434/api"
+
+  await expect(card.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
+  await expect(card.locator("strong")).toHaveCount(0)
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts

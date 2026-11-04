@@ -2,6 +2,8 @@ import { ToolDefinition, type JsonSchema, type LanguageModel, type LLMRequest } 
 import { isRecord } from "../../utils/record.js"
 import { GeminiJsonSchema } from "./gemini-json-schema.js"
 
+const { SCHEMA_MAPS, VALUES, mapValues } = GeminiJsonSchema
+
 const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   const projected = items.map(moonshotNode)
   if (projected.length === 0) return {}
@@ -27,10 +29,16 @@ const moonshotNode = (schema: unknown): unknown => {
   return Object.fromEntries([
     ...(type === undefined ? [] : [["type", type]]),
     ...Object.entries(schema).flatMap(([key, value]) => {
-      if (key === "items" && Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
+      if (VALUES.has(key)) return [[key, value]]
+      if (SCHEMA_MAPS.has(key) && isRecord(value)) return [[key, mapValues(value, moonshotNode)]]
+      if (key === "items") {
+        if (Array.isArray(schema.prefixItems)) return []
+        if (Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
+      }
       if (key === "prefixItems") {
-        if ("items" in schema) return []
-        return [["items", tupleItemsSchema(Array.isArray(value) ? value : [])]]
+        if (!Array.isArray(value)) return "items" in schema ? [] : [["items", {}]]
+        const rest = isRecord(schema.items) ? [schema.items] : Array.isArray(schema.items) ? schema.items : []
+        return [["items", tupleItemsSchema([...value, ...rest])]]
       }
       if (key === "unevaluatedItems") return []
       return [[key, moonshotNode(value)]]
@@ -42,9 +50,6 @@ const moonshot = (schema: JsonSchema): JsonSchema => {
   const projected = moonshotNode(schema)
   return isRecord(projected) ? projected : {}
 }
-
-const openAI = (schema: JsonSchema): JsonSchema => schema
-const responses = openAI
 
 const gemini = GeminiJsonSchema.normalize
 
@@ -106,7 +111,5 @@ const tools = (entries: LLMRequest["tools"], model: LanguageModel): LLMRequest["
 export const ToolSchemaProjection = {
   gemini,
   moonshot,
-  openAI,
-  responses,
   tools,
 } as const

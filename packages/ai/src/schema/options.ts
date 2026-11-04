@@ -52,11 +52,11 @@ export const mergeProviderOptions = (
 export const HttpTimeout = Schema.Union([Schema.Number.check(Schema.isGreaterThan(0)), Schema.Literal(false)])
 export type HttpTimeout = Schema.Schema.Type<typeof HttpTimeout>
 
-/** Applied to `headerTimeout` when a request leaves it unset. */
+/** Applied to `timeout.headers` when a request leaves it unset. */
 export const DEFAULT_HTTP_TIMEOUT_MS = 300_000
 
 /**
- * Applied to `chunkTimeout` when a request leaves it unset. Some providers, such as DeepSeek, have specifically asked
+ * Applied to `timeout.chunk` when a request leaves it unset. Some providers, such as DeepSeek, have specifically asked
  * clients to allow at least 15 minutes, because their models can stream nothing for minutes while they reason.
  */
 export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
@@ -65,51 +65,70 @@ export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
 export const RequestEncoding = Schema.Literals(["zstd", "gzip", "none"])
 export type RequestEncoding = Schema.Schema.Type<typeof RequestEncoding>
 
-export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
-  body: Schema.optional(JsonSchema),
-  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  /** Time allowed for the whole request, from send until the response completes. Unbounded when unset. */
-  timeout: Schema.optional(HttpTimeout),
-  /** Time allowed for response headers to arrive. */
-  headerTimeout: Schema.optional(HttpTimeout),
-  /** Time allowed between streamed response chunks once headers have arrived. */
-  chunkTimeout: Schema.optional(HttpTimeout),
+/** Rare wire-level overrides. */
+export interface HttpOptions {
+  readonly query?: Record<string, string>
+  /** Deep-merged over the provider-native JSON body. */
+  readonly body?: Record<string, unknown>
   /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
-  encoding: Schema.optional(RequestEncoding),
-}) {}
-
-export namespace HttpOptions {
-  export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
-
-  /** Normalize HTTP option input into the canonical `HttpOptions` class; `undefined` stays `undefined`. */
-  export function make(input: Input): HttpOptions
-  export function make(input: Input | undefined): HttpOptions | undefined
-  export function make(input: Input | undefined) {
-    if (input === undefined || input instanceof HttpOptions) return input
-    return new HttpOptions(input)
-  }
+  readonly encoding?: RequestEncoding
 }
 
-export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
-  const body = mergeJsonRecords(...items.map((item) => item?.body))
-  const headers = mergeStringRecords(...items.map((item) => item?.headers))
-  const query = mergeStringRecords(...items.map((item) => item?.query))
-  const timeout = items.findLast((item) => item?.timeout !== undefined)?.timeout
-  const headerTimeout = items.findLast((item) => item?.headerTimeout !== undefined)?.headerTimeout
-  const chunkTimeout = items.findLast((item) => item?.chunkTimeout !== undefined)?.chunkTimeout
-  const encoding = items.findLast((item) => item?.encoding !== undefined)?.encoding
-  if (
-    !body &&
-    !headers &&
-    !query &&
-    timeout === undefined &&
-    headerTimeout === undefined &&
-    chunkTimeout === undefined &&
-    encoding === undefined
-  )
-    return undefined
-  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout, encoding })
+/** Per-phase time limits in milliseconds. */
+export interface TimeoutConfig {
+  /** The whole request, from send until the response completes. Unbounded when unset. */
+  readonly total?: HttpTimeout
+  /** Until response headers arrive. */
+  readonly headers?: HttpTimeout
+  /** Between streamed response chunks once headers have arrived. */
+  readonly chunk?: HttpTimeout
+}
+
+/** Milliseconds for the whole request, `false` to disable it, or per-phase limits. */
+export type RequestTimeout = HttpTimeout | TimeoutConfig
+
+/** Transport settings shared by requests, models and routes. */
+export interface TransportOptions {
+  /** Merged over the provider's headers; these win. */
+  readonly headers?: Record<string, string>
+  /** Applied to text requests; media requests do not apply it yet. */
+  readonly timeout?: RequestTimeout
+  readonly http?: HttpOptions
+}
+
+/** The fields every request shares, whatever its modality. */
+export interface BaseRequest<Model, Options = ProviderOptions> extends TransportOptions {
+  readonly model: Model
+  readonly providerOptions?: Options
+  /** Sends this call through `fetch` instead of the client's HTTP executor. */
+  readonly fetch?: typeof globalThis.fetch
+}
+
+export const timeoutConfig = (timeout: RequestTimeout | undefined): TimeoutConfig =>
+  typeof timeout === "object" ? timeout : { total: timeout }
+
+const last = <A>(values: ReadonlyArray<A | undefined>) => values.findLast((value) => value !== undefined)
+
+const someDefined = <A extends object>(value: A) =>
+  Object.values(value).some((item) => item !== undefined) ? value : undefined
+
+/** Merge transport settings; later items win, headers, query and body merge by key. */
+export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefined>): TransportOptions => {
+  const timeouts = items.map((item) => timeoutConfig(item?.timeout))
+  const http = items.map((item) => item?.http)
+  return {
+    headers: mergeStringRecords(...items.map((item) => item?.headers)),
+    timeout: someDefined({
+      total: last(timeouts.map((item) => item.total)),
+      headers: last(timeouts.map((item) => item.headers)),
+      chunk: last(timeouts.map((item) => item.chunk)),
+    }),
+    http: someDefined({
+      query: mergeStringRecords(...http.map((item) => item?.query)),
+      body: mergeJsonRecords(...http.map((item) => item?.body)),
+      encoding: last(http.map((item) => item?.encoding)),
+    }),
+  }
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
@@ -162,30 +181,23 @@ export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptions
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-export class LanguageModelDefaults extends Schema.Class<LanguageModelDefaults>("LLM.LanguageModelDefaults")({
-  generation: Schema.optional(GenerationOptions),
-  providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-}) {}
+/** Request defaults a selected model applies under each request. */
+export interface LanguageModelDefaults extends TransportOptions {
+  readonly generation?: GenerationOptions
+  readonly providerOptions?: ProviderOptions
+}
 
 export namespace LanguageModelDefaults {
-  export type Input =
-    | LanguageModelDefaults
-    | {
-        readonly generation?: GenerationOptions.Input
-        readonly providerOptions?: ProviderOptions
-        readonly http?: HttpOptions.Input
-      }
+  export interface Input extends TransportOptions {
+    readonly generation?: GenerationOptions.Input
+    readonly providerOptions?: ProviderOptions
+  }
 
   /** Normalize selected-model request defaults without applying precedence. */
-  export const make = (input: Input) => {
-    if (input instanceof LanguageModelDefaults) return input
-    return new LanguageModelDefaults({
-      generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
-      providerOptions: input.providerOptions,
-      http: HttpOptions.make(input.http),
-    })
-  }
+  export const make = (input: Input): LanguageModelDefaults => ({
+    ...input,
+    generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+  })
 }
 
 /** Provider-defined string enum: known values for autocomplete, any string accepted. */
@@ -221,7 +233,8 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   requireFinishReason: Schema.optional(Schema.Boolean),
   requireAssistantAfterTool: Schema.optional(Schema.Boolean),
   supportsStore: Schema.optional(Schema.Boolean),
-  supportsUsageInStreaming: Schema.optional(Schema.Boolean),
+  /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
+  streamUsage: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
   // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
   // this is true; other protocols omit it only when this is false.
@@ -341,9 +354,16 @@ export const LanguageModelSchema = Schema.declare((value): value is LanguageMode
   expected: "LLM.LanguageModel",
 })
 
+// Provider cache lifetime such as "5m", "30m", "1h" or "24h", in models.dev's duration format. It is sent as given;
+// each provider accepts its own set, and omitting it keeps the provider default.
+export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals(["ms", "s", "m", "h", "d"])]).check(
+  Schema.isPattern(/^\d+(ms|s|m|h|d)$/),
+)
+export type CacheTTL = typeof CacheTTL.Type
+
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),
-  ttlSeconds: Schema.optional(Schema.Number),
+  ttl: Schema.optional(CacheTTL),
 }) {}
 
 // Auto-placement policy for prompt caching. The protocol-neutral lowering step
@@ -355,7 +375,9 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // tool loops.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular
-// object form to override individual choices.
+// object form to choose placements exactly; an object with only `ttl` keeps
+// the automatic placements and sets their lifetime. Routes without inline
+// markers send `ttl` as a request-level cache option where one exists.
 export const CachePolicyObject = Schema.Struct({
   tools: Schema.optional(Schema.Boolean),
   system: Schema.optional(Schema.Boolean),
@@ -366,7 +388,7 @@ export const CachePolicyObject = Schema.Struct({
       Schema.Struct({ tail: Schema.Natural }),
     ]),
   ),
-  ttlSeconds: Schema.optional(Schema.Number),
+  ttl: Schema.optional(CacheTTL),
 })
 export type CachePolicyObject = Schema.Schema.Type<typeof CachePolicyObject>
 

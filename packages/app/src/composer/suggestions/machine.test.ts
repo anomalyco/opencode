@@ -80,6 +80,26 @@ test.each<{
     popover: { type: "context", query: "sr" },
   },
   {
+    name: "keeps an open mention searching across single spaces",
+    from: { popover: { type: "context", query: "open" } },
+    event: { type: "input.changed", value: "see @open con", persist: false },
+    draft: persisted("see @open con"),
+    popover: { type: "context", query: "open con" },
+  },
+  {
+    name: "does not reopen a mention across a space",
+    event: { type: "input.changed", value: "see @open con", persist: false },
+    draft: persisted("see @open con"),
+    popover: { type: "closed" },
+  },
+  {
+    name: "ends an open mention at a double space",
+    from: { popover: { type: "context", query: "open " } },
+    event: { type: "input.changed", value: "see @open  ", persist: false },
+    draft: persisted("see @open  "),
+    popover: { type: "closed" },
+  },
+  {
     name: "enters shell mode from an initial exclamation mark",
     event: { type: "input.changed", value: "!", persist: false },
     draft: persisted("!"),
@@ -126,8 +146,27 @@ test.each<{
     name: "loops active popover items with arrow keys",
     from: { popover: { type: "context", query: "", activeID: "second" } },
     event: key("ArrowDown", { ids: ["first", "second"] }),
-    popover: { type: "context", query: "", activeID: "first" },
+    popover: { type: "context", query: "", activeID: "first", chosen: true },
     handled: true,
+  },
+  {
+    name: "moves a highlight the user didn't choose to the first row when results reorder",
+    from: { popover: { type: "context", query: "se", activeID: "server" } },
+    event: { type: "popover.results", ids: ["session", "server"] },
+    popover: { type: "context", query: "se", activeID: "session", chosen: false },
+  },
+  {
+    name: "keeps a chosen highlight when results reorder",
+    from: { popover: { type: "context", query: "se", activeID: "server", chosen: true } },
+    event: { type: "popover.results", ids: ["session", "server"] },
+    popover: { type: "context", query: "se", activeID: "server", chosen: true },
+  },
+  {
+    name: "forgets the chosen highlight when the query changes",
+    from: { popover: { type: "context", query: "se", activeID: "server", chosen: true } },
+    event: { type: "input.changed", value: "@ses" },
+    draft: persisted("@ses"),
+    popover: { type: "context", query: "ses" },
   },
 ])("$name", (row) => {
   const result = transitionComposer(

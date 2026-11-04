@@ -1,32 +1,83 @@
 import type { Data } from "@opencode/client/solid"
-import type { SessionInfo } from "@opencode/client/promise"
+import { isSessionNotFoundError, type OpenCodeEvent, type SessionInfo } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
 
+const REMOVED_SESSION_LIMIT = 512
+
+// The events on which the server advances a session's `time.updated` to the event's time.
+const SESSION_ACTIVITY = [
+  "session.inbox.enqueued",
+  "session.step.started",
+  "session.step.ended",
+  "session.step.failed",
+  "session.renamed",
+  "session.agent.selected",
+  "session.model.selected",
+  "session.metadata.updated",
+  "session.permissions",
+  "session.moved",
+  "session.archived",
+  "session.unarchived",
+  "session.revert.staged",
+  "session.revert.cleared",
+  "session.revert.committed",
+] satisfies OpenCodeEvent["type"][]
+
 export function createDesktopData(input: { data: Data; remove: (sessionID: string) => Promise<void> }) {
   const mutation = createSessionMutations(input.remove)
-  onCleanup(input.data.on("session.deleted", (event) => mutation.deleted(event.data.sessionID)))
+  const [activity, setActivity] = createStore<Record<string, number | undefined>>({})
+  onCleanup(
+    input.data.on("session.deleted", (event) => {
+      setActivity(event.data.sessionID, undefined)
+      mutation.deleted(event.data.sessionID)
+    }),
+  )
+
+  // Lists loaded earlier (the Home index, the live store, search results) learn each session's newer
+  // `time.updated` from its events, so they rank sessions in the server's order without reloading.
+  SESSION_ACTIVITY.forEach((type) =>
+    onCleanup(
+      input.data.on(type, (event) => {
+        if (event.created > (activity[event.data.sessionID] ?? 0)) setActivity(event.data.sessionID, event.created)
+      }),
+    ),
+  )
+
+  const apply = (sessions: readonly SessionInfo[]) =>
+    mutation.apply(sessions).map((session) => {
+      const updated = activity[session.id]
+
+      return updated && updated > session.time.updated ? { ...session, time: { ...session.time, updated } } : session
+    })
 
   return {
     ...input.data,
     session: {
       ...input.data.session,
-      list: () => mutation.apply(input.data.session.list()),
-      apply: mutation.apply,
-      remove: mutation.remove,
+      list: () => apply(input.data.session.list()),
+      apply,
+      remove: (sessionID: string) =>
+        mutation.remove(sessionID).then(() => {
+          setActivity(sessionID, undefined)
+          input.data.session.forget(sessionID)
+        }),
     },
   }
 }
 
 export function createSessionMutations(remove: (sessionID: string) => Promise<void>) {
-  const [store, setStore] = createStore({ session: [] as SessionMutation[] })
+  const [store, setStore] = createStore<{ session: SessionMutation[] }>({ session: [] })
 
   const clear = (id: string) => {
     setStore("session", (current) => current.filter((mutation) => mutation.id !== id))
   }
+
+  const append = (current: readonly SessionMutation[], next: SessionMutation) =>
+    [...current.filter((mutation) => mutation.sessionID !== next.sessionID), next].slice(-REMOVED_SESSION_LIMIT)
 
   return {
     apply(sessions: readonly SessionInfo[]) {
@@ -38,17 +89,20 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
     },
     remove(sessionID: string) {
       const mutation = { id: uuid(), type: "remove" as const, sessionID }
-      setStore("session", (current) => [...current, mutation])
+      setStore("session", (current) => append(current, mutation))
 
       return Promise.resolve()
         .then(() => remove(sessionID))
         .catch((error) => {
+          if (isSessionNotFoundError(error)) return
+
           clear(mutation.id)
           throw error
         })
     },
+    // Keep the deleted session hidden: cached lists such as the Home index still hold it until they refetch.
     deleted(sessionID: string) {
-      setStore("session", (current) => current.filter((mutation) => mutation.sessionID !== sessionID))
+      setStore("session", (current) => append(current, { id: uuid(), type: "remove", sessionID }))
     },
   }
 }

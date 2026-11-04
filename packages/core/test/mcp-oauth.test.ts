@@ -37,6 +37,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
   const rows = new Map(initial.map((row) => [row.id, row]))
   const unused = () => Effect.die("unused credential method")
   const service = Credential.Service.of({
+    lock: unused,
     all: unused,
     create: unused,
     activate: unused,
@@ -158,6 +159,37 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("code")).toBe("accepted")
     expect(tokenRequests[0]?.get("code_verifier")).not.toBeNull()
     expect(tokenRequests[0]?.get("resource")).toBe(server.url.href)
+  })
+
+  test("keeps waiting for the redirect after callback requests without OAuth parameters", async () => {
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
+          return new Response(null, { status: 404 })
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "refresh", expires_in: 3600 })
+      },
+    })
+
+    const credential = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
+          const redirectValue = authorizationUrl.searchParams.get("redirect_uri")
+          const state = authorizationUrl.searchParams.get("state")
+          if (!redirectValue || !state) throw new Error("Missing OAuth redirect parameters")
+          const callback = new URL(redirectValue)
+          expect((yield* Effect.promise(() => fetch(callback, { method: "OPTIONS" }))).status).toBe(400)
+          expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
+          callback.searchParams.set("code", "accepted")
+          callback.searchParams.set("state", state)
+          expect((yield* Effect.promise(() => fetch(callback))).status).toBe(200)
+          return yield* authorization.callback
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(credential.access).toBe("access")
   })
 
   test("reports a rejected token exchange on the callback page", async () => {
