@@ -1,4 +1,4 @@
-import { type Consumer, EXIT, nativeKind, site, STATE } from "../machine/native-kind.js"
+import { consumer, type Consumer, EXIT, nativeKind, site, STATE } from "../machine/native-kind.js"
 import { requireCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { rangeError, typeError } from "../interpreter/model.js"
@@ -166,7 +166,7 @@ const ACCUMULATOR = STATE + 1
 const HAS = STATE + 2
 const RESULT = STATE + 3
 
-const Reduce: Consumer = {
+const Reduce = consumer({
   name: "Iterator.prototype.reduce",
   each: (task, frame, value, index) => {
     const slots = frame.slots
@@ -192,32 +192,33 @@ const Reduce: Consumer = {
     if (!frame.slots[HAS]) throw typeError("Iterator.prototype.reduce of an empty iterator with no initial value.")
     return frame.slots[ACCUMULATOR] as Value
   },
-}
+})
 
-const ToArray: Consumer = {
+const ToArray = consumer({
   name: "Iterator.prototype.toArray",
   take: (frame, value) => {
     ;((frame.slots[RESULT] ??= []) as Array<Value>).push(value)
   },
   done: (task, frame) => new Arr(task.ctx.builtins.Array, (frame.slots[RESULT] ?? []) as Array<Value>),
-}
+})
 
 // A consumer that calls the callback with each value and its index, and decides by the result.
 const deciding = (
   name: string,
   decide: (frame: Frame, value: Value, result: Value) => typeof EXIT | undefined,
   otherwise: Value,
-): Consumer => ({
-  name: method(name),
-  each: (task, frame, value, index) => {
-    frame.slots[RESULT] = value
-    const result = task.call(frame.slots[CALLBACK] as Callable, undefined, [value, index], undefined)
-    if (result === PENDING) return PENDING
-    return decide(frame, frame.slots[RESULT] as Value, result)
-  },
-  resume: (_task, frame, input) => decide(frame, frame.slots[RESULT] as Value, input as Value),
-  done: (_task, frame) => (frame.slots[HAS] ? (frame.slots[RESULT] as Value) : otherwise),
-})
+): Consumer =>
+  consumer({
+    name: method(name),
+    each: (task, frame, value, index) => {
+      frame.slots[RESULT] = value
+      const result = task.call(frame.slots[CALLBACK] as Callable, undefined, [value, index], undefined)
+      if (result === PENDING) return PENDING
+      return decide(frame, frame.slots[RESULT] as Value, result)
+    },
+    resume: (_task, frame, input) => decide(frame, frame.slots[RESULT] as Value, input as Value),
+    done: (_task, frame) => (frame.slots[HAS] ? (frame.slots[RESULT] as Value) : otherwise),
+  })
 
 // Stops with `result` as the method's result.
 const stop = (frame: Frame, result: Value): typeof EXIT => {

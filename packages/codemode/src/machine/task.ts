@@ -6,10 +6,8 @@ import type { ScopeStack } from "../interpreter/scope.js"
 import {
   abrupt,
   Await,
-  Call,
   type Completion,
   Enter,
-  type Eval,
   normal,
   Push,
   type Signal,
@@ -17,12 +15,18 @@ import {
   Yield,
 } from "../interpreter/signals.js"
 import { locate } from "../interpreter/errors.js"
-import { Frame, type Kind, PASS, PENDING, type Pending } from "./frame.js"
-import { dispatch, native, nativeFrame } from "./calls.js"
+import { Frame, kind, type Kind, PASS, PENDING, type Pending } from "./frame.js"
+import { dispatch } from "./calls.js"
 import type { Machine } from "./machine.js"
 
-/** Steps run by every machine task in this process, so tests can see that a program ran on the machine. */
-export const stats = { steps: 0 }
+/**
+ * Steps run by every machine task in this process, so tests can see that a program ran on the machine; `inspect`, when
+ * a test sets it, sees the stack before every step.
+ */
+export const stats: { steps: number; inspect: ((stack: ReadonlyArray<Frame>) => void) | undefined } = {
+  steps: 0,
+  inspect: undefined,
+}
 
 /**
  * A stack of machine frames and the loop that steps it. The machine runs every job on its root task.
@@ -99,11 +103,6 @@ export class MachineTask {
     return dispatch(this, callable, thisValue, args, node, callee)
   }
 
-  /** Runs host interpreter work as a native frame; a failure it raises is located at `site` when one is given. */
-  native<A>(work: Eval<A>, site: AstNode | undefined, locate: boolean): A | Pending {
-    return native(this, work, site, locate)
-  }
-
   /** Asks for `signal`; its answer (or failure) is the result of the frame this pushes. */
   request(signal: Signal, node: AstNode | undefined): Pending {
     this.signal = signal
@@ -129,6 +128,7 @@ export class MachineTask {
     let value = input
     while (true) {
       stats.steps++
+      if (stats.inspect !== undefined) stats.inspect(stack)
       if (!ok) {
         let error = value
         while (true) {
@@ -191,12 +191,6 @@ export class MachineTask {
   // Answers a signal on this stack, giving what the top frame continues with; undefined hands the signal on.
   private answer(signal: Signal): Completion | undefined {
     const machine = this.machine
-    if (signal instanceof Call) {
-      this.stack.push(nativeFrame(this.scopes, signal.body, signal.boundary, true))
-      machine.depth++
-      if (machine.tick()) this.slice = true
-      return normal(undefined)
-    }
     if (signal instanceof Enter) {
       this.enter(signal.frames)
       if (machine.tick()) this.slice = true
@@ -246,4 +240,4 @@ export class MachineTask {
 }
 
 // A frame waiting on the answer to a request; the answer passes straight to the frame below.
-const passKind: Kind = { name: "Request", step: (_task, _frame, _node, input) => input }
+const passKind = kind("Request", (_task, _frame, _node, input) => input)

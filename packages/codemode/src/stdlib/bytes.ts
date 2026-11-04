@@ -1,4 +1,4 @@
-import { type Consumer, nativeKind, STATE } from "../machine/native-kind.js"
+import { consumer, nativeKind, STATE } from "../machine/native-kind.js"
 import { Push } from "../interpreter/signals.js"
 import { PENDING } from "../machine/frame.js"
 import { Drain, drain } from "../machine/natives.js"
@@ -49,7 +49,7 @@ const finishBytes = (into: BytesInto, bytes: Uint8Array): Value => {
 }
 
 // State: the method's name, where the bytes go, the mapper and its `this`, the values, and the next one to map.
-const CollectBytes: Consumer = {
+const CollectBytes = consumer({
   name: "Uint8Array bytes",
   notIterable: (_task, frame, source) => {
     throw typeError(
@@ -71,7 +71,7 @@ const CollectBytes: Consumer = {
     }
     return task.push(MapBytes, frame.node, slots.slice(STATE))
   },
-}
+})
 
 // Slots: as `CollectBytes`'s state, with the mapped values so far.
 const MapBytes = nativeKind("Uint8Array mapper", (task, frame, input) => {

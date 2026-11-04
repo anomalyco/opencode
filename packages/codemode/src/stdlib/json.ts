@@ -1,12 +1,24 @@
-import type { Eval } from "../interpreter/signals.js"
+import { nativeKind } from "../machine/native-kind.js"
 import { methods } from "../interpreter/native.js"
-import { applyCollectionCallback } from "../interpreter/callback.js"
+import { requireCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { checkStringLength } from "../interpreter/limits.js"
 import { syntaxError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
-import { fromJson, toJson } from "../data.js"
-import { get, keys, Arr, Obj, coerceToString, record, remove, set, type Value } from "../interpreter/objects.js"
+import { fromJson, JsonWalk, walk } from "../data.js"
+import {
+  get,
+  keys,
+  Arr,
+  type Callable,
+  Obj,
+  coerceToString,
+  record,
+  remove,
+  set,
+  type Value,
+} from "../interpreter/objects.js"
+import { Push } from "../interpreter/signals.js"
+import { type Frame, PENDING } from "../machine/frame.js"
 
 export const jsonGlobal = <R>(ctx: Interpreter<R>) => {
   const json = new Obj(ctx.builtins.Object)
@@ -28,23 +40,56 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<Value>) => {
     }
   })()
   if (typeofValue(args[1]) !== "function") return parsed
-
-  const apply = applyCollectionCallback(ctx, args[1], "JSON.parse")
-  const visit = function* (holder: Obj, key: string): Eval<Value> {
-    const value = get(holder, key)
-    if (value instanceof Obj) {
-      for (const name of keys(value)) {
-        const revived = yield* visit(value, name)
-        if (revived === undefined) remove(value, name)
-        else set(value, name, revived)
-      }
-    }
-    return yield* apply([key, value], holder)
-  }
-  return visit(record(ctx.builtins.Object, { "": parsed }), "")
+  const reviver = requireCallback(args[1], "JSON.parse")
+  return new Push(Revive, [reviver, [revival(record(ctx.builtins.Object, { "": parsed }), "")]])
 }
 
-function* stringify<R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> {
+/** One value the reviver walk is at: its holder and key, the value, and its property names and the next one. */
+type Revival = {
+  readonly holder: Obj
+  readonly key: string
+  readonly value: Value
+  names: Array<string>
+  index: number
+}
+
+const revival = (holder: Obj, key: string): Revival => {
+  const value = get(holder, key)
+  return { holder, key, value, names: value instanceof Obj ? keys(value) : [], index: 0 }
+}
+
+// Slots: the reviver, and the values being revived, innermost last. Children are revived first, each replacing (or,
+// when the reviver gives undefined, removing) its property; then the reviver sees the value itself.
+const Revive = nativeKind("JSON.parse reviver", (task, frame: Frame, input) => {
+  const reviver = frame.slots[0] as Callable
+  const stack = frame.slots[1] as Array<Revival>
+  let resumed = frame.phase === 1
+  while (true) {
+    const current = stack[stack.length - 1]!
+    let revived: Value
+    if (resumed) {
+      resumed = false
+      revived = input as Value
+    } else {
+      if (current.index < current.names.length) {
+        stack.push(revival(current.value as Obj, current.names[current.index++]!))
+        continue
+      }
+      frame.phase = 1
+      const result = task.call(reviver, current.holder, [current.key, current.value], undefined)
+      if (result === PENDING) return PENDING
+      revived = result
+    }
+    stack.pop()
+    const parent = stack[stack.length - 1]
+    if (parent === undefined) return revived
+    const name = parent.names[parent.index - 1]!
+    if (revived === undefined) remove(parent.value as Obj, name)
+    else set(parent.value as Obj, name, revived)
+  }
+})
+
+const stringify = <R>(ctx: Interpreter<R>, args: Array<Value>) => {
   const space = args[2]
   const indent = typeof space === "number" || typeof space === "string" ? space : undefined
   const replacer = args[1]
@@ -54,9 +99,6 @@ function* stringify<R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> {
           .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
           .map(String)
       : null
-  const callback =
-    typeofValue(replacer) === "function" ? applyCollectionCallback(ctx, replacer, "JSON.stringify") : undefined
-  const text = JSON.stringify(yield* toJson(ctx, args[0], callback), properties, indent)
-  if (text !== undefined) checkStringLength(text.length)
-  return text
+  const callback = typeofValue(replacer) === "function" ? requireCallback(replacer, "JSON.stringify") : undefined
+  return new Push(JsonWalk, walk(ctx.builtins, args[0], false, callback, properties, indent))
 }

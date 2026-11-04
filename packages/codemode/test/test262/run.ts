@@ -11,6 +11,9 @@ import { createErrorValue } from "../../src/interpreter/intrinsics.js"
 import { constructor, fn, methods } from "../../src/interpreter/native.js"
 import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/interpreter/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
+import { Push } from "../../src/interpreter/signals.js"
+import { PENDING } from "../../src/machine/frame.js"
+import { nativeKind } from "../../src/machine/native-kind.js"
 
 export const root = import.meta.dir
 
@@ -119,23 +122,7 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
               `Actual ${show(args[0])} and expected ${show(args[1])} should have the same contents. ${prefix(args[2])}`,
             ),
     ],
-    [
-      "throws",
-      3,
-      function* (_, args) {
-        const expected = args[0] instanceof Callable ? String(get(args[0], "name")) : show(args[0])
-        try {
-          yield* ctx.call(args[1], undefined, [])
-        } catch (error) {
-          const thrown = materialize(ctx, error)
-          if (!(thrown instanceof Obj)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
-          const actual = get(thrown, "constructor")
-          if (actual === args[0]) return undefined
-          return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
-        }
-        return fail(`${prefix(args[2])}Expected a ${expected} to be thrown but no exception was thrown at all`)
-      },
-    ],
+    ["throws", 3, (_, args) => new Push(Throws, [test262Prototype, args[0], args[1], args[2], undefined])],
   ])
   return [
     ["assert", assert],
@@ -156,6 +143,43 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
     ],
   ]
 }
+
+// assert.throws: calls the function, then checks what it threw. Slots: the Test262Error prototype, the expected
+// constructor, the function, the message, and the failure caught.
+const Throws = nativeKind(
+  "test262 assert.throws",
+  (task, frame) => {
+    const slots = frame.slots
+    const expectedCtor = slots[1] as Value
+    const expected = expectedCtor instanceof Callable ? String(get(expectedCtor, "name")) : show(expectedCtor)
+    const prefix = slots[3] === undefined ? "" : `${String(slots[3])} `
+    const fail = (message: string) => {
+      throw new Throw(createErrorValue(slots[0] as Obj, message))
+    }
+    if (frame.phase === 0) {
+      frame.phase = 1
+      if (task.call(slots[2] as Value, undefined, [], frame.node) === PENDING) return PENDING
+    }
+    if (frame.phase === 1) {
+      frame.phase = 3
+      return fail(`${prefix}Expected a ${expected} to be thrown but no exception was thrown at all`)
+    }
+    frame.phase = 3
+    const thrown = materialize(task.ctx, slots[4])
+    if (!(thrown instanceof Obj)) return fail(`${prefix}Thrown value was not an object!`)
+    const actual = get(thrown, "constructor")
+    if (actual === expectedCtor) return undefined
+    return fail(`${prefix}Expected a ${expected} but got a ${show(actual)}`)
+  },
+  {
+    unwind: (_task, frame, error) => {
+      if (frame.phase !== 1) return false
+      frame.phase = 2
+      frame.slots[4] = error
+      return true
+    },
+  },
+)
 
 const show = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value)

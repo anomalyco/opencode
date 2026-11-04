@@ -31,23 +31,10 @@ import {
 } from "../interpreter/operations.js"
 import { isOpaque } from "../interpreter/references.js"
 import { ScopeStack } from "../interpreter/scope.js"
-import {
-  abrupt,
-  type Boundary,
-  type Completion,
-  Convert,
-  Enter,
-  type Hint,
-  type Eval,
-  Invoke,
-  isEval,
-  MAX_CALL_DEPTH,
-  normal,
-  Push,
-  type Signal,
-} from "../interpreter/signals.js"
+import { Convert, Enter, type Hint, Invoke, MAX_CALL_DEPTH, normal, Push } from "../interpreter/signals.js"
 import { conversions } from "../interpreter/callback.js"
 import type { Resolving } from "./scheduler.js"
+import { BoundaryWalk, type Json, walk } from "../data.js"
 import type { StatementResult } from "../interpreter/model.js"
 import { Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev } from "./expressions.js"
@@ -88,7 +75,11 @@ export function dispatch(
   }
   if (callable instanceof ToolReference) {
     if (callable.path.length === 0) throw typeError("The tools root is not callable.", callee ?? node)
-    return native(task, task.ctx.toolCall(callable.path, args, node), node, false)
+    const machine = task.machine
+    const resolving = machine.resolving(machine.newPromise())
+    machine.depth++
+    if (machine.tick()) task.slice = true
+    return task.push(ToolCall, node, [callable.path, args, resolving, 0, []])
   }
   throw notAFunction(callee, node)
 }
@@ -137,8 +128,47 @@ function settle(
       newTarget !== undefined,
     ])
   }
-  return isEval(result) ? native(task, result, node, true) : result
+  return result
 }
+
+// A tool call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
+// promise argument is awaited first (the frame is an async boundary, so the caller has the promise meanwhile); a
+// failure while crossing rejects it. Once they have crossed the call is queued, and the driver starts it before any
+// other job runs, so admission and hooks happen first, and it runs concurrently with the program. Slots: the tool's
+// path, the arguments, what settles the promise, the next argument, and those crossed so far.
+const ToolCall = kind(
+  "Tool call",
+  (task, frame: Frame, node: AstNode, input) => {
+    const slots = frame.slots
+    const resolving = slots[2] as Resolving
+    if (frame.phase === SETTLED) return resolving.promise
+    const args = slots[1] as Array<Value>
+    const json = slots[4] as Array<Json | undefined>
+    if (frame.phase === 1) {
+      json.push(input as Json | undefined)
+      slots[3] = (slots[3] as number) + 1
+    }
+    const index = slots[3] as number
+    frame.phase = 1
+    if (index < args.length) return task.push(BoundaryWalk, node, walk(task.ctx.builtins, args[index], true))
+    const path = slots[0] as ReadonlyArray<string>
+    task.machine.host(
+      { kind: "tool", path, args: json },
+      { label: path.join("."), result: "json", resolving, site: node },
+    )
+    return resolving.promise
+  },
+  {
+    unwind: (_task, frame, error) => {
+      if (frame.phase === SETTLED) return false
+      ;(frame.slots[2] as Resolving).reject(error)
+      frame.phase = SETTLED
+      return true
+    },
+    cut: (frame) => normal((frame.slots[2] as Resolving).promise),
+    counts: () => true,
+  },
+)
 
 // A built-in's result held back while the host takes its turn.
 const Settled = kind("Settled", (_task, frame: Frame) => frame.slots[0])
@@ -384,101 +414,6 @@ export const CallKind = kind("Call", callStep, {
     const resolving = frame.slots[7] as Resolving | undefined
     return resolving === undefined ? undefined : normal(resolving.promise)
   },
-  counts: (frame) => frame.slots[4] === true,
-})
-
-// The phases of a native frame: running (or receiving the answer it waits for), throwing a failure into the work, done.
-const RUNNING = 0
-const THROWING = 1
-const FINISHED = 2
-
-/**
- * Runs a built-in's interpreter work as a native frame: program calls it makes (`Invoke`) run as frames on this stack,
- * and anything else it asks for is answered by the step loop. The frame holds a host generator, so it is opaque.
- */
-export function native<A>(task: MachineTask, work: Eval<A>, site: AstNode | undefined, located: boolean): Out<A> {
-  const frame = new Frame(Native, site, RUNNING, task.scopes, [work, located, undefined, undefined, false])
-  task.stack.push(frame)
-  let out: Out<A>
-  try {
-    out = nativeStep(task, frame, site, undefined) as Out<A>
-  } catch (error) {
-    task.stack.pop()
-    throw error
-  }
-  if (out !== PENDING) task.stack.pop()
-  return out
-}
-
-/**
- * A native frame for a body that runs as an activation of its own: a job's work, or a body a built-in starts behind a
- * boundary (`Call`). It counts toward the depth limit; the boundary decides what its completion gives the frame below.
- */
-export const nativeFrame = (
-  scopes: ScopeStack,
-  body: Eval<unknown>,
-  boundary: Boundary | undefined,
-  counted: boolean,
-): Frame => new Frame(Native, undefined, RUNNING, scopes, [body, false, undefined, boundary, counted])
-
-// Slots: the work, whether its failures are located at the call site, a failure to throw into it, the boundary it
-// runs behind, and whether it counts toward the depth limit.
-function nativeStep(task: MachineTask, frame: Frame, site: AstNode | undefined, input: unknown): Out<Value> {
-  const slots = frame.slots
-  const work = slots[0] as Eval<unknown>
-  let ok = frame.phase !== THROWING
-  let value = ok ? input : slots[2]
-  slots[2] = undefined
-  frame.phase = RUNNING
-  while (true) {
-    let result: IteratorResult<Signal, unknown>
-    try {
-      result = ok ? work.next(value) : work.throw(value)
-    } catch (error) {
-      frame.phase = FINISHED
-      const boundary = slots[3] as Boundary | undefined
-      if (boundary !== undefined) return outcome(boundary.finish(abrupt(error)))
-      throw slots[1] ? locate(error, site) : error
-    }
-    if (result.done) {
-      frame.phase = FINISHED
-      const boundary = slots[3] as Boundary | undefined
-      if (boundary !== undefined) return outcome(boundary.finish(normal(result.value)))
-      return result.value as Value
-    }
-    const signal = result.value
-    if (!(signal instanceof Invoke)) {
-      task.signal = signal
-      return PENDING
-    }
-    let out: Out<Value>
-    try {
-      out = task.call(signal.callable, signal.thisValue, signal.args, signal.site)
-    } catch (error) {
-      ok = false
-      value = error
-      continue
-    }
-    if (out === PENDING) return PENDING
-    ok = true
-    value = out
-  }
-}
-
-const outcome = (completion: Completion): Value => {
-  if (!completion.ok) throw completion.error
-  return completion.value as Value
-}
-
-export const Native = kind("Native", nativeStep, {
-  opaque: true,
-  unwind: (_task, frame, error) => {
-    if (frame.phase === FINISHED) return false
-    frame.phase = THROWING
-    frame.slots[2] = error
-    return true
-  },
-  cut: (frame) => (frame.slots[3] as Boundary | undefined)?.suspended(),
   counts: (frame) => frame.slots[4] === true,
 })
 

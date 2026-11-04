@@ -18,7 +18,7 @@ import type {
   VariableDeclaration,
   WhileStatement,
 } from "acorn"
-import { toBoundary } from "../data.js"
+import { BoundaryWalk, walk } from "../data.js"
 import { materialize } from "../interpreter/errors.js"
 import {
   type Binding,
@@ -934,9 +934,7 @@ function programStep(task: MachineTask, frame: Frame, node: Program, input: unkn
   }
   if (phase === 3) {
     frame.phase = 4
-    const copied = task.native(toBoundary(task.ctx, input as Value), node, false)
-    if (copied === PENDING) return PENDING
-    input = copied
+    return task.push(BoundaryWalk, node, walk(task.ctx.builtins, input as Value, true))
   }
   task.machine.outcome = normal(input)
   return undefined

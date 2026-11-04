@@ -5,11 +5,13 @@ import { CodeMode, Tool } from "../src/index.js"
 import { parseProgram } from "../src/interpreter/execute.js"
 import { Interpreter } from "../src/interpreter/interpreter.js"
 import { createBuiltins } from "../src/interpreter/intrinsics.js"
-import { GeneratorObj, type Native, nativeRule, PromiseObj, type Value } from "../src/interpreter/objects.js"
+import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/interpreter/objects.js"
 import { normal } from "../src/interpreter/signals.js"
-import { Frame } from "../src/machine/frame.js"
+import { Frame, type Kind, kinds } from "../src/machine/frame.js"
+import { Machine } from "../src/machine/machine.js"
+import { type Consumer, consumers } from "../src/machine/native-kind.js"
+import { ScopeStack } from "../src/interpreter/scope.js"
 import { AsyncFromSyncIterator } from "../src/machine/generators.js"
-import type { Machine } from "../src/machine/machine.js"
 import { stats } from "../src/machine/task.js"
 import { ToolRuntime } from "../src/tool-runtime.js"
 
@@ -67,12 +69,36 @@ const programBinding = (machine: Machine, name: string): Value => {
   return slice.at(-1)!.scope.get(name, slice[0]!.node!)
 }
 
-// Frames as saved state: every one a `Frame`, none holding a host generator.
+// Throws unless `value` is plain data: no host function or generator is reachable from it. Program values, scopes,
+// AST nodes, and the machine (a back-reference from what settles a promise) are data of their own; frame kinds and
+// consumers are module constants named once.
+const requireData = (value: unknown, path: string, seen: Set<unknown>): void => {
+  if (typeof value === "function") throw new Error(`a host function at ${path}`)
+  if (value === null || typeof value !== "object" || seen.has(value)) return
+  seen.add(value)
+  if (value instanceof Obj || value instanceof ScopeStack || value instanceof Machine) return
+  if (ArrayBuffer.isView(value)) return
+  const node = value as { type?: unknown; start?: unknown }
+  if (typeof node.type === "string" && typeof node.start === "number") return
+  if (kinds.get((value as Kind).name) === value || consumers.get((value as Consumer).name) === value) return
+  const generator = value as { next?: unknown; throw?: unknown }
+  if (typeof generator.next === "function" && typeof generator.throw === "function") {
+    throw new Error(`a host generator at ${path}`)
+  }
+  if (value instanceof Frame) {
+    if (kinds.get(value.kind.name) !== value.kind) throw new Error(`an unnamed frame kind at ${path}`)
+    return requireData(value.slots, `${path}.${value.kind.name}`, seen)
+  }
+  const entries = value instanceof Map ? [...value] : Object.entries(value)
+  for (const [key, item] of entries) requireData(item, `${path}.${String(key)}`, seen)
+}
+
+// Frames as saved state: every one a `Frame` whose state is plain data.
 const expectData = (frames: ReadonlyArray<Frame>) => {
   expect(frames.length).toBeGreaterThan(0)
   for (const frame of frames) {
     expect(frame).toBeInstanceOf(Frame)
-    expect(frame.kind.opaque).toBeUndefined()
+    requireData(frame, "frame", new Set())
   }
 }
 
@@ -223,10 +249,7 @@ describe("machine", () => {
     expect(slices.length).toBe(3)
     for (const frames of slices) {
       expect(Array.isArray(frames)).toBe(true)
-      for (const frame of frames) {
-        expect(frame).toBeInstanceOf(Frame)
-        expect(frame.kind.opaque).toBeUndefined()
-      }
+      expectData(frames)
     }
     // Each slice starts at its async boundary: the program's body, or an async function's call.
     expect(slices.map((frames) => frames[0]!.kind.name).sort()).toEqual(["Call", "Call", "Program"])
@@ -319,6 +342,83 @@ describe("machine", () => {
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
       expect(await Bun.file(`${import.meta.dir}/../${file}`).text()).not.toMatch(/from "effect"/)
+    }
+  })
+})
+
+describe("built-ins as data", () => {
+  test("every frame on every stack is data at every step", async () => {
+    const seenKinds = new Set<string>()
+    stats.inspect = (stack) => {
+      const seen = new Set<unknown>()
+      for (const frame of stack) {
+        seenKinds.add(frame.kind.name)
+        requireData(frame, "frame", seen)
+      }
+    }
+    try {
+      const result = await value(`
+        const log = []
+        const box = (v) => ({ valueOf() { log.push("valueOf"); return v }, toString() { return "box" + v } })
+        const xs = Array.from({ length: 6 }, (_, i) => (i * 7) % 6)
+        const sorted = xs.map((x) => x * 2).filter((x) => x !== 4).sort((a, b) => b - a)
+        const found = [xs.find((x) => x > 3), xs.findLast((x) => x < 3), xs.some((x) => x > 4), xs.every((x) => x >= 0)]
+        const flat = xs.flatMap((x) => [x, -x]).reduce((a, b) => a + b, 0) + xs.reduceRight((a, b) => a + b)
+        xs.forEach((x) => log.push(x))
+        function* gen(n) { for (let i = 0; i < n; i++) yield [String(i), i] }
+        const map = new Map(gen(3))
+        const set = new Set(Array.from(gen(3), ([k]) => k))
+        const weak = new WeakMap([[log, 1]])
+        map.forEach((v, k) => log.push(k))
+        const setLike = { size: box(2), has: (v) => v === "1", keys: () => ["1", "9"][Symbol.iterator]() }
+        const ops = [set.union(setLike).size, set.intersection(setLike).size, set.isSubsetOf(setLike), set.isDisjointFrom(setLike)]
+        const groups = [Object.groupBy(xs, (x) => (x % 2 ? box("odd") : "even")), Map.groupBy(xs, (x) => x % 3).size]
+        const entries = Object.fromEntries(gen(2))
+        const iter = gen(5).map((pair) => pair[1]).filter((n) => n % 2 === 0).flatMap((n) => [n, n]).take(5).drop(1)
+        const helpers = [iter.toArray(), gen(4).map(([, n]) => n).reduce((a, b) => a + b), Iterator.from({ next: () => ({ done: true }) }).toArray()]
+        const json = JSON.stringify({ a: box(1), d: { toJSON: (k) => "key " + k }, list: [1, undefined] }, (k, v) => (k === "a" ? String(v) : v), 1)
+        const parsed = JSON.parse('{"a":[1,2,{"b":3}]}', (k, v) => (typeof v === "number" ? v * 10 : v))
+        const text = "a-b-c".replace(/-/g, (m) => "+").replaceAll("+", () => "_") + "x".padStart(box(3), "0")
+        const dates = [new Date(box(0)).getTime(), Date.UTC(box(2000), 0), new Date(0).setFullYear(box(1999))]
+        const numbers = [Math.max(box(5), 2), Number(box(7)), String(box(1)), [box(1), 2].join(box("|"))]
+        const calls = [Math.max.call(null, 1, 2), ((a, b) => a + b).apply(null, [1, 2]), ((a) => a).bind(null, 9)()]
+        const params = String(new URLSearchParams(gen(2))) + new Headers([["x", "1"]]).get("x")
+        const aggregate = new AggregateError(gen(2), box("many")).errors.length
+        const error = new Error(box("boxed")).message
+        const work = async (i) => { await null; return i * 2 }
+        const all = await Promise.all([work(1), work(2), 3])
+        const settled = await Promise.allSettled([work(1), Promise.reject(new Error("no"))])
+        const raced = await Promise.race([work(5), new Promise((resolve) => resolve("first"))])
+        const any = await Promise.any([Promise.reject(1), work(4)])
+        const tried = await Promise.try(() => work(6))
+        const thenned = await work(1).then((v) => v + 1).catch(() => 0).finally(() => log.push("finally"))
+        const thenable = await { then: (resolve) => resolve("thenable") }
+        const tool = await tools.echo({ value: work(10) })
+        const found2 = search({ query: "echo" }).items.length
+        async function* agen() { yield 1; yield await work(1) }
+        const collected = []
+        for await (const v of agen()) collected.push(v)
+        return { sorted, found, flat, map: map.size, set: set.size, weak: weak.has(log), ops, groups, entries, helpers, json, parsed, text, dates, numbers, calls, params, aggregate, error, all, settled: settled.length, raced, any, tried, thenned, thenable, tool, found2, collected, log: log.length }
+      `)
+      expect(result).toMatchObject({ all: [2, 4, 3], raced: "first", any: 8, tried: 12, thenned: 3, tool: 20 })
+    } finally {
+      stats.inspect = undefined
+    }
+    for (const name of [
+      "Array callback",
+      "Drain",
+      "Convert",
+      "IteratorHelper.next",
+      "JSON.stringify walk",
+      "Tool call",
+      "Promise combinator",
+      "PromiseReactionJob",
+      "Array sort",
+      "JSON.parse reviver",
+      "Set method",
+      "search",
+    ]) {
+      expect(seenKinds).toContain(name)
     }
   })
 })

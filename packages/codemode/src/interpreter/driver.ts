@@ -85,7 +85,7 @@ export class Driver<R> {
     if (request.kind === "tool") return this.tools.execute(request.path, request.args)
     if (request.kind === "search") return this.tools.search(request.args)
     // An extension's work, made by the extension bridge with the program's services in its requirements.
-    return request.effect as Effect.Effect<unknown, unknown, R>
+    return this.machine.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>
   }
 
   // Starts concurrent host work now; its outcome goes back to the machine's inbox, in completion order.

@@ -1,4 +1,4 @@
-import { type Consumer, STATE } from "../machine/native-kind.js"
+import { consumer, STATE } from "../machine/native-kind.js"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
 import { ToolRuntimeError } from "../tool-runtime.js"
@@ -159,7 +159,7 @@ export const createAggregateErrorValue = <R>(
 }
 
 // State: the message, the prototype, the options, and the errors so far.
-const AggregateErrors: Consumer = {
+const AggregateErrors = consumer({
   name: "new AggregateError",
   notIterable: () => {
     throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
@@ -177,7 +177,7 @@ const AggregateErrors: Consumer = {
     )
     return withCause(created, slots[STATE + 2] as Value)
   },
-}
+})
 
 // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
 const withCause = (created: ErrorObj, options: Value) => {

@@ -1,4 +1,4 @@
-import { type Consumer, STATE } from "../machine/native-kind.js"
+import { consumer, STATE } from "../machine/native-kind.js"
 import { Push } from "../interpreter/signals.js"
 import { Drain, drain } from "../machine/natives.js"
 import { constructor, methods, receiver } from "../interpreter/native.js"
@@ -69,7 +69,7 @@ export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value 
 }
 
 // State: the object being filled. A rejected entry closes the source iterator.
-const FromEntries: Consumer = {
+const FromEntries = consumer({
   name: "Object.fromEntries",
   notIterable: () => {
     throw typeError("Object.fromEntries expects a synchronous iterable of entries.")
@@ -81,7 +81,7 @@ const FromEntries: Consumer = {
     define(frame.slots[STATE] as Obj, coerceToString(getOwn(entry, 0)), getOwn(entry, 1))
   },
   done: (_task, frame) => frame.slots[STATE] as Obj,
-}
+})
 
 const classTag = (value: Value): string => {
   if (value === null) return "Null"

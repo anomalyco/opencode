@@ -1,4 +1,4 @@
-import { type Consumer, nativeKind, STATE } from "../machine/native-kind.js"
+import { consumer, nativeKind, STATE } from "../machine/native-kind.js"
 import { Push } from "../interpreter/signals.js"
 import { PENDING } from "../machine/frame.js"
 import { Drain, drain } from "../machine/natives.js"
@@ -136,7 +136,7 @@ export const readPairs = (init: Value, label: string, into: PairsInto) =>
   new Push(Drain, drain(Pairs, init, [label, [], into]))
 
 // State: the label, the pairs so far, and what they build.
-const Pairs: Consumer = {
+const Pairs = consumer({
   name: "pairs",
   notIterable: (_task, frame, init) => fromRecord(frame.slots[STATE + 2] as PairsInto, init),
   each: (task, frame, value) => task.push(Drain, frame.node, drain(Pair, value, [frame.slots[STATE], []])),
@@ -156,10 +156,10 @@ const Pairs: Consumer = {
       attempt(() => new Headers(pairs as Array<[string, string]>)),
     )
   },
-}
+})
 
 // One pair's strings; a failing conversion closes the pair's iterator. State: the label and the strings so far.
-const Pair: Consumer = {
+const Pair = consumer({
   name: "pair",
   notIterable: (_task, frame) => {
     throw typeError(`${frame.slots[STATE] as string} expects iterable [name, value] pairs.`)
@@ -168,7 +168,7 @@ const Pair: Consumer = {
     ;(frame.slots[STATE + 1] as Array<string>).push(coerceToString(value))
   },
   done: (_task, frame) => frame.slots[STATE + 1] as never,
-}
+})
 
 const fromRecord = (into: PairsInto, init: Value): Value => {
   if (into.kind === "Headers") {

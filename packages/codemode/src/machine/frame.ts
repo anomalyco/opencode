@@ -40,8 +40,6 @@ export type Kind = {
   yielded?(task: MachineTask, index: number, value: Value): Completion
   /** Whether the frame counts toward the call-depth limit while it is on the stack. */
   counts?(frame: Frame): boolean
-  /** A frame of this kind holds a host generator (a built-in that calls program code), so it cannot be saved. */
-  readonly opaque?: boolean
   /** A failure that unwinds past a frame of this kind is located at its node, where a built-in runs. */
   readonly locates?: boolean
 }
@@ -69,7 +67,7 @@ export const kinds = new Map<string, Kind>()
 export const kind = (
   name: string,
   step: Kind["step"],
-  options?: Pick<Kind, "unwind" | "cut" | "yielded" | "counts" | "opaque" | "locates">,
+  options?: Pick<Kind, "unwind" | "cut" | "yielded" | "counts" | "locates">,
 ): Kind => {
   if (kinds.has(name)) throw new Error(`Frame kind "${name}" is defined twice.`)
   const made = { name, step, ...options }

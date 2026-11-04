@@ -1,8 +1,9 @@
 import type { TaggedTemplateExpression } from "acorn"
-import { fromJson, type Json, toBoundary } from "../data.js"
+import { nativeKind } from "../machine/native-kind.js"
+import { BoundaryWalk, fromJson, type Json, walk } from "../data.js"
 import type { ToolRuntime } from "../tool-runtime.js"
+import type { ExtensionRequest } from "../machine/scheduler.js"
 import { Machine } from "../machine/machine.js"
-import { Bridge } from "./bridge.js"
 import { globals } from "./globals.js"
 import type { Builtins } from "./intrinsics.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
@@ -11,7 +12,7 @@ import { moduleName, resolveModule } from "./modules.js"
 import { type Arr, define, entries, nativeRule, Obj, type Value } from "./objects.js"
 import { promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
-import { AsyncBoundary, Call, type Eval, Host } from "./signals.js"
+import { Host, Push } from "./signals.js"
 import type { NodeId, Source } from "./source.js"
 
 /** One program execution: the tool bridge, the machine that runs it, captured logs, and the global scope built once. */
@@ -25,9 +26,10 @@ export class Interpreter<R> {
   readonly intrinsics: IntrinsicNames
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
+  /** Makes the Effect an extension function's host work runs as; set by the extension bridge. */
+  extensionWork: ((request: ExtensionRequest) => unknown) | undefined
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
   readonly sources = new Map<string, Source>()
-  private readonly bridge: Bridge
   private readonly globalScope: Map<string, Binding>
   private readonly modules = new Map<string, Value>()
   private readonly namespaces = new Map<string, Obj>()
@@ -43,7 +45,6 @@ export class Interpreter<R> {
     this.logs = options.logs ?? []
     // The machine never runs host work itself, so it does not need the services that work runs with.
     this.machine = new Machine(this as Interpreter<unknown>)
-    this.bridge = new Bridge()
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     const intrinsics = globals(this)
@@ -100,40 +101,30 @@ export class Interpreter<R> {
     return new ScopeStack([this.globalScope])
   }
 
-  // The call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
-  // promise argument is awaited first; the host call is queued once they have crossed, and the driver starts it, so
-  // admission and hooks happen before any other job runs, and it runs concurrently with the program.
-  *toolCall(path: ReadonlyArray<string>, args: Array<Value>, site: AstNode | undefined): Eval<Value> {
-    const ctx = this
-    const machine = ctx.machine
-    const resolving = machine.resolving(machine.newPromise())
-    const body = function* (): Eval<void> {
-      const json: Array<Json | undefined> = []
-      for (const arg of args) json.push(yield* toBoundary(ctx, arg))
-      machine.host({ kind: "tool", path, args: json }, { label: path.join("."), result: "json", resolving, site })
-    }
-    return (yield new Call(body(), new AsyncBoundary(resolving))) as Value
-  }
-
   /** The node a `NodeId` names, in one of this execution's sources. */
   node(id: NodeId): AstNode | undefined {
     return this.sources.get(id.source)?.node(id)
   }
 
-  /** Calls into the program; a built-in passes its own call site so failures inside are located there. */
-  call(callable: Value, thisValue: Value, args: Array<Value>, site?: AstNode): Eval<Value> {
-    return this.bridge.call(callable, thisValue, args, site)
-  }
-
-  /** Await: suspends the innermost async body until `value` settles. */
-  awaitValue(value: Value, node?: AstNode): Eval<Value> {
-    return this.bridge.awaitValue(value, node)
-  }
-
   /** The built-in search: its result is usable directly, and can also be awaited or chained like a Promise. */
-  *search(args: Array<Value>) {
-    const json: Array<Json | undefined> = []
-    for (const arg of args) json.push(yield* toBoundary(this, arg))
-    return promiseLike(this, fromJson(this, (yield new Host({ kind: "search", args: json })) as Json | undefined))
+  search(args: Array<Value>): Push {
+    return new Push(Search, [args, 0, []])
   }
 }
+
+// Slots: the arguments, the next one to cross, and those crossed so far. A promise argument is awaited first.
+const Search = nativeKind("search", (task, frame, input) => {
+  const slots = frame.slots
+  const args = slots[0] as Array<Value>
+  const json = slots[2] as Array<Json | undefined>
+  if (frame.phase === 2) return promiseLike(task.ctx, fromJson(task.ctx, input as Json | undefined))
+  if (frame.phase === 1) {
+    json.push(input as Json | undefined)
+    slots[1] = (slots[1] as number) + 1
+  }
+  const index = slots[1] as number
+  frame.phase = 1
+  if (index < args.length) return task.push(BoundaryWalk, frame.node, walk(task.ctx.builtins, args[index], true))
+  frame.phase = 2
+  return task.request(new Host({ kind: "search", args: json }), frame.node)
+})

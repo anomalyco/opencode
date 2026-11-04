@@ -1,4 +1,4 @@
-import { type Consumer, nativeKind, STATE, SUB } from "../machine/native-kind.js"
+import { consumer, nativeKind, STATE, SUB } from "../machine/native-kind.js"
 import { Push } from "../interpreter/signals.js"
 import type { Builtins } from "../interpreter/intrinsics.js"
 import { locate } from "../interpreter/errors.js"
@@ -51,7 +51,7 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
 
 // State: the namespace, the callback, the groups, and the item being grouped. A value's work: call the callback,
 // then (Object.groupBy) convert its result to a property key.
-const GroupBy: Consumer = {
+const GroupBy = consumer({
   name: "groupBy",
   notIterable: (_task, frame) => {
     throw typeError(`${frame.slots[STATE] as string}.groupBy expects an iterable collection.`)
@@ -92,7 +92,7 @@ const GroupBy: Consumer = {
     return undefined
   },
   done: (_task, frame) => frame.slots[STATE + 2] as Obj,
-}
+})
 
 const constructMap = (init: Value, proto: Obj) => {
   const target = new MapObj(proto)
@@ -101,7 +101,7 @@ const constructMap = (init: Value, proto: Obj) => {
 }
 
 // State: the collection being filled.
-const MapEntries: Consumer = {
+const MapEntries = consumer({
   name: "new Map",
   notIterable: (_task, _frame, init) => {
     throw typeError(`new Map(...) expects an iterable of [key, value] pairs, received ${describeValue(init)}.`)
@@ -113,7 +113,7 @@ const MapEntries: Consumer = {
     ;(frame.slots[STATE] as MapObj).map.set(getOwn(entry, 0), getOwn(entry, 1))
   },
   done: (_task, frame) => frame.slots[STATE] as Value,
-}
+})
 
 const constructSet = (init: Value, proto: Obj) => {
   const target = new SetObj(proto)
@@ -121,7 +121,7 @@ const constructSet = (init: Value, proto: Obj) => {
   return new Push(Drain, drain(SetValues, init, [target]))
 }
 
-const SetValues: Consumer = {
+const SetValues = consumer({
   name: "new Set",
   notIterable: (_task, _frame, init) => {
     throw typeError(`new Set(...) expects a synchronous iterable, received ${describeValue(init)}.`)
@@ -130,9 +130,9 @@ const SetValues: Consumer = {
     ;(frame.slots[STATE] as SetObj).set.add(value)
   },
   done: (_task, frame) => frame.slots[STATE] as Value,
-}
+})
 
-const WeakMapEntries: Consumer = {
+const WeakMapEntries = consumer({
   name: "new WeakMap",
   notIterable: (_task, _frame, init) => {
     throw typeError(`new WeakMap(...) expects an iterable of [key, value] pairs, received ${describeValue(init)}.`)
@@ -144,9 +144,9 @@ const WeakMapEntries: Consumer = {
     ;(frame.slots[STATE] as WeakMapObj).map.set(weakKey(getOwn(entry, 0), "as weak map key"), getOwn(entry, 1))
   },
   done: (_task, frame) => frame.slots[STATE] as Value,
-}
+})
 
-const WeakSetValues: Consumer = {
+const WeakSetValues = consumer({
   name: "new WeakSet",
   notIterable: (_task, _frame, init) => {
     throw typeError(`new WeakSet(...) expects a synchronous iterable, received ${describeValue(init)}.`)
@@ -155,7 +155,7 @@ const WeakSetValues: Consumer = {
     ;(frame.slots[STATE] as WeakSetObj).set.add(weakKey(value, "in weak set"))
   },
   done: (_task, frame) => frame.slots[STATE] as Value,
-}
+})
 
 // The callback sees the stored key (-0 is +0) and its result wins over anything it inserted itself.
 const getOrInsertComputed = (table: MapObj["map"] | WeakMapObj["map"], key: Value, callback: Callable) => {

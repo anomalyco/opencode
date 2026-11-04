@@ -35,6 +35,16 @@ export type Consumer = {
   readonly done: (task: MachineTask, frame: Frame) => Out<Value>
 }
 
+/** Every consumer, by name, so a saved `Drain` frame can name its consumer. */
+export const consumers = new Map<string, Consumer>()
+
+/** Defines a consumer, once per name. */
+export const consumer = (made: Consumer): Consumer => {
+  if (consumers.has(made.name)) throw new Error(`Consumer "${made.name}" is defined twice.`)
+  consumers.set(made.name, made)
+  return made
+}
+
 /** What `each` or `resume` returns to stop early: the iterator is closed, then `done` makes the result. */
 export const EXIT: unique symbol = Symbol("codemode.exit")
 

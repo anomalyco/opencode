@@ -1,4 +1,4 @@
-import { type Consumer, nativeKind, STATE } from "../machine/native-kind.js"
+import { consumer, nativeKind, STATE } from "../machine/native-kind.js"
 import { Push } from "../interpreter/signals.js"
 import { PENDING } from "../machine/frame.js"
 import { Drain, drain } from "../machine/natives.js"
@@ -59,7 +59,7 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Push => {
 }
 
 // State: the mapper, its `this`, and the values so far.
-const ArrayFrom: Consumer = {
+const ArrayFrom = consumer({
   name: "Array.from",
   each: (task, frame, value, index) => {
     const slots = frame.slots
@@ -72,7 +72,7 @@ const ArrayFrom: Consumer = {
   },
   resume: (_task, frame, input) => (frame.slots[STATE + 2] as Array<Value>).push(input as Value),
   done: (task, frame) => new Arr(task.ctx.builtins.Array, frame.slots[STATE + 2] as Array<Value>),
-}
+})
 
 // Slots: the array-like, its length, the mapper and its `this`, the next index, and the values so far.
 const ArrayFromArrayLike = nativeKind("Array.from array-like", (task, frame, input) => {

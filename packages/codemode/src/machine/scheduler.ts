@@ -1,4 +1,5 @@
 import type { Json } from "../data.js"
+import type { ExtensionInvocation } from "../tool-runtime.js"
 import { locate } from "../interpreter/errors.js"
 import type { AstNode } from "../interpreter/model.js"
 import type { Callable, GeneratorObj, Obj, PromiseObj, Value } from "../interpreter/objects.js"
@@ -67,13 +68,28 @@ export type Job =
   | { readonly kind: "thenable"; readonly promise: PromiseObj; readonly thenable: Obj; readonly then: Value }
 
 /**
- * What host work a call asks for. A tool call or a search is data; an extension's work is a live host value the driver
- * runs as it is.
+ * What host work a call asks for, as data the driver turns into an Effect: a tool call, a search, or a step of an
+ * extension function's call (see `ExtensionRequest`).
  */
 export type HostRequest =
   | { readonly kind: "tool"; readonly path: ReadonlyArray<string>; readonly args: Array<Json | undefined> }
   | { readonly kind: "search"; readonly args: Array<Json | undefined> }
-  | { readonly kind: "effect"; readonly effect: unknown }
+  | { readonly kind: "extension"; readonly call: ExtensionRequest }
+
+/**
+ * One step of a call to an extension function: its `extension.before` hook (`before`), settling what the host function
+ * returned or threw (`settle`: `host` is that), or calling an async host function and settling its result (`run`:
+ * `host` is the function). `invocation` is what the hooks see, for a global or a global object's function. The host
+ * function and what it returns are live host values with no data form.
+ */
+export type ExtensionRequest = {
+  readonly stage: "before" | "settle" | "run"
+  readonly label: string
+  readonly invocation: ExtensionInvocation | undefined
+  readonly host: unknown
+  readonly args: ReadonlyArray<unknown>
+  readonly threw: boolean
+}
 
 /**
  * Host work the program waits on. The machine queues it and hands it to the driver at its next stop; the driver runs

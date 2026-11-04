@@ -1,4 +1,4 @@
-import { type Consumer, STATE } from "../machine/native-kind.js"
+import { consumer, STATE } from "../machine/native-kind.js"
 import { constants, type Method, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
 import { Obj, coerceToNumber } from "../interpreter/objects.js"
@@ -87,7 +87,7 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
 }
 
 // State: the numbers so far.
-const SumPrecise: Consumer = {
+const SumPrecise = consumer({
   name: "Math.sumPrecise",
   notIterable: () => {
     throw typeError("Math.sumPrecise expects a synchronous iterable.")
@@ -97,4 +97,4 @@ const SumPrecise: Consumer = {
     ;(frame.slots[STATE] as Array<number>).push(value)
   },
   done: (_task, frame) => Math.sumPrecise(frame.slots[STATE] as Array<number>),
-}
+})

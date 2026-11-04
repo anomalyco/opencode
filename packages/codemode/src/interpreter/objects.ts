@@ -12,7 +12,7 @@ import {
   Throw,
   typeError,
 } from "./model.js"
-import { type Convert, type Enter, type Eval, type GeneratorRequest, Invoke, type Push } from "./signals.js"
+import { type Convert, type Enter, type GeneratorRequest, Invoke, type Push } from "./signals.js"
 import type { Frame } from "../machine/frame.js"
 import type { Reaction, Resolving } from "../machine/scheduler.js"
 import { OrderedTable, type TableCursor } from "./table.js"
@@ -206,10 +206,12 @@ export class Arguments extends Obj {
 }
 
 /**
- * A native function body: a value, interpreter work for bodies that call program code or the host, or machine frames
- * that run as the call: saved ones put back on the stack (`Enter`, a generator's body) or a fresh one (`Push`).
+ * A native function body: a value, or what the machine carries out as the call: frames that run as it (saved ones put
+ * back on the stack, `Enter`, as a generator's body; a fresh one, `Push`, whose state is plain data), a call it hands on
+ * (`Invoke`), or conversions to run before it runs again (`Convert`). Never a host generator: a built-in that calls
+ * program code does so from a frame.
  */
-export type NativeResult = Value | Eval<Value> | Enter | Push | Invoke | Convert
+export type NativeResult = Value | Enter | Push | Invoke | Convert
 /** `site` is the call running the built-in, where a failure it reports later (a rejection) is located. */
 export type NativeCall = (thisValue: Value, args: Array<Value>, site: AstNode | undefined) => NativeResult
 export type NativeConstruct = (args: Array<Value>, newTarget: Callable, site: AstNode | undefined) => NativeResult

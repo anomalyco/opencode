@@ -28,7 +28,9 @@ import {
   type Value,
 } from "./objects.js"
 import { describeValue, isOpaque } from "./references.js"
-import { Host } from "./signals.js"
+import { Host, Push } from "./signals.js"
+import { nativeKind } from "../machine/native-kind.js"
+import type { ExtensionRequest } from "../machine/scheduler.js"
 
 /**
  * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and built-in
@@ -167,37 +169,36 @@ export const extensionGlobals = <R>(
       runtime: "extension",
       name: typeof name === "string" ? name : "",
       length: typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
-      call: function* (_, values, site) {
+      call: (_, values, site) => {
         const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-        const cross = (reason: unknown) => new Throw(fromHost(reason, label))
-        const call = describe?.(args)
-        const hooks = ctx.tools.hooks
-        const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
-        const after = call && hooks["extension.after"]
-        const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
-          (after ? hooked(call, undefined, after, effect) : effect).pipe(
-            Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
-          )
+        const invocation = describe?.(args)
         // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
-        if (isAsync(value))
-          return pending(
-            Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
-            label,
-            site,
-          )
-        if (before) yield new Host({ kind: "effect", effect: before })
-        const host = callHost<R>(value, args)
-        if (host.async) return pending(settle(host.effect), label, site)
-        return (yield new Host({ kind: "effect", effect: settle(host.effect) })) as Value
+        if (isAsync(value)) {
+          return pending(ctx, { stage: "run", label, invocation, host: value, args, threw: false }, site)
+        }
+        return new Push(ExtensionCall, [value, args, label, invocation])
       },
     })
   }
 
-  // An asynchronous host call: the program holds a promise that settles when the host's work does.
-  const pending = (work: Effect.Effect<Value, Throw, R>, label: string, site: AstNode | undefined) => {
-    const resolving = ctx.machine.resolving(ctx.machine.newPromise(), site)
-    ctx.machine.host({ kind: "effect", effect: work }, { label, result: "value", resolving, site })
-    return resolving.promise
+  // The Effect each step of an extension call runs as, with the program's services in its requirements.
+  ctx.extensionWork = (request: ExtensionRequest) => {
+    const label = request.label
+    const call = request.invocation
+    const cross = (reason: unknown) => new Throw(fromHost(reason, label))
+    const hooks = ctx.tools.hooks
+    const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
+    if (request.stage === "before") return before ?? Effect.void
+    const after = call && hooks["extension.after"]
+    const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
+      (after ? hooked(call, undefined, after, effect) : effect).pipe(
+        Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
+      )
+    if (request.stage === "settle") return settle(outcome<R>(request.host, request.threw))
+    return Effect.andThen(
+      before ?? Effect.void,
+      settle(Effect.suspend(() => outcome<R>(...callHost(request.host as Function, request.args)))),
+    )
   }
 
   return extensions.flatMap((extension) =>
@@ -213,21 +214,53 @@ export const extensionGlobals = <R>(
   )
 }
 
-/**
- * Calls a host function and describes what the program waits on. A returned Effect or Promise settles later; a
- * returned value or a throw settles now.
- */
-const callHost = <R>(value: Function, args: ReadonlyArray<unknown>) => {
-  try {
-    const result: unknown = value.apply(undefined, args)
-    // Extension.Services adds an Effect global's requirements to R.
-    if (Effect.isEffect(result)) return { async: true, effect: result as Effect.Effect<unknown, unknown, R> }
-    if (result instanceof Promise)
-      return { async: true, effect: Effect.tryPromise({ try: () => result, catch: (reason) => reason }) }
-    return { async: false, effect: Effect.succeed(result) }
-  } catch (reason) {
-    return { async: false, effect: Effect.fail(reason) }
+// Slots: the host function, its arguments, its label, and what the hooks see. Its `extension.before` hook runs first
+// (blocking, as the call is synchronous); then the host function is called. What it returns settles now, blocking,
+// unless it is an Effect or a Promise, which the program holds a promise for.
+const ExtensionCall = nativeKind("extension call", (task, frame, input) => {
+  const slots = frame.slots
+  const label = slots[2] as string
+  const invocation = slots[3] as ExtensionInvocation | undefined
+  const args = slots[1] as ReadonlyArray<unknown>
+  if (frame.phase === 2) return input as Value
+  if (frame.phase === 0 && invocation !== undefined && task.ctx.tools.hooks["extension.before"] !== undefined) {
+    frame.phase = 1
+    const call = { stage: "before", label, invocation, host: undefined, args, threw: false } as const
+    return task.request(new Host({ kind: "extension", call }), frame.node)
   }
+  const [host, threw] = callHost(slots[0] as Function, args)
+  const call = { stage: "settle", label, invocation, host, args, threw } as const
+  if (!threw && (Effect.isEffect(host) || host instanceof Promise)) return pending(task.ctx, call, frame.node)
+  frame.phase = 2
+  return task.request(new Host({ kind: "extension", call }), frame.node)
+})
+
+// An asynchronous host call: the program holds a promise that settles when the host's work does.
+const pending = <R>(ctx: Interpreter<R>, call: ExtensionRequest, site: AstNode | undefined) => {
+  const resolving = ctx.machine.resolving(ctx.machine.newPromise(), site)
+  ctx.machine.host({ kind: "extension", call }, { label: call.label, result: "value", resolving, site })
+  return resolving.promise
+}
+
+/** Calls a host function: what it returned, or what it threw. */
+const callHost = (value: Function, args: ReadonlyArray<unknown>): [result: unknown, threw: boolean] => {
+  try {
+    return [value.apply(undefined, args), false]
+  } catch (reason) {
+    return [reason, true]
+  }
+}
+
+/**
+ * What a host function's call settles as: a returned Effect or Promise settles later; a returned value or a throw
+ * settles now.
+ */
+const outcome = <R>(result: unknown, threw: boolean): Effect.Effect<unknown, unknown, R> => {
+  if (threw) return Effect.fail(result)
+  // Extension.Services adds an Effect global's requirements to R.
+  if (Effect.isEffect(result)) return result as Effect.Effect<unknown, unknown, R>
+  if (result instanceof Promise) return Effect.tryPromise({ try: () => result, catch: (reason) => reason })
+  return Effect.succeed(result)
 }
 
 /**
