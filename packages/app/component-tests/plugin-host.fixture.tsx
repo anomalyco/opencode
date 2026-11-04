@@ -1,4 +1,7 @@
-import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { JsonValue, PluginInfo, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionDocument } from "@opencode/session-ui/document"
+import { SessionContextToolGroup } from "@opencode/session-ui/message"
+import { CurrentSessionProviders } from "@opencode/session-ui/storybook"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
@@ -66,6 +69,7 @@ export {
   Slot,
   Store,
   Theme,
+  ToolRenderer,
 } from "@opencode/plugin/gui"
 
 export { Schema }
@@ -840,13 +844,17 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const session = value as unknown as MountedSession
 
+  // SAFETY: the test's plugins never read the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = {} as unknown as SessionScreen
+
   function Message() {
     const host = usePluginHost()
     hosts.push(host)
 
     return (
       <Show when={host.ready()}>
-        <PluginLinks session={session}>
+        <PluginLinks session={session} screen={screen}>
           <Markdown text={message.text} streaming={message.streaming} />
         </PluginLinks>
       </Show>
@@ -952,6 +960,118 @@ export function mountHostApis(input: { definitions: readonly Entry[] }) {
     attach: () => void captured.apis?.attach(mounted),
     reload: (id: string) => hosts[0]?.reload(id),
     status: (id: string) => hosts[0]?.state.status[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/** A completed tool call as the timeline holds it. */
+function toolCall(
+  id: string,
+  name: string,
+  input: Record<string, JsonValue>,
+  output: string,
+): SessionMessageAssistantTool {
+  return {
+    type: "tool",
+    id,
+    name,
+    state: { status: "completed", input, content: [{ type: "text", text: output }], metadata: {} },
+    time: { created: 1, ran: 2, completed: 3 },
+  }
+}
+
+/**
+ * Mounts the real host and a session timeline's open tool group inside the session screen's `PluginLinks`:
+ * `acme_search`, `acme_exact`, `broken_tool`, `other_tool` and the built-in `shell`.
+ */
+export function mountToolRows(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "tool-rows"
+  // Over the story, which fills the page, so the rows can be clicked.
+  Object.assign(container.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "10",
+    width: "720px",
+    overflow: "auto",
+    background: "white",
+  })
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+
+  const tools = [
+    toolCall("call_search", "acme_search", { query: "open bugs" }, "ACME-1 First bug"),
+    toolCall("call_exact", "acme_exact", { id: "ACME-2" }, "ACME-2 details"),
+    toolCall("call_broken", "broken_tool", { id: "x" }, "broken output"),
+    toolCall("call_other", "other_tool", { id: "y" }, "other output"),
+    toolCall("call_shell", "shell", { command: "printf built-in" }, "built-in"),
+  ]
+
+  const transcript: SessionDocument = {
+    sessionID: "ses_tools",
+    messages: [
+      {
+        id: "msg_tools",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: tools,
+        time: { created: 1, completed: 4 },
+      },
+    ],
+    status: { type: "idle" },
+    diffs: [],
+  }
+
+  const value = { key: "fixture\nses_tools", id: "ses_tools", directory: "/repo", visit: {} }
+
+  // SAFETY: the tool renderers pass the session through; the test's plugins read only `directory`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = value as unknown as MountedSession
+
+  // SAFETY: as above; the test's plugins never read the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = {} as unknown as SessionScreen
+
+  function Rows() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <PluginLinks session={session} screen={screen}>
+          <CurrentSessionProviders document={transcript}>
+            <SessionContextToolGroup parts={tools} busy={false} open onOpenChange={() => undefined} />
+          </CurrentSessionProviders>
+        </PluginLinks>
+      </Show>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <DialogProvider>
+          <PluginHostProvider
+            definitions={() => input.definitions}
+            disabled={() => new Set<string>()}
+            apis={fakeApis(unused)}
+            whenMounted={mounted}
+          >
+            <Rows />
+          </PluginHostProvider>
+        </DialogProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    status: (id: string) => hosts[0]?.state.status[id],
+    failure: (id: string) => hosts[0]?.state.failures[id],
     unmount: () => {
       dispose()
       container.remove()

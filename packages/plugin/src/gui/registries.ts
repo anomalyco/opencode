@@ -1,3 +1,4 @@
+import type { JsonValue } from "@opencode/client/promise"
 import type { JSX } from "solid-js"
 import type { IconName } from "./icon-name.js"
 import { Registry } from "./core.js"
@@ -859,6 +860,115 @@ export interface Theme {
   readonly dark: ThemeVariant
 }
 
+/**
+ * Where a tool call stands.
+ * - `pending`: the model is still writing the call; `input` holds what has arrived, often nothing yet.
+ * - `running`: the tool runs; `output` holds what it reported so far, if anything.
+ * - `completed`: the tool finished; `output`, `metadata` and `files` hold its result.
+ * - `error`: the tool failed; `error` holds the message.
+ */
+export type ToolCallStatus = "pending" | "running" | "completed" | "error"
+
+/** A file a tool returned with its result, such as a screenshot or an image an MCP server sent. */
+export interface ToolCallFile {
+  /** The file's media type, e.g. `image/png`. */
+  readonly mime: string
+  /** The file name the tool gave, if any. */
+  readonly name?: string
+  /**
+   * Loads the file's bytes and resolves a URL an `<img>` or a link can use. The timeline does not keep the bytes of
+   * tool results, so the first call may fetch the message from the server. Call it only once the content shows.
+   * Resolves `undefined` when the bytes are gone, the file is a remote URL (never loaded), or `signal` aborted; it
+   * never rejects.
+   *
+   * @param signal - Aborts the wait, e.g. when your content unmounts.
+   * @returns The URL, or `undefined`.
+   *
+   * @example
+   * ```tsx
+   * const [src, setSrc] = createSignal<string>()
+   * void file.url().then(setSrc)
+   * return <Show when={src()}>{(url) => <img src={url()} />}</Show>
+   * ```
+   */
+  url(signal?: AbortSignal): Promise<string | undefined>
+}
+
+/** One tool call in the session timeline. Every field is a reactive getter over the live call; do not destructure. */
+export interface ToolCall {
+  /** The call's id, unique within the session. */
+  readonly id: string
+  /** The tool's name, e.g. `jira_search`. MCP tools are named `<server>_<tool>`. */
+  readonly name: string
+  /** Where the call stands. */
+  readonly status: ToolCallStatus
+  /** The arguments the model passed. Partial or empty while `pending`. */
+  readonly input: { readonly [key: string]: JsonValue }
+  /** The text the tool returned, or reported so far while `running`. Undefined when it returned none. */
+  readonly output?: string
+  /** The failure message; set only while `status` is `error`. */
+  readonly error?: string
+  /** The structured metadata the tool and `tool.execute.after` hooks attached; empty when none. */
+  readonly metadata: { readonly [key: string]: JsonValue }
+  /** The files the tool returned with its result, in order; empty when none. */
+  readonly files: readonly ToolCallFile[]
+}
+
+/** What `ToolRenderer.trigger` and `ToolRenderer.render` receive. Read the getters where you use them. */
+export interface ToolRenderProps {
+  /** The tool call; its fields follow the live call. */
+  readonly tool: ToolCall
+  /** The session whose timeline shows the call; a new object when the timeline's session moves. */
+  readonly session: MountedSession
+  /** The session screen that owns the timeline; constant. */
+  readonly screen: SessionScreen
+}
+
+/** The collapsed row of a tool call. */
+export interface ToolTrigger {
+  /** The row's title, e.g. "Jira search". */
+  readonly title: string
+  /** Muted text after the title, e.g. the query. Omit it for none. */
+  readonly subtitle?: string
+  /** Short `key=value` chips after the subtitle. Omit it for none. */
+  readonly args?: readonly string[]
+}
+
+/**
+ * Renders the timeline rows of matching tool calls: plugin and MCP tools the app has no renderer for. Tools with a
+ * built-in renderer (`shell`, `edit`, `read`, `subagent`, ...) never match, so a plugin cannot replace or break them.
+ *
+ * The row stays the app's own: it collapses, expands, shows progress and keeps its height in the virtualized
+ * timeline. You restyle its collapsed line with `trigger`, its expanded body with `render`, or both. The body mounts
+ * only while the row is expanded. Rows start collapsed.
+ *
+ * When several renderers match a name, an exact `tool` wins over a pattern, a longer pattern over a shorter one, and
+ * then the first contributed. A `trigger` or `render` that throws records the error, and that row shows the default
+ * row instead; your other rows keep rendering.
+ */
+export interface ToolRenderer {
+  /**
+   * The tool name to match: exact, e.g. `jira_search`, or a prefix pattern ending in `*`, e.g. `jira_*` for every tool
+   * of the `jira` MCP server. `*` alone matches every tool without a built-in renderer.
+   */
+  readonly tool: string
+  /**
+   * The collapsed row's title, subtitle and args. Reactive. Return `undefined`, or omit it, for the default "Called
+   * `tool`" row.
+   *
+   * @param props - The call, its session and screen. Do not destructure.
+   * @returns The row, or `undefined` for the default.
+   */
+  trigger?(props: ToolRenderProps): ToolTrigger | undefined
+  /**
+   * Renders the expanded body once per expansion; its own reactivity updates it while the call runs. Omit it to keep
+   * the default body: the input, output, error, returned images and `metadata.diagnostics`.
+   *
+   * @param props - The call, its session and screen. Do not destructure.
+   */
+  render?(props: ToolRenderProps): JSX.Element
+}
+
 /** The places a `Slot` renders, with the input each passes to `render`. */
 export interface SlotMap {
   /** Full-width strip under the window content, above toasts. */
@@ -989,6 +1099,20 @@ export const Server = Registry.define<Server>("server")
  * ```
  */
 export const LinkHandler = Registry.define<LinkHandler>("link-handler")
+
+/**
+ * The registry of tool renderers: how plugin and MCP tool calls show in the session timeline.
+ *
+ * @example
+ * ```tsx
+ * ctx.add(ToolRenderer, {
+ *   tool: "jira_*",
+ *   trigger: (props) => ({ title: ctx.t("jira"), subtitle: String(props.tool.input.query ?? "") }),
+ *   render: (props) => <Issues output={props.tool.output} />,
+ * })
+ * ```
+ */
+export const ToolRenderer = Registry.define<ToolRenderer>("tool-renderer")
 
 /**
  * The registry of titlebar pills.

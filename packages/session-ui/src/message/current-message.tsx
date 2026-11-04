@@ -6,6 +6,7 @@ import {
   CurrentContextToolGroup,
   CurrentFileToolGroup,
   CurrentReadToolGroup,
+  currentToolFiles,
   ToolDisplay,
 } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
@@ -107,6 +108,7 @@ export function SessionAssistantContent(props: {
             output={currentToolOutput(tool())}
             status={tool().state.status}
             error={currentToolError(tool())}
+            files={currentToolFiles(tool())}
             defaultOpen={props.defaultOpen}
             open={props.toolOpen}
             onOpenChange={props.onToolOpenChange}

@@ -350,7 +350,20 @@ function args(input: GenericToolInput | undefined) {
     .slice(0, 3)
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean; input?: GenericToolInput }) {
+/** A tool without a renderer of its own. `children` is its expanded body, mounted only while open. */
+export function GenericTool(props: {
+  tool: string
+  status?: string
+  hideDetails?: boolean
+  input?: GenericToolInput
+  /** Replaces the default "Called `tool`" row. */
+  trigger?: { title: string; subtitle?: string; args?: readonly string[] }
+  children?: JSX.Element
+  hasContent?: boolean
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
   const i18n = useI18n()
 
   return (
@@ -358,11 +371,19 @@ export function GenericTool(props: { tool: string; status?: string; hideDetails?
       icon="mcp"
       status={props.status}
       trigger={{
-        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
-        subtitle: label(props.input),
-        args: args(props.input),
+        title: props.trigger?.title ?? i18n.t("ui.basicTool.called", { tool: props.tool }),
+        subtitle: props.trigger ? props.trigger.subtitle : label(props.input),
+        args: props.trigger ? [...(props.trigger.args ?? [])] : args(props.input),
       }}
       hideDetails={props.hideDetails}
-    />
+      hasContent={props.hasContent ?? false}
+      defer
+      allowOpenWhilePending
+      defaultOpen={props.defaultOpen}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
+      {props.children}
+    </BasicTool>
   )
 }

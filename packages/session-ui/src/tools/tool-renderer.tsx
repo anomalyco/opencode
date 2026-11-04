@@ -22,6 +22,7 @@ import { Effect, Option, Schema } from "effect"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
+import { type ToolCallFileView, type ToolCallView, type ToolView, useToolViews } from "../context/tools"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
@@ -44,11 +45,13 @@ import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "@kitlangton/solid-motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
-import type {
-  FileDiffInfo,
-  SessionMessageAssistantReasoning,
-  SessionMessageAssistantTool,
-  SessionMessageShell,
+import {
+  mediaHashFromUri,
+  type FileDiffInfo,
+  type SessionMessageAssistantReasoning,
+  type SessionMessageAssistantTool,
+  type SessionMessageShell,
+  type ToolFileContent,
 } from "@opencode/client/promise"
 import {
   currentToolError,
@@ -731,6 +734,7 @@ export function CurrentContextToolGroup(props: {
                                         metadata={currentToolMetadata(tool())}
                                         output={currentToolOutput(tool())}
                                         error={currentToolError(tool())}
+                                        files={currentToolFiles(tool())}
                                         status={tool().state.status}
                                         defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
                                         open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
@@ -1025,6 +1029,9 @@ export function CurrentFileToolGroup(props: {
     files: files().map((entry) => entry.value),
   }))
 
+  // The group rebuilds metadata from its files, so each tool's diagnostics show below the files.
+  const diagnostics = createMemo(() => props.tools.flatMap((tool) => toolDiagnostics(currentToolMetadata(tool))))
+
   const pending = createMemo(() =>
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
@@ -1055,6 +1062,7 @@ export function CurrentFileToolGroup(props: {
         virtualizeDiff={false}
         onContentRendered={props.onSizeChange}
       />
+      <FileDiagnostics files={diagnostics()} />
     </div>
   )
 }
@@ -1138,6 +1146,8 @@ export interface ToolProps {
   pendingFiles?: readonly string[]
   forceOpen?: boolean
   locked?: boolean
+  /** The files the tool returned with its result, such as screenshots. */
+  files?: readonly ToolFileContent[]
 }
 
 type ToolComponent = Component<ToolProps>
@@ -1365,12 +1375,18 @@ export function ToolDisplay(
 
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props))
-  const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
+  const views = useToolViews()
+  const render = createMemo(() => ToolRegistry.render(props.tool))
+  // Built-in renderers win; only a tool without one asks the host, once per row.
+  const view = createMemo(() => (render() || !views ? undefined : views.match(props.tool)))
 
   return (
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
+          <Match when={view()} keyed>
+            {(view) => <HostTool {...props} view={view} />}
+          </Match>
           <Match when={error()}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
@@ -1414,11 +1430,306 @@ export function ToolDisplay(
             }}
           </Match>
           <Match when={true}>
-            <Dynamic component={render()} {...props} />
+            <Dynamic component={render() ?? FallbackTool} {...props} />
           </Match>
         </Switch>
       </div>
     </Show>
+  )
+}
+
+// A tool the host renders, such as one a GUI plugin contributes a renderer for. It renders in every status; a
+// renderer that throws leaves the default row in its place.
+function HostTool(props: ToolProps & { id: string; view: ToolView }) {
+  const data = useData()
+  const files = createMemo(() => toolFileViews(props.files ?? noFiles, props.id, data))
+
+  const call: ToolCallView = {
+    get id() {
+      return props.id
+    },
+    get name() {
+      return props.tool
+    },
+    get status() {
+      return toolCallStatus(props.status)
+    },
+    get input() {
+      // SAFETY: tool input is decoded from JSON, so every value is a JSON value.
+      return props.input as ToolCallView["input"]
+    },
+    get output() {
+      return props.output
+    },
+    get error() {
+      return props.error
+    },
+    get metadata() {
+      // SAFETY: tool metadata is decoded from JSON, so every value is a JSON value.
+      return props.metadata as ToolCallView["metadata"]
+    },
+    get files() {
+      return files()
+    },
+  }
+
+  const view = props.view
+
+  return view.isolate(
+    () => (
+      <GenericTool
+        tool={props.tool}
+        status={props.status}
+        input={props.input}
+        trigger={view.trigger?.(call)}
+        hideDetails={props.hideDetails}
+        hasContent={!!view.render || toolResultHasContent(props)}
+        defaultOpen={props.defaultOpen}
+        open={props.open}
+        onOpenChange={(open) => {
+          props.onOpenChange?.(open)
+          props.onContentRendered?.()
+        }}
+      >
+        <Show when={view.render} fallback={<ToolResult {...props} views={files()} />}>
+          {(render) => <div data-component="host-tool-result">{render()(call)}</div>}
+        </Show>
+      </GenericTool>
+    ),
+    () => <FallbackTool {...props} />,
+  )
+}
+
+// The default row of a tool without a renderer: its input, output, error, returned files and diagnostics.
+function FallbackTool(props: ToolProps & { id?: string }) {
+  return (
+    <GenericTool
+      tool={props.tool}
+      status={props.status}
+      input={props.input}
+      hideDetails={props.hideDetails}
+      hasContent={toolResultHasContent(props)}
+      defaultOpen={props.defaultOpen}
+      open={props.open}
+      onOpenChange={(open) => {
+        props.onOpenChange?.(open)
+        props.onContentRendered?.()
+      }}
+    >
+      <ToolResult {...props} />
+    </GenericTool>
+  )
+}
+
+const noFiles: readonly ToolFileContent[] = []
+
+/** The files a tool returned with its result, such as screenshots. A host may have dropped their bytes. */
+export function currentToolFiles(tool: SessionMessageAssistantTool) {
+  if (!("content" in tool.state) || !tool.state.content) return noFiles
+  const files = tool.state.content.filter((item) => item.type === "file")
+
+  return files.length > 0 ? files : noFiles
+}
+
+function toolCallStatus(status: string | undefined): ToolCallView["status"] {
+  if (status === "streaming") return "pending"
+
+  if (status === "running" || status === "error") return status
+
+  return "completed"
+}
+
+function toolResultHasContent(props: ToolProps) {
+  return (
+    !!props.output ||
+    !!props.error ||
+    (props.files?.length ?? 0) > 0 ||
+    Object.keys(props.input).length > 0 ||
+    toolDiagnostics(props.metadata).length > 0
+  )
+}
+
+/**
+ * Each file of a tool result with a `url` that resolves its bytes. Files whose bytes the host's store dropped load
+ * once, together, through `readToolFiles`. Only inline data and stored media resolve: a remote URL never loads.
+ */
+function toolFileViews(
+  files: readonly ToolFileContent[],
+  toolID: string,
+  data: ReturnType<typeof useData>,
+): ToolCallFileView[] {
+  // One read per tool result, shared by its files.
+  let pending: Promise<readonly ToolFileContent[] | undefined> | undefined
+
+  const reload = () => {
+    const sessionID = data.sessionID
+    const read = data.readToolFiles
+
+    if (!sessionID || !read) return Promise.resolve(undefined)
+    pending ??= read({ sessionID, toolID }).catch(() => undefined)
+
+    return pending
+  }
+
+  return files.map((file, index) => ({
+    mime: file.mime,
+    name: file.name ?? undefined,
+    async url(signal) {
+      if (mediaHashFromUri(file.uri)) return data.readMedia?.(file.uri, file.mime, signal).catch(() => undefined)
+
+      if (inlineData(file.uri)) return file.uri
+
+      if (!file.uri.startsWith("data:")) return undefined
+      const uri = (await reload())?.[index]?.uri
+
+      return signal?.aborted || !uri || !inlineData(uri) ? undefined : uri
+    },
+  }))
+}
+
+// A `data:` URI that still carries its payload.
+function inlineData(uri: string) {
+  return uri.startsWith("data:") && uri.indexOf(",") < uri.length - 1
+}
+
+/** Every file's error diagnostics in `metadata.diagnostics`, as the edit and write rows show them. */
+function toolDiagnostics(metadata: ToolProps["metadata"]) {
+  if (!("diagnostics" in metadata)) return []
+  const diagnostics = toolMetadata(metadata).diagnostics
+
+  if (!diagnostics) return []
+
+  return Object.keys(diagnostics).flatMap((path) => {
+    const list = getDiagnostics(diagnostics, path)
+
+    return list.length > 0 ? [{ path, diagnostics: list }] : []
+  })
+}
+
+function FileDiagnostics(props: { files: readonly { path: string; diagnostics: readonly Diagnostic[] }[] }) {
+  const data = useData()
+
+  return (
+    <For each={props.files}>
+      {(file) => (
+        <div data-slot="file-diagnostics">
+          <span data-slot="file-diagnostics-path">{relativizeProjectPath(file.path, data.directory)}</span>
+          <DiagnosticsDisplay diagnostics={file.diagnostics} />
+        </div>
+      )}
+    </For>
+  )
+}
+
+// Mounts only while its row is open, so a collapsed row never builds file views or reads diagnostics.
+function ToolResult(props: ToolProps & { id?: string; views?: readonly ToolCallFileView[] }) {
+  const i18n = useI18n()
+  const data = useData()
+
+  const files = createMemo(() => props.views ?? (props.id ? toolFileViews(props.files ?? noFiles, props.id, data) : []))
+
+  const input = createMemo(() => Object.entries(props.input))
+
+  const output = createMemo(() =>
+    stripAnsi(props.output ?? "")
+      .replace(/\r\n?/g, "\n")
+      .trimEnd(),
+  )
+
+  const diagnostics = createMemo(() => toolDiagnostics(props.metadata))
+
+  onMount(() => props.onContentRendered?.())
+
+  return (
+    <div data-component="tool-result">
+      <Show when={input().length > 0}>
+        <section data-slot="tool-result-section">
+          <span data-slot="tool-result-label">{i18n.t("ui.basicTool.input")}</span>
+          <dl data-slot="tool-result-input" data-scrollable dir="ltr">
+            <For each={input()}>
+              {([key, value]) => (
+                <div data-slot="tool-result-input-entry">
+                  <dt>{key}:</dt>
+                  <dd>{Option.getOrElse(decodeString(value), () => JSON.stringify(value, null, 2))}</dd>
+                </div>
+              )}
+            </For>
+          </dl>
+        </section>
+      </Show>
+      <Show when={output()}>
+        {(text) => (
+          <section data-slot="tool-result-section">
+            <span data-slot="tool-result-label">{i18n.t("ui.tool.execute.output")}</span>
+            <ConsoleOutput output={text()} />
+          </section>
+        )}
+      </Show>
+      <Show when={props.status === "error" ? props.error : undefined}>
+        {(error) => (
+          <section data-slot="tool-result-section">
+            <span data-slot="tool-result-label">{i18n.t("ui.tool.execute.error")}</span>
+            <div data-slot="tool-result-error" dir="ltr">
+              <LinkedText text={error()} />
+            </div>
+          </section>
+        )}
+      </Show>
+      <Show when={files().length > 0}>
+        <ToolResultFiles files={files()} onContentRendered={props.onContentRendered} />
+      </Show>
+      <FileDiagnostics files={diagnostics()} />
+    </div>
+  )
+}
+
+function ToolResultFiles(props: { files: readonly ToolCallFileView[]; onContentRendered?: () => void }) {
+  const i18n = useI18n()
+  const preview = createImagePreview()
+  let root!: HTMLDivElement
+
+  return (
+    <section data-slot="tool-result-section">
+      <span data-slot="tool-result-label">{i18n.plural("ui.common.fileCount", props.files.length)}</span>
+      <div ref={root} data-slot="tool-result-files">
+        <For each={props.files}>
+          {(file) => {
+            const [url, setUrl] = createSignal<string>()
+
+            if (file.mime.startsWith("image/")) {
+              const controller = new AbortController()
+              onCleanup(() => controller.abort())
+              void file.url(controller.signal).then((value) => {
+                if (!controller.signal.aborted) setUrl(value)
+              })
+            }
+
+            return (
+              <Show
+                when={url()}
+                fallback={
+                  <span data-slot="tool-result-file" title={file.mime}>
+                    {file.name ?? file.mime}
+                  </span>
+                }
+              >
+                {(src) => (
+                  <img
+                    data-slot="tool-result-image"
+                    src={src()}
+                    alt={file.name ?? i18n.t("ui.message.attachment.alt")}
+                    onLoad={() => {
+                      preview(root)
+                      props.onContentRendered?.()
+                    }}
+                  />
+                )}
+              </Show>
+            )
+          }}
+        </For>
+      </div>
+    </section>
   )
 }
 

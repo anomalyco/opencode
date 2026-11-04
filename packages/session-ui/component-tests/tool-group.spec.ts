@@ -288,3 +288,37 @@ for (const width of [840, 390]) {
       .toBe(true)
   })
 }
+
+story("a plugin or MCP tool expands to its input, output, returned image and diagnostics", async ({ mount, page }) => {
+  const root = await mount("current-tool-group--plugin-and-mcp-tools")
+  const tool = root.locator('[data-timeline-part-id="mcp_search"]')
+  const trigger = tool.getByRole("button", { name: /^Called `jira_search`/ })
+  await expect(trigger).toHaveAttribute("aria-expanded", "false")
+  await expect(tool.locator('[data-component="tool-result"]')).toHaveCount(0)
+
+  await trigger.click()
+  const result = tool.locator('[data-component="tool-result"]')
+  await expect(result.locator('[data-slot="tool-result-input-entry"]')).toHaveText([
+    'query:project = OC AND text ~ "timeline"',
+    'fields:[\n  "summary",\n  "status"\n]',
+    "note:first line\nsecond line",
+  ])
+  await expect(result.locator('[data-slot="bash-result"]')).toHaveText(
+    "OC-101 Timeline rows drop MCP output\nOC-102 Show tool images inline",
+  )
+  await expect(result.locator('[data-slot="diagnostic-message"]')).toHaveText("Property 'key' does not exist")
+  await expect(result.locator('[data-slot="file-diagnostics-path"]')).toHaveText("src/jira.ts")
+
+  const image = result.getByRole("button", { name: "board.png", exact: true })
+  await expect(image).toBeVisible()
+  expect(await image.evaluate((node) => node instanceof HTMLImageElement && node.naturalWidth)).toBe(2)
+  await image.click()
+  await expect(page.getByRole("dialog")).toBeVisible()
+})
+
+story("diagnostics on a grouped file change stay visible", async ({ mount }) => {
+  const root = await mount("current-tool-group--plugin-and-mcp-tools")
+  const write = root.locator('[data-timeline-part-id="mcp_write"]')
+  await expect(write.locator('[data-slot="file-diagnostics-path"]')).toHaveText("src/probe.go")
+  await expect(write.locator('[data-slot="diagnostic-message"]')).toHaveText("cannot use string as int")
+})

@@ -1355,7 +1355,126 @@
   }
 }
 
+[data-slot="file-diagnostics"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: 8px;
+  border: 0.5px solid var(--v2-state-border-danger);
+  border-radius: 6px;
+  overflow: hidden;
+
+  [data-slot="file-diagnostics-path"] {
+    padding: 6px 12px 0;
+    background-color: var(--v2-state-bg-danger);
+    font-family: var(--v2-font-family-code);
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  [data-component="diagnostics"] {
+    border-top: 0;
+  }
+}
+
+[data-component="tool-result"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+
+  [data-slot="tool-result-section"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  [data-slot="tool-result-label"] {
+    font-size: 12px;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="tool-result-input"],
+  [data-slot="tool-result-error"] {
+    margin: 0;
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="tool-result-input"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="tool-result-input-entry"] {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+
+    dt {
+      flex-shrink: 0;
+    }
+
+    dd {
+      margin: 0;
+      min-width: 0;
+      color: var(--v2-text-text-base);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="tool-result-error"] {
+    color: var(--v2-state-fg-danger);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot="tool-result-files"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  [data-slot="tool-result-image"] {
+    display: block;
+    max-width: 100%;
+    max-height: 320px;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+    cursor: zoom-in;
+  }
+
+  [data-slot="tool-result-file"] {
+    padding: 2px 8px;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="file-diagnostics"] {
+    margin-top: 0;
+  }
+}
+
 [data-component="user-message"] [data-slot="user-message-text"],
+[data-component="tool-result"],
 [data-component="text-part"],
 [data-component="reasoning-part"],
 [data-component="tool-output"],
