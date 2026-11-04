@@ -157,7 +157,8 @@ struct RouteData {
 pub struct Shared {
     pub memory: RefCell<Memory>,
     route: RefCell<Option<RouteData>>,
-    current: RefCell<Weak<Viewer>>,
+    /// The viewer last mounted; it lives until the next one replaces it.
+    current: RefCell<Option<Rc<Viewer>>>,
 }
 
 pub fn plugin() -> Definition<Tui> {
@@ -193,6 +194,11 @@ pub fn plugin() -> Definition<Tui> {
         setup.layer(keys::open_layer(&tui, Rc::new(move |tui| self::open(tui, &open))));
         let weak = tui.weak();
         setup.on_dispose(move || {
+            if let Some(viewer) = shared.current.take()
+                && let Some(layer) = viewer.layer.borrow_mut().take()
+            {
+                layer.dispose();
+            }
             if let Some(tui) = weak.upgrade() {
                 tui.panels.release(&tui, ID);
             }
@@ -368,8 +374,8 @@ impl Viewer {
             this: this.clone(),
         });
         // The previous viewer's keys go with it.
-        if let Some(previous) = shared.current.replace(Rc::downgrade(&viewer)).upgrade()
-            && let Some(layer) = previous.layer.borrow_mut().take()
+        let previous = shared.current.replace(Some(viewer.clone()));
+        if let Some(layer) = previous.and_then(|previous| previous.layer.borrow_mut().take())
         {
             layer.dispose();
         }
@@ -421,7 +427,11 @@ impl Viewer {
     }
 
     fn is_current(&self) -> bool {
-        self.shared.current.borrow().ptr_eq(&self.this)
+        self.shared
+            .current
+            .borrow()
+            .as_ref()
+            .is_some_and(|current| std::ptr::eq(Rc::as_ptr(current), self))
     }
 
     fn session(&self) -> Option<&SessionID> {
