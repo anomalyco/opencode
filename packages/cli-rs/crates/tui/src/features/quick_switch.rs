@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use opencode_api::generated::{SessionID, V2Event};
+use opencode_api::generated::V2Event;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
 
