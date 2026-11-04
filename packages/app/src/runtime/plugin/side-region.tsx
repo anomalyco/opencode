@@ -73,12 +73,13 @@ export function SideRegion(props: {
   const panelWidth = createMemo(() => (tabsVisible() ? "auto" : "0px"))
 
   // Opening the side region with no tabs shows a new tab view, once per opening and session. Keyed by the session, not
-  // the item, whose object changes with every routed session.
+  // the item, whose object changes with every routed session. A view left from an earlier opening is shown again
+  // rather than joined by another.
   const starting = createMemo(() =>
     tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined,
   )
 
-  createEffect(on(starting, (key) => key && props.region.openNewTab("side")))
+  createEffect(on(starting, (key) => key && !props.region.newTab("side") && props.region.openNewTab("side")))
 
   // The split pane shows while it holds tabs; when the side pane has none, the split pane takes the whole height.
   const panes = createMemo(() => {
