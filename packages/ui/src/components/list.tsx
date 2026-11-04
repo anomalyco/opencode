@@ -81,7 +81,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const keys = createMemo(() => list.state().keys)
   const highlight = createMemo(() => list.state().highlight)
 
-  const searchProps = () => (typeof props.search === "object" ? props.search : {})
+  const searchProps = () => (props.search && props.search !== true ? props.search : {})
   const searchAction = () => searchProps().action
   const addProps = () => props.add
   const showAdd = () => !!addProps()
@@ -129,10 +129,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   }
 
   function GroupHeader(groupProps: { group: { category: string; items: T[] } }): JSX.Element {
-    const [state, setState] = createStore({
-      stuck: false,
-      header: undefined as HTMLDivElement | undefined,
-    })
+    const [state, setState] = createStore<{ stuck: boolean; header?: HTMLDivElement }>({ stuck: false })
 
     createEffect(() => {
       const scroll = scrollRef()
