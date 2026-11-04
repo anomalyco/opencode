@@ -313,6 +313,8 @@ fn configured(entries: &[ConfigEntry]) -> Option<Choice> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Display {
     pub agent: Option<String>,
+    /// Permissions are accepted automatically (`--auto` or `session.permissions`).
+    pub auto: bool,
     pub model: String,
     pub provider: String,
     pub variant: Option<String>,
@@ -365,6 +367,9 @@ impl Row {
                     if let Some(agent) = &layout.agent {
                         spans.push(agent.clone().fg(highlight));
                     }
+                    if layout.auto {
+                        spans.push(" auto".fg(theme.text.muted));
+                    }
                     if !layout.model.is_empty() {
                         if layout.agent.is_some() {
                             spans.push(" · ".fg(theme.text.muted));
@@ -385,7 +390,7 @@ impl Row {
     }
 }
 
-/// `promptMetadataLayout` without the `auto` and `limit` parts (E.9a, E.16).
+/// `promptMetadataLayout` without the `limit` part (E.16).
 fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let narrow = terminal_width < 44;
     let agent = if narrow { None } else { display.agent.clone() };
@@ -402,18 +407,28 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let candidates = [
         Display {
             agent: agent.clone(),
+            auto: display.auto,
             model: display.model.clone(),
             provider: provider.clone(),
             variant: display.variant.clone(),
         },
         Display {
             agent: agent.clone(),
+            auto: false,
+            model: display.model.clone(),
+            provider: provider.clone(),
+            variant: display.variant.clone(),
+        },
+        Display {
+            agent: agent.clone(),
+            auto: false,
             model: display.model.clone(),
             provider: short,
             variant: display.variant.clone(),
         },
         Display {
             agent: agent.clone(),
+            auto: false,
             model: display.model.clone(),
             provider: String::new(),
             variant: display.variant.clone(),
@@ -434,6 +449,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
         .map_or(0, |variant| format!(" · {variant}").width());
     Display {
         agent,
+        auto: false,
         model: truncate(&display.model, width.saturating_sub(prefix + suffix).max(9)),
         provider: String::new(),
         variant: display.variant.clone(),
@@ -445,6 +461,9 @@ fn flat(layout: &Display) -> String {
     let mut parts: Vec<&str> = Vec::new();
     if let Some(agent) = &layout.agent {
         parts.push(agent);
+    }
+    if layout.auto {
+        parts.push("auto");
     }
     if !layout.model.is_empty() {
         if layout.agent.is_some() {
@@ -497,6 +516,7 @@ mod tests {
     fn display(model: &str, provider: &str, variant: Option<&str>) -> Display {
         Display {
             agent: Some("Build".into()),
+            auto: false,
             model: model.into(),
             provider: provider.into(),
             variant: variant.map(str::to_owned),
@@ -513,6 +533,12 @@ mod tests {
         assert_eq!(narrow.model, "Claude S…");
         // Below 44 columns the agent and provider go.
         assert_eq!(layout(30, 40, &full).agent, None);
+        // `auto` goes first.
+        let auto = Display { auto: true, ..full };
+        assert!(layout(80, 100, &auto).auto);
+        let tight = layout(flat(&auto).width() - 1, 100, &auto);
+        assert!(!tight.auto);
+        assert_eq!(tight.provider, "OpenCode / Anthropic");
     }
 
     #[test]
