@@ -15,7 +15,11 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
 
   if (input.path) history.set({ value: input.path, replace: true })
   render(() => {
-    const [store, setStore] = createStore<{ actions: string[]; opened: { path: string; app?: string }[] }>({
+    const [store, setStore] = createStore<{
+      actions: string[]
+      opened: { path: string; app?: string }[]
+      trafficLights?: { x: number; y: number }
+    }>({
       actions: [],
       opened: [],
     })
@@ -53,6 +57,7 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
       restart: unused,
       plugins: bridge,
       runDesktopMenuAction: (action) => setStore("actions", (actions) => [...actions, action]),
+      setTrafficLightsPosition: async (position) => void setStore("trafficLights", { x: position.x, y: position.y }),
     }
 
     if (input.openApps) {
@@ -67,6 +72,9 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
           <output aria-label="Desktop menu actions">{store.actions.join(",")}</output>
           <output aria-label="Opened paths" class="sr-only">
             {JSON.stringify(store.opened)}
+          </output>
+          <output aria-label="Traffic lights" class="sr-only">
+            {JSON.stringify(store.trafficLights ?? null)}
           </output>
           <AppInterface
             servers={[{ type: "sidecar", variant: "base", displayName: "Local Server", http: { url: input.server } }]}

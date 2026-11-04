@@ -4,6 +4,7 @@ import {
   NO_PROVIDER,
   REMOTE_SERVER,
   SERVER,
+  T0,
   draftHref,
   expectPath,
   holdRoute,
@@ -529,8 +530,22 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
   const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
   await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
-  await expect(sidebar).toHaveCSS("width", "276px")
+  await expect(sidebar).toHaveCSS("width", "240px")
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+
+  // Actions and session rows share one icon lane, and the resize handle fills only the gap after the rows.
+  const [homeIcon, avatar, row, gutter, chat] = await Promise.all([
+    sidebar.locator('[data-action="vertical-tabs-home"] svg').boundingBox(),
+    sidebar.locator('[data-slot="project-avatar-slot"]').first().boundingBox(),
+    sidebar.locator("[data-titlebar-tab]").first().boundingBox(),
+    sidebar.locator('[data-component="resize-handle"]').boundingBox(),
+    page.locator('[data-slot="session-chat-panel"]').boundingBox(),
+  ])
+
+  if (!homeIcon || !avatar || !row || !gutter || !chat) throw new Error("vertical tabs layout is not rendered")
+  expect(avatar.x).toBe(homeIcon.x)
+  expect(gutter.x).toBe(row.x + row.width)
+  expect(gutter.x + gutter.width).toBe(chat.x)
 
   const actions = await Promise.all(
     ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
@@ -543,7 +558,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   )
 
   const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([4, 4])
+  expect(gaps).toEqual([3, 3])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
@@ -558,7 +573,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
     await expect(sidebar).toHaveCSS("width", width)
   }
 
-  await resize(-80, "196px")
+  await resize(-44, "196px")
   await resize(-40, "156px")
 
   for (const name of ["Home", "New session"]) {
@@ -578,20 +593,71 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await resize(-380, "260px")
 
   const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+
+  // The list feathers only the edges with more rows past them.
+  const feather = () =>
+    scroll.evaluate((element) => {
+      const style = getComputedStyle(element)
+
+      return [style.getPropertyValue("--vertical-tabs-fade-top"), style.getPropertyValue("--vertical-tabs-fade-bottom")]
+    })
+
+  await expect.poll(feather).toEqual(["0px", "16px"])
   await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(tabB).toBeInViewport({ ratio: 1 })
+  await expect.poll(feather).toEqual(["16px", "0px"])
 
   await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
   const home = sidebar.locator('[data-action="vertical-tabs-home"]')
-  const hint = home.locator('span[aria-hidden="true"]')
-  await expect(hint).toHaveText("Ctrl+Alt+H")
-  await expect(hint.getByText("Ctrl+Alt+H", { exact: true })).toHaveCSS("direction", "ltr")
+
+  const hint = home.locator('div[aria-hidden="true"]')
+  await expect(hint.locator('[data-slot="keybind-v2-label"]')).toHaveText(["Ctrl", "Alt", "H"])
+  await expect(hint.locator('[data-component="keybind-v2"]')).toHaveCSS("direction", "ltr")
   await expect(hint).toBeHidden()
   await home.focus()
   await expect(hint).toBeVisible()
 
   await tabB.click()
   await expectPath(page, sessionHref(b.id))
+})
+
+test.describe("vertical tabs on a touch desktop", () => {
+  test.use({ hasTouch: true })
+
+  test("long titles fade out before the always-visible close button", async ({ page }) => {
+    const long = {
+      id: "ses_tab_long",
+      title: "A long session title that would otherwise run underneath the close button",
+    }
+
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [long],
+      seed: { settings: { appearance: { tabLayout: "vertical" } } },
+    })
+    await page.goto(sessionHref(long.id))
+
+    const tab = page.locator('[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab]')
+    await expect(tab).toHaveAttribute("data-title-overflow", "true")
+    await expect(tab.getByRole("button", { name: "Close tab", exact: true })).toHaveCSS("opacity", "1")
+    await expect
+      .poll(() =>
+        tab.evaluate((element) => {
+          const link = element.querySelector('[data-slot="tab-link"]')!.getBoundingClientRect()
+
+          const close = element.querySelector('[data-slot="tab-close"]')!.getBoundingClientRect()
+
+          const stops = [
+            ...getComputedStyle(element.querySelector('[data-slot="tab-link"]')!).maskImage.matchAll(
+              /calc\(100% - ([\d.]+)px\)/g,
+            ),
+          ].map((match) => Number(match[1]))
+
+          return link.right - Math.min(...stops) <= close.left
+        }),
+      )
+      .toBe(true)
+  })
 })
 
 for (const [screen, href] of [
@@ -642,9 +708,9 @@ test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   const lower = await tabC.boundingBox()
 
   if (!upper || !lower) throw new Error("vertical tabs have no bounding boxes")
-  expect(lower.y - upper.y - upper.height).toBe(4)
+  expect(lower.y - upper.y - upper.height).toBe(3)
 
-  const middle = upper.y + upper.height + 2
+  const middle = upper.y + upper.height + 1.5
 
   // The two halves belong to their nearest row; an exact tie belongs to the next row.
   for (const [offset, id] of [
@@ -658,7 +724,7 @@ test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
     )
   }
 
-  await page.mouse.click(upper.x + upper.width / 2, middle + 1)
+  await page.mouse.click(upper.x + upper.width / 2, middle)
   await expectPath(page, sessionHref(c.id))
 
   await page.mouse.move(upper.x + upper.width / 2, middle - 1)
@@ -717,7 +783,8 @@ test("tab preview opens cold, switches immediately between tabs, and closes outs
   const box = await tabB.boundingBox()
 
   if (!box) throw new Error("vertical tab has no bounding box")
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 1)
+  // The 3px gap cannot split evenly into whole pixels; the upper row keeps the first one.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 0.5)
   await page.clock.runFor(1000)
   await expect(preview).toContainText(b.title)
   await tabB.getByRole("button", { name: "Close tab", exact: true }).hover()
@@ -1234,6 +1301,43 @@ test("⌘W closes the session tab again once the window loses focus after the si
   await expect(sessions.alphaTab).toHaveCount(0)
 })
 
+test("⌘W in the side panel closes its last New tab with the panel, and only then the session tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const alpha = { id: "ses_side_new_alpha", title: "Side new alpha" }
+  const beta = { id: "ses_side_new_beta", title: "Side new beta" }
+  await openSession(page, { name: "SideCloseNewTab", sessions: [alpha, beta] })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const newTab = panel.getByRole("tab", { name: "New tab", exact: true })
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  const alphaTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`)
+
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+Shift+R")
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect.poll(() => panel.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  // A launcher row in the New tab view holds focus as ⌘W removes it.
+  await panel.getByRole("button", { name: /^Open file/ }).focus()
+
+  // The New tab was the panel's last tab, so closing it closes the panel too, and focus goes back.
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(newTab).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(composer).toBeFocused()
+
+  // One press too many closes nothing rather than the session.
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(alphaTab).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
+
+  // With no panel open, ⌘W from the composer closes the session tab.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(beta.id))
+  await expect(alphaTab).toHaveCount(0)
+})
+
 // Windows has no native menu bar: the titlebar menu owns Paste, which only the desktop edit action can perform.
 test("the Windows titlebar menu pastes through the desktop edit action", async ({ page }) => {
   await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
@@ -1245,6 +1349,39 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await paste.click()
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
+
+test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "WindowsMenu",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+
+  const menu = page.getByRole("button", { name: "OpenCode menu", exact: true }).locator("svg")
+
+  const home = page.locator('[data-action="vertical-tabs-home"] svg')
+  await expect(home).toBeVisible()
+  await expect.poll(async () => [(await menu.boundingBox())?.x, (await home.boundingBox())?.x]).toEqual([19, 19])
+})
+
+for (const row of [
+  { name: "left tabs", width: 1280, settings: { appearance: { tabLayout: "vertical" } }, position: { x: 20, y: 25 } },
+  { name: "top tabs", width: 1280, settings: { appearance: { tabLayout: "horizontal" } }, position: { x: 14, y: 15 } },
+  {
+    name: "a bottom titlebar",
+    width: 700,
+    settings: { general: { mobileTitlebarPosition: "bottom" } },
+    position: { x: 14, y: 14 },
+  },
+]) {
+  test(`macOS traffic lights center on the header line with ${row.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: row.width, height: 720 })
+    await mockWorkspace(page, { name: "TrafficLights", sessions: [], seed: { settings: row.settings } })
+    await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, os: "macos" })}`)
+    await expect(page.getByRole("status", { name: "Traffic lights" })).toHaveText(JSON.stringify(row.position))
+  })
+}
 
 // Server A is the default origin; B is a remote that answers only for its own directories.
 async function twoServers(
@@ -1323,6 +1460,27 @@ test("loads a tab's transcript while the pointer rests on it, and not when it pa
   expect(requested.filter((id) => id === b.id)).toHaveLength(1)
 })
 
+test("⌘W in a focused Context tab closes it, then the panel, and keeps the session tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const alpha = { id: "ses_side_context_alpha", title: "Side context alpha" }
+  const beta = { id: "ses_side_context_beta", title: "Side context beta" }
+  await openSession(page, { name: "SideCloseContext", sessions: [alpha, beta] })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const context = panel.getByRole("tab", { name: "Context", exact: true })
+  const alphaTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`)
+
+  await page.getByRole("button", { name: "Toggle session context" }).click()
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await panel.click({ position: { x: 100, y: 300 } })
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(context).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(alphaTab).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
+})
+
 // Closes Alpha's side tabs with ⌘W until the side panel empties and collapses, as an overshooting hand would.
 async function emptySidePanel(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -1356,3 +1514,195 @@ async function emptySidePanel(page: Page) {
 
   return { beta, alphaTab: page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`) }
 }
+
+test("opening a session from the inbox keeps the list's scroll position and rows", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 480 })
+
+  const sessions = Array.from({ length: 24 }, (_, index) => ({
+    id: `ses_inbox_${String(index).padStart(2, "0")}`,
+    title: `Inbox session ${index}`,
+    directory: index === 14 ? "C:/OpenCode/Inbox/worktrees/unopened" : "C:/OpenCode/Inbox",
+    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index },
+  }))
+
+  await mockWorkspace(page, {
+    name: "Inbox",
+    sessions,
+    vcs: { current: "dev", default: "dev" },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const list = page.locator('[data-slot="sidebar-inbox-scroll"]')
+  const items = list.locator('[data-slot="sidebar-inbox-item"]')
+  const target = items.filter({ hasText: "Inbox session 14" })
+  await expect(items).toHaveCount(10)
+  await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
+  await expect(list.getByText("Recent", { exact: true })).toBeVisible()
+  await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await expect(target).toBeInViewport({ ratio: 1 })
+  // Git metadata must load for an unopened worktree, not only after selecting its session.
+  await target.locator('[data-component="tooltip-v2-trigger"]:has(use[href="#opencode-v2-icon-branch"])').hover()
+  await expect(page.getByRole("tooltip")).toHaveText("dev")
+  const offset = await list.evaluate((element) => element.scrollTop)
+  expect(offset).toBeGreaterThan(0)
+  const row = await target.elementHandle()
+
+  await target.click()
+  await expectPath(page, sessionHref("ses_inbox_14"))
+  await expect(target).toHaveAttribute("data-state", "active")
+  // Opening a session loads it into the client, which updates every section.
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
+})
+
+test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 41 * 60_000 })
+  await mockWorkspace(page, {
+    name: "ArchivedInbox",
+    sessions: [
+      { id: "ses_archive_active", title: "Active inbox session", time: { created: T0, updated: T0, idle: T0 } },
+      ...["First archived session", "Second archived session"].map((title, index) => ({
+        id: `ses_archive_${index}`,
+        title,
+        time: { created: T0 - 100, updated: T0 + index, idle: index ? T0 - 100 : T0, archived: T0 + 10 },
+      })),
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const archived = inbox.getByRole("button", { name: "Archived", exact: true })
+
+  const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Active inbox session")
+  await expect(archived).toBeVisible()
+  await archived.focus()
+  await archived.press("Enter")
+
+  const dialog = page.getByRole("dialog")
+
+  const search = dialog.getByRole("combobox")
+
+  await expect(search).toBeFocused()
+  await expect(search).toHaveAttribute("placeholder", "Search sessions")
+  await expect(dialog.getByText("Archived sessions", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("option")).toHaveCount(2)
+  await expect(dialog.getByRole("option", { name: /First archived session/ })).toBeVisible()
+  await expect(dialog.getByRole("option", { name: /Second archived session/ })).toBeVisible()
+  await search.fill("Active inbox session")
+  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
+  await search.fill("First archived")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await expect(dialog.getByRole("option", { name: /First archived session/ })).toHaveAttribute("aria-selected", "true")
+  await search.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expectPath(page, sessionHref("ses_archive_0"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+})
+
+test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
+  await openSession(page, {
+    name: "WorkingInbox",
+    sessions: [{ id: "ses_working_selected", title: "Selected working session" }],
+    sessionStatus: { ses_working_selected: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
+    },
+  })
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+
+  const toggle = shelf.getByRole("button", { name: "Working", exact: true })
+
+  const row = shelf.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(row).toHaveCount(0)
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+  await expectPath(page, sessionHref("ses_working_selected"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await toggle.press("Enter")
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
+})
+
+test("sessions opened from Home and Search get a temporary Current session row without duplicating Recent", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "CurrentInbox",
+    sessions: [
+      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0 } },
+      { id: "ses_current_search", title: "Older Search session", time: { created: T0, updated: T0, idle: T0 } },
+      { id: "ses_current_recent", title: "Recent inbox session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `ses_current_extra_${index}`,
+        title: `Other recent session ${index}`,
+        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index },
+      })),
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveCount(10)
+  await page.locator('[data-component="home-session-row"]').filter({ hasText: "Older Home session" }).click()
+  await expectPath(page, sessionHref("ses_current_home"))
+  await expect(rows.filter({ hasText: "Older Home session" })).toHaveAttribute("data-state", "active")
+  await expect(inbox.getByText("Current session", { exact: true })).toHaveCount(0)
+  await expect(rows).toHaveCount(11)
+  await rows.filter({ hasText: "Recent inbox session" }).click()
+  await expectPath(page, sessionHref("ses_current_recent"))
+  await expect(rows).toHaveCount(10)
+  await expect(rows.filter({ hasText: "Recent inbox session" })).toHaveAttribute("data-state", "active")
+  await page.getByRole("button", { name: "Search sessions", exact: true }).click()
+
+  const dialog = page.getByRole("dialog")
+
+  const search = dialog.getByRole("combobox")
+
+  await expect(search).toBeFocused()
+  await search.fill("Older Search session")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await search.press("Enter")
+  await expectPath(page, sessionHref("ses_current_search"))
+  await expect(rows.filter({ hasText: "Older Search session" })).toHaveAttribute("data-state", "active")
+  await expect(rows.filter({ hasText: "Older Home session" })).toHaveCount(0)
+  await expect(rows).toHaveCount(11)
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(rows).toHaveCount(10)
+})

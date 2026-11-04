@@ -1,4 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
+import { uuid } from "@opencode/util/uuid"
 import { decodeEvent, type VoiceEvent } from "./protocol"
 import { delegatorInstructions, liveInstructions, tools } from "./spec"
 
@@ -162,7 +163,7 @@ export class VoiceTransport {
 
   send(event: VoiceClientEvent) {
     if (this.ended || this.channel.readyState !== "open") throw new VoiceFailure("dropped")
-    this.channel.send(JSON.stringify({ event_id: crypto.randomUUID(), ...event }))
+    this.channel.send(JSON.stringify({ event_id: uuid(), ...event }))
   }
 
   mute(muted: boolean) {
@@ -192,7 +193,7 @@ export class VoiceTransport {
     await Promise.resolve()
       .then(async () => {
         if (this.channel.readyState !== "open") return
-        this.channel.send(JSON.stringify({ type: "session.close", event_id: crypto.randomUUID() }))
+        this.channel.send(JSON.stringify({ type: "session.close", event_id: uuid() }))
         const timeout = setTimeout(() => this.closed.resolve(), 1000)
         await this.closed.promise
         clearTimeout(timeout)

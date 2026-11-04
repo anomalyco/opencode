@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.2.1",
+  "version": "2.2.5",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -17,6 +17,7 @@
     "./file": "./src/components/file.tsx",
     "./file-media": "./src/components/file-media.tsx",
     "./file-search": "./src/components/file-search.tsx",
+    "./linked-text": "./src/components/linked-text.tsx",
     "./line-comment": "./src/components/line-comment.tsx",
     "./line-comment-annotations": "./src/components/line-comment-annotations.tsx",
     "./markdown": "./src/components/markdown.tsx",

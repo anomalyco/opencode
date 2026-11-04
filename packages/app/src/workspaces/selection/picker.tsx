@@ -1,5 +1,5 @@
 import { useDialog } from "@opencode/ui/context/dialog"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePlatform } from "@/runtime/platform/platform"
 import { lazy, Suspense } from "solid-js"
 import type { LocationRef } from "@opencode/client/promise"
@@ -19,10 +19,14 @@ type DirectoryPickerInput = {
 
 export function useDirectoryPicker() {
   const platform = usePlatform()
+  const servers = useServers()
   const dialog = useDialog()
 
   return (input: DirectoryPickerInput) => {
-    if (directoryPickerKind(platform.platform, input.server) === "native" && platform.platform === "desktop") {
+    if (
+      directoryPickerKind(platform.platform, input.server, servers.ownUrl()) === "native" &&
+      platform.platform === "desktop"
+    ) {
       void platform.openDirectoryPickerDialog({ title: input.title, multiple: input.multiple }).then(input.onSelect)
 
       return

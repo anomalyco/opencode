@@ -1,6 +1,7 @@
 import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
+import { uuid } from "@opencode/util/uuid"
 import type { MountedSession, SetupContext } from "@opencode/plugin/gui"
 import type Btw from "./index"
 
@@ -104,7 +105,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
 
     if (!session?.id) return
 
-    const id = crypto.randomUUID()
+    const id = uuid()
     const created = Date.now()
     const current = selection(session)
 

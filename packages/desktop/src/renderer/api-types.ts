@@ -71,6 +71,8 @@ export type ElectronAPI = {
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>
   setForceFocus(enabled: boolean): Promise<void>
+  getSpellcheckEnabled(): Promise<boolean>
+  setSpellcheckEnabled(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
 }

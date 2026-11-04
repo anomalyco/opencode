@@ -6,8 +6,5 @@ export default {
   loading: "Laster terminal…",
   "title.numbered": "Terminal {{number}}",
   close: "Lukk terminal",
-  "connectionLost.title": "Tilkobling mistet",
-  "connectionLost.abnormalClose": "WebSocket lukket unormalt: {{code}}",
-  "connectionLost.description": "Terminalforbindelsen ble avbrutt. Dette kan skje når serveren starter på nytt.",
   "tab.title": "Terminal",
 }

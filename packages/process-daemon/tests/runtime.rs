@@ -297,6 +297,7 @@ fn check_normal_exit(code: u32) {
             StreamEvent::Exited {
                 exit_code,
                 final_offset,
+                ..
             } => {
                 assert_eq!(exit_code, Some(code));
                 assert_eq!(final_offset, offset);
@@ -314,7 +315,8 @@ fn check_normal_exit(code: u32) {
     assert_eq!(
         snapshot.info.lifecycle,
         TerminalLifecycle::Exited {
-            exit_code: Some(code)
+            exit_code: Some(code),
+            signal: None,
         }
     );
     assert_eq!(snapshot.info.output_tail, offset);

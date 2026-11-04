@@ -28,6 +28,7 @@ import {
   type LLMRequest,
   type Media,
   type ToolDefinition,
+  type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
 import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
@@ -387,13 +388,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     },
     defaults: {
       headers: info.headers,
-      http:
-        projected.body === undefined && info.headers === undefined
-          ? undefined
-          : {
-              body: projected.body === undefined ? undefined : { ...projected.body },
-              headers: info.headers,
-            },
+      http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
     },
     body: {
@@ -497,7 +492,7 @@ function callOptions(
     seed: request.generation?.seed,
     tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
-    headers: request.http?.headers,
+    headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }
@@ -527,7 +522,7 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
   return [{ role: "system", content: system }, ...messages]
 }
 
-function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
+function message(input: Exclude<LLMRequest["messages"][number], ToolMessage>): LanguageModelV3Message[] {
   switch (input.role) {
     case "system":
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
@@ -548,12 +543,10 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
       return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
-    case "tool":
-      return toolMessage(input).messages
   }
 }
 
-function toolMessage(input: LLMRequest["messages"][number]) {
+function toolMessage(input: ToolMessage) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
     if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
@@ -838,20 +831,14 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    case "finish":
-      return Effect.succeed([
-        LLMEvent.stepFinish({
-          index: state.step++,
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-        LLMEvent.finish({
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+    case "finish": {
+      const finish = {
+        reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
+        usage: usage(event.usage),
+        providerMetadata: providerMetadata(event.providerMetadata),
+      }
+      return Effect.succeed([LLMEvent.stepFinish({ index: state.step++, ...finish }), LLMEvent.finish(finish)])
+    }
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
@@ -941,7 +928,7 @@ function llmError(error: unknown, operation: "request" | "read") {
 
 // AI SDK stream errors can arrive as plain objects. A gateway's type validation error keeps the provider's error
 // response in `value`, which carries the message and codes.
-const errorValue = (error: unknown) => (ProviderShared.isRecord(error) ? error.value : undefined)
+const errorValue = (error: unknown) => (isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
 // Bun network error list in handleFetchError; the messages are undici's fetch

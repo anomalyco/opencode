@@ -5,6 +5,7 @@ import { Icon } from "@opencode/ui/icon"
 import { abort } from "@opencode/util/abort"
 import { useI18n } from "../../context/i18n"
 import { Loader } from "../../feedback/loader/loader"
+import { MenuScroll } from "../../components/menu-scroll"
 import { createTypeahead } from "./controller"
 
 export { createTypeahead } from "./controller"
@@ -152,6 +153,7 @@ export function Typeahead<T>(props: {
           </button>
         </Show>
       </div>
+      <div aria-hidden="true" class="h-[0.5px] shrink-0 bg-v2-border-border-base" />
       {/* Initial results and the empty state snap into place; other search resizing animates. */}
       <div
         class="overflow-hidden duration-[200ms] ease-[cubic-bezier(0.645,0.045,0.355,1)] motion-reduce:transition-none"
@@ -164,7 +166,13 @@ export function Typeahead<T>(props: {
             )
           }
         >
-          <div id={typeahead.listID} role="listbox" class="max-h-56 overflow-y-auto px-1 pb-1 empty:hidden">
+          <MenuScroll
+            id={typeahead.listID}
+            role="listbox"
+            class="max-h-56"
+            viewportClass="p-1"
+            classList={{ hidden: results().items.length === 0 }}
+          >
             <For each={results().items}>
               {(item) => (
                 <div
@@ -188,11 +196,11 @@ export function Typeahead<T>(props: {
                 </div>
               )}
             </For>
-          </div>
+          </MenuScroll>
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
           <Show when={results().items.length === 0}>
             <div
-              class="mx-1 flex h-8 items-center px-2 pb-1 text-v2-text-text-faint"
+              class="mx-1 flex h-9 items-center px-2 py-1 text-v2-text-text-faint"
               classList={{ invisible: store.answered === undefined }}
             >
               <Show when={failed()} fallback={props.emptyLabel}>

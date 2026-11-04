@@ -124,20 +124,31 @@ export function createRegion(input: {
   const stored = () => input.tabs().all()
   const providers = createMemo(() => host.items(BuiltinPanel).filter((item) => item.value.region === input.region))
 
-  const entries = createMemo(() =>
-    providers().flatMap((item) => {
-      const prefix = `${item.plugin}:`
-      const open = stored().flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
+  const entries = createMemo<RegionEntry[]>(
+    (previous) => {
+      const prior = new Map(previous.map((entry) => [entry.key, entry]))
 
-      return item.value.list(panelInput(input.view, input.screen, { open })).map(
-        (tab): RegionEntry => ({
-          key: panelKey(item.plugin, tab.id),
-          plugin: item.plugin,
-          tab,
-          provider: item.value,
-        }),
-      )
-    }),
+      return providers().flatMap((item) => {
+        const prefix = `${item.plugin}:`
+        const open = stored().flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
+
+        return item.value.list(panelInput(input.view, input.screen, { open })).map((tab): RegionEntry => {
+          const key = panelKey(item.plugin, tab.id)
+          const existing = prior.get(key)
+
+          if (existing && existing.tab === tab && existing.provider === item.value) return existing
+
+          return {
+            key,
+            plugin: item.plugin,
+            tab,
+            provider: item.value,
+          }
+        })
+      })
+    },
+    [],
+    { equals: same },
   )
 
   const byKey = createMemo(() => new Map(entries().map((entry) => [entry.key, entry])))
@@ -327,12 +338,29 @@ export function createRegion(input: {
     if (state.adding.some((value) => !live(value))) setState("adding", (list) => list.filter(live))
   })
 
+  const empty = createMemo(() => strip().length === 0)
+
+  // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
+  const giveBackFocus = () => {
+    const inside = !!document.getElementById("review-panel")?.contains(document.activeElement)
+    const back = returnFocus
+    returnFocus = undefined
+
+    if (inside && back?.isConnected) back.focus({ preventScroll: true })
+  }
+
+  // Emptying the region closes it, so focus goes back as the user's own close would give it.
+  const emptied = () => {
+    giveBackFocus()
+    input.onEmptied?.()
+  }
+
   // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
   const dismissNewTab = (id: string) =>
     batch(() => {
       setState("adding", (list) => list.filter((value) => value.id !== id))
 
-      if (stored().length === 0 && !state.adding.some(live)) input.onEmptied?.()
+      if (empty() && !state.adding.some(live)) emptied()
     })
 
   return {
@@ -342,7 +370,7 @@ export function createRegion(input: {
     /** The drawn strip of the pane that holds the selected tab, by key. */
     keys: () => panes[activePane()].keys(),
     /** The strip holds no tab, hidden ones included. */
-    empty: createMemo(() => strip().length === 0),
+    empty,
     entry: (key: string) => byKey().get(key),
     active,
     selected: createMemo(() => {
@@ -396,12 +424,7 @@ export function createRegion(input: {
       const focused = document.activeElement
 
       if (side.opened()) {
-        const inside = !!document.getElementById("review-panel")?.contains(focused)
-        const back = returnFocus
-        returnFocus = undefined
-
-        // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
-        if (inside && back?.isConnected) back.focus({ preventScroll: true })
+        giveBackFocus()
         side.toggle()
 
         return
@@ -431,7 +454,7 @@ export function createRegion(input: {
       batch(() => {
         input.tabs().close(key)
 
-        if (last) input.onEmptied?.()
+        if (last) emptied()
       })
 
       if (entry)
