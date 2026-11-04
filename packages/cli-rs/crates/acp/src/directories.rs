@@ -1,8 +1,5 @@
 //! Additional directories: validation, permission grants, and their record in session metadata
 //! (`packages/cli/src/acp/directories.ts`).
-//!
-//! Owned by C.12 (`rs-acp-rest`). C.11 filled it because `session/new`, `load`, `resume`, `fork`, and
-//! `list` validate `cwd` through it; C.12 ports its tests (`additional-directories.test.ts`).
 
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
