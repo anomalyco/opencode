@@ -1,14 +1,14 @@
 //! The session route (T.1): the regions later steps fill (`routes/session/index.tsx`).
 //!
 //! ```text
-//! header        title
 //! transcript    messages::list (E.6a), sticky to the bottom
 //! working       the spinner while the session runs
 //! permission    permission::Permission (E.9a); the prompt hides while it shows
 //! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
 //! prompt        prompt::editor::mount (E.2)
 //! ```
-//! The sidebar (E.14) mounts beside the column.
+//! The column is the session pane of `frame::SessionFrame` (E.12); TS has no session header, the title shows
+//! in the tab strip. The sidebar (E.14) mounts beside the column.
 
 pub mod actions;
 pub mod form;
@@ -31,8 +31,7 @@ use crate::app::Tui;
 
 pub struct Session {
     id: SessionID,
-    root: View,
-    header: Text,
+    frame: crate::frame::SessionFrame,
     transcript: messages::list::Transcript,
     _scroll: scroll::Controls,
     _actions: actions::Actions,
@@ -47,7 +46,6 @@ impl Session {
     pub fn new(tui: &Tui, id: SessionID) -> Self {
         let app = &tui.app;
         let theme = tui.page();
-        let header = Text::new(app, "").fg(theme.text.base).bold().truncate(true);
         let transcript = messages::list::Transcript::new(tui);
         let scroll = scroll::Controls::new(tui, &transcript);
         let actions = actions::Actions::new(tui, &id, &scroll);
@@ -67,29 +65,21 @@ impl Session {
             .min_width(0)
             .padding_edge(Edge::Left, 2)
             .padding_edge(Edge::Right, 2)
-            .padding_edge(Edge::Top, 1)
             // `paddingBottom={1}` (`routes/session/index.tsx:1518`); T.1's status row used to fill it.
             .padding_edge(Edge::Bottom, 1)
-            .gap(1)
-            .child(&header)
             .child(transcript.root())
             .child(&working)
             .child(permission.root())
             .child(form.root())
             .child(location.root())
             .child(prompt.root());
-        let root = View::new(app)
-            .row()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .child(&column);
-        sidebar::mount(tui, &root, &id);
+        let frame = crate::frame::SessionFrame::new(tui, &id, &column);
+        sidebar::mount(tui, &frame.root(), &id);
         load(tui, tui.data.session_sync(&id, false));
         load(tui, tui.data.message_sync(&id));
         Self {
             id,
-            root,
-            header,
+            frame,
             transcript,
             _scroll: scroll,
             _actions: actions,
@@ -104,17 +94,11 @@ impl Session {
 
 impl RouteView for Session {
     fn root(&self) -> View {
-        self.root.clone()
+        self.frame.root()
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
         if changes.session(&self.id) {
-            let title = tui.data.read(|state| {
-                state
-                    .session(&self.id)
-                    .and_then(|session| session.title.clone())
-            });
-            self.header.set_text(title.unwrap_or_default());
             crate::features::location::session(tui, &self.id);
         }
         if changes.status(&self.id) {
