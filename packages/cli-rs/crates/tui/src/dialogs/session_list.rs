@@ -898,8 +898,14 @@ fn relative(from: &str, to: &str) -> String {
 }
 
 /// Pinned sessions in `<state>/session.json` (`context/local.tsx:508-603`), shared with the TS
-/// TUI. Read once per state directory and kept in memory, as TS does; written atomically.
+/// TUI. Read once per state directory and kept in memory, as TS does. Each pin, unpin, and prune is
+/// written in order on one worker thread, under the file's lock, from what the file holds then
+/// (`opencode_local::pins`).
 pub mod pins {
+    use std::sync::OnceLock;
+
+    use opencode_local::serial::Serial;
+
     use super::*;
 
     thread_local! {
@@ -912,7 +918,14 @@ pub mod pins {
         PINS.with(|pins| {
             pins.borrow_mut()
                 .entry(key.clone())
-                .or_insert_with(|| key.as_deref().map(read).unwrap_or_default())
+                .or_insert_with(|| {
+                    key.as_deref()
+                        .map(opencode_local::pins::load)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(SessionID)
+                        .collect()
+                })
                 .clone()
         })
     }
@@ -935,48 +948,33 @@ pub mod pins {
 
     /// `togglePin`.
     pub fn toggle(tui: &Tui, id: &SessionID) {
-        let mut pinned = list(tui);
-        match pinned.iter().position(|pin| pin == id) {
-            Some(index) => {
-                pinned.remove(index);
-            }
-            None => pinned.push(id.clone()),
+        let pinned = !list(tui).contains(id);
+        set(tui, id, pinned);
+    }
+
+    /// `prune` on `session.deleted`: the file loses the pin even when only another client had it.
+    pub fn prune(tui: &Tui, id: &SessionID) {
+        set(tui, id, false);
+    }
+
+    fn set(tui: &Tui, id: &SessionID, pinned: bool) {
+        let mut list = list(tui);
+        list.retain(|pin| pin != id);
+        if pinned {
+            list.push(id.clone());
         }
         let key = tui.state_dir();
-        PINS.with(|pins| pins.borrow_mut().insert(key.clone(), pinned.clone()));
+        PINS.with(|pins| pins.borrow_mut().insert(key.clone(), list));
         let Some(state) = key else { return };
-        tui.app.runtime().spawn_blocking(move || {
-            let value =
-                json!({ "pinned": pinned.iter().map(|id| id.0.clone()).collect::<Vec<_>>() });
-            if let Err(error) = write(&state.join("session.json"), &value) {
-                log::warn!("failed to save session.json: {error}");
-            }
-        });
-    }
-
-    fn read(state: &std::path::Path) -> Vec<SessionID> {
-        std::fs::read_to_string(state.join("session.json"))
-            .ok()
-            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-            .and_then(|value| value.get("pinned").and_then(Value::as_array).cloned())
-            .map(|pinned| {
-                pinned
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(|id| SessionID(id.to_owned()))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    // `writeJsonAtomic`: a temporary file beside the target, then a rename.
-    fn write(file: &std::path::Path, value: &Value) -> std::io::Result<()> {
-        if let Some(parent) = file.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let temp = file.with_extension(format!("json.{}.tmp", std::process::id()));
-        std::fs::write(&temp, serde_json::to_string_pretty(value)?)?;
-        std::fs::rename(temp, file)
+        let id = id.0.clone();
+        static WRITER: OnceLock<Serial> = OnceLock::new();
+        WRITER
+            .get_or_init(|| Serial::new("session.json"))
+            .run(move || {
+                if let Err(error) = opencode_local::pins::set(&state, &id, pinned) {
+                    log::warn!("failed to save session.json: {error}");
+                }
+            });
     }
 }
 
