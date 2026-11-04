@@ -6,6 +6,7 @@
 
 pub mod core;
 pub mod flowchart;
+pub mod sequence;
 mod palette;
 mod plugin;
 mod render;
@@ -67,6 +68,9 @@ impl std::fmt::Display for SyntaxError {
 pub fn detect(content: &str) -> Option<Kind> {
     if flowchart::parser::is_flowchart(content) {
         return Some(Kind::Flowchart);
+    }
+    if sequence::parser::is_sequence(content) {
+        return Some(Kind::Sequence);
     }
     None
 }
