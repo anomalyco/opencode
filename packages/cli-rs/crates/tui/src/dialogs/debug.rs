@@ -7,8 +7,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_ui::dialog::{
-    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header,
-    layout_view,
+    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer,
+    header, layout_view,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -99,8 +99,7 @@ pub fn show(tui: &Tui) {
                 Rc::new(move || {
                     let Some(cx) = cx.upgrade() else { return };
                     let mut action =
-                        FooterAction::new(if copied.get() { "✓ copied" } else { "copy" })
-                            .key("c");
+                        FooterAction::new(if copied.get() { "✓ copied" } else { "copy" }).key("c");
                     action.on_trigger = Some(run.clone());
                     if copied.get() {
                         action.color = Some(cx.theme.text.feedback.success.base);
