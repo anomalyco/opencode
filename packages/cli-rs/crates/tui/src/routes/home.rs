@@ -175,7 +175,10 @@ fn load(tui: &Tui, empty: &Text, prompt: &Textarea) {
                     empty.set_text("No sessions yet");
                     // Only while this home is mounted, and not from an open dialog.
                     let mounted = tui.textarea.borrow().as_ref().map(Widget::id);
-                    if mounted == Some(prompt.id()) && !tui.dialogs.is_open() {
+                    if mounted == Some(prompt.id())
+                        && !tui.dialogs.is_open()
+                        && tui.keymap.mode() != crate::routes::session::form::FORM_MODE
+                    {
                         tui.app.focus(&prompt);
                     }
                 }
