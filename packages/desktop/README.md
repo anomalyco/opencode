@@ -70,6 +70,9 @@ strobe bench perf/startup.bench.ts --target desktop --base app:opencode --head a
 strobe bench perf/startup.bench.ts --target dev --base origin/dev --head .
 ```
 
+strobe runs on Windows, macOS and Linux. Windows measures the most; on macOS a packaged launch needs a build whose bundle
+id this account has never run (`packages/app/perf/README.md` lists what each OS gives).
+
 Besides `launch.ready`, each launch reports its milestones as `launch.<name>` in ms since spawn: the main process's own
 marks from its log (`entry`, `electron`, `window`, `served`, `bundle`, `logging`, `storage`, `init`, `layers`,
 `visible`, `service.starting`, `service.ready`; `src/main/lifecycle/marks.ts`), or each step of the dev command's

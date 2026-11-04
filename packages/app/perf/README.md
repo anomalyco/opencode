@@ -74,7 +74,16 @@ strobe report experiment <exp_…> --open
 strobe report experiment <exp_…> --format pr
 ```
 
-`bunx strobe` runs the strobe version pinned in the root catalog (`@hona/strobe`); a `strobe` on your PATH also works.
+`bunx strobe` runs the strobe version pinned in the root catalog (`@hona/strobe`), which ships builds for Windows x64,
+macOS (arm64, x64) and Linux (x64, arm64); a `strobe` on your PATH also works. Script cases (core, ui) run the same on
+every OS. Page and desktop cases measure the most on Windows:
+
+- On macOS and Linux, frames come from Chromium's own trace only: the OS's present events (`--os-frames`) are Windows
+  only. A software GPU is refused, so a VM or a server without a GPU cannot run page cases.
+- macOS has no CPU affinity API, so runs are not pinned. Window pixels (`launch.painted`, `launch.settled`) need the
+  Screen Recording permission. A desktop case launches only a build whose bundle id this account has never run: an
+  isolated launch cannot move a Cocoa app's `~/Library`, so strobe refuses rather than write into yours.
+- Linux finds windows through X11 (XWayland works; a native Wayland window is invisible to other apps).
 
 Set `OPENCODE_PERF_SESSION` to a session export to add two cases to `tabs.bench.ts` on your own session: open it cold,
 and switch to it warm.
