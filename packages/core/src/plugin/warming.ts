@@ -5,7 +5,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Session } from "@opencode/schema/session"
 import { ConfigWarming } from "@opencode/schema/config/warming"
-import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
+import { Clock, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
 import { Config } from "../config.js"
 import { SessionWarmup } from "../session/warmup.js"
 import { resolveModel } from "./optimize.js"
@@ -28,13 +28,12 @@ interface Entry {
   // from there, not from the end of a long response.
   touched: number
   expires: number
-  // Bumped by each step request, so a refresh that raced one doesn't judge the new prompt by the old one.
-  generation: number
 }
 
 // A refresh that reaches the provider this close to expiry may find the entry gone and rewrite the whole prompt.
 const EXPIRY_MARGIN = Duration.seconds(10)
-// How often to look again while a model request runs; the request may end the turn after the entry has expired.
+// How often to look again while a model request runs. The interval comes from the request the step sends, which is
+// recorded once its context hook returns, and the request may end the turn after the entry has expired.
 const BUSY_POLL = Duration.seconds(5)
 
 export const Plugin = define({
@@ -74,17 +73,21 @@ export const Plugin = define({
       )
     })
 
-    const scope = yield* Scope.Scope
     const sessions = new Map<Session.ID, Entry>()
+    // One loop per Session. Each step request restarts it, so it always times from that request's cache lifetime.
+    const loops = yield* FiberMap.make<Session.ID>()
     // A refresh during a model request would compete with the request it keeps warm.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
 
-    const stop = Effect.fn("WarmingPlugin.stop")(function* (sessionID: Session.ID, reason?: string) {
+    /** Ends warming from inside the Session's loop, which returns afterwards. */
+    const settle = Effect.fn("WarmingPlugin.settle")(function* (sessionID: Session.ID, reason?: string) {
       sessions.delete(sessionID)
       yield* warmup.forget(sessionID)
       if (reason) yield* Effect.logInfo("stopped session warming", { sessionID, reason })
     })
+    /** Ends warming from outside the Session's loop. */
+    const stop = (sessionID: Session.ID) => settle(sessionID).pipe(Effect.andThen(FiberMap.remove(loops, sessionID)))
 
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
@@ -119,52 +122,44 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
 
-    const loop: (sessionID: Session.ID, current: Entry) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
-      function* (sessionID, current) {
-        // A stopped and re-armed Session has a new entry with its own loop.
-        if (sessions.get(sessionID) !== current) return
-        const now = yield* Clock.currentTimeMillis
-        if (now >= current.expires) return yield* stop(sessionID)
+    const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(function* (sessionID) {
+      const current = sessions.get(sessionID)
+      if (!current) return
+      const now = yield* Clock.currentTimeMillis
+      if (now >= current.expires) return yield* settle(sessionID)
+      if (requesting.has(sessionID)) {
+        yield* Effect.sleep(BUSY_POLL)
+        return yield* loop(sessionID)
+      }
 
-        // The runner records the step request after its context hook, so read it when a refresh is due.
-        const sent = yield* warmup.latest(sessionID)
-        const refresh = sent && keepAlive(sent.request)
-        const ttl = refresh && parseTTL(refresh.ttl)
-        const interval =
-          current.settings.interval === "auto" ? ttl && ttl * 0.9 : Duration.toMillis(current.settings.interval)
-        const due = current.touched + (interval ?? 0)
-        if (now < due) {
-          yield* Effect.sleep(Duration.millis(Math.min(due, current.expires) - now))
-          return yield* loop(sessionID, current)
-        }
-        if (requesting.has(sessionID)) {
-          yield* Effect.sleep(BUSY_POLL)
-          return yield* loop(sessionID, current)
-        }
-        // Routes that cache implicitly, or whose thinking budget follows the output limit, aren't refreshed.
-        if (!sent || !refresh || ttl === undefined || interval === undefined) return yield* stop(sessionID)
-        if (now >= current.touched + ttl - Duration.toMillis(EXPIRY_MARGIN))
-          return yield* stop(sessionID, "the cache entry has expired")
+      const sent = yield* warmup.latest(sessionID)
+      const refresh = sent && keepAlive(sent.request)
+      const ttl = refresh && parseTTL(refresh.ttl)
+      // Routes that cache implicitly, or whose thinking budget follows the output limit, aren't refreshed.
+      if (!sent || !refresh || ttl === undefined) return yield* settle(sessionID)
+      const interval = current.settings.interval === "auto" ? ttl * 0.9 : Duration.toMillis(current.settings.interval)
+      const due = current.touched + interval
+      if (now < due) {
+        yield* Effect.sleep(Duration.millis(Math.min(due, current.expires) - now))
+        return yield* loop(sessionID)
+      }
+      if (now >= current.touched + ttl - Duration.toMillis(EXPIRY_MARGIN))
+        return yield* settle(sessionID, "the cache entry has expired")
 
-        const generation = current.generation
-        current.touched = now
-        yield* Effect.logInfo("warming session", { sessionID })
-        const usage = yield* llm.generate(refresh.request, sent.options).pipe(
-          Effect.map((response) => response.usage),
-          Effect.catchCause((cause) =>
-            Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
-          ),
-        )
-        if (sessions.get(sessionID) !== current) return
-        if (current.generation === generation) {
-          if (!usage) return yield* stop(sessionID, "the refresh failed")
-          // A refresh that read nothing or wrote anything found the entry gone; each further one would rewrite it.
-          if (!(usage.cacheReadInputTokens ?? 0) || (usage.cacheWriteInputTokens ?? 0) > 0)
-            return yield* stop(sessionID, "the refresh missed the cache")
-        }
-        return yield* loop(sessionID, current)
-      },
-    )
+      current.touched = now
+      yield* Effect.logInfo("warming session", { sessionID })
+      const usage = yield* llm.generate(refresh.request, sent.options).pipe(
+        Effect.map((response) => response.usage),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
+        ),
+      )
+      if (!usage) return yield* settle(sessionID, "the refresh failed")
+      // A refresh that read nothing or wrote anything found the entry gone; each further one would rewrite it.
+      if (!(usage.cacheReadInputTokens ?? 0) || (usage.cacheWriteInputTokens ?? 0) > 0)
+        return yield* settle(sessionID, "the refresh missed the cache")
+      return yield* loop(sessionID)
+    })
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
@@ -178,22 +173,17 @@ export const Plugin = define({
         yield* warmup.watch(event.sessionID)
         const now = yield* Clock.currentTimeMillis
         const expires = now + Duration.toMillis(settings.duration)
-        const active = sessions.get(event.sessionID)
-        if (active) {
-          active.settings = settings
-          active.touched = now
-          active.expires = expires
-          active.generation++
-          return
-        }
-        const entry = { settings, touched: now, expires, generation: 0 }
-        sessions.set(event.sessionID, entry)
-        yield* Effect.logInfo("scheduled session warming", { sessionID: event.sessionID, expires })
-        yield* loop(event.sessionID, entry).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
+        if (!sessions.has(event.sessionID))
+          yield* Effect.logInfo("scheduled session warming", { sessionID: event.sessionID, expires })
+        sessions.set(event.sessionID, { settings, touched: now, expires })
+        yield* FiberMap.run(
+          loops,
+          event.sessionID,
+          loop(event.sessionID).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
+            ),
           ),
-          Effect.forkIn(scope),
         )
       }),
     )

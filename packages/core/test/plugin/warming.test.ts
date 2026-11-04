@@ -31,12 +31,13 @@ const openai = OpenAIChat.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
   .model({ id: "gpt-4o-mini" })
 
-const stepRequest = (model: typeof anthropic | typeof openai) =>
+const stepRequest = (model: typeof anthropic | typeof openai, ttl?: "1h") =>
   ai.request({
     model,
     system: "You are concise.",
     messages: [Message.user("list the files")],
     generation: { maxTokens: 32_000 },
+    ...(ttl ? { cache: { ttl } } : {}),
   })
 
 const session = Session.Info.make({
@@ -177,6 +178,23 @@ describe("WarmingPlugin", () => {
       yield* warming.turnEnds
       for (const seconds of [270, 540, 810]) yield* warming.at(seconds)
       expect(warming.refreshes).toHaveLength(1)
+    }),
+  )
+
+  it.effect("times from the latest step's cache lifetime when it changes", () =>
+    Effect.gen(function* () {
+      const warming = yield* run({ cacheReadInputTokens: 1000, cacheWriteInputTokens: 0 })
+      yield* warming.step(stepRequest(anthropic, "1h"))
+      yield* warming.turnEnds
+      yield* warming.at(60)
+      const request = stepRequest(anthropic)
+      yield* warming.step(request)
+      yield* warming.turnEnds
+      yield* warming.at(329)
+      expect(warming.refreshes).toHaveLength(0)
+      yield* warming.at(335)
+      expect(warming.refreshes).toHaveLength(1)
+      expect(warming.refreshes[0]?.messages).toBe(request.messages)
     }),
   )
 
