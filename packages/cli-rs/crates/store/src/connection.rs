@@ -366,6 +366,16 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::SessionMoved(_)
             // The tab strip's prompt pulse (E.12).
             | V2Event::SessionInboxEnqueued(_)
+            // The notifications plugin (E.19a).
+            | V2Event::FormCreated(_)
+            | V2Event::FormReplied(_)
+            | V2Event::FormCancelled(_)
+            | V2Event::PermissionAsked(_)
+            | V2Event::PermissionReplied(_)
+            | V2Event::SessionExecutionStarted(_)
+            | V2Event::SessionExecutionSucceeded(_)
+            | V2Event::SessionExecutionInterrupted(_)
+            | V2Event::SessionExecutionFailed(_)
     )
 }
 
