@@ -3,6 +3,7 @@ export * as Permission from "./permission.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Permission } from "@opencode/schema/permission"
+import { ReviewResult } from "@opencode/plugin/permission"
 import type { Tool } from "@opencode/schema/tool"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
@@ -245,18 +246,47 @@ const layer = Layer.effect(
         }),
       )
 
+    const review = Effect.fn("Permission.review")(function* (input: AssertInput) {
+      const evaluated = yield* evaluateInput(input)
+      const value = request(input, evaluated.message)
+      if (evaluated.effect !== "ask" || !(yield* hooks.has("permission", "experimental.review")))
+        return { ...evaluated, request: value }
+      const result = yield* hooks
+        .trigger("permission", "experimental.review", { request: value, agent: input.agent })
+        .pipe(
+          Effect.flatMap((event) =>
+            event.result === undefined
+              ? Effect.succeed({
+                  decision: "escalate" as const,
+                  reason: evaluated.message ?? "Please review this request.",
+                })
+              : Schema.decodeUnknownEffect(ReviewResult)(event.result),
+          ),
+          Effect.timeout("30 seconds"),
+          Effect.catchDefect(() => Effect.fail(new Error("Permission reviewer failed"))),
+          Effect.catch(() =>
+            Effect.succeed({
+              decision: "escalate" as const,
+              reason: "Automatic permission review unavailable; please review this request.",
+            }),
+          ),
+        )
+      const effect: Permission.Effect =
+        result.decision === "approve" ? "allow" : result.decision === "deny" ? "deny" : "ask"
+      return { ...evaluated, effect, message: result.reason, request: { ...value, message: result.reason } }
+    })
+
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
-      const result = yield* evaluateInput(input)
-      const value = request(input, result.message)
-      if (result.effect === "ask") yield* create(value, input.agent)
-      return { id: value.id, effect: result.effect }
+      const result = yield* review(input)
+      if (result.effect === "ask") yield* create(result.request, input.agent)
+      return { id: result.request.id, effect: result.effect }
     })
 
     const assert = Effect.fn("Permission.assert")((input: AssertInput) =>
       Effect.gen(function* () {
         if (closed) return yield* Effect.die(new DeclinedError())
-        const result = yield* evaluateInput(input)
+        const result = yield* review(input)
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             if (result.effect === "deny") {
@@ -268,7 +298,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(result.request, input.agent)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
