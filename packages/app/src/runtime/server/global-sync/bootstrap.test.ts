@@ -35,7 +35,6 @@ test("bootstraps projects through the native store setter and preserves subseque
     project: [],
     provider_auth: {},
     config: {},
-    reload: undefined,
   })
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

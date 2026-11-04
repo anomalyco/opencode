@@ -267,7 +267,7 @@ function createServerController(
   function withLocalMeta(project: Project): Project {
     if (project.id !== "global") return project
 
-    return { ...project, ...sync.child(project.worktree, { bootstrap: false })[0].projectMeta }
+    return { ...project, ...sync.child(project.worktree)[0].projectMeta }
   }
 
   const list = createMemo(() => sync.data.project.map(withLocalMeta))

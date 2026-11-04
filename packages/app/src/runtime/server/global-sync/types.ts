@@ -1,14 +1,26 @@
-import type { Agent, Config, LspStatus, Path, ProviderListResponse, VcsInfo } from "@/runtime/server/types"
+import type {
+  Agent,
+  Config,
+  Path,
+  Project,
+  ProviderAuthResponse,
+  ProviderListResponse,
+  VcsInfo,
+} from "@/runtime/server/types"
 import type { ReferenceInfo } from "@opencode/client/promise"
 import type { CommandInfo, McpResource, McpServer } from "@opencode/client/promise"
-import type { Accessor } from "solid-js"
-import type { SetStoreFunction, Store } from "solid-js/store"
 import { ProjectState } from "../persistence"
 
 export type ProjectMeta = NonNullable<typeof ProjectState.Type.value>
 
+export type GlobalStore = {
+  path: Path
+  project: Project[]
+  provider_auth: ProviderAuthResponse
+  config: Config
+}
+
 export type State = {
-  status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: CommandInfo[]
   reference: ReferenceInfo[]
@@ -25,41 +37,7 @@ export type State = {
   mcp_resource: {
     [key: string]: McpResource
   }
-  lsp_ready: boolean
-  lsp: LspStatus[]
   vcs: VcsInfo | undefined
-}
-
-export type MetaCache = {
-  store: Store<typeof ProjectState.Type>
-  setStore: SetStoreFunction<typeof ProjectState.Type>
-  ready: Accessor<boolean>
-}
-
-export type ChildOptions = {
-  bootstrap?: boolean
-  mcp?: boolean
-}
-
-export type DirState = {
-  lastAccessAt: number
-}
-
-export type EvictPlan = {
-  stores: string[]
-  state: Map<string, DirState>
-  pins: Set<string>
-  max: number
-  ttl: number
-  now: number
-}
-
-export type DisposeCheck = {
-  directory: string
-  hasStore: boolean
-  pinned: boolean
-  booting: boolean
-  loadingSessions: boolean
 }
 
 export const MAX_DIR_STORES = 30
