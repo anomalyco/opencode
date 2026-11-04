@@ -127,7 +127,9 @@ fn open(messages: Vec<Value>, info: Info) -> Harness {
         older: older.clone(),
     };
     let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
-    let app = TestApp::new(80, 30);
+    // The transcript keeps the 15-row view these cases were written for (E.12 took the session header and
+    // the column gaps out, so it grew by five rows at 80x30).
+    let app = TestApp::new(80, 25);
     let tui = opencode_tui::mount(
         &app,
         Deps {
@@ -175,8 +177,8 @@ impl Harness {
     }
 }
 
-/// The transcript's first row on screen, under the padding, the title, and the gap.
-const TOP: usize = 3;
+/// The transcript's first row on screen, under the tab strip.
+const TOP: usize = 1;
 
 /// How far the content moved down between two screens, by the first answer or question line of
 /// `before` that `after` still shows.

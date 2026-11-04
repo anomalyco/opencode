@@ -62,6 +62,10 @@ pub fn sync(tui: &Tui, changes: &Changes) {
 }
 
 fn handle(tui: &Tui, event: &V2Event) {
+    // The tab strip sees `session.deleted` first; with tabs on it leaves the deleted tab without a toast.
+    if crate::tabs::event(tui, event) {
+        return;
+    }
     match event {
         V2Event::TuiCommandExecute(event) if here(tui, event.location.as_ref()) => {
             tui.keymap.dispatch(&event.data.command, None);

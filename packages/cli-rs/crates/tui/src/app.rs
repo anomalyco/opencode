@@ -84,6 +84,12 @@ pub struct Tui {
     pub(crate) overlays: crate::features::overlays::Overlays,
     pub(crate) title: crate::features::title::Title,
     pub(crate) events: crate::features::events::Events,
+    /// Session tabs (E.12).
+    pub tabs: crate::tabs::Tabs,
+    /// The tab strip or rail around the route, and the pane sizes (E.12).
+    pub frame: crate::frame::Frame,
+    /// Plugin side panels (E.12).
+    pub panels: crate::panel::Panels,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -91,7 +97,6 @@ pub struct Tui {
     painted: RefCell<Theme>,
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
-    main: View,
     seen: Cell<u64>,
     connection: RefCell<Option<Connection>>,
     layers: RefCell<Vec<Disposer>>,
@@ -151,8 +156,11 @@ impl Tui {
         if route == Route::Home && !remount {
             crate::features::location::home(self);
         }
+        // The tab strip shows before the view lays out, so a transcript sticks to the bottom it ends with.
+        crate::tabs::route_changed(self);
+        crate::frame::refresh(self);
         let view = routes::mount(self, &route);
-        self.main.add(&view.root());
+        self.frame.main().add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
         // A remount under an open dialog (a theme change) must not take the dialog's focus.
         if !self.dialogs.is_open() {
@@ -175,6 +183,8 @@ impl Tui {
         }
         crate::features::title::sync(self, &changes);
         crate::features::events::sync(self, &changes);
+        crate::tabs::sync(self, &changes);
+        crate::frame::refresh(self);
     }
 
     /// Syncs the route view with everything, after state outside the store changed.
@@ -295,8 +305,6 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let page = theme.theme().page();
     app.set_theme(app_theme(&page));
     let shell = View::new(app).column().grow(1.0).basis(Length::Auto);
-    let main = View::new(app).column().grow(1.0).basis(Length::Auto);
-    shell.add(&main);
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
@@ -313,7 +321,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         files.as_ref().map(|files| files.config.clone()),
     );
     let plugins = crate::plugins::host::registry(&deps.config.info);
-    let tui = Rc::new_cyclic(|this| Tui {
+    let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
         local: crate::dialogs::model::Local::new(
             app,
             deps.client.clone(),
@@ -344,12 +352,14 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         overlays: Default::default(),
         title: Default::default(),
         events: Default::default(),
+        tabs: Default::default(),
+        frame: crate::frame::Frame::new(app, this.clone()),
+        panels: Default::default(),
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
         painted: RefCell::new(page),
         restyle: Cell::new(false),
-        main,
         seen: Cell::new(0),
         connection: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
@@ -359,6 +369,9 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     install_keys(&tui);
     install_theme(&tui);
     install_wakeups(&tui, deps.events);
+    crate::tabs::install(&tui);
+    crate::frame::install(&tui, &shell);
+    crate::features::clear::install(&tui);
     crate::features::events::install(&tui);
     crate::features::overlays::install(&tui);
     crate::features::title::install(&tui);
