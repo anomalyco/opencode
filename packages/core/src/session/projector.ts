@@ -2,13 +2,12 @@ export * as SessionProjector from "./projector.js"
 
 import { castDraft, produce, type WritableDraft } from "immer"
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
-import { Cause, DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import path from "path"
 import { Config } from "../config.js"
 import { Database } from "../database/database.js"
 import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
-import type { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
 import { SessionEvent } from "./event.js"
@@ -315,24 +314,11 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 })
 
 /** Reads `experimental.part_rows` from the Config in scope on every call; without one, it is off. */
-export const partRowsEnabled = Effect.gen(function* () {
+const partRowsEnabled = Effect.gen(function* () {
   const config = yield* Effect.serviceOption(Config.Service)
   if (Option.isNone(config)) return false
   return Config.latest(yield* config.value.entries(), "experimental")?.part_rows === true
 })
-
-/** {@link partRowsEnabled} as `session`'s location configures it. Off when that location can't boot or load its config. */
-export const partRowsEnabledFor = (instances: Instance.Interface, session: SessionSchema.Info) =>
-  partRowsEnabled.pipe(
-    instances.provide(session),
-    Effect.catchCause((cause) =>
-      Cause.hasInterrupts(cause)
-        ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
-        : Effect.logWarning("could not resolve experimental.part_rows; writing whole messages", { cause }).pipe(
-            Effect.as(false),
-          ),
-    ),
-  )
 
 type MessageRow = typeof SessionMessageTable.$inferSelect
 type PartRow = typeof SessionPartTable.$inferSelect

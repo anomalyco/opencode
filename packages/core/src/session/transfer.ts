@@ -21,10 +21,9 @@ import { Session } from "../session.js"
 import { Slug } from "../util/slug.js"
 import { SessionBlob } from "./blob.js"
 import { SessionEvent } from "./event.js"
-import { SessionHistory } from "./history.js"
 import { SessionMessage } from "./message.js"
 import { SessionProjector } from "./projector.js"
-import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
+import { SessionMessageTable, SessionTable } from "./sql.js"
 
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
@@ -82,14 +81,8 @@ const layer = Layer.effect(
         const subpath = RelativePath.make(
           path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
         )
-        const settled = input.data.messages.filter(isSettled)
-        const destination = { ...input.data.info, projectID: project.id, location: input.location, subpath }
-        const hasParts = (message: SessionMessage.Info): message is SessionMessage.Assistant =>
-          message.type === "assistant" && message.content.length > 0
-        // With experimental.part_rows off at the destination, assistant content stays inline as before.
-        const partRows = settled.some(hasParts) && (yield* SessionProjector.partRowsEnabledFor(instances, destination))
-        const messages = settled.map((message, index) => {
-          const encoded = encodeMessage(partRows && hasParts(message) ? { ...message, content: [] } : message)
+        const messages = input.data.messages.filter(isSettled).map((message, index) => {
+          const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
           return {
             id: message.id,
@@ -100,27 +93,17 @@ const layer = Layer.effect(
             data,
           }
         })
-        const parts = settled.flatMap((message) => {
-          if (!partRows || !hasParts(message)) return []
-          const timeCreated = DateTime.toEpochMillis(message.time.created)
-          return message.content.map((part, ordinal) => ({
-            message_id: message.id,
-            session_id: sessionID,
-            ordinal,
-            type: part.type,
-            call_id: part.type === "tool" ? part.id : null,
-            time_created: timeCreated,
-            time_updated: importedAt,
-            data: SessionHistory.encodePart(part),
-          }))
-        })
         // Only inline media the import carries becomes blobs, and only its blobs get refs: refs it carried in
         // could otherwise keep or expose blobs it never held. The destination's config is loaded only when needed.
         const split = messages.map((message) => SessionBlob.split(message.data))
-        const splitParts = parts.map((part) => SessionBlob.split(part.data))
         const media =
-          (split.some((row) => row.moved) || splitParts.some((row) => row.moved)) &&
-          (yield* SessionBlob.enabledFor(instances, destination))
+          split.some((row) => row.moved) &&
+          (yield* SessionBlob.enabledFor(instances, {
+            ...input.data.info,
+            projectID: project.id,
+            location: input.location,
+            subpath,
+          }))
         yield* bus
           .publish(
             SessionEvent.Created,
@@ -143,38 +126,23 @@ const layer = Layer.effect(
               commit: (seq) =>
                 Effect.gen(function* () {
                   if (messages.length > 0) {
-                    if (media)
-                      yield* Effect.forEach([...split, ...splitParts], (row) => SessionBlob.save(db, row.blobs), {
-                        discard: true,
-                      })
+                    if (media) yield* Effect.forEach(split, (row) => SessionBlob.save(db, row.blobs), { discard: true })
                     const stored = media
                       ? messages.map((message, i) => ({ ...message, data: split[i]!.data }))
                       : messages
-                    const storedParts = media ? parts.map((part, i) => ({ ...part, data: splitParts[i]!.data })) : parts
                     for (const batch of DatabaseBatch.insertBatches(SessionMessageTable, stored))
                       yield* db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie)
-                    for (const batch of DatabaseBatch.insertBatches(SessionPartTable, storedParts))
-                      yield* db.insert(SessionPartTable).values(batch).run().pipe(Effect.orDie)
-                    if (media) {
-                      const moved = new Map<string, Set<string>>()
-                      const add = (messageID: string, blobs: ReadonlyArray<{ hash: string }>) => {
-                        const hashes = moved.get(messageID) ?? new Set<string>()
-                        for (const blob of blobs) hashes.add(blob.hash)
-                        moved.set(messageID, hashes)
-                      }
-                      stored.forEach((message, i) => add(message.id, split[i]!.blobs))
-                      storedParts.forEach((part, i) => add(part.message_id, splitParts[i]!.blobs))
+                    if (media)
                       yield* Effect.forEach(
                         stored,
-                        (message) =>
+                        (message, i) =>
                           SessionBlob.recordHashes(
                             db,
                             { sessionID, messageID: message.id, seq: message.seq },
-                            moved.get(message.id)!,
+                            new Set(split[i]!.blobs.map((blob) => blob.hash)),
                           ),
                         { discard: true },
                       )
-                    }
                     yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
                   }
                   yield* db
