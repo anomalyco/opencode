@@ -19,7 +19,7 @@ use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
 use opencode_ui::path::abbreviate_home;
 use opencode_ui::prompt::{Prompt, PromptProps, prompt};
-use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectOption, SelectProps, Side};
+use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -234,7 +234,6 @@ impl Open {
                     props.footer_hints = vec![FooterHint {
                         title: "new worktree".into(),
                         label: "ctrl+n".into(),
-                        side: Side::Left,
                         group: None,
                     }];
                 } else {
@@ -523,10 +522,15 @@ impl Open {
                 }
             }
         };
-        // Hidden when empty, so it takes no place in the footer row (TS renders nothing).
+        drop(state);
+        // Hidden when empty, so it takes no place in the footer row and draws no band (TS renders nothing).
         self.footer.visible(line.is_some());
         if let Some(line) = line {
             self.footer.add(&line);
+        }
+        let select = self.select.borrow().clone();
+        if let Some(select) = select {
+            select.refresh_footer();
         }
     }
 

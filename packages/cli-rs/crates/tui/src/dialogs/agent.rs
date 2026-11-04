@@ -27,7 +27,8 @@ pub fn show(local: &Rc<Local>) {
                 })
                 .collect();
             let mut props = SelectProps::new("Select agent", options);
-            props.placeholder = cx.new_designs.then(|| "Search agents".to_owned());
+            props.search_in_title = true;
+            props.title_placeholder = Some("Search agents".to_owned());
             props.current = local.agent().map(|agent| agent.id.0);
             let weak = Rc::downgrade(&local);
             props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {

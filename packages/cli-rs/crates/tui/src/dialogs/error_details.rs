@@ -86,20 +86,14 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             };
             copy_action.on_trigger = Some(copy.clone());
             actions.push(copy_action);
-            let props = if cx.new_designs {
+            slot.clear();
+            slot.add(&footer(
+                &cx,
                 FooterProps {
                     primary: actions,
                     ..FooterProps::default()
-                }
-            } else {
-                FooterProps {
-                    secondary: actions,
-                    primary: vec![FooterAction::new("scroll").key("↑/↓")],
-                    ..FooterProps::default()
-                }
-            };
-            slot.clear();
-            slot.add(&footer(&cx, props));
+                },
+            ));
         })
     };
     draw();
@@ -181,9 +175,14 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             ..HeaderProps::default()
         },
     );
-    let root = opencode_ui::dialog::layout(cx, &head, &body, None, None);
-    root.add(&slot);
-    root
+    opencode_ui::dialog::layout_view(
+        cx,
+        &head,
+        &body,
+        Some(&slot),
+        opencode_ui::dialog::DIALOG_INSET,
+        1,
+    )
 }
 
 /// The rows `text` takes when word-wrapped at `width` cells: greedy by words, a word longer than a

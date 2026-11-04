@@ -130,16 +130,16 @@ fn settings_dialog_matches_typescript() {
     let app = TestApp::new(80, 30);
     let tui = mount(&app, info(json!({})), None);
     settings::show(&tui, None);
-    wait_for(&app, "Settings");
-    assert_dialog(&app, "E.18a/settings", "Settings");
+    wait_for(&app, "Search settings");
+    assert_dialog(&app, "E.18a/settings", "Search settings");
 
     app.press("down");
     app.press("down");
-    assert_dialog(&app, "E.18a/settings-down", "Settings");
+    assert_dialog(&app, "E.18a/settings-down", "Search settings");
 
     settings::show(&tui, None);
     app.type_text("scroll");
-    assert_dialog(&app, "E.18a/settings-filter", "Settings");
+    assert_dialog(&app, "E.18a/settings-filter", "Scrollbar");
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn settings_dialog_shows_configured_values_as_typescript() {
     );
     settings::show(&tui, None);
     app.type_text("speed");
-    assert_dialog(&app, "E.18a/settings-config", "Settings");
+    assert_dialog(&app, "E.18a/settings-config", "Scroll speed");
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn column(line: &str, needle: &str) -> u16 {
     line[..line.find(needle).unwrap()].chars().count() as u16
 }
 
-/// The footer of the row titled `title`.
+/// The footer of the row titled `title`, without the marks of the selected row's `‹ value ›` or `value ↵`.
 fn footer(app: &TestApp, title: &str) -> String {
     let screen = app.text();
     // The home behind the dialog shows at the start of some rows (the prompt's `┃`).
@@ -192,11 +192,19 @@ fn footer(app: &TestApp, title: &str) -> String {
         .lines()
         .find_map(|line| {
             let at = line.find(title)?;
-            let gutter = line[..at].trim().trim_end_matches('●').trim();
-            matches!(gutter, "" | "┃").then(|| &line[at..])
+            let gutter = line[..at].trim().trim_end_matches('▪');
+            gutter
+                .chars()
+                .all(|char| char == '┃' || char.is_whitespace())
+                .then(|| &line[at..])
         })
         .unwrap_or_else(|| panic!("no {title:?} row:\n{screen}"));
-    line[title.len()..].trim().to_owned()
+    let value = line[title.len()..].trim();
+    let value = value
+        .strip_prefix("‹ ")
+        .and_then(|value| value.strip_suffix(" ›"))
+        .unwrap_or(value);
+    value.trim_end_matches(" ↵").to_owned()
 }
 
 #[test]
@@ -258,8 +266,7 @@ fn the_palette_lists_settings_while_filtering_and_opens_the_one_chosen() {
     let filtered = wait_for(&app, "Settings · Session");
     assert!(filtered.contains("Thinking"), "{filtered}");
     app.press("return");
-    let dialog = wait_for(&app, "change ←/→");
-    assert!(dialog.contains("Settings"), "{dialog}");
+    wait_for(&app, "Search settings");
     // Opened on Thinking, which Right changes.
     app.press("right");
     assert_eq!(footer(&app, "Thinking"), "show");
@@ -267,21 +274,20 @@ fn the_palette_lists_settings_while_filtering_and_opens_the_one_chosen() {
 }
 
 #[test]
-fn experiments_toggle_and_new_designs_switch_the_theme_list() {
+fn experiments_toggle_and_new_designs_graduated() {
     let app = TestApp::new(80, 24);
     let tui = mount(&app, info(json!({})), None);
-    assert!(!tui.theme.borrow().names().contains(&"opencode2".to_owned()));
-    experiments::show(&tui);
-    wait_for(&app, "New designs");
-    app.press("right");
-    assert!(tui.settings.experiment("new-designs"));
+    // The new designs are the only ones: `opencode2` leads the theme list and the experiment is gone.
     assert_eq!(tui.theme.borrow().names()[0], "opencode2");
-    // Under new designs the footer hint is gone; the dialog keeps working.
-    app.press("down");
-    app.press("return");
+    experiments::show(&tui);
+    wait_for(&app, "TUI tools");
+    assert!(!app.text().contains("New designs"));
+    app.press("right");
     assert!(tui.settings.experiment("client-mcp"));
     wait_for(&app, "TUI tools");
     assert_eq!(footer(&app, "TUI tools"), "on");
+    app.press("return");
+    assert!(!tui.settings.experiment("client-mcp"));
 }
 
 #[test]
@@ -289,7 +295,7 @@ fn slash_and_palette_commands_open_settings_and_debug() {
     let app = TestApp::new(100, 30);
     let tui = mount(&app, info(json!({})), None);
     tui.keymap.dispatch("opencode.debug", None);
-    let screen = wait_for(&app, "Share this when reporting an issue.");
+    let screen = wait_for(&app, "Share this when reporting an issue");
     for label in ["Version", "Date", "OS", "Terminal", "Session ID", "Model"] {
         assert!(screen.contains(label), "{label}: {screen}");
     }
@@ -297,13 +303,13 @@ fn slash_and_palette_commands_open_settings_and_debug() {
         screen.contains(&format!("{} (", debug::VERSION)),
         "{screen}"
     );
-    assert!(screen.contains("copy enter"), "{screen}");
+    assert!(screen.contains("copy c"), "{screen}");
     // `TestApp` has no terminal, so the copy fails; the PTY run in the step report shows the success path.
-    app.press("return");
+    app.press("c");
     wait_for(&app, "Failed to copy to clipboard");
-    assert!(app.text().contains("copy enter"));
+    assert!(app.text().contains("copy c"));
     tui.keymap.dispatch("opencode.settings", None);
-    wait_for(&app, "change ←/→");
+    wait_for(&app, "Search settings");
 }
 
 #[test]
@@ -347,7 +353,7 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
 
     // Experiments opens the dialog; turning the setting off hides the bar.
     app.click(column(bar, "Experiments"), row);
-    wait_for(&app, "New designs");
+    wait_for(&app, "TUI tools");
     app.press("escape");
     settings::show(&tui, Some("debug.devtools"));
     app.type_text("developer");
@@ -461,16 +467,16 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     );
     app.press("escape");
     experiments::show(&tui);
-    wait_for(&app, "New designs");
+    wait_for(&app, "TUI tools");
     app.press("right");
     assert!(app.wait_until(Duration::from_secs(5), || {
-        tui.settings.experiment("new-designs")
+        tui.settings.experiment("client-mcp")
     }));
     // The bytes TS writes for the same two updates (`Config.update` through the F.5 oracle).
     let text = std::fs::read_to_string(&file).unwrap();
     assert_eq!(
         text,
-        "{\n  // my settings\n  \"$schema\": \"https://opencode.ai/v2/cli.json\",\n  \"session\": {\n    \"thinking\": \"show\"\n  },\n  \"experimental\": {\n    \"new-designs\": true\n  }\n}\n"
+        "{\n  // my settings\n  \"$schema\": \"https://opencode.ai/v2/cli.json\",\n  \"session\": {\n    \"thinking\": \"show\"\n  },\n  \"experimental\": {\n    \"client-mcp\": true\n  }\n}\n"
     );
 
     // TS reads what Rust wrote, then writes a setting the Rust dialog shows on its next open.
@@ -486,7 +492,7 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     };
     ts_config(
         twin.path(),
-        json!({ "update": [[["experimental", "new-designs"], true]] }),
+        json!({ "update": [[["experimental", "client-mcp"], true]] }),
     )
     .unwrap();
     assert_eq!(std::fs::read_to_string(&twin_file).unwrap(), text);
@@ -494,7 +500,7 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     let read = ts_config(home.path(), json!({ "get": true })).unwrap();
     assert_eq!(read["ok"]["session"]["thinking"], json!("show"), "{read}");
     assert_eq!(
-        read["ok"]["experimental"]["new-designs"],
+        read["ok"]["experimental"]["client-mcp"],
         json!(true),
         "{read}"
     );

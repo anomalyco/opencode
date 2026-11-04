@@ -1,5 +1,5 @@
-//! Free models dialog (E.16): `component/dialog-model-free.tsx`, the model picker under `new-designs` while no
-//! provider is connected.
+//! Free models dialog (E.16): `component/dialog-model-free.tsx`, the model picker while no provider is
+//! connected.
 
 use std::rc::Rc;
 
@@ -21,15 +21,17 @@ pub fn show(local: &Rc<Local>) {
             // Favoriting does not reorder the list until the dialog is reopened.
             let favorites: Vec<String> = local.favorite().iter().map(Model::key).collect();
             let recent: Vec<String> = local.recent().iter().map(Model::key).collect();
+            let marker = cx.theme.text.formfield.selected;
             let options: select::Options<Model> = {
                 let weak = Rc::downgrade(&local);
                 Rc::new(move |query: &str| {
                     weak.upgrade().map_or_else(Vec::new, |local| {
-                        options(&local, query, &favorites, &recent)
+                        options(&local, query, &favorites, &recent, marker)
                     })
                 })
             };
             let mut props = SelectProps::dynamic("Free models", options.clone());
+            props.description = Some("Connect a provider for access to more models".to_owned());
             props.flat = true;
             props.skip_filter = true;
             props.current = local.current();
@@ -87,6 +89,7 @@ fn options(
     query: &str,
     favorites: &[String],
     recent: &[String],
+    marker: Color,
 ) -> Vec<SelectOption<Model>> {
     let favorite_now = local.favorite();
     let all: Vec<SelectOption<Model>> = local
@@ -95,8 +98,12 @@ fn options(
         .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated) && is_free(model))
         .map(|model| {
             let value = Model::new(&model.provider_id.0, &model.id);
-            let mut option = SelectOption::new(model.name, value.clone());
-            option.footer = favorite_now.contains(&value).then(|| "*".to_owned());
+            let mut option = SelectOption::new(model.name.clone(), value.clone());
+            if favorite_now.contains(&value) {
+                option.footer = Some("*".to_owned());
+                option.footer_fg = Some(marker);
+            }
+            option.detail = Some(model::detail(&model, false, None));
             option
         })
         .collect();
