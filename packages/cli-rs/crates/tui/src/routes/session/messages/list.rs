@@ -13,8 +13,9 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::generated::{
-    AgentInfo, ModelInfo, ModelRef, SessionID, SessionMessageAssistant, SessionMessageAssistantContentItem,
-    SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID, SessionMessageInfo,
+    AgentInfo, ModelInfo, ModelRef, SessionID, SessionMessageAssistant,
+    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction,
+    SessionMessageID, SessionMessageInfo,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
@@ -227,7 +228,7 @@ impl Inner {
                 if up && inner.reveal_older(&tui) {
                     return;
                 }
-                inner.follow(&tui);
+                inner.follow(&tui, !up);
             });
         });
         self.register(tui);
@@ -446,7 +447,7 @@ impl Inner {
 
     /// `updateAwayFromBottom`: away from the bottom the window stays put; back at it, the window
     /// follows the tail again.
-    fn follow(&self, tui: &Tui) {
+    fn follow(&self, tui: &Tui, down: bool) {
         // Rows mounted since the last frame are not in the content's size yet.
         let frame = tui.app.frame_number();
         if self
@@ -460,7 +461,8 @@ impl Inner {
         let (_, top) = self.scroll.scroll_position();
         let content = self.scroll.content_view().rect().height;
         let bottom = f64::from((content - self.scroll.rect().height).max(0.0));
-        let next = if top >= bottom {
+        // Only a step down reaches the bottom; after a step up the content's size may be a frame old.
+        let next = if down && top >= bottom {
             Start::Tail
         } else {
             match &*self.start.borrow() {
@@ -551,7 +553,11 @@ impl Context<'_> {
                 colors.push(color);
             }
         }
-        let Some(index) = self.agents.iter().position(|item| item.id.as_str() == agent) else {
+        let Some(index) = self
+            .agents
+            .iter()
+            .position(|item| item.id.as_str() == agent)
+        else {
             return colors[0];
         };
         self.agents[index]

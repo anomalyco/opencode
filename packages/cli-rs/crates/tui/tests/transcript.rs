@@ -321,9 +321,8 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     assert!(screen.contains("The plan has two steps."), "{screen}");
 }
 
-#[test]
-fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
-    // 50 turns of 6 rows each; the first page (20 messages) is 60 rows, 40 of them mounted.
+/// 50 turns of 6 rows each; the first page (20 messages) is 60 rows, 40 of them mounted.
+fn long_session() -> Harness {
     let messages: Vec<Value> = (1..=50)
         .flat_map(|turn| {
             let created = turn * 10_000;
@@ -343,15 +342,19 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
             ]
         })
         .collect();
-    let h = open(80, 20, "ses_w", messages, Info::default());
+    open(80, 20, "ses_w", messages, Info::default())
+}
+
+/// Scrolls up one wheel step at a time until `turn`'s question shows. Every step keeps the
+/// reader's line on screen while older rows mount above it, and each older page shows the
+/// history hint until it lands. Returns the last screen.
+fn scroll_up_to(h: &Harness, turn: u32) -> String {
     let screen = h.wait_for("Answer 50 part 3");
     assert!(
         !screen.contains("Question 50"),
         "only the tail is on screen:\n{screen}"
     );
-
-    // Scrolling up keeps the reader's line on screen as older rows mount above it. Rows 0..20
-    // of the first page mount first; then the next page loads.
+    let target = format!("┃  Question {turn}");
     let unique = |screen: &str| {
         screen
             .lines()
@@ -361,6 +364,7 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
     };
     let hint = "Loading session history…";
     let mut previous = screen;
+    let mut history = Vec::new();
     let mut gated = false;
     for _ in 0..3000 {
         let mut screen = h.scroll_up();
@@ -383,18 +387,29 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
                 "the view jumped: {line:?} left the screen\nbefore:\n{previous}\nafter:\n{screen}"
             );
         }
+        if screen != previous {
+            history.push(screen.clone());
+        }
         previous = screen;
-        if previous.lines().any(|line| line.trim() == "┃  Question 1") {
+        if previous.lines().any(|line| line.trim() == target) {
             break;
         }
     }
     assert!(
-        previous.lines().any(|line| line.trim() == "┃  Question 1"),
-        "the oldest message never showed after {} older reads:\n{previous}",
-        h.older.load(Ordering::SeqCst)
+        previous.lines().any(|line| line.trim() == target),
+        "{target:?} never showed after {} older reads; the last screens:\n{}",
+        h.older.load(Ordering::SeqCst),
+        history[history.len().saturating_sub(4)..].join("\n=====\n")
     );
     assert!(gated, "the history hint never showed");
+    assert!(!previous.contains(hint), "{previous}");
+    previous
+}
+
+#[test]
+fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
+    let h = long_session();
+    scroll_up_to(&h, 1);
     // The first page plus four older ones.
     assert_eq!(h.older.load(Ordering::SeqCst), 4);
-    assert!(!previous.contains("Loading session history…"), "{previous}");
 }
