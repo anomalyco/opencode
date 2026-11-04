@@ -14,7 +14,10 @@ export interface State {
   readonly source: "env" | "config" | "default"
 }
 
-/** `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off. */
+/**
+ * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off, and
+ * `all` turns every flag on unless the same list opts one out, as in `all,-media_blob`.
+ */
 export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/Overrides", {
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
@@ -23,8 +26,9 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
 const onByDefault = (channel: string) => channel === "local" || channel === "dev"
 
 /**
- * Resolves every flag: `OPENCODE_FLAGS`, then `experimental.<key>` from the highest-priority document that sets
- * `experimental` (the same document every other `experimental` setting reads), then on for local and dev builds.
+ * Resolves every flag: `OPENCODE_FLAGS` (`-key`, then `all`), then `experimental.<key>` and then `all_flags: true` from
+ * the highest-priority document that sets `experimental` (the same document every other `experimental` setting reads),
+ * then on for local and dev builds. `all_flags: false` falls through rather than turning flags off.
  * A remote kill switch belongs above `OPENCODE_FLAGS` here.
  */
 export function resolve(input: {
@@ -39,10 +43,12 @@ export function resolve(input: {
       .filter(Boolean)
       .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
   )
+  const all = env.get(ConfigFlag.wildcard) === true
   const experimental = Config.latest(input.entries, "experimental")
+  const allFlags = experimental?.all_flags === true
   return Record.map(ConfigFlag.registry, (_, key): State => {
-    const override = env.get(key)
-    const configured = experimental?.[key]
+    const override = env.get(key) ?? (all ? true : undefined)
+    const configured = experimental?.[key] ?? (allFlags ? true : undefined)
     const [enabled, source]: [boolean, State["source"]] =
       override !== undefined
         ? [override, "env"]

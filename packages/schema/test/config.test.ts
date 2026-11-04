@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Config } from "../src/config.js"
 import { ConfigAgent } from "../src/config/agent.js"
+import { ConfigExperimental } from "../src/config/experimental.js"
+import { ConfigFlag } from "../src/config/flag.js"
 import { ConfigMCP } from "../src/config/mcp.js"
 import { ConfigPolicy } from "../src/config/policy.js"
 import { ConfigProvider } from "../src/config/provider.js"
@@ -184,5 +186,24 @@ describe("Config.Entry", () => {
     expect(docs.oauth).not.toHaveProperty("client_id")
     expect(encoded.info.providers?.custom).not.toHaveProperty("headers")
     expect(encoded.info.providers?.custom).not.toHaveProperty("canonical")
+  })
+})
+
+describe("ConfigExperimental.all_flags", () => {
+  test("round-trips the all-flags switch and rejects non-booleans", () => {
+    const input = { experimental: { all_flags: true } }
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(decoded.experimental?.all_flags).toBe(true)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    expect(() => Schema.decodeUnknownSync(Config.Info)({ experimental: { all_flags: "yes" } })).toThrow()
+  })
+
+  test("omits all_flags while encoding when unset", () => {
+    expect(Schema.encodeSync(ConfigExperimental.Info)(new ConfigExperimental.Info({}))).toEqual({})
+  })
+
+  test("keeps all_flags and the env wildcard out of the flag registry", () => {
+    expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
+    expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
   })
 })
