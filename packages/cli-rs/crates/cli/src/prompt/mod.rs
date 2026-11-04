@@ -77,6 +77,11 @@ pub fn is_interactive() -> bool {
     term::interactive()
 }
 
+/// `process.stdout.rows` and `process.stdout.columns`, for custom frames: unset without a terminal.
+pub fn stdout_size() -> (Option<usize>, Option<usize>) {
+    (term::stdout_rows(), term::columns())
+}
+
 /// Puts the terminal back as it was before a prompt took raw mode, when one holds it. The CLI runs this as a
 /// shutdown step, so a SIGTERM during a prompt does not leave the shell in raw mode.
 pub fn restore_terminal() {
