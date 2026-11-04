@@ -30,6 +30,7 @@ use crate::app::Tui;
 pub struct Session {
     id: SessionID,
     frame: crate::frame::SessionFrame,
+    sidebar: sidebar::Sidebar,
     transcript: messages::list::Transcript,
     _scroll: scroll::Controls,
     _actions: actions::Actions,
@@ -64,12 +65,13 @@ impl Session {
             .child(location.root())
             .child(prompt.root());
         let frame = crate::frame::SessionFrame::new(tui, &id, &column);
-        sidebar::mount(tui, &frame.root(), &id);
+        let sidebar = sidebar::mount(tui, &frame.root(), &id);
         load(tui, tui.data.session_sync(&id, false));
         load(tui, tui.data.message_sync(&id));
         Self {
             id,
             frame,
+            sidebar,
             transcript,
             _scroll: scroll,
             _actions: actions,
@@ -102,6 +104,7 @@ impl RouteView for Session {
             }
         }
         self.prompt.sync(tui, changes);
+        self.sidebar.sync(tui, changes);
     }
 
     fn focus(&self, tui: &Tui) {

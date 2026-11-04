@@ -33,27 +33,23 @@ impl opencode_plugin::Host for Tui {
 /// The built-ins in TS order (`plugin/builtins.ts`). A built-in whose step has not landed has an empty setup;
 /// its step replaces the line with its plugin. The storybook (F14) is excepted (Q17).
 pub fn builtins() -> Vec<Definition<Tui>> {
-    [
-        "opencode.home.footer",     // E.14
-        "opencode.prompt.footer",   // E.14
-        "opencode.btw",             // E.14
-        "opencode.sidebar.context", // E.14
-        "opencode.sidebar.limit",   // E.14
-        "opencode.sidebar.mcp",     // E.14
-        "opencode.sidebar.todo",    // E.14
-        "opencode.sidebar.footer",  // E.14
-        "opencode.notifications",   // E.19a
-        "opencode.plugins",         // E.18b
-        "opencode.stats",           // E.14
-        "opencode.merman",          // P.3
-        "opencode.latex",           // P.2
-        "opencode.diffs",           // E.15a
+    let empty = |id: &str| Definition::new(id, |_| {});
+    vec![
+        super::home_footer::plugin(),
+        super::prompt_footer::plugin(),
+        super::btw::plugin(),
+        super::sidebar_context::plugin(),
+        super::sidebar_limit::plugin(),
+        super::sidebar_mcp::plugin(),
+        super::sidebar_todo::plugin(),
+        super::sidebar_footer::plugin(),
+        crate::plugins::notifications::plugin(),
+        empty("opencode.plugins"), // E.18b
+        super::stats::plugin(),
+        empty("opencode.merman"), // P.3
+        empty("opencode.latex"),  // P.2
+        empty("opencode.diffs"),  // E.15a
     ]
-    .map(|id| match id {
-        crate::plugins::notifications::ID => crate::plugins::notifications::plugin(),
-        _ => Definition::new(id, |_| {}),
-    })
-    .into()
 }
 
 /// The registry of the built-ins and the `plugins` config, not yet active.
