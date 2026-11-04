@@ -53,7 +53,8 @@ export function make<A extends { readonly type: string }>(
         connection.subscribers.forEach((subscriber) => subscriber.push(item.value))
       }
     } catch (error) {
-      completion = { error }
+      // A stopped stream ends its subscribers cleanly; only a stream that failed by itself reports an error.
+      if (!connection.controller.signal.aborted) completion = { error }
     } finally {
       stop(connection)
       try {
@@ -66,6 +67,14 @@ export function make<A extends { readonly type: string }>(
   }
 
   return {
+    /**
+     * Drops the shared stream when a subscriber finds it dead (no bytes, or no `server.connected`, for too long). Every
+     * subscriber's iterator ends, and the next subscription opens a new stream instead of joining the dead one, which
+     * another subscriber would otherwise keep open.
+     */
+    reset() {
+      if (current) stop(current)
+    },
     subscribe<Type extends Exclude<A["type"], "server.connected"> = Exclude<A["type"], "server.connected">>(
       options?: SubscribeOptions<Type>,
     ): AsyncIterable<SelectedEvent<A, Type | "server.connected">> {

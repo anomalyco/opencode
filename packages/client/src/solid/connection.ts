@@ -78,7 +78,13 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     const request = new AbortController()
     current = request
     const cancel = () => request.abort(signal.reason)
-    const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), connectTimeout)
+    // The stream is shared with the client's other subscribers, so a dead one is dropped for all of them; otherwise
+    // the reconnect would join it again.
+    const drop = (reason: Error) => {
+      api.event.reset()
+      request.abort(reason)
+    }
+    const timeout = setTimeout(() => drop(new Error("Timed out connecting to server")), connectTimeout)
     signal.addEventListener("abort", cancel, { once: true })
 
     // Any received bytes, including keepalive comments, push the stall deadline out. A timer whose
@@ -88,7 +94,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       lastActivity = Date.now()
       if (connectedAt === undefined) return
       clearTimeout(watchdog)
-      watchdog = setTimeout(() => request.abort(new Error("Event stream stalled")), idleTimeout)
+      watchdog = setTimeout(() => drop(new Error("Event stream stalled")), idleTimeout)
     }
 
     try {
@@ -213,6 +219,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     if (!started || connection.status !== "connected") return
     options.log?.info?.("event stream resync", { reason, idle: Date.now() - lastActivity })
     forced = true
+    api.event.reset()
     current?.abort(new Error(reason))
   }
 
