@@ -1,6 +1,6 @@
 // P-APP scenarios (docs/H.2.md): one file per scenario, `parity/scenarios/<step>/<name>.app.ts`, with
 // `export default defineApp({...})`. parity/app/scenarios.test.tsx records each one through the TS TUI;
-// crates/tui/tests/app.rs replays the recording through the Rust TUI.
+// crates/tui/tests/all/app.rs replays the recording through the Rust TUI.
 import type { Fixture } from "./cells"
 import type { Route } from "./fake-server"
 import type { PtyScript, PtyStep } from "./pty-socket"

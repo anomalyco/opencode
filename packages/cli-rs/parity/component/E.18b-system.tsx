@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures for the system dialogs (E.18b): crates/tui/tests/system.rs opens the Rust dialogs over the whole
+// P-COMP fixtures for the system dialogs (E.18b): crates/tui/tests/all/system.rs opens the Rust dialogs over the whole
 // TUI with the same responses (keep `SERVERS` and the other data below in step with it) and compares the dialog
 // panel.
 import { onMount, type JSX } from "solid-js"
@@ -64,7 +64,7 @@ const PLUGINS = [
   { id: "theme.pack", source: { type: "package", target: "theme-pack" }, features: { tui: true }, state: { status: "active" } },
 ]
 
-// The Rust built-ins (crates/tui/src/plugins/host.rs) and the plugin crates/tui/tests/system.rs adds.
+// The Rust built-ins (crates/tui/src/plugins/host.rs) and the plugin crates/tui/tests/all/system.rs adds.
 const BUILTINS = [
   "opencode.home.footer",
   "opencode.prompt.footer",

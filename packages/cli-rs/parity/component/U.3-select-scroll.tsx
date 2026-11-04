@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for DialogSelect's scrolling (packages/tui/src/ui/dialog-select.tsx `scrollToSelection`):
-// crates/ui/tests/dialogs.rs. A list of 30 options in three categories, one with a detail row, at 72x30 (a list
+// crates/ui/tests/all/dialogs.rs. A list of 30 options in three categories, one with a detail row, at 72x30 (a list
 // of 9 rows). Keys sent with no frame between them reach OpenTUI's scroll box in one layout, which sums the
 // relative scrolls before it clamps them; "-frames" fixtures draw a frame after every key instead.
 import { DialogSelect } from "../../../tui/src/ui/dialog-select"

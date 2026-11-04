@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures of assistant text as the transcript shows it (`TextPart`, routes/session/message-parts.tsx): the
-// TUI's <markdown> props, rendered and completed, over a small corpus. crates/ui/tests/content.rs compares
+// TUI's <markdown> props, rendered and completed, over a small corpus. crates/ui/tests/all/content.rs compares
 // opencode_ui::markdown with them. The documents are shared with Rust through parity/fixtures/U.4a/corpus.json.
 import { useTheme, useThemes } from "../../../tui/src/context/theme"
 import { renderComponent } from "../lib/component"

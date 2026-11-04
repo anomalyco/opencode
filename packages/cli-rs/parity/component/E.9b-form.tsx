@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the form prompt (packages/tui/src/routes/session/form.tsx), one per field kind plus the
-// review: crates/tui/tests/form_parity.rs. The Rust prompt sits in the session route of a 100x30 app, inside two
+// review: crates/tui/tests/all/form_parity.rs. The Rust prompt sits in the session route of a 100x30 app, inside two
 // columns of padding on each side, so the TS prompt renders alone at 96x30.
 import type { FormWithLocation } from "../../../tui/src/context/data"
 import { FormPrompt } from "../../../tui/src/routes/session/form"

@@ -1,5 +1,5 @@
 //! P-APP (H.2, `docs/H.2.md`): the recordings `parity/app/scenarios.test.tsx` writes, masks, and the checkpoint
-//! and request comparisons. The runner that drives the Rust TUI is `crates/tui/tests/app.rs`; this module does
+//! and request comparisons. The runner that drives the Rust TUI is `crates/tui/tests/all/app.rs`; this module does
 //! not depend on the TUI.
 
 use std::collections::BTreeMap;

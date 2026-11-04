@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures for DialogConfirm (packages/tui/src/ui/dialog-confirm.tsx): crates/ui/tests/dialogs.rs. The
+// P-COMP fixtures for DialogConfirm (packages/tui/src/ui/dialog-confirm.tsx): crates/ui/tests/all/dialogs.rs. The
 // second one presses Left, which moves the legacy footer from Confirm to Cancel.
 import { DialogConfirm } from "../../../tui/src/ui/dialog-confirm"
 import { renderComponent } from "../lib/component"

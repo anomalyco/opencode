@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures for the toast (packages/tui/src/ui/toast.tsx): crates/ui/tests/dialogs.rs. "U.3/toast-theme" is
+// P-COMP fixtures for the toast (packages/tui/src/ui/toast.tsx): crates/ui/tests/all/dialogs.rs. "U.3/toast-theme" is
 // the theme error toast (component/theme-error-toast.tsx); "U.3/toast" has no title and a message that wraps.
 import { onMount } from "solid-js"
 import { Toast, useToast, type ToastOptions } from "../../../tui/src/ui/toast"

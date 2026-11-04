@@ -10,7 +10,7 @@ Rust: `opencode_ui::markdown::view` wraps opentui-rust's `Markdown` widget
 (G.3). Conceal, streaming, the code-block renderer hook, grid tables, and scope styles (G.11,
 `Markdown::scope_styles`) are set as in TypeScript. `parity/fixtures/U.4a/markdown-prose.json`,
 `U.4c/markdown-raw.json`, and `U.4c/markdown-table.json` match cell for cell, colors included
-(`crates/ui/tests/content.rs`).
+(`crates/ui/tests/all/content.rs`).
 
 Not in the corpus, documented by G.3 (`rust:crates/opentui/docs/markdown.md`): task items keep their checkbox,
 concealed escapes drop the backslash, quotes hold rendered blocks, and setext headings show as ATX headings in

@@ -1,4 +1,4 @@
-// P-FILE helper for E.2, driven by crates/tui/tests/prompt_history.rs. Run it from
+// P-FILE helper for E.2, driven by crates/tui/tests/all/prompt_history.rs. Run it from
 // <ts-root>/packages/tui with OpenTUI's Solid preload. Solid and OpenTUI resolve as packages/tui
 // resolves them, so this file and the TUI sources share one Solid instance (no JSX here for that reason).
 //

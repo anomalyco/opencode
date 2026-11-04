@@ -77,7 +77,7 @@ fn styled(layout: &crate::Layout) -> Vec<String> {
         .collect()
 }
 
-/// A test app in dark `opencode`, with the screen cleared as the TypeScript screen is (`crates/ui/tests/content.rs`).
+/// A test app in dark `opencode`, with the screen cleared as the TypeScript screen is (`crates/ui/tests/all/content.rs`).
 fn app(width: u16, height: u16) -> (TestApp, Theme) {
     let theme = Catalog::default()
         .load("opencode", ThemeMode::Dark)

@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures for DialogSelect (packages/tui/src/ui/dialog-select.tsx): crates/ui/tests/dialogs.rs. One list
+// P-COMP fixtures for DialogSelect (packages/tui/src/ui/dialog-select.tsx): crates/ui/tests/all/dialogs.rs. One list
 // with two categories, a current option, descriptions, footers, details, and an action: as opened (scrolled to
 // the current option), after moving down twice, after typing a filter, and with a filter that matches nothing.
 import { DialogSelect } from "../../../tui/src/ui/dialog-select"

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the model, agent, variant, usage, model usage, and Go upsell dialogs (E.16):
-// crates/tui/tests/models.rs. Each dialog opens over the real TUI providers, LocalProvider included, against
+// crates/tui/tests/all/models.rs. Each dialog opens over the real TUI providers, LocalProvider included, against
 // the routes in parity/fixtures/E.16/server.json and the model.json below, which the Rust test serves too.
 import { testRender } from "@opentui/solid"
 import { mkdtemp, rm } from "node:fs/promises"
