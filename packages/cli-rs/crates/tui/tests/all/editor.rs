@@ -17,8 +17,7 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-#[path = "support/ide.rs"]
-mod ide;
+use crate::support::ide;
 
 use ide::Ide;
 
