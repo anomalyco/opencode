@@ -6,6 +6,7 @@ import { Database } from "../database/database.js"
 import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { SessionBackground } from "./background.js"
 import { SessionEvent } from "./event.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
@@ -114,6 +115,7 @@ export const layer = Layer.effect(
       inbox,
       // The coordinator is created below; a report only runs after a busy period has settled.
       wake: (sessionID) => coordinator.wake(sessionID),
+      pending: (sessionID) => SessionBackground.unsettled(jobs, store, db, sessionID),
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>

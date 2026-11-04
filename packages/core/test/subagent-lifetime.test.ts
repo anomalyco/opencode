@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -142,4 +142,91 @@ describe("subagent observer lifetime", () => {
       20_000,
     )
   }
+
+  it.live(
+    "child that starts a background shell and goes idle reports only after the shell exits",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        yield* Effect.promise(() =>
+          Bun.write(
+            `${dir.path}/opencode.json`,
+            JSON.stringify({
+              agents: { reviewer: { mode: "subagent" } },
+              permissions: [{ action: "*", resource: "*", effect: "allow" }],
+            }),
+          ),
+        )
+        const sessions = yield* Session.Service
+        const locations = yield* LocationServiceMap.Service
+        const jobs = yield* Job.Service
+        const llm = yield* TestLLM.Test
+        const parent = yield* sessions.create({
+          location: { directory: AbsolutePath.make(dir.path) },
+          agent: Agent.ID.make("build"),
+          model: Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") }),
+        })
+        const child = yield* sessions.create({ parentID: parent.id, agent: Agent.ID.make("reviewer") })
+        yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(
+          Effect.provide(locations.get(parent.location)),
+        )
+        const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+        // The child's background shell, which keeps running after the child's turn ends.
+        const exit = yield* Deferred.make<void>()
+        yield* jobs.start({
+          id: "shell-dev",
+          type: "shell",
+          title: "dev server",
+          recovery: { kind: "shell", sessionID: child.id, shellID: "shell-dev", command: "bun dev" },
+          run: Deferred.await(exit).pipe(Effect.as("exited")),
+        })
+        yield* jobs.background("shell-dev")
+        yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("final", "final"))
+
+        const result = yield* executeTool(registry, {
+          sessionID: parent.id,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-review",
+            name: "subagent",
+            input: {
+              agent: "reviewer",
+              sessionID: child.id,
+              description: "Review fixture",
+              prompt: "Review the fixture",
+              background: true,
+            },
+          },
+        })
+        expect(result.status).toBe("completed")
+        yield* llm.wait(1).pipe(Effect.timeout("2 seconds"))
+        yield* sessions.wait(child.id)
+        expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
+        expect((yield* jobs.get(child.id))?.status).toBe("running")
+
+        // Mirrors the shell tool's notifyWhenDone: admit the exit notice to the child, which wakes
+        // it, then clear the durable marker.
+        yield* Deferred.succeed(exit, undefined)
+        const shell = (yield* jobs.wait({ id: "shell-dev" })).info
+        expect(shell?.notificationID).toBeDefined()
+        yield* sessions.synthetic({
+          ...(shell?.notificationID ? { id: shell.notificationID } : {}),
+          sessionID: child.id,
+          text: "Background shell exited",
+        })
+        if (shell?.notificationID) yield* jobs.completeBackground(shell.notificationID)
+
+        yield* jobs.wait({ id: child.id })
+        yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
+        yield* sessions.wait(parent.id)
+        const notices = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
+        expect(notices).toHaveLength(1)
+        expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: child.id, state: "completed" } })
+        expect(notices[0]?.text).toContain("final")
+        expect(notices[0]?.text).not.toContain("first")
+        expect(yield* jobs.pendingBackground).toEqual([])
+      }),
+    20_000,
+  )
 })

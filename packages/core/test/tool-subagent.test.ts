@@ -65,8 +65,11 @@ const executionNode = makeGlobalNode({
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
+      const db = (yield* Database.Service).db
       const completed = new Set<Session.ID>()
       const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: Session.ID) {
+        // Deliver admitted input like a real drain, so the child does not look unsettled.
+        yield* SessionInbox.promote(db, bus, sessionID, "input")
         if (completed.has(sessionID)) return
         if ((yield* store.get(sessionID))?.title?.includes("fail")) {
           yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
@@ -110,7 +113,7 @@ const executionNode = makeGlobalNode({
       })
     }),
   ),
-  deps: [Bus.node, SessionStore.node],
+  deps: [Bus.node, SessionStore.node, Database.node],
 })
 
 const subagentPluginSupervisor = makeLocationNode({
@@ -488,7 +491,7 @@ describe("SubagentTool", () => {
             agent: "reviewer",
             model: childModel,
           })
-          expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toBe(
+          expect((yield* sessions.context(child.id)).find((message) => message.type === "user")?.text).toBe(
             "You are a subagent spawned by another session.\nreview this",
           )
 
@@ -552,9 +555,7 @@ describe("SubagentTool", () => {
           expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
           expect((yield* sessions.get(childID)).title).toBe("review")
           expect(
-            (yield* sessions.inbox(childID)).flatMap((message) =>
-              message.type === "user" ? [message.payload.text] : [],
-            ),
+            (yield* sessions.context(childID)).flatMap((message) => (message.type === "user" ? [message.text] : [])),
           ).toEqual(["You are a subagent spawned by another session.\nreview this", "continue this"])
           expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
         }),

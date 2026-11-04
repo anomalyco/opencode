@@ -33,6 +33,8 @@ export type Deps = {
   readonly jobs: Job.Interface
   readonly inbox: SessionInbox.Interface
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** True while the child still has background work or undelivered input that will wake it again. */
+  readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
 }
 
 /**
@@ -87,6 +89,9 @@ export const make = (deps: Deps) => {
     if (live && !live.notificationID) return
     // A job that finished or was cancelled mid-period already reported through its observer.
     if (!live && snap.remembered) return
+    // The child's own background work will wake it again, and that later settlement reports the
+    // final state. Failures and user interrupts report now.
+    if (outcome.type === "succeeded" && (yield* deps.pending(child.id))) return
 
     const recovery = subagentRecovery(live?.notificationID ? snap.recovery : undefined, child, parentID)
     const status = outcome.type === "succeeded" ? "completed" : outcome.type === "interrupted" ? "cancelled" : "error"

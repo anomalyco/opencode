@@ -1,10 +1,16 @@
 export * as SubagentJob from "./subagent-job.js"
 
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Effect, Fiber, Layer, Scope, Stream } from "effect"
 import { Node } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "../bus.js"
+import { Database } from "../database/database.js"
 import { Job } from "../job.js"
 import { Session } from "../session.js"
+import { SessionBackground } from "./background.js"
+import { SessionEvent } from "./event.js"
+import type { SessionSchema } from "./schema.js"
+import { SessionStore } from "./store.js"
 import { SubagentCompletion } from "./subagent-completion.js"
 import { SubagentMetadata } from "./subagent-metadata.js"
 
@@ -23,9 +29,16 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
 
-const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scope.Scope> = Effect.gen(function* () {
+const make: Effect.Effect<
+  Interface,
+  never,
+  Session.Service | Job.Service | Bus.Service | SessionStore.Service | Database.Service | Scope.Scope
+> = Effect.gen(function* () {
   const sessions = yield* Session.Service
   const jobs = yield* Job.Service
+  const bus = yield* Bus.Service
+  const store = yield* SessionStore.Service
+  const db = (yield* Database.Service).db
   const scope = yield* Scope.Scope
   // Jobs and their completion observers outlive the plugin that launched them.
   // Fork with the global context too, rather than retaining the caller's location.
@@ -44,6 +57,26 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
       if (metadata) yield* sessions.setMetadata({ sessionID: recovery.childSessionID, metadata })
     }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
   })
+
+  // Waits until the child stops for good: idle, with no background work or undelivered input left
+  // to wake it. It only waits and never resumes, since resuming an idle child runs a model step.
+  const settle = Effect.fnUntraced(function* (
+    sessionID: SessionSchema.ID,
+  ): Effect.fn.Return<void, Session.NotFoundError, Scope.Scope> {
+    // Listen before waiting and checking, so a settlement in between still ends the wait below.
+    const settled = yield* bus
+      .subscribe([SessionEvent.Execution.Succeeded, SessionEvent.Execution.Failed, SessionEvent.Execution.Interrupted])
+      .pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+    yield* sessions.wait(sessionID)
+    if (!(yield* sessions.active).has(sessionID) && !(yield* SessionBackground.unsettled(jobs, store, db, sessionID)))
+      return
+    yield* Fiber.join(settled)
+    return yield* settle(sessionID)
+  }, Effect.scoped)
 
   const notify = Effect.fn("SubagentJob.notify")(function* (recovery: Recovery, startedAt: number) {
     const key = `${recovery.childSessionID}:${startedAt}`
@@ -83,6 +116,7 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
           recovery: input.recovery,
           run: Effect.gen(function* () {
             yield* sessions.resume(input.recovery.childSessionID)
+            yield* settle(input.recovery.childSessionID)
             const messages = yield* sessions.messages({
               sessionID: input.recovery.childSessionID,
               order: "desc",
@@ -108,5 +142,5 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
   layer: Layer.effect(Service, make),
-  deps: [Session.node, Job.node],
+  deps: [Session.node, Job.node, Bus.node, SessionStore.node, Database.node],
 })

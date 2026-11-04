@@ -2,7 +2,9 @@ export * as SessionBackground from "./background.js"
 
 import type { Kind, Status } from "@opencode/schema/job"
 import { Effect } from "effect"
+import type { Database } from "../database/database.js"
 import type { Job } from "../job.js"
+import { SessionInbox } from "./inbox.js"
 import type { SessionSchema } from "./schema.js"
 
 export type Lookup = {
@@ -48,6 +50,21 @@ export const outstanding = Effect.fnUntraced(function* (
       description: recovery.description,
     }
   })
+})
+
+/**
+ * Whether an idle Session will be woken again by its own work: a background job of its own or a
+ * descendant's still running, or admitted input not yet delivered, such as a finished shell's
+ * notice. A subagent's report waits for this so it carries the child's final state.
+ */
+export const unsettled = Effect.fnUntraced(function* (
+  jobs: Pick<Job.Interface, "runningBackground">,
+  store: Lookup,
+  db: Database.Interface["db"],
+  sessionID: SessionSchema.ID,
+) {
+  if ((yield* outstanding(jobs, store, sessionID)).length > 0) return true
+  return yield* SessionInbox.has(db, sessionID, "input")
 })
 
 /** Active and unconsumed background jobs matching the requested Session, kind, status, and descendant scope. */
