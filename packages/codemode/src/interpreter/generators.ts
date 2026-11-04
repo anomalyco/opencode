@@ -139,15 +139,17 @@ const drainQueue = <R>(ctx: Interpreter<R>, generator: GeneratorObj) => {
 // AsyncGeneratorAwaitReturn: a `return(value)` on an ended or unstarted generator settles once `value` does.
 const awaitReturn = <R>(ctx: Interpreter<R>, generator: GeneratorObj) => {
   const runner = ctx.runner
-  const finish = (completion: Completion) => {
-    completeStep(ctx, generator, completion, true)
-    drainQueue(ctx, generator)
-  }
   try {
-    runner.then(runner.promiseResolve(generator.queue[0]!.request.value), finish)
+    runner.then(runner.promiseResolve(generator.queue[0]!.request.value), { kind: "awaitReturn", generator })
   } catch (error) {
-    finish(abrupt(error))
+    finishAwaitReturn(ctx, generator, abrupt(error))
   }
+}
+
+/** The `awaitReturn` reaction: answers the `return` request with how its value settled, then drains the queue. */
+export const finishAwaitReturn = <R>(ctx: Interpreter<R>, generator: GeneratorObj, completion: Completion) => {
+  completeStep(ctx, generator, completion, true)
+  drainQueue(ctx, generator)
 }
 
 /** Where a generator body splits off the stack when it yields, and how its end answers the request that ran it. */

@@ -181,26 +181,22 @@ export const extensionGlobals = <R>(
         if (isAsync(value))
           return pending(
             Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
+            label,
             site,
           )
         if (before) yield ctx.runner.blocking(before)
         const host = callHost<R>(value, args)
-        if (host.async) return pending(settle(host.effect), site)
+        if (host.async) return pending(settle(host.effect), label, site)
         return (yield ctx.runner.blocking(settle(host.effect))) as Value
       },
     })
   }
 
   // An asynchronous host call: the program holds a promise that settles when the host's work does.
-  const pending = (work: Effect.Effect<Value, Throw, R>, site: AstNode | undefined) => {
-    const promise = ctx.runner.newPromise()
-    const resolving = ctx.runner.resolving(promise, site)
-    ctx.runner.host(
-      work,
-      (settled) => (settled.ok ? resolving.resolve(settled.value as Value) : resolving.reject(settled.error)),
-      site,
-    )
-    return promise
+  const pending = (work: Effect.Effect<Value, Throw, R>, label: string, site: AstNode | undefined) => {
+    const resolving = ctx.runner.resolving(ctx.runner.newPromise(), site)
+    ctx.runner.host(work, { label, result: "value", resolving, site })
+    return resolving.promise
   }
 
   return extensions.flatMap((extension) =>

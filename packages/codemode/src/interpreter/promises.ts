@@ -5,7 +5,18 @@ import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
 import { isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
-import { type Completion, type Eval, Interruption, normal, type Reaction, type Resolving, Task } from "./runner.js"
+import {
+  type Combination,
+  type Completion,
+  type Eval,
+  Interruption,
+  normal,
+  type Reaction,
+  type Resolving,
+  type Start,
+  Task,
+} from "./runner.js"
+import { finishAwaitReturn } from "./generators.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
@@ -24,36 +35,60 @@ export const capability = <R>(ctx: Interpreter<R>, site: AstNode | undefined): R
 const settleWith = (resolving: Resolving, completion: Completion) =>
   completion.ok ? resolving.resolve(completion.value as Value) : resolving.reject(completion.error)
 
-/**
- * A promise reaction that calls program code: the handler runs as a job, and its result or failure settles the
- * derived promise. A missing handler passes the outcome through.
- */
-const handlerReaction =
-  <R>(
-    ctx: Interpreter<R>,
-    onFulfilled: Callable | undefined,
-    onRejected: Callable | undefined,
-    derived: Resolving | undefined,
-  ): Reaction =>
-  (settled) => {
-    const handler = settled.ok ? onFulfilled : onRejected
-    if (handler === undefined || (!settled.ok && settled.error instanceof Interruption)) {
-      if (derived !== undefined) settleWith(derived, settled)
+/** Runs a settled promise's reaction as a job: it finishes at once, or returns the task that calls program code. */
+export const react = <R>(
+  ctx: Interpreter<R>,
+  reaction: Exclude<Reaction, { readonly kind: "await" }>,
+  settled: Completion,
+): Start | void => {
+  switch (reaction.kind) {
+    case "settle":
+      return settleWith(reaction.target, settled)
+    case "handler":
+      return handle(ctx, reaction, settled)
+    case "combinator":
+      return combine(ctx, reaction, settled)
+    case "finally":
+      return cleanUp(ctx, reaction, settled)
+    case "finallyCleaned":
+      return settled.ok ? reaction.target.resolve(undefined) : reaction.target.reject(settled.error)
+    case "finallyOutcome":
+      return settleWith(reaction.target, settled.ok ? reaction.outcome : settled)
+    case "awaitReturn":
+      return finishAwaitReturn(ctx, reaction.generator, settled)
+    case "callback":
+      return reaction.run(settled)
+  }
+}
+
+/** A task that runs `body` as its own job. */
+const job = (body: Eval<void>): Start => ({ task: new Task([{ body, boundary: undefined }]), input: normal(undefined) })
+
+// A `then`/`catch` reaction calls program code: the handler runs as a job, and its result or failure settles the
+// derived promise. A missing handler passes the outcome through.
+const handle = <R>(
+  ctx: Interpreter<R>,
+  reaction: Extract<Reaction, { readonly kind: "handler" }>,
+  settled: Completion,
+): Start | void => {
+  const handler = settled.ok ? reaction.onFulfilled : reaction.onRejected
+  const derived = reaction.derived
+  if (handler === undefined || (!settled.ok && settled.error instanceof Interruption)) {
+    return settleWith(derived, settled)
+  }
+  const argument = settled.ok ? (settled.value as Value) : materialize(ctx, settled.error)
+  const body = function* (): Eval<void> {
+    let result: Value
+    try {
+      result = yield* ctx.call(handler, undefined, [argument])
+    } catch (error) {
+      derived.reject(error)
       return
     }
-    const argument = settled.ok ? (settled.value as Value) : materialize(ctx, settled.error)
-    const body = function* (): Eval<void> {
-      let result: Value
-      try {
-        result = yield* ctx.call(handler, undefined, [argument])
-      } catch (error) {
-        derived?.reject(error)
-        return
-      }
-      derived?.resolve(result)
-    }
-    return { task: new Task([{ body: body(), boundary: undefined }]), input: normal(undefined) }
+    derived.resolve(result)
   }
+  return job(body())
+}
 
 const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject", "withResolvers", "try"] as const
 
@@ -106,66 +141,80 @@ function* combinator<R>(
     if (cursor === undefined) {
       throw typeError(`Promise.${name} expects a synchronous iterable, received ${describeValue(iterable)}.`)
     }
-    const values: Array<Value> = []
-    const reasons: Array<Value> = []
-    // Once the result settles early, the remaining members' reactions can do nothing: detach them so a member that
-    // stays pending for the rest of the program does not keep them.
-    const attached: Array<readonly [PromiseObj, Reaction]> = []
-    const decided = (settle: () => void) => {
-      settle()
-      for (const [item, reaction] of attached) runner.detach(item, reaction)
-    }
-    let remaining = 1
+    const combination: Combination = { name, made, values: [], reasons: [], remaining: 1, attached: [] }
     let index = 0
-    const finish = () => {
-      if (--remaining > 0) return
-      if (name === "any") {
-        made.reject(new Throw(createAggregateErrorValue(ctx, reasons, "All promises were rejected")))
-        return
-      }
-      made.resolve(new Arr(ctx.builtins.Array, values))
-    }
     while (true) {
       const step = yield* cursor.next()
       if (step.done) break
       const item = runner.promiseResolve(step.value)
-      const at = index++
-      values.push(undefined)
-      reasons.push(undefined)
-      remaining++
-      let called = false
-      const reaction: Reaction = (settled) => {
-        if (called) return
-        called = true
-        if (name === "race" || (!settled.ok && settled.error instanceof Interruption)) {
-          return decided(() => settleWith(made, settled))
-        }
-        if (name === "all") {
-          if (!settled.ok) return decided(() => made.reject(settled.error))
-          values[at] = settled.value as Value
-          return finish()
-        }
-        if (name === "any") {
-          if (settled.ok) return decided(() => made.resolve(settled.value as Value))
-          reasons[at] = materialize(ctx, settled.error)
-          return finish()
-        }
-        values[at] = settled.ok
-          ? record(ctx.builtins.Object, { status: "fulfilled", value: settled.value as Value })
-          : record(ctx.builtins.Object, { status: "rejected", reason: materialize(ctx, settled.error) })
-        finish()
-      }
-      attached.push([item, reaction])
+      const reaction: Reaction = { kind: "combinator", combination, index: index++, called: false }
+      combination.values.push(undefined)
+      combination.reasons.push(undefined)
+      combination.remaining++
+      combination.attached.push([item, reaction])
       runner.then(item, reaction)
     }
     if (name === "race" && index === 0) {
       throw typeError("Promise.race([]) would never settle; provide at least one promise or value.")
     }
-    finish()
+    finishCombination(ctx, combination)
   } catch (error) {
     made.reject(error)
   }
   return made.promise
+}
+
+// One member settled. Once the result settles early, the remaining members' reactions can do nothing: they are
+// detached so a member that stays pending for the rest of the program does not keep them.
+const combine = <R>(
+  ctx: Interpreter<R>,
+  reaction: Extract<Reaction, { readonly kind: "combinator" }>,
+  settled: Completion,
+) => {
+  if (reaction.called) return
+  reaction.called = true
+  const combination = reaction.combination
+  const made = combination.made
+  const name = combination.name
+  if (name === "race" || (!settled.ok && settled.error instanceof Interruption)) {
+    settleWith(made, settled)
+    return detachAll(ctx, combination)
+  }
+  if (name === "all") {
+    if (!settled.ok) {
+      made.reject(settled.error)
+      return detachAll(ctx, combination)
+    }
+    combination.values[reaction.index] = settled.value as Value
+    return finishCombination(ctx, combination)
+  }
+  if (name === "any") {
+    if (settled.ok) {
+      made.resolve(settled.value as Value)
+      return detachAll(ctx, combination)
+    }
+    combination.reasons[reaction.index] = materialize(ctx, settled.error)
+    return finishCombination(ctx, combination)
+  }
+  combination.values[reaction.index] = settled.ok
+    ? record(ctx.builtins.Object, { status: "fulfilled", value: settled.value as Value })
+    : record(ctx.builtins.Object, { status: "rejected", reason: materialize(ctx, settled.error) })
+  finishCombination(ctx, combination)
+}
+
+const detachAll = <R>(ctx: Interpreter<R>, combination: Combination) => {
+  for (const [item, reaction] of combination.attached) ctx.runner.detach(item, reaction)
+}
+
+const finishCombination = <R>(ctx: Interpreter<R>, combination: Combination) => {
+  if (--combination.remaining > 0) return
+  if (combination.name === "any") {
+    combination.made.reject(
+      new Throw(createAggregateErrorValue(ctx, combination.reasons, "All promises were rejected")),
+    )
+    return
+  }
+  combination.made.resolve(new Arr(ctx.builtins.Array, combination.values))
 }
 
 const instanceMethod = <R>(
@@ -181,7 +230,7 @@ const instanceMethod = <R>(
   const onFulfilled = name === "then" ? reactionHandler(args[0], method) : undefined
   const onRejected = reactionHandler(name === "then" ? args[1] : args[0], method)
   const made = capability(ctx, site)
-  ctx.runner.then(promise, handlerReaction(ctx, onFulfilled, onRejected, made))
+  ctx.runner.then(promise, { kind: "handler", onFulfilled, onRejected, derived: made })
   return made.promise
 }
 
@@ -193,37 +242,44 @@ const chainFinally = <R>(
   cleanup: Callable | undefined,
   site: AstNode | undefined,
 ): PromiseObj => {
-  const runner = ctx.runner
   const made = capability(ctx, site)
-  if (cleanup === undefined) {
-    runner.then(source, (settled) => settleWith(made, settled))
-    return made.promise
-  }
-  runner.then(source, (settled) => {
-    if (!settled.ok && settled.error instanceof Interruption) return made.reject(settled.error)
-    const body = function* (): Eval<void> {
-      let result: Value
-      try {
-        result = yield* ctx.call(cleanup, undefined, [])
-      } catch (error) {
-        made.reject(error)
-        return
-      }
-      let after: PromiseObj
-      try {
-        after = runner.promiseResolve(result)
-      } catch (error) {
-        made.reject(error)
-        return
-      }
-      // The spec chains `then(valueThunk)` onto the cleanup's promise: one more job before the outcome passes.
-      const derived = capability(ctx, site)
-      runner.then(after, (cleaned) => (cleaned.ok ? derived.resolve(undefined) : derived.reject(cleaned.error)))
-      runner.then(derived.promise, (cleaned) => settleWith(made, cleaned.ok ? settled : cleaned))
-    }
-    return { task: new Task([{ body: body(), boundary: undefined }]), input: normal(undefined) }
-  })
+  ctx.runner.then(
+    source,
+    cleanup === undefined ? { kind: "settle", target: made } : { kind: "finally", cleanup, target: made, site },
+  )
   return made.promise
+}
+
+const cleanUp = <R>(
+  ctx: Interpreter<R>,
+  reaction: Extract<Reaction, { readonly kind: "finally" }>,
+  settled: Completion,
+) => {
+  const runner = ctx.runner
+  const made = reaction.target
+  if (!settled.ok && settled.error instanceof Interruption) return made.reject(settled.error)
+  const cleanup = reaction.cleanup
+  const body = function* (): Eval<void> {
+    let result: Value
+    try {
+      result = yield* ctx.call(cleanup, undefined, [])
+    } catch (error) {
+      made.reject(error)
+      return
+    }
+    let after: PromiseObj
+    try {
+      after = runner.promiseResolve(result)
+    } catch (error) {
+      made.reject(error)
+      return
+    }
+    // The spec chains `then(valueThunk)` onto the cleanup's promise: one more job before the outcome passes.
+    const derived = capability(ctx, reaction.site)
+    runner.then(after, { kind: "finallyCleaned", target: derived })
+    runner.then(derived.promise, { kind: "finallyOutcome", target: made, outcome: settled })
+  }
+  return job(body())
 }
 
 const reactionHandler = (value: Value, method: string): Callable | undefined => {

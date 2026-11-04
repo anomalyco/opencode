@@ -4,7 +4,9 @@ import { locate, normalizeError } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { MAX_PENDING_PROMISES } from "./limits.js"
 import { type AstNode, type GeneratorRequestKind, PendingThrow, rangeError, typeError } from "./model.js"
-import { type Callable, get, Obj, PromiseObj, Resolver, type Value } from "./objects.js"
+import { type Callable, type GeneratorObj, get, Obj, PromiseObj, Resolver, type Value } from "./objects.js"
+import { react } from "./promises.js"
+import { fromJson, type Json } from "../data.js"
 import { typeofValue } from "./references.js"
 
 /**
@@ -113,10 +115,81 @@ export class Task {
   constructor(readonly stack: Array<Entry>) {}
 }
 
-/** A settled promise's reaction, run as a job: it either finishes at once or starts a task. */
-export type Reaction = (settled: Completion) => Start | void
-
 export type Start = { readonly task: Task; readonly input: Completion }
+
+/** What the member reactions of one `Promise.all`/`allSettled`/`race`/`any` share. */
+export type Combination = {
+  readonly name: "all" | "allSettled" | "race" | "any"
+  /** Settles the combinator's result. */
+  readonly made: Resolving
+  readonly values: Array<Value>
+  readonly reasons: Array<Value>
+  /** Members still to settle, plus one until iteration ends. */
+  remaining: number
+  /** Every member's reaction, detached once the result is decided. */
+  readonly attached: Array<readonly [PromiseObj, Reaction]>
+}
+
+/**
+ * A settled promise's reaction, as data. It runs as a job (see `react` in promises.ts) and either finishes at once or
+ * starts a task. The kinds:
+ * - `await`: resume the async body parked on the promise.
+ * - `settle`: pass the outcome on to `target`.
+ * - `handler`: `then`/`catch` handlers; the handler's result settles `derived`.
+ * - `combinator`: one member of a `Promise` combinator.
+ * - `finally`, `finallyCleaned`, `finallyOutcome`: the steps of `Promise.prototype.finally` with a cleanup.
+ * - `awaitReturn`: an async generator's `return(value)` once `value` settles.
+ * - `callback`: a host closure, still used by the async-from-sync iterator adapter.
+ */
+export type Reaction =
+  | { readonly kind: "await"; readonly task: Task }
+  | { readonly kind: "settle"; readonly target: Resolving }
+  | {
+      readonly kind: "handler"
+      readonly onFulfilled: Callable | undefined
+      readonly onRejected: Callable | undefined
+      readonly derived: Resolving
+    }
+  | { readonly kind: "combinator"; readonly combination: Combination; readonly index: number; called: boolean }
+  | {
+      readonly kind: "finally"
+      readonly cleanup: Callable
+      readonly target: Resolving
+      readonly site: AstNode | undefined
+    }
+  | { readonly kind: "finallyCleaned"; readonly target: Resolving }
+  | { readonly kind: "finallyOutcome"; readonly target: Resolving; readonly outcome: Completion }
+  | { readonly kind: "awaitReturn"; readonly generator: GeneratorObj }
+  | { readonly kind: "callback"; readonly run: (settled: Completion) => Start | void }
+
+/** One queued job, as data: run a settled promise's reaction, resume a task, or adopt a thenable. */
+export type Job =
+  | { readonly kind: "reaction"; readonly reaction: Reaction; readonly settled: Completion }
+  | { readonly kind: "resume"; readonly task: Task; readonly input: Completion }
+  | { readonly kind: "thenable"; readonly promise: PromiseObj; readonly thenable: Obj; readonly then: Value }
+
+/**
+ * Host work the program waits on: a tool or extension call, running as a fiber the runner keeps by `id`. Its outcome
+ * arrives as an inbox record and settles the call's promise in a later job.
+ */
+export class HostCall {
+  status: "inFlight" | "completed" = "inFlight"
+  constructor(
+    readonly id: number,
+    /** What runs: a tool path, or an extension function's label. */
+    readonly label: string,
+    /** A tool's arguments, as they crossed. */
+    readonly args: ReadonlyArray<Json | undefined> | undefined,
+    /** How the result becomes a program value: a tool's crosses as JSON, an extension's is already one. */
+    readonly result: "json" | "value",
+    readonly resolving: Resolving,
+    /** The call that started the work, where a defect it raises is located. */
+    readonly site: AstNode | undefined,
+  ) {}
+}
+
+/** A host call's outcome, waiting to be delivered. */
+type Delivery = { readonly call: HostCall; readonly completion: Completion }
 
 /**
  * CreateResolvingFunctions as data: settles one promise at most once, however many `Resolver`s share it. `reject` takes
@@ -142,8 +215,6 @@ export class Resolving {
     this.runner.reject(this.promise, locate(reason, this.site))
   }
 }
-
-type Job = () => Start | void
 
 type Pause =
   | { readonly kind: "slice"; readonly input: Completion }
@@ -174,12 +245,14 @@ export class Runner<R> {
   private sliceStart = 0
   private pending = 0
   private nextID = 0
+  private nextHostID = 0
   /** Rejections nothing handled yet, described when they happened so reporting them at the end is cheap. */
   private readonly unhandled = new Map<PromiseObj, Diagnostic>()
   /** Bodies suspended at an `await` and the promise each waits on, so a stall can point at the one that is stuck. */
   private readonly parked = new Map<Task, { readonly promise: PromiseObj; readonly node: AstNode | undefined }>()
-  private readonly fibers = new Set<Fiber.Fiber<unknown, unknown>>()
-  private readonly inbox: Array<() => void> = []
+  /** Running host work by `HostCall` id; fibers stay here and never become part of the program's state. */
+  private readonly fibers = new Map<number, Fiber.Fiber<unknown, unknown>>()
+  private readonly inbox: Array<Delivery> = []
   private wake: (() => void) | undefined
   private stopping = false
 
@@ -218,13 +291,13 @@ export class Runner<R> {
         if (start === undefined) {
           const job = self.dequeue()
           if (job !== undefined) {
-            start = job() ?? undefined
+            start = self.runJob(job) ?? undefined
             if (start === undefined && self.tick()) yield* self.yieldToHost
             continue
           }
-          const settle = self.inbox.shift()
-          if (settle !== undefined) {
-            settle()
+          const delivery = self.inbox.shift()
+          if (delivery !== undefined) {
+            self.deliver(delivery)
             continue
           }
           if (self.fibers.size > 0) {
@@ -267,7 +340,7 @@ export class Runner<R> {
     const self = this
     return Effect.gen(function* () {
       self.stopping = true
-      while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers])
+      while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers.values()])
     })
   }
 
@@ -276,7 +349,8 @@ export class Runner<R> {
    * program did settles first, so its failures count even though no later job ran.
    */
   diagnostics(): Array<Diagnostic> {
-    for (let settle = this.inbox.shift(); settle !== undefined; settle = this.inbox.shift()) settle()
+    for (let delivery = this.inbox.shift(); delivery !== undefined; delivery = this.inbox.shift())
+      this.deliver(delivery)
     return [...this.unhandled].sort(([left], [right]) => left.id - right.id).map(([, diagnostic]) => diagnostic)
   }
 
@@ -297,32 +371,52 @@ export class Runner<R> {
   }
 
   /**
-   * Starts host work now; its completion settles through `settle` in a later job, in completion order. A defect is
-   * located at `site`, the call that started the work.
+   * Starts host work now, settling `resolving`'s promise in a later job, in completion order. A defect is located at
+   * `site`, the call that started the work.
    */
-  host(effect: Effect.Effect<unknown, unknown, R>, settle: (completion: Completion) => void, site?: AstNode): void {
+  host(
+    effect: Effect.Effect<unknown, unknown, R>,
+    call: {
+      readonly label: string
+      readonly args?: ReadonlyArray<Json | undefined>
+      readonly result: "json" | "value"
+      readonly resolving: Resolving
+      readonly site: AstNode | undefined
+    },
+  ): HostCall {
+    const record = new HostCall(this.nextHostID++, call.label, call.args, call.result, call.resolving, call.site)
     // Starts synchronously, so admission and hooks happen at the call site.
     const fiber = Effect.runForkWith(this.services)(effect)
-    this.fibers.add(fiber)
+    this.fibers.set(record.id, fiber)
     fiber.addObserver((exit) => {
-      this.fibers.delete(fiber)
+      this.fibers.delete(record.id)
       // Interrupted by the program ending: nothing is left to settle.
       if (this.stopping) return
-      this.inbox.push(() =>
-        settle(
-          Exit.isSuccess(exit)
-            ? normal(exit.value)
-            : abrupt(
-                Cause.hasInterruptsOnly(exit.cause)
-                  ? new Interruption(exit.cause)
-                  : Cause.hasDies(exit.cause)
-                    ? locate(Cause.squash(exit.cause), site)
-                    : Cause.squash(exit.cause),
-              ),
-        ),
-      )
+      this.inbox.push({
+        call: record,
+        completion: Exit.isSuccess(exit)
+          ? normal(exit.value)
+          : abrupt(
+              Cause.hasInterruptsOnly(exit.cause)
+                ? new Interruption(exit.cause)
+                : Cause.hasDies(exit.cause)
+                  ? locate(Cause.squash(exit.cause), record.site)
+                  : Cause.squash(exit.cause),
+            ),
+      })
       this.wake?.()
     })
+    return record
+  }
+
+  private deliver(delivery: Delivery): void {
+    const call = delivery.call
+    const completion = delivery.completion
+    call.status = "completed"
+    if (!completion.ok) return call.resolving.reject(completion.error)
+    call.resolving.resolve(
+      call.result === "json" ? fromJson(this.ctx, completion.value as Json | undefined) : (completion.value as Value),
+    )
   }
 
   // --- Promise abstract operations ---
@@ -348,7 +442,7 @@ export class Runner<R> {
     else {
       if (promise.state === "rejected") this.unhandled.delete(promise)
       const settled = promise.state === "fulfilled" ? normal(promise.result) : abrupt(promise.result)
-      this.enqueue(() => reaction(settled))
+      this.enqueue({ kind: "reaction", reaction, settled })
     }
     promise.handled = true
   }
@@ -386,7 +480,7 @@ export class Runner<R> {
         message: `Unhandled rejection from an un-awaited promise: ${failure.message}`,
       })
     }
-    for (const reaction of reactions) this.enqueue(() => reaction(completion))
+    for (const reaction of reactions) this.enqueue({ kind: "reaction", reaction, settled: completion })
   }
 
   /** ResolvePromise: adopts a thenable, otherwise fulfills. */
@@ -398,7 +492,7 @@ export class Runner<R> {
     if (!(resolution instanceof Obj)) return this.settle(promise, normal(resolution))
     const then = get(resolution, "then")
     if (typeofValue(then) !== "function") return this.settle(promise, normal(resolution))
-    this.enqueue(() => this.thenableJob(promise, resolution, then))
+    this.enqueue({ kind: "thenable", promise, thenable: resolution, then })
   }
 
   // NewPromiseResolveThenableJob. Adopting a native promise through the intrinsic `then` takes the same jobs as
@@ -406,9 +500,7 @@ export class Runner<R> {
   private thenableJob(promise: PromiseObj, thenable: Obj, then: Value): Start | void {
     const resolving = this.resolving(promise)
     if (then === this.intrinsicThen && thenable instanceof PromiseObj) {
-      this.then(thenable, (settled) =>
-        settled.ok ? resolving.resolve(settled.value as Value) : resolving.reject(settled.error),
-      )
+      this.then(thenable, { kind: "settle", target: resolving })
       return
     }
     const proto = this.ctx.builtins.Function
@@ -423,6 +515,15 @@ export class Runner<R> {
       }
     }
     return { task: new Task([{ body: body(), boundary: undefined }]), input: normal(undefined) }
+  }
+
+  private runJob(job: Job): Start | void {
+    if (job.kind === "resume") return { task: job.task, input: job.input }
+    if (job.kind === "thenable") return this.thenableJob(job.promise, job.thenable, job.then)
+    const reaction = job.reaction
+    if (reaction.kind !== "await") return react(this.ctx, reaction, job.settled)
+    this.parked.delete(reaction.task)
+    return { task: reaction.task, input: job.settled }
   }
 
   // --- Driver ---
@@ -476,10 +577,7 @@ export class Runner<R> {
         const boundary = stack[index]!.boundary!
         const continuation = new Task(stack.splice(index))
         this.parked.set(continuation, { promise, node: signal.node })
-        this.then(promise, (settled) => {
-          this.parked.delete(continuation)
-          return { task: continuation, input: settled }
-        })
+        this.then(promise, { kind: "await", task: continuation })
         completion = boundary.suspended()
         continue
       }

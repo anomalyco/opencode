@@ -583,14 +583,13 @@ class Frame<R> {
     const body = function* (): Eval<void> {
       const json: Array<Json | undefined> = []
       for (const arg of args) json.push(yield* toBoundary(ctx, arg))
-      runner.host(
-        ctx.tools.execute(path, json),
-        (settled) =>
-          settled.ok
-            ? resolving.resolve(fromJson(ctx, settled.value as Json | undefined))
-            : resolving.reject(settled.error),
+      runner.host(ctx.tools.execute(path, json), {
+        label: path.join("."),
+        args: json,
+        result: "json",
+        resolving,
         site,
-      )
+      })
     }
     return (yield new Call(
       body(),
@@ -1029,12 +1028,14 @@ class Frame<R> {
         wrapper = runner.promiseResolve(step.value)
       } catch (error) {
         const start = rejected(error)
-        if (start !== undefined) runner.enqueue(() => start)
+        if (start !== undefined) runner.enqueue({ kind: "resume", task: start.task, input: start.input })
         return
       }
-      runner.then(wrapper, (settled) =>
-        settled.ok ? made.resolve(result(settled.value as Value, step.done)) : rejected(settled.error),
-      )
+      runner.then(wrapper, {
+        kind: "callback",
+        run: (settled) =>
+          settled.ok ? made.resolve(result(settled.value as Value, step.done)) : rejected(settled.error),
+      })
     }
     const next = asyncFromSyncMethod(builtins, "next", function* (_, args) {
       const made = capability(ctx, node)
