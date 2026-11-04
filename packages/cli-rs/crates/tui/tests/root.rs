@@ -36,6 +36,7 @@ fn routes() -> Vec<MemoryRoute> {
     };
     vec![
         MemoryRoute::json("GET", "/api/location", 200, &location),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([agent]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([model]))),
         MemoryRoute::json(

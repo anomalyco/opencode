@@ -38,6 +38,12 @@ fn routes(persistent_pty: bool) -> Vec<MemoryRoute> {
     let mut routes = vec![
         MemoryRoute::json(
             "GET",
+            "/api/session",
+            200,
+            &json!({ "data": [], "cursor": {} }),
+        ),
+        MemoryRoute::json(
+            "GET",
             "/api/info",
             200,
             &json!({ "version": "test", "pid": 0, "urls": [], "paths": { "tmp": "/tmp" },
