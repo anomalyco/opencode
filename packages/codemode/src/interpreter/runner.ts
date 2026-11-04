@@ -24,6 +24,7 @@ export {
   type GeneratorRequest,
   Host,
   Interruption,
+  Invoke,
   isEval,
   MAX_CALL_DEPTH,
   normal,
@@ -43,6 +44,7 @@ import {
   type Eval,
   Host,
   Interruption,
+  Invoke,
   normal,
   type Signal,
   Task,
@@ -479,6 +481,19 @@ export class Runner<R> {
       const signal = step.value
       if (signal instanceof Call) {
         stack.push({ body: signal.body, boundary: signal.boundary })
+        completion = normal(undefined)
+        if (this.tick()) return { kind: "slice", input: completion }
+        continue
+      }
+      if (signal instanceof Invoke) {
+        let call: Call
+        try {
+          call = this.ctx.enter(signal)
+        } catch (error) {
+          completion = abrupt(error)
+          continue
+        }
+        stack.push({ body: call.body, boundary: call.boundary })
         completion = normal(undefined)
         if (this.tick()) return { kind: "slice", input: completion }
         continue

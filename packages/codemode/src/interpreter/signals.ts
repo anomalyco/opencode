@@ -74,7 +74,20 @@ export class Interruption {
 /** Let the host run; the current job continues before any other job. */
 export const Slice: unique symbol = Symbol("codemode.slice")
 
-export type Signal = Call | Enter | Await | Yield | Host | typeof Slice
+/**
+ * Call a program function from inside interpreter work. The machine evaluator answers it on its own stack; the
+ * runner, when it reaches it, starts the call as a new activation.
+ */
+export class Invoke {
+  constructor(
+    readonly callable: Value,
+    readonly thisValue: Value,
+    readonly args: Array<Value>,
+    readonly site: AstNode | undefined,
+  ) {}
+}
+
+export type Signal = Call | Enter | Await | Yield | Host | Invoke | typeof Slice
 
 /** What a generator body continues with: the `next`, `return`, or `throw` call that resumed it. */
 export type GeneratorRequest = { readonly kind: GeneratorRequestKind; readonly value: Value }

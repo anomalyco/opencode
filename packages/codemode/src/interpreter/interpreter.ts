@@ -97,11 +97,13 @@ import { type Hint, preserveConsumerError, toPrimitive } from "./callback.js"
 import {
   AsyncBoundary,
   Await,
+  type Body,
   Call,
   type Eval,
   generatorBody,
   type GeneratorRequest,
   Interruption,
+  Invoke,
   isEval,
   MAX_CALL_DEPTH,
   Runner,
@@ -115,6 +117,7 @@ import { describeValue, isOpaque, typeofValue } from "./references.js"
 import { native } from "./native.js"
 import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
+import { type Evaluator, Machine } from "../machine/machine.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
 import type { NodeId, Source } from "./source.js"
 import { constructRegExp } from "../stdlib/regexp.js"
@@ -176,6 +179,8 @@ export class Interpreter<R> {
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
   readonly sources = new Map<string, Source>()
+  /** The machine evaluator, when this execution runs on it instead of the generator evaluator. */
+  readonly machine: Machine | undefined
   private readonly root: Frame<R>
   private readonly globalScope: Map<string, Binding>
   private readonly modules = new Map<string, Value>()
@@ -188,11 +193,15 @@ export class Interpreter<R> {
     readonly builtins: Builtins
     readonly logs?: Array<string>
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
+    /** Which evaluator runs program code; the generator evaluator unless the machine is asked for. */
+    readonly evaluator?: Evaluator
   }) {
     this.tools = options.tools
     this.builtins = options.builtins
     this.logs = options.logs ?? []
     this.runner = new Runner(this, options.services)
+    // The machine never runs host work with the caller's services itself; it asks the runner, which is typed by them.
+    this.machine = options.evaluator === "machine" ? new Machine(this as Interpreter<unknown>) : undefined
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
@@ -242,9 +251,24 @@ export class Interpreter<R> {
   }
 
   /** The program's body, as the first job: its completion value, copied out for the host. */
-  *main(source: Source): Eval<Json | undefined> {
+  main(source: Source): Body {
     this.sources.set(source.id, source)
+    return this.machine === undefined ? this.legacyMain(source) : this.machine.program(source)
+  }
+
+  private *legacyMain(source: Source): Eval<Json | undefined> {
     return yield* toBoundary(this, yield* this.root.run(source.program))
+  }
+
+  /** A new chain over the global scope, where the program's own scope is pushed. */
+  programScopes(): ScopeStack {
+    return new ScopeStack([this.globalScope])
+  }
+
+  /** Starts a program call the runner reached outside the machine as its own activation. */
+  enter(invoke: Invoke): Call {
+    if (this.machine === undefined) throw new TypeError("Invoke reached the runner without the machine evaluator.")
+    return this.machine.enter(invoke)
   }
 
   // The call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
@@ -278,6 +302,15 @@ export class Interpreter<R> {
     )) as Value
   }
 
+  /** `yield*` in a generator body, as interpreter work; the machine evaluator runs it as a native frame for now. */
+  delegateYield(value: Value, node: AstNode, asynchronous: boolean): Eval<Value> {
+    return this.root.delegateYield(value, node, asynchronous)
+  }
+
+  /** CreateAsyncFromSyncIterator, for `for await` over a synchronous iterable. */
+  asyncFromSync(builtin: Cursor | undefined, custom: CustomIterator | undefined, node: AstNode | undefined) {
+    return this.root.asyncFromSync(builtin, custom, node)
+  }
 
   /** The node a `NodeId` names, in one of this execution's sources. */
   node(id: NodeId): AstNode | undefined {
@@ -1538,7 +1571,7 @@ class Frame<R> {
     const args = yield* this.evaluateCallArguments(node.arguments)
     const result = this.dispatch(callable, thisValue, args, node, callee)
     if (isEval(result)) return yield* result
-    return result instanceof Call ? ((yield result) as Value) : result
+    return result instanceof Call || result instanceof Invoke ? ((yield result) as Value) : result
   }
 
   private *readMethod(node: MemberExpression): Eval<{ callable: Value; thisValue: Value }> {
@@ -1552,7 +1585,7 @@ class Frame<R> {
   *call(callable: Value, thisValue: Value, args: Array<Value>, node?: AstNode, callee?: Expression): Eval<Value> {
     const result = this.dispatch(callable, thisValue, args, node, callee)
     if (isEval(result)) return yield* result
-    return result instanceof Call ? ((yield result) as Value) : result
+    return result instanceof Call || result instanceof Invoke ? ((yield result) as Value) : result
   }
 
   // The single dispatch for every invocation: call expressions and callbacks share it. A program function is a `Call`
@@ -1563,8 +1596,11 @@ class Frame<R> {
     args: Array<Value>,
     node?: AstNode,
     callee?: Expression,
-  ): Value | Eval<Value> | Call {
-    if (callable instanceof Fn) return this.invokeFunction(callable, thisValue, args, node)
+  ): Value | Eval<Value> | Call | Invoke {
+    if (callable instanceof Fn) {
+      if (this.ctx.machine !== undefined) return new Invoke(callable, thisValue, args, node)
+      return this.invokeFunction(callable, thisValue, args, node)
+    }
     if (callable instanceof Builtin) {
       const ctx = this.ctx
       // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call.

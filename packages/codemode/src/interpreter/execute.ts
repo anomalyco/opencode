@@ -9,6 +9,7 @@ import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
 import type { Runner } from "./runner.js"
 import { Source } from "./source.js"
+import type { Evaluator } from "../machine/machine.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -39,7 +40,7 @@ export const executeProgram = <R>(
       const parsed = parseProgram(code)
       if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] } satisfies Result
       const services = yield* Effect.context<R>()
-      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
+      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals, evaluator: evaluator() })
       runner = ctx.runner
       const outcome = yield* runner.run(ctx.main(parsed.source))
       if (!outcome.ok) {
@@ -110,6 +111,9 @@ export const executeProgram = <R>(
     )
   })
 }
+
+// Internal while the machine evaluator is ported: `CODEMODE_EVALUATOR=machine` runs programs on it.
+const evaluator = (): Evaluator => (process.env.CODEMODE_EVALUATOR === "machine" ? "machine" : "legacy")
 
 export const parseProgram = (
   code: string,
