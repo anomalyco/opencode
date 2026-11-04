@@ -22,15 +22,17 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     (conn) => global.servers.health[ServerConnection.key(conn)]?.healthy !== false,
   )
 
-  const loaders = servers.map((conn) => {
-    const ctx = global.ensureServerCtx(conn)
+  const loaders = servers.flatMap((conn) => {
+    const ctx = global.serverCtx(conn)
+
+    if (!ctx) return []
 
     const load = createServerSessionEntries({
       server: ServerConnection.key(conn),
       archived: props.archived,
       known: props.archived
         ? () => ctx.data.session.list().filter((session) => !session.parentID)
-        : createKnownServerSessions(ctx),
+        : createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
       load: (search, signal) =>
@@ -53,10 +55,12 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
             description: language.t("palette.session.location", { project: entry.description ?? "", server: tag }),
           }))
 
-    return {
-      items: (query: string) => format(load.items(query)),
-      search: (query: string) => load.search(query).then(format),
-    }
+    return [
+      {
+        items: (query: string) => format(load.items(query)),
+        search: (query: string) => load.search(query).then(format),
+      },
+    ]
   })
 
   const items = (query: string) => {
@@ -85,15 +89,15 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     const open = () => {
       dialog.close()
 
-      if (conn && directory) global.ensureServerCtx(conn).projects.touch(directory)
+      if (conn && directory) global.serverCtx(conn)?.projects.touch(directory)
       void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId })))
     }
 
     if (!props.archived) return open()
 
-    if (!conn) return
+    const ctx = conn ? global.serverCtx(conn) : undefined
 
-    const ctx = global.ensureServerCtx(conn)
+    if (!ctx) return
 
     void ctx.sdk.api.session
       .update({ sessionID: sessionId, archived: false })

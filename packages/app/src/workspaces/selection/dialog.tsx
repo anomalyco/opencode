@@ -15,7 +15,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { getFilename } from "@opencode/util/path"
 import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { inferHomeDirectory } from "@/runtime/server/global-sync/bootstrap"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
@@ -60,9 +60,8 @@ interface DirectoryPickerDialogProps {
 }
 
 export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
-  const global = useGlobal()
   const servers = useServers()
-  const serverCtx = global.ensureServerCtx(props.server)
+  const serverCtx = useServer().ctx
   const sync = serverCtx.sync
   const sdk = serverCtx.sdk
   const dialog = useDialog()

@@ -257,7 +257,7 @@ export function createSettingsSearchCatalog() {
 
   const inventory = createMemo(() =>
     servers().map((server) => {
-      const context = server.connection ? global.ensureServerCtx(server.connection) : undefined
+      const context = server.connection ? global.serverCtx(server.connection) : undefined
 
       return {
         ...server,

@@ -1,5 +1,6 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { ServerProvider } from "@/runtime/server/current"
 import { usePlatform } from "@/runtime/platform/platform"
 import { lazy, Suspense } from "solid-js"
 import type { LocationRef } from "@opencode/client/promise"
@@ -44,11 +45,14 @@ export function useDirectoryPicker() {
     }
 
     // Dialogs render under the caller's owner, so loading the lazy chunk would otherwise suspend the caller's boundary.
+    // The picker reads the server through its live controller, and closes its content while the server signs in again.
     dialog.show(
       () => (
-        <Suspense>
-          <DirectoryPickerDialog {...input} onSelect={onSelect} />
-        </Suspense>
+        <ServerProvider conn={input.server}>
+          <Suspense>
+            <DirectoryPickerDialog {...input} onSelect={onSelect} />
+          </Suspense>
+        </ServerProvider>
       ),
       cancel,
     )
