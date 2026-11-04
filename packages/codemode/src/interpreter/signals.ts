@@ -109,9 +109,6 @@ export class AsyncBoundary implements Boundary {
   readonly async = true
   readonly generator = false
   constructor(readonly resolving: Resolving) {}
-  get result(): Value {
-    return this.resolving.promise
-  }
   finish(completion: Completion): Completion {
     if (!completion.ok) this.resolving.reject(completion.error)
     return normal(this.resolving.promise)

@@ -316,7 +316,15 @@ export class Machine {
       return
     }
     if (signal instanceof Host) {
-      const call = new HostCall(this.nextHostID++, signal.request, "", true, "value", undefined, undefined)
+      const call = new HostCall(
+        this.nextHostID++,
+        signal.request,
+        signal.request.kind,
+        true,
+        "value",
+        undefined,
+        undefined,
+      )
       this.queued.push(call)
       return
     }
