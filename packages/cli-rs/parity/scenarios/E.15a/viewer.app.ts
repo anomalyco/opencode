@@ -25,8 +25,6 @@ const files = await repoDiff(
 )
 
 const here = { directory: "/tmp/opencode/packages/tui", project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
-// The prompt footer row beside the docked viewer (P01-read-only-prompt).
-const footer = { x: 0, y: 38, width: 70, height: 1, reason: "prompt footer hints and label width (P01-read-only-prompt)" }
 
 export default defineApp({
   width: 140,
@@ -44,16 +42,16 @@ export default defineApp({
     { path: "/api/vcs/diff", json: { location: here, data: files } },
   ],
   steps: [
-    { checkpoint: "session", until: "The parser changes are ready.", masks: [footer] },
+    { checkpoint: "session", until: "The parser changes are ready." },
     { type: "/diff" },
     { keys: ["enter"] },
-    { checkpoint: "panel", until: "vs main", masks: [footer] },
+    { checkpoint: "panel", until: "vs main" },
     { keys: ["]"] },
-    { checkpoint: "hunk", masks: [footer] },
+    { checkpoint: "hunk" },
     { keys: ["n"] },
-    { checkpoint: "file", masks: [footer] },
+    { checkpoint: "file" },
     { keys: ["m"] },
-    { checkpoint: "reviewed", masks: [footer] },
+    { checkpoint: "reviewed" },
     { keys: ["f"] },
     { checkpoint: "full", until: "▾ src" },
     { keys: ["v"] },
@@ -63,6 +61,6 @@ export default defineApp({
     { keys: ["b"] },
     { checkpoint: "no-tree" },
     { keys: ["q"] },
-    { checkpoint: "closed", until: "The parser changes are ready.", masks: [footer] },
+    { checkpoint: "closed", until: "The parser changes are ready." },
   ],
 })
