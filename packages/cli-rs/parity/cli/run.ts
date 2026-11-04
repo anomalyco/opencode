@@ -47,6 +47,9 @@ export type CliCase = {
   masks?: { pattern: RegExp; replacement: string }[]
   // Sends `name` to the client once a request for `after` (a path) has reached the fake server.
   signal?: { after: string; name: NodeJS.Signals }
+  // P-FILE: files read back after the run into the record (`null` when missing), by path under the sandbox
+  // root (`work/...` is the working directory, `home/.config/...` the XDG config).
+  collect?: string[]
 }
 
 export function defineCli(value: CliCase) {
@@ -85,6 +88,16 @@ export async function runCli(side: Side, value: CliCase) {
     proc.exited,
   ])
   await server?.stop()
+  const files = value.collect
+    ? Object.fromEntries(
+        await Promise.all(
+          value.collect.map(async (file) => {
+            const handle = Bun.file(path.join(box.root, file))
+            return [file, (await handle.exists()) ? await handle.text() : null] as const
+          }),
+        ),
+      )
+    : undefined
   await rm(box.root, { recursive: true, force: true })
   const context = { server: server?.url, root: box.root }
   const mask = (text: string) =>
@@ -101,6 +114,7 @@ export async function runCli(side: Side, value: CliCase) {
       ),
     ),
     requests: { reads: requests.reads.map(mask), writes: requests.writes.map(mask) },
+    ...(files ? { files } : {}),
   }
 }
 
