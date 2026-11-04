@@ -16,7 +16,15 @@ const url = "http://remote.test"
 const key = ServerKey.make(url)
 const ssh = ServerKey.make("ssh:box")
 
-const http = (password: string): ServerConnection.Http => ({ type: "http", http: { url, password } })
+// The registry hands out the same connection object until it changes, as the store does.
+const connections = new Map<string, ServerConnection.Http>()
+
+const http = (password: string) => {
+  const conn: ServerConnection.Http = connections.get(password) ?? { type: "http", http: { url, password } }
+  connections.set(password, conn)
+
+  return conn
+}
 
 const plugin = (state: ServerConnection.Plugin["state"], password: string): ServerConnection.Plugin => ({
   type: "plugin",
@@ -48,9 +56,12 @@ const reported = (
 
 const rejected = { healthy: false, unauthorized: true }
 
-/** Plays the driver: every `create` effect reports a controller named `ctx<attempt>`, and the log keeps the order. */
+// Controllers dispose long after the run that created them, so every run appends to one log.
+const log: string[] = []
+
+/** Plays the driver: every `create` effect reports a controller named `ctx<attempt>`; returns what this run logged. */
 function run(state: ServerControllersState<Ctx>, event: ServerControllersEvent<Ctx>) {
-  const log: string[] = []
+  const from = log.length
 
   const step = (
     current: ServerControllersState<Ctx>,
@@ -78,7 +89,9 @@ function run(state: ServerControllersState<Ctx>, event: ServerControllersEvent<C
     }, result.state)
   }
 
-  return { state: step(state, event), log }
+  const next = step(state, event)
+
+  return { state: next, log: log.slice(from) }
 }
 
 function live(conn: ServerConnection.Any) {
