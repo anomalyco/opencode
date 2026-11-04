@@ -446,8 +446,8 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
         "   › glob\n",
         "   ✓ execute\n",
         "   ✗ execute\n",
-        "      ↳ Error: boom\n",
-        "           at main\n",
+        "\n     ↳ Error: boom\n",
+        "\n         at main\n",
     ] {
         assert!(screen.contains(line), "{line:?} missing:\n{screen}");
     }
