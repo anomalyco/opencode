@@ -10,8 +10,7 @@ use crate::theme::Theme;
 /// The capture styles for code, Markdown, and the prompt, from the TUI theme: a port of `generateSyntax`
 /// (`packages/theme/src/tui/syntax.ts`). Rules apply in order, so a scope listed twice keeps its last style.
 ///
-/// Core falls back from an unstyled `a.b.c` to `a`; [`SyntaxTheme::get`] falls back to the longest styled prefix,
-/// `a.b`. The two agree for every scope below and differ only for deeper captures under a styled two-part scope.
+/// A name without a style falls back to its first dotted part, as in Core: `string.special.path` takes `string`.
 pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
     let syntax = &theme.syntax;
     let markdown = &theme.markdown;
@@ -193,7 +192,7 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
         (&["warning"], fg(feedback.warning.base).bold()),
         (&["info"], fg(feedback.info.base)),
     ];
-    let mut styles = SyntaxTheme::new();
+    let mut styles = SyntaxTheme::new().first_part_fallback();
     for (scopes, style) in rules {
         for scope in scopes {
             styles.set(*scope, style);
@@ -211,6 +210,7 @@ pub fn view(
     filetype: Option<&str>,
     content: &str,
 ) -> Code {
+    crate::grammars::register();
     Code::new(app)
         .fg(theme.text.base)
         .syntax_theme(syntax.clone())

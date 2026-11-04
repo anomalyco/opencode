@@ -107,6 +107,7 @@ pub fn view(
     wrap: WrapMode,
     gutter_padding: u32,
 ) -> View {
+    crate::grammars::register();
     let gutter = DiffGutter {
         padding_left: 1 + gutter_padding,
         min_digits: Some(last_line(patch).to_string().len() as u32),
