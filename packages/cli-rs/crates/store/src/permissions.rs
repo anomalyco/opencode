@@ -54,10 +54,10 @@ impl Data {
     /// Reads pending permissions once per invalidation (`permission.sync`).
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
         let session = session.clone();
-        self.sync_run(
+        self.sync_start(
             format!("session.permission:{}", session.0),
-            move |data| async move {
-                let started = data.read(|state| state.deletion_epoch);
+            |state| state.deletion_epoch,
+            move |data, started| async move {
                 let list = data
                     .client()
                     .permission_list(

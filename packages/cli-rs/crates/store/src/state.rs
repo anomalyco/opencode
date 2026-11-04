@@ -79,6 +79,8 @@ pub struct State {
     pub(crate) omit_file_data: bool,
 
     pub(crate) log: Log,
+    /// A `server.connected` arrived before; the next one is a reconnect.
+    pub(crate) connected: bool,
     pub(crate) syncs: Syncs,
     /// Batches being applied; flushes wait for the outermost.
     pub(crate) batch: u32,
@@ -86,7 +88,7 @@ pub struct State {
     /// Status events received while a `session.active` snapshot is in flight, by connection.
     pub(crate) active_updates: Option<(u64, StatusUpdates)>,
     /// Inbox events received while an inbox read is in flight, by read.
-    pub(crate) pending_updates: HashMap<SessionID, (u64, HashMap<String, PendingUpdate>)>,
+    pub(crate) pending_updates: HashMap<SessionID, (u64, IndexMap<String, PendingUpdate>)>,
     /// Inbox IDs of optimistic admissions the server has not acknowledged.
     pub(crate) outbox: HashSet<String>,
     /// Session IDs of optimistic creations the server has not acknowledged.
@@ -126,6 +128,12 @@ impl State {
     /// The revision of the last flush.
     pub fn revision(&self) -> u64 {
         self.log.revision()
+    }
+
+    /// The current revision and what changed after `seen`. Inside [`Data::read`], a view gets
+    /// the changes and the state they describe under one lock, so no flush lands in between.
+    pub fn changes_since(&self, seen: u64) -> (u64, Changes) {
+        (self.log.revision(), self.log.since(seen))
     }
 
     pub(crate) fn clear_deleted(&mut self, id: &SessionID) {
@@ -323,7 +331,7 @@ impl Data {
 
     /// The current revision and what changed after `seen`.
     pub fn changes_since(&self, seen: u64) -> (u64, Changes) {
-        self.read(|state| (state.log.revision(), state.log.since(seen)))
+        self.read(|state| state.changes_since(seen))
     }
 
     /// Mutates the state and flushes its changes unless a batch is open.
@@ -374,10 +382,17 @@ impl Data {
 
     /// Runs a follow-up read unless offline or disposed (`refresh`). A `SessionNotFoundError`
     /// marks the session deleted; other failures go to [`Data::on_error`].
-    pub(crate) fn refresh(&self, future: impl Future<Output = Result<(), Error>> + Send + 'static) {
+    ///
+    /// Store reads start when they are built, so `load` builds the read only after the check, as
+    /// the TS `refresh` calls its `load` only when connected.
+    pub(crate) fn refresh<F>(&self, load: impl FnOnce(Data) -> F)
+    where
+        F: Future<Output = Result<(), Error>> + Send + 'static,
+    {
         if !self.live() {
             return;
         }
+        let future = load(self.clone());
         let data = self.clone();
         self.inner.runtime.spawn(async move {
             let Err(error) = future.await else {
@@ -402,24 +417,30 @@ impl Data {
     }
 
     /// Runs `load` once per key until invalidated (`sync.run`).
-    pub(crate) fn sync_run<F>(&self, key: String, load: impl FnOnce(Data) -> F) -> Task<()>
+    pub(crate) fn sync_run<F>(
+        &self,
+        key: String,
+        load: impl FnOnce(Data) -> F + Send + 'static,
+    ) -> Task<()>
     where
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
-        self.sync_start(key, |_| (), move |data, _| load(data))
+        self.sync_start(key, |_| (), move |data, ()| load(data))
     }
 
-    /// [`Data::sync_run`] with a synchronous start: `begin` runs under the lock when the load
-    /// starts at once, as the synchronous part of a TS load does, so no event after the call can
-    /// miss what it registers. A reload that waits for the load it replaces gets `None` and
-    /// registers when it starts.
+    /// [`Data::sync_run`] with a synchronous start, as the part of a TS load before its first
+    /// `await`. `begin` runs under the store lock before this returns, or, for a reload that waits
+    /// for the load it replaces, under the lock right after that wait. So no event after the call
+    /// can miss what it registers (an overtake log, the deletion epoch). `load` builds the read
+    /// from what `begin` returned, outside the lock.
     pub(crate) fn sync_start<R, F>(
         &self,
         key: String,
-        begin: impl FnOnce(&mut State) -> R,
-        load: impl FnOnce(Data, Option<R>) -> F,
+        begin: impl FnOnce(&mut State) -> R + Send + 'static,
+        load: impl FnOnce(Data, R) -> F + Send + 'static,
     ) -> Task<()>
     where
+        R: Send + 'static,
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
         let mut state = self.lock();
@@ -437,18 +458,26 @@ impl Data {
         };
         let token = state.token();
         let started = Arc::new(AtomicBool::new(wait.is_none()));
-        let begun = wait.is_none().then(|| begin(&mut state));
-        let load = load(self.clone(), begun);
+        let start = match wait {
+            None => Start::Begun(begin(&mut state)),
+            Some(wait) => Start::After(wait, begin),
+        };
         let data = self.clone();
         let flag = started.clone();
         let settle = key.clone();
         // Spawned under the lock, so its settlement cannot run before the entry exists.
         let task = self.spawn(async move {
-            if let Some(wait) = wait {
-                let _ = wait.await;
-                flag.store(true, Ordering::SeqCst);
-            }
-            let result = load.await;
+            let begun = match start {
+                Start::Begun(begun) => begun,
+                Start::After(wait, begin) => {
+                    let _ = wait.await;
+                    data.write(|state| {
+                        flag.store(true, Ordering::SeqCst);
+                        begin(state)
+                    })
+                }
+            };
+            let result = load(data.clone(), begun).await;
             data.write(|state| state.syncs.settle(&settle, token, result.is_ok()));
             result
         });
@@ -463,6 +492,12 @@ impl Data {
         );
         task
     }
+}
+
+/// How a keyed load starts: begun under the caller's lock, or after the load it replaces.
+enum Start<R, B> {
+    Begun(R),
+    After(Task<()>, B),
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
