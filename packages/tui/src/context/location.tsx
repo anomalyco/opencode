@@ -47,7 +47,7 @@ export function LocationProvider(props: ParentProps) {
       delay: 1_000,
       maxDelay: 5_000,
       timeout: LOCATION_READY_TIMEOUT,
-      retryIf: (cause) => generation === attempt && !isLocationNotFoundError(cause),
+      retryIf: (cause) => generation === attempt && isServiceUnavailableError(cause),
     }).catch((cause) => {
       const current = ref()
       const stale =

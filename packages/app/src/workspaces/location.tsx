@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@opencode/client/promise"
+import { isLocationNotFoundError, isServiceUnavailableError, type LocationGetOutput, type LocationRef } from "@opencode/client/promise"
 import { retry } from "@opencode/util/retry"
 import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -50,7 +50,8 @@ const context = createSimpleContext({
         delay: 1_000,
         maxDelay: 5_000,
         timeout: 5 * 60 * 1000,
-        retryIf: (error) => !stale && !isLocationNotFoundError(error),
+        retryIf: (error) => !stale && isServiceUnavailableError(error),
+
       }).catch((error) => {
         if (stale || !isLocationNotFoundError(error)) return
         setState("missing", location)
