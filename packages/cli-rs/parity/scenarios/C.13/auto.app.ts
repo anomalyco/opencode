@@ -18,7 +18,7 @@ export default defineApp({
           reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
         },
       ],
-      deviation: ["P01-read-only-prompt", "C01-startup-prompt-cells"],
+      deviation: ["C01-startup-prompt-cells"],
     },
   ],
 })
