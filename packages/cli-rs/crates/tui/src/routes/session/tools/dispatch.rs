@@ -138,7 +138,12 @@ impl<'a> Props<'a> {
                 .iter()
                 .filter_map(|content| match content {
                     ToolContent::Text(text) => Some(text.text.clone()),
-                    ToolContent::File(file) => Some(file.name.clone().flatten().unwrap_or_else(|| file.uri.clone())),
+                    ToolContent::File(file) => Some(
+                        file.name
+                            .clone()
+                            .flatten()
+                            .unwrap_or_else(|| file.uri.clone()),
+                    ),
                     ToolContent::Unknown(_) => None,
                 })
                 .collect::<Vec<_>>()
@@ -149,7 +154,7 @@ impl<'a> Props<'a> {
             input,
             metadata: tool_display_metadata(&part.state),
             output,
-            permission: permission::tool_pending(cx.tui, cx.session, &part.id),
+            permission: permission::tool_pending(cx.tui, cx.state, cx.session, &part.id),
         }
     }
 
@@ -351,14 +356,14 @@ impl InlineTool {
         let weak = Rc::downgrade(&inner);
         inner.root.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
-            if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
+            if cx
+                .app()
+                .selected_text()
+                .is_some_and(|text| !text.is_empty())
+            {
                 return;
             }
-            let failed = inner
-                .state
-                .borrow()
-                .as_ref()
-                .is_some_and(Inline::failed);
+            let failed = inner.state.borrow().as_ref().is_some_and(Inline::failed);
             if failed {
                 inner.expanded.set(!inner.expanded.get());
                 inner.paint_error();
@@ -467,9 +472,8 @@ impl InlineInner {
         self.error.clear();
         self.error.visible(error.is_some());
         if let Some(error) = error {
-            self.error.add(
-                &Text::new(&self.app, error).fg(self.theme.text.feedback.error.base),
-            );
+            self.error
+                .add(&Text::new(&self.app, error).fg(self.theme.text.feedback.error.base));
         }
     }
 }
@@ -564,7 +568,11 @@ impl BlockTool {
         let weak = Rc::downgrade(&inner);
         inner.root.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
-            if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
+            if cx
+                .app()
+                .selected_text()
+                .is_some_and(|text| !text.is_empty())
+            {
                 return;
             }
             let clickable = inner
@@ -644,11 +652,9 @@ impl BlockTool {
                         .header
                         .add(&Text::new(&inner.app, label.clone()).shrink(0.0).fg(fg));
                 }
-                let max = (block.width
-                    - 4
-                    - label.width() as i64
-                    - if block.spinner { 2 } else { 0 })
-                .max(2);
+                let max =
+                    (block.width - 4 - label.width() as i64 - if block.spinner { 2 } else { 0 })
+                        .max(2);
                 inner.header.add(
                     &Text::new(&inner.app, truncate_file_path(value, max))
                         .fg(fg)

@@ -86,7 +86,7 @@ fn assistant(id: &str, created: u64, content: Value) -> Value {
 fn read(id: &str, path: &str) -> Value {
     json!({
         "type": "tool", "id": id, "name": "read",
-        "state": { "status": "completed", "input": { "filePath": path }, "content": [] },
+        "state": { "status": "completed", "input": { "path": path }, "content": [] },
         "time": { "created": 1, "completed": 2 },
     })
 }
@@ -366,8 +366,8 @@ fn groups_open_on_click_and_follow_grouping_and_verbosity() {
     let h = open(turns(3), Info::default());
     let screen = h.app.text();
     assert!(screen.contains("→ Explored: 2 reads"), "{screen}");
-    // E.7a's tool rows replace the `⚙ read` stand-in.
-    let read = "⚙ read";
+    // E.7a's read row.
+    let read = "→ Read";
     assert!(!screen.contains(read), "{screen}");
 
     // A click opens the group; the reads show below its header.

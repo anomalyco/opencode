@@ -85,7 +85,11 @@ impl Generic {
             clickable: !entries.is_empty() || !output.is_empty(),
             ..Inline::new(
                 props,
-                if status == Status::Error { "✗" } else { "✓" },
+                if status == Status::Error {
+                    "✗"
+                } else {
+                    "✓"
+                },
                 tool,
                 status == Status::Completed,
             )

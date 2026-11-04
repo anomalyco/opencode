@@ -16,7 +16,8 @@ impl Glob {
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let count = finite(props.metadata.get("count"));
-        self.0.set(search(cx, props, "Glob", "Finding files…", count));
+        self.0
+            .set(search(cx, props, "Glob", "Finding files…", count));
     }
 }
 
