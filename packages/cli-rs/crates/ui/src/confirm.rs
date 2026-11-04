@@ -156,7 +156,7 @@ pub fn confirm(cx: &Rc<DialogCx>, props: ConfirmProps) -> View {
 }
 
 /// `Locale.titlecase`: upper-cases the first letter of each word.
-pub(crate) fn titlecase(text: &str) -> String {
+pub fn titlecase(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut word = false;
     for char in text.chars() {
