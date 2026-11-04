@@ -56,6 +56,9 @@ impl Transport for Fixture {
                     let next = (start > 0).then(|| start.to_string());
                     (200, json!({ "data": page, "cursor": { "next": next } }))
                 }
+                ("GET", [id, "permission"]) if self.sessions.contains_key(*id) => {
+                    (200, json!({ "data": [] }))
+                }
                 _ => (404, json!({})),
             };
             let body = serde_json::to_vec(&body).unwrap();
@@ -387,7 +390,8 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
     }
     assert!(
         previous.lines().any(|line| line.trim() == "┃  Question 1"),
-        "the oldest message never showed:\n{previous}"
+        "the oldest message never showed after {} older reads:\n{previous}",
+        h.older.load(Ordering::SeqCst)
     );
     assert!(gated, "the history hint never showed");
     // The first page plus four older ones.

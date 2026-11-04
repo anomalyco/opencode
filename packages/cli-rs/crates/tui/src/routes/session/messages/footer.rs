@@ -264,15 +264,16 @@ impl UsageInner {
         let steps = self.steps.borrow();
         self.root.visible(!steps.is_empty());
         let theme = &self.theme;
-        let bold = Style::new().bold();
         let latest = steps.last();
         let drops = steps
             .iter()
             .filter(|step| step.reuse_drop.is_some())
             .count();
+        // TS asks for a bold "Tokens" and bold new-token counts through a span `attributes` style, which
+        // its spans ignore; the cells are plain, so these are too.
         let mut spans = vec![
             Span::raw(if self.expanded.get() { "- " } else { "+ " }),
-            Span::styled("Tokens", bold),
+            Span::raw("Tokens"),
             Span::raw(format!(
                 ": {} {} · latest: {} new · {} cached · {} total",
                 steps.len(),
@@ -349,7 +350,7 @@ impl UsageInner {
                     ),
                     Span::styled(
                         format!("{:>width$}", locale(step.new_tokens), width = columns.1),
-                        Style::new().fg(fg).bold(),
+                        Style::new().fg(fg),
                     ),
                     Span::styled(
                         format!(
