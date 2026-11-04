@@ -1203,6 +1203,7 @@ dependencies = [
  "fancy-regex",
  "html-escape",
  "indexmap",
+ "opencode-parity",
  "opencode-plugin",
  "opencode-ui",
  "opentui",

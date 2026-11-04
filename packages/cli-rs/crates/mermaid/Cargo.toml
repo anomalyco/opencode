@@ -21,4 +21,5 @@ html-escape = "0.3"
 unicode-segmentation = "1"
 
 [dev-dependencies]
+opencode-parity.workspace = true
 serde_json.workspace = true

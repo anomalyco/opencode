@@ -15,7 +15,7 @@ mod plugin;
 mod render;
 
 pub use palette::Palette;
-pub use plugin::{ID, plugin};
+pub use plugin::{ID, Renderer, plugin, widget};
 pub use render::{Diagram, Rendered, Run, render};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
