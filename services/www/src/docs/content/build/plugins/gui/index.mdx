@@ -1412,6 +1412,119 @@ interface Link {
 }
 ```
 
+### Tool results
+
+`ToolRenderer` changes how calls to your plugin's tools, or an MCP server's tools, show in the session timeline. Match
+a tool by its name. MCP tools are named `<server>_<tool>`, so `jira_*` matches every tool of the `jira` server.
+
+```tsx
+import { ToolRenderer } from "@opencode/plugin/gui"
+
+ctx.add(ToolRenderer, {
+  tool: "jira_*",
+  trigger: (props) => ({
+    title: ctx.t("tool.jira"),
+    subtitle: String(props.tool.input.query ?? ""),
+  }),
+  render: (props) => <IssueList output={props.tool.output} status={props.tool.status} />,
+})
+```
+
+- `trigger` restyles the collapsed row: a `title`, a muted `subtitle` and short `args`. Omit it for the default
+  "Called `tool`" row.
+- `render` replaces the expanded body. Omit it to keep the default body.
+- The host still owns the row: it collapses, expands, shows progress and keeps its place in the virtualized timeline.
+  The body mounts only while the row is expanded.
+- `props.tool` follows the live call. Read its getters where you use them; do not destructure.
+
+#### Restyle the row only
+
+Leave out `render` to keep the default body under your own row.
+
+```ts
+ctx.add(ToolRenderer, {
+  tool: "deploy",
+  trigger: (props) => ({ title: ctx.t("tool.deploy"), args: [`env=${props.tool.input.env}`] }),
+})
+```
+
+Without any renderer, a tool's row expands to its default body:
+
+- every input argument, in full
+- the output text
+- the error, when the call failed
+- images the tool returned, which open in a preview on click
+- error diagnostics in `metadata.diagnostics`, by file
+
+#### Show returned images
+
+`props.tool.files` lists the files the tool returned. The timeline does not keep their bytes, so `url()` loads
+them. Call it only from your rendered body.
+
+```tsx
+function Screenshot(props: { file: ToolCallFile }) {
+  const [src, setSrc] = createSignal<string>()
+  const controller = new AbortController()
+
+  onCleanup(() => controller.abort())
+  void props.file.url(controller.signal).then(setSrc)
+
+  return <Show when={src()}>{(url) => <img src={url()} alt={props.file.name ?? ""} />}</Show>
+}
+```
+
+`url()` resolves `undefined` when the bytes are gone or the file is a remote URL, and never rejects.
+
+#### Matching rules
+
+- Tools with a built-in renderer, such as `shell`, `edit`, `read` and `subagent`, never match. A plugin cannot replace
+  or break them.
+- An exact `tool` wins over a pattern, a longer pattern wins over a shorter one, and then the first contributed wins.
+- `*` alone matches every tool without a built-in renderer.
+- A `trigger` or `render` that throws records the error. That row shows the default row instead, and your other rows
+  keep rendering.
+
+#### Reference
+
+```ts
+interface ToolRenderer {
+  tool: string
+  trigger?(props: ToolRenderProps): ToolTrigger | undefined
+  render?(props: ToolRenderProps): JSX.Element
+}
+
+interface ToolRenderProps {
+  tool: ToolCall
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ToolTrigger {
+  title: string
+  subtitle?: string
+  args?: readonly string[]
+}
+
+interface ToolCall {
+  id: string
+  name: string
+  status: ToolCallStatus
+  input: { [key: string]: JsonValue }
+  output?: string
+  error?: string
+  metadata: { [key: string]: JsonValue }
+  files: readonly ToolCallFile[]
+}
+
+interface ToolCallFile {
+  mime: string
+  name?: string
+  url(signal?: AbortSignal): Promise<string | undefined>
+}
+
+type ToolCallStatus = "pending" | "running" | "completed" | "error"
+```
+
 ### Servers
 
 `Server` contributes a list of server connections, such as servers your plugin starts on other machines.

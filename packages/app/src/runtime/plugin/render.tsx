@@ -1,6 +1,7 @@
 import {
   createEffect,
   createMemo,
+  createSignal,
   ErrorBoundary,
   For,
   getOwner,
@@ -23,6 +24,7 @@ import {
 } from "@opencode/session-ui/context/markdown"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
 import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
+import { ToolViewsProvider, type ToolCallView, type ToolView, type ToolViews } from "@opencode/session-ui/context/tools"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { DesktopTheme } from "@opencode/ui/theme/types"
 import {
@@ -30,8 +32,11 @@ import {
   CodeBlockAction,
   Style,
   Theme,
+  ToolRenderer,
   type CodeBlockProps,
   type MountedSession,
+  type SessionScreen,
+  type ToolRenderProps,
 } from "@opencode/plugin/gui"
 import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
@@ -41,8 +46,8 @@ import { createLinkCheck } from "./link-check"
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
  * error and renders nothing, then runs `failed`, and the rest of the window keeps working. Contributions render on
- * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete; the
- * session header slot is per timeline.
+ * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete, and as
+ * tool rows, for a tool without a built-in renderer that a plugin matched; the session header slot is per timeline.
  */
 export function Contribution(props: { plugin: string; failed?: () => void; children: () => JSX.Element }) {
   const host = usePluginHost()
@@ -147,11 +152,12 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 }
 
 /**
- * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, and hands
- * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions. A turn's sources chip opens its turn
- * through the Sources plugin's handler.
+ * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, hands
+ * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions, and the rows of tools without a built-in
+ * renderer to plugin ToolRenderer contributions. A turn's sources chip opens its turn through the Sources plugin's
+ * handler.
  */
-export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
+export function PluginLinks(props: ParentProps<{ session: MountedSession; screen: SessionScreen; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
 
@@ -174,15 +180,22 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 
   const codeBlocks = createCodeBlocks(() => props.session, Links)
 
+  const tools = createToolViews(
+    () => props.session,
+    () => props.screen,
+  )
+
   return (
     <Links codeBlocks={codeBlocks}>
-      <SourcesProvider
-        enabled={sourcesExperiment.enabled}
-        icons={sourcesExperiment.icons}
-        onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
-      >
-        {props.children}
-      </SourcesProvider>
+      <ToolViewsProvider value={tools}>
+        <SourcesProvider
+          enabled={sourcesExperiment.enabled}
+          icons={sourcesExperiment.icons}
+          onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
+        >
+          {props.children}
+        </SourcesProvider>
+      </ToolViewsProvider>
     </Links>
   )
 }
@@ -295,4 +308,79 @@ function createCodeBlocks(
         .items.filter((item) => item.value.languages.some((name) => name.toLowerCase() === language))
         .map(action),
   }
+}
+
+/**
+ * The `ToolRenderer` views for the session's tool rows, by tool name. Every row of a tool without a built-in renderer
+ * shares one index of the contributions and looks its tool up once. Content renders under the plugin's error
+ * isolation: a row whose renderer throws records the failure and shows the default row.
+ */
+function createToolViews(session: () => MountedSession, screen: () => SessionScreen): ToolViews {
+  const host = usePluginHost()
+
+  const index = createMemo(() => {
+    const items = host.items(ToolRenderer)
+    const exact = new Map<string, Item<ToolRenderer>>()
+
+    items.forEach((item) => {
+      if (!item.value.tool.endsWith("*") && !exact.has(item.value.tool)) exact.set(item.value.tool, item)
+    })
+
+    // A stable sort, so equally long patterns keep contribution order.
+    const patterns = items
+      .filter((item) => item.value.tool.endsWith("*"))
+      .toSorted((a, b) => b.value.tool.length - a.value.tool.length)
+
+    return { exact, patterns }
+  })
+
+  // One view per contribution, so a row keeps its renderer while other contributions change.
+  const views = new WeakMap<Item<ToolRenderer>, ToolView>()
+
+  const view = (item: Item<ToolRenderer>) => {
+    const cached = views.get(item)
+
+    if (cached) return cached
+
+    const input = (tool: ToolCallView): ToolRenderProps => ({
+      tool,
+      get session() {
+        return session()
+      },
+      get screen() {
+        return screen()
+      },
+    })
+
+    const created: ToolView = {
+      trigger: (tool) => item.value.trigger?.(input(tool)),
+      render: item.value.render ? (tool) => item.value.render?.(input(tool)) : undefined,
+      isolate: (children, fallback) => {
+        const [failed, setFailed] = createSignal(false)
+
+        return (
+          <Show when={!failed()} fallback={fallback()}>
+            <Contribution plugin={item.plugin} failed={() => setFailed(true)}>
+              {children}
+            </Contribution>
+          </Show>
+        )
+      },
+    }
+
+    views.set(item, created)
+
+    return created
+  }
+
+  const match = (name: string) => {
+    const current = index()
+
+    const item =
+      current.exact.get(name) ?? current.patterns.find((pattern) => name.startsWith(pattern.value.tool.slice(0, -1)))
+
+    return item ? view(item) : undefined
+  }
+
+  return { match }
 }

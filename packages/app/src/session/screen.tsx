@@ -56,7 +56,7 @@ export function SessionScreenView(props: { session: SessionModel }) {
   const mounted = createMountedSession(props.session)
 
   return (
-    <PluginLinks session={mounted.view()}>
+    <PluginLinks session={mounted.view()} screen={mounted.screen}>
       <SessionScreenContent
         session={props.session}
         screen={mounted.screen}
@@ -297,7 +297,7 @@ function SessionScreenContent(props: {
       })
 
       return (
-        <PluginLinks session={own()} active={active()}>
+        <PluginLinks session={own()} screen={props.screen} active={active()}>
           <MessageTimeline
             active={active()}
             hideHeader={!isDesktop()}

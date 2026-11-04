@@ -1,6 +1,7 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createTwoFilesPatch } from "diff"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { type ContextGroupPart, CurrentContextToolGroup } from "./tool-renderer"
@@ -26,6 +27,55 @@ export const MixedTools = {
       storyTool("group_read", "read", "completed", { path: "src/group.ts" }),
       storyTool("group_general", "subagent", "completed", { agent: "general", description: "Inspect grouped tools" }),
       storyTool("group_explore", "subagent", "completed", { agent: "explore", description: "Check card geometry" }),
+    ]
+
+    return (
+      <section style={{ width: "100%", "max-width": "720px", padding: "24px" }}>
+        <CurrentSessionProviders document={storyDocument(tools)}>
+          <CurrentContextToolGroup parts={tools} busy={false} open={open()} onOpenChange={setOpen} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}
+
+const diagnostic = (message: string) => ({ severity: 1, message, range: { start: { line: 4, character: 12 } } })
+
+// A 2x2 PNG, so the returned image has real pixels without a fixture file.
+const png =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNgmP9fZP5/BobG/yKN/wEpjAZlamAjDwAAAABJRU5ErkJggg=="
+
+export const PluginAndMcpTools = {
+  render: () => {
+    const [open, setOpen] = createSignal(true)
+
+    const tools: SessionMessageAssistantTool[] = [
+      {
+        type: "tool",
+        id: "mcp_search",
+        name: "jira_search",
+        state: {
+          status: "completed",
+          input: {
+            query: 'project = OC AND text ~ "timeline"',
+            fields: ["summary", "status"],
+            note: "first line\nsecond line",
+          },
+          content: [
+            { type: "text", text: "OC-101 Timeline rows drop MCP output\nOC-102 Show tool images inline" },
+            { type: "file", mime: "image/png", name: "board.png", uri: png },
+          ],
+          metadata: { diagnostics: { "src/jira.ts": [diagnostic("Property 'key' does not exist")] } },
+        },
+        time: { created: 1, ran: 2, completed: 3 },
+      },
+      storyTool(
+        "mcp_write",
+        "write",
+        "completed",
+        { path: "src/probe.go", content: "package main\n" },
+        { metadata: { diagnostics: { "src/probe.go": [diagnostic("cannot use string as int")] } } },
+      ),
     ]
 
     return (

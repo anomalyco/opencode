@@ -4,6 +4,7 @@ import type {
   SessionStatus,
   ShellOutputInput,
   ShellOutputOutput,
+  ToolFileContent,
 } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
@@ -55,6 +56,15 @@ export type ReadMediaUrlFn = (uri: string, mime: string, signal?: AbortSignal) =
 
 export type PeekMediaUrlFn = (uri: string, mime: string) => string | undefined
 
+/**
+ * Reads the files of one tool result with their bytes, for a host whose message store drops them. Resolves undefined
+ * when the call is not found.
+ */
+export type ReadToolFilesFn = (
+  input: { sessionID: string; toolID: string },
+  signal?: AbortSignal,
+) => Promise<readonly ToolFileContent[] | undefined>
+
 export const {
   use: useData,
   provider: DataProvider,
@@ -72,6 +82,7 @@ export const {
     turnDiff?: TurnDiffSource
     readMedia?: ReadMediaUrlFn
     peekMedia?: PeekMediaUrlFn
+    readToolFiles?: ReadToolFilesFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
     /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
@@ -102,6 +113,7 @@ export const {
       },
       readMedia: props.readMedia,
       peekMedia: props.peekMedia,
+      readToolFiles: props.readToolFiles,
     }
   },
 })

@@ -1974,3 +1974,101 @@ story("code block content follows plugins that join and leave after the message 
   await expect(root.getByTestId("chart")).toHaveCount(0)
   await expect(root.locator("pre code")).toHaveText("A,B")
 })
+
+story(
+  "tool renderers restyle matching plugin tools, fall back on a throw, and leave built-in tools alone",
+  async ({ page }) => {
+    const statuses = await page.evaluate(async (fixture) => {
+      const { mountToolRows, until, ToolRenderer } = await import(fixture)
+
+      type Props = {
+        readonly tool: {
+          readonly status: string
+          readonly output?: string
+          readonly input: { readonly query?: string }
+        }
+      }
+
+      const host = mountToolRows({
+        definitions: [
+          {
+            id: "acme",
+            windowEntry: async () => ({
+              default: (ctx: Context) => {
+                ctx.add(ToolRenderer, {
+                  tool: "acme_*",
+                  trigger: (props: Props) => ({ title: "Acme search", subtitle: props.tool.input.query }),
+                  render: (props: Props) => {
+                    const body = document.createElement("p")
+                    body.dataset.testid = "acme-body"
+                    body.textContent = `${props.tool.status}: ${props.tool.output}`
+
+                    return body
+                  },
+                })
+                // An exact name wins over the pattern above, and keeps the default body.
+                ctx.add(ToolRenderer, { tool: "acme_exact", trigger: () => ({ title: "Acme issue" }) })
+                // A built-in tool never matches.
+                ctx.add(ToolRenderer, { tool: "shell", trigger: () => ({ title: "Not the shell" }) })
+              },
+            }),
+          },
+          {
+            id: "wild",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(ToolRenderer, { tool: "*", trigger: () => ({ title: "Wildcard" }) }),
+            }),
+          },
+          {
+            id: "broken",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(ToolRenderer, {
+                  tool: "broken_*",
+                  trigger: () => {
+                    throw new Error("renderer failed")
+                  },
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(
+        () => !!host.failure("broken") && host.status("acme") === "active" && host.status("wild") === "active",
+      )
+
+      return { acme: host.status("acme"), broken: host.failure("broken") }
+    }, fixture)
+
+    expect(statuses).toEqual({
+      acme: "active",
+      broken: { phase: "render", error: expect.stringContaining("renderer failed") },
+    })
+
+    const rows = page.getByTestId("tool-rows")
+    const row = (id: string) => rows.locator(`[data-timeline-part-id="${id}"]`)
+
+    const search = row("call_search").getByRole("button", { name: /^Acme search\s*open bugs$/ })
+    await expect(row("call_search").getByTestId("acme-body")).toHaveCount(0)
+    await search.click()
+    await expect(row("call_search").getByTestId("acme-body")).toHaveText("completed: ACME-1 First bug")
+
+    await row("call_exact")
+      .getByRole("button", { name: /^Acme issue/ })
+      .click()
+    await expect(row("call_exact").locator('[data-slot="bash-result"]')).toHaveText("ACME-2 details")
+
+    // The broken renderer's row falls back to the default row, which still expands to the result.
+    await row("call_broken")
+      .getByRole("button", { name: /^Called `broken_tool`/ })
+      .click()
+    await expect(row("call_broken").locator('[data-slot="bash-result"]')).toHaveText("broken output")
+
+    await expect(row("call_other").getByRole("button", { name: /^Wildcard/ })).toBeVisible()
+    await expect(row("call_shell")).toContainText("Shell")
+    await expect(row("call_shell")).not.toContainText("Not the shell")
+    await expect(row("call_shell")).not.toContainText("Wildcard")
+  },
+)

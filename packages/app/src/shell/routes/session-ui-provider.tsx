@@ -1,4 +1,5 @@
-import { DataProvider, type TurnDiffInput } from "@opencode/session-ui/context"
+import type { SessionMessageInfo } from "@opencode/client/promise"
+import { DataProvider, type ReadToolFilesFn, type TurnDiffInput } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useQuery } from "@tanstack/solid-query"
@@ -65,6 +66,28 @@ export function SessionUIProvider(
 
     data.session.remember(session)
     tabs.select(tabs.addSessionTab({ server: props.server, sessionId: session.id }))
+  }
+
+  // The message store drops the bytes of files in tool results; an expanded tool row reads its own back on demand.
+  const readToolFiles: ReadToolFilesFn = async (input, signal) => {
+    const owns = (message: SessionMessageInfo) =>
+      message.type === "assistant" && message.content.some((part) => part.type === "tool" && part.id === input.toolID)
+
+    const message = data.session.message.list(input.sessionID).find(owns)
+
+    if (!message) return undefined
+
+    const loaded = await serverSDK.api.session.message.get(
+      { sessionID: input.sessionID, messageID: message.id },
+      { signal },
+    )
+
+    if (loaded.type !== "assistant") return undefined
+    const tool = loaded.content.find((part) => part.type === "tool" && part.id === input.toolID)
+
+    if (tool?.type !== "tool" || !("content" in tool.state) || !tool.state.content) return undefined
+
+    return tool.state.content.filter((item) => item.type === "file")
   }
 
   const sessionTitle = (id: string) => {
@@ -142,6 +165,7 @@ export function SessionUIProvider(
         shellOutput={(input) => serverSDK.api.shell.output(input)}
         readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}
         peekMedia={(uri, mime) => serverSDK.media.peek(uri, mime)}
+        readToolFiles={readToolFiles}
         turnDiff={turnDiff()}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
