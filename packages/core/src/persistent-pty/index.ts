@@ -149,14 +149,28 @@ const makeLayer = (options: Options = {}) =>
       const removing = new Set<Pty.ID>()
       // Controller activity selects a terminal; observer reads and pane visibility do not.
       const current = new Map<Session.ID, Pty.ID>()
+      // Titles as of the last listing. Programs retitle terminals inside the daemon, so every listing compares
+      // against these and publishes each change exactly once, however many paths observe it.
+      const titles = new Map<Pty.ID, Pick<Info, "title" | "userTitle">>()
 
       const list = Effect.fn("PersistentPty.list")(function* (sessionID?: Session.ID) {
         const response = yield* optionalRequest(daemon, { op: "list" })
-        if (!response) return []
-        if (response.type !== "terminals") return yield* unexpected(response)
-        return response.terminals
-          .map(toInfo)
-          .filter((terminal) => sessionID === undefined || terminal.sessionID === sessionID)
+        if (response && response.type !== "terminals") return yield* unexpected(response)
+        const terminals = response?.terminals.map(toInfo) ?? []
+        const previous = new Map(titles)
+        titles.clear()
+        terminals.forEach((terminal) =>
+          titles.set(terminal.id, { title: terminal.title, userTitle: terminal.userTitle }),
+        )
+        yield* Effect.forEach(
+          terminals.filter((terminal) => {
+            const before = previous.get(terminal.id)
+            return before && (before.title !== terminal.title || before.userTitle !== terminal.userTitle)
+          }),
+          (terminal) => bus.publish(Updated, { sessionID: terminal.sessionID, terminal }),
+          { discard: true },
+        )
+        return terminals.filter((terminal) => sessionID === undefined || terminal.sessionID === sessionID)
       })
 
       const get = Effect.fn("PersistentPty.get")(function* (id: Pty.ID) {
@@ -195,6 +209,7 @@ const makeLayer = (options: Options = {}) =>
         )
         if (response.type !== "created") return yield* unexpected(response)
         const terminal = toInfo(response.terminal)
+        titles.set(terminal.id, { title: terminal.title, userTitle: terminal.userTitle })
         yield* bus.publish(Added, { sessionID, terminal })
         return terminal
       })
@@ -236,16 +251,15 @@ const makeLayer = (options: Options = {}) =>
           ),
       )
 
+      // Listing the renamed terminal publishes its update.
       const rename = Effect.fn("PersistentPty.rename")(function* (id: Pty.ID, title: string | null) {
-        const terminal = yield* get(id)
+        yield* get(id)
         // Daemons without the feature drop the connection on unknown requests.
         if (!(yield* daemon.supports("rename").pipe(Effect.mapError(unavailable))))
           return yield* new UnsupportedError({ feature: "rename" })
         const response = yield* request(daemon, { op: "rename", id: fromID(id), title })
         if (response.type !== "ok") return yield* unexpected(response)
-        const renamed = yield* get(id)
-        yield* bus.publish(Updated, { sessionID: terminal.sessionID, terminal: renamed })
-        return renamed
+        return yield* get(id)
       })
 
       const snapshot = Effect.fn("PersistentPty.snapshot")(function* (id: Pty.ID) {
@@ -321,6 +335,16 @@ const makeLayer = (options: Options = {}) =>
         )
       }
 
+      const refreshTitles = () => {
+        runFork(
+          list().pipe(
+            Effect.catchTag("PersistentPty.UnavailableError", (error) =>
+              Effect.logWarning("failed to refresh terminal titles", { error: error.message }),
+            ),
+          ),
+        )
+      }
+
       const removeSession = (sessionID: Session.ID) =>
         list(sessionID).pipe(
           Effect.flatMap((terminals) =>
@@ -363,6 +387,8 @@ const makeLayer = (options: Options = {}) =>
             ...input,
             onEvent: (event) => {
               if (event.type === "exited") removeVisibleExit(id)
+              // Each attachment sees the change; once one listing has recorded it the rest skip it.
+              if (event.type === "title_changed" && titles.get(id)?.title !== event.title) refreshTitles()
               input.onEvent(event)
             },
           })

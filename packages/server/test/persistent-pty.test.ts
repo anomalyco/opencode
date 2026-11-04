@@ -208,6 +208,69 @@ smoke(
   20_000,
 )
 
+smoke(
+  "publishes one update per program title change that the user title does not hide",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory()
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        pty: { root: fixture.directory },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const client = OpenCode.make({ baseUrl: base, headers: { authorization: `Basic ${btoa("opencode:secret")}` } })
+      const sessionID = Session.ID.make("ses_persistent_pty_titles")
+      // cat prints each input line back, so input carrying an OSC 2 sequence retitles the terminal.
+      const terminal = yield* Effect.promise(() =>
+        client.experimental.persistentPty.create({
+          sessionID,
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; printf ready; exec cat"],
+          cwd: fixture.root,
+          title: "created",
+          env: {},
+          size: { cols: 40, rows: 10 },
+        }),
+      )
+      yield* waitForText(base, terminal.id, "ready")
+      const events = yield* Effect.acquireRelease(
+        Effect.promise(() => openEventStream(base)),
+        (stream) => Effect.promise(() => stream.close()),
+      )
+      // Two attachments both see each title change; the server still publishes it once.
+      const controller = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, terminal.id, "titles-controller")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, terminal.id, "titles-observer", "observer")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      const updated = () =>
+        Effect.promise(() => events.next("persistent-pty.updated")).pipe(
+          Effect.map((event) => (isRecord(event.data) ? event.data.terminal : undefined)),
+        )
+
+      controller.socket.send(inputFrame(40, 10, "\u001b]2;vim\u0007first\n"))
+      expect(yield* updated()).toMatchObject({ id: terminal.id, title: "vim", userTitle: null })
+
+      yield* Effect.promise(() => client.experimental.persistentPty.update({ ptyID: terminal.id, title: "build" }))
+      expect(yield* updated()).toMatchObject({ id: terminal.id, title: "build", userTitle: "build" })
+
+      controller.socket.send(inputFrame(40, 10, "\u001b]2;htop\u0007second\n"))
+      yield* waitForText(base, terminal.id, "second")
+      yield* Effect.promise(() => client.experimental.persistentPty.update({ ptyID: terminal.id, title: null }))
+      expect(yield* updated()).toMatchObject({ id: terminal.id, title: "htop", userTitle: null })
+      yield* Effect.promise(() => client.experimental.persistentPty.shutdown())
+    }),
+  20_000,
+)
+
 it.live("reports renaming as unsupported on a daemon without the rename feature", () =>
   Effect.gen(function* () {
     const fixture = yield* testDirectory()

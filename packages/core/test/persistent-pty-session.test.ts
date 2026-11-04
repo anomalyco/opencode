@@ -132,6 +132,50 @@ describe("PersistentPty rename", () => {
   )
 })
 
+describe("PersistentPty program titles", () => {
+  it.live("publishes one update when a program retitles a terminal, and none when a user title hides it", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon(["rename"])
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        const bus = yield* Bus.Service
+        const directory = yield* tmpdirScoped()
+        const sessionID = Session.ID.make("ses_titles")
+        const terminal = yield* pty.create(sessionID, { args: [], cwd: directory.path, title: "test", env: {} })
+        const updates = yield* collectUpdated(bus, 4)
+
+        daemon.retitle(terminal.id, "vim")
+        yield* pty.list()
+        yield* pty.list(sessionID)
+        yield* pty.rename(terminal.id, "build")
+        daemon.retitle(terminal.id, "htop")
+        yield* pty.list()
+        yield* pty.get(terminal.id)
+        yield* pty.rename(terminal.id, null)
+        daemon.retitle(terminal.id, "less")
+        yield* pty.list()
+
+        expect(
+          (yield* Fiber.join(updates)).map((event) => [
+            event.data.sessionID,
+            event.data.terminal.id,
+            event.data.terminal.title,
+            event.data.terminal.userTitle,
+          ]),
+        ).toEqual([
+          [sessionID, terminal.id, "vim", null],
+          [sessionID, terminal.id, "build", "build"],
+          [sessionID, terminal.id, "htop", null],
+          [sessionID, terminal.id, "less", null],
+        ])
+      }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
+})
+
+const collectUpdated = (bus: Bus.Interface, count: number) =>
+  bus.subscribe(Updated).pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+
 const nextUpdated = (bus: Bus.Interface) =>
   bus
     .subscribe(Updated)

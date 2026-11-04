@@ -111,6 +111,9 @@ export const fakeDaemon = Effect.fn(function* (features?: string[]) {
   const socket = path.join(base, "daemon.sock")
   const terminals: Array<ReturnType<typeof terminal> & { user_title?: string | null }> = []
   const failTerminate = new Set<string>()
+  // Titles set by the terminals' programs (OSC 0/2), which a user title hides.
+  const programTitles = new Map<number, string>()
+  const effectiveTitle = (item: (typeof terminals)[number]) => item.user_title ?? programTitles.get(item.id) ?? "test"
   const ops: string[] = []
   let nextID = 1
   yield* listen(socket, (connection, request) => {
@@ -136,7 +139,7 @@ export const fakeDaemon = Effect.fn(function* (features?: string[]) {
       const found = terminals.find((item) => item.id === request.id)
       if (!found) return { type: "error", message: "terminal not found" }
       found.user_title = typeof request.title === "string" && request.title !== "" ? request.title : null
-      found.title = found.user_title ?? "test"
+      found.title = effectiveTitle(found)
       return { type: "ok" }
     }
     // Old daemons cannot parse unknown requests and drop the connection.
@@ -153,6 +156,13 @@ export const fakeDaemon = Effect.fn(function* (features?: string[]) {
   return {
     failTerminate,
     ops,
+    retitle: (ptyID: string, title: string) => {
+      const id = Number(ptyID.slice("pty_persistent_".length))
+      const found = terminals.find((item) => item.id === id)
+      if (!found) throw new Error(`terminal not found: ${ptyID}`)
+      programTitles.set(id, title)
+      found.title = effectiveTitle(found)
+    },
     options: {
       root,
       handoff: { directory, instanceID: "test", ticket: "ticket", expiresAt: Date.now() + 60_000 },
