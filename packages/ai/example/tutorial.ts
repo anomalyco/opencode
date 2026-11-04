@@ -28,7 +28,7 @@ const apiKey = Config.Redacted("OPENAI_API_KEY")
 // image generation.
 const openai = OpenAI.configure({
   apiKey,
-  generation: { maxTokens: 160 },
+  maxTokens: 160,
   providerOptions: {
     store: false,
   },
@@ -40,8 +40,8 @@ const model = openai.responses("gpt-4o-mini")
 //
 // Options can live on both the configured route/provider facade and the request:
 //
-//   - `generation`: common controls such as max tokens, temperature, topP/topK,
-//     penalties, seed, and stop sequences.
+//   - `maxTokens`, `temperature`, `topP`, `topK`, penalties, `seed` and `stop`:
+//     common controls set at the top level.
 //   - `promptCacheKey`: stable cache affinity for protocols that support it.
 //   - `providerOptions`: model-typed provider-native behavior. For example,
 //     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or
@@ -54,7 +54,8 @@ const request = ai.request({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
-  generation: { maxTokens: 80, temperature: 0.7 },
+  maxTokens: 80,
+  temperature: 0.7,
   promptCacheKey: "tutorial-joke",
 })
 
@@ -100,7 +101,8 @@ const streamWithTools = Effect.gen(function* () {
   const request = ai.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
-    generation: { maxTokens: 80, temperature: 0 },
+    maxTokens: 80,
+    temperature: 0,
     tools,
   })
   const events = Array.from(yield* ai.stream(request).pipe(Stream.runCollect))
@@ -139,7 +141,8 @@ const generateStructuredObject = Effect.gen(function* () {
     system: "Return only structured weather data.",
     prompt: "Give me today's weather for San Francisco.",
     schema: WeatherReport,
-    generation: { maxTokens: 120, temperature: 0 },
+    maxTokens: 120,
+    temperature: 0,
   })
 
   console.log("\n== structured output ==")
