@@ -60,7 +60,7 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  it.effect("'auto' on Anthropic marks the last tool, the last system part, and the two newest messages", () =>
+  it.effect("'auto' on Anthropic marks the last tool, the last system part, the tail, and the previous tail", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -86,12 +86,10 @@ describe("applyCachePolicy", () => {
             { type: "text", text: "Base agent" },
             { type: "text", text: "Project instructions", cache_control: { type: "ephemeral" } },
           ],
+          // The previous request ended at "first user" and wrote its tail entry there.
           messages: [
-            { role: "user", content: [{ type: "text", text: "first user" }] },
-            {
-              role: "assistant",
-              content: [{ type: "text", text: "assistant reply", cache_control: { type: "ephemeral" } }],
-            },
+            { role: "user", content: [{ type: "text", text: "first user", cache_control: { type: "ephemeral" } }] },
+            { role: "assistant", content: [{ type: "text", text: "assistant reply" }] },
             {
               role: "user",
               content: [{ type: "text", text: "latest user message", cache_control: { type: "ephemeral" } }],
@@ -139,6 +137,7 @@ describe("applyCachePolicy", () => {
             Message.user("start"),
             Message.assistant([ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} })]),
             Message.tool({ id: "tc_1", name: "lookup", result: "found" }),
+            Message.assistant("Done."),
             Message.user([Message.text("look at these"), ...attachments]),
           ],
           cache: "auto",
@@ -146,9 +145,104 @@ describe("applyCachePolicy", () => {
       )
 
       const body = prepared.body as { messages: Array<{ content: Array<{ cache_control?: unknown }> }> }
-      // The tool result is where the previous request's tail breakpoint sat, 25 positions before the new one.
+      // The previous request ended at the tool result, 26 positions before the new tail breakpoint.
       expect(body.messages[2]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
-      expect(body.messages[3]?.content.at(-1)?.cache_control).toEqual({ type: "ephemeral" })
+      expect(body.messages[3]?.content[0]?.cache_control).toBeUndefined()
+      expect(body.messages[4]?.content.at(-1)?.cache_control).toEqual({ type: "ephemeral" })
+    }),
+  )
+
+  it.effect("'auto' on Anthropic marks the previous tail, not another result of the same step", () =>
+    Effect.gen(function* () {
+      const call = (id: string) => ToolCallPart.make({ id, name: "lookup", input: {} })
+      const result = (id: string) => Message.tool({ id, name: "lookup", result: "found" })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          messages: [
+            Message.user("start"),
+            Message.assistant([call("tc_1"), call("tc_2"), call("tc_3")]),
+            result("tc_1"),
+            result("tc_2"),
+            result("tc_3"),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ content: Array<{ cache_control?: unknown }> }> }
+      // The three results lower into one user turn; the previous request ended at "start".
+      expect(body.messages.map((message) => message.content.map((part) => part.cache_control))).toEqual([
+        [{ type: "ephemeral" }],
+        [undefined, undefined, undefined],
+        [undefined, undefined, { type: "ephemeral" }],
+      ])
+    }),
+  )
+
+  it.effect("a message with nothing that carries a marker leaves its slot to the system prompt", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "lookup", description: "lookup", inputSchema: { type: "object", properties: {} } }],
+          messages: [
+            Message.user("start"),
+            Message.assistant([
+              { type: "reasoning", text: "thinking", encrypted: "signature" },
+              ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} }),
+            ]),
+            Message.tool({ id: "tc_1", name: "lookup", result: "found" }),
+          ],
+          cache: { tools: true, system: true, messages: { tail: 2 } },
+        }),
+      )
+
+      const body = prepared.body as {
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      // Thinking and tool_use blocks never carry cache_control, so the reply takes no slot.
+      expect(body.messages[1]?.content.map((part) => part.cache_control)).toEqual([undefined, undefined])
+      expect(body.messages[2]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(body.system.map((part) => part.cache_control)).toEqual([{ type: "ephemeral" }, { type: "ephemeral" }])
+    }),
+  )
+
+  it.effect("auto hints never put a shorter lifetime before a manual one", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+          messages: [
+            Message.user("first user"),
+            Message.assistant("assistant reply"),
+            Message.user([{ ...Message.text("latest"), cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) }]),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      // Anthropic rejects a ttl="1h" marker after a 5m one. Everything before the manual hint is written for an
+      // hour anyway, so the earlier markers cost the same at 1h.
+      const hour = { type: "ephemeral", ttl: "1h" }
+      expect(body.tools[0]?.cache_control).toEqual(hour)
+      expect(body.system.map((part) => part.cache_control)).toEqual([undefined, hour])
+      expect(body.messages.map((message) => message.content[0]?.cache_control)).toEqual([hour, undefined, hour])
     }),
   )
 
@@ -527,7 +621,10 @@ describe("applyCachePolicy", () => {
         ...body.messages.flatMap((message) => message.content.map((part) => part.cache_control)),
       ].filter((cache) => cache !== undefined)
       expect(marked).toHaveLength(4)
+      // Only the tools marker comes before the manual 1h hint; the markers after it keep the default lifetime.
+      expect(body.tools[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
       expect(body.system[1]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
+      expect(body.system[2]?.cache_control).toEqual({ type: "ephemeral" })
       expect(body.messages[0]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
     }),
   )
@@ -652,22 +749,31 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  test("skips non-cacheable parts when placing message breakpoints", () => {
+  test("skips parts that can't carry a marker when placing message breakpoints", () => {
     const compaction = CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "summary" })
     const toolCall = ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} })
 
     const mixed = ai.request({
       model: anthropicModel,
-      messages: [Message.assistant([toolCall, compaction])],
+      messages: [Message.assistant([Message.text("Checking."), toolCall, compaction])],
       cache: { messages: "latest-assistant" },
     })
     const appliedMixed = applyCachePolicy(mixed)
     expect(appliedMixed.messages[0]?.content[0]).toMatchObject({
-      type: "tool-call",
-      id: "tc_1",
+      type: "text",
+      text: "Checking.",
       cache: { type: "ephemeral" },
     })
-    expect(appliedMixed.messages[0]?.content[1]).toEqual(compaction)
+    expect(appliedMixed.messages[0]?.content[1]).toEqual(toolCall)
+    expect(appliedMixed.messages[0]?.content[2]).toEqual(compaction)
+
+    // No protocol sends cache_control on a tool call, so a message without text keeps its slot.
+    const callOnly = ai.request({
+      model: anthropicModel,
+      messages: [Message.assistant([toolCall, compaction])],
+      cache: { messages: "latest-assistant" },
+    })
+    expect(applyCachePolicy(callOnly)).toBe(callOnly)
 
     const compactionOnly = ai.request({
       model: anthropicModel,
