@@ -429,6 +429,7 @@ const layer = Layer.unwrap(
       small: () => Effect.undefined,
     })
     const replacements: LayerNode.Replacements = [
+      Bus.node.replace(Bus.configured({ persist: true })),
       Snapshot.node.replace(Snapshot.noopLayer),
       LayerNodePlatform.llmClient.replace(testLLM),
       SessionRunnerModel.node.replace(models),
@@ -443,7 +444,7 @@ const layer = Layer.unwrap(
       Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.suspend(() => state.activationHook) })),
       SessionModelTransport.node.replace(modelTransport),
     ]
-    const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
+    const runnerLayer = AppNodeBuilder.build(LayerNode.group([SessionRunnerLLM.node, Bus.node]), [
       ...replacements,
       McpInstructions.node.replace(mcpInstructions),
     ])
@@ -511,7 +512,6 @@ const layer = Layer.unwrap(
       ]),
       [
         ...replacements,
-        Bus.node.replace(Bus.configured({ persist: true })),
         LocationServiceMap.node.replace(promptLocationNode),
         Model.node.replace(promptModels),
         SessionExecution.node.replace(execution),

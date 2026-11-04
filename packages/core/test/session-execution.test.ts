@@ -78,6 +78,7 @@ describe("SessionExecution lifecycle", () => {
       expect(yield* get(steer.id)).toMatchObject({ status: "running", cost: 2 })
       yield* bus.publish(SessionEvent.TurnSettled, { sessionID })
       const result = yield* get(first.id)
+      if (!result) return yield* Effect.die("Missing turn result")
       expect(result).toMatchObject({ status: "settled", cost: 2, tokens: { input: 10, output: 5 }, assistantMessageID })
       expect(yield* get(steer.id)).toEqual({ ...result, inputID: steer.id })
       expect((yield* admit(first.id)).id).toBe(first.id)
