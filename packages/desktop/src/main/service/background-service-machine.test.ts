@@ -149,8 +149,50 @@ describe("background service connection", () => {
 
     const retried = replay([{ type: "connection.requested", reply: r2 }], failed.state)
 
-    expect(retried.state).toEqual({ status: "reconnecting", attempt: 3, data: A, waiters: [r2] })
+    expect(retried.state).toEqual({ status: "reconnecting", attempt: 3, data: A, waiters: [], joiners: [r2] })
     expect(retried.commands).toEqual([[{ type: "connect", attempt: 3, mode: "reconnect" }]])
+  })
+
+  test("a window that opens during a reconnect that fails still gets the last service", () => {
+    const [reconnect, opened, retry] = [reply(), reply(), reply()]
+    const error = new Error("port in use")
+
+    const result = replay(
+      [
+        { type: "reconnect.requested", reply: reconnect },
+        { type: "connection.requested", reply: opened },
+        { type: "connect.failed", attempt: 2, error },
+        // The next window to open retries, and keeps the last service if that fails too.
+        { type: "connection.requested", reply: retry },
+        { type: "connect.failed", attempt: 3, error },
+      ],
+      readyA,
+    )
+
+    expect(result.commands).toEqual([
+      [{ type: "connect", attempt: 2, mode: "reconnect" }],
+      [],
+      [
+        { type: "resolve", replies: [opened], data: A },
+        { type: "reject", replies: [reconnect], error },
+      ],
+      [{ type: "connect", attempt: 3, mode: "reconnect" }],
+      [{ type: "resolve", replies: [retry], data: A }],
+    ])
+    expect(result.state).toEqual({ status: "failed", attempt: 3, error, last: A })
+  })
+
+  test("without a previous service, every caller of a failed attempt gets the error", () => {
+    const [opened, reconnect] = [reply(), reply()]
+    const error = new Error("config invalid")
+
+    const result = replay([
+      { type: "connection.requested", reply: opened },
+      { type: "reconnect.requested", reply: reconnect },
+      { type: "connect.failed", attempt: 1, error },
+    ])
+
+    expect(result.commands.at(-1)).toEqual([{ type: "reject", replies: [opened, reconnect], error }])
   })
 
   test("ignores results of an attempt a reconnect superseded", () => {
@@ -171,6 +213,23 @@ describe("background service connection", () => {
 
     expect(result.state).toBe(reconnecting)
     expect(result.commands.flat()).toEqual([])
+  })
+
+  test("a window that closes while it waits for a reconnect is not answered", () => {
+    const [reconnect, opened] = [reply(), reply()]
+    const error = new Error("port in use")
+
+    const result = replay(
+      [
+        { type: "reconnect.requested", reply: reconnect },
+        { type: "connection.requested", reply: opened },
+        { type: "waiter.cancelled", reply: opened },
+        { type: "connect.failed", attempt: 2, error },
+      ],
+      readyA,
+    )
+
+    expect(result.commands.at(-1)).toEqual([{ type: "reject", replies: [reconnect], error }])
   })
 
   test("a window that stops waiting leaves the attempt to the others", () => {

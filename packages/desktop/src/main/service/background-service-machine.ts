@@ -23,14 +23,22 @@ export type State =
   | { readonly status: "connecting"; readonly attempt: number; readonly waiters: readonly Reply[] }
   /** `data` is the active service. A probed service is still verified by `attempt`'s `Service.ensure`. */
   | { readonly status: "ready"; readonly attempt: number; readonly data: Data }
-  /** Requests keep using `data` until the reconnect replaces it. */
+  /**
+   * Requests keep using `data` until the reconnect replaces it. `waiters` asked to reconnect and share its outcome.
+   * `joiners` opened or reloaded a window meanwhile: a failed reconnect answers them with `data`, the service they
+   * would have received before it started.
+   */
   | {
       readonly status: "reconnecting"
       readonly attempt: number
       readonly data: Data
       readonly waiters: readonly Reply[]
+      readonly joiners: readonly Reply[]
     }
-  /** The last attempt failed; the next caller starts a new one instead of receiving `error` again. */
+  /**
+   * The last attempt failed; the next caller starts a new one instead of receiving `error` again. `last` is the
+   * service reached before it, if any.
+   */
   | { readonly status: "failed"; readonly attempt: number; readonly error: Error; readonly last: Data | undefined }
   | { readonly status: "disposed" }
 
@@ -77,10 +85,12 @@ export function transition(state: State, event: Event): Transition {
   if (event.type === "disposed")
     return {
       state: { status: "disposed" },
-      commands: "waiters" in state ? reject(state.waiters, DISPOSED_ERROR) : [],
+      commands: reject(pending(state), DISPOSED_ERROR),
     }
 
-  if (state.status === "connecting" || state.status === "reconnecting") return waiting(state, event)
+  if (state.status === "connecting") return connecting(state, event)
+
+  if (state.status === "reconnecting") return reconnecting(state, event)
 
   if (state.status === "ready") return ready(state, event)
 
@@ -92,7 +102,13 @@ export function transition(state: State, event: Event): Transition {
   // connect, so a failure that has since been fixed (a config error, a port race) is not replayed.
   if (state.last)
     return {
-      state: { status: "reconnecting", attempt, data: state.last, waiters: [event.reply] },
+      state: {
+        status: "reconnecting",
+        attempt,
+        data: state.last,
+        waiters: event.type === "reconnect.requested" ? [event.reply] : [],
+        joiners: event.type === "connection.requested" ? [event.reply] : [],
+      },
       commands: [{ type: "connect", attempt, mode: "reconnect" }],
     }
 
@@ -102,20 +118,21 @@ export function transition(state: State, event: Event): Transition {
   }
 }
 
-function waiting(state: Extract<State, { status: "connecting" | "reconnecting" }>, event: Event): Transition {
-  // Every caller joins the attempt in flight, so windows that reconnect together run one `Service.ensure`.
+// No service was reached yet, so every caller shares the attempt's outcome, failure included.
+function connecting(state: Extract<State, { status: "connecting" }>, event: Event): Transition {
+  // Every caller joins the attempt in flight, so windows that start together run one `Service.ensure`.
   if (event.type === "connection.requested" || event.type === "reconnect.requested")
     return { state: { ...state, waiters: [...state.waiters, event.reply] }, commands: [] }
 
   if (event.type === "waiter.cancelled") {
     if (!state.waiters.includes(event.reply)) return unchanged(state)
 
-    return { state: { ...state, waiters: state.waiters.filter((reply) => reply !== event.reply) }, commands: [] }
+    return { state: { ...state, waiters: without(state.waiters, event.reply) }, commands: [] }
   }
 
   if (!("attempt" in event) || event.attempt !== state.attempt) return unchanged(state)
 
-  if (event.type === "probe.succeeded" && state.status === "connecting")
+  if (event.type === "probe.succeeded")
     return {
       state: { status: "ready", attempt: state.attempt, data: event.data },
       commands: [
@@ -125,30 +142,57 @@ function waiting(state: Extract<State, { status: "connecting" | "reconnecting" }
       ],
     }
 
-  if (event.type === "connect.succeeded") {
-    const changed = state.status === "connecting" || !same(state.data, event.data)
-
+  if (event.type === "connect.succeeded")
     return {
       state: { status: "ready", attempt: state.attempt, data: event.data },
-      commands: [
-        ...(changed ? [{ type: "publish" as const, data: event.data }] : []),
-        ...resolve(state.waiters, event.data),
-      ],
+      commands: [{ type: "publish", data: event.data }, ...resolve(state.waiters, event.data)],
     }
-  }
 
   if (event.type === "connect.failed")
     return {
-      state: {
-        status: "failed",
-        attempt: state.attempt,
-        error: event.error,
-        last: state.status === "reconnecting" ? state.data : undefined,
-      },
+      state: { status: "failed", attempt: state.attempt, error: event.error, last: undefined },
       commands: reject(state.waiters, event.error),
     }
 
   return unchanged(state)
+}
+
+function reconnecting(state: Extract<State, { status: "reconnecting" }>, event: Event): Transition {
+  // Windows that reconnect together run one `Service.ensure`; a window that opens meanwhile waits for it too.
+  if (event.type === "reconnect.requested")
+    return { state: { ...state, waiters: [...state.waiters, event.reply] }, commands: [] }
+
+  if (event.type === "connection.requested")
+    return { state: { ...state, joiners: [...state.joiners, event.reply] }, commands: [] }
+
+  if (event.type === "waiter.cancelled") {
+    if (!state.waiters.includes(event.reply) && !state.joiners.includes(event.reply)) return unchanged(state)
+
+    return {
+      state: { ...state, waiters: without(state.waiters, event.reply), joiners: without(state.joiners, event.reply) },
+      commands: [],
+    }
+  }
+
+  if (event.type !== "connect.succeeded" && event.type !== "connect.failed") return unchanged(state)
+
+  if (event.attempt !== state.attempt) return unchanged(state)
+
+  if (event.type === "connect.succeeded")
+    return {
+      state: { status: "ready", attempt: state.attempt, data: event.data },
+      commands: [
+        ...(same(state.data, event.data) ? [] : [{ type: "publish" as const, data: event.data }]),
+        ...resolve([...state.waiters, ...state.joiners], event.data),
+      ],
+    }
+
+  // A window that only asked for the connection still gets the last service, as it would have before the reconnect
+  // started; only the windows that asked to reconnect see the failure.
+  return {
+    state: { status: "failed", attempt: state.attempt, error: event.error, last: state.data },
+    commands: [...resolve(state.joiners, state.data), ...reject(state.waiters, event.error)],
+  }
 }
 
 function ready(state: Extract<State, { status: "ready" }>, event: Event): Transition {
@@ -160,7 +204,7 @@ function ready(state: Extract<State, { status: "ready" }>, event: Event): Transi
 
     // The new attempt also supersedes a verification still running for the current one.
     return {
-      state: { status: "reconnecting", attempt, data: state.data, waiters: [event.reply] },
+      state: { status: "reconnecting", attempt, data: state.data, waiters: [event.reply], joiners: [] },
       commands: [{ type: "connect", attempt, mode: "reconnect" }],
     }
   }
@@ -182,6 +226,19 @@ function resolve(replies: readonly Reply[], data: Data): Command[] {
 
 function reject(replies: readonly Reply[], error: Error): Command[] {
   return replies.length > 0 ? [{ type: "reject", replies, error }] : []
+}
+
+/** Every caller still waiting on an attempt. */
+function pending(state: State) {
+  if (state.status === "connecting") return state.waiters
+
+  if (state.status === "reconnecting") return [...state.waiters, ...state.joiners]
+
+  return []
+}
+
+function without(replies: readonly Reply[], reply: Reply) {
+  return replies.filter((item) => item !== reply)
 }
 
 function same(a: Data, b: Data) {
