@@ -9,6 +9,8 @@ import {
   parseErrorResponse,
   resourceUrlFromServerUrl,
   UnauthorizedError,
+  OAuthError,
+  OAuthErrorCode,
   type FetchLike,
   type OAuthClientProvider,
   type OAuthDiscoveryState,
@@ -16,12 +18,13 @@ import {
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
-import { Cause, Deferred, Effect } from "effect"
+import { Cause, Clock, Deferred, Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
@@ -29,8 +32,22 @@ import { ErrorSummary } from "../util/error-summary.js"
 /** Client ID Metadata Document: servers that support CIMD accept this URL as the client_id without registration. */
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
+// The SDK falls back to interactive authorization for server_error and network failures during
+// refresh. A temporary outage must instead reach the connection owner without requesting a login.
+export class RefreshError extends OAuthError {
+  constructor(
+    message: string,
+    readonly retryAfter?: number,
+  ) {
+    super(OAuthErrorCode.TemporarilyUnavailable, message)
+  }
+}
+
 // Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
 const refreshes = new Map<string, ReturnType<FetchLike>>()
+// Different MCP resources can share an authorization server. Serialize their refreshes across
+// Locations, rather than sending a burst for every server after sleep or a network interruption.
+const refreshLoads = KeyedMutex.makeUnsafe<string>()
 
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
   if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
@@ -45,13 +62,47 @@ const share = (pending: ReturnType<FetchLike>) => pending.then((response) => res
 // Requests use `FetchHttpClient.Fetch`, which an embedder can replace, rather than the global fetch.
 const sender = Effect.gen(function* () {
   const fetch = yield* FetchHttpClient.Fetch
+  const run = Effect.runPromiseWith(yield* Effect.context())
   const base: FetchLike = (url, init) => fetch(url, { ...init, timeout: false } as BunFetchRequestInit)
   const send: FetchLike = (url, init) => {
     const key = refreshKey(url, init)
     if (key === undefined) return base(url, init)
     const current = refreshes.get(key)
     if (current) return share(current)
-    const pending = base(url, init).finally(() => {
+    const pending = run(
+      Effect.gen(function* () {
+        const response = yield* Effect.tryPromise({
+          try: (signal) => base(url, { ...init, signal }),
+          catch: (error) =>
+            init?.signal?.aborted
+              ? error
+              : new RefreshError(
+                  `OAuth token refresh could not reach the authorization server: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+        }).pipe(
+          Effect.timeoutOrElse({
+            // Unlike tool execution, token refresh must not hold the authorization server's queue
+            // indefinitely when a half-open connection survives a VPN interruption.
+            duration: "30 seconds",
+            orElse: () => Effect.fail(new RefreshError("OAuth token refresh timed out")),
+          }),
+        )
+        if (response.status !== 408 && response.status !== 429 && (response.status < 500 || response.status === 501))
+          return response
+        const header = response.headers.get("Retry-After")
+        const now = yield* Clock.currentTimeMillis
+        const delay =
+          header === null ? NaN : /^\d+(\.\d+)?$/.test(header) ? Number(header) * 1000 : Date.parse(header) - now
+        yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve())
+        return yield* Effect.fail(
+          new RefreshError(
+            `OAuth token refresh temporarily failed (HTTP ${response.status})`,
+            Number.isFinite(delay) ? Math.max(0, delay) : undefined,
+          ),
+        )
+      }).pipe(refreshLoads.withLock(new URL(url).origin)),
+      { signal: init?.signal ?? undefined },
+    ).finally(() => {
       if (refreshes.get(key) === pending) refreshes.delete(key)
     })
     refreshes.set(key, pending)
