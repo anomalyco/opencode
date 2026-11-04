@@ -20,13 +20,15 @@ function start(workspace: NewSessionWorkspace, mcp: Record<string, boolean> = {}
   return { type: "start", sessionID, workspace, mcp, toggling } satisfies NewSessionStartEvent
 }
 
+type Replay = {
+  state: NewSessionStartState
+  steps: { state: NewSessionStartState["type"]; effects: string[] }[]
+  effects: NewSessionStartEffect[]
+}
+
 // Folds events through the machine and records each step's state and effect types.
 function replay(events: NewSessionStartEvent[], from = createNewSessionStartState()) {
-  const initial: {
-    state: NewSessionStartState
-    steps: { state: NewSessionStartState["type"]; effects: string[] }[]
-    effects: NewSessionStartEffect[]
-  } = { state: from, steps: [], effects: [] }
+  const initial: Replay = { state: from, steps: [], effects: [] }
 
   return events.reduce((acc, event) => {
     const result = transitionNewSessionStart(acc.state, event)
