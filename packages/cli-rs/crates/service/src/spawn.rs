@@ -29,10 +29,7 @@ struct State {
 impl Contender {
     /// Starts `command` (program first) with `env` added to the inherited environment. A variable
     /// with no value is removed, as `undefined` is in a Node `env`.
-    pub fn spawn(
-        command: &[OsString],
-        env: &[(String, Option<String>)],
-    ) -> std::io::Result<Self> {
+    pub fn spawn(command: &[OsString], env: &[(String, Option<String>)]) -> std::io::Result<Self> {
         let (program, args) = command
             .split_first()
             .ok_or_else(|| std::io::Error::other("Missing service command"))?;
