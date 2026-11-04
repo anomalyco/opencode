@@ -67,7 +67,8 @@ fn setup(parts: &Parts, intercept: Option<Override>) -> Setup {
                     "model" => {
                         parts.calls.push("model".into());
                         if parts.model.wait().await {
-                            return ok(json!({}));
+                            // `POST /api/session/:id/model` answers 204 with no body.
+                            return Reply::Text(204, String::new());
                         }
                         Reply::Text(500, "Model setup failed".into())
                     }
