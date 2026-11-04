@@ -24,6 +24,7 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
 import { BedrockAuth } from "./utils/bedrock-auth.js"
 import { BedrockCache } from "./utils/bedrock-cache.js"
+import { warnDropped } from "./utils/cache.js"
 import { BedrockMedia } from "./utils/bedrock-media.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -383,8 +384,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
     if (message.role === "user") {
       const content: BedrockUserBlock[] = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "media"]))
-          return yield* ProviderShared.unsupportedContent("Bedrock Converse", "user", ["text", "media"])
         if (part.type === "text") {
           content.push(...textWithCache(breakpoints, part.text, part.cache))
           continue
@@ -436,8 +435,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 
     const content: BedrockUserBlock[] = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
       const result = yield* lowerToolResult(part, documentNames, normalizeID)
       const images: BedrockMedia.ImageBlock[] = hoistImages
         ? result.toolResult.content.filter((item) => "image" in item)
@@ -607,11 +604,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   })()
   const system = lowerSystem(breakpoints, request.system)
   const messages = yield* lowerMessages(flattened.request, breakpoints)
-  if (breakpoints.dropped > 0) {
-    yield* Effect.logWarning(
-      `Bedrock Converse: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${BedrockCache.BEDROCK_BREAKPOINT_CAP} per request.`,
-    )
-  }
+  yield* warnDropped(breakpoints, "Bedrock Converse", BedrockCache.BEDROCK_BREAKPOINT_CAP)
   const inferenceConfig = (() => {
     if (
       maxTokens === undefined &&

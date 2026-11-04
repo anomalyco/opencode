@@ -158,6 +158,34 @@ export async function runNonInteractivePrompt(input: Input) {
     return result
   }
 
+  // Sessions in this run's tree that have owned a job, so a wake still queued for one of them is seen.
+  const jobSessions = new Set([input.sessionID])
+  let waitingForBackground = false
+
+  // Any job in the tree holds the run open: this session's, its subagents', and theirs.
+  const pendingBackground = async () => {
+    if (input.compatibility === "v1" || interrupted || permissionRejected || formCancelled || emittedError) return false
+    const jobs = await input.client.experimental.job
+      .list({ sessionID: input.sessionID, descendants: true })
+      .catch(() => [])
+    jobs.forEach((job) => {
+      jobSessions.add(job.sessionID)
+      if (job.kind === "subagent") jobSessions.add(job.childSessionID)
+    })
+    if (jobs.length > 0) return true
+    // A finished job wakes its session before its row is removed, so a wake that raced the
+    // list above shows up as a queued inbox item or an active session in the tree.
+    const [active, inboxes] = await Promise.all([
+      input.client.session.active().catch(() => ({})),
+      Promise.all([...jobSessions].map((sessionID) => input.client.session.inbox.list({ sessionID }).catch(() => []))),
+    ])
+    if (inboxes.some((inbox) => inbox.length > 0)) return true
+    for (const sessionID of Object.keys(active)) {
+      if (await ownsSession(sessionID)) return true
+    }
+    return false
+  }
+
   const replyPermission = async (request: {
     id: string
     sessionID: string
@@ -210,13 +238,17 @@ export async function runNonInteractivePrompt(input: Input) {
   }
 
   const consume = async () => {
+    const aborted = new Promise<{ done: true; value: undefined }>((resolve) => {
+      if (controller.signal.aborted) resolve({ done: true, value: undefined })
+      else controller.signal.addEventListener("abort", () => resolve({ done: true, value: undefined }), { once: true })
+    })
     while (!controller.signal.aborted) {
-      const next = await stream.next().catch((error) => {
-        if (!emittedError) throw error
+      const next = await Promise.race([stream.next(), aborted]).catch((error) => {
+        if (!emittedError && !interrupted) throw error
         return { done: true as const, value: undefined }
       })
       if (next.done) {
-        if (emittedError) return
+        if (emittedError || interrupted) return
         throw new Error("Event stream disconnected during prompt execution")
       }
       const event = next.value
@@ -236,7 +268,20 @@ export async function runNonInteractivePrompt(input: Input) {
         await cancelForm(event.data.form)
         continue
       }
-      if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
+      if (!("sessionID" in event.data)) continue
+      if (event.data.sessionID !== input.sessionID) {
+        // While waiting, a reply ending anywhere in the tree may have finished the last of the work.
+        if (
+          waitingForBackground &&
+          (event.type === "session.execution.succeeded" ||
+            event.type === "session.execution.failed" ||
+            event.type === "session.execution.interrupted") &&
+          (await ownsSession(event.data.sessionID)) &&
+          !(await pendingBackground())
+        )
+          return
+        continue
+      }
       const time = toMillis("created" in event ? event.created : undefined)
 
       if (event.type === "session.inbox.delivered") {
@@ -546,7 +591,11 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         return
       }
-      if (event.type === "session.execution.succeeded") return
+      if (event.type === "session.execution.succeeded") {
+        waitingForBackground = await pendingBackground()
+        if (waitingForBackground) continue
+        return
+      }
     }
   }
 
@@ -711,7 +760,14 @@ export async function runNonInteractivePrompt(input: Input) {
     interrupted = true
     process.exitCode = 130
     admission?.abort()
-    void input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+    void input.client.session
+      .interrupt({ sessionID: input.sessionID })
+      .then((result) => {
+        if (!result.interrupted) controller.abort()
+      })
+      .catch(() => {
+        controller.abort()
+      })
   }
   process.on("SIGINT", interrupt)
 
@@ -790,7 +846,15 @@ export async function runNonInteractivePrompt(input: Input) {
       return
     }
 
-    const waiting = input.client.experimental.session.wait({ sessionID: input.sessionID })
+    const waitUntilIdle = async () => {
+      await input.client.experimental.session.wait({ sessionID: input.sessionID })
+      if (!(await pendingBackground())) return
+      await completed
+      if (!interrupted && !permissionRejected && !formCancelled && !emittedError) {
+        await input.client.experimental.session.wait({ sessionID: input.sessionID })
+      }
+    }
+    const waiting = waitUntilIdle()
     await Promise.race([waiting, completed.then(() => waiting)])
     finalizing = true
     const projected = await reconcile()

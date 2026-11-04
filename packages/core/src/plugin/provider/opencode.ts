@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -16,9 +16,11 @@ import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
 import { AbsolutePath } from "../../schema.js"
+import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
@@ -63,12 +65,6 @@ const SkillBundle = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
 type LibrarySkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
-// Downloaded skills by sign-in and workspace, then slug. Shared by every project in this process, so a skill downloads again
-// only when its version changes.
-const downloaded = new Map<
-  string,
-  Map<string, { readonly slug: string; readonly version: string; readonly skill: LibrarySkill }>
->()
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -169,12 +165,17 @@ function oauth(http: HttpClient.HttpClient) {
 }
 
 export const OpencodePlugin = define<
-  HttpClient.HttpClient | Bus.Service | Config.Service | InstructionDiscovery.Service | Skill.Service | Scope.Scope
+  | HttpClient.HttpClient
+  | Bus.Service
+  | Config.Service
+  | InstructionDiscovery.Service
+  | SharedCache.Service
+  | Skill.Service
+  | Scope.Scope
 >({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
-    const bus = yield* Bus.Service
     const client = yield* HttpClient.HttpClient
     // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
     // and whether it evaluates the policies it is being sent.
@@ -182,7 +183,9 @@ export const OpencodePlugin = define<
     const config = yield* Config.Service
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
+    const cache = yield* SharedCache.Service
     const scope = yield* Scope.Scope
+    const settings = yield* ConsoleAccess.Options
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
@@ -190,7 +193,9 @@ export const OpencodePlugin = define<
       remote: typeof ConsoleConfig.Type | undefined
       connection: ActiveConnection
       organization: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined }
+      // Fingerprint of an API key, so a key replaced in place counts as a new sign-in.
+      access: string | undefined
+    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
@@ -201,15 +206,20 @@ export const OpencodePlugin = define<
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
-    // When the last Console config load started, so rejected inference can reuse a recent status.
-    let checked = Number.NEGATIVE_INFINITY
 
-    const load = Effect.fn("OpencodePlugin.load")(function* () {
-      checked = yield* Clock.currentTimeMillis
+    // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
+    // A failed load reports only its connection: what it falls back to depends on the snapshot, which is read under
+    // `loading` when the outcome is applied.
+    const load = Effect.fn("OpencodePlugin.load")(function* (
+      maxAge: Duration.Input = Duration.minutes(1),
+    ): Effect.fn.Return<
+      | { readonly _tag: "Loaded"; readonly next: typeof snapshot }
+      | { readonly _tag: "Failed"; readonly connection: ActiveConnection }
+    > {
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { remote: undefined, connection, organization: undefined }
+        return { _tag: "Loaded", next: { remote: undefined, connection, organization: undefined, access: undefined } }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
@@ -218,31 +228,51 @@ export const OpencodePlugin = define<
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ remote: undefined, connection, organization: undefined })
-          return fetchConfig(http, credential).pipe(
-            Effect.map((remote) => ({
-              remote,
-              connection,
-              organization: organizationName(credential),
-            })),
-          )
+            return Effect.succeed({ remote: undefined, connection, organization: undefined, access: undefined })
+          return cache
+            .get({
+              key: `opencode-console:${workspaceKey(connection, credential)}`,
+              interval: maxAge,
+              // A sign-in error is Console's answer for this sign-in, so it is shared like a config rather than
+              // replaced by the last config, as a network failure is.
+              load: fetchConfig(http, credential).pipe(
+                Effect.map((remote) => ({ remote })),
+                Effect.catch((cause) =>
+                  connectionStatus(cause) ? Effect.succeed({ failed: cause }) : Effect.fail(cause),
+                ),
+              ),
+            })
+            .pipe(
+              Effect.flatMap((result) =>
+                "failed" in result ? Effect.fail(result.failed) : Effect.succeed(result.remote),
+              ),
+              Effect.map((remote) => ({
+                remote,
+                connection,
+                organization: organizationName(credential),
+                access: accessFingerprint(credential),
+              })),
+            )
         }),
         Effect.tap(() => status(undefined)),
+        Effect.map((next) => ({ _tag: "Loaded" as const, next })),
         Effect.catch((cause) =>
           Effect.gen(function* () {
             // Only well-formed Console errors change the connection status; anything else may be transient.
             const next = connectionStatus(cause)
             if (next) yield* status(next)
             yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
-            // A load that fails for the connection already in place keeps its last config: dropping it
-            // would lift organization policy while personal credentials keep working.
-            return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
-              : { remote: undefined, connection, organization: undefined }
+            return { _tag: "Failed" as const, connection }
           }),
         ),
       )
     })
+    // A load that fails for the connection already in place keeps its last config: dropping it would lift
+    // organization policy while personal credentials keep working.
+    const fallback = (connection: ActiveConnection): typeof snapshot =>
+      IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
+        ? { ...snapshot, connection }
+        : { remote: undefined, connection, organization: undefined, access: undefined }
     // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
@@ -305,27 +335,33 @@ export const OpencodePlugin = define<
         const credential = yield* ctx.integration.connection.resolve(connection)
         if (!credential || credential.type === "external") return []
         const server = yield* normalizeServer(ConsoleAccess.server(credential))
-        // API keys carry no account or org, so the sign-in itself identifies the workspace.
-        const workspace = JSON.stringify([server, IntegrationConnection.key(connection), credential.metadata?.orgID])
-        const cached = downloaded.get(workspace)
+        const workspace = workspaceKey(connection, credential)
         const loaded = yield* Effect.forEach(
           listed,
           (item) => {
-            const previous = cached?.get(item.slug)
-            if (previous?.version === item.version) return Effect.succeed(previous)
-            return downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
-              Effect.map((skill) => ({ slug: item.slug, version: item.version, skill })),
-              // A failed download keeps the last copy that loaded, and retries on the next config change.
+            const input = {
+              key: `opencode-console-skill:${workspace}:${item.slug}`,
+              interval: Duration.infinity,
+              load: downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
+                Effect.map((skill) => ({ version: item.version, skill })),
+              ),
+            }
+            // Every project shares one download per skill. Any other version, or a failure, downloads again; a failed
+            // download keeps the last copy that loaded.
+            return cache.get(input).pipe(
+              Effect.filterOrFail((cached) => cached.version === item.version),
+              Effect.catch(() => cache.get({ ...input, force: true })),
+              Effect.map((cached) => cached.skill),
               Effect.catch((cause) =>
-                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(Effect.as(previous)),
+                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(
+                  Effect.as(undefined),
+                ),
               ),
             )
           },
           { concurrency: 8 },
         )
-        const kept = loaded.filter((item) => item !== undefined)
-        downloaded.set(workspace, new Map(kept.map((item) => [item.slug, item])))
-        return kept.map((item) => item.skill)
+        return loaded.filter((item) => item !== undefined)
       },
       Effect.catch((cause) => Effect.logWarning("failed to load Console skills", { cause }).pipe(Effect.as(undefined))),
     )
@@ -335,14 +371,8 @@ export const OpencodePlugin = define<
       execute: (input: WebSearch.ProviderInput) =>
         Effect.gen(function* () {
           const active = yield* ctx.integration.connection.active("opencode")
-          if (
-            !active ||
-            (connection.type === "credential"
-              ? active.type !== "credential" || active.id !== connection.id
-              : active.type !== "env" || active.name !== connection.name)
-          ) {
+          if (!active || IntegrationConnection.key(active) !== IntegrationConnection.key(connection))
             return yield* Effect.fail(new Error("OpenCode Console connection changed"))
-          }
           const credential = yield* ctx.integration.connection.resolve(active)
           if (!credential || credential.type === "external")
             return yield* Effect.fail(new Error("OpenCode Console is not connected"))
@@ -387,7 +417,8 @@ export const OpencodePlugin = define<
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    snapshot = yield* load()
+    const initial = yield* load()
+    snapshot = initial._tag === "Loaded" ? initial.next : fallback(initial.connection)
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
@@ -442,18 +473,27 @@ export const OpencodePlugin = define<
         { concurrency: 5, discard: true },
       )
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
-    // With `maxAge`, a load that started within it is reused; checking inside the permit lets concurrent callers
-    // share the load that was in flight when they arrived.
-    const check = (maxAge = Duration.zero): Effect.Effect<void> =>
-      loading.withPermit(
-        Effect.gen(function* () {
-          if ((yield* Clock.currentTimeMillis) - checked < Duration.toMillis(maxAge)) return
-          const next = yield* load()
-          if (!Equal.equals(snapshot, next)) yield* apply(next)
-        }),
-      )
+    // Loads run outside `loading`, so a slow one never holds up another check. `wait` bounds the load: one still
+    // running carries on in `SharedCache`, retries included, for the next check, while the current snapshot stays.
+    const check = (maxAge?: Duration.Input, wait?: Duration.Input): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const outcome =
+          wait === undefined
+            ? yield* load(maxAge)
+            : Option.getOrUndefined(yield* load(maxAge).pipe(Effect.timeoutOption(wait)))
+        if (!outcome) return
+        yield* loading.withPermit(
+          Effect.gen(function* () {
+            // A switch while this load ran makes it stale; the switch's own check applies the new connection.
+            const loaded = outcome._tag === "Loaded" ? outcome.next.connection : outcome.connection
+            const active = yield* ctx.integration.connection.active("opencode")
+            if (IntegrationConnection.key(loaded) !== IntegrationConnection.key(active)) return
+            const next = outcome._tag === "Loaded" ? outcome.next : fallback(outcome.connection)
+            if (!Equal.equals(snapshot, next)) yield* apply(next)
+          }),
+        )
+      })
 
     // Console inference rejects a missing SSO sign-in with a generic 401/403. Re-check the Console config, which
     // reports the reason, and replace the response with instructions when the connection needs the user.
@@ -484,22 +524,24 @@ export const OpencodePlugin = define<
       )
     })
     yield* guard(snapshot)
+    // A prompt after the machine slept or the host suspended refreshes stale Console config, and the MCP gateway
+    // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
+    // 3 seconds; the turn then runs on the config it has.
+    yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    // Only while connected: a signed-out location runs no timer and no credential lookups.
+    // Only while connected: a signed-out location runs no timer and no credential lookups. Hosts that suspend
+    // between prompts turn the timer off with the `console.poll` server option and rely on the prompt hook.
     const polling = yield* FiberHandle.make<void, never>()
     const poll = Effect.fnUntraced(function* () {
-      if (!snapshot.connection) return yield* FiberHandle.clear(polling)
+      if (!snapshot.connection || !settings.poll) return yield* FiberHandle.clear(polling)
       yield* FiberHandle.run(polling, Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever), {
         onlyIfMissing: true,
       })
     })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
-      Stream.runForEach(() => refresh().pipe(Effect.andThen(poll()))),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    // A switch applies only a changed snapshot, so one a prompt already applied doesn't reload MCP servers mid-turn.
+    yield* ProviderRefresh.onSwitch("opencode", check().pipe(Effect.andThen(poll())))
     yield* poll()
   }),
 })
@@ -534,6 +576,8 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
         }),
       ),
       Effect.scoped,
+      // A transient failure, which `SharedCache` retries.
+      Effect.timeout(Duration.seconds(5)),
     )
 }
 
@@ -560,6 +604,23 @@ function connectionStatus(cause: unknown): IntegrationConnection.Status | undefi
   )
     return { status: "needs_auth", message: signedOutMessage }
   return undefined
+}
+
+// API keys carry no account or org, so the sign-in itself identifies the workspace.
+function workspaceKey(
+  connection: NonNullable<Parameters<typeof IntegrationConnection.key>[0]>,
+  credential: Credential.Key | Credential.OAuth,
+) {
+  return JSON.stringify([
+    ConsoleAccess.server(credential),
+    IntegrationConnection.key(connection),
+    credential.metadata?.orgID,
+    accessFingerprint(credential),
+  ])
+}
+
+function accessFingerprint(credential: Credential.Key | Credential.OAuth) {
+  return credential.type === "key" ? SharedCache.fingerprint(credential.key) : undefined
 }
 
 function organizationName(credential: Credential.Value) {

@@ -173,6 +173,9 @@ export function statPeriodKey(row: StatBaseRow) {
   return [row.grain, row.period_key, row.dataset, row.tier, row.client, row.source].join("\u0000")
 }
 
+// One synced period. The sync writes only the all-client, all-source rows.
+export type StatPeriodScope = { grain: StatGrain; periodKey: string; dataset: string }
+
 export function statRowScope(rows: StatBaseRow[]) {
   if (rows.length === 0) return
   return {
@@ -221,7 +224,7 @@ export function rankRowsWithMarketShare<T extends StatBaseRow>(
   return Object.values(
     rows.reduce<Record<string, T[]>>((result, row) => {
       const key = groupKey(row)
-      result[key] = [...(result[key] ?? []), row]
+      ;(result[key] ??= []).push(row)
       return result
     }, {}),
   ).flatMap((group) => {

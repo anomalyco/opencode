@@ -53,6 +53,12 @@ export function SideRegion(props: {
   sidebar: PanelSidebar
   present?: boolean
   size: Sizing
+  /**
+   * The width the contents keep, the side region's open width, which a close keeps as the far end of its travel. Set
+   * on the content box alone: an inherited custom property on an ancestor restyled every element in the region, the
+   * review's diffs included, on every frame of a resize drag.
+   */
+  contentWidth: Accessor<string>
   drag: PaneDrag
 }) {
   const layout = useLayout()
@@ -122,7 +128,7 @@ export function SideRegion(props: {
           <div
             data-slot="session-review-content"
             class="h-full flex shrink-0 contain-strict"
-            style={{ width: "var(--panel-hold-width, var(--session-side-content-width, 100%))" }}
+            style={{ width: `var(--panel-hold-width, ${props.contentWidth()})` }}
           >
             <div
               ref={stack}
@@ -402,7 +408,7 @@ export function PaneTabs(props: {
         </Menu>
         <div
           data-slot="session-side-panel-actions"
-          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
+          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-[var(--session-header-inset-end,12px)]"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >

@@ -13,6 +13,7 @@ import { Variant } from "@opencode/core/variant"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { AISDK } from "@opencode/core/aisdk"
 import { Npm } from "@opencode/util/npm"
+import { withEnv } from "./fixture/env"
 import { it } from "./lib/effect"
 
 interface ModelOptions {
@@ -54,27 +55,6 @@ function model(packageName: string | undefined, options: ModelOptions = {}) {
     modelID: info.modelID,
   })
   return Info.make(info)
-}
-
-function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
-      Object.entries(variables).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
 }
 
 function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effect.Effect<A, E, R>) {

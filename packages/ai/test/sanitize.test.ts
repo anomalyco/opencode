@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import { ai, type LLMRequest, Message, ToolCallPart, ToolDefinition } from "../src/effect.js"
 import { OpenAIChat } from "../src/protocols.js"
 import { Auth } from "../src/route.js"
@@ -35,7 +36,7 @@ describe("sanitizeSurrogates", () => {
       }),
     )
 
-    expect(sanitized.messages.every((message) => message instanceof Message)).toBe(true)
+    expect(sanitized.messages.every((message) => Schema.is(Message)(message))).toBe(true)
     expect(sanitized.tools[0]).toBe(tool)
     expect(sanitized.system).toEqual([{ type: "text", text: "system \uFFFD" }])
     expect(sanitized.messages).toEqual([
@@ -53,7 +54,7 @@ describe("sanitizeSurrogates", () => {
       tools: [tool],
       messages: [...messages, Message.user("bad \uD800")],
       generation: { maxTokens: 10 },
-      metadata: { nested: { list: ["a", "b"] } },
+      providerOptions: { nested: { list: ["a", "b"] } },
     })
     const sanitized = sanitizeRequest(request)
 
@@ -69,7 +70,7 @@ describe("sanitizeSurrogates", () => {
     const output = sanitizeSurrogates(input)
     expect(output.system).toBe(input.system)
     expect(output.tools).toBe(input.tools)
-    expect(output.metadata).toBe(input.metadata)
+    expect(output.providerOptions).toBe(input.providerOptions)
     expect(output.messages).not.toBe(input.messages)
 
     const clean = ai.request({ model, system: "system", tools: [tool], messages })

@@ -11,6 +11,7 @@
       },
       "devDependencies": {
         "@ast-grep/cli": "0.44.0",
+        "@hona/strobe": "catalog:",
         "@opencode/client": "workspace:*",
         "@oxlint/plugins": "1.60.0",
         "@tsconfig/bun": "catalog:",
@@ -86,6 +87,7 @@
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
+        "@hona/strobe": "catalog:",
         "@playwright/test": "catalog:",
         "@sentry/vite-plugin": "catalog:",
         "@tailwindcss/vite": "4.3.3",
@@ -251,6 +253,8 @@
       "dependencies": {
         "@ai-sdk/provider": "3.0.19",
         "@ai-sdk/provider-utils": "4.0.62",
+        "@effect/platform-node": "catalog:",
+        "@effect/platform-node-shared": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
         "@effect/sql-sqlite-node": "catalog:",
         "@ff-labs/fff-bun": "0.10.5",
@@ -289,7 +293,7 @@
       "devDependencies": {
         "@ai-sdk/openai-compatible": "2.0.41",
         "@anthropic-ai/claude-agent-sdk": "0.3.301",
-        "@effect/platform-node": "catalog:",
+        "@hona/strobe": "catalog:",
         "@opencode/http-recorder": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
         "@parcel/watcher-darwin-x64": "2.5.1",
@@ -326,6 +330,7 @@
       "devDependencies": {
         "@brendonovich/vite-plugin-opencode": "0.1.3",
         "@effect/platform-node": "catalog:",
+        "@hona/strobe": "catalog:",
         "@lydell/node-pty": "catalog:",
         "@opencode/app": "workspace:*",
         "@opencode/client": "workspace:*",
@@ -768,12 +773,12 @@
       "name": "@opencode/stats-server",
       "version": "2.2.5",
       "dependencies": {
-        "@effect/platform-node": "catalog:",
         "@opencode/stats-core": "workspace:*",
         "effect": "catalog:",
         "sst": "catalog:",
       },
       "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -864,6 +869,7 @@
         "solid-sonner": "catalog:",
       },
       "devDependencies": {
+        "@hona/strobe": "catalog:",
         "@solidjs/meta": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
@@ -1049,6 +1055,7 @@
     "@effect/platform-node-shared": "4.1.0",
     "@effect/sql-sqlite-bun": "4.1.0",
     "@effect/sql-sqlite-node": "4.1.0",
+    "@hona/strobe": "0.6.0",
     "@kobalte/core": "0.13.13",
     "@lydell/node-pty": "1.2.0-beta.12",
     "@npmcli/arborist": "9.4.0",
@@ -1687,6 +1694,18 @@
     "@graphql-typed-document-node/core": ["@graphql-typed-document-node/core@3.2.0", "", { "peerDependencies": { "graphql": "^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0" } }, "sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ=="],
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.0.11", "", { "dependencies": { "@types/node": "^20.0.0", "happy-dom": "^20.0.11" } }, "sha512-GqNqiShBT/lzkHTMC/slKBrvN0DsD4Di8ssBk4aDaVgEn+2WMzE6DXxq701ndSXj7/0cJ8mNT71pM7Bnrr6JRw=="],
+
+    "@hona/strobe": ["@hona/strobe@0.6.0", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.6.0", "@hona/strobe-darwin-x64": "0.6.0", "@hona/strobe-linux-arm64": "0.6.0", "@hona/strobe-linux-x64": "0.6.0", "@hona/strobe-win32-x64": "0.6.0" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-KkGO9k3tLwZq0X4epJgrAFNQyO515969aTfkC8CBjMWchRuofW66LbucYP+up3UP6Fb5kg7VUuP1yb8Dcdls0Q=="],
+
+    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.6.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-7d1IFyjXYl1GiGyWPT1Yqvc9XkZJy7a5/E4JfvinupenszJTXkFZrQCz1JuuAyHqhKc5zchmlvCVll2bGCIu2A=="],
+
+    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.6.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-o5HAqoSN/DLIGJb0VSIzBTP4iyys9gDPkQotVqhgxgvG687P6w7uV+c2ZBXT9O1DQxraTbIc61PI1e54fhtskA=="],
+
+    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.6.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-wvmWlB5vYJ0DTCpbboTMB6xW4I5SQkYz2P92lAoqlHZq1CV+smMLCOwjs8Ml1Cz9IsLbUNQ6zR/ggWuE7GRhOQ=="],
+
+    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.6.0", "", { "os": "linux", "cpu": "x64" }, "sha512-0C7lK/bakN4EGKCCbKOMmBGqfB/iz3cDQJC8RNRSpgVXTbtmitRywTs1UK11WbMhB0AkaSVqBfA2FYFXILePSg=="],
+
+    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.6.0", "", { "os": "win32", "cpu": "x64" }, "sha512-XSAeRz0Z+g/8Z3cU/c8I80yiH5Z96xXvw4f1e2kBUm9ukrFFDkm1mheP5KLsx7Nq/aNtsqTXLLiw1mmwHuioVA=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.5", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q=="],
 

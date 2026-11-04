@@ -13,7 +13,6 @@ import { showToast } from "@/shell/notifications/toast"
 import "@/settings/settings.css"
 import { builtins } from "./builtins"
 import { usePluginHost } from "./host"
-import { createInstalled } from "./installed"
 import { useReservedPlugins } from "./root"
 
 /**
@@ -55,14 +54,13 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
   const language = useLanguage()
   const host = usePluginHost()
   const bridge = usePlatform().plugins
-  const installed = createInstalled(bridge)
   const reserved = useReservedPlugins()
 
   const builtin = (id: string) => builtins.some((definition) => definition.id === id)
 
   // A server plugin's id can be a built-in's (a reserved id), so each row looks up its own kind of item.
   const itemOf = (id: string, kind: "builtin" | "config") =>
-    installed.list().find((item) => item.id === id && item.builtin === (kind === "builtin"))
+    host.installed().find((item) => item.id === id && item.builtin === (kind === "builtin"))
 
   const defined = (id: string) => !builtin(id) && host.definitions().some((definition) => definition.id === id)
 
@@ -90,7 +88,7 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
     return [
       ...new Set([
         ...host.definitions().flatMap((definition) => (builtin(definition.id) ? [] : [definition.id])),
-        ...installed.list().flatMap((item) => (item.builtin ? [] : [item.id])),
+        ...host.installed().flatMap((item) => (item.builtin ? [] : [item.id])),
         ...reserved(),
       ]),
     ].filter((id) => !named.has(id))
@@ -212,7 +210,7 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
         <For each={unnamed()}>{(id) => row({ id, name: id })}</For>
         <For each={failedBuiltins()}>{(id) => row({ id, name: id, builtin: true })}</For>
       </SettingsList>
-      <Show when={installed.list().some((item) => !item.builtin)}>
+      <Show when={host.installed().some((item) => !item.builtin)}>
         <p class="text-11-regular text-v2-text-text-muted">{language.t("settings.plugins.parts.note")}</p>
       </Show>
     </>

@@ -13,15 +13,16 @@ import {
 } from "./route/client.js"
 import {
   GenerationOptions,
-  HttpOptions,
   InvalidProviderOutputError,
   InvalidRequestError,
   AIError,
   LLMEvent,
   LLMResponse,
+  ResponseFold,
   Message,
   LanguageModel,
   SystemPart,
+  type BaseRequest,
   type CachePolicy,
   type CompactionCheckpointResponse,
   type CompactionResponse,
@@ -29,7 +30,6 @@ import {
   ToolChoice,
   ToolEntry,
   Usage,
-  type ContentPart,
   type LanguageModelProviderOptions,
   type LLMRequest,
   type ToolEntryInput,
@@ -44,23 +44,20 @@ export type LLMRequestInput<Model extends LanguageModel = LanguageModel> = TextR
 
 /** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
 export type PromptOrMessages =
-  | { readonly prompt: string | ContentPart | ReadonlyArray<ContentPart>; readonly messages?: never }
+  | { readonly prompt: Message.UserContentInput; readonly messages?: never }
   | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
 
-interface TextRequestFields<Model extends LanguageModel> {
+interface TextRequestFields<Model extends LanguageModel>
+  extends BaseRequest<Model, NoInfer<LanguageModelProviderOptions<Model>>> {
   readonly id?: string
-  readonly model: Model
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<Model>>
-  readonly http?: HttpOptions.Input
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string
-  readonly metadata?: Record<string, unknown>
   /** Emit a `raw` event with each provider frame before the events parsed from it. */
   readonly includeRaw?: boolean
 }
@@ -174,7 +171,7 @@ const stepStream = (
   after: (step: Step) => Stream.Stream<LLMEvent, AIError, Service>,
 ): Stream.Stream<LLMEvent, AIError, Service> =>
   Stream.suspend(() => {
-    let state = LLMResponse.empty()
+    let state = ResponseFold.empty()
     let finish: Finish | undefined
     return LLMClient.stream(request, options).pipe(
       Stream.map((event) =>
@@ -184,15 +181,15 @@ const stepStream = (
       ),
       Stream.tap((event) =>
         Effect.sync(() => {
-          state = LLMResponse.reduce(state, event)
+          state = ResponseFold.reduce(state, event)
           if (event.type === "finish") finish = event
         }),
       ),
       Stream.filter((event) => event.type !== "finish"),
-      Stream.mapError((error) => withPartial(error, LLMResponse.partial(state))),
+      Stream.mapError((error) => withPartial(error, ResponseFold.partial(state))),
       Stream.concat(
         Stream.suspend(() => {
-          const response = LLMResponse.complete(state)
+          const response = ResponseFold.complete(state)
           return response && finish ? after({ response, finish }) : Stream.empty
         }),
       ),
@@ -305,10 +302,12 @@ export const request = <const Model extends LanguageModel>(input: LLMRequestInpu
     toolChoice: input.toolChoice ? ToolChoice.make(input.toolChoice) : undefined,
     generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
     providerOptions: input.providerOptions,
-    http: HttpOptions.make(input.http),
+    headers: input.headers,
+    fetch: input.fetch,
+    timeout: input.timeout,
+    http: input.http,
     cache: input.cache,
     promptCacheKey: input.promptCacheKey,
-    metadata: input.metadata,
     includeRaw: input.includeRaw,
   }
 }
