@@ -42,12 +42,15 @@ export function pairingLink(value: string) {
   const url = URL.parse(trimmed)
 
   if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) return
-  const code = /^\/auth\/connect\/([^/]+)$/.exec(url.pathname)?.[1]
-  const address = serverAddress(url.origin)
+  // A server mounted under a path prefix, such as `/opencode`, keeps it in front of `/auth/connect/<code>`.
+  const match = /^(.*)\/auth\/connect\/([^/]+)$/.exec(url.pathname)
 
-  if (!code || !CODE.test(code) || !address) return
+  if (!match || !CODE.test(match[2])) return
+  const address = serverAddress(url.origin + match[1])
 
-  return { urls: [address], code }
+  if (!address) return
+
+  return { urls: [address], code: match[2] }
 }
 
 // A server address typed where a pairing link was expected: a host with no path, so a bare code or a cut-off link
