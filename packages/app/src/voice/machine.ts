@@ -1,4 +1,4 @@
-import type { ToolCall } from "./protocol"
+import type { ToolCall, VoiceEvent } from "./protocol"
 
 export const MAX_ROUNDS = 50
 
@@ -8,7 +8,7 @@ export const RESPONSE_TIMEOUT = 60_000
 /** Each tool call in a round gets this long; above wait_for_session's 90 s server wait. */
 export const TOOL_TIMEOUT = 100_000
 
-/** The output of each call in a round that ran past its deadline. */
+/** The output of each unfinished call in a round that ran past its deadline. */
 export const TIMED_OUT = JSON.stringify({
   error: "Tool request timed out. Do not claim it succeeded or resend an uncertain admission.",
 })
@@ -18,8 +18,8 @@ export type ToolOutput = { call_id: string; output: string }
 export type DelegationPhase =
   /** Waiting for the delegator's response to finish, collecting the function calls it makes. */
   | { type: "responding"; attempt: number; responseID?: string; calls: readonly ToolCall[] }
-  /** Running the previous response's function calls locally; Live waits for an output for each pending call. */
-  | { type: "running"; attempt: number; pending: readonly string[] }
+  /** Running the previous response's function calls locally, in order; Live waits for an output for each. */
+  | { type: "running"; attempt: number; outputs: readonly ToolOutput[]; pending: readonly string[] }
 
 export type Delegation = {
   id: string
@@ -41,7 +41,9 @@ export type VoiceDelegationState = {
   finished: readonly string[]
 }
 
-export type ResponseOutcome = "completed" | "failed" | "incomplete" | "cancelled"
+const outcomes = ["completed", "failed", "incomplete", "cancelled"] as const
+
+export type ResponseOutcome = (typeof outcomes)[number]
 
 /** Response events name their delegation, or leave `delegationID` empty when Live does not know it. */
 type Routed = { delegationID?: string | null; responseID?: string }
@@ -51,7 +53,8 @@ export type VoiceDelegationEvent =
   | ({ type: "response.created" } & Routed)
   | ({ type: "response.call"; call: ToolCall } & Routed)
   | ({ type: "response.finished"; outcome: ResponseOutcome } & Routed)
-  | { type: "round.completed"; id: string; attempt: number; sessionID: string; outputs: readonly ToolOutput[] }
+  /** One call of a round finished; `sessionID` is where later tools default to after it. */
+  | { type: "tool.completed"; id: string; attempt: number; sessionID: string; output: ToolOutput }
   /** `channelOpen` is whether Live's data channel can still take tool outputs when the timer fires. */
   | { type: "delegation.timeout"; id: string; attempt: number; channelOpen: boolean }
   | { type: "call.reset" }
@@ -59,7 +62,7 @@ export type VoiceDelegationEvent =
 export type VoiceDelegationEffect =
   /** Replaces the delegation's timer; when it fires, dispatch `delegation.timeout` with this attempt. */
   | { type: "deadline"; id: string; attempt: number; ms: number }
-  /** Runs the calls in order, then dispatches `round.completed` with this attempt. */
+  /** Runs the calls in order and dispatches `tool.completed` with this attempt as each one finishes. */
   | {
       type: "round"
       id: string
@@ -67,7 +70,7 @@ export type VoiceDelegationEffect =
       request: { id: string; sessionID: string; transcript: string[] }
       calls: readonly ToolCall[]
     }
-  /** Aborts the delegation's running tools; the machine already ignores their round. */
+  /** Aborts the delegation's running tools; the machine already ignores their late results. */
   | { type: "abort"; id: string }
   /** Sends the outputs to Live and asks the delegator to continue. */
   | { type: "outputs"; outputs: readonly ToolOutput[] }
@@ -122,7 +125,7 @@ export function transitionVoiceDelegation(
 
   if (event.type === "call.reset")
     return {
-      state: { ...state, delegations: [] },
+      state: { ...state, delegations: [], finished: [...state.finished, ...state.delegations.flatMap(abandoned)] },
       effects: state.delegations.map(
         (delegation): VoiceDelegationEffect => ({ type: "finish", id: delegation.id, outcome: "discarded" }),
       ),
@@ -133,43 +136,88 @@ export function transitionVoiceDelegation(
 
     if (delegation?.phase.attempt !== event.attempt) return unchanged(state)
 
-    if (delegation.phase.type !== "running" || !event.channelOpen) return finish(state, delegation, "discarded")
+    if (delegation.phase.type !== "running" || !event.channelOpen)
+      return finish({ ...state, finished: [...state.finished, ...abandoned(delegation)] }, delegation, "discarded")
 
     // Live waits for an output per call; an error lets the delegator tell the user instead of waiting forever.
-    const resumed = resume(
-      state,
-      delegation,
-      delegation.sessionID,
-      delegation.phase.pending.map((id) => ({ call_id: id, output: TIMED_OUT })),
-    )
+    // Finished calls keep their real output, so a delivered message is never reported as uncertain.
+    const resumed = resume(state, delegation, [
+      ...delegation.phase.outputs,
+      ...delegation.phase.pending.map((id) => ({ call_id: id, output: TIMED_OUT })),
+    ])
 
     return { state: resumed.state, effects: [{ type: "abort", id: delegation.id }, ...resumed.effects] }
   }
 
-  if (event.type === "round.completed") {
-    const delegation = state.delegations.find((item) => item.id === event.id)
+  if (event.type === "tool.completed") {
+    const found = state.delegations.find((item) => item.id === event.id)
 
-    if (delegation?.phase.type !== "running" || delegation.phase.attempt !== event.attempt) return unchanged(state)
+    if (
+      found?.phase.type !== "running" ||
+      found.phase.attempt !== event.attempt ||
+      !found.phase.pending.includes(event.output.call_id)
+    )
+      return unchanged(state)
 
-    return resume(state, delegation, event.sessionID, event.outputs)
+    const delegation = {
+      ...found,
+      sessionID: event.sessionID,
+      phase: {
+        ...found.phase,
+        outputs: [...found.phase.outputs, event.output],
+        pending: found.phase.pending.filter((id) => id !== event.output.call_id),
+      },
+    }
+
+    if (!delegation.phase.pending.length) return resume(state, delegation, delegation.phase.outputs)
+
+    return { state: replace(state, delegation), effects: [] }
   }
 
   return responded(state, event)
 }
 
+/** Maps a Live event to the machine, reading the response ID wherever the decoder found one. */
+export function responseEvent(event: VoiceEvent): VoiceDelegationEvent | undefined {
+  if (event.type !== "response.event" || !event.event) return undefined
+  const nested = event.event
+  const routed = { delegationID: event.delegation_id, responseID: nested.response?.id ?? nested.response_id }
+
+  if (nested.type === "response.created") return { type: "response.created", ...routed }
+
+  if (nested.type === "response.output_item.done" && nested.item?.type === "function_call") {
+    const item = nested.item
+
+    if (!item.call_id || !item.name) return undefined
+
+    return {
+      type: "response.call",
+      ...routed,
+      call: { call_id: item.call_id, name: item.name, arguments: item.arguments ?? "{}" },
+    }
+  }
+
+  const outcome = outcomes.find((item) => nested.type === `response.${item}`)
+
+  if (!outcome) return undefined
+
+  return { type: "response.finished", ...routed, outcome }
+}
+
+// A delegation that ends before its response does must not leave that response free to bind to a newer one.
+function abandoned(delegation: Delegation) {
+  return delegation.phase.type === "responding" && delegation.phase.responseID ? [delegation.phase.responseID] : []
+}
+
 function resume(
   state: VoiceDelegationState,
   delegation: Delegation,
-  sessionID: string,
   outputs: readonly ToolOutput[],
 ): VoiceDelegationTransition {
   const attempt = state.seq + 1
 
   return {
-    state: replace(
-      { ...state, seq: attempt },
-      { ...delegation, sessionID, phase: { type: "responding", attempt, calls: [] } },
-    ),
+    state: replace({ ...state, seq: attempt }, { ...delegation, phase: { type: "responding", attempt, calls: [] } }),
     effects: [
       { type: "outputs", outputs },
       { type: "deadline", id: delegation.id, attempt, ms: RESPONSE_TIMEOUT },
@@ -219,7 +267,7 @@ function responded(
       {
         ...delegation,
         rounds: delegation.rounds + 1,
-        phase: { type: "running", attempt, pending: phase.calls.map((call) => call.call_id) },
+        phase: { type: "running", attempt, outputs: [], pending: phase.calls.map((call) => call.call_id) },
       },
     ),
     effects: [

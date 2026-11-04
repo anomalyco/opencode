@@ -11,8 +11,8 @@ import {
   createVoiceDelegationState,
   delegating,
   hasDelegation,
+  responseEvent,
   transitionVoiceDelegation,
-  type ToolOutput,
   type VoiceDelegationEffect,
   type VoiceDelegationEvent,
 } from "./machine"
@@ -37,8 +37,6 @@ type CallRuntime = {
   ready: boolean
   joining: boolean
 }
-
-const outcomes = ["completed", "failed", "incomplete", "cancelled"] as const
 
 export function createVoiceCall(input: {
   ctx: ServerCtx
@@ -184,27 +182,9 @@ export function createVoiceCall(input: {
       return
     }
 
-    if (event.type !== "response.event" || !event.event) return
-    const nested = event.event
-    const routed = { delegationID: event.delegation_id, responseID: nested.response?.id }
+    const next = responseEvent(event)
 
-    if (nested.type === "response.created") return dispatch({ type: "response.created", ...routed })
-
-    if (nested.type === "response.output_item.done" && nested.item?.type === "function_call") {
-      const item = nested.item
-
-      if (!item.call_id || !item.name) return
-
-      return dispatch({
-        type: "response.call",
-        ...routed,
-        call: { call_id: item.call_id, name: item.name, arguments: item.arguments ?? "{}" },
-      })
-    }
-
-    const outcome = outcomes.find((item) => nested.type === `response.${item}`)
-
-    if (outcome) dispatch({ type: "response.finished", ...routed, outcome })
+    if (next) dispatch(next)
   }
 
   function dispatch(event: VoiceDelegationEvent) {
@@ -290,14 +270,18 @@ export function createVoiceCall(input: {
   async function runRound(effect: Extract<VoiceDelegationEffect, { type: "round" }>, signal: AbortSignal) {
     // open_session moves the rest of this request onto the session it opened.
     const request = { ...effect.request }
+
     // Serial execution preserves dependencies between tools in one round.
-    const outputs: ToolOutput[] = []
-
     for (const call of effect.calls) {
-      outputs.push({ call_id: call.call_id, output: await tools.run(call, request, signal) })
+      const output = await tools.run(call, request, signal)
+      dispatch({
+        type: "tool.completed",
+        id: effect.id,
+        attempt: effect.attempt,
+        sessionID: request.sessionID,
+        output: { call_id: call.call_id, output },
+      })
     }
-
-    dispatch({ type: "round.completed", id: effect.id, attempt: effect.attempt, sessionID: request.sessionID, outputs })
   }
 
   async function watch() {

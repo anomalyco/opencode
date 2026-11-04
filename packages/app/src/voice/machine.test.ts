@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test"
+import { decodeEvent } from "./protocol"
 import {
   createVoiceDelegationState,
   delegating,
   MAX_ROUNDS,
+  responseEvent,
   RESPONSE_TIMEOUT,
   TIMED_OUT,
   transitionVoiceDelegation,
+  type ResponseOutcome,
   type VoiceDelegationEffect,
   type VoiceDelegationEvent,
   type VoiceDelegationState,
@@ -22,58 +25,80 @@ function replay(events: VoiceDelegationEvent[], start = createVoiceDelegationSta
   )
 }
 
-const created = (id: string): VoiceDelegationEvent => ({
+// Response events go through the real decoder, so they carry only the fields Live sends.
+function live(delegationID: string | null, nested: object) {
+  const event = decodeEvent(JSON.stringify({ type: "response.event", delegation_id: delegationID, event: nested }))
+  const next = event && responseEvent(event)
+
+  if (!next) throw new Error("not a delegation event")
+
+  return next
+}
+
+const opened = (id: string): VoiceDelegationEvent => ({
   type: "delegation.created",
   id,
   sessionID: "ses_here",
   transcript: [`user: ${id}`],
 })
 
-const call = (id: string): Extract<VoiceDelegationEvent, { type: "response.call" }> => ({
-  type: "response.call",
-  delegationID: null,
-  call: { call_id: id, name: "send_message", arguments: "{}" },
-})
+const started = (responseID: string, delegationID: string | null = null) =>
+  live(delegationID, { type: "response.created", response: { id: responseID } })
 
-const finishes = (effects: VoiceDelegationEffect[]) => effects.filter((effect) => effect.type === "finish")
+// Function call items name their response only through `response_id`, when Live sends it.
+const called = (callID: string, responseID?: string, delegationID: string | null = null) =>
+  live(delegationID, {
+    type: "response.output_item.done",
+    response_id: responseID,
+    item: { type: "function_call", call_id: callID, name: "send_message", arguments: "{}" },
+  })
+
+const ended = (responseID: string, outcome: ResponseOutcome, delegationID: string | null = null) =>
+  live(delegationID, { type: `response.${outcome}`, response: { id: responseID } })
 
 const attempt = (state: VoiceDelegationState, id: string) =>
   state.delegations.find((delegation) => delegation.id === id)?.phase.attempt ?? -1
 
+const ran = (state: VoiceDelegationState, id: string, callID: string, output = "{}"): VoiceDelegationEvent => ({
+  type: "tool.completed",
+  id,
+  attempt: attempt(state, id),
+  sessionID: "ses_here",
+  output: { call_id: callID, output },
+})
+
+const timeout = (state: VoiceDelegationState, id: string, channelOpen: boolean): VoiceDelegationEvent => ({
+  type: "delegation.timeout",
+  id,
+  attempt: attempt(state, id),
+  channelOpen,
+})
+
+const finishes = (effects: VoiceDelegationEffect[]) => effects.filter((effect) => effect.type === "finish")
+
+const rounds = (effects: VoiceDelegationEffect[]) =>
+  effects
+    .filter((effect) => effect.type === "round")
+    .map((effect) => [effect.id, effect.calls.map((call) => call.call_id)])
+
 test("an untagged response reaches the open delegation while another runs tools", () => {
   // del_1 runs send_message when del_2 starts; Live then omits delegation_id on del_2's events.
   const running = replay([
-    created("del_1"),
-    { type: "response.created", delegationID: "del_1", responseID: "resp_1" },
-    { ...call("call_1"), delegationID: "del_1", responseID: "resp_1" },
-    { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
-    created("del_2"),
+    opened("del_1"),
+    started("resp_1", "del_1"),
+    called("call_1", "resp_1", "del_1"),
+    ended("resp_1", "completed", "del_1"),
+    opened("del_2"),
   ])
 
-  expect(running.effects.filter((effect) => effect.type === "round").map((effect) => effect.id)).toEqual(["del_1"])
+  expect(rounds(running.effects)).toEqual([["del_1", ["call_1"]]])
 
-  const second = replay(
-    [
-      { type: "response.created", delegationID: null, responseID: "resp_2" },
-      { type: "response.finished", delegationID: null, responseID: "resp_2", outcome: "completed" },
-    ],
-    running.state,
-  )
+  const second = replay([started("resp_2"), ended("resp_2", "completed")], running.state)
 
   expect(finishes(second.effects)).toEqual([{ type: "finish", id: "del_2", outcome: "answered" }])
 
   const first = replay(
-    [
-      {
-        type: "round.completed",
-        id: "del_1",
-        attempt: attempt(second.state, "del_1"),
-        sessionID: "ses_other",
-        outputs: [{ call_id: "call_1", output: "{}" }],
-      },
-      { type: "response.created", delegationID: null, responseID: "resp_3" },
-      { type: "response.finished", delegationID: null, responseID: "resp_3", outcome: "completed" },
-    ],
+    [ran(second.state, "del_1", "call_1"), started("resp_3"), ended("resp_3", "completed")],
     second.state,
   )
 
@@ -83,14 +108,29 @@ test("an untagged response reaches the open delegation while another runs tools"
   expect(delegating(first.state)).toBe(false)
 })
 
+test("an untagged function call follows its response ID to its own delegation", () => {
+  const result = replay([
+    opened("del_1"),
+    opened("del_2"),
+    started("resp_1"),
+    started("resp_2"),
+    called("call_2", "resp_2"),
+    ended("resp_2", "completed"),
+  ])
+
+  // Attached to del_1, the call would leave del_2 answered while Live waits for call_2's output.
+  expect(rounds(result.effects)).toEqual([["del_2", ["call_2"]]])
+  expect(finishes(result.effects)).toEqual([])
+})
+
 test.each(["cancelled", "failed", "incomplete"] as const)("response.%s ends only its own delegation", (outcome) => {
   const result = replay([
-    created("del_1"),
-    { type: "response.created", delegationID: null, responseID: "resp_1" },
-    created("del_2"),
-    { type: "response.finished", delegationID: null, responseID: "resp_1", outcome },
-    { type: "response.created", delegationID: null, responseID: "resp_2" },
-    { type: "response.finished", delegationID: null, responseID: "resp_2", outcome: "completed" },
+    opened("del_1"),
+    started("resp_1"),
+    opened("del_2"),
+    ended("resp_1", outcome),
+    started("resp_2"),
+    ended("resp_2", "completed"),
   ])
 
   expect(finishes(result.effects)).toEqual([
@@ -101,7 +141,8 @@ test.each(["cancelled", "failed", "incomplete"] as const)("response.%s ends only
 })
 
 test("a timeout with the data channel closed discards only its delegation and ignores earlier attempts", () => {
-  const start = replay([created("del_1"), created("del_2")])
+  const start = replay([opened("del_1"), opened("del_2")])
+
   expect(start.effects).toContainEqual({
     type: "deadline",
     id: "del_1",
@@ -109,26 +150,15 @@ test("a timeout with the data channel closed discards only its delegation and ig
     ms: RESPONSE_TIMEOUT,
   })
 
-  const responding = attempt(start.state, "del_1")
-
   const running = replay(
-    [
-      call("call_1"),
-      { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
-      { type: "delegation.timeout", id: "del_1", attempt: responding, channelOpen: true },
-    ],
+    [called("call_1"), ended("resp_1", "completed", "del_1"), timeout(start.state, "del_1", true)],
     start.state,
   )
 
   expect(finishes(running.effects)).toEqual([])
 
-  const round = attempt(running.state, "del_1")
-
   const timedOut = replay(
-    [
-      { type: "delegation.timeout", id: "del_1", attempt: round, channelOpen: false },
-      { type: "round.completed", id: "del_1", attempt: round, sessionID: "ses_here", outputs: [] },
-    ],
+    [timeout(running.state, "del_1", false), ran(running.state, "del_1", "call_1")],
     running.state,
   )
 
@@ -136,37 +166,36 @@ test("a timeout with the data channel closed discards only its delegation and ig
   expect(timedOut.state.delegations.map((delegation) => delegation.id)).toEqual(["del_2"])
 
   // A response that never finishes has no outputs to send, so it ends even with the channel open.
-  const silent = replay(
-    [{ type: "delegation.timeout", id: "del_2", attempt: attempt(timedOut.state, "del_2"), channelOpen: true }],
-    timedOut.state,
-  )
+  const silent = replay([timeout(timedOut.state, "del_2", true)], timedOut.state)
 
   expect(silent.effects).toEqual([{ type: "finish", id: "del_2", outcome: "discarded" }])
 })
 
-test("a tool round that times out sends error outputs and waits for the delegator's answer", () => {
-  const running = replay([
-    created("del_1"),
-    call("call_1"),
-    call("call_2"),
-    { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
-  ])
+test("a delegation that ends early leaves its response unable to finish a newer one", () => {
+  const bound = replay([opened("del_1"), started("resp_1")])
+  const late = [called("call_1", "resp_1"), ended("resp_1", "completed")]
+  const timedOut = replay([timeout(bound.state, "del_1", true), opened("del_2")], bound.state)
+  const reset = replay([{ type: "call.reset" }, opened("del_2")], bound.state)
 
-  const round = attempt(running.state, "del_1")
+  expect(replay(late, timedOut.state)).toEqual({ state: timedOut.state, effects: [] })
+  expect(replay(late, reset.state)).toEqual({ state: reset.state, effects: [] })
+})
 
-  const timedOut = transitionVoiceDelegation(running.state, {
-    type: "delegation.timeout",
-    id: "del_1",
-    attempt: round,
-    channelOpen: true,
-  })
+test("a tool round that times out keeps finished outputs and reports only unfinished calls", () => {
+  const running = replay([opened("del_1"), called("call_1"), called("call_2"), ended("resp_1", "completed", "del_1")])
+  const admitted = JSON.stringify({ admitted: true })
+  const progressed = replay([ran(running.state, "del_1", "call_1", admitted)], running.state)
+
+  expect(progressed.effects).toEqual([])
+
+  const timedOut = transitionVoiceDelegation(progressed.state, timeout(progressed.state, "del_1", true))
 
   expect(timedOut.effects).toEqual([
     { type: "abort", id: "del_1" },
     {
       type: "outputs",
       outputs: [
-        { call_id: "call_1", output: TIMED_OUT },
+        { call_id: "call_1", output: admitted },
         { call_id: "call_2", output: TIMED_OUT },
       ],
     },
@@ -174,11 +203,7 @@ test("a tool round that times out sends error outputs and waits for the delegato
   ])
 
   const answered = replay(
-    [
-      { type: "round.completed", id: "del_1", attempt: round, sessionID: "ses_here", outputs: [] },
-      { type: "response.created", delegationID: null, responseID: "resp_2" },
-      { type: "response.finished", delegationID: null, responseID: "resp_2", outcome: "completed" },
-    ],
+    [ran(progressed.state, "del_1", "call_2"), started("resp_2"), ended("resp_2", "completed")],
     timedOut.state,
   )
 
@@ -188,63 +213,43 @@ test("a tool round that times out sends error outputs and waits for the delegato
 test("a runaway delegation is discarded after the last allowed round", () => {
   const result = Array.from({ length: MAX_ROUNDS + 1 }, (_, index) => index).reduce(
     (current, index) => {
-      const finished = replay(
-        [
-          call(`call_${index}`),
-          { type: "response.finished", delegationID: "del_1", responseID: `resp_${index}`, outcome: "completed" },
-        ],
-        current.state,
-      )
+      const finished = replay([called(`call_${index}`), ended(`resp_${index}`, "completed", "del_1")], current.state)
 
-      const ran = finished.state.delegations.length
-        ? replay(
-            [
-              {
-                type: "round.completed",
-                id: "del_1",
-                attempt: attempt(finished.state, "del_1"),
-                sessionID: "ses_here",
-                outputs: [],
-              },
-            ],
-            finished.state,
-          )
-        : finished
+      const done = finished.state.delegations.length
+        ? replay([ran(finished.state, "del_1", `call_${index}`)], finished.state)
+        : { state: finished.state, effects: [] }
 
-      return {
-        state: ran.state,
-        effects: [...current.effects, ...finished.effects, ...(ran === finished ? [] : ran.effects)],
-      }
+      return { state: done.state, effects: [...current.effects, ...finished.effects, ...done.effects] }
     },
-    replay([created("del_1")]),
+    replay([opened("del_1")]),
   )
 
-  expect(result.effects.filter((effect) => effect.type === "round")).toHaveLength(MAX_ROUNDS)
+  expect(rounds(result.effects)).toHaveLength(MAX_ROUNDS)
   expect(finishes(result.effects)).toEqual([{ type: "finish", id: "del_1", outcome: "discarded" }])
 })
 
 test("replayed function calls and terminal events are ignored", () => {
-  const start = replay([created("del_1"), created("del_2")])
+  const start = replay([opened("del_1"), opened("del_2")])
 
   const result = replay(
     [
-      { type: "response.created", delegationID: "del_1", responseID: "resp_1" },
-      { ...call("call_1"), delegationID: "del_1" },
-      { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
+      started("resp_1", "del_1"),
+      called("call_1", undefined, "del_1"),
+      ended("resp_1", "completed", "del_1"),
       // Untagged repeats would otherwise run call_1 again or finish del_2 with del_1's response.
-      { ...call("call_1"), responseID: "resp_2" },
-      { type: "response.finished", delegationID: null, responseID: "resp_1", outcome: "completed" },
+      called("call_1", "resp_2"),
+      ended("resp_1", "completed"),
     ],
     start.state,
   )
 
-  expect(result.effects.filter((effect) => effect.type === "round")).toHaveLength(1)
+  expect(rounds(result.effects)).toHaveLength(1)
   expect(finishes(result.effects)).toEqual([])
   expect(result.state.delegations[1]).toEqual(start.state.delegations[1])
 })
 
 test("a dropped call discards every open delegation", () => {
-  const result = replay([created("del_1"), created("del_2"), { type: "call.reset" }])
+  const result = replay([opened("del_1"), opened("del_2"), { type: "call.reset" }])
 
   expect(finishes(result.effects)).toEqual([
     { type: "finish", id: "del_1", outcome: "discarded" },
