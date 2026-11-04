@@ -125,6 +125,34 @@ story("select fields come in the text input sizes and default to the inline trig
   await expect(fields.nth(3)).toHaveCSS("box-shadow", "none")
 })
 
+story("compact checkboxes use the design system control states and focus ring", async ({ mount, page }) => {
+  const root = await mount("ui-checkbox--compact")
+
+  await page.addStyleTag({
+    content: `[data-slot="checkbox-v2"] {
+      --v2-background-bg-base: rgb(20, 30, 40);
+      --v2-background-bg-layer-01: rgb(50, 60, 70);
+      --v2-background-bg-accent: rgb(1, 2, 3);
+      --v2-state-fg-danger: rgb(7, 8, 9);
+    }`,
+  })
+
+  const controls = root.locator('[data-slot="checkbox-v2-control"]')
+
+  await expect(controls.nth(0)).toHaveCSS("background-color", "rgb(20, 30, 40)")
+  await expect(controls.nth(0)).toHaveCSS("background-image", "none")
+  await expect(controls.nth(1)).toHaveCSS("background-color", "rgb(1, 2, 3)")
+  await expect(controls.nth(1)).not.toHaveCSS("background-image", "none")
+  await expect(controls.nth(2)).toHaveCSS("background-color", "rgb(1, 2, 3)")
+  await expect(controls.nth(3)).toHaveCSS("box-shadow", "rgb(7, 8, 9) 0px 0px 0px 0.5px inset")
+  await expect(controls.nth(6)).toHaveCSS("background-color", "rgb(50, 60, 70)")
+
+  await page.keyboard.press("Tab")
+  await expect(root.getByRole("checkbox", { name: "Default" })).toBeFocused()
+  await expect(controls.nth(0)).toHaveCSS("outline-width", "2px")
+  await expect(controls.nth(0)).toHaveCSS("outline-offset", "2px")
+})
+
 story(
   "text inputs keep clear and copy actions equally sized and inset across sizes and directions",
   async ({ mount, page }) => {
