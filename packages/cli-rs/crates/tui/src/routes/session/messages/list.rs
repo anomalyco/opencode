@@ -33,6 +33,7 @@ use opentui::widget::ScrollEdge;
 use super::{
     assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user,
 };
+use super::super::tools;
 use crate::app::Tui;
 use crate::routes::session::grouping;
 
@@ -186,10 +187,21 @@ impl Transcript {
             .as_ref()
             .is_some_and(|location| changes.location(location));
         let pending = changes.pending(session);
-        if !changes.any_message(session) && !changes.session(session) && !catalogs && !pending {
+        // A tool row waiting on a permission request takes the warning color.
+        let permissions = changes.permissions(session);
+        if !changes.any_message(session)
+            && !changes.session(session)
+            && !catalogs
+            && !pending
+            && !permissions
+        {
             return;
         }
-        let force = changes.messages(session) || changes.session(session) || catalogs || pending;
+        let force = changes.messages(session)
+            || changes.session(session)
+            || catalogs
+            || pending
+            || permissions;
         self.0.render(tui, |message| {
             force || changes.message(session, &SessionMessageID(message.to_owned()))
         });
@@ -473,6 +485,7 @@ impl Inner {
                 keys: &keys,
                 directory: info.map(|info| info.location.directory.as_str()),
                 image_preview: self.image_preview,
+                session: &session,
                 agents: catalogs
                     .and_then(|data| data.agent.as_deref())
                     .unwrap_or_default()
@@ -711,6 +724,7 @@ pub struct Context<'a> {
     /// The store, locked while rows render.
     pub state: &'a State,
     pub keys: &'a Keys,
+    pub session: &'a SessionID,
     pub app: &'a App,
     pub theme: &'a Theme,
     pub syntax: &'a SyntaxTheme,
@@ -1029,7 +1043,7 @@ enum Body {
     User(user::User),
     Text(assistant::TextPart),
     Reasoning(reasoning::Reasoning),
-    Tool(assistant::Tool),
+    Tool(tools::dispatch::Tool),
     Footer(footer::Footer),
     Usage(footer::TurnUsage),
     Notice(skill::Notice),
@@ -1059,7 +1073,7 @@ impl Row {
             Spec::Part { part, .. } => match part {
                 Part::Text(_) => Body::Text(assistant::TextPart::new(cx)),
                 Part::Reasoning(_) => Body::Reasoning(reasoning::Reasoning::new(cx)),
-                Part::Tool(_) => Body::Tool(assistant::Tool::new(cx)),
+                Part::Tool(_) => Body::Tool(tools::dispatch::Tool::new(cx)),
             },
             Spec::Footer(_) => Body::Footer(footer::Footer::new(cx)),
             Spec::TurnUsage { .. } => Body::Usage(footer::TurnUsage::new(cx)),
