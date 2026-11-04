@@ -11,6 +11,7 @@ import {
   sessionID,
   setupTimeline,
   status,
+  stepStarted,
   textPart,
   userMessage,
   validateTimelineMessages,
@@ -21,6 +22,298 @@ import { openSession } from "../utils/workspace"
 test.use({ serviceWorkers: "block" })
 
 test.describe("timeline history", () => {
+  for (const scenario of [
+    { name: "long reply", disabled: false, paragraphs: 60 },
+    { name: "disabled divider", disabled: true, paragraphs: 60 },
+    { name: "last screen", disabled: false, paragraphs: 11 },
+  ])
+    test(`reopens at locally unseen messages: ${scenario.name}`, async ({ page }) => {
+      const id = "ses_new_messages"
+
+      let messages = [
+        userMessage([textPart("prt_new_prompt", "Explain the implementation")], { id: "msg_new_prompt", created: 1 }),
+        assistantMessage([textPart("prt_seen", "Already read")], { id: "msg_seen", created: 2 }),
+      ]
+
+      await openSession(page, {
+        name: "NewMessages",
+        sessions: [{ id }],
+        pageMessages: () => ({ items: messages }),
+        seed: scenario.disabled ? { settings: { general: { newMessagesDivider: false } } } : undefined,
+      })
+      await expect(page.getByText("Already read", { exact: true })).toBeVisible()
+      await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+      messages = [
+        ...messages,
+        assistantMessage(
+          [
+            textPart(
+              "prt_new_reply",
+              Array.from({ length: scenario.paragraphs }, (_, index) => `New paragraph ${index}.`).join("\n\n"),
+            ),
+          ],
+          { id: "msg_new_reply", created: 3 },
+        ),
+      ]
+      await page.reload()
+      await expectSessionTitle(page, id)
+      const notice = page.locator('[data-slot="session-timeline-notice"]').getByText("New", { exact: true })
+
+      if (scenario.disabled) {
+        await expect(page.getByText(`New paragraph ${scenario.paragraphs - 1}.`, { exact: true })).toBeInViewport()
+        await expect(notice).toHaveCount(0)
+
+        return
+      }
+
+      await expect(notice).toBeInViewport()
+      await expect(page.getByText("New paragraph 0.", { exact: true })).toBeInViewport()
+      const scroller = timelineScroller(page)
+
+      if (scenario.name === "last screen") {
+        await page.setViewportSize({ width: 1280, height: 600 })
+        await expect
+          .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
+          .toBeGreaterThan(12)
+        const overflow = await scroller.evaluate((element) => element.scrollHeight - element.clientHeight)
+
+        await page.setViewportSize({ width: 1280, height: 600 + overflow - 12 })
+        await expect
+          .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
+          .toBeCloseTo(12, 0)
+      }
+
+      const dismissal = await scroller.evaluateHandle((element, last) => {
+        element.scrollTop = element.scrollHeight
+
+        const paragraph = [...element.querySelectorAll("p")].find(
+          (item) => item.textContent === `New paragraph ${last}.`,
+        )
+
+        if (!paragraph) throw new Error("Missing the last new paragraph")
+
+        const state = { before: paragraph.getBoundingClientRect().top, shift: 0, dismissed: false }
+
+        const sample = () => {
+          state.shift = Math.max(state.shift, Math.abs(paragraph.getBoundingClientRect().top - state.before))
+
+          const notice = element.querySelector(
+            '[data-timeline-row="NewMessages"] [data-slot="session-timeline-notice"]',
+          )
+
+          state.dismissed = !notice?.checkVisibility({ visibilityProperty: true })
+
+          if (!state.dismissed) requestAnimationFrame(sample)
+        }
+
+        requestAnimationFrame(sample)
+        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100_000 }))
+
+        return state
+      }, scenario.paragraphs - 1)
+
+      await expect(page.getByText(`New paragraph ${scenario.paragraphs - 1}.`, { exact: true })).toBeInViewport()
+      await expect(notice).toBeHidden()
+      await expect.poll(() => dismissal.evaluate((state) => state.dismissed)).toBe(true)
+      expect(await dismissal.evaluate((state) => state.shift)).toBeLessThanOrEqual(1)
+
+      if (scenario.name === "last screen") {
+        await page.setViewportSize({ width: 1280, height: 400 })
+        await expect
+          .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
+          .toBeGreaterThan(200)
+        await scroller.evaluate((element) => {
+          element.scrollTop = element.scrollHeight
+          element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 1 }))
+        })
+        await expect(page.locator('[data-timeline-row="NewMessages"]')).toHaveCount(0)
+        await expect(page.getByText("New paragraph 10.", { exact: true })).toBeInViewport()
+      }
+    })
+
+  test("returning to a cached session lands on work streamed while another tab was open", async ({ page }) => {
+    const other = "ses_new_other"
+
+    let history = [userMessage(), assistantMessage([textPart("prt_cached_seen", "Read before switching")])]
+
+    const workspace = await openSession(page, {
+      name: "NewMessagesCached",
+      sessions: [{ id: sessionID }, { id: other, directory: "C:/OpenCode/UnreadOther" }],
+      pageMessages: (id) => ({
+        items: id === other ? [userMessage([textPart("prt_other", "Other session")])] : history,
+      }),
+    })
+
+    await expect(page.getByText("Read before switching", { exact: true })).toBeVisible()
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(other)}"]`).click()
+    await expect(page.getByText("Other session", { exact: true })).toBeVisible()
+
+    const text = textPart(
+      "prt_cached_reply",
+      Array.from({ length: 40 }, (_, index) => `Cached reply ${index}.`).join("\n\n"),
+    )
+
+    const reply = assistantMessage([], { id: "msg_cached_new_reply", completed: false, created: 1700000002000 })
+
+    history = [
+      ...history,
+      { ...reply, content: [{ type: "text", text: text.text }], time: { ...reply.time, completed: 1700000003000 } },
+    ]
+
+    await workspace.push([
+      status("busy"),
+      stepStarted(reply),
+      ...partUpdated({
+        ...text,
+        messageID: reply.id,
+      }),
+      messageUpdated(reply),
+      status("idle"),
+      status("busy", 1, other),
+    ])
+    const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(sessionID)}"]`)
+
+    // Wait for the stream to reach the active session before switching back.
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible()
+    await tab.click()
+    await expect(
+      page.locator('[data-slot="session-timeline-notice"]').getByText("New", { exact: true }),
+    ).toBeInViewport()
+    await expect(page.getByText("Cached reply 0.", { exact: true })).toBeInViewport()
+    await page.getByRole("button", { name: "Jump to latest" }).click()
+    await expect(page.getByText("Cached reply 39.", { exact: true })).toBeInViewport()
+    await expect(page.locator('[data-timeline-row="NewMessages"]')).toHaveCount(0)
+  })
+
+  test("marks new work above an undelivered steer", async ({ page }) => {
+    const id = "ses_unread_steer"
+
+    let messages = [
+      userMessage([textPart("prt_unread_prompt", "Read the code")], { id: "msg_1000_unread_prompt", created: 1 }),
+      assistantMessage([textPart("prt_unread_seen", "Read work")], {
+        id: "msg_1001_unread_work",
+        parentID: "msg_1000_unread_prompt",
+        created: 2,
+        completed: false,
+      }),
+    ]
+
+    await openSession(page, {
+      name: "UnreadSteer",
+      sessions: [{ id }],
+      sessionStatus: { [id]: { type: "busy" } },
+      pageMessages: () => ({ items: messages }),
+      inbox: [
+        {
+          id: "msg_1002_unread_steer",
+          sessionID: id,
+          type: "user",
+          delivery: "steer",
+          payload: { text: "Waiting prompt" },
+          time: { created: 3 },
+        },
+      ],
+    })
+    await expect(
+      page.locator('[data-timeline-row="UserMessage"]').getByText("Waiting prompt", { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText("Read work", { exact: true })).toBeVisible()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    messages = [
+      messages[0],
+      assistantMessage(
+        [
+          textPart("prt_unread_seen", "Read work"),
+          textPart("prt_unread_new", Array.from({ length: 60 }, (_, index) => `Unseen work ${index}.`).join("\n\n")),
+        ],
+        { id: "msg_1001_unread_work", parentID: "msg_1000_unread_prompt", created: 2, completed: false },
+      ),
+    ]
+    await page.reload()
+    await expect(page.locator('[data-timeline-row="NewMessages"]').getByText("New", { exact: true })).toBeInViewport()
+    await expect(page.getByText("Unseen work 0.", { exact: true })).toBeInViewport()
+  })
+
+  test("lands at the true unread boundary when older unread history loads", async ({ page }) => {
+    const id = "ses_unread_pages"
+
+    let messages: SessionMessageInfo[] = [
+      userMessage([textPart("prt_unread_pages_prompt", "Keep working")], { id: "msg_0000_unread_pages", created: 1 }),
+      assistantMessage([textPart("prt_unread_pages_seen", "Read before leaving")], {
+        id: "msg_0001_unread_pages",
+        parentID: "msg_0000_unread_pages",
+        created: 2,
+      }),
+    ]
+
+    await openSession(page, {
+      name: "UnreadPages",
+      sessions: [{ id }],
+      pageMessages: (_id, _limit, before) => {
+        const end = before ? Number(before) : messages.length
+
+        const start = Math.max(0, end - 20)
+
+        return { items: messages.slice(start, end), cursor: start ? String(start) : undefined }
+      },
+    })
+    await expect(page.getByText("Read before leaving", { exact: true })).toBeVisible()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    // The unread span exceeds the initial page and three enrichment pages.
+    messages = [
+      ...messages,
+      ...Array.from({ length: 90 }, (_, index) =>
+        assistantMessage([textPart(`prt_unread_page_${index}`, `Unread response ${index}`)], {
+          id: `msg_${String(index + 2).padStart(4, "0")}_unread_pages`,
+          parentID: "msg_0000_unread_pages",
+          created: index + 3,
+        }),
+      ),
+    ]
+    await page.reload()
+    const notice = page.locator('[data-timeline-key="new-messages:msg_0002_unread_pages:text:0"]')
+
+    await expect(notice).toBeInViewport()
+    await expect(page.getByText("Unread response 0", { exact: true })).toBeInViewport()
+  })
+
+  test("keeps unread replies before a prompt sent from another client", async ({ page }) => {
+    const id = "ses_unread_remote"
+
+    let messages = [
+      userMessage([textPart("prt_remote_prompt", "Start working")], { id: "msg_remote_0", created: 1 }),
+      assistantMessage([textPart("prt_remote_seen", "Already read")], { id: "msg_remote_1", created: 2 }),
+    ]
+
+    const view = await openSession(page, {
+      name: "UnreadRemote",
+      sessions: [{ id }],
+      pageMessages: () => ({ items: messages }),
+    })
+
+    await expect(page.getByText("Already read", { exact: true })).toBeVisible()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    messages = [
+      ...messages,
+      assistantMessage([textPart("prt_remote_unread", "Unread before the other client's prompt")], {
+        id: "msg_remote_2",
+        created: 3,
+      }),
+      userMessage([textPart("prt_remote_other", "Sent from another client")], { id: "msg_remote_3", created: 4 }),
+      assistantMessage(
+        [textPart("prt_remote_reply", Array.from({ length: 40 }, (_, index) => `Remote reply ${index}.`).join("\n\n"))],
+        { id: "msg_remote_4", created: 5 },
+      ),
+    ]
+    await page.reload()
+    await expect(page.locator('[data-timeline-key="new-messages:msg_remote_2:text:0"]')).toBeInViewport()
+    await expect(page.getByText("Unread before the other client's prompt", { exact: true })).toBeInViewport()
+    await view.editor.fill("Continue from this client")
+    await view.editor.press("Enter")
+    await expect(page.getByText("Remote reply 39.", { exact: true })).toBeInViewport()
+    await expect(page.locator('[data-timeline-row="NewMessages"]')).toHaveCount(0)
+  })
+
   test("restoring a paged transcript waits for another upward scroll before loading history", async ({ page }) => {
     const id = "ses_history_restore"
     const other = "ses_history_other"
