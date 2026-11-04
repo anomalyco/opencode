@@ -47,6 +47,7 @@ describe("terminal machine", () => {
       { type: "capability.checked", attempt: 1, supported: true },
       { type: "list.failed", sessionID: "ses_1", attempt: 2, error: "boom" },
     ])
+
     const view = sessionView(failed.state, "ses_1")
 
     expect(view).toEqual({ type: "failed", error: "boom" })
@@ -75,6 +76,7 @@ describe("terminal machine", () => {
       { type: "session.loaded", sessionID: "ses_1" },
       { type: "capability.checked", attempt: 1, supported: true },
     ]).state
+
     const failed = transition(loading, { type: "list.failed", sessionID: "ses_1", attempt: 2, error: "boom" }).state
 
     const states = [loading, failed, listed()]
@@ -199,6 +201,7 @@ describe("terminal machine", () => {
 
   test("a terminal update replaces a listed terminal and lists again for an unknown one", () => {
     const state = listed()
+
     const renamed = transition(state, {
       type: "terminal.updated",
       sessionID: "ses_1",
@@ -251,6 +254,7 @@ describe("terminal machine", () => {
       { type: "session.loaded", sessionID: "ses_1" },
       { type: "capability.failed", attempt: 1, error: "offline" },
     ]).state
+
     const view = sessionView(failed, "ses_1")
 
     expect(view).toEqual({ type: "failed", error: "offline" })
