@@ -78,12 +78,15 @@ test("closing a preview leaves kept tabs unchanged", () => {
   expect(state.discarded).toEqual([second])
 })
 
-test("a preview retains its child-session route when promoted", () => {
+test.each([false, true])("a preview retains its child-session route when promoted (captured: %s)", (captured) => {
   const state = fixture()
 
-  state.preview.open(first)
+  const opened = state.preview.open(first)
+
   state.preview.setRoute("ses_child", first.sessionId)
-  state.preview.keep()
+
+  state.preview.keep(captured ? opened : undefined)
+
   expect(state.tabs).toEqual([{ ...first, routeSessionId: "ses_child", routeParentId: first.sessionId }])
 })
 
@@ -106,4 +109,45 @@ test("direct navigation to a kept tab clears the old preview", () => {
   expect(state.preview.current()).toBeUndefined()
   expect(state.discarded).toEqual([first])
   expect(state.tabs).toEqual([second])
+})
+
+test("releasing a preview returns it without disposing its state", () => {
+  const state = fixture()
+
+  const opened = state.preview.open(first)
+
+  expect(state.preview.release()).toBe(opened)
+  expect(state.preview.release()).toBeUndefined()
+  expect(state.preview.current()).toBeUndefined()
+  expect(state.discarded).toEqual([])
+  expect(state.tabs).toEqual([])
+})
+
+test("reopening or activating the same session retains its preview and child route", () => {
+  const state = fixture()
+
+  state.preview.open(first)
+  state.preview.setRoute("ses_child", first.sessionId)
+
+  const routed = state.preview.current()
+
+  if (!routed) throw new Error("Expected a routed preview")
+
+  expect(state.preview.open(first)).toBe(routed)
+  state.preview.activate(first)
+  expect(state.preview.current()).toBe(routed)
+  expect(state.discarded).toEqual([])
+  expect(state.navigations.at(-1)).toEqual({ tab: routed, preview: true })
+})
+
+test("keeping an already-kept target is idempotent and leaves an unrelated preview active", () => {
+  const state = fixture([first])
+
+  const opened = state.preview.open(second)
+
+  expect(state.preview.keep(first)).toBe(first)
+  expect(state.preview.keep(first)).toBe(first)
+  expect(state.tabs).toEqual([first])
+  expect(state.preview.current()).toBe(opened)
+  expect(state.discarded).toEqual([])
 })

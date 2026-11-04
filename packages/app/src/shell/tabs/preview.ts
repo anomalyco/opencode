@@ -1,5 +1,12 @@
-import { createStore } from "solid-js/store"
+import { createSignal } from "solid-js"
 import type { SessionTab, Tab } from "./tabs"
+import {
+  currentPreview,
+  INITIAL_PREVIEW_STATE,
+  matchesPreview,
+  transitionPreview,
+  type PreviewEvent,
+} from "./preview-machine"
 
 export function createSessionPreview(options: {
   tabs: () => readonly Tab[]
@@ -7,12 +14,22 @@ export function createSessionPreview(options: {
   onNavigate: (tab: SessionTab, preview: boolean) => void
   onDiscard: (tab: SessionTab) => void
 }) {
-  const [state, setState] = createStore<{ tab: SessionTab | undefined }>({ tab: undefined })
+  const [state, setState] = createSignal(INITIAL_PREVIEW_STATE)
+
+  const current = () => currentPreview(state())
+
+  const dispatch = (event: PreviewEvent) => {
+    const previous = state()
+
+    const next = transitionPreview(previous, event)
+
+    if (next !== previous) setState(next)
+  }
 
   const release = () => {
-    const tab = state.tab
+    const tab = current()
 
-    setState("tab", undefined)
+    dispatch({ type: "release" })
 
     return tab
   }
@@ -34,15 +51,15 @@ export function createSessionPreview(options: {
       )
 
   return {
-    current: () => state.tab,
+    current,
     release,
     clear,
     activate(tab: Tab) {
-      if (
-        state.tab &&
-        (tab.type !== "session" || tab.server !== state.tab.server || tab.sessionId !== state.tab.sessionId)
-      )
-        clear()
+      const previous = current()
+
+      dispatch({ type: "activate", tab })
+
+      if (previous && previous !== current()) options.onDiscard(previous)
     },
     open(input: Omit<SessionTab, "type">) {
       const existing = find(input)
@@ -54,33 +71,32 @@ export function createSessionPreview(options: {
         return existing
       }
 
-      const current = state.tab
+      const active = current()
 
-      const tab =
-        current?.server === input.server && current.sessionId === input.sessionId
-          ? current
-          : { type: "session" as const, ...input }
+      const tab = active && matchesPreview(state(), input) ? active : { type: "session" as const, ...input }
 
-      if (tab !== current) {
+      if (tab !== current()) {
         clear()
-        setState("tab", tab)
+        dispatch({ type: "open", tab })
       }
 
       options.onNavigate(tab, true)
 
       return tab
     },
-    keep(tab = state.tab) {
+    keep(tab = current()) {
       if (!tab) return
 
-      if (state.tab?.server === tab.server && state.tab.sessionId === tab.sessionId) release()
+      const active = current()
 
-      return find(tab) ?? options.onKeep(tab)
+      const target = active && matchesPreview(state(), tab) ? active : tab
+
+      dispatch({ type: "keep", tab: target })
+
+      return find(target) ?? options.onKeep(target)
     },
     setRoute(sessionId: string, parentId?: string) {
-      if (!state.tab) return
-      setState("tab", "routeSessionId", sessionId === state.tab.sessionId ? undefined : sessionId)
-      setState("tab", "routeParentId", sessionId === state.tab.sessionId ? undefined : parentId)
+      dispatch({ type: "route", sessionId, parentId })
     },
   }
 }
