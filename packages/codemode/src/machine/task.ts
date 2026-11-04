@@ -3,24 +3,40 @@ import type { Interpreter } from "../interpreter/interpreter.js"
 import type { AstNode } from "../interpreter/model.js"
 import type { Value } from "../interpreter/objects.js"
 import type { ScopeStack } from "../interpreter/scope.js"
-import { type Eval, type Signal, Slice } from "../interpreter/signals.js"
+import {
+  abrupt,
+  Await,
+  Call,
+  type Completion,
+  Enter,
+  type Eval,
+  normal,
+  type Signal,
+  Slice,
+  Yield,
+} from "../interpreter/signals.js"
 import { Frame, type Kind, PASS, PENDING, type Pending } from "./frame.js"
-import { dispatch, native } from "./calls.js"
+import { boundaryOf, dispatch, native, nativeFrame } from "./calls.js"
 import type { Machine } from "./machine.js"
 
 /** Steps run by every machine task in this process, so tests can see that a program ran on the machine. */
 export const stats = { steps: 0 }
 
 /**
- * A stack of machine frames and the loop that steps it. To the runner it is an activation body, like interpreter
- * work: `next` and `throw` run it until it finishes or needs the driver (`Await`, `Yield`, a host call, a slice, or a
- * call it cannot make on its own stack), and the driver's answer resumes the frame that asked.
+ * A stack of machine frames and the loop that steps it. The machine runs every job on its root task. A generator's
+ * body is a task of its own for now, run by a native frame on the stack that resumes it; to that frame it answers
+ * `next` and `throw` like interpreter work.
+ *
+ * The loop answers what frames ask for on the stack itself: an `await` cuts the stack at the innermost async boundary
+ * and parks the frames it cut on the promise, a `yield` splits it at the innermost generator body, and a body a
+ * built-in starts (`Call`) or a generator resumes (`Enter`) is pushed. What it cannot answer (host work, a slice, or an
+ * `await` or `yield` with no boundary on this stack) it hands to whoever runs it.
  */
 export class MachineTask {
   readonly stack: Array<Frame> = []
   /** The scope chain of the frame running now. */
   scopes: ScopeStack
-  /** What the running frame asked the driver for; the step loop hands it over once the frame parks. */
+  /** What the running frame asked for; the step loop answers it once the frame parks. */
   signal: Signal | undefined = undefined
   /** The host should get a turn at the next step boundary. */
   slice = false
@@ -103,15 +119,28 @@ export class MachineTask {
     return native(this, work, site, locate)
   }
 
-  /** Asks the driver for `signal`; its answer (or failure) is the result of the frame this pushes. */
+  /** Asks for `signal`; its answer (or failure) is the result of the frame this pushes. */
   request(signal: Signal, node: AstNode | undefined): Pending {
     this.signal = signal
     this.stack.push(new Frame(passKind, node, PASS, this.scopes, []))
     return PENDING
   }
 
-  private drive(ok: boolean, input: unknown): IteratorResult<Signal, Value> {
+  /** Puts frames taken off a stack back on this one, counting their calls again. */
+  enter(frames: ReadonlyArray<Frame>): void {
+    for (const frame of frames) {
+      this.stack.push(frame)
+      if (frame.kind.counts?.(frame)) this.machine.depth++
+    }
+  }
+
+  /**
+   * Runs the stack from the top frame with `input` until it empties (its last result) or a frame asks for something
+   * this stack cannot answer (the signal). A throw that unwinds past the bottom frame is thrown.
+   */
+  drive(ok: boolean, input: unknown): IteratorResult<Signal, Value> {
     const stack = this.stack
+    const machine = this.machine
     let value = input
     while (true) {
       stats.steps++
@@ -130,6 +159,7 @@ export class MachineTask {
             }
           }
           stack.pop()
+          if (frame.kind.counts?.(frame)) machine.depth--
         }
         ok = true
         value = undefined
@@ -151,6 +181,7 @@ export class MachineTask {
       }
       if (out !== PENDING) {
         stack.pop()
+        if (frame.kind.counts?.(frame)) machine.depth--
         value = out
         continue
       }
@@ -158,7 +189,11 @@ export class MachineTask {
       const signal = this.signal
       if (signal !== undefined) {
         this.signal = undefined
-        return { done: false, value: signal }
+        const answer = this.answer(signal)
+        if (answer === undefined) return { done: false, value: signal }
+        ok = answer.ok
+        value = answer.ok ? answer.value : answer.error
+        continue
       }
       if (this.slice) {
         this.slice = false
@@ -166,7 +201,59 @@ export class MachineTask {
       }
     }
   }
+
+  // Answers a signal on this stack, giving what the top frame continues with; undefined hands the signal on.
+  private answer(signal: Signal): Completion | undefined {
+    const machine = this.machine
+    if (signal instanceof Call) {
+      this.stack.push(nativeFrame(this.scopes, signal.body, signal.boundary, true))
+      machine.depth++
+      if (machine.tick()) this.slice = true
+      return normal(undefined)
+    }
+    if (signal instanceof Enter) {
+      this.enter(signal.frames)
+      if (machine.tick()) this.slice = true
+      return signal.input
+    }
+    if (signal instanceof Await) return this.await(signal)
+    if (signal instanceof Yield) {
+      const stack = this.stack
+      for (let index = stack.length - 1; index >= 0; index--) {
+        const boundary = boundaryOf(stack[index]!)
+        if (boundary?.generator) return boundary.yielded(signal.value, () => this.split(index))
+      }
+    }
+    return undefined
+  }
+
+  // Cuts the stack at the innermost async boundary and parks the frames cut off on the awaited promise; the frame
+  // below the boundary continues with what the boundary gives it (an async function's promise, say).
+  private await(signal: Await): Completion | undefined {
+    const stack = this.stack
+    for (let index = stack.length - 1; index >= 0; index--) {
+      const frame = stack[index]!
+      const cut = frame.kind.cut?.(frame)
+      if (cut === undefined) continue
+      let promise
+      try {
+        promise = this.machine.promiseResolve(signal.value)
+      } catch (error) {
+        return abrupt(error)
+      }
+      this.machine.park(this.split(index), promise, signal.node, cut.ok ? (cut.value as Value) : undefined)
+      return cut
+    }
+    return undefined
+  }
+
+  // Takes the frames from `index` up off the stack; their calls no longer count toward its depth.
+  private split(index: number): Array<Frame> {
+    const frames = this.stack.splice(index)
+    for (const frame of frames) if (frame.kind.counts?.(frame)) this.machine.depth--
+    return frames
+  }
 }
 
-// A frame waiting on the driver's answer to a request; the answer passes straight to the frame below.
+// A frame waiting on the answer to a request; the answer passes straight to the frame below.
 const passKind: Kind = { name: "Request", step: (_task, _frame, _node, input) => input }

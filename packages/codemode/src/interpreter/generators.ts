@@ -5,13 +5,14 @@ import type { Interpreter } from "./interpreter.js"
 import {
   abrupt,
   type Boundary,
+  Call,
   type Completion,
   Enter,
-  type Entry,
   type Eval,
   type GeneratorRequest,
   normal,
-} from "./runner.js"
+} from "./signals.js"
+import type { Frame } from "../machine/frame.js"
 
 /** `next`/`return`/`throw` on the generator prototypes; async generators answer with promises. */
 export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
@@ -49,17 +50,15 @@ export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
 
 const result = <R>(ctx: Interpreter<R>, value: Value, done: boolean) => iteratorResult(ctx.builtins.Object, value, done)
 
-// Puts the suspended body back on the stack and continues it with `request`; the boundary answers the caller when
-// the body next yields or ends.
-const resume = <R>(ctx: Interpreter<R>, generator: GeneratorObj, request: GeneratorRequest): Enter => {
+// Starts the body behind its boundary, or puts the suspended body's frames back on the stack and continues it with
+// `request`; the boundary answers the caller when the body next yields or ends.
+const resume = <R>(ctx: Interpreter<R>, generator: GeneratorObj, request: GeneratorRequest): Call | Enter => {
   const started = generator.state !== "suspendedStart"
   generator.state = "executing"
-  if (!started) {
-    return new Enter([{ body: generator.body, boundary: new GeneratorBoundary(ctx, generator) }], normal(undefined))
-  }
-  const entries = generator.entries!
-  generator.entries = undefined
-  return new Enter(entries, normal(request))
+  if (!started) return new Call(generator.body, new GeneratorBoundary(ctx, generator))
+  const frames = generator.frames!
+  generator.frames = undefined
+  return new Enter(frames, normal(request))
 }
 
 // A synchronous generator step: the body runs on the caller's stack until it yields, returns, or throws.
@@ -76,9 +75,9 @@ function* step<R>(ctx: Interpreter<R>, generator: GeneratorObj, kind: GeneratorR
 // AsyncGenerator.prototype.next/return/throw: queue the request with its promise, and run the body now if it is
 // waiting for one. A request that arrives while the body runs is answered when the body reaches it.
 function* request<R>(ctx: Interpreter<R>, thisValue: Value, kind: GeneratorRequestKind, value: Value): Eval<Value> {
-  const runner = ctx.runner
-  const promise = runner.newPromise()
-  const resolving = runner.resolving(promise)
+  const machine = ctx.machine
+  const promise = machine.newPromise()
+  const resolving = machine.resolving(promise)
   if (!(thisValue instanceof GeneratorObj) || !thisValue.asynchronous) {
     resolving.reject(typeError(`AsyncGenerator.prototype.${kind} called on incompatible receiver.`))
     return promise
@@ -138,9 +137,9 @@ const drainQueue = <R>(ctx: Interpreter<R>, generator: GeneratorObj) => {
 
 // AsyncGeneratorAwaitReturn: a `return(value)` on an ended or unstarted generator settles once `value` does.
 const awaitReturn = <R>(ctx: Interpreter<R>, generator: GeneratorObj) => {
-  const runner = ctx.runner
+  const machine = ctx.machine
   try {
-    runner.then(runner.promiseResolve(generator.queue[0]!.request.value), { kind: "awaitReturn", generator })
+    machine.then(machine.promiseResolve(generator.queue[0]!.request.value), { kind: "awaitReturn", generator })
   } catch (error) {
     finishAwaitReturn(ctx, generator, abrupt(error))
   }
@@ -179,10 +178,10 @@ class GeneratorBoundary<R> implements Boundary {
     return normal(undefined)
   }
 
-  yielded(value: Value, split: () => Array<Entry>): Completion {
+  yielded(value: Value, split: () => Array<Frame>): Completion {
     const generator = this.target
     if (!generator.asynchronous) {
-      generator.entries = split()
+      generator.frames = split()
       generator.state = "suspendedYield"
       return normal(result(this.ctx, value, false))
     }
@@ -190,7 +189,7 @@ class GeneratorBoundary<R> implements Boundary {
     completeStep(this.ctx, generator, normal(value), false)
     const next = generator.queue[0]
     if (next !== undefined) return normal(next.request)
-    generator.entries = split()
+    generator.frames = split()
     generator.state = "suspendedYield"
     return normal(undefined)
   }

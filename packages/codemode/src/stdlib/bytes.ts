@@ -1,4 +1,4 @@
-import type { Eval } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/signals.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, rangeError, syntaxError, typeError } from "../interpreter/model.js"

@@ -1,4 +1,4 @@
-import type { Eval } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/signals.js"
 import { constructor, methods, receiver } from "../interpreter/native.js"
 import { type AstNode, AsyncIteratorSymbol, invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
 import {

@@ -1,4 +1,4 @@
-import type { Eval } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/signals.js"
 import { methods } from "../interpreter/native.js"
 import { applyCollectionCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"

@@ -1,4 +1,4 @@
-import type { Eval } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/signals.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { rangeError } from "../interpreter/model.js"
 import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../interpreter/objects.js"

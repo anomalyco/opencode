@@ -12,7 +12,9 @@ import {
   Throw,
   typeError,
 } from "./model.js"
-import type { Entry, Eval, GeneratorRequest, Reaction, Resolving } from "./runner.js"
+import type { Eval, GeneratorRequest } from "./signals.js"
+import type { Frame } from "../machine/frame.js"
+import type { Reaction, Resolving } from "../machine/scheduler.js"
 import { OrderedTable, type TableCursor } from "./table.js"
 
 /** Property attributes, as in a JS property descriptor. */
@@ -347,8 +349,8 @@ export type GeneratorState =
 export class GeneratorObj extends Opaque {
   override readonly tag = "Generator"
   state: GeneratorState = "suspendedStart"
-  /** The suspended body's activations, kept while it waits for the next request. */
-  entries: Array<Entry> | undefined
+  /** The suspended body's frames, kept while it waits for the next request. */
+  frames: Array<Frame> | undefined
   /** An async generator's requests, oldest first, each with the functions that settle its promise. */
   readonly queue: Array<{ readonly request: GeneratorRequest; readonly resolving: Resolving }> = []
   constructor(

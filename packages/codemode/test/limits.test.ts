@@ -91,7 +91,7 @@ describe("the host stays in control", () => {
       }),
     )
     expect(result).toMatchObject({ ok: true, value: 999_999 })
-    // The loop takes well over 10 ms anywhere, and the runner yields to the host every millisecond; a job that kept
+    // The loop takes well over 10 ms anywhere, and the machine yields to the host every millisecond; a job that kept
     // the thread for its whole run would let the counter tick at most a couple of times around it.
     expect(ticks).toBeGreaterThan(10)
   })

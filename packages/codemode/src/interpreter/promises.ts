@@ -5,17 +5,8 @@ import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
 import { isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
-import {
-  type Combination,
-  type Completion,
-  type Eval,
-  Interruption,
-  normal,
-  type Reaction,
-  type Resolving,
-  type Start,
-  Task,
-} from "./runner.js"
+import { type Completion, type Eval, Interruption } from "./signals.js"
+import type { Combination, Reaction, Resolving } from "../machine/scheduler.js"
 import { finishAwaitReturn } from "./generators.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
@@ -29,18 +20,18 @@ const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
  * it is located at `site`, the call that created it.
  */
 export const capability = <R>(ctx: Interpreter<R>, site: AstNode | undefined): Resolving =>
-  ctx.runner.resolving(ctx.runner.newPromise(), site)
+  ctx.machine.resolving(ctx.machine.newPromise(), site)
 
 /** Settles `resolving` with a completion: a fulfillment value is resolved, so a thenable is adopted. */
 const settleWith = (resolving: Resolving, completion: Completion) =>
   completion.ok ? resolving.resolve(completion.value as Value) : resolving.reject(completion.error)
 
-/** Runs a settled promise's reaction as a job: it finishes at once, or returns the task that calls program code. */
+/** Runs a settled promise's reaction as a job: it finishes at once, or returns the work that calls program code. */
 export const react = <R>(
   ctx: Interpreter<R>,
   reaction: Exclude<Reaction, { readonly kind: "await" }>,
   settled: Completion,
-): Start | void => {
+): Eval<void> | void => {
   switch (reaction.kind) {
     case "settle":
       return settleWith(reaction.target, settled)
@@ -61,8 +52,33 @@ export const react = <R>(
   }
 }
 
-/** A task that runs `body` as its own job. */
-const job = (body: Eval<void>): Start => ({ task: new Task([{ body, boundary: undefined }]), input: normal(undefined) })
+/**
+ * NewPromiseResolveThenableJob: the work that calls the thenable's `then`. Adopting a native promise through the
+ * intrinsic `then` takes the same jobs as calling it, and keeps the rejection as thrown so its diagnostic survives.
+ */
+export const adoptThenable = <R>(
+  ctx: Interpreter<R>,
+  promise: PromiseObj,
+  thenable: Obj,
+  then: Value,
+): Eval<void> | void => {
+  const machine = ctx.machine
+  const resolving = machine.resolving(promise)
+  if (then === machine.intrinsicThen && thenable instanceof PromiseObj) {
+    machine.then(thenable, { kind: "settle", target: resolving })
+    return
+  }
+  const proto = ctx.builtins.Function
+  const resolve = new Resolver(proto, "", resolving, "resolve")
+  const reject = new Resolver(proto, "", resolving, "reject")
+  return (function* (): Eval<void> {
+    try {
+      yield* ctx.call(then, thenable, [resolve, reject])
+    } catch (error) {
+      resolving.reject(error)
+    }
+  })()
+}
 
 // A `then`/`catch` reaction calls program code: the handler runs as a job, and its result or failure settles the
 // derived promise. A missing handler passes the outcome through.
@@ -70,7 +86,7 @@ const handle = <R>(
   ctx: Interpreter<R>,
   reaction: Extract<Reaction, { readonly kind: "handler" }>,
   settled: Completion,
-): Start | void => {
+): Eval<void> | void => {
   const handler = settled.ok ? reaction.onFulfilled : reaction.onRejected
   const derived = reaction.derived
   if (handler === undefined || (!settled.ok && settled.error instanceof Interruption)) {
@@ -87,7 +103,7 @@ const handle = <R>(
     }
     derived.resolve(result)
   }
-  return job(body())
+  return body()
 }
 
 const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject", "withResolvers", "try"] as const
@@ -98,8 +114,8 @@ function* invokePromiseMethod<R>(
   args: Array<Value>,
   site: AstNode | undefined,
 ): Eval<Value> {
-  const runner = ctx.runner
-  if (name === "resolve") return runner.promiseResolve(args[0])
+  const machine = ctx.machine
+  if (name === "resolve") return machine.promiseResolve(args[0])
   if (name === "reject") {
     const made = capability(ctx, site)
     made.reject(new Throw(args[0]))
@@ -134,7 +150,7 @@ function* combinator<R>(
   iterable: Value,
   site: AstNode | undefined,
 ): Eval<Value> {
-  const runner = ctx.runner
+  const machine = ctx.machine
   const made = capability(ctx, site)
   try {
     const cursor = yield* ctx.iterate(iterable)
@@ -146,13 +162,13 @@ function* combinator<R>(
     while (true) {
       const step = yield* cursor.next()
       if (step.done) break
-      const item = runner.promiseResolve(step.value)
+      const item = machine.promiseResolve(step.value)
       const reaction: Reaction = { kind: "combinator", combination, index: index++, called: false }
       combination.values.push(undefined)
       combination.reasons.push(undefined)
       combination.remaining++
       combination.attached.push([item, reaction])
-      runner.then(item, reaction)
+      machine.then(item, reaction)
     }
     if (name === "race" && index === 0) {
       throw typeError("Promise.race([]) would never settle; provide at least one promise or value.")
@@ -203,7 +219,7 @@ const combine = <R>(
 }
 
 const detachAll = <R>(ctx: Interpreter<R>, combination: Combination) => {
-  for (const [item, reaction] of combination.attached) ctx.runner.detach(item, reaction)
+  for (const [item, reaction] of combination.attached) ctx.machine.detach(item, reaction)
 }
 
 const finishCombination = <R>(ctx: Interpreter<R>, combination: Combination) => {
@@ -230,7 +246,7 @@ const instanceMethod = <R>(
   const onFulfilled = name === "then" ? reactionHandler(args[0], method) : undefined
   const onRejected = reactionHandler(name === "then" ? args[1] : args[0], method)
   const made = capability(ctx, site)
-  ctx.runner.then(promise, { kind: "handler", onFulfilled, onRejected, derived: made })
+  ctx.machine.then(promise, { kind: "handler", onFulfilled, onRejected, derived: made })
   return made.promise
 }
 
@@ -243,7 +259,7 @@ const chainFinally = <R>(
   site: AstNode | undefined,
 ): PromiseObj => {
   const made = capability(ctx, site)
-  ctx.runner.then(
+  ctx.machine.then(
     source,
     cleanup === undefined ? { kind: "settle", target: made } : { kind: "finally", cleanup, target: made, site },
   )
@@ -255,7 +271,7 @@ const cleanUp = <R>(
   reaction: Extract<Reaction, { readonly kind: "finally" }>,
   settled: Completion,
 ) => {
-  const runner = ctx.runner
+  const machine = ctx.machine
   const made = reaction.target
   if (!settled.ok && settled.error instanceof Interruption) return made.reject(settled.error)
   const cleanup = reaction.cleanup
@@ -269,17 +285,17 @@ const cleanUp = <R>(
     }
     let after: PromiseObj
     try {
-      after = runner.promiseResolve(result)
+      after = machine.promiseResolve(result)
     } catch (error) {
       made.reject(error)
       return
     }
     // The spec chains `then(valueThunk)` onto the cleanup's promise: one more job before the outcome passes.
     const derived = capability(ctx, reaction.site)
-    runner.then(after, { kind: "finallyCleaned", target: derived })
-    runner.then(derived.promise, { kind: "finallyOutcome", target: made, outcome: settled })
+    machine.then(after, { kind: "finallyCleaned", target: derived })
+    machine.then(derived.promise, { kind: "finallyOutcome", target: made, outcome: settled })
   }
-  return job(body())
+  return body()
 }
 
 const reactionHandler = (value: Value, method: string): Callable | undefined => {
@@ -321,7 +337,7 @@ const promiseLikeMethods = <R>(ctx: Interpreter<R>) => {
     const source = receiver(Obj, thisValue, name)
     const copy = new Obj(ctx.builtins.Object)
     for (const [key, slot] of source.props) copy.props.set(key, { ...slot })
-    return ctx.runner.promiseResolve(copy)
+    return ctx.machine.promiseResolve(copy)
   }
   methods(
     ctx.builtins,
@@ -363,7 +379,7 @@ export const promiseGlobal = <R>(ctx: Interpreter<R>) => {
     ["finally", 1, (thisValue, args, site) => instanceMethod(ctx, "finally", thisValue, args, site)],
   ])
   const then = get(proto, "then")
-  if (then instanceof Callable) ctx.runner.intrinsicThen = then
+  if (then instanceof Callable) ctx.machine.intrinsicThen = then
   promiseLikeMethods(ctx)
   return promise
 }

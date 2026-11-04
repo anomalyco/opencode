@@ -49,7 +49,7 @@ import {
   predeclarePattern,
 } from "../interpreter/operations.js"
 import { describeValue } from "../interpreter/references.js"
-import { Await, Interruption } from "../interpreter/signals.js"
+import { abrupt, Await, Interruption, normal } from "../interpreter/signals.js"
 import { type Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev, named } from "./expressions.js"
 import { type Iter, iteratorClose, iteratorStep, openIterator } from "./iteration.js"
@@ -357,7 +357,7 @@ const Labeled = kind("LabeledStatement", labeledStatement)
 
 // The machine checks for a slice at each loop back-edge, so a long loop lets the host run.
 const backEdge = (task: MachineTask, frame: Frame, phase: number): boolean => {
-  if (!task.ctx.runner.tick() && !task.slice) return false
+  if (!task.machine.tick() && !task.slice) return false
   task.slice = true
   frame.phase = phase
   return true
@@ -866,10 +866,15 @@ const Try = kind("TryStatement", tryStatement, {
 
 // Slots: the statement running and the value of the last expression statement. Phases: 1 has a statement's result,
 // 2 has the last expression's value, 3 has a returned thenable settled, 4 has the result copied out.
+// The phases of the program's frame: 0 starts, 1 has a statement's result, 2 has the body's value, 3 has it adopted,
+// 4 has it copied out, and `ENDED` has ended the program, its outcome recorded on the machine.
+const ENDED = 5
+
 function programStep(task: MachineTask, frame: Frame, node: Program, input: unknown) {
   const slots = frame.slots
   const body = node.body
   let phase = frame.phase
+  if (phase === ENDED) return undefined
   let value: Value = undefined
   let index = 0
   if (phase === 0) {
@@ -930,9 +935,12 @@ function programStep(task: MachineTask, frame: Frame, node: Program, input: unkn
   }
   if (phase === 3) {
     frame.phase = 4
-    return task.native(toBoundary(task.ctx, input as Value), node, false)
+    const copied = task.native(toBoundary(task.ctx, input as Value), node, false)
+    if (copied === PENDING) return PENDING
+    input = copied
   }
-  return input
+  task.machine.outcome = normal(input)
+  return undefined
 }
 
 const outsideLoop = (result: StatementResult, statement: Statement | ModuleDeclaration) => {
@@ -941,4 +949,17 @@ const outsideLoop = (result: StatementResult, statement: Statement | ModuleDecla
   }
 }
 
-export const ProgramKind = kind("Program", programStep)
+/**
+ * The program's body, the first job. It is an async boundary: an `await` in it parks the whole body, and how the body
+ * ends, normally or by a throw, is the program's outcome.
+ */
+export const ProgramKind = kind("Program", programStep, {
+  unwind: (task, frame, error) => {
+    if (frame.phase === ENDED) return false
+    task.machine.outcome = abrupt(error)
+    frame.phase = ENDED
+    return true
+  },
+  cut: () => normal(undefined),
+  counts: () => true,
+})

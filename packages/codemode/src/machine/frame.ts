@@ -1,5 +1,6 @@
 import type { AstNode } from "../interpreter/model.js"
 import type { ScopeStack } from "../interpreter/scope.js"
+import type { Completion } from "../interpreter/signals.js"
 import type { MachineTask } from "./task.js"
 
 /**
@@ -26,6 +27,13 @@ export type Kind = {
   // Method syntax, so each kind's step can name the node type it evaluates and the input it receives.
   step(task: MachineTask, frame: Frame | undefined, node: AstNode | undefined, input: unknown): unknown
   unwind?(task: MachineTask, frame: Frame, error: unknown): boolean
+  /**
+   * Whether the frame is an async boundary, where an `await` above cuts the stack: what the frame below receives once
+   * the frames from this one up are parked on the awaited promise, or undefined when the frame is no boundary.
+   */
+  cut?(frame: Frame): Completion | undefined
+  /** Whether the frame counts toward the call-depth limit while it is on the stack. */
+  counts?(frame: Frame): boolean
   /** A frame of this kind holds a host generator (a built-in that calls program code), so it cannot be saved. */
   readonly opaque?: boolean
 }
@@ -47,7 +55,11 @@ export class Frame {
   ) {}
 }
 
-export const kind = (name: string, step: Kind["step"], options?: Pick<Kind, "unwind" | "opaque">): Kind => ({
+export const kind = (
+  name: string,
+  step: Kind["step"],
+  options?: Pick<Kind, "unwind" | "cut" | "counts" | "opaque">,
+): Kind => ({
   name,
   step,
   ...options,

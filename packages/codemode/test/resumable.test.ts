@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Context } from "effect"
 import { parseProgram } from "../src/interpreter/execute.js"
 import { Interpreter } from "../src/interpreter/interpreter.js"
 import { createBuiltins } from "../src/interpreter/intrinsics.js"
@@ -14,7 +13,6 @@ import { nodeId, sourceOf } from "../src/interpreter/source.js"
 const interpreter = () =>
   new Interpreter<never>({
     tools: ToolRuntime.make(ToolRuntime.prepare<never>({}), undefined, {}),
-    services: Context.empty(),
     builtins: createBuiltins(),
   })
 

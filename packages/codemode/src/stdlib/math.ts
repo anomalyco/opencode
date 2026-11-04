@@ -3,7 +3,7 @@ import { typeError } from "../interpreter/model.js"
 import { Obj, coerceToNumber } from "../interpreter/objects.js"
 import { preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import type { Eval } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/signals.js"
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
 declare global {

@@ -1,14 +1,15 @@
-import type { Cause, Effect } from "effect"
+import type { Cause } from "effect"
+import type { Frame } from "../machine/frame.js"
+import type { HostRequest, Resolving } from "../machine/scheduler.js"
 import { type AstNode, GeneratorReturn, type GeneratorRequestKind, typeError } from "./model.js"
 import type { Value } from "./objects.js"
 
-// The signals interpreter work sends its driver, and the activation records the driver keeps. Nothing here needs
-// Effect at run time, so the machine can use them too.
+// The signals interpreter work (a built-in's host generator) sends the machine. Nothing here needs Effect at run time.
 
 /**
- * Interpreter work: a generator that yields signals to the driver and returns its result. Work inside one activation
- * composes with `yield*`; a program call is a `Call`, so program recursion lives on the explicit stack below and never
- * grows the host stack.
+ * Interpreter work: a generator that yields signals to the machine and returns its result. It runs in a native frame;
+ * a program call is an `Invoke`, which the machine runs as frames on its own stack, so program recursion never grows
+ * the host stack.
  */
 export type Eval<A> = Generator<Signal, A, unknown>
 
@@ -19,16 +20,13 @@ export type Completion =
 export const normal = (value: unknown): Completion => ({ ok: true, value })
 export const abrupt = (error: unknown): Completion => ({ ok: false, error })
 
-/**
- * What an activation's body is: interpreter work, or a machine task (`src/machine`), which answers the same `next` and
- * `throw` as a generator.
- */
+/** What a native frame runs: interpreter work, or a machine task (a generator's body), which answers the same calls. */
 export interface Body {
   next(input?: unknown): IteratorResult<Signal, unknown>
   throw(error: unknown): IteratorResult<Signal, unknown>
 }
 
-/** Run `body` as a new activation; a boundary marks where a suspended body splits off the stack. */
+/** Run `body` in a native frame of its own; a boundary marks where the stack splits when the body above suspends. */
 export class Call {
   constructor(
     readonly body: Body,
@@ -36,10 +34,10 @@ export class Call {
   ) {}
 }
 
-/** Push saved activations back on the stack and continue the top one with `input`. */
+/** Push saved frames back on the stack and continue the top one with `input`. */
 export class Enter {
   constructor(
-    readonly entries: Array<Entry>,
+    readonly frames: Array<Frame>,
     readonly input: Completion,
   ) {}
 }
@@ -59,7 +57,7 @@ export class Yield {
 
 /** Block the current job on host work: no other job runs until it ends, as with a synchronous host call. */
 export class Host {
-  constructor(readonly effect: Effect.Effect<unknown, unknown>) {}
+  constructor(readonly request: HostRequest) {}
 }
 
 /**
@@ -74,10 +72,7 @@ export class Interruption {
 /** Let the host run; the current job continues before any other job. */
 export const Slice: unique symbol = Symbol("codemode.slice")
 
-/**
- * Call a program function from inside interpreter work. The machine evaluator answers it on its own stack; the
- * runner, when it reaches it, starts the call as a new activation.
- */
+/** Call a program function from inside interpreter work; the machine runs the call as frames on its own stack. */
 export class Invoke {
   constructor(
     readonly callable: Value,
@@ -100,40 +95,36 @@ export interface Boundary {
   readonly generator: boolean
   /** The body above returned or threw. */
   finish(completion: Completion): Completion
-  /** The body above suspended at an `await`; its activations are saved in the continuation. */
+  /** The body above suspended at an `await`; its frames are parked on the awaited promise. */
   suspended(): Completion
-  /** The body above yielded; `split` takes its activations off the stack when it suspends. */
-  yielded(value: Value, split: () => Array<Entry>): Completion
+  /** The body above yielded; `split` takes its frames off the stack when it suspends. */
+  yielded(value: Value, split: () => Array<Frame>): Completion
 }
 
-/** The boundary of an async body: the body's completion settles it, and the caller receives `result` at once. */
+/**
+ * The boundary of host work that crosses its arguments first (a tool call): the caller receives the call's promise
+ * at once, and a failure while crossing rejects it. Once the work starts, its outcome settles the promise.
+ */
 export class AsyncBoundary implements Boundary {
   readonly async = true
   readonly generator = false
-  constructor(
-    private readonly settle: (completion: Completion) => void,
-    readonly result: Value,
-  ) {}
+  constructor(readonly resolving: Resolving) {}
+  get result(): Value {
+    return this.resolving.promise
+  }
   finish(completion: Completion): Completion {
-    this.settle(completion)
-    return normal(this.result)
+    if (!completion.ok) this.resolving.reject(completion.error)
+    return normal(this.resolving.promise)
   }
   suspended(): Completion {
-    return normal(this.result)
+    return normal(this.resolving.promise)
   }
   yielded(): Completion {
     return abrupt(typeError("yield is only valid inside a generator."))
   }
 }
 
-export type Entry = { readonly body: Body; readonly boundary: Boundary | undefined }
-
-/** Paused or running program code: activations on an explicit stack, innermost last. */
-export class Task {
-  constructor(readonly stack: Array<Entry>) {}
-}
-
-/** Most activations one task may hold, as the call-stack limit. */
+/** Most activations one stack may hold, as the call-stack limit. */
 export const MAX_CALL_DEPTH = 10_000
 
 // Program values never have a `next` method of their own: an object's properties live in its property map.

@@ -28,6 +28,7 @@ import {
   type Value,
 } from "./objects.js"
 import { describeValue, isOpaque } from "./references.js"
+import { Host } from "./signals.js"
 
 /**
  * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and built-in
@@ -184,18 +185,18 @@ export const extensionGlobals = <R>(
             label,
             site,
           )
-        if (before) yield ctx.runner.blocking(before)
+        if (before) yield new Host({ kind: "effect", effect: before })
         const host = callHost<R>(value, args)
         if (host.async) return pending(settle(host.effect), label, site)
-        return (yield ctx.runner.blocking(settle(host.effect))) as Value
+        return (yield new Host({ kind: "effect", effect: settle(host.effect) })) as Value
       },
     })
   }
 
   // An asynchronous host call: the program holds a promise that settles when the host's work does.
   const pending = (work: Effect.Effect<Value, Throw, R>, label: string, site: AstNode | undefined) => {
-    const resolving = ctx.runner.resolving(ctx.runner.newPromise(), site)
-    ctx.runner.host(work, { label, result: "value", resolving, site })
+    const resolving = ctx.machine.resolving(ctx.machine.newPromise(), site)
+    ctx.machine.host({ kind: "effect", effect: work }, { label, result: "value", resolving, site })
     return resolving.promise
   }
 

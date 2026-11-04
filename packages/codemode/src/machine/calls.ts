@@ -30,19 +30,22 @@ import {
 import { isOpaque } from "../interpreter/references.js"
 import { ScopeStack } from "../interpreter/scope.js"
 import {
-  AsyncBoundary,
-  Call,
+  abrupt,
+  type Body,
+  type Boundary,
+  type Completion,
   type Eval,
   generatorBody,
   Invoke,
   isEval,
   MAX_CALL_DEPTH,
+  normal,
   type Signal,
 } from "../interpreter/signals.js"
+import type { Resolving } from "./scheduler.js"
 import type { StatementResult } from "../interpreter/model.js"
 import { Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev } from "./expressions.js"
-import type { Machine } from "./machine.js"
 import { bind, declaring } from "./patterns.js"
 import { blockStatement } from "./statements.js"
 import { MachineTask } from "./task.js"
@@ -59,7 +62,7 @@ export function dispatch(
   if (callable instanceof Fn) return invoke(task, callable, thisValue, args, node)
   if (callable instanceof Builtin) {
     // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call.
-    if (task.ctx.runner.tick()) task.slice = true
+    if (task.machine.tick()) task.slice = true
     // A bound function calls its target directly, so a program target runs as a frame rather than inside a native.
     if (callable instanceof BoundFn) {
       return dispatch(task, callable.target, callable.boundThis, [...callable.boundArgs, ...args], node)
@@ -79,67 +82,36 @@ export function dispatch(
   throw notAFunction(callee, node)
 }
 
-// A program call: a synchronous body runs as a counted `Call` frame on this stack. An async body runs as a task of its
-// own behind an async boundary, as the runner keeps it today, and the caller receives its promise; a generator call
-// binds its parameters on this stack and returns the generator.
+// A program call runs as a counted `Call` frame on this stack. An async function's frame is an async boundary: an
+// `await` in its body cuts the stack there and the caller receives its promise, which the body's completion settles.
+// A generator call binds its parameters on this stack and returns the generator.
 function invoke(task: MachineTask, fn: Fn, thisValue: Value, args: Array<Value>, node: AstNode | undefined) {
   const machine = task.machine
-  const runner = task.ctx.runner
-  if (runner.depth + machine.calls > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
-  if (runner.tick()) task.slice = true
-  if (fn.async && !fn.generator) return task.request(asyncCall(machine, fn, thisValue, args, node), fn.body)
+  if (machine.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
+  if (machine.tick()) task.slice = true
+  const resolving = fn.async && !fn.generator ? machine.resolving(machine.newPromise()) : undefined
   const counted = !fn.generator
-  if (counted) machine.calls++
-  return task.push(CallKind, fn.body, [fn, thisValue, args, node, counted, undefined, 0])
-}
-
-/** A program call the runner starts as its own activation, so its frame is not counted again. */
-export function enter(machine: Machine, invocation: Invoke): Call {
-  const fn = invocation.callable as Fn
-  const runner = machine.ctx.runner
-  if (runner.depth + machine.calls > MAX_CALL_DEPTH) {
-    throw rangeError("Maximum call stack size exceeded", invocation.site)
-  }
-  if (fn.async && !fn.generator) return asyncCall(machine, fn, invocation.thisValue, invocation.args, invocation.site)
-  return new Call(callTask(machine, fn, invocation.thisValue, invocation.args, invocation.site))
-}
-
-const callTask = (machine: Machine, fn: Fn, thisValue: Value, args: Array<Value>, site: AstNode | undefined) => {
-  const task = new MachineTask(machine, new ScopeStack([], fn))
-  task.stack.push(new Frame(CallKind, fn.body, 0, task.scopes, [fn, thisValue, args, site, false, undefined, 0]))
-  return task
-}
-
-// An async function's body is a task behind an async boundary: its completion settles the promise the caller gets.
-const asyncCall = (machine: Machine, fn: Fn, thisValue: Value, args: Array<Value>, site: AstNode | undefined) => {
-  const body = callTask(machine, fn, thisValue, args, site)
-  const runner = machine.ctx.runner
-  const promise = runner.newPromise()
-  const resolving = runner.resolving(promise)
-  return new Call(
-    body,
-    new AsyncBoundary(
-      (completion) =>
-        completion.ok ? resolving.resolve(completion.value as Value) : resolving.reject(completion.error),
-      promise,
-    ),
-  )
+  if (counted) machine.depth++
+  return task.push(CallKind, fn.body, [fn, thisValue, args, node, counted, undefined, 0, resolving])
 }
 
 // The phases of a `Call` frame: bind the parameters (resuming at the slot index after a pattern finishes), make the
-// generator or start the body, and receive the body's result. A generator's own body task starts at `RUN`.
+// generator or start the body, and receive the body's result. A generator's own body task starts at `RUN`. An async
+// function's frame that took a throw has `SETTLED` its promise with it.
 const ENTER = 0
 const BIND = 1
 const BODY = 2
 const RUN = 3
 const RESULT = 4
+const SETTLED = 5
 
-// Slots: fn, this, args, call site, whether the frame counts toward the depth limit, the parameter scope, and the
-// next parameter to bind.
+// Slots: fn, this, args, call site, whether the frame counts toward the depth limit, the parameter scope, the next
+// parameter to bind, and for an async function what settles its promise.
 function callStep(task: MachineTask, frame: Frame, _node: AstNode, input: unknown): Out<Value> {
   const slots = frame.slots
   const fn = slots[0] as Fn
   let phase = frame.phase
+  if (phase === SETTLED) return (slots[7] as Resolving).promise
   if (phase === ENTER) {
     const scopes = activate(task, fn, slots[1] as Value, slots[2] as Array<Value>)
     frame.scope = scopes
@@ -168,10 +140,16 @@ function callStep(task: MachineTask, frame: Frame, _node: AstNode, input: unknow
       input = result
     }
   }
-  if (slots[4]) task.machine.calls--
-  if (fn.body.type !== "BlockStatement") return input as Value
-  const result = input as StatementResult
-  return result.kind === "return" ? result.value : undefined
+  const result =
+    fn.body.type !== "BlockStatement"
+      ? (input as Value)
+      : (input as StatementResult).kind === "return"
+        ? (input as Extract<StatementResult, { kind: "return" }>).value
+        : undefined
+  const resolving = slots[7] as Resolving | undefined
+  if (resolving === undefined) return result
+  resolving.resolve(result)
+  return resolving.promise
 }
 
 // The activation's scope chain: the closure's scopes and a parameter scope holding `this`, `arguments`, and the
@@ -249,10 +227,19 @@ const generator = (task: MachineTask, fn: Fn, frame: Frame): GeneratorObj => {
 }
 
 export const CallKind = kind("Call", callStep, {
-  unwind: (task, frame) => {
-    if (frame.slots[4]) task.machine.calls--
-    return false
+  // An async function's body that throws rejects its promise; the caller still receives the promise.
+  unwind: (_task, frame, error) => {
+    const resolving = frame.slots[7] as Resolving | undefined
+    if (resolving === undefined || frame.phase === SETTLED) return false
+    resolving.reject(error)
+    frame.phase = SETTLED
+    return true
   },
+  cut: (frame) => {
+    const resolving = frame.slots[7] as Resolving | undefined
+    return resolving === undefined ? undefined : normal(resolving.promise)
+  },
+  counts: (frame) => frame.slots[4] === true,
 })
 
 // The phases of a native frame: running (or receiving the answer it waits for), throwing a failure into the work, done.
@@ -262,10 +249,10 @@ const FINISHED = 2
 
 /**
  * Runs a built-in's interpreter work as a native frame: program calls it makes (`Invoke`) run as frames on this stack,
- * and anything else it asks for goes to the driver. The frame holds a host generator, so it is opaque.
+ * and anything else it asks for is answered by the step loop. The frame holds a host generator, so it is opaque.
  */
 export function native<A>(task: MachineTask, work: Eval<A>, site: AstNode | undefined, located: boolean): Out<A> {
-  const frame = new Frame(Native, site, RUNNING, task.scopes, [work, located, undefined])
+  const frame = new Frame(Native, site, RUNNING, task.scopes, [work, located, undefined, undefined, false])
   task.stack.push(frame)
   let out: Out<A>
   try {
@@ -278,25 +265,41 @@ export function native<A>(task: MachineTask, work: Eval<A>, site: AstNode | unde
   return out
 }
 
-// Slots: the work, whether its failures are located at the call site, and a failure to throw into it.
+/**
+ * A native frame for a body that runs as an activation of its own: a job's work, or a body a built-in starts behind a
+ * boundary (`Call`). It counts toward the depth limit; the boundary decides what its completion gives the frame below.
+ */
+export const nativeFrame = (scopes: ScopeStack, body: Body, boundary: Boundary | undefined, counted: boolean): Frame =>
+  new Frame(Native, undefined, RUNNING, scopes, [body, false, undefined, boundary, counted])
+
+/** The boundary a native frame's body runs behind, if any. */
+export const boundaryOf = (frame: Frame): Boundary | undefined =>
+  frame.kind === Native ? (frame.slots[3] as Boundary | undefined) : undefined
+
+// Slots: the work, whether its failures are located at the call site, a failure to throw into it, the boundary it
+// runs behind, and whether it counts toward the depth limit.
 function nativeStep(task: MachineTask, frame: Frame, site: AstNode | undefined, input: unknown): Out<Value> {
   const slots = frame.slots
-  const work = slots[0] as Eval<Value>
+  const work = slots[0] as Body
   let ok = frame.phase !== THROWING
   let value = ok ? input : slots[2]
   slots[2] = undefined
   frame.phase = RUNNING
   while (true) {
-    let result: IteratorResult<Signal, Value>
+    let result: IteratorResult<Signal, unknown>
     try {
       result = ok ? work.next(value) : work.throw(value)
     } catch (error) {
       frame.phase = FINISHED
+      const boundary = slots[3] as Boundary | undefined
+      if (boundary !== undefined) return outcome(boundary.finish(abrupt(error)))
       throw slots[1] ? locate(error, site) : error
     }
     if (result.done) {
       frame.phase = FINISHED
-      return result.value
+      const boundary = slots[3] as Boundary | undefined
+      if (boundary !== undefined) return outcome(boundary.finish(normal(result.value)))
+      return result.value as Value
     }
     const signal = result.value
     if (!(signal instanceof Invoke)) {
@@ -317,6 +320,11 @@ function nativeStep(task: MachineTask, frame: Frame, site: AstNode | undefined, 
   }
 }
 
+const outcome = (completion: Completion): Value => {
+  if (!completion.ok) throw completion.error
+  return completion.value as Value
+}
+
 export const Native = kind("Native", nativeStep, {
   opaque: true,
   unwind: (_task, frame, error) => {
@@ -325,6 +333,11 @@ export const Native = kind("Native", nativeStep, {
     frame.slots[2] = error
     return true
   },
+  cut: (frame) => {
+    const boundary = frame.slots[3] as Boundary | undefined
+    return boundary?.async ? boundary.suspended() : undefined
+  },
+  counts: (frame) => frame.slots[4] === true,
 })
 
 export type Hint = "number" | "string" | "default"

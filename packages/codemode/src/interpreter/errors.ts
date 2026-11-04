@@ -19,7 +19,7 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
-import type { Eval } from "./runner.js"
+import type { Eval } from "./signals.js"
 import { toPrimitiveString } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 

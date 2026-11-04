@@ -1344,7 +1344,7 @@ describe("promise construction", () => {
 })
 
 describe("jobs run to completion", () => {
-  // The runner pauses a long job to let the host run; the paused job still finishes before any other job starts.
+  // The machine pauses a long job to let the host run; the paused job still finishes before any other job starts.
   test("updates to shared state between awaits are not lost", async () => {
     expect(
       await value(`

@@ -16,7 +16,7 @@ import {
   type Value,
 } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
-import { type Eval, Interruption } from "../interpreter/runner.js"
+import { type Eval, Interruption } from "../interpreter/signals.js"
 
 const finished: Step = { done: true, value: undefined }
 

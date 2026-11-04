@@ -21,7 +21,7 @@ import {
   HeadersObj,
 } from "./interpreter/objects.js"
 import { typeofValue } from "./interpreter/references.js"
-import { type Eval, Slice } from "./interpreter/runner.js"
+import { type Eval, Slice } from "./interpreter/signals.js"
 
 export type Json = Schema.Json
 
@@ -50,7 +50,7 @@ const walk = <R>(
   const stack = new Set<object>()
   const visit = function* (holder: Obj, key: string, depth: number): Eval<Json | undefined> {
     // Shared references expand into a tree, so the work is not bounded by the value's size or depth.
-    if (ctx.runner.tick()) yield Slice
+    if (ctx.machine.tick()) yield Slice
     if (depth > MAX_VALUE_DEPTH) throw rangeError(`Value exceeds the maximum depth of ${MAX_VALUE_DEPTH}.`)
     const raw = get(holder, key)
     if (raw instanceof PromiseObj && !boundary) {
