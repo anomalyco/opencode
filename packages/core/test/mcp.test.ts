@@ -2406,6 +2406,74 @@ test("serializes concurrent MCP lifecycle operations", async () => {
   )
 })
 
+const awaitStatus = (service: Mcp.Interface, status: Mcp.Status["status"]) =>
+  service.servers().pipe(
+    Effect.map((servers) => servers.find((server) => server.name === "resources")?.status),
+    Effect.filterOrFail(
+      (current) => current?.status === status,
+      (current) => new Error(`MCP server status is ${JSON.stringify(current)}, expected ${status}`),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("10 millis") }),
+    Effect.timeout("5 seconds"),
+  )
+
+testEffect(Layer.empty).live("finishes an MCP connect whose caller is interrupted during the handshake", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (typeof body !== "object" || body === null || !("method" in body) || body.method !== "initialize")
+          return undefined
+        await Effect.runPromise(Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))))
+        return undefined
+      },
+    })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const connecting = yield* service.connect("resources").pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(connecting)
+      yield* Deferred.succeed(release, undefined)
+
+      yield* awaitStatus(service, "connected")
+      expect((yield* service.tools()).length).toBeGreaterThan(0)
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(release, undefined)),
+      Effect.provide(
+        resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, disabled: true })),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).live("finishes an MCP disconnect whose caller is interrupted while the session ends", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: async (request) => {
+        if (request.method !== "DELETE") return undefined
+        await Effect.runPromise(Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))))
+        return undefined
+      },
+    })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      expect(yield* settled(service)).toEqual({ status: "connected" })
+      const disconnecting = yield* service.disconnect("resources").pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(disconnecting)
+      yield* Deferred.succeed(release, undefined)
+
+      yield* awaitStatus(service, "disabled")
+      expect(yield* service.tools()).toEqual([])
+    }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)), Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
 testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog updates", () =>
   Effect.gen(function* () {
     const tool = (server: string, name: string, description = name) =>
