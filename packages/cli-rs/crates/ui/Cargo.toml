@@ -17,4 +17,5 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+opencode-parity.workspace = true
 tempfile.workspace = true
