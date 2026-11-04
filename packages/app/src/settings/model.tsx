@@ -146,6 +146,10 @@ const appearanceSchema = Persistence.struct({
   terminal: Schema.String,
   // "inbox" is experimental: the vertical layout with a server-wide session inbox in place of tabs.
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
+  // Group Side tabs by server. Off keeps the original flat strip.
+  tabGroupByServer: Schema.Boolean,
+  // Server keys in the order the user dragged their Side tab groups.
+  tabServerOrder: Persistence.array(Schema.String),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -309,7 +313,16 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
+  appearance: {
+    fontSize: 14,
+    mono: "",
+    sans: "",
+    terminal: "",
+    tabLayout: "horizontal",
+    tabGroupByServer: false,
+    tabServerOrder: [],
+    reduceMotion: "system",
+  },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -459,6 +472,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        tabGroupByServer: withFallback(
+          () => store.appearance?.tabGroupByServer,
+          defaultSettings.appearance.tabGroupByServer,
+        ),
+        setTabGroupByServer(value: boolean) {
+          setStore("appearance", "tabGroupByServer", value)
+        },
+        tabServerOrder: withFallback(
+          () => store.appearance?.tabServerOrder,
+          defaultSettings.appearance.tabServerOrder,
+        ),
+        setTabServerOrder(value: string[]) {
+          setStore("appearance", "tabServerOrder", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {

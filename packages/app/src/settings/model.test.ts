@@ -107,6 +107,8 @@ describe("settings schema", () => {
         sans: "",
         terminal: "",
         tabLayout: "horizontal",
+        tabGroupByServer: false,
+        tabServerOrder: [],
         reduceMotion: "system",
       },
       keybinds: {},
@@ -162,6 +164,8 @@ describe("settings schema", () => {
       sans: "",
       terminal: "",
       tabLayout: "vertical",
+      tabGroupByServer: false,
+      tabServerOrder: [],
       reduceMotion: "system",
     })
     expect(settings.permissions).toEqual({ autoApprove: true, autoApproveProjects: { on: true, off: false } })

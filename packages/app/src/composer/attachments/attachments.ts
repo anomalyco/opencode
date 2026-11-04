@@ -2,6 +2,7 @@ import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createBlobReference } from "@/runtime/persistence/drafts"
+import { TAB_GROUP_DRAG_TYPE } from "@/runtime/drag"
 import { uuid } from "@opencode/util/uuid"
 import type { ComposerPrompt } from "../types"
 import type { ImageAttachmentPart, PathAttachmentPart } from "../state"
@@ -213,6 +214,9 @@ export function createComposerAttachments(
     if (input.isDialogActive()) return
     event.preventDefault()
     clearDrag()
+
+    if (event.dataTransfer?.types.includes(TAB_GROUP_DRAG_TYPE)) return
+
     const plainText = event.dataTransfer?.getData("text/plain")
 
     if (plainText?.startsWith("file:")) {
@@ -273,6 +277,8 @@ export function createComposerAttachments(
 // Files from the system and file rows from the workspace tree (which also carry a file URL) drop as attachments.
 // A text selection carries neither, so dragging it shows no dropzone.
 function dragType(data: DataTransfer | null) {
+  if (data?.types.includes(TAB_GROUP_DRAG_TYPE)) return null
+
   if (data?.types.includes("Files")) return "image"
 
   if (data?.types.includes("text/uri-list")) return "@mention"

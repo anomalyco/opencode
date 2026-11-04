@@ -532,6 +532,30 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               </Show>
             )
 
+            const groupTabsButton = () => (
+              <Show
+                when={settings.appearance.tabLayout() === "vertical" && global.servers.list().length > 1}
+              >
+                <Tooltip placement="bottom" value={language.t("titlebar.tabs.groupByServer")} class="shrink-0">
+                  <IconButton
+                    type="button"
+                    variant="ghost-muted"
+                    size="normal"
+                    class="shrink-0"
+                    classList={{ "opacity-50": !settings.appearance.tabGroupByServer() }}
+                    icon={<Icon name="server" size="small" />}
+                    state={settings.appearance.tabGroupByServer() ? "pressed" : undefined}
+                    onClick={() =>
+                      settings.appearance.setTabGroupByServer(!settings.appearance.tabGroupByServer())
+                    }
+                    aria-label={language.t("titlebar.tabs.groupByServer")}
+                    aria-pressed={settings.appearance.tabGroupByServer()}
+                    data-action="toggle-tab-server-groups"
+                  />
+                </Tooltip>
+              </Show>
+            )
+
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
@@ -841,7 +865,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <div
                                 data-slot="sidebar-header"
                                 data-home={homeInSidebarHeader() ? "" : undefined}
-                                class="flex w-full shrink-0 gap-2"
+                                class="flex w-full shrink-0 gap-2 [container-type:inline-size]"
                                 classList={{
                                   "items-start pt-2.5 pb-[3px]": homeInSidebarHeader(),
                                   "mb-0.5 h-12 items-center": !homeInSidebarHeader(),
@@ -866,11 +890,23 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <Show when={homeInSidebarHeader()} fallback={<div class="flex-1" />}>
                                   <div class="min-w-0 flex-1">{homeButton(true)}</div>
                                 </Show>
-                                <SidebarToggle handoff="out" />
+                                {/* Optically aligns the toggle's glyph with the selected session's end edge. */}
+                                <div class="-me-0.5 flex shrink-0 items-center gap-1">
+                                  {groupTabsButton()}
+                                  <SidebarToggle handoff="out" />
+                                </div>
                               </div>
                             </Show>
                             <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                              <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
+                              <Show when={!homeInSidebarHeader()}>
+                                <div
+                                  data-slot="sidebar-home-row"
+                                  class="flex w-full items-center gap-1 [container-type:inline-size]"
+                                >
+                                  <div class="min-w-0 flex-1">{homeButton(true)}</div>
+                                  <Show when={windows()}>{groupTabsButton()}</Show>
+                                </div>
+                              </Show>
                               {searchButton(true)}
                               <RecentlyClosedTabsMenu
                                 vertical
@@ -885,6 +921,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 fallback={
                                   <TitlebarTabStrip
                                     orientation="vertical"
+                                    groupByServer
                                     tabs={tabsStore}
                                     currentTab={currentTab()}
                                     onNavigate={(tab, el) => {

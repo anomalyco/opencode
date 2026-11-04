@@ -854,6 +854,281 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   expect(reads.filter((url) => !url.startsWith(REMOTE_SERVER))).toEqual([])
 })
 
+test("Side tabs group by server only after the list toggle is enabled", async ({ page }) => {
+  const local = session({ id: "ses_group_toggle_a", directory: "C:/server-a", title: "Local one" })
+  const local2 = session({ id: "ses_group_toggle_a2", directory: "C:/server-a", title: "Local two" })
+  const remote = session({ id: "ses_group_toggle_b", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local, local2], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical" } },
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }, local2.id],
+  })
+  await page.goto(sessionHref(local.id))
+
+  const headers = page.locator('[data-slot="tab-server-group"]')
+  const toggle = page.locator('[data-action="toggle-tab-server-groups"]')
+  const order = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
+
+  await expect(toggle).toHaveCount(1)
+  await expect(headers).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-pressed", "false")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-pressed", "true")
+  await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(local.id)}`,
+    `${SERVER}\n${sessionHref(local2.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ])
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-pressed", "false")
+  await expect(headers).toHaveCount(0)
+})
+
+test("server group add starts a draft in the clicked group", async ({ page }) => {
+  const local = session({ id: "ses_group_add_a1", directory: "C:/server-a", title: "Local one" })
+  const local2 = session({ id: "ses_group_add_a2", directory: "C:/server-a", title: "Local two" })
+  const remote = session({ id: "ses_group_add_b1", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local, local2], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }, local2.id],
+  })
+  await page.goto(sessionHref(local.id))
+
+  const layout = () =>
+    page
+      .locator('[data-slot="tab-server-group"], [data-titlebar-tab-slot]')
+      .evaluateAll((nodes) =>
+        nodes.map((node) =>
+          node.getAttribute("data-slot") === "tab-server-group"
+            ? `group:${node.textContent?.trim()}`
+            : node.getAttribute("data-tab-key"),
+        ),
+      )
+
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
+
+  await expect.poll(layout).toEqual([
+    "group:This computer",
+    `${SERVER}\n${sessionHref(local.id)}`,
+    `${SERVER}\n${sessionHref(local2.id)}`,
+    expect.stringMatching(/^draft:/),
+    "group:127.0.0.1:4097",
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ])
+
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "127.0.0.1:4097" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
+
+  await expect.poll(layout).toEqual([
+    "group:This computer",
+    `${SERVER}\n${sessionHref(local.id)}`,
+    `${SERVER}\n${sessionHref(local2.id)}`,
+    expect.stringMatching(/^draft:/),
+    "group:127.0.0.1:4097",
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+    expect.stringMatching(/^draft:/),
+  ])
+})
+
+test("server groups limit their visible tabs and collapse from the header", async ({ page }) => {
+  const local = [1, 2, 3, 4].map((index) =>
+    session({ id: `ses_group_more_${index}`, directory: "C:/server-a", title: `Local ${index}` }),
+  )
+
+  const remote = session({ id: "ses_group_more_remote", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: local, b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [local[0]!.id, { session: remote.id, server: REMOTE_SERVER }, ...local.slice(1).map((item) => item.id)],
+  })
+  await page.goto(sessionHref(local[0]!.id))
+
+  const visibleTabs = page.locator("[data-titlebar-tab-slot]:visible")
+  await expect(visibleTabs).toHaveCount(4)
+
+  const showMore = page.locator('[data-action="tab-server-group-show-more"]')
+  await expect(showMore).toHaveText("Show more")
+  await showMore.click()
+  await expect(visibleTabs).toHaveCount(5)
+
+  const showLess = page.locator('[data-action="tab-server-group-show-less"]')
+  await expect(showLess).toHaveText("Show less")
+  await showLess.click()
+  await expect(visibleTabs).toHaveCount(4)
+
+  const toggle = page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-toggle"]')
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(visibleTabs).toHaveCount(2)
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(visibleTabs).toHaveCount(4)
+
+  await page.goto(sessionHref(local[3]!.id))
+  await expect(visibleTabs).toHaveCount(5)
+  await expect(showMore).toBeVisible()
+
+  await toggle.click()
+  await expect(visibleTabs).toHaveCount(2)
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[data-titlebar-tab-slot][data-active="true"]')).toBeVisible()
+})
+
+test("server groups reorder visible tabs without disturbing concealed ones", async ({ page }) => {
+  const local = [1, 2, 3, 4].map((index) =>
+    session({ id: `ses_group_reorder_${index}`, directory: "C:/server-a", title: `Local ${index}` }),
+  )
+
+  const remote = session({ id: "ses_group_reorder_remote", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: local, b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [local[0]!.id, { session: remote.id, server: REMOTE_SERVER }, ...local.slice(1).map((item) => item.id)],
+  })
+  await page.goto(sessionHref(local[0]!.id))
+
+  const slot = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  const order = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((item) => item.getAttribute("data-tab-key")))
+
+  const source = slot(local[2]!.id)
+  const target = slot(local[0]!.id)
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+
+  if (!sourceBox || !targetBox) throw new Error("tab has no bounding box")
+
+  await page.mouse.move(sourceBox.x + 80, sourceBox.y + sourceBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetBox.x + 80, targetBox.y + targetBox.height / 2, { steps: 12 })
+  await page.mouse.up()
+
+  const grouped = [
+    `${SERVER}\n${sessionHref(local[2]!.id)}`,
+    `${SERVER}\n${sessionHref(local[0]!.id)}`,
+    `${SERVER}\n${sessionHref(local[1]!.id)}`,
+    `${SERVER}\n${sessionHref(local[3]!.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ]
+
+  await expect.poll(order).toEqual(grouped)
+  await expect(page.locator("[data-titlebar-tab-slot]:visible")).toHaveCount(4)
+
+  const remoteSlot = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remote.id, REMOTE_SERVER)}"])`)
+
+  await slot(local[0]!.id).dragTo(remoteSlot)
+  await expect.poll(order).toEqual(grouped)
+
+  // Turning grouping off restores the flat strip, where a tab can move past another server's tab.
+  await page.locator('[data-action="toggle-tab-server-groups"]').click()
+  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(local[2]!.id)}`,
+    `${SERVER}\n${sessionHref(local[0]!.id)}`,
+    `${SERVER}\n${sessionHref(local[1]!.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+    `${SERVER}\n${sessionHref(local[3]!.id)}`,
+  ])
+
+  const flatSource = await slot(local[0]!.id).boundingBox()
+  const flatTarget = await remoteSlot.boundingBox()
+
+  if (!flatSource || !flatTarget) throw new Error("flat tab has no bounding box")
+
+  await page.mouse.move(flatSource.x + 80, flatSource.y + flatSource.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(flatTarget.x + 80, flatTarget.y + flatTarget.height / 2, { steps: 12 })
+  await page.mouse.up()
+
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(local[2]!.id)}`,
+    `${SERVER}\n${sessionHref(local[1]!.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+    `${SERVER}\n${sessionHref(local[0]!.id)}`,
+    `${SERVER}\n${sessionHref(local[3]!.id)}`,
+  ])
+})
+
+test("server groups can be reordered by dragging their headers", async ({ page }) => {
+  const local = session({ id: "ses_group_order_a", directory: "C:/server-a", title: "Local one" })
+  const remote = session({ id: "ses_group_order_b", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+  })
+  await page.goto(sessionHref(local.id))
+
+  const headers = page.locator('[data-slot="tab-server-group"]')
+  await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+
+  const remoteHeader = page.locator('[data-slot="tab-server-group"]', { hasText: "127.0.0.1:4097" })
+  const localHeader = page.locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+  await remoteHeader.hover()
+
+  const dragSource = remoteHeader
+  const sourceBox = await dragSource.boundingBox()
+  const sessionBox = await page.locator('[data-slot="session-timeline-scroll"]').boundingBox()
+
+  if (!sourceBox || !sessionBox) throw new Error("drag target has no bounding box")
+
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sessionBox.x + sessionBox.width / 2, sessionBox.y + sessionBox.height / 2, { steps: 12 })
+  await expect(dragSource).toHaveAttribute("data-dragging", "true")
+  await expect(page.locator('[data-component="session-dropzone"]')).toBeHidden()
+
+  const target = localHeader
+  const targetBox = await target.boundingBox()
+
+  if (!targetBox) throw new Error("drop target has no bounding box")
+
+  // Groups reorder on dragover, before the pointer is released.
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  await target.dispatchEvent("dragover", { dataTransfer, clientY: targetBox.y + 2 })
+  await dataTransfer.dispose()
+
+  await expect(headers).toHaveText(["127.0.0.1:4097", "This computer"])
+  await page.mouse.up()
+  await expect(remoteHeader).not.toHaveAttribute("data-dragging", "true")
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const settings = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
+
+        return settings.appearance?.tabServerOrder
+      }),
+    )
+    .toEqual([REMOTE_SERVER, SERVER])
+
+  await localHeader.dragTo(remoteHeader)
+  await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+  await expect(localHeader).not.toHaveAttribute("data-dragging", "true")
+})
+
 test("a remote tab stays busy while a child session runs", async ({ page }) => {
   const sessionA = session({ id: "ses_server_a", directory: "C:/server-a", title: "Server A session" })
   const sessionB = session({ id: "ses_server_b", directory: "/home/server-b", title: "Server B session" })

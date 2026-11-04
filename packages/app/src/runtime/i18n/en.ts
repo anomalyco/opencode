@@ -599,6 +599,14 @@ export const dict = {
   "session.tab.recentHint": "Hold {{key}} for recently closed",
   "session.tab.showMore": "Show more",
   "session.tab.new": "New tab",
+  "session.tab.newOnServer": "New session on {{server}}",
+  "session.tab.serverGroup.collapse": "Collapse {{server}}",
+  "session.tab.serverGroup.drag": "Drag to reorder {{server}}",
+  "session.tab.serverGroup.expand": "Expand {{server}}",
+  "session.tab.serverGroup.openFailed.connection": "{{server}} is no longer connected. Reconnect it and try again.",
+  "session.tab.serverGroup.openFailed.directory": "No working directory is known for {{server}}. Open a session there first.",
+  "session.tab.serverGroup.openFailed.title": "Could not start a session",
+  "session.tab.serverGroup.showLess": "Show less",
   "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
   "session.panel.bottom": "Bottom panel",
@@ -719,6 +727,7 @@ export const dict = {
   "common.copied": "Copied",
 
   "titlebar.tabs": "Tabs",
+  "titlebar.tabs.groupByServer": "Group tabs by server",
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",

@@ -204,6 +204,16 @@
   padding-inline: var(--tab-link-inset);
 }
 
+/* Clip a collapsing tab slot without removing the tab link's 2px gap hit area. */
+[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-slot] {
+  overflow: clip;
+  overflow-clip-margin: 2px;
+}
+
+[data-motion="reduce"] [data-titlebar-tab-slot][data-orientation="vertical"] {
+  transition: none !important;
+}
+
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-slot] + [data-titlebar-tab-slot] [data-titlebar-tab] {
   --tab-hit-before: 1.5px;
 }
