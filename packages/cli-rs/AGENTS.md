@@ -23,6 +23,11 @@ Fast checks only, scoped with `-p` to the crates a step touches: `cargo fmt --ch
 TypeScript test files. No root `bun run check`, no full Bun suites, no opentui-rust `test.sh`, no
 OpenTUI suites, no benchmarks. Put `timeout` on anything that could hang.
 
+The integration tests of `opencode-tui` and `opencode-ui` link the static OpenTUI set, so each crate
+has one test binary, `tests/all/main.rs`, with one module per area and the shared helpers under
+`tests/all/support`. Add a new test file there as a module, not as a new `tests/*.rs`. Run one area
+with `cargo test -p opencode-tui --test all <module>::`, the unit tests with `--lib`.
+
 ## Ownership
 
 - Each step owns the files plan 8.4 lists. `lib.rs` of `api`, `local`, `service`, `store`, and `ui`

@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the session action dialogs: the timeline (packages/tui/src/routes/session/dialog-timeline.tsx),
 // fork (dialog-fork.tsx), rename (component/dialog-session-rename.tsx), and export options
-// (ui/dialog-export-options.tsx). crates/tui/tests/actions.rs (`dialogs_match_typescript`) mounts the Rust TUI over
+// (ui/dialog-export-options.tsx). crates/tui/tests/all/actions.rs (`dialogs_match_typescript`) mounts the Rust TUI over
 // the same session and messages (`turns()` there; keep both in step), hides the screen behind the dialog, and
 // compares the cells. The Rust TUI is the `new-designs` one, so the experiment is on. Times render in UTC here;
 // the Rust test shifts the messages by its local offset.

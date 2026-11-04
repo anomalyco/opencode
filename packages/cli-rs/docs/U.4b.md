@@ -82,10 +82,10 @@ Core's queries assume Core's capture handling, which opentui-rust did not have. 
 
 ## Proof
 
-- `crates/ui/tests/grammars.rs` (P-COMP): one snippet per grammar of the default build except TypeScript
+- `crates/ui/tests/all/grammars.rs` (P-COMP): one snippet per grammar of the default build except TypeScript
   (`parity/fixtures/U.4b/corpus.json`). Each is rendered by `parity/component/U.4b-grammars.tsx` in `<code>` with
   the TUI's parsers registered, and by `code::view`. Every cell is equal, colors and attributes included.
-- `crates/ui/tests/content.rs`: the U.4a fixtures (TypeScript code, diff, Markdown fences) now match with no
+- `crates/ui/tests/all/content.rs`: the U.4a fixtures (TypeScript code, diff, Markdown fences) now match with no
   exemptions.
 - `grammars::tests`: every query compiles under `grammars-all`, the table matches the manifest, and TypeScript
   captures `keyword.import` and `spell`.

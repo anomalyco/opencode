@@ -1,4 +1,4 @@
-// P-FILE for model.json (E.16): crates/tui/tests/models.rs runs this against the state directory the Rust TUI
+// P-FILE for model.json (E.16): crates/tui/tests/all/models.rs runs this against the state directory the Rust TUI
 // writes. `load <state>` prints what the TypeScript client reads; `recent <state> <provider> <model>` adds a
 // recent model the way the TypeScript model dialog does, under the same lock.
 import path from "node:path"

@@ -10,7 +10,7 @@ parity/scenarios/<step>/<name>.app.ts   one scenario, written by hand
         ▼
 parity/fixtures/<step>/<name>.app.json   the recording: scenario, requests and responses
 parity/fixtures/<step>/<name>/<checkpoint>.json   cells, in H.1's fixture format
-        │  cargo test -p opencode-tui --test app   (Rust runner, TestApp over opencode_api::memory)
+        │  cargo test -p opencode-tui --test all app::   (Rust runner, TestApp over opencode_api::memory)
         ▼
 pass, or a report of the differing cells and requests
 ```
@@ -149,7 +149,7 @@ It knows nothing of scenarios, so other tests can use it as a small fixture serv
 
 ## The Rust runner
 
-`crates/tui/tests/app.rs`, one test, `scenarios`, which runs every recording under `parity/fixtures/*/`
+`crates/tui/tests/all/app.rs`, one test, `scenarios`, which runs every recording under `parity/fixtures/*/`
 (`PARITY_SCENARIO` selects one) and fails at the end with every failing scenario's report:
 
 1. builds `Memory` from the recording's routes, then its reads and writes by exact query, then by path;
@@ -174,7 +174,7 @@ comparisons. It does not depend on the TUI, so the parity crate stays a leaf.
 2. Record it: `PARITY_SCENARIO=<step>/<name> bun test --cwd packages/cli-rs/parity ./app/scenarios.test.tsx`.
    Run it twice; `git status` must show no change after the second run.
 3. Replay it: `PARITY_SCENARIO=<step>/<name> bun run --cwd packages/cli-rs cargo test -p opencode-tui --test
-   app -- --nocapture`. On a difference, the runner writes the Rust cells to
+   all app::scenarios -- --nocapture`. On a difference, the runner writes the Rust cells to
    `$TMPDIR/opencode-parity/<step>/<name>/<checkpoint>.json` for a diff against the recorded file.
 4. When a step makes a checkpoint match, remove the deviation names from the scenario. When no scenario
    names a deviation file any more, delete the file.

@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 // P-ORACLE on frame sequences for U.6: renders the TUI's motion renderables under OpenTUI's manual clock and
 // captures row 0 at fixed instants. Each fixture in parity/fixtures/U.6/ is a filmstrip: row N is the frame at
-// the Nth instant listed in instants.json. crates/ui/tests/motion_frames.rs renders the Rust widgets in a TestApp,
+// the Nth instant listed in instants.json. crates/ui/tests/all/motion_frames.rs renders the Rust widgets in a TestApp,
 // advances its clock to the same instants, and compares the stacked rows cell by cell.
 //
 // Instants of the stepped spinners are multiples of their interval: OpenTUI ticks a spinner on any frame within

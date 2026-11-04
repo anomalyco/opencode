@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the command palette (packages/tui/src/component/command-palette.tsx) and the help dialog
-// (packages/tui/src/ui/dialog-help.tsx): crates/ui/tests/dialogs.rs registers the same global layer of palette
+// (packages/tui/src/ui/dialog-help.tsx): crates/ui/tests/all/dialogs.rs registers the same global layer of palette
 // commands. "U.3/palette" is the palette as opened, with one suggested command; "U.3/help" is the help dialog.
 import { onMount, type JSX } from "solid-js"
 import { CommandPaletteDialog } from "../../../tui/src/component/command-palette"

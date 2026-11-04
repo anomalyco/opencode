@@ -1,6 +1,6 @@
 // The P.1 test plugin, TypeScript side: one line appended to the home.footer slot, after the footer built-in.
 // parity/scenarios/P.1/slot.app.ts loads this directory through the cli.json `plugins` entry; the Rust TUI
-// skips that entry and registers its Rust twin (`slot_plugin` in crates/tui/tests/app.rs).
+// skips that entry and registers its Rust twin (`slot_plugin` in crates/tui/tests/all/app.rs).
 import type { Context } from "../../../../plugin/src/tui/plugin"
 
 export default {

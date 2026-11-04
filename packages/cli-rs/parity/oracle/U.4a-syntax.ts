@@ -1,5 +1,5 @@
 // P-ORACLE for U.4a: the syntax style the TUI derives from a theme (`generateSyntax`, packages/theme/src/tui/syntax.ts)
-// for a few built-in themes and modes. Writes parity/fixtures/U.4a/syntax.json; crates/ui/tests/content.rs builds
+// for a few built-in themes and modes. Writes parity/fixtures/U.4a/syntax.json; crates/ui/tests/all/content.rs builds
 // opencode_ui::code::syntax_theme for the same themes and compares every scope.
 import { ResourceContext } from "@opentui/core"
 import { generateSyntax, resolveThemeDocument } from "../../../theme/src/tui/index.ts"

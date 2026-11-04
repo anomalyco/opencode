@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the MCP servers dialog (packages/tui/src/component/dialog-mcp.tsx) and the skills
-// dialog (component/dialog-skill.tsx). crates/tui/tests/mcp.rs mounts the Rust TUI over the same responses
+// dialog (component/dialog-skill.tsx). crates/tui/tests/all/mcp.rs mounts the Rust TUI over the same responses
 // (`SERVERS` and `SKILLS` below; keep both in step), hides the screen behind the dialog, sends the same keys,
 // and compares the cells.
 import { onMount, type JSX } from "solid-js"

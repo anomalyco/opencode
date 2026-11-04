@@ -1,6 +1,6 @@
 // P-ORACLE for U.1: resolves every built-in theme in every mode it supports, the generated `system` theme over a few
 // terminal palettes, and a few broken custom themes, through the TypeScript TUI's own functions. Writes
-// parity/fixtures/U.1/tokens.json; crates/ui/tests/theme_oracle.rs resolves the same inputs in Rust and compares.
+// parity/fixtures/U.1/tokens.json; crates/ui/tests/all/theme_oracle.rs resolves the same inputs in Rust and compares.
 //
 // Colors are packed as 8 hex digits (rrggbbaa) in the order of `paths` (tokens) and `hues` (one 9-step scale per
 // named hue), so the fixture stays small. The Rust test unpacks them and reports mismatches by path.
