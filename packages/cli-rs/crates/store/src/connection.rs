@@ -376,6 +376,11 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::SessionExecutionSucceeded(_)
             | V2Event::SessionExecutionInterrupted(_)
             | V2Event::SessionExecutionFailed(_)
+            // Terminal support and lists (E.13a).
+            | V2Event::ServerConnected(_)
+            | V2Event::PersistentPtyAdded(_)
+            | V2Event::PersistentPtyRemoved(_)
+            | V2Event::PersistentPtyUpdated(_)
     )
 }
 
