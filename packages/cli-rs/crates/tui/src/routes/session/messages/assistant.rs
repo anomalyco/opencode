@@ -1,11 +1,11 @@
-//! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`), the hook
-//! tool rows hang on, and a plain stand-in for the message kinds E.6b renders.
+//! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`) and the hook
+//! tool rows hang on.
 
 use std::cell::{Cell, RefCell};
 
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantText, SessionMessageAssistantTool,
-    SessionMessageAssistantToolState, SessionMessageCompaction, SessionMessageInfo,
+    SessionMessageAssistantToolState,
 };
 use opentui::prelude::*;
 use opentui::widget::Markdown;
@@ -105,66 +105,6 @@ impl Tool {
             SessionMessageAssistantToolState::Unknown(_) => "unknown",
         };
         self.line.set_text(format!("⚙ {} ({status})", tool.name));
-    }
-}
-
-/// Shell, compaction, notice, switch, skill, and error messages as one muted line, until E.6b
-/// gives each its row (`SessionMessageView`).
-pub struct Notice {
-    root: View,
-    line: Text,
-}
-
-impl Notice {
-    pub fn new(cx: &Context<'_>) -> Self {
-        let line = Text::new(cx.app, "")
-            .fg(cx.theme.text.muted)
-            .wrap(WrapMode::Word);
-        let root = View::new(cx.app)
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&line);
-        Self { root, line }
-    }
-
-    pub fn root(&self) -> &View {
-        &self.root
-    }
-
-    pub fn update(&self, cx: &Context<'_>, message: &SessionMessageInfo) {
-        let text = match message {
-            SessionMessageInfo::Synthetic(synthetic) => {
-                synthetic.description.clone().unwrap_or_default()
-            }
-            SessionMessageInfo::System(system) => system
-                .description
-                .clone()
-                .unwrap_or_else(|| "Instructions updated".to_owned()),
-            SessionMessageInfo::Shell(shell) => format!("$ {}", shell.command),
-            SessionMessageInfo::Skill(skill) => format!("→ Skill {}", skill.name),
-            SessionMessageInfo::AgentSwitched(switched) => {
-                format!("Switched agent to {}", titlecase(switched.agent.as_str()))
-            }
-            SessionMessageInfo::ModelSwitched(switched) => {
-                format!("Switched model to {}", switched.model.id)
-            }
-            SessionMessageInfo::LocationSwitched(switched) => {
-                format!("↳ Moved to {}", switched.location.directory)
-            }
-            SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_)) => {
-                "Compacting…".to_owned()
-            }
-            SessionMessageInfo::Compaction(_) => "Compacted".to_owned(),
-            SessionMessageInfo::Idle(idle) => {
-                self.line.fg(cx.theme.text.feedback.error.base);
-                idle.error
-                    .as_ref()
-                    .map(|error| format!("Error: {}", error.message))
-                    .unwrap_or_default()
-            }
-            _ => String::new(),
-        };
-        self.line.set_text(text);
     }
 }
 
