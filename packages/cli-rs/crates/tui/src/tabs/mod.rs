@@ -96,6 +96,8 @@ pub struct Tabs {
     retry: Cell<Option<opentui::prelude::TimerId>>,
     attempt: Cell<u32>,
     cwd: RefCell<String>,
+    /// Tabs whose session [`prefetch`] read.
+    fetched: RefCell<HashSet<String>>,
     epoch: Cell<Option<std::time::Instant>>,
     _watch: RefCell<Option<opencode_local::watch::Watch>>,
 }
@@ -391,6 +393,7 @@ pub fn route_changed(tui: &Tui) {
 /// After the store changed: refresh titles and roots of open tabs (`normalize`), count prompt pulses, and
 /// acknowledge what the user sees.
 pub fn sync(tui: &Tui, changes: &Changes) {
+    prefetch(tui);
     if Tabs::enabled(tui) && changes.sessions() {
         let open = tui.tabs.tabs(tui);
         // `normalize`: each tab under its root session, once, with the store's title.
@@ -420,6 +423,28 @@ pub fn sync(tui: &Tui, changes: &Changes) {
         }
     }
     acknowledge(tui);
+}
+
+/// Reads each open tab's session and its children once, so persisted tabs show current titles and states
+/// (the first half of the TS prefetch effect; the delayed message, inbox, permission, and form reads are not
+/// ported).
+fn prefetch(tui: &Tui) {
+    if !Tabs::enabled(tui) {
+        return;
+    }
+    let tabs = tui.tabs.tabs(tui);
+    let missing: Vec<SessionID> = tui.data.read(|state| {
+        tabs.iter()
+            .map(|tab| SessionID(tab.session_id.clone()))
+            .filter(|id| state.session(id).is_none())
+            .collect()
+    });
+    for id in missing {
+        if tui.tabs.fetched.borrow_mut().insert(id.0.clone()) {
+            let task = tui.data.session_sync(&id, true);
+            tui.app.spawn(task, |_, _| {});
+        }
+    }
 }
 
 /// `title`: the store's title, else the persisted one, else the fallback, else the timestamped default.
