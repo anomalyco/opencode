@@ -57,6 +57,9 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
         </span>
         <span data-slot="text-shimmer-char-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">
           {text()}
+          <span data-slot="text-shimmer-sweep">
+            <span data-slot="text-shimmer-sweep-text">{text()}</span>
+          </span>
         </span>
       </span>
     </Dynamic>

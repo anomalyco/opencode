@@ -1,5 +1,6 @@
-import { For, Show, createMemo, onCleanup } from "solid-js"
+import { For, Match, Show, Switch, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Button } from "@opencode/ui/button"
 import { Tabs } from "@opencode/ui/tabs"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -48,6 +49,12 @@ export default function TerminalPanel(props: {
   const mobile = () => frame.placement() === "mobile"
   const active = () => (mobile() ? terminal().active() : terminal().get(props.tab())?.id)
 
+  const failed = () => {
+    const view = terminal().view()
+
+    return view.type === "failed" ? view : undefined
+  }
+
   // Selected output quotes into the composer of the screen showing this panel.
   const quote: TerminalQuoteTarget = {
     available: () => opened() && props.screen.composer.quotable(),
@@ -82,7 +89,7 @@ export default function TerminalPanel(props: {
         () => {
           const session = terminal()
 
-          return session.ready() ? session : undefined
+          return session.view().type === "ready" ? session : undefined
         },
         (session) => {
           if (seen.session === session.key) return
@@ -134,7 +141,7 @@ export default function TerminalPanel(props: {
   createKeyed(
     () => ({
       session: terminal().key,
-      ready: terminal().ready(),
+      ready: terminal().view().type === "ready",
       active: opened() ? active() : undefined,
       terminals: terminal().all(),
       elsewhere: elsewhere(),
@@ -208,68 +215,87 @@ export default function TerminalPanel(props: {
 
   return (
     <div id="terminal-panel" class="flex flex-col size-full">
-      <Show
-        when={terminal().ready()}
+      <Switch
         fallback={
           <div class="flex-1 flex items-center justify-center text-text-weak pointer-events-none">
             {plugin.t("loading")}
           </div>
         }
       >
-        <Show when={mobile()} fallback={surfaces()}>
-          <div class="h-[49px] shrink-0 flex border-b border-v2-border-border-base">
-            <Tabs
-              variant="panel"
-              value={terminal().active()}
-              onChange={(id) => terminal().select(id)}
-              class="!h-full min-w-0 !flex-1"
-            >
-              <Tabs.List
-                class="!border-b-0"
-                onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
-                  const focused = document.activeElement
-
-                  if (event.target === focused) return
-
-                  if (focused instanceof HTMLInputElement && event.currentTarget.contains(focused)) focused.blur()
-                }}
-              >
-                <For each={terminal().all()}>
-                  {(info) => (
-                    <TerminalTab
-                      terminal={info}
-                      session={terminal()}
-                      rename={(title) => void terminal().rename(info.id, title)}
-                    />
-                  )}
-                </For>
-                <div class="h-full flex items-center justify-center">
-                  <Tooltip
-                    value={
-                      <>
-                        {plugin.t("command.new")}
-                        <Show when={newTerminalKeybind().length > 0}>
-                          <Keybind keys={newTerminalKeybind()} variant="neutral" />
-                        </Show>
-                      </>
-                    }
-                    placement="bottom"
-                    class="flex items-center"
-                  >
-                    <IconButton
-                      icon={<Icon name="plus-small" size="large" />}
-                      variant="ghost"
-                      onClick={() => void terminal().new()}
-                      aria-label={plugin.t("command.new")}
-                    />
-                  </Tooltip>
-                </div>
-              </Tabs.List>
-            </Tabs>
+        <Match when={failed()}>
+          {(view) => (
+            <div role="alert" class="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
+              <div class="flex flex-col gap-1">
+                <div class="text-13-regular text-text-strong">{plugin.t("list.failed")}</div>
+                <div class="text-12-regular text-text-weak break-words">{view().error}</div>
+              </div>
+              <Button size="small" variant="outline" onClick={() => void terminal().retry()}>
+                {plugin.t("common.retry")}
+              </Button>
+            </div>
+          )}
+        </Match>
+        <Match when={terminal().view().type === "unsupported"}>
+          <div class="flex-1 flex items-center justify-center px-4 text-center text-text-weak pointer-events-none">
+            {plugin.t("unavailable")}
           </div>
-          {surfaces()}
-        </Show>
-      </Show>
+        </Match>
+        <Match when={terminal().view().type === "ready"}>
+          <Show when={mobile()} fallback={surfaces()}>
+            <div class="h-[49px] shrink-0 flex border-b border-v2-border-border-base">
+              <Tabs
+                variant="panel"
+                value={terminal().active()}
+                onChange={(id) => terminal().select(id)}
+                class="!h-full min-w-0 !flex-1"
+              >
+                <Tabs.List
+                  class="!border-b-0"
+                  onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+                    const focused = document.activeElement
+
+                    if (event.target === focused) return
+
+                    if (focused instanceof HTMLInputElement && event.currentTarget.contains(focused)) focused.blur()
+                  }}
+                >
+                  <For each={terminal().all()}>
+                    {(info) => (
+                      <TerminalTab
+                        terminal={info}
+                        session={terminal()}
+                        rename={(title) => void terminal().rename(info.id, title)}
+                      />
+                    )}
+                  </For>
+                  <div class="h-full flex items-center justify-center">
+                    <Tooltip
+                      value={
+                        <>
+                          {plugin.t("command.new")}
+                          <Show when={newTerminalKeybind().length > 0}>
+                            <Keybind keys={newTerminalKeybind()} variant="neutral" />
+                          </Show>
+                        </>
+                      }
+                      placement="bottom"
+                      class="flex items-center"
+                    >
+                      <IconButton
+                        icon={<Icon name="plus-small" size="large" />}
+                        variant="ghost"
+                        onClick={() => void terminal().new()}
+                        aria-label={plugin.t("command.new")}
+                      />
+                    </Tooltip>
+                  </div>
+                </Tabs.List>
+              </Tabs>
+            </div>
+            {surfaces()}
+          </Show>
+        </Match>
+      </Switch>
     </div>
   )
 }

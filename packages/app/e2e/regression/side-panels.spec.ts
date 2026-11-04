@@ -116,6 +116,15 @@ test("closing the last New tab closes the side region, and only a New tab lists 
   await toggle.click()
   await expect(newTab).toHaveAttribute("aria-selected", "true")
   await expect(review).toBeVisible()
+
+  // Closing and reopening the region keeps its one New tab instead of adding another each time.
+  for (const _ of [1, 2, 3]) {
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", "true")
+    await expect(newTab).toHaveCount(1)
+  }
 })
 
 test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others", async ({

@@ -53,6 +53,12 @@ export function SideRegion(props: {
   sidebar: PanelSidebar
   present?: boolean
   size: Sizing
+  /**
+   * The width the contents keep, the side region's open width, which a close keeps as the far end of its travel. Set
+   * on the content box alone: an inherited custom property on an ancestor restyled every element in the region, the
+   * review's diffs included, on every frame of a resize drag.
+   */
+  contentWidth: Accessor<string>
   drag: PaneDrag
 }) {
   const layout = useLayout()
@@ -67,12 +73,13 @@ export function SideRegion(props: {
   const panelWidth = createMemo(() => (tabsVisible() ? "auto" : "0px"))
 
   // Opening the side region with no tabs shows a new tab view, once per opening and session. Keyed by the session, not
-  // the item, whose object changes with every routed session.
+  // the item, whose object changes with every routed session. A view left from an earlier opening is shown again
+  // rather than joined by another.
   const starting = createMemo(() =>
     tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined,
   )
 
-  createEffect(on(starting, (key) => key && props.region.openNewTab("side")))
+  createEffect(on(starting, (key) => key && !props.region.newTab("side") && props.region.openNewTab("side")))
 
   // The split pane shows while it holds tabs; when the side pane has none, the split pane takes the whole height.
   const panes = createMemo(() => {
@@ -122,7 +129,7 @@ export function SideRegion(props: {
           <div
             data-slot="session-review-content"
             class="h-full flex shrink-0 contain-strict"
-            style={{ width: "var(--panel-hold-width, var(--session-side-content-width, 100%))" }}
+            style={{ width: `var(--panel-hold-width, ${props.contentWidth()})` }}
           >
             <div
               ref={stack}

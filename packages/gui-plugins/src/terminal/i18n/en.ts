@@ -5,6 +5,8 @@ export default {
   "command.new.description": "Create a new terminal tab",
   "location.open": "Open in terminal",
   loading: "Loading terminal…",
+  "list.failed": "Couldn't load terminals",
+  unavailable: "Terminals aren't available on this server",
   "title.numbered": "Terminal {{number}}",
   close: "Close terminal",
   "create.failed": "Couldn't create a terminal",

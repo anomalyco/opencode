@@ -544,6 +544,25 @@ test("editing restores the existing draft and replaces only the original queue p
   expect(mock.log[0]).toBe("prompt:queue")
 })
 
+test("a queued prompt the server delivers mid-edit returns the draft typed before the edit", async ({ page }) => {
+  const mock = createQueueMock(["first queued prompt", "tighten the error copy"])
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(2)
+
+  await view.input.fill("my in-progress draft")
+  await view.rows.getByText("tighten the error copy", { exact: true }).click()
+  await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
+
+  // The running turn ends and the server delivers the prompt being edited.
+  const [delivered] = mock.rows.splice(1, 1)
+  mock.emit("session.inbox.delivered", { sessionID, inboxID: delivered.id })
+
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(["first queued prompt"])
+  await expect(view.input).toHaveText("my in-progress draft")
+  await expect(view.input).toBeFocused()
+})
+
 for (const delivery of ["queue", "steer"] as const) {
   test(`editing a prompt the server delivered meanwhile keeps the edit draft (${delivery})`, async ({ page }) => {
     const mock = createQueueMock(["first queued prompt", "second queued prompt"])

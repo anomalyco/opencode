@@ -1,6 +1,7 @@
 export * as AISDK from "./aisdk.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
@@ -35,7 +36,7 @@ import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type Ht
 import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
-import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
 import { Provider } from "./provider.js"
@@ -120,7 +121,8 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-function prepareOptions(model: RuntimeInfo, pkg: string) {
+// `outbound` sends requests for providers whose settings name no `fetch` of their own.
+function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
   const projected = mapBodyToProviderOptions(model, pkg)
   const settings = model.settings ?? {}
   const options: Record<string, unknown> = {
@@ -158,7 +160,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
       }
     }
 
-    const send: Fetch = isFetch(customFetch) ? customFetch : fetch
+    const send: Fetch = isFetch(customFetch) ? customFetch : outbound
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware
@@ -255,6 +257,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AI
 export const locationLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const outbound = yield* FetchHttpClient.Fetch
     let sdkHooks: ((event: SDKEvent) => Effect.Effect<void> | void)[] = []
     let languageHooks: ((event: LanguageEvent) => Effect.Effect<void> | void)[] = []
     const languages = new Map<string, LanguageModelV3>()
@@ -333,7 +336,7 @@ export const locationLayer = Layer.effect(
           })
 
         const packageName = Provider.packageName(model.package)
-        const options = prepareOptions(model, packageName)
+        const options = prepareOptions(model, packageName, outbound)
         const sdkKey = cacheKey({
           providerID: model.providerID,
           canonical: model.canonical,
@@ -1042,4 +1045,4 @@ function providerErrorMessage(error: APICallError) {
   return error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`))
 }
 
-export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
+export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [httpFetch] })

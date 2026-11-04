@@ -1,4 +1,12 @@
-import { createContext, createEffect, createMemo, createSignal, useContext, type ParentProps } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createRenderEffect,
+  createSignal,
+  useContext,
+  type ParentProps,
+} from "solid-js"
 import { reconcile } from "solid-js/store"
 import { Schema } from "effect"
 import { MenuItem, Server, type ServerEntry } from "@opencode/plugin/gui"
@@ -42,12 +50,12 @@ export function usePluginServers() {
   return value
 }
 
-/** Collects Server contributions. `failed` reports plugins whose main entry failed, so startup stops waiting for them. */
-export function PluginServersProvider(props: ParentProps<{ failed: (plugin: string) => boolean }>) {
-  return <ServersContext.Provider value={createPluginServers(props.failed)}>{props.children}</ServersContext.Provider>
+/** Collects Server contributions, and reports to the host's startup gate once they are known. */
+export function PluginServersProvider(props: ParentProps) {
+  return <ServersContext.Provider value={createPluginServers()}>{props.children}</ServersContext.Provider>
 }
 
-function createPluginServers(failed: (plugin: string) => boolean) {
+function createPluginServers() {
   const host = usePluginHost()
 
   const [known, setKnown, , knownReady] = persisted(
@@ -56,7 +64,19 @@ function createPluginServers(failed: (plugin: string) => boolean) {
     {},
   )
 
+  // A failed read settles the inventory too: startup then shows only the servers that report.
+  const settled = () => host.gate({ type: "inventory.settled" })
+  void Promise.resolve(knownReady.promise).then(settled, settled)
+
   const sources = createMemo(() => host.items(Server).toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0)))
+
+  // Startup waits once for every source to report or for its main entry to fail; one that reloads later does not hide
+  // the app again.
+  createRenderEffect(() => {
+    if (host.ready() && sources().every((item) => item.value.ready || host.mainFailed(item.plugin)))
+      host.gate({ type: "sources.settled" })
+  })
+
   // Only a ready source reports its complete inventory. One that reloads, fails or has not started keeps its last
   // inventory as stopped entries, so its servers' tabs, drafts and routes outlive the outage.
   const available = createMemo(() => sources().filter((item) => item.value.ready))
@@ -125,15 +145,8 @@ function createPluginServers(failed: (plugin: string) => boolean) {
     })
   })
 
-  // Startup waits for every source once; a source that reloads later does not hide the app again.
-  const ready = createMemo<boolean>(
-    (previous) =>
-      previous || (knownReady() && host.ready() && sources().every((item) => item.value.ready || failed(item.plugin))),
-    false,
-  )
-
   return {
-    ready,
+    ready: host.serversReady,
     /** Contributed servers the app lists, as stable connections. */
     list,
     /**

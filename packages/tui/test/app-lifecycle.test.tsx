@@ -1847,7 +1847,6 @@ test("free usage limit offers OpenCode Go once per 24h, transitions Subscribe to
       if (url.pathname === `/api/session/${session.id}/message`)
         return json({
           data: [
-            { id: "msg_queued_user", type: "user", text: "Queued follow-up", time: { created: 3 } },
             {
               id: "msg_free_assistant",
               type: "assistant",

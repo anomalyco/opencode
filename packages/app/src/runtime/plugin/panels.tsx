@@ -494,7 +494,10 @@ export function createRegion(input: {
 
 export type Region = ReturnType<typeof createRegion>
 
-/** Grouped content stays mounted while any member is listed; other tabs mount only while selected. */
+/**
+ * Grouped content stays mounted while any member is listed; other tabs mount only while selected, and the last one
+ * stays mounted, hidden, while the pane selects nothing.
+ */
 export function RegionContent(props: {
   pane: RegionPane
   view: MountedSession
@@ -505,11 +508,21 @@ export function RegionContent(props: {
     Array.from(new Set(props.pane.entries().flatMap((entry) => (entry.tab.group ? [groupKey(entry)] : [])))),
   )
 
-  const single = createMemo(() => {
+  // A switch to a session with nothing open in this pane keeps the last tab, so switching back shows it again instead of
+  // tearing down and building a panel such as the review, its file tree and diffs, on every switch. Closing a tab in
+  // the same session still unmounts it.
+  const kept = createMemo<{ key: string | undefined; session: string }>((previous) => {
     const entry = props.pane.selected()
+    const session = props.view.key
 
-    return entry && !entry.tab.group ? entry.key : undefined
+    if (!entry && previous?.key && previous.session !== session) return previous
+
+    return { key: entry && !entry.tab.group ? entry.key : undefined, session }
   })
+
+  const single = () => kept().key
+
+  const shown = () => props.pane.selected()?.key === single()
 
   return (
     <>
@@ -582,9 +595,18 @@ export function RegionContent(props: {
                   tabIndex={entry()?.tab.tabbable ? 0 : undefined}
                   data-slot="tabs-content"
                   class="flex flex-col h-full overflow-hidden contain-strict"
+                  // Out of the pane's flow and skipped while hidden, so showing it again reuses its style and layout.
+                  // Skipped content takes neither focus nor the pointer, and unlike `inert`, flipping it restyles
+                  // nothing inside.
+                  classList={{ "absolute inset-0 [content-visibility:hidden]": !shown() }}
+                  aria-hidden={!shown() || undefined}
                 >
                   <PanelContext.Provider
-                    value={{ ...props.frame, visible: props.frame.shown, open: () => props.pane.openFor(plugin) }}
+                    value={{
+                      ...props.frame,
+                      visible: () => props.frame.shown() && shown(),
+                      open: () => props.pane.openFor(plugin),
+                    }}
                   >
                     <Contribution plugin={plugin}>
                       {() =>

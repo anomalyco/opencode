@@ -24,6 +24,7 @@ import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
+import { createNewMessages } from "./new-messages"
 
 const emptyMessages: SessionMessageInfo[] = []
 
@@ -56,7 +57,11 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: { session: TimelineSessionSource; active: Accessor<boolean> }) {
+export function createTimelineController(input: {
+  session: TimelineSessionSource
+  active: Accessor<boolean>
+  caughtUp: Accessor<boolean>
+}) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -181,6 +186,17 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
+  const newMessages = createNewMessages({
+    scope: serverSDK.scope,
+    directory: sdk().directory,
+    sessionID: input.session.identity.sessionID()!,
+    messages: projectedMessages,
+    active: input.active,
+    enabled: settings.general.newMessagesDivider,
+    caughtUp: input.caughtUp,
+    pendingInputIDs,
+  })
+
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
@@ -191,6 +207,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
+    newMessages: newMessages.parts,
+    newMessagesRead: newMessages.dismissed,
   })
 
   const [pending, setPending] = createStore({ rename: false })
@@ -340,6 +358,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       childTitle,
       showHeader,
       projection,
+      newMessages,
       timelineDetail,
       reasoningMode,
       shellToolPartsExpanded,
