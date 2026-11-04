@@ -267,11 +267,13 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         autocomplete: OnceCell::new(),
         this: this.clone(),
     });
+    connect(&inner);
+    install_layers(tui, &inner);
+    // After the prompt's layers, as TS renders it after them: the newer layer runs first, so its
+    // `prompt.clear` wins while the popup shows.
     let _ = inner
         .autocomplete
         .set(autocomplete::mount(tui, &inner, &inner.root));
-    connect(&inner);
-    install_layers(tui, &inner);
     *tui.textarea.borrow_mut() = Some(inner.textarea.clone());
     if let Some(draft) = tui.prompt.drafts.take(session) {
         let cursor = draft.cursor;
