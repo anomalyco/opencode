@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   INITIAL_AUTO_APPROVE_STATE,
-  isDockVisible,
+  needsUser,
   transitionAutoApprove,
   type AutoApproveEffect,
   type AutoApproveEvent,
@@ -79,7 +79,7 @@ describe("transitionAutoApprove", () => {
       [{ type: "reply", sessionID: "ses_1", runId: "r1", attempt: 2 }],
       [],
     ])
-    expect(steps.map((step) => isDockVisible(step.state, true))).toEqual([false, false, false, false, false, true])
+    expect(steps.map((step) => needsUser(step.state, true))).toEqual([false, false, false, false, false, true])
   })
 
   test("recovers on a later attempt", () => {
@@ -154,7 +154,7 @@ test.each<{ state: AutoApproveState; on: boolean; off: boolean }>([
   { state: waiting("r1", 1), on: false, off: true },
   { state: gaveUp, on: true, off: true },
   { state: { status: "replied" }, on: false, off: false },
-])("isDockVisible for $state.status", (input) => {
-  expect(isDockVisible(input.state, true)).toBe(input.on)
-  expect(isDockVisible(input.state, false)).toBe(input.off)
+])("needsUser for $state.status", (input) => {
+  expect(needsUser(input.state, true)).toBe(input.on)
+  expect(needsUser(input.state, false)).toBe(input.off)
 })
