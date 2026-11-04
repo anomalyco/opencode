@@ -280,6 +280,8 @@ pub struct Pane<'a> {
 
 /// What a row click does.
 pub type OnRow = Rc<dyn Fn(&Row)>;
+/// What a right-click on a file row does, with the file and the cell (`onFileContextMenu`).
+pub type OnMenu = Rc<dyn Fn(usize, u16, u16)>;
 
 /// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows, and the help footer.
 pub fn pane(
@@ -289,6 +291,7 @@ pub fn pane(
     tree: &Tree,
     on_row: OnRow,
     on_source: Rc<dyn Fn()>,
+    on_menu: OnMenu,
 ) -> View {
     let surface = theme.background.raised.base;
     let faint = tint(theme.text.muted, surface, 0.45);
@@ -415,6 +418,16 @@ pub fn pane(
             hovered.bg(if over { hover } else { base });
             cx.request_redraw();
         });
+        if let Some(file) = row.file {
+            let on_menu = on_menu.clone();
+            container.on_mouse(move |cx, event| {
+                if event.kind == MouseEventKind::Down(MouseButton::Right) {
+                    cx.prevent_default();
+                    cx.stop_propagation();
+                    on_menu(file, event.x, event.y);
+                }
+            });
+        }
         let on_row = on_row.clone();
         container.on_click(move |cx, _| {
             cx.stop_propagation();
