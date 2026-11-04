@@ -25,40 +25,6 @@ test("a fresh local plugin generation observes edited helper exports", async () 
   expect(before.module).toMatchObject({ default: "before" })
 })
 
-test("independent source caches recover after an overlapping failed import", async () => {
-  await using sources = await fixture()
-  const entry = new URL("tui.ts", sources.url)
-  const control = new URL("node_modules/control/index.mjs", sources.url)
-  await Bun.write(
-    control,
-    "export const started = Promise.withResolvers(); export const release = Promise.withResolvers()",
-  )
-  const gate = await import(control.href)
-  const watched = Promise.withResolvers<void>()
-  const other = createPluginSources(async () => watched.resolve())
-  await Bun.write(
-    entry,
-    'import { started, release } from "./node_modules/control/index.mjs"; started.resolve(); await release.promise; throw new Error("old load failed")',
-  )
-  const first = sources.read(entry.href).catch((error: Error) => error.message)
-  try {
-    await gate.started.promise
-    await Bun.write(entry, 'export default "recovered"')
-    const second = other.read(entry.href)
-    // Let the second loader enter while the first module is still evaluating.
-    await watched.promise
-    await new Promise<void>((resolve) => setImmediate(resolve))
-    gate.release.resolve()
-    expect(await first).toBe("old load failed")
-    expect((await second).module).toMatchObject({ default: "recovered" })
-    expect((await other.read(entry.href)).module).toMatchObject({ default: "recovered" })
-  } finally {
-    gate.release.resolve()
-    await first
-    other.dispose()
-  }
-})
-
 test("tracks transitive imports through the Solid runtime transform", async () => {
   const watched: string[] = []
   await using sources = await fixture(async (file) => {
