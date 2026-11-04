@@ -2,6 +2,9 @@
 //! through the whole Rust TUI in a `TestApp`, over the in-memory transport, and compares each checkpoint's
 //! cells and the requests with what the TS TUI did. `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 
+#[path = "support/ide.rs"]
+mod ide;
+
 use std::fmt::Write;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -98,6 +101,27 @@ fn run(recording: &Recording) -> (bool, String) {
     {
         opencode_tui::plugins::host::add(&tui, slot_plugin());
     }
+    // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
+    let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
+    let zed = recording.zed.as_ref().map(|zed| {
+        let directory = tempfile::tempdir().expect("zed directory");
+        let db = directory.path().join("db.sqlite");
+        rusqlite::Connection::open(&db)
+            .and_then(|connection| connection.execute_batch(&zed.sql))
+            .expect("zed database");
+        (directory, db)
+    });
+    if ide.is_some() || zed.is_some() {
+        opencode_tui::prompt::editor_context::start(
+            &tui,
+            opencode_tui::prompt::editor_context::Source {
+                port: ide.as_ref().map(|ide| ide.port),
+                zed_terminal: zed.is_some(),
+                zed_db: zed.iter().map(|(_, db)| db.clone()).collect(),
+                ..Default::default()
+            },
+        );
+    }
 
     let mut passed = true;
     let mut report = String::new();
@@ -108,6 +132,11 @@ fn run(recording: &Recording) -> (bool, String) {
             Step::Click { click } => app.click(click[0], click[1]),
             Step::Event { event } => memory.emit(event),
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
+            Step::Ide { ide: message } => {
+                let ide = ide.as_ref().expect("an ide step needs `ide` in the scenario");
+                app.wait_until(UNTIL, || ide.initialized());
+                ide.send(message);
+            }
             Step::Checkpoint(checkpoint) => {
                 let capture = settle(&app, &memory, checkpoint.until.as_deref());
                 let result = match app::compare_checkpoint(checkpoint, capture) {
@@ -175,8 +204,32 @@ fn run(recording: &Recording) -> (bool, String) {
             requests.not_sent.join(", ")
         );
     }
+    if let (Some(expected), Some(ide)) = (&recording.ide, &ide) {
+        let (ok, line) = verdict(
+            handshake(expected) == handshake(&ide.received.lock().unwrap()),
+            &[],
+        );
+        passed &= ok;
+        let _ = writeln!(report, "  ide: {line}");
+    }
     drop(tui);
     (passed, report)
+}
+
+/// What a client sent the IDE server, each message once and without its request ID: TS connects again when
+/// the session's directory differs from its working directory, which the Rust runner's does not.
+fn handshake(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let mut unique: Vec<serde_json::Value> = Vec::new();
+    for message in messages {
+        let mut message = message.clone();
+        if let Some(object) = message.as_object_mut() {
+            object.remove("id");
+        }
+        if !unique.contains(&message) {
+            unique.push(message);
+        }
+    }
+    unique
 }
 
 /// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`.

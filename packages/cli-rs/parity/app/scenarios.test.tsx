@@ -2,6 +2,11 @@
 // createAppFixture. Writes parity/fixtures/<step>/<name>.app.json and one cell file per checkpoint.
 // `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 import { test } from "bun:test"
+import { Database } from "bun:sqlite"
+import type { ServerWebSocket } from "bun"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
 import { createFetch, directory } from "../../../tui/test/fixture/tui-client"
 import { applyMasks, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
@@ -42,10 +47,20 @@ async function record(name: string, file: string) {
   const routes = scenario.routes ?? []
   const defaults = createFetch().fetch
   const log: Logged[] = []
-  const env = scenario.env ?? {}
+  await using ide = scenario.ide ? startIde() : undefined
+  await using zed = scenario.zed ? await zedDatabase(scenario.zed.sql) : undefined
+  const env = {
+    ...scenario.env,
+    ...(ide ? { OPENCODE_EDITOR_SSE_PORT: String(ide.port) } : {}),
+    ...(zed ? { ZED_TERM: "true", OPENCODE_ZED_DB: zed.db, HOME: zed.home } : {}),
+  }
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]))
   Object.assign(process.env, env)
   await using _env = {
-    [Symbol.asyncDispose]: async () => Object.keys(env).forEach((key) => delete process.env[key]),
+    [Symbol.asyncDispose]: async () =>
+      Object.entries(saved).forEach(([key, value]) =>
+        value === undefined ? delete process.env[key] : (process.env[key] = value),
+      ),
   }
   await using setup = await createAppFixture({
     width: scenario.width ?? 100,
@@ -82,6 +97,10 @@ async function record(name: string, file: string) {
     if ("click" in step) await setup.mockMouse.click(...step.click)
     if ("event" in step) setup.events.emit(step.event as never)
     if ("drag" in step) await setup.mockMouse.drag(...step.drag[0], ...step.drag[1])
+    if ("ide" in step) {
+      if (!ide) throw new Error(`${name}: an ide step needs \`ide: true\``)
+      await ide.notify(step.ide)
+    }
     if (!("checkpoint" in step)) {
       steps.push(step)
       continue
@@ -108,6 +127,8 @@ async function record(name: string, file: string) {
     args: scenario.args ?? {},
     ...(scenario.env ? { env: scenario.env } : {}),
     routes,
+    ...(ide ? { ide: ide.received } : {}),
+    ...(scenario.zed ? { zed: scenario.zed } : {}),
     steps,
     ...(scenario.requests ? { deviation: scenario.requests.deviation } : {}),
     requests: {
@@ -116,6 +137,67 @@ async function record(name: string, file: string) {
     },
   }
   await Bun.write(`${parity}fixtures/${name}.app.json`, JSON.stringify(recording, null, 2) + "\n")
+}
+
+// A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
+// notifications to the clients that finished the handshake.
+function startIde() {
+  const received: unknown[] = []
+  const ready = new Set<ServerWebSocket<unknown>>()
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request, server) =>
+      server.upgrade(request) ? undefined : new Response("websocket only", { status: 400 }),
+    websocket: {
+      message(socket, data) {
+        const message = JSON.parse(String(data))
+        received.push(message)
+        if (message.method === "initialize")
+          socket.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { protocolVersion: "2025-11-25", serverInfo: { name: "fake-ide", version: "1" } },
+            }),
+          )
+        if (message.method === "notifications/initialized") ready.add(socket)
+      },
+      close(socket) {
+        ready.delete(socket)
+      },
+    },
+  })
+  return {
+    port: server.port,
+    received,
+    async notify(message: { method: string; params?: unknown }) {
+      const deadline = Date.now() + 5_000
+      while (ready.size === 0 && Date.now() < deadline) await Bun.sleep(25)
+      if (ready.size === 0) throw new Error("no IDE client finished the MCP handshake within 5s")
+      ready.forEach((socket) => socket.send(JSON.stringify({ jsonrpc: "2.0", ...message })))
+    },
+    async [Symbol.asyncDispose]() {
+      await server.stop(true)
+    },
+  }
+}
+
+// A Zed database for the scenario in a temporary directory, which is also HOME, so no IDE lock file of the
+// machine is read.
+async function zedDatabase(sql: string) {
+  const home = await mkdtemp(path.join(tmpdir(), "opencode-parity-zed-"))
+  const db = path.join(home, "db.sqlite")
+  const database = new Database(db)
+  database.exec(sql)
+  database.close()
+  return {
+    home,
+    db,
+    async [Symbol.asyncDispose]() {
+      await rm(home, { recursive: true, force: true })
+    },
+  }
 }
 
 // The frame is ready when it contains `until` and three polls in a row read the same cells; colors settle
