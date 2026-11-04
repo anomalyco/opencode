@@ -78,8 +78,7 @@ dialogs (absolute, z 3000), toasts (in root)
 - As `app.tsx:1303-1335`, T.1's commands sit in a `global` layer without bindings (so the palette
   reaches them over a dialog), and separate layers bind keys: `command.palette.show` (Ctrl+P) and
   `help.show` in base mode, `session.new` (`<leader>n`, goes home) in global mode, and `app.exit`
-  (Ctrl+C, Ctrl+D, `<leader>q`) in base mode. E.2 enables the `app.exit` layer only while the prompt
-  is empty. `exit_on_ctrl_c` is off: Ctrl+C
+  (Ctrl+C, Ctrl+D, `<leader>q`) in base mode, enabled unless the focused `Tui::textarea` has text. `exit_on_ctrl_c` is off: Ctrl+C
   reaches the keymap, so an open dialog closes first, as in TS. Quitting restores the terminal.
 
 ## Theme
