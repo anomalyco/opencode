@@ -1,0 +1,1027 @@
+{
+  "scenario": "E.7b/blocks",
+  "width": 100,
+  "height": 70,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "session": {
+      "grouping": "none"
+    },
+    "animations": false,
+    "experimental": {
+      "new-designs": true
+    }
+  },
+  "args": {
+    "sessionID": "ses_blocks"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_blocks",
+      "json": {
+        "data": {
+          "id": "ses_blocks",
+          "title": "Fix the lexer",
+          "projectID": "proj_test",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_blocks/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_2",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_1",
+                "name": "todowrite",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "todos": [
+                      {
+                        "content": "Read the lexer",
+                        "status": "completed"
+                      },
+                      {
+                        "content": "Fix peek",
+                        "status": "in_progress"
+                      },
+                      {
+                        "content": "Rewrite the parser",
+                        "status": "cancelled"
+                      },
+                      {
+                        "content": "Run the tests",
+                        "status": "pending"
+                      }
+                    ]
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "4 todos"
+                    }
+                  ],
+                  "metadata": {}
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_2",
+                "name": "question",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "questions": [
+                      {
+                        "question": "Keep the old API?"
+                      },
+                      {
+                        "question": "Add a test?"
+                      }
+                    ]
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "answered"
+                    }
+                  ],
+                  "metadata": {
+                    "answers": [
+                      [
+                        "Yes",
+                        "for now"
+                      ],
+                      []
+                    ]
+                  }
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_3",
+                "name": "apply_patch",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "patchText": "*** Begin Patch"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Applied"
+                    }
+                  ],
+                  "metadata": {
+                    "files": [
+                      {
+                        "file": "src/lexer.rs",
+                        "filePath": "/tmp/opencode/packages/tui/src/lexer.rs",
+                        "type": "update",
+                        "patch": "Index: src/lexer.rs\n===================================================================\n--- src/lexer.rs\n+++ src/lexer.rs\n@@ -1,3 +1,3 @@\n fn peek(&self) -> Option<char> {\n-    self.chars.get(self.pos + 1)\n+    self.chars.get(self.pos)\n }\n",
+                        "additions": 1,
+                        "deletions": 1
+                      },
+                      {
+                        "file": "src/old.rs",
+                        "filePath": "/tmp/opencode/packages/tui/src/old.rs",
+                        "type": "delete",
+                        "patch": "",
+                        "additions": 0,
+                        "deletions": 12
+                      }
+                    ]
+                  }
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_4",
+                "name": "apply_patch",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "patchText": "*** Begin Patch"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Applied"
+                    }
+                  ],
+                  "metadata": {
+                    "applied": [
+                      {
+                        "type": "add",
+                        "resource": "docs/lexer.md"
+                      }
+                    ]
+                  }
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_5",
+                "name": "apply_patch",
+                "state": {
+                  "status": "running",
+                  "input": {
+                    "patchText": "*** Begin Patch\n*** Add File: src/token.rs\n+pub struct Token;"
+                  },
+                  "metadata": {}
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_6",
+                "name": "apply_patch",
+                "state": {
+                  "status": "error",
+                  "input": {
+                    "patchText": "*** Update File: src/a.rs\n*** Update File: src/b.rs"
+                  },
+                  "error": {
+                    "type": "unknown",
+                    "message": "context mismatch in src/a.rs"
+                  }
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_7",
+                "name": "execute",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "code": "throw new Error('boom')"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Error: boom\n    at main (code.ts:1:7)"
+                    }
+                  ],
+                  "metadata": {
+                    "error": true,
+                    "toolCalls": []
+                  }
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              }
+            ],
+            "finish": "tool-calls",
+            "time": {
+              "created": 1500,
+              "completed": 1800
+            }
+          },
+          {
+            "id": "msg_1",
+            "type": "user",
+            "text": "Fix the lexer and track it",
+            "time": {
+              "created": 1000
+            }
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_blocks/inbox",
+      "json": {
+        "data": []
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "open",
+      "until": "at main",
+      "fixture": "E.7b/blocks/open"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_blocks/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_blocks"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_blocks",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_blocks",
+            "title": "Fix the lexer",
+            "projectID": "proj_test",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_blocks/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_blocks/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_blocks/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_2",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_1",
+                  "name": "todowrite",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "todos": [
+                        {
+                          "content": "Read the lexer",
+                          "status": "completed"
+                        },
+                        {
+                          "content": "Fix peek",
+                          "status": "in_progress"
+                        },
+                        {
+                          "content": "Rewrite the parser",
+                          "status": "cancelled"
+                        },
+                        {
+                          "content": "Run the tests",
+                          "status": "pending"
+                        }
+                      ]
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "4 todos"
+                      }
+                    ],
+                    "metadata": {}
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_2",
+                  "name": "question",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "questions": [
+                        {
+                          "question": "Keep the old API?"
+                        },
+                        {
+                          "question": "Add a test?"
+                        }
+                      ]
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "answered"
+                      }
+                    ],
+                    "metadata": {
+                      "answers": [
+                        [
+                          "Yes",
+                          "for now"
+                        ],
+                        []
+                      ]
+                    }
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_3",
+                  "name": "apply_patch",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "patchText": "*** Begin Patch"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Applied"
+                      }
+                    ],
+                    "metadata": {
+                      "files": [
+                        {
+                          "file": "src/lexer.rs",
+                          "filePath": "/tmp/opencode/packages/tui/src/lexer.rs",
+                          "type": "update",
+                          "patch": "Index: src/lexer.rs\n===================================================================\n--- src/lexer.rs\n+++ src/lexer.rs\n@@ -1,3 +1,3 @@\n fn peek(&self) -> Option<char> {\n-    self.chars.get(self.pos + 1)\n+    self.chars.get(self.pos)\n }\n",
+                          "additions": 1,
+                          "deletions": 1
+                        },
+                        {
+                          "file": "src/old.rs",
+                          "filePath": "/tmp/opencode/packages/tui/src/old.rs",
+                          "type": "delete",
+                          "patch": "",
+                          "additions": 0,
+                          "deletions": 12
+                        }
+                      ]
+                    }
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_4",
+                  "name": "apply_patch",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "patchText": "*** Begin Patch"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Applied"
+                      }
+                    ],
+                    "metadata": {
+                      "applied": [
+                        {
+                          "type": "add",
+                          "resource": "docs/lexer.md"
+                        }
+                      ]
+                    }
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_5",
+                  "name": "apply_patch",
+                  "state": {
+                    "status": "running",
+                    "input": {
+                      "patchText": "*** Begin Patch\n*** Add File: src/token.rs\n+pub struct Token;"
+                    },
+                    "metadata": {}
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_6",
+                  "name": "apply_patch",
+                  "state": {
+                    "status": "error",
+                    "input": {
+                      "patchText": "*** Update File: src/a.rs\n*** Update File: src/b.rs"
+                    },
+                    "error": {
+                      "type": "unknown",
+                      "message": "context mismatch in src/a.rs"
+                    }
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_7",
+                  "name": "execute",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "code": "throw new Error('boom')"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Error: boom\n    at main (code.ts:1:7)"
+                      }
+                    ],
+                    "metadata": {
+                      "error": true,
+                      "toolCalls": []
+                    }
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                }
+              ],
+              "finish": "tool-calls",
+              "time": {
+                "created": 1500,
+                "completed": 1800
+              }
+            },
+            {
+              "id": "msg_1",
+              "type": "user",
+              "text": "Fix the lexer and track it",
+              "time": {
+                "created": 1000
+              }
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_blocks/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_blocks"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
