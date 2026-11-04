@@ -41,6 +41,23 @@ await renderComponent({
   ready: (frame) => frame.includes("Exit the app"),
 })
 
+// At 80x20 the list has 4 rows, so it scrolls; "-end" is after moving to the last command.
+for (const [fixture, moves] of [
+  ["U.3/palette-20", 0],
+  ["U.3/palette-20-end", 5],
+] as const) {
+  await renderComponent({
+    fixture,
+    width: 80,
+    height: 20,
+    element: () => <Commands open={() => <CommandPaletteDialog />} />,
+    ready: (frame) => frame.includes("Commands"),
+    act: (setup) => {
+      for (let i = 0; i < moves; i++) setup.mockInput.pressArrow("down")
+    },
+  })
+}
+
 await renderComponent({
   fixture: "U.3/help",
   width: 80,
