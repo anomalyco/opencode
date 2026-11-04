@@ -3,6 +3,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   MAX_LOCAL_ATTACHMENT_BYTES,
+  MAX_LOCAL_VIDEO_BYTES,
   parsePastedFilepaths,
   promptFilesForServer,
   readKeptAttachments,
@@ -173,18 +174,27 @@ describe("prompt local attachments", () => {
     expect(await resolvePastedAttachments(image, process.platform)).toBeUndefined()
   })
 
-  test("reads MP4, MOV, and M4V paths as videos only when asked, and reads kept files again", async () => {
+  test("keeps MP4, MOV, and M4V paths as videos only when asked, up to core's cap, and reads kept files", async () => {
     await using tmp = await tmpdir()
     const clips = ["clip.mp4", "clip.MOV", "clip.m4v"].map((name) => path.join(tmp.path, name))
     await Promise.all(clips.map((clip) => Bun.write(clip, new Uint8Array([1, 2, 3]))))
     const large = path.join(tmp.path, "large.m4v")
-    await Bun.write(large, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1))
-
-    expect(await resolvePastedAttachments(clips.join(" "), process.platform, true)).toEqual([
-      { type: "file", uri: "data:video/mp4;base64,AQID", filename: "clip.mp4", path: clips[0] },
-      { type: "file", uri: "data:video/quicktime;base64,AQID", filename: "clip.MOV", path: clips[1] },
-      { type: "file", uri: "data:video/x-m4v;base64,AQID", filename: "clip.m4v", path: clips[2] },
+    const capped = path.join(tmp.path, "capped.mp4")
+    await Promise.all([
+      Bun.write(large, new Uint8Array(MAX_LOCAL_VIDEO_BYTES + 1)),
+      Bun.write(capped, new Uint8Array(MAX_LOCAL_VIDEO_BYTES)),
     ])
+
+    // Pasting keeps only the path; sending reads the file.
+    const file = (clip: string) => ({
+      type: "file" as const,
+      uri: pathToFileURL(clip).href,
+      filename: path.basename(clip),
+      path: clip,
+    })
+    expect(await resolvePastedAttachments(clips.join(" "), process.platform, true)).toEqual(clips.map(file))
+    expect(await resolvePastedAttachments(capped, process.platform, true)).toEqual([file(capped)])
+    expect(await resolvePastedAttachments(large, process.platform, true)).toBeUndefined()
     expect(await resolvePastedAttachments(clips[0]!, process.platform)).toBeUndefined()
 
     const image = { uri: "data:image/png;base64,AAAA", path: path.join(tmp.path, "missing.png") }
@@ -201,10 +211,11 @@ describe("prompt local attachments", () => {
     const image = path.join(tmp.path, "shot.png")
     const clip = path.join(tmp.path, "my clip.mp4")
     const large = path.join(tmp.path, "large.mp4")
+    // The video fits core's cap, and with the image it is one byte over the shared limit. The large one is over the cap.
     await Promise.all([
-      Bun.write(image, new Uint8Array(2)),
-      Bun.write(clip, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES - 1)),
-      Bun.write(large, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1)),
+      Bun.write(image, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES - MAX_LOCAL_VIDEO_BYTES + 1)),
+      Bun.write(clip, new Uint8Array(MAX_LOCAL_VIDEO_BYTES)),
+      Bun.write(large, new Uint8Array(MAX_LOCAL_VIDEO_BYTES + 1)),
     ])
     const long = `${"a".repeat(8192)}.mp4`
     for (const [text, oversized] of [

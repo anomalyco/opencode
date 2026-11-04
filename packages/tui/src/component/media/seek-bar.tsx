@@ -3,11 +3,14 @@ import { useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js"
 import { useMedia, type MediaPlayback } from "../../context/media"
 import { useTheme } from "../../context/theme"
-import { formatDuration, isMediaClick } from "./tile"
+import { createMediaClick, formatDuration } from "./tile"
 
-export type Transport = ReturnType<typeof createTransport>
+type Transport = ReturnType<typeof createTransport>
 
-/** Playback state and controls for one `<video>`, which spreads `events`. `start` applies each time it opens. */
+/**
+ * Playback state and controls for one `<video>`, which spreads `events`. `start` applies each time it opens. Seeks go
+ * through one throttle, so keys held down and a dragged seek bar coalesce into one pending target.
+ */
 export function createTransport(start: MediaPlayback) {
   const [player, setPlayer] = createSignal<VideoRenderable>()
   const [metadata, setMetadata] = createSignal<VideoMetadata>()
@@ -15,22 +18,29 @@ export function createTransport(start: MediaPlayback) {
   const [playing, setPlaying] = createSignal(false)
   const [tier, setTier] = createSignal(0)
   const [scrubTime, setScrubTime] = createSignal<number>()
+  const seeker = createSeekThrottle((target) => {
+    const video = player()
+    if (!video) return
+    video.seek(target)
+    setTime(video.currentTime)
+  })
+  const clamp = (target: number) => Math.max(0, Math.min(player()?.duration ?? 0, target))
   return {
     player,
     metadata,
     time,
     playing,
+    /** Where playback is headed: the dragged seek bar's time, a pending seek's target, or the current time. */
+    position: () => scrubTime() ?? seeker.pending() ?? time(),
     /** Where the seek bar is dragged to while it is, shown ahead of the throttled seeks that follow it. */
     scrubTime,
     setScrubTime,
     /** OpenTUI's quality tier on Kitty: 0 is full size; higher tiers shrink frames to keep up. */
     tier,
-    seek(target: number) {
-      const video = player()
-      if (!video) return
-      video.seek(Math.max(0, Math.min(video.duration, target)))
-      setTime(video.currentTime)
-    },
+    /** Seeks to `target` now, or as the throttle allows, replacing a pending seek. */
+    seek: (target: number) => player() && seeker.push(clamp(target)),
+    /** Seeks to `target` at once, dropping a pending seek. */
+    land: (target: number) => player() && seeker.flush(clamp(target)),
     /** Pauses a playing video, or plays it, from the start once it has reached the end. */
     toggle() {
       const video = player()
@@ -56,6 +66,8 @@ export function createTransport(start: MediaPlayback) {
       onTimeUpdate(value: number) {
         setTime(value)
         setTier(player()?.qualityTier ?? 0)
+        // Playback moves the player away from the last seek, so a seek to that time again is not a repeat.
+        if (player()?.playing) seeker.reset()
       },
     },
   }
@@ -64,7 +76,7 @@ export function createTransport(start: MediaPlayback) {
 /** The play button, the elapsed time (with `total`, also the duration) and the seek bar of a transport row. */
 export function TransportControls(props: { transport: Transport; total?: boolean; preview?: boolean }) {
   const theme = useTheme()
-  const time = () => formatTimecode(props.transport.scrubTime() ?? props.transport.time())
+  const time = () => formatTimecode(props.transport.position())
   return (
     <>
       <Toggle id="media-play" on={props.transport.playing()} run={props.transport.toggle}>
@@ -81,7 +93,7 @@ export function TransportControls(props: { transport: Transport; total?: boolean
 /** A clickable control, highlighted while `on`. */
 export function Toggle(props: { id?: string; on: boolean; run: () => void; children: JSX.Element }) {
   const theme = useTheme()
-  const renderer = useRenderer()
+  const click = createMediaClick(() => props.run())
   return (
     <text
       id={props.id}
@@ -89,7 +101,7 @@ export function Toggle(props: { id?: string; on: boolean; run: () => void; child
       wrapMode="none"
       flexShrink={0}
       selectable={false}
-      onMouseUp={(event: MouseEvent) => isMediaClick(renderer, event) && props.run()}
+      {...click}
     >
       {props.children}
     </text>
@@ -111,7 +123,6 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
   const [hover, setHover] = createSignal<number>()
   const scrubbing = () => props.transport.scrubTime() !== undefined
   const duration = () => props.transport.metadata()?.duration ?? 0
-  const seek = createSeekThrottle(props.transport.seek)
   let bar: BoxRenderable | undefined
   let resume = false
 
@@ -122,11 +133,11 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
     event.stopPropagation()
     setHover(column(event))
     props.transport.setScrubTime(timeAt(column(event)))
-    seek.push(timeAt(column(event)))
+    props.transport.seek(timeAt(column(event)))
   }
   // The playhead's column, so the runs below change only when it moves, not with every time update.
   const head = createMemo(() => {
-    const time = props.transport.scrubTime() ?? props.transport.time()
+    const time = props.transport.position()
     return duration() > 0 ? Math.round((Math.min(duration(), time) / duration()) * (width() - 1)) : 0
   })
   // A few colour runs, not a span per cell.
@@ -163,15 +174,13 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
         if (event.button !== 0 || !video || duration() <= 0) return
         resume = video.playing
         video.pause()
-        // Playback or the keys may have moved the player since the last drag.
-        seek.reset()
         scrub(event)
       }}
       onMouseDrag={(event: MouseEvent) => scrubbing() && scrub(event)}
       onMouseUp={(event: MouseEvent) => {
         if (!scrubbing()) return
         event.stopPropagation()
-        seek.flush(props.transport.scrubTime()!)
+        props.transport.land(props.transport.scrubTime()!)
         props.transport.setScrubTime(undefined)
         if (resume) props.transport.player()?.play()
         if (event.y !== bar?.y) setHover(undefined)
@@ -217,10 +226,21 @@ function SeekPreview(props: {
   const [failed, setFailed] = createSignal(false)
   const width = () => Math.max(12, Math.min(28, props.barWidth))
   const height = () => Math.max(3, Math.min(10, Math.round((width() - 2) / (props.aspect * media.cellAspect()))))
-  const seek = createSeekThrottle((time) => player?.seek(time), PREVIEW_REST_MS)
+  // After a scrub, its frame is from before the scrub until it catches up with where the scrub ended.
+  const [behind, setBehind] = createSignal(false)
+  const seek = createSeekThrottle((time) => {
+    player?.seek(time)
+    setBehind(false)
+  }, PREVIEW_REST_MS)
+  let scrubbed = false
   createEffect(() => {
     if (!ready()) return
-    if (props.scrubbing) return seek.cancel()
+    if (props.scrubbing) {
+      scrubbed = true
+      return seek.cancel()
+    }
+    if (scrubbed) setBehind(props.time !== seek.last())
+    scrubbed = false
     seek.push(props.time)
   })
 
@@ -232,7 +252,7 @@ function SeekPreview(props: {
       left={Math.max(0, Math.min(props.barWidth - width(), props.column - Math.floor(width() / 2)))}
       width={width()}
       zIndex={10}
-      visible={!props.scrubbing}
+      visible={!props.scrubbing && !behind()}
       flexDirection="column"
       alignItems="center"
       border
@@ -262,7 +282,7 @@ function SeekPreview(props: {
 }
 
 /** Elapsed time as `m:ss`, counting only whole seconds that have passed. */
-export function formatTimecode(seconds: number) {
+function formatTimecode(seconds: number) {
   return formatDuration(Math.floor(Math.max(0, seconds)))
 }
 
@@ -274,13 +294,13 @@ export function formatTimecode(seconds: number) {
 function createSeekThrottle(run: (time: number) => void, rest = 0) {
   const clock = useRenderer().clock
   let timer: TimerHandle | undefined
-  let pending: number | undefined
+  const [pending, setPending] = createSignal<number>()
   let last: number | undefined
   let next = -Infinity
   const cancel = () => {
     if (timer) clock.clearTimeout(timer)
     timer = undefined
-    pending = undefined
+    setPending(undefined)
   }
   /** Calls `run` with `time` now, dropping a pending call. */
   const flush = (time: number) => {
@@ -293,20 +313,23 @@ function createSeekThrottle(run: (time: number) => void, rest = 0) {
   }
   onCleanup(cancel)
   return {
+    /** The time of the call waiting for its turn. */
+    pending,
+    /** The time of the last call. */
+    last: () => last,
     push(time: number) {
-      pending = time
+      setPending(time)
       // Without a rest, a scheduled call keeps its time; with one, each push restarts the wait.
       if (timer && !rest) return
       if (timer) clock.clearTimeout(timer)
       const wait = Math.max(rest, next - clock.now())
       if (wait <= 0) return flush(time)
-      timer = clock.setTimeout(() => flush(pending!), wait)
+      timer = clock.setTimeout(() => flush(pending()!), wait)
     },
     flush,
     cancel,
-    /** Drops a pending call and forgets the last time, once something else may have moved the player. */
+    /** Forgets the last time, once something else may have moved the player. */
     reset() {
-      cancel()
       last = undefined
     },
   }

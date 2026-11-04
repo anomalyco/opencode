@@ -142,20 +142,44 @@ const mimeToModality = (mime: string) => {
 
 // xAI rejects any other image type (e.g. GIF) with invalid_image, and the stored image would fail every later turn.
 const XAI_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"])
+// The catalog can claim video for a model whose protocol cannot send it, and the newest video stays in the history,
+// so a video these protocols reject would fail every later turn. Bedrock lowers only the types in `VIDEO_FORMATS`
+// in packages/ai/src/protocols/utils/bedrock-media.ts.
+const NO_VIDEO_PROTOCOLS = new Set(["mistral-chat", "cohere-chat"])
+const BEDROCK_VIDEO_MIMES = new Set([
+  "video/x-matroska",
+  "video/quicktime",
+  "video/mp4",
+  "video/webm",
+  "video/x-flv",
+  "video/mpeg",
+  "video/mpg",
+  "video/wmv",
+  "video/x-ms-wmv",
+  "video/3gpp",
+])
+
+/** The model a request goes to, for media its provider or protocol rejects whatever the catalog says. */
+type Target = { readonly provider: string; readonly route: { readonly protocol: string } }
 
 const unsupportedMedia = (
   mime: string,
   name: string | undefined,
   capabilities: Model.Capabilities,
-  provider: string | undefined,
+  target: Target | undefined,
 ) => {
   const modality = mimeToModality(mime)
   if (!modality) return
-  const unsupported = !capabilities.input.some((item) => item.startsWith(modality))
-    ? modality
-    : provider === "xai" && modality === "image" && !XAI_IMAGE_MIMES.has(mime.toLowerCase())
-      ? mime
-      : undefined
+  const type = mime.toLowerCase()
+  const protocol = target?.route.protocol
+  const unsupported =
+    !capabilities.input.some((item) => item.startsWith(modality)) ||
+    (modality === "video" && NO_VIDEO_PROTOCOLS.has(protocol ?? ""))
+      ? modality
+      : (modality === "image" && target?.provider === "xai" && !XAI_IMAGE_MIMES.has(type)) ||
+          (modality === "video" && protocol === "bedrock-converse" && !BEDROCK_VIDEO_MIMES.has(type))
+        ? mime
+        : undefined
   if (!unsupported) return
   return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${unsupported} input). Inform the user.`
 }
@@ -216,8 +240,8 @@ const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<Con
 export const unsupportedParts = (
   messages: LLMRequest["messages"],
   capabilities: Model.Capabilities,
-  provider?: string,
-) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
+  target?: Target,
+) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, target))
 
 const mediaSizes = (messages: LLMRequest["messages"], prefix: string) =>
   messages.flatMap((message) =>
@@ -350,7 +374,7 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundVideos(boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider))),
+        messages: boundVideos(boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model))),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         ...generation,

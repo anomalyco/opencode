@@ -2,15 +2,15 @@ import type { MouseEvent } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createSignal, Match, on, Show, Switch } from "solid-js"
 import { Keymap } from "../../context/keymap"
-import { MEDIA_PIP_Z_INDEX, useMedia, type MediaPip as MediaPipState } from "../../context/media"
+import { MEDIA_PIP_Z_INDEX, useMedia, type MediaPipRequest } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
 import { createTransport, Toggle, TransportControls } from "./seek-bar"
 import { createVideoFile } from "./source"
-import { isMediaClick } from "./tile"
+import { createMediaClick } from "./tile"
 
 /** The floating mini player, shown while `useMedia().pip()` is set. It never takes keyboard focus. */
-export function MediaPip(props: { pip: MediaPipState }) {
+export function MediaPip(props: { pip: MediaPipRequest }) {
   const media = useMedia()
   const dialog = useDialog()
   const renderer = useRenderer()
@@ -19,7 +19,7 @@ export function MediaPip(props: { pip: MediaPipState }) {
   const file = createVideoFile(() => props.pip.item)
   // It opens paused; the effect below starts it once ready, or once the viewer covering it closes.
   const transport = createTransport({ time: props.pip.time, playing: false })
-  const [muted, setMuted] = createSignal(false)
+  const [muted, setMuted] = createSignal(props.pip.muted ?? false)
   const [failed, setFailed] = createSignal(false)
   const [moved, setMoved] = createSignal<{ left: number; top: number }>()
   // Sound would play on the remote machine in a remote session.
@@ -49,8 +49,14 @@ export function MediaPip(props: { pip: MediaPipState }) {
   }
 
   function expand() {
-    const video = transport.player()
-    const playback = video ? { time: video.currentTime, playing: video.playing || resume } : props.pip
+    const playback = {
+      time: transport.position(),
+      // Before it is ready, or under the viewer, it is paused but plays once it can.
+      playing: transport.player()?.playing || resume,
+      muted: muted(),
+      volume: props.pip.volume,
+      loop: props.pip.loop,
+    }
     batch(() => {
       media.closePip()
       media.openViewer([props.pip.item], 0, playback)
@@ -92,7 +98,9 @@ export function MediaPip(props: { pip: MediaPipState }) {
   }))
   Keymap.createLayer(() => ({ bindings: commands.map((command) => command.id) }))
 
-  const click = (run: () => void) => (event: MouseEvent) => isMediaClick(renderer, event) && run()
+  const toggleClick = createMediaClick(transport.toggle)
+  const expandClick = createMediaClick(expand)
+  const closeClick = createMediaClick(media.closePip)
   let drag: { x: number; y: number; left: number; top: number } | undefined
 
   return (
@@ -134,7 +142,7 @@ export function MediaPip(props: { pip: MediaPipState }) {
           {props.pip.item.name ?? "video"}
         </text>
       </box>
-      <box height={videoHeight()} onMouseUp={click(transport.toggle)}>
+      <box height={videoHeight()} {...toggleClick}>
         <Switch>
           <Match when={failed() || file().failed}>
             <box width="100%" height="100%" alignItems="center" justifyContent="center">
@@ -147,6 +155,8 @@ export function MediaPip(props: { pip: MediaPipState }) {
                 audio={audio}
                 source={source()}
                 muted={muted()}
+                volume={props.pip.volume}
+                loop={props.pip.loop}
                 fit="fit"
                 width="100%"
                 height="100%"
@@ -164,10 +174,10 @@ export function MediaPip(props: { pip: MediaPipState }) {
             ♪
           </Toggle>
         </Show>
-        <text id="media-pip-expand" fg={theme.text.base} selectable={false} onMouseUp={click(expand)}>
+        <text id="media-pip-expand" fg={theme.text.base} selectable={false} {...expandClick}>
           ⤢
         </text>
-        <text id="media-pip-close" fg={theme.text.base} selectable={false} onMouseUp={click(media.closePip)}>
+        <text id="media-pip-close" fg={theme.text.base} selectable={false} {...closeClick}>
           ✕
         </text>
       </box>

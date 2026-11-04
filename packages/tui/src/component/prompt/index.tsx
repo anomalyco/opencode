@@ -58,7 +58,7 @@ import {
   resolvePastedAttachments,
 } from "./local-attachment"
 import { useMedia } from "../../context/media"
-import { MEDIA_EXTENSIONS, mediaKind, mediaMime, type MediaItem } from "../media/model"
+import { mediaKind, mediaMime, type MediaItem } from "../media/model"
 import { keepMediaItems, MediaStrip } from "../media/strip"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
@@ -842,19 +842,15 @@ export function Prompt(props: PromptProps) {
     localizeVideos(prompt)
   }
 
-  // A video that comes back without a local file, such as one restored from a sent message, gets one in the media
-  // cache, so the composer can play it and history and the stash keep its path instead of its bytes. A local server's
-  // `file://` video gets its path, so sending reads it again and notices when it is gone.
+  // A local server's `file://` video, such as one restored from history or the stash, gets its path, so sending reads it
+  // again and notices when it is gone. An `@` mention keeps the server's read, as an `@` image does.
   function localizeVideos(prompt: PromptInfo) {
     if (!richMedia()) return
     prompt.files?.forEach((file) => {
-      if (file.path) return
+      if (file.path || file.mention?.text.startsWith("@")) return
       const uri = file.uri
-      const mime = /^data:(video\/[^;,]+);base64,/.exec(uri)?.[1]
-      const extension = Object.keys(MEDIA_EXTENSIONS).find((key) => MEDIA_EXTENSIONS[key] === mime)
-      const local = extension
-        ? media.files.write(Buffer.from(uri.split(",")[1]!, "base64"), extension)
-        : uri.startsWith("file:") && terminalEnvironment.localServer && mediaMime(uri)?.startsWith("video/")
+      const local =
+        uri.startsWith("file:") && terminalEnvironment.localServer && mediaMime(uri)?.startsWith("video/")
           ? Promise.resolve(uri).then((value) => fileURLToPath(value))
           : undefined
       if (!local) return

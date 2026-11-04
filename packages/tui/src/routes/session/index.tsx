@@ -94,8 +94,8 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns, useRichMedia } from "../../config"
 import { useMedia } from "../../context/media"
-import { collectSessionMedia, type MediaItem } from "../../component/media/model"
-import { keepMediaItems, MediaStrip } from "../../component/media/strip"
+import type { MediaItem } from "../../component/media/model"
+import { MediaStrip } from "../../component/media/strip"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -133,6 +133,7 @@ import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView, type ToolRef } from "./group-view"
+import { createSessionGallery } from "./gallery"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
@@ -233,14 +234,16 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
-  // The transcript's media without the reverted and queued messages it hides. Kept items keep their strips' tiles.
-  const gallery = createMemo<readonly MediaItem[]>((previous) => {
-    if (!richMedia()) return []
-    const boundary = session()?.revert?.messageID
-    const queued = new Set(queuedPrompts().map((item) => item.id))
-    const visible = messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
-    return keepMediaItems(previous, collectSessionMedia(visible, session()?.location))
-  }, [])
+  // The transcript's media without the reverted and queued messages it hides.
+  const gallery = createSessionGallery(
+    createMemo(() => {
+      if (!richMedia()) return []
+      const boundary = session()?.revert?.messageID
+      const queued = new Set(queuedPrompts().map((item) => item.id))
+      return messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
+    }),
+    () => session()?.location,
+  )
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -1714,7 +1717,7 @@ function SessionRowView(props: SessionRowViewProps) {
               row={row()}
               message={props.message}
               entry={(entry, images) => <SessionEntryView row={entry} message={props.message} images={images} />}
-              images={(tools) => <ToolImages tools={tools} />}
+              images={(tools) => <ToolImages tools={tools()} />}
             />
           )}
         </Match>

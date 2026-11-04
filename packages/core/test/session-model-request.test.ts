@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
+import { ai, type LanguageModel, Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
+import { AmazonBedrock, Cohere } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
+import { Effect } from "effect"
 import { boundImages, boundVideos, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
@@ -84,7 +87,10 @@ describe("SessionModelRequest.unsupportedParts", () => {
         }),
       ),
     ]
-    const result = unsupportedParts(messages, capabilities(["text", "image"]), "xai")
+    const result = unsupportedParts(messages, capabilities(["text", "image"]), {
+      provider: "xai",
+      route: { protocol: "xai-responses" },
+    })
 
     expect(result[0]?.content).toEqual([
       ...user,
@@ -103,7 +109,52 @@ describe("SessionModelRequest.unsupportedParts", () => {
         ],
       },
     })
-    expect(unsupportedParts(messages, capabilities(["text", "image"]), "openai")).toEqual(messages)
+    const openai = { provider: "openai", route: { protocol: "openai-responses" } }
+    expect(unsupportedParts(messages, capabilities(["text", "image"]), openai)).toEqual(messages)
+  })
+
+  describe("degrades video the model's protocol cannot send", () => {
+    const watching = capabilities(["text", "image", "video"])
+    const send = (model: LanguageModel, mime: string) =>
+      Effect.runPromise(
+        compileRequest(
+          ai.request({
+            model,
+            messages: unsupportedParts(
+              [Message.user([{ type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", mime), filename: "clip" }])],
+              watching,
+              model,
+            ),
+          }),
+        ),
+      ).then((prepared) => JSON.stringify(prepared.body))
+    const cohere = Cohere.configure({ apiKey: "fixture" }).model("command-a-03-2025")
+    const bedrock = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "fixture" }).model(
+      "amazon.nova-pro-v1:0",
+    )
+
+    test("Cohere Chat gets the unsupported video text", async () => {
+      expect(await send(cohere, "video/mp4")).toContain(
+        'Cannot read \\"clip\\" (this model does not support video input)',
+      )
+    })
+
+    test("Bedrock Converse keeps the video types it lowers and degrades the rest", async () => {
+      const supported = [
+        "video/mp4",
+        "video/quicktime",
+        "video/webm",
+        "video/x-matroska",
+        "video/3gpp",
+        "video/x-ms-wmv",
+      ]
+      for (const mime of supported) expect(await send(bedrock, mime)).toContain('"video":{')
+      for (const mime of ["video/x-msvideo", "video/ogg", "video/x-m4v"]) {
+        const body = await send(bedrock, mime)
+        expect(body).not.toContain('"video":{')
+        expect(body).toContain(`this model does not support ${mime} input`)
+      }
+    })
   })
 
   test("preserves supported media", () => {

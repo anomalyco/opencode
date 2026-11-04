@@ -1,4 +1,5 @@
 import path from "path"
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
 import { onMount } from "solid-js"
@@ -8,6 +9,7 @@ import type { Types } from "effect"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
+import { keptVideoExtension } from "../component/prompt/local-attachment"
 
 export type PastedText = {
   text: string
@@ -62,13 +64,36 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
   }
 }
 
-// History and the stash keep a video's local file as its `file://` uri instead of its bytes; sending reads it again.
-export function persistablePrompt(prompt: PromptInfo): PromptInfo {
+// History and the stash never keep a video's bytes. A video keeps its local file as a `file://` uri, and one without a
+// file gets one under `state` now, so an entry written right after a restore has it too. Sending reads it again.
+export function persistablePrompt(prompt: PromptInfo, state: string): PromptInfo {
   return {
     ...prompt,
-    files: prompt.files?.map((file) =>
-      file.path && file.uri.startsWith("data:video/") ? { ...file, uri: pathToFileURL(file.path).href } : file,
-    ),
+    files: prompt.files?.map((file) => {
+      const video = /^data:(video\/[^;,]+);base64,/.exec(file.uri)
+      const local =
+        video && (file.path ?? writeVideo(path.join(state, "prompt-media"), file.uri.slice(video[0].length), video[1]!))
+      return local ? { ...file, uri: pathToFileURL(local).href, path: local } : file
+    }),
+  }
+}
+
+// Named for its content, written once. A video that cannot be written keeps its bytes rather than being dropped.
+function writeVideo(directory: string, base64: string, mime: string) {
+  const bytes = Buffer.from(base64, "base64")
+  const file = path.join(
+    directory,
+    new Bun.CryptoHasher("sha256").update(bytes).digest("hex") + keptVideoExtension(mime),
+  )
+  try {
+    if (existsSync(file)) return file
+    mkdirSync(directory, { recursive: true })
+    const temporary = `${file}.${crypto.randomUUID()}.tmp`
+    writeFileSync(temporary, bytes)
+    renameSync(temporary, file)
+    return file
+  } catch {
+    return undefined
   }
 }
 
@@ -130,7 +155,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         return store.history.at(next)
       },
       append(item: PromptInfo) {
-        const entry = structuredClone(persistablePrompt(unwrap(item)))
+        const entry = structuredClone(persistablePrompt(unwrap(item), paths.state))
         if (isDuplicateEntry(store.history.at(-1), entry)) {
           setStore("index", 0)
           return

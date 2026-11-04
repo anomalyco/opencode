@@ -6,9 +6,9 @@ import {
   type Renderable,
   type TextareaRenderable,
 } from "@opentui/core"
-import { ManualClock } from "@opentui/core/testing"
+import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
-import { descendants, image, renderMedia, video } from "../fixture/media"
+import { descendants, image, longVideoFixture, renderMedia, video } from "../fixture/media"
 
 type Viewer = Awaited<ReturnType<typeof renderMedia>>
 
@@ -90,6 +90,18 @@ test("zooms an image with keys and the wheel, pans it by dragging, and resets", 
   expect(viewer.frame()).toContain("protocol  blocks")
 })
 
+test("esc in the header closes the viewer on a click, not when a drag is released over it", async () => {
+  await using viewer = await renderMedia(() => null)
+  viewer.media().openViewer([image("image")], 0)
+  await viewer.until(() => viewer.frame().includes("96×48"))
+  const stage = viewer.find("media-viewer-stage")!
+  const esc = viewer.frame().split("\n")[0]!.lastIndexOf("esc")
+  await viewer.app.mockMouse.drag(stage.x + 10, stage.y + 5, esc, 0)
+  expect(viewer.media().viewer()).toBeDefined()
+  await viewer.app.mockMouse.click(esc, 0)
+  expect(viewer.media().viewer()).toBeUndefined()
+})
+
 test("clicking the current filmstrip tile keeps the image's size and zoom", async () => {
   await using viewer = await renderMedia(() => null)
   viewer.media().openViewer([image("a"), image("b")], 0)
@@ -131,7 +143,8 @@ test("explains media it cannot show", async () => {
 })
 
 test("controls a video from the keyboard", async () => {
-  await using viewer = await renderMedia(() => null)
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
   const player = await openVideo(viewer)
   expect(player.audio).toBe(true)
   await viewer.until(() => viewer.frame().includes("160×90 · 0:02 · 10 fps"))
@@ -149,6 +162,7 @@ test("controls a video from the keyboard", async () => {
   ] as const
   for (const [key, time] of seeks) {
     await viewer.press(key)
+    clock.advance(120)
     expect(player.currentTime).toBeCloseTo(time, 1)
   }
   expect(player.paused).toBe(true)
@@ -161,6 +175,76 @@ test("controls a video from the keyboard", async () => {
   expect(player.volume).toBeCloseTo(0.9)
   await viewer.press(" ")
   await viewer.until(() => player.playing)
+})
+
+test("keys held on a paused video add up into one throttled seek, which the seek bar shares", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  let seeks = 0
+  player.onSeek = () => seeks++
+
+  // The first key seeks at once; the next ones wait out the interval, each starting where the one before aims.
+  await viewer.press("shift+right")
+  expect(seeks).toBe(1)
+  expect(player.currentTime).toBeCloseTo(1, 1)
+  for (const key of [".", ".", "."]) await viewer.press(key)
+  expect(seeks).toBe(1)
+  // The playhead and time show where the seeks are headed.
+  expect(bar.plainText.indexOf("●")).toBe(Math.round((1.3 / 2) * (bar.width - 1)))
+  expect(viewer.frame()).toContain("0:01 / 0:02")
+  clock.advance(120)
+  expect(seeks).toBe(2)
+  expect(player.currentTime).toBeCloseTo(1.3, 1)
+
+  // A press on the bar right after a key replaces the key's pending seek and waits its turn.
+  await viewer.press("0")
+  await viewer.app.mockMouse.pressDown(bar.x + 10, bar.y)
+  expect(seeks).toBe(2)
+  clock.advance(120)
+  expect(seeks).toBe(3)
+  expect(player.currentTime).toBeCloseTo((10 / (bar.width - 1)) * 2, 1)
+  await viewer.app.mockMouse.release(bar.x + 10, bar.y)
+  expect(seeks).toBe(3)
+})
+
+test("a key seeks again to its last time once playback has moved the player", async () => {
+  await using viewer = await renderMedia(() => null)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  await viewer.press("0")
+  await viewer.press(" ")
+  await viewer.until(() => player.currentTime > 0.3)
+  await viewer.press("0")
+  await viewer.until(() => player.currentTime < 0.2)
+})
+
+test("the info shows the Kitty transport's file state and reads it again every second", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  const renderer = viewer.app.renderer
+  renderer.emit(CliRenderEvents.CAPABILITIES, setRendererCapabilities(renderer, { kitty_graphics: true }))
+  // The test terminal never answers a probe; report the states one would go through.
+  let fileState = "probing"
+  const status = renderer.kittyImageTransportStatus
+  Object.defineProperty(renderer, "kittyImageTransportStatus", { get: () => ({ ...status, fileState }) })
+  viewer.media().openViewer([image("image")], 0)
+  await viewer.press("i")
+  expect(viewer.frame()).toContain("protocol  kitty · probing")
+
+  fileState = "ready"
+  clock.advance(999)
+  await viewer.app.renderOnce()
+  expect(viewer.frame()).toContain("protocol  kitty · probing")
+  clock.advance(1)
+  await viewer.app.renderOnce()
+  expect(viewer.frame()).toContain("protocol  kitty · file")
+  fileState = "timeout"
+  clock.advance(1_000)
+  await viewer.app.renderOnce()
+  expect(viewer.frame()).toContain("protocol  kitty · raw")
 })
 
 test("the seek bar previews the hovered frame silently and seeks where it is clicked", async () => {
@@ -245,11 +329,57 @@ test("scrubbing seeks the main player at most every 120 ms, lands on release, an
   await viewer.app.mockMouse.release(bar.x + 25, bar.y)
   expect(playerSeeks).toBe(3)
   expect(player.currentTime).toBeCloseTo((25 / (bar.width - 1)) * 2, 1)
-  // Still over the bar, the preview shows again and catches up once.
-  clock.advance(1_000)
+  // Still over the bar, the preview shows again once it has caught up, not with the frame from before the scrub.
+  clock.advance(79)
+  expect(viewer.find("media-seek-preview")!.visible).toBe(false)
+  clock.advance(1)
   expect(viewer.find("media-seek-preview")!.visible).toBe(true)
   expect(previewSeeks).toBe(1)
+  clock.advance(1_000)
+  expect(previewSeeks).toBe(1)
   expect(playerSeeks).toBe(3)
+})
+
+test("a scrub that ends where the preview already shows leaves the preview as it is", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  await viewer.app.mockMouse.moveTo(bar.x + 20, bar.y)
+  await viewer.until(() => viewer.videos("media-seek-preview")[0]?.ready === true)
+  clock.advance(1_000)
+  const preview = viewer.videos("media-seek-preview")[0]!
+  expect(preview.currentTime).toBeCloseTo((20 / (bar.width - 1)) * 2, 1)
+  let seeks = 0
+  preview.onSeek = () => seeks++
+
+  await viewer.app.mockMouse.pressDown(bar.x + 20, bar.y)
+  expect(viewer.find("media-seek-preview")!.visible).toBe(false)
+  await viewer.app.mockMouse.release(bar.x + 20, bar.y)
+  expect(viewer.find("media-seek-preview")!.visible).toBe(true)
+  clock.advance(1_000)
+  expect(seeks).toBe(0)
+})
+
+test("the preview seeks to the hovered time again when it opens a source again", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  const time = (20 / (bar.width - 1)) * 2
+  await viewer.app.mockMouse.moveTo(bar.x + 20, bar.y)
+  await viewer.until(() => viewer.videos("media-seek-preview")[0]?.ready === true)
+  clock.advance(1_000)
+  const preview = viewer.videos("media-seek-preview")[0]!
+  expect(preview.currentTime).toBeCloseTo(time, 1)
+
+  // A new open shows the first frame, even of a file it showed before.
+  preview.source = longVideoFixture
+  await viewer.until(() => preview.ready && preview.source === longVideoFixture)
+  clock.advance(1_000)
+  expect(preview.currentTime).toBeCloseTo(time, 1)
 })
 
 test("a click seeks once, a release lands at once, and the next press waits out the interval", async () => {

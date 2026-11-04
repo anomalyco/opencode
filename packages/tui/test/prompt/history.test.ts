@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { measureEditText } from "@opentui/core"
+import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { readKeptAttachments } from "../../src/component/prompt/local-attachment"
 import {
   appendPrompt,
   isDuplicateEntry,
@@ -9,6 +11,9 @@ import {
   persistablePrompt,
   type PromptInfo,
 } from "../../src/prompt/history"
+import { tmpdir } from "../fixture/fixture"
+
+const sha256 = (base64: string) => new Bun.CryptoHasher("sha256").update(Buffer.from(base64, "base64")).digest("hex")
 
 const entry = (text: string, files: PromptInfo["files"] = []): PromptInfo => ({
   text,
@@ -69,12 +74,24 @@ describe("prompt history", () => {
     expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
   })
 
-  test("keeps a video's local file instead of its bytes, and the bytes of a video without one", () => {
+  test("keeps a video's local file instead of its bytes, and gives a video of any type without one a file", async () => {
+    await using tmp = await tmpdir()
     const image = { uri: "data:image/png;base64,AAAA", path: "/tmp/shot.png" }
     const video = { uri: "data:video/mp4;base64,BBBB", path: "/tmp/my clip.mp4" }
-    const files = [image, video, { uri: "data:video/mp4;base64,CCCC" }]
-    const kept = [image, { ...video, uri: pathToFileURL(video.path).href }, files[2]]
-    expect(persistablePrompt(entry("[Image 1] [Video 1] [Video 2]", files)).files).toEqual(kept)
+    const restored = ["data:video/mp4;base64,CCCC", "data:video/webm;base64,DDDD", "data:video/x-matroska;base64,CCCC"]
+    const files = [image, video, ...restored.map((uri) => ({ uri }))]
+    const persisted = persistablePrompt(entry("media", files), tmp.path).files!
+
+    expect(persisted.slice(0, 2)).toEqual([image, { ...video, uri: pathToFileURL(video.path).href }])
+    const written = persisted.slice(2).map((file) => file.path!)
+    expect(written.map((file) => path.relative(tmp.path, file))).toEqual([
+      path.join("prompt-media", `${sha256("CCCC")}.mp4`),
+      path.join("prompt-media", `${sha256("DDDD")}.webm`),
+      path.join("prompt-media", `${sha256("CCCC")}.x-matroska`),
+    ])
+    expect(persisted.slice(2).map((file) => file.uri)).toEqual(written.map((file) => pathToFileURL(file).href))
+    // Sending reads each file back as the type it was restored with.
+    expect((await readKeptAttachments(persisted.slice(2))).files.map((file) => file.uri)).toEqual(restored)
   })
 
   test.each(["wcwidth", "unicode"] as const)("appends a prompt and shifts ranges by the %s offset", (widthMethod) => {

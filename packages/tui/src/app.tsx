@@ -260,6 +260,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         autoFocus: false,
         openConsoleOnError: false,
         useMouse: config.mouse,
+        // Kitty frames pass through files in the renderer's TMPDIR, which on a disk costs CPU and writes; the runtime
+        // directory is in memory.
+        environment: process.env.XDG_RUNTIME_DIR ? { TMPDIR: process.env.XDG_RUNTIME_DIR } : undefined,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
         },

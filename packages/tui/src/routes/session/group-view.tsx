@@ -21,7 +21,8 @@ export type ToolRef = { messageID: string; part: SessionMessageAssistantTool }
 type Renderers = {
   message: (messageID: string) => SessionMessageInfo | undefined
   entry: (entry: SessionEntry, images?: boolean) => JSX.Element
-  images: (tools: readonly ToolRef[]) => JSX.Element
+  // An accessor, so a strip already shown takes new tools without being built again.
+  images: (tools: () => readonly ToolRef[]) => JSX.Element
 }
 
 type GroupProps = Renderers & {
@@ -149,7 +150,7 @@ function GroupContent(props: GroupProps) {
               </InlineToolRow>
             </Show>
             <Show when={expanded() && tools().length > 0}>{children("tool")}</Show>
-            <Show when={!props.imagesOutside}>{props.images(tools())}</Show>
+            <Show when={!props.imagesOutside}>{props.images(tools)}</Show>
           </Show>
         }
       >
@@ -231,7 +232,7 @@ function ActivityGroup(props: GroupProps) {
           </box>
         </Show>
         <Show when={richMedia() && !disclosure.expanded() && !props.imagesOutside && tools().length > 0}>
-          {props.images(tools())}
+          {props.images(tools)}
         </Show>
       </Show>
       <PendingEntries {...props} entries={entries()} />
