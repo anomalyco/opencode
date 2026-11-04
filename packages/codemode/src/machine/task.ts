@@ -62,7 +62,14 @@ export class MachineTask {
    * yet), the frame is made now and slipped in at `mark`, the stack height when the function began, so it sits below
    * the frames that work pushed.
    */
-  park(frame: Frame | undefined, mark: number, kind: Kind, node: AstNode, phase: number, slots: Array<unknown> = []): Pending {
+  park(
+    frame: Frame | undefined,
+    mark: number,
+    kind: Kind,
+    node: AstNode,
+    phase: number,
+    slots: Array<unknown> = [],
+  ): Pending {
     if (frame !== undefined) {
       frame.phase = phase
       frame.slots = slots

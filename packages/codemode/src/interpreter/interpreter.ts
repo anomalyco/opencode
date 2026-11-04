@@ -274,11 +274,7 @@ export class Interpreter<R> {
   // The call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
   // promise argument is awaited first; the host call starts once they have crossed, so admission and hooks happen at
   // the call site, and runs concurrently with the program.
-  *toolCall(
-    path: ReadonlyArray<string>,
-    args: Array<Value>,
-    site: AstNode | undefined,
-  ): Eval<Value> {
+  *toolCall(path: ReadonlyArray<string>, args: Array<Value>, site: AstNode | undefined): Eval<Value> {
     const ctx = this
     const runner = ctx.runner
     const promise = runner.newPromise()
@@ -364,7 +360,8 @@ class Frame<R> {
     this.scopes.push()
     try {
       // Imports load before any code runs, as in a module.
-      for (const statement of program.body) if (statement.type === "ImportDeclaration") bindImport(this.ctx, this.scopes, statement)
+      for (const statement of program.body)
+        if (statement.type === "ImportDeclaration") bindImport(this.ctx, this.scopes, statement)
       predeclareLexical(this.scopes, program.body)
       hoistFunctions(this.ctx.builtins, this.scopes, program.body)
       hoistVars(this.scopes, program.body)
@@ -1128,7 +1125,11 @@ class Frame<R> {
         }
         const key = yield* this.destructuringPropertyKey(property)
         consumed.add(typeof key === "symbol" ? key : String(key))
-        yield* this.assignPattern(property.value, destructuredProperty(this.ctx.builtins, value, key, property), property)
+        yield* this.assignPattern(
+          property.value,
+          destructuredProperty(this.ctx.builtins, value, key, property),
+          property,
+        )
       }
       return
     }
@@ -1249,11 +1250,7 @@ class Frame<R> {
         const right = this.evaluate(node.right)
         if (isEval(right) || current instanceof Obj || right instanceof Obj)
           return this.compoundAfter(node, current, right)
-        return this.scopes.set(
-          left.name,
-          applyBinaryOperator(node.operator.slice(0, -1), current, right, node),
-          left,
-        )
+        return this.scopes.set(left.name, applyBinaryOperator(node.operator.slice(0, -1), current, right, node), left)
       }
       case "SequenceExpression":
         return this.evaluateSequenceExpression(node)
@@ -1801,8 +1798,7 @@ class Frame<R> {
     while (true) {
       const method = kind === "next" ? iterator.next : get(iterator.iterator, kind)
       if (method === undefined || method === null) {
-        if (kind === "return")
-          throw new GeneratorReturn(asynchronous ? yield* this.awaitValue(input, node) : input)
+        if (kind === "return") throw new GeneratorReturn(asynchronous ? yield* this.awaitValue(input, node) : input)
         yield* this.closeIterator(iterator, node)
         throw typeError("The delegated iterator does not provide a throw() method.", node)
       }

@@ -228,7 +228,12 @@ function ifStatement(task: MachineTask, frame: Frame | undefined, node: IfStatem
 
 const If = kind("IfStatement", ifStatement)
 
-function throwStatement(task: MachineTask, frame: Frame | undefined, node: ThrowStatement, input: unknown): never | typeof PENDING {
+function throwStatement(
+  task: MachineTask,
+  frame: Frame | undefined,
+  node: ThrowStatement,
+  input: unknown,
+): never | typeof PENDING {
   let value = input as Value
   if (frame === undefined) {
     const mark = task.stack.length
@@ -434,9 +439,7 @@ function forStatement(task: MachineTask, frame: Frame, node: ForStatement, input
     if (init?.type === "VariableDeclaration" && init.kind !== "var") predeclareLexical(task.scopes, [init])
     if (init) {
       const done =
-        init.type === "VariableDeclaration"
-          ? variableDeclaration(task, undefined, init, undefined)
-          : ev(task, init)
+        init.type === "VariableDeclaration" ? variableDeclaration(task, undefined, init, undefined) : ev(task, init)
       if (done === PENDING) {
         frame.phase = 1
         return PENDING
@@ -873,7 +876,8 @@ function programStep(task: MachineTask, frame: Frame, node: Program, input: unkn
     // Keep top-level declarations separate so they can shadow builtins.
     task.scopes.push()
     // Imports load before any code runs, as in a module.
-    for (const statement of body) if (statement.type === "ImportDeclaration") bindImport(task.ctx, task.scopes, statement)
+    for (const statement of body)
+      if (statement.type === "ImportDeclaration") bindImport(task.ctx, task.scopes, statement)
     predeclareLexical(task.scopes, body)
     hoistFunctions(task.ctx.builtins, task.scopes, body)
     hoistVars(task.scopes, body)

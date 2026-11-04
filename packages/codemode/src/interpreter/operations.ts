@@ -244,8 +244,7 @@ export const operatorConversion = (
   const equality = operator === "==" || operator === "!="
   const other = lhs instanceof Obj ? rhs : lhs
   const converts =
-    primitiveOperators.has(operator) ||
-    (equality && other !== null && other !== undefined && typeof other !== "object")
+    primitiveOperators.has(operator) || (equality && other !== null && other !== undefined && typeof other !== "object")
   if (!converts) return undefined
   return { kind: "primitive", hint: operator === "+" || equality ? "default" : "number" }
 }
@@ -452,7 +451,9 @@ export const hoistFunctions = (
 ): void => {
   for (const node of statements) {
     if (node.type !== "FunctionDeclaration") continue
-    scopes.current().set(node.id.name, { mutable: true, value: createFunction(builtins, scopes, node), initialized: true })
+    scopes
+      .current()
+      .set(node.id.name, { mutable: true, value: createFunction(builtins, scopes, node), initialized: true })
   }
 }
 
@@ -637,7 +638,11 @@ export const writableReference = (
 export const assignToReference = (target: Obj, key: PropertyKey, next: Value, node: AstNode): void => {
   const written = (() => {
     try {
-      rejectCircularInsertion(target, next, target instanceof Arr ? "Array assignment result" : "Object assignment result")
+      rejectCircularInsertion(
+        target,
+        next,
+        target instanceof Arr ? "Array assignment result" : "Object assignment result",
+      )
       return set(target, key, next)
     } catch (error) {
       throw locate(error, node)

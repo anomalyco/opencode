@@ -67,7 +67,7 @@ import {
 import { capability } from "../interpreter/promises.js"
 import { isOpaque, typeofValue } from "../interpreter/references.js"
 import { Await, type GeneratorRequest, isEval, Yield } from "../interpreter/signals.js"
-import { type Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
+import { type Frame, kind, type Out, PENDING } from "./frame.js"
 import { operate, toPrimitive, toPropertyKey } from "./calls.js"
 import { spread } from "./iteration.js"
 import { assigning, bind } from "./patterns.js"
@@ -481,7 +481,6 @@ function assignmentExpression(
   const phase = frame?.phase ?? 0
   const left = node.left
   const operator = node.operator
-  const park = (next: number, slots?: Array<unknown>): Pending => task.park(frame, mark, Assignment, node, next, slots)
   const logical = logicalAssignment(operator)
   if (!logical && operator !== "=" && !compoundOperators.has(operator)) {
     throw typeError(`Unsupported assignment operator '${operator}'.`, node)
@@ -495,7 +494,7 @@ function assignmentExpression(
         if (!shouldAssign(operator, current)) return current
       }
       const right = named(task, node.right, name)
-      if (right === PENDING) return park(1)
+      if (right === PENDING) return task.park(frame, mark, Assignment, node, 1)
       return task.scopes.set(name, right, left)
     }
     // The binary operator a compound assignment applies: `+=` is `+`.
@@ -507,7 +506,7 @@ function assignmentExpression(
       if (phase === 0) {
         current = task.scopes.get(name, left)
         const evaluated = ev(task, node.right)
-        if (evaluated === PENDING) return park(1, [current])
+        if (evaluated === PENDING) return task.park(frame, mark, Assignment, node, 1, [current])
         right = evaluated
       } else {
         current = frame!.slots[0] as Value
@@ -515,7 +514,7 @@ function assignmentExpression(
       }
       if (current instanceof Obj || right instanceof Obj) {
         const result = operate(task, binary, current, right, node)
-        if (result === PENDING) return park(2)
+        if (result === PENDING) return task.park(frame, mark, Assignment, node, 2)
         next = result
       } else next = applyBinaryOperator(binary, current, right, node)
     } else next = input as Value
@@ -525,10 +524,11 @@ function assignmentExpression(
     let right: Value
     if (phase === 0) {
       const evaluated = ev(task, node.right)
-      if (evaluated === PENDING) return park(1)
+      if (evaluated === PENDING) return task.park(frame, mark, Assignment, node, 1)
       right = evaluated
     } else right = phase === 1 ? (input as Value) : (frame!.slots[0] as Value)
-    if (phase <= 1 && bind(task, left, right, node, assigning) === PENDING) return park(2, [right])
+    if (phase <= 1 && bind(task, left, right, node, assigning) === PENDING)
+      return task.park(frame, mark, Assignment, node, 2, [right])
     return right
   }
   if (left.type !== "MemberExpression") {
@@ -542,7 +542,7 @@ function assignmentExpression(
     let resolved = input as Reference
     if (phase === 0) {
       const evaluated = member(task, undefined, left, undefined, false) as Out<Reference>
-      if (evaluated === PENDING) return park(1)
+      if (evaluated === PENDING) return task.park(frame, mark, Assignment, node, 1)
       resolved = evaluated
     }
     reference = writableReference(resolved, left)
@@ -557,13 +557,13 @@ function assignmentExpression(
     let right = input as Value
     if (phase <= 1) {
       const evaluated = ev(task, node.right)
-      if (evaluated === PENDING) return park(2, [reference, current])
+      if (evaluated === PENDING) return task.park(frame, mark, Assignment, node, 2, [reference, current])
       right = evaluated
     }
     if (operator === "=" || logical) next = right
     else {
       const result = operate(task, operator.slice(0, -1), current, right, node)
-      if (result === PENDING) return park(3, [reference, current])
+      if (result === PENDING) return task.park(frame, mark, Assignment, node, 3, [reference, current])
       next = result
     }
   } else next = input as Value
@@ -582,13 +582,6 @@ function updateExpression(task: MachineTask, frame: Frame | undefined, node: Upd
   if (increment === undefined) {
     throw typeError(`Unsupported update operator '${operator}'.`, node)
   }
-  // CodeMode numeric coercion, not host Number(), so opaque runtime references reject clearly.
-  const operand = (current: Value): number => {
-    if (isOpaque(current)) {
-      throw invalidData(`'${operator}' requires a data value.`, argument)
-    }
-    return coerceToNumber(current)
-  }
   if (argument.type === "Identifier") {
     let current = input as Value
     if (phase === 0) {
@@ -597,7 +590,7 @@ function updateExpression(task: MachineTask, frame: Frame | undefined, node: Upd
       if (converted === PENDING) return task.park(frame, mark, Update, node, 1)
       current = converted
     }
-    const before = operand(current)
+    const before = operand(operator, argument, current)
     const next = before + increment
     task.scopes.set(argument.name, next, argument)
     return node.prefix ? next : before
@@ -619,10 +612,18 @@ function updateExpression(task: MachineTask, frame: Frame | undefined, node: Upd
     if (converted === PENDING) return task.park(frame, mark, Update, node, 2, [reference])
     current = converted
   } else reference = frame!.slots[0] as MemberReference
-  const value = operand(current)
+  const value = operand(operator, argument, current)
   const next = value + increment
   assignToReference(reference.target, reference.key, next, argument)
   return node.prefix ? next : value
+}
+
+// CodeMode numeric coercion, not host Number(), so opaque runtime references reject clearly.
+const operand = (operator: string, argument: Expression, current: Value): number => {
+  if (isOpaque(current)) {
+    throw invalidData(`'${operator}' requires a data value.`, argument)
+  }
+  return coerceToNumber(current)
 }
 
 const Update = kind("UpdateExpression", updateExpression)
@@ -636,7 +637,6 @@ function objectExpression(task: MachineTask, frame: Frame | undefined, node: Obj
   const object = frame === undefined ? new Obj(ctx.builtins.Object) : (frame.slots[0] as Obj)
   let index = frame === undefined ? 0 : (frame.slots[1] as number)
   let key = frame?.slots[2] as PropertyKey
-  const park = (next: number): Pending => task.park(frame, mark, ObjectKind, node, next, [object, index, key])
   const properties = node.properties
   for (; index < properties.length; index++, phase = 0) {
     const property = properties[index]!
@@ -644,7 +644,7 @@ function objectExpression(task: MachineTask, frame: Frame | undefined, node: Obj
       let spread = input as Value
       if (phase === 0) {
         const evaluated = ev(task, property.argument)
-        if (evaluated === PENDING) return park(1)
+        if (evaluated === PENDING) return task.park(frame, mark, ObjectKind, node, 1, [object, index, key])
         spread = evaluated
       }
       if (spread === null || spread === undefined) continue
@@ -658,7 +658,7 @@ function objectExpression(task: MachineTask, frame: Frame | undefined, node: Obj
       const keyNode = property.key
       if (property.computed) {
         const evaluated = ev(task, keyNode)
-        if (evaluated === PENDING) return park(2)
+        if (evaluated === PENDING) return task.park(frame, mark, ObjectKind, node, 2, [object, index, key])
         input = evaluated
         phase = 2
       } else if (keyNode.type === "Identifier") key = keyNode.name
@@ -667,7 +667,7 @@ function objectExpression(task: MachineTask, frame: Frame | undefined, node: Obj
     }
     if (phase === 2) {
       const converted = toPropertyKey(task, input as Value, property.key)
-      if (converted === PENDING) return park(3)
+      if (converted === PENDING) return task.park(frame, mark, ObjectKind, node, 3, [object, index, key])
       input = converted
       phase = 3
     }
@@ -681,7 +681,7 @@ function objectExpression(task: MachineTask, frame: Frame | undefined, node: Obj
             ? "[Symbol.asyncIterator]"
             : String(key)
       const evaluated = named(task, property.value as Expression, name)
-      if (evaluated === PENDING) return park(4)
+      if (evaluated === PENDING) return task.park(frame, mark, ObjectKind, node, 4, [object, index, key])
       value = evaluated
     }
     define(object, key, value)
@@ -889,4 +889,3 @@ function importExpression(task: MachineTask, frame: Frame | undefined, node: Imp
 }
 
 const Import = kind("ImportExpression", importExpression)
-

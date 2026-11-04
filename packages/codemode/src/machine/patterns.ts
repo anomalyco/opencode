@@ -11,7 +11,7 @@ import {
 } from "../interpreter/operations.js"
 import { describeValue } from "../interpreter/references.js"
 import { Interruption } from "../interpreter/signals.js"
-import { type Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
+import { type Frame, kind, type Out, PENDING } from "./frame.js"
 import { toPropertyKey } from "./calls.js"
 import { ev, member, named } from "./expressions.js"
 import { type Iter, iterate, iteratorClose, iteratorStep } from "./iteration.js"
@@ -122,7 +122,6 @@ function objectPattern(
   }
   const consumed = slots[4] as Set<PropertyKey>
   const properties = pattern.properties
-  const park = (next: number): Pending => task.park(frame, mark, ObjectPatternKind, pattern, next, slots)
   while ((slots[3] as number) < properties.length) {
     const index = slots[3] as number
     const property = properties[index]!
@@ -130,7 +129,8 @@ function objectPattern(
       slots[3] = index + 1
       const rest = new Obj(task.ctx.builtins.Object)
       assign(rest, enumerableSource(task.ctx, "Object destructuring", value, pattern), consumed)
-      if (bind(task, property.argument, rest, property, mode) === PENDING) return park(0)
+      if (bind(task, property.argument, rest, property, mode) === PENDING)
+        return task.park(frame, mark, ObjectPatternKind, pattern, 0, slots)
       continue
     }
     let key: PropertyKey
@@ -141,7 +141,7 @@ function objectPattern(
       const keyNode = property.key
       if (property.computed) {
         const computed = ev(task, keyNode)
-        if (computed === PENDING) return park(1)
+        if (computed === PENDING) return task.park(frame, mark, ObjectPatternKind, pattern, 1, slots)
         input = computed
         phase = 1
       } else if (keyNode.type === "Identifier") key = keyNode.name
@@ -150,7 +150,7 @@ function objectPattern(
     }
     if (phase === 1) {
       const converted = toPropertyKey(task, input as Value, property.key)
-      if (converted === PENDING) return park(2)
+      if (converted === PENDING) return task.park(frame, mark, ObjectPatternKind, pattern, 2, slots)
       input = converted
       phase = 2
     }
@@ -159,7 +159,8 @@ function objectPattern(
     consumed.add(typeof key! === "symbol" ? key : String(key!))
     slots[3] = index + 1
     const item = destructuredProperty(task.ctx.builtins, value, key!, property)
-    if (bind(task, property.value, item, property, mode) === PENDING) return park(0)
+    if (bind(task, property.value, item, property, mode) === PENDING)
+      return task.park(frame, mark, ObjectPatternKind, pattern, 0, slots)
   }
   return undefined
 }
@@ -188,11 +189,10 @@ function arrayPattern(
   const mark = task.stack.length
   const mode = slots[2] as Mode
   let phase = frame?.phase ?? 0
-  const park = (next: number): Pending => task.park(frame, mark, ArrayPatternKind, pattern, next, slots)
   if (phase === 0) {
     slots = [slots[0], slots[1], mode, undefined, 0, false, undefined, undefined]
     const opened = iterate(task, slots[0] as Value, pattern)
-    if (opened === PENDING) return park(OPEN)
+    if (opened === PENDING) return task.park(frame, mark, ArrayPatternKind, pattern, OPEN, slots)
     input = opened
     phase = OPEN
   }
@@ -201,7 +201,8 @@ function arrayPattern(
     slots[3] = input
     phase = ELEMENT
     // An iterator with something to close needs a frame, so a failure while binding can close it.
-    if (frame === undefined && !(input instanceof Position)) return park(ELEMENT)
+    if (frame === undefined && !(input instanceof Position))
+      return task.park(frame, mark, ArrayPatternKind, pattern, ELEMENT, slots)
   }
   if (phase === FAILING) return fail(task, frame!, pattern)
   if (phase === FAILED) throw slots[7]
@@ -222,11 +223,11 @@ function arrayPattern(
         const target = rest ? element.argument : element
         const result = bind(task, target, rest ? new Arr(task.ctx.builtins.Array) : undefined, element, mode)
         if (rest) return task.tail(frame, result)
-        if (result === PENDING) return park(ELEMENT)
+        if (result === PENDING) return task.park(frame, mark, ArrayPatternKind, pattern, ELEMENT, slots)
         continue
       }
       const step = iteratorStep(task, iterator, pattern)
-      if (step === PENDING) return park(STEPPED)
+      if (step === PENDING) return task.park(frame, mark, ArrayPatternKind, pattern, STEPPED, slots)
       input = step
       phase = STEPPED
     }
@@ -250,7 +251,8 @@ function arrayPattern(
         // close.
         if (frame !== undefined) frame.phase = step.done ? ELEMENT : BINDING
         const result = bind(task, element, step.done ? undefined : step.value, pattern, mode)
-        if (result === PENDING) return park(step.done ? ELEMENT : BINDING)
+        if (result === PENDING)
+          return task.park(frame, mark, ArrayPatternKind, pattern, step.done ? ELEMENT : BINDING, slots)
         if (frame !== undefined) frame.phase = ELEMENT
         phase = ELEMENT
         continue
@@ -269,7 +271,7 @@ function arrayPattern(
       }
       while (!slots[5]) {
         const step = iteratorStep(task, iterator, pattern)
-        if (step === PENDING) return park(REST)
+        if (step === PENDING) return task.park(frame, mark, ArrayPatternKind, pattern, REST, slots)
         slots[5] = step.done
         if (!step.done) rest.push(step.value)
       }

@@ -140,7 +140,6 @@ export const MAX_CALL_DEPTH = 10_000
 export const isEval = <A>(value: A | Eval<A>): value is Eval<A> =>
   typeof value === "object" && value !== null && typeof (value as { readonly next?: unknown }).next === "function"
 
-
 /** The body a generator object resumes: a `return()` request ends it with the returned value. */
 export function* generatorBody(body: Iterable<Signal, Value, unknown>): Eval<Value> {
   try {
@@ -150,4 +149,3 @@ export function* generatorBody(body: Iterable<Signal, Value, unknown>): Eval<Val
     throw error
   }
 }
-

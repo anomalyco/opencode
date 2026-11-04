@@ -116,7 +116,10 @@ describe("machine evaluator", () => {
         for (let i = 0; i < 3; i++) fns.push(() => id(i))
         return [out, fns.map((f) => f())]
       `),
-    ).toEqual([["zero", "one", "d", "d"], [0, 1, 2]])
+    ).toEqual([
+      ["zero", "one", "d", "d"],
+      [0, 1, 2],
+    ])
   })
 
   test("conversions call program valueOf and toString", async () => {
@@ -141,7 +144,11 @@ describe("machine evaluator", () => {
         const all = await Promise.all([1, 2, 3].map(twice))
         return [log, [...g()], all]
       `),
-    ).toEqual([["done", "done"], [1, 2], [2, 4, 6]])
+    ).toEqual([
+      ["done", "done"],
+      [1, 2],
+      [2, 4, 6],
+    ])
   })
 
   test("runaway recursion stops at the same depth with the same location", async () => {

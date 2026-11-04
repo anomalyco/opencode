@@ -237,7 +237,9 @@ const generator = (task: MachineTask, fn: Fn, frame: Frame): GeneratorObj => {
   const builtins = task.ctx.builtins
   const scopes = frame.scope
   const body = new MachineTask(task.machine, scopes)
-  body.stack.push(new Frame(CallKind, fn.body, RUN, scopes, [fn, undefined, undefined, undefined, false, frame.slots[5]]))
+  body.stack.push(
+    new Frame(CallKind, fn.body, RUN, scopes, [fn, undefined, undefined, undefined, false, frame.slots[5]]),
+  )
   const proto = get(fn, "prototype")
   return new GeneratorObj(
     proto instanceof Obj ? proto : fn.async ? builtins.AsyncGenerator : builtins.Generator,
