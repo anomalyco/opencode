@@ -74,6 +74,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   createEffect(() => {
     Object.entries(requests).forEach(([id, state]) => {
       if (!state || state.status === "pending" || state.status === "replied") return
+
       if (!covers(state.projectID)) dispatch(id, { type: "cancel" })
     })
   })
@@ -84,6 +85,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
 
     if (result.state !== state) {
       setRequests({ [requestID]: result.state.status === "pending" ? undefined : result.state })
+
       if (result.state.status === "replied") pruneReplied()
     }
 
@@ -129,10 +131,12 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     const complete = await sweep(signal)
 
     if (complete || attempt >= AUTO_APPROVE_RETRY_LIMIT || signal.aborted) return
+
     const timer = setTimeout(
       () => void sweepWithRetry(signal, attempt + 1),
       AUTO_APPROVE_RETRY_DELAY_MS * (attempt + 1),
     )
+
     signal.addEventListener("abort", () => clearTimeout(timer), { once: true })
   }
 

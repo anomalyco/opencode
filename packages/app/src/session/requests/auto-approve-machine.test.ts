@@ -35,10 +35,11 @@ const waiting = (runId: string, attempt: number): AutoApproveState => ({
 const gaveUp: AutoApproveState = { status: "gave-up", projectID: "proj_1" }
 
 function replay(events: AutoApproveEvent[], from = INITIAL_AUTO_APPROVE_STATE) {
-  return events.reduce<AutoApproveTransition[]>(
-    (steps, event) => [...steps, transitionAutoApprove(steps.at(-1)?.state ?? from, event)],
-    [],
-  )
+  return events.reduce<AutoApproveTransition[]>((steps, event) => {
+    steps.push(transitionAutoApprove(steps.at(-1)?.state ?? from, event))
+
+    return steps
+  }, [])
 }
 
 describe("transitionAutoApprove", () => {
