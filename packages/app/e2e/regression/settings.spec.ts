@@ -3,6 +3,8 @@ import type { ConfigEntry, OpenCodeEvent, SessionMessageInfo, WorktreeDirectory 
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
+import { recordNotifications } from "../utils/notifications"
+import { installSseTransport } from "../utils/sse-transport"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -92,6 +94,146 @@ test("a settings page survives refresh", async ({ page }) => {
   await page.reload()
   await expect(appearance).toHaveAttribute("aria-selected", "true")
   await expect(page).toHaveURL("/settings?tab=appearance")
+})
+
+test("Questions settings default independently of old Permissions settings and survive reload", async ({ page }) => {
+  const { settings } = await open(page, {
+    seed: {
+      settings: {
+        notifications: { agent: false, permissions: false, errors: true },
+        sounds: { permissionsEnabled: false, permissions: "alert-05" },
+      },
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Notifications", exact: true }).click()
+  await expect(settings.locator('[data-slot="settings-row-title"]')).toHaveText([
+    "Agent",
+    "Permissions",
+    "Questions",
+    "Errors",
+    "Agent",
+    "Permissions",
+    "Questions",
+    "Errors",
+    "Interface",
+  ])
+  const questions = settings.getByRole("switch", { name: "Questions", exact: true })
+
+  const permissions = settings.locator('[data-action="settings-notifications-permissions"]').getByRole("switch")
+
+  const questionSound = settings.locator('[data-action="settings-sounds-questions"]')
+
+  const permissionSound = settings.locator('[data-action="settings-sounds-permissions"]')
+
+  await expect(questions).toBeChecked()
+  await expect(permissions).not.toBeChecked()
+  await expect(questionSound).toHaveText("Staplebops 05")
+  await expect(permissionSound).toHaveText("None")
+  await questions.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(questions).not.toBeChecked()
+  await questionSound.click()
+  await page.getByRole("option", { name: "Alert 02", exact: true }).click()
+  await expect(questionSound).toHaveText("Alert 02")
+
+  await page.reload()
+  await expect(questions).not.toBeChecked()
+  await expect(questionSound).toHaveText("Alert 02")
+  await expect(permissions).not.toBeChecked()
+  await expect(permissionSound).toHaveText("None")
+  await questions.locator("..").locator('[data-slot="switch-control"]').click()
+  await questionSound.click()
+  await page.getByRole("option", { name: "None", exact: true }).click()
+  await expect(questions).toBeChecked()
+  await expect(questionSound).toHaveText("None")
+  await settings.getByRole("combobox", { name: "Search", exact: true }).fill("Questions")
+  await expect(settings.locator('[data-setting-target="settings-notifications-questions"]')).toBeVisible()
+  await expect(settings.locator('[data-setting-target="settings-sounds-questions"]')).toBeVisible()
+})
+
+test("request events use real Questions settings without disabling Permissions alerts", async ({ page }) => {
+  const recorded = await recordNotifications(page)
+
+  const transport = await installSseTransport(page, { server: SERVER })
+
+  const workspace = await openSession(page, {
+    name: "Request notifications",
+    seed: { settings: { sounds: { agentEnabled: false, permissions: "alert-01", questions: "alert-02" } } },
+  })
+
+  await transport.waitForConnection()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await page.getByRole("button", { name: "Settings", exact: true }).click()
+  const settings = page.getByTestId("settings-screen")
+
+  await settings.getByRole("tab", { name: "Notifications", exact: true }).click()
+  const questions = settings.getByRole("switch", { name: "Questions", exact: true })
+
+  await expect(questions).toBeChecked()
+
+  const event = (
+    kind: "question" | "mcp-elicitation" | "websearch.provider" | "permission",
+    index: number,
+  ): OpenCodeEvent => {
+    const base = {
+      id: `evt_request_${index}`,
+      created: 1700000001000 + index,
+      location: { directory: workspace.directory },
+    }
+
+    if (kind === "permission")
+      return {
+        ...base,
+        type: "permission.asked",
+        data: {
+          id: `per_request_${index}`,
+          sessionID: workspace.session.id,
+          action: "shell",
+          resources: ["echo hello"],
+          metadata: {},
+        },
+      }
+
+    return {
+      ...base,
+      type: "form.created",
+      data: {
+        form: {
+          id: `frm_request_${index}`,
+          sessionID: workspace.session.id,
+          title: "Input",
+          metadata: { kind },
+          fields: [{ key: "answer", type: "string", title: "Continue?" }],
+        },
+      },
+    }
+  }
+
+  await transport.send(event("question", 1))
+  await expect
+    .poll(() => recorded.notifications)
+    .toEqual([{ title: "Question requires an answer", body: "Request notifications" }])
+  await expect.poll(() => recorded.sounds).toEqual([expect.stringContaining("alert-02")])
+
+  await settings.locator('[data-action="settings-sounds-questions"]').click()
+  await page.getByRole("option", { name: "None", exact: true }).click()
+  await expect(settings.locator('[data-action="settings-sounds-questions"]')).toHaveText("None")
+  const previews = recorded.sounds.slice()
+
+  await transport.send(event("mcp-elicitation", 2))
+  await expect
+    .poll(() => recorded.notifications.map((item) => item.title))
+    .toEqual(["Question requires an answer", "Input requested"])
+
+  await questions.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(questions).not.toBeChecked()
+  await transport.burst([event("question", 3), event("permission", 4), event("websearch.provider", 5)])
+  await expect
+    .poll(() => recorded.notifications.map((item) => item.title))
+    .toEqual(["Question requires an answer", "Input requested", "Permission required", "Permission required"])
+  await expect
+    .poll(() => recorded.sounds)
+    .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
 })
 
 for (const locale of ["en", "ar"]) {
@@ -349,11 +491,45 @@ test("project list menus rename, edit, add, and stay inside the scrollport", asy
   await settings.getByRole("tab", { name: "Projects", exact: true }).click()
   const panel = settings.getByRole("tabpanel")
   const list = panel.getByRole("list")
-  await expect(list.getByRole("listitem")).toHaveCount(4)
-  const card = list.getByRole("listitem").filter({ hasText: "rebase" })
+  await expect(list.getByRole("listitem")).toHaveCount(1)
+  await expect(list.getByRole("button", { name: "rebase", exact: true })).toBeVisible()
+  const others = panel.getByRole("button", { name: "Other projects", exact: true })
+  await expect(others).toContainText("3")
+  await expect(others).toHaveAttribute("aria-expanded", "false")
+  await others.click()
+  await expect(others).toHaveAttribute("aria-expanded", "true")
+  await expect(panel.getByRole("listitem")).toHaveCount(4)
+  await others.click()
+  const search = panel.getByRole("searchbox", { name: "Search projects" })
+  await search.fill("/projects/dinocms")
+  await expect(panel.getByRole("listitem")).toHaveCount(1)
+  await expect(panel.getByRole("button", { name: "dinocms", exact: true })).toBeVisible()
+  await expect(panel.getByRole("heading", { name: "Other projects", exact: true })).toBeVisible()
+  await search.fill("")
+  await expect(panel.getByRole("listitem")).toHaveCount(1)
+  await others.click()
+  await expect(panel.getByRole("listitem")).toHaveCount(4)
+
+  const addTrigger = panel
+    .getByRole("listitem")
+    .filter({ hasText: "dinocms" })
+    .getByRole("button", { name: "More options", exact: true })
+
+  await addTrigger.focus()
+  await addTrigger.press("Enter")
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitem")).toHaveText(["Add project", "Edit", "Rename"])
+  const addProject = menu.getByRole("menuitem", { name: "Add project", exact: true })
+  await expect(addProject).toBeFocused()
+  await addProject.press("Enter")
+  await expect(menu).toBeHidden()
+  await expect(others).toContainText("2")
+  const addedProjects = panel.getByRole("list").filter({ hasText: "rebase" })
+  await expect(addedProjects.getByRole("listitem")).toHaveCount(2)
+  await expect(addedProjects.getByRole("button", { name: "dinocms", exact: true })).toBeFocused()
+  const card = panel.getByRole("listitem").filter({ hasText: "rebase" })
   const more = card.getByRole("button", { name: "More options", exact: true })
   await more.click()
-  const menu = page.getByRole("menu")
   await expect(menu.getByRole("menuitem")).toHaveText(["Edit", "Rename", "Clear notifications"])
   await menu.getByRole("menuitem", { name: "Edit", exact: true }).click()
   await expect(panel.getByRole("heading", { name: "rebase", exact: true })).toBeVisible()
@@ -403,6 +579,8 @@ test("project list menus rename, edit, add, and stay inside the scrollport", asy
   await select.click()
   await expect(picker).toBeHidden()
   await expect(panel.getByRole("heading", { name: "added", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expect(page.locator('[data-component="home-project-row"]').filter({ hasText: "dinocms" })).toBeVisible()
 })
 
 test("project settings open as a nested view that keeps its route", async ({ page }) => {
@@ -707,7 +885,13 @@ test.describe("pages open before slow data", () => {
         { name: "stripe", integrationID: "stripe-oauth", status: { status: "needs_auth", error: "Sign in required" } },
       ],
       integrations: [
-        { id: "stripe-oauth", name: "Stripe", methods: [{ id: "oauth", type: "oauth" }], connections: [] },
+        {
+          id: "stripe-oauth",
+          name: "Stripe",
+          methods: [{ id: "oauth", type: "oauth" }],
+          connections: [],
+          metadata: { source: "mcp" },
+        },
       ],
       onIntegrationOAuth: (input) => {
         signIns.push(input.integrationID)
@@ -1191,6 +1375,13 @@ test("providers: the connect dialog lists connected providers and manages their 
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
       { id: "anthropic", name: "Anthropic", methods: [{ type: "key", label: "API key" }], connections: [] },
+      {
+        id: "linear",
+        name: "Linear",
+        methods: [{ id: "oauth", type: "oauth", label: "Sign in" }],
+        connections: [],
+        metadata: { source: "mcp" },
+      },
     ],
     onCredentialActivate: (credentialID) => {
       activated.push(credentialID)
@@ -1211,6 +1402,9 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(
     dialog.locator('[data-provider-id="anthropic"]').locator('[data-slot="provider-connected"]'),
   ).toHaveCount(0)
+  // MCP servers connect from the MCPs dialog and settings, not here.
+  await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
+  await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
   await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
   const picker = await container.boundingBox()
@@ -1684,13 +1878,15 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 720, bottom: false },
   { name: "mobile", width: 390, height: 844, bottom: true },
 ]) {
-  test(`settings layout (${viewport.name}): every page scrolls inside its panel with room below`, async ({ page }) => {
+  test(`settings layout (${viewport.name}): every page scrolls inside settings with room below`, async ({ page }) => {
     await page.route("https://api.github.com/repos/anomalyco/opencode/contributors?*", (route) =>
       route.fulfill({ json: [] }),
     )
     const { settings } = await open(page)
     await page.setViewportSize(viewport)
     const panel = settings.locator(".settings-content > .settings-panel:visible")
+    // The wide layout scrolls the whole view beside a sticky sidebar; the narrow one scrolls the page's own panel.
+    const scroller = viewport.name === "desktop" ? settings.locator(":scope > .settings") : panel
     const main = page.getByRole("main")
 
     if (viewport.bottom) {
@@ -1705,10 +1901,15 @@ for (const viewport of [
     await expect(main).toHaveJSProperty("scrollTop", 0)
 
     if (viewport.name === "desktop") {
-      // Wheel over the settings gutter scrolls the page beside it.
+      // Wheel over the settings gutter or the page list scrolls the page beside it.
       await settings.hover({ position: { x: 16, y: 200 } })
       await page.mouse.wheel(0, 200)
-      await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      const top = await scroller.evaluate((element) => element.scrollTop)
+      await settings.getByRole("tab", { name: "Preferences", exact: true }).hover()
+      await page.mouse.wheel(0, 200)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(top)
+      await expect(settings.getByRole("button", { name: "Back to app" })).toBeInViewport()
     }
 
     const pages = [
@@ -1751,7 +1952,7 @@ for (const viewport of [
       await panel.hover()
       await page.mouse.wheel(0, 10000)
       await expect
-        .poll(() => panel.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+        .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
         .toBeLessThanOrEqual(1)
       await expect
         .poll(

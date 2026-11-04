@@ -76,6 +76,14 @@ export function NewSessionView(props: {
 
   const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
 
+  const location = (project?: PromptProject) =>
+    props.location({
+      project,
+      onWorkspace: (value) => {
+        if (value !== "main") setOnboarding("used", true)
+      },
+    })
+
   // Imperative handles for the brick breaker; they are not reactive state.
   const handles: BrickBreakerHandles = {}
   let panel!: HTMLDivElement
@@ -117,13 +125,8 @@ export function NewSessionView(props: {
                       root={props.workspace.project.root()}
                       branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() =>
-                        props.location({
-                          onWorkspace: (value) => {
-                            if (value !== "main") setOnboarding("used", true)
-                          },
-                        })
-                      }
+                      onClick={() => location()}
+                      onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
                     />
                   )}
                 </Show>
@@ -272,7 +275,10 @@ function fitPath(value: string, width: number, font: string) {
   }
 }
 
-/** The composer tray: combined location picker, Git context, and the session's directory. */
+const TRIGGER =
+  "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+
+/** The composer tray: project and worktree pickers, Git context, and the session's directory. */
 function NewSessionLocation(props: {
   project: PromptProject
   /** "main", "create", or a worktree directory. */
@@ -281,10 +287,23 @@ function NewSessionLocation(props: {
   branch?: JSX.Element
   onboarding: boolean
   onClick: () => void
+  /** Opens the project's worktree step; without it the project has no worktrees to choose. */
+  onWorktree?: () => void
 }) {
   const language = useLanguage()
   const command = useCommand()
   const [layout, setLayout] = createStore({ width: 0, font: "" })
+
+  command.register("new-session-worktree", () => [
+    {
+      id: "session.location.select",
+      title: language.t("session.location.worktree"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+alt+o",
+      disabled: !props.onWorktree,
+      onSelect: props.onWorktree,
+    },
+  ])
 
   const worktree = () => {
     if (props.workspace === "main") return
@@ -304,61 +323,101 @@ function NewSessionLocation(props: {
 
   return (
     <div class="relative flex min-h-9 min-w-0 items-center gap-3 ps-2 pe-1.5 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
-      <div class="flex min-w-0 max-w-full flex-wrap items-center gap-1 py-1.5">
-        <Tooltip
-          appearance={props.onboarding ? "large" : undefined}
-          placement="top"
-          openDelay={800}
-          value={
-            props.onboarding ? (
-              <div class="flex flex-col gap-1 text-start">
-                <div class="flex items-center gap-1.5 font-[530] text-v2-text-text-base">
-                  <Icon name="outline-worktree" size="small" class="shrink-0 text-v2-text-text-accent" />
-                  <span>{language.t("workspace.onboarding.title")}</span>
-                </div>
-                <span class="font-[440] text-v2-text-text-muted">{language.t("workspace.onboarding.description")}</span>
-              </div>
-            ) : (
-              language.t("session.new.workspace.trigger.tooltip")
-            )
-          }
-          contentClass={props.onboarding ? "max-w-[280px]" : undefined}
-          class="flex min-w-0 max-w-full"
-        >
-          <button
-            type="button"
-            data-action="prompt-project"
-            aria-haspopup="dialog"
-            aria-description={language.t("session.new.workspace.trigger.tooltip")}
-            class="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
-            onClick={props.onClick}
+      <div class="flex min-w-0 max-w-full flex-wrap items-center gap-x-0 gap-y-1 py-1.5">
+        <div class="flex min-w-0 max-w-full items-center">
+          <Tooltip
+            placement="top"
+            openDelay={800}
+            value={
+              <span class="flex items-center gap-2">
+                {language.t("session.new.project.trigger.tooltip")}
+                <Show when={command.keybindParts("project.select").length}>
+                  <Keybind keys={command.keybindParts("project.select")} variant="neutral" />
+                </Show>
+              </span>
+            }
+            class="flex min-w-0"
           >
-            <ProjectAvatar
-              class="shrink-0"
-              fallback={displayName(props.project)}
-              src={getProjectAvatarSource(props.project.id, props.project.icon)}
-              variant={getProjectAvatarVariant(props.project.icon?.color)}
-              generated={getProjectAvatarGenerated(props.project)}
-            />
-            <span class="min-w-0 truncate">{displayName(props.project)}</span>
-            <Show when={worktree()}>
-              {(name) => (
-                <>
-                  <Slash gap={0} />
-                  <span class="sr-only">{" / "}</span>
-                  <span class="min-w-12 shrink-[1000] truncate">{name()}</span>
-                </>
-              )}
-            </Show>
-            <Show when={props.onboarding}>
-              <span
-                data-slot="workspace-onboarding-dot"
-                aria-hidden="true"
-                class="size-1.5 shrink-0 rounded-full bg-v2-text-text-accent"
+            <button
+              type="button"
+              data-action="prompt-project"
+              aria-haspopup="dialog"
+              aria-description={language.t("session.new.project.trigger.tooltip")}
+              class={`${TRIGGER} min-w-0`}
+              onClick={props.onClick}
+            >
+              <ProjectAvatar
+                class="shrink-0"
+                fallback={displayName(props.project)}
+                src={getProjectAvatarSource(props.project.id, props.project.icon)}
+                variant={getProjectAvatarVariant(props.project.icon?.color)}
+                generated={getProjectAvatarGenerated(props.project)}
               />
-            </Show>
-          </button>
-        </Tooltip>
+              <span class="min-w-0 truncate">{displayName(props.project)}</span>
+            </button>
+          </Tooltip>
+          <Show when={props.onWorktree}>
+            {(onWorktree) => (
+              <>
+                <Slash gap={2} />
+                <Tooltip
+                  appearance={props.onboarding ? "large" : undefined}
+                  placement="top"
+                  openDelay={800}
+                  value={
+                    <div class="flex flex-col gap-1 text-start">
+                      <Show when={props.onboarding}>
+                        <div class="flex items-center gap-1.5 font-[530] text-v2-text-text-base">
+                          <Icon name="outline-worktree" size="small" class="shrink-0 text-v2-text-text-accent" />
+                          <span>{language.t("workspace.onboarding.title")}</span>
+                        </div>
+                        <span class="font-[440] text-v2-text-text-muted">
+                          {language.t("workspace.onboarding.description")}
+                        </span>
+                      </Show>
+                      <span
+                        class="flex items-center justify-between gap-2"
+                        classList={{ "font-[440] text-v2-text-text-muted": props.onboarding }}
+                      >
+                        {language.t("session.location.worktree")}
+                        <Show when={command.keybindParts("session.location.select").length}>
+                          <Keybind keys={command.keybindParts("session.location.select")} variant="neutral" />
+                        </Show>
+                      </span>
+                    </div>
+                  }
+                  contentClass={props.onboarding ? "max-w-[280px]" : undefined}
+                  class="flex min-w-12 shrink-[1000]"
+                >
+                  <button
+                    type="button"
+                    data-action="prompt-worktree"
+                    aria-haspopup="dialog"
+                    aria-description={language.t("session.location.worktree")}
+                    class={`${TRIGGER} min-w-0`}
+                    onClick={onWorktree()}
+                  >
+                    <Icon
+                      name={props.workspace === "create" ? "plus" : worktree() ? "outline-worktree" : "monitor"}
+                      size="small"
+                      class="shrink-0 text-v2-icon-icon-muted"
+                    />
+                    <span class="min-w-0 truncate">
+                      {worktree() ?? language.t("session.new.workspace.triggerLocal")}
+                    </span>
+                    <Show when={props.onboarding}>
+                      <span
+                        data-slot="workspace-onboarding-dot"
+                        aria-hidden="true"
+                        class="size-1.5 shrink-0 rounded-full bg-v2-text-text-accent"
+                      />
+                    </Show>
+                  </button>
+                </Tooltip>
+              </>
+            )}
+          </Show>
+        </div>
         {props.branch}
       </div>
       {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
@@ -366,7 +425,7 @@ function NewSessionLocation(props: {
         {(directory) => (
           <div
             class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
-            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 26}px)` }}
+            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 6}px)` }}
           >
             <Tooltip
               placement="top"
@@ -377,40 +436,24 @@ function NewSessionLocation(props: {
             >
               <span
                 ref={(row) =>
-                  createResizeObserver(row, () => {
-                    const icon = row.querySelector("[data-slot=new-session-location-icon]")
-                    const style = getComputedStyle(row)
-
+                  createResizeObserver(row, () =>
                     setLayout({
-                      width: row.clientWidth - (icon?.clientWidth ?? 0) - parseFloat(style.columnGap),
-                      font: style.font,
-                    })
-                  })
+                      width: row.clientWidth,
+                      font: getComputedStyle(row).font,
+                    }),
+                  )
                 }
-                class="flex min-w-0 flex-1 items-center justify-end gap-1.5"
+                class="flex min-w-0 flex-1 items-center justify-end"
                 dir="ltr"
               >
-                <Tooltip
-                  placement="top"
-                  openDelay={800}
-                  value={
-                    <span class="flex items-center gap-2">
-                      {language.t("session.location.toggle")}
-                      <Keybind keys={command.keybindParts("session.location.cycle")} variant="neutral" />
-                    </span>
-                  }
-                >
-                  <span class="flex shrink-0" data-slot="new-session-location-icon">
-                    <Icon
-                      name={worktree() ? "outline-worktree" : "monitor"}
-                      size="small"
-                      class="text-v2-icon-icon-muted"
-                    />
-                  </span>
-                </Tooltip>
                 <span
                   data-slot="new-session-location-path"
-                  class="min-w-0 overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                  class="min-w-0 cursor-text select-text overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                  onCopy={(event) => {
+                    if (!event.clipboardData || window.getSelection()?.toString() !== fitted().text) return
+                    event.clipboardData.setData("text/plain", directory)
+                    event.preventDefault()
+                  }}
                 >
                   <bdi dir="ltr">{fitted().text}</bdi>
                 </span>

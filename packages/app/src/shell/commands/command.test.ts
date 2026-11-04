@@ -189,6 +189,11 @@ describe("command keybinds", () => {
       event: { key: "а", code: "KeyF", ctrlKey: true, modifierAltGraph: true },
       match: false,
     },
+    // macOS Option turns . into ≥; preserve ASCII layout mappings.
+    { config: "meta+alt+.", event: { key: "≥", code: "Period", metaKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: ".", code: "Period", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: "ю", code: "Period", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: "v", code: "Period", ctrlKey: true, altKey: true }, match: false },
   ])("matchKeybind $config with $event.key is $match", (row) => {
     const event = new KeyboardEvent("keydown", row.event)
 

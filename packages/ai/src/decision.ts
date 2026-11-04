@@ -4,7 +4,8 @@ import { Media } from "./media.js"
 import { tryRequest } from "./media-model.js"
 import {
   AIError,
-  HttpOptions,
+  type BaseRequest,
+  type HttpOptions,
   ModelID,
   ProviderID,
   ProviderMetadata,
@@ -28,8 +29,15 @@ export const DecisionPart = Schema.Union([DecisionTextPart, DecisionJsonPart, De
 )
 export type DecisionPart = Schema.Schema.Type<typeof DecisionPart>
 
+/** A media part as input: `media` may be plain data, with `mediaType` naming its type when the content can't. */
+export type DecisionMediaPartInput = Omit<typeof DecisionMediaPart.Type, "media"> & {
+  readonly media: Media.Input
+  readonly mediaType?: string
+}
+export type DecisionPartInput = Exclude<DecisionPart, { readonly type: "media" }> | DecisionMediaPartInput
+
 /** A plain object is one `json` part. */
-export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPart>
+export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPartInput>
 
 // ---------------------------------------------------------------------------
 // Questions
@@ -161,7 +169,7 @@ export type DecisionOptions = Record<string, unknown>
 /** What a decision model's route does; `DecisionRoute.make(...).model(...)` builds one from a protocol. */
 export interface DecisionModelRoute<Options extends DecisionOptions = DecisionOptions> {
   readonly id: string
-  generate(request: DecisionRequestFor<Options>, execute: Execute): Effect.Effect<DecisionResponse, AIError>
+  generate(request: DecisionRequest<DecisionModel<Options>>, execute: Execute): Effect.Effect<DecisionResponse, AIError>
 }
 
 /** Host quirks a protocol adapts to, like `LanguageModelCompatibility` for language models. */
@@ -238,34 +246,29 @@ export type DecisionModelOptions<Model> = Model extends DecisionModel<infer Opti
 // Request and response
 // ---------------------------------------------------------------------------
 
-export class DecisionRequest extends Schema.Class<DecisionRequest>("Decision.Request")({
+const DecisionRequestSchema = Schema.Struct({
   model: DecisionModelSchema,
   input: Schema.Array(DecisionPart),
   questions: DecisionQuestionList,
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _DecisionRequest: void
-}
+})
 
-export type DecisionRequestFor<
-  Options extends DecisionOptions = DecisionOptions,
-  Questions extends DecisionQuestions = DecisionQuestions,
-> = Omit<DecisionRequest, "model" | "questions" | "providerOptions"> & {
-  readonly model: DecisionModel<Options>
-  readonly questions: Questions
-  readonly providerOptions?: Options
-}
-
-export type DecisionRequestInput<
+/** A normalized decision request, the plain object `ai.decision.request(...)` returns. */
+export interface DecisionRequest<
   Model extends DecisionModel = DecisionModel,
   Questions extends DecisionQuestions = DecisionQuestions,
-> = {
-  readonly model: Model
+> extends BaseRequest<Model, DecisionModelOptions<Model>> {
+  readonly input: ReadonlyArray<DecisionPart>
+  readonly questions: Questions
+}
+
+/** Input accepted by `ai.decision.request` and `generate`. A `DecisionRequest` is also a valid input. */
+export interface DecisionRequestInput<
+  Model extends DecisionModel = DecisionModel,
+  Questions extends DecisionQuestions = DecisionQuestions,
+> extends BaseRequest<Model, NoInfer<DecisionModelOptions<Model>>> {
   readonly input: DecisionInput
   readonly questions: Questions
-  readonly providerOptions?: NoInfer<DecisionModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 /** What decision hosts report; their raw usage stays in the response's `providerMetadata`. */
@@ -291,26 +294,34 @@ export type DecisionResponseFor<Questions extends DecisionQuestions> = Omit<Deci
 // Call API
 // ---------------------------------------------------------------------------
 
-export function request<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
+/** Normalize decision request input into a plain `DecisionRequest`; a plain object `input` becomes one `json` part. */
+export const request = <const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,
-): DecisionRequestFor<DecisionModelOptions<Model>, Questions>
-export function request(input: DecisionRequest): DecisionRequest
-export function request(input: DecisionRequest | DecisionRequestInput): DecisionRequest
-export function request(input: DecisionRequest | DecisionRequestInput) {
-  if (input instanceof DecisionRequest) return input
-  return new DecisionRequest({
-    ...input,
-    input: Array.isArray(input.input) ? input.input : [{ type: "json", value: input.input }],
-    http: HttpOptions.make(input.http),
-  })
+): DecisionRequest<Model, Questions> => ({
+  ...input,
+  input: isParts(input.input) ? input.input.map(decisionPart) : [{ type: "json", value: input.input }],
+})
+
+const validate = Schema.decodeUnknownSync(DecisionRequestSchema)
+
+// `Array.isArray` doesn't narrow a readonly array union, so the object branch would keep the parts type.
+const isParts = (input: DecisionInput): input is ReadonlyArray<DecisionPartInput> => Array.isArray(input)
+
+const decisionPart = (part: DecisionPartInput): DecisionPart => {
+  if (part.type !== "media") return part
+  const { mediaType, ...rest } = part
+  return { ...rest, media: Media.make(part.media, mediaType) }
 }
 
 export function generate<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service>
-export function generate(input: DecisionRequest): Effect.Effect<DecisionResponse, AIError, Service>
-export function generate(input: DecisionRequest | DecisionRequestInput) {
-  return tryRequest(() => request(input)).pipe(Effect.flatMap(DecisionClient.generate))
+export function generate(input: DecisionRequestInput) {
+  return tryRequest(() => {
+    const normalized = request(input)
+    validate(normalized)
+    return normalized
+  }).pipe(Effect.flatMap(DecisionClient.generate))
 }
 
 export const Decision = {

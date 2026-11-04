@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.common.fileCount.one": "{{count}} bestand",
   "ui.common.fileCount.other": "{{count}} bestanden",
   "ui.messagePart.compaction.started": "Sessieverdichting is gestart",
@@ -108,10 +108,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Abonneer je voor $ 10 per maand op OpenCode Go voor betrouwbare toegang tot de beste open-sourcemodellen.",
   "dialog.usageExceeded.freeTier.actionLabel": "Abonneer je",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-limiet bereikt",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Gebruikslimiet bereikt. Schakel betalen met je beschikbare saldo in om dit model nu te blijven gebruiken",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Instellingen openen",
   "ui.sessionTurn.status.delegating": "Werk delegeren",
   "ui.sessionTurn.status.planning": "Volgende stappen plannen",
   "ui.sessionTurn.status.gatheringContext": "Verkennen",

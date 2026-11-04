@@ -43,6 +43,7 @@ export const dict = {
   "home.workspaceTip":
     "Starten Sie die nächste Sitzung in einem neuen Arbeitsbereich, um Änderungen isoliert zu halten",
   "session.tab.add": "Registerkarte hinzufügen",
+  "session.tab.closeOthers": "Andere Tabs schließen",
   "session.queue.attachments.one": "Plus {{count}}-Aufsatz",
   "session.queue.attachments.other": "Plus {{count}}-Anbaugeräte",
   "settings.backToSettings": "Zurück zu den Einstellungen",

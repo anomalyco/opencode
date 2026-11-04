@@ -8,8 +8,9 @@
   "include": [
     "example/**/*.ts",
     "test/**/*.types.ts",
+    "test/loop.test.ts",
+    "test/promise.test.ts",
     "test/testing.test.ts",
-    "test/testing-media.test.ts",
     "test/provider/checkpoint.test.ts"
   ]
 }

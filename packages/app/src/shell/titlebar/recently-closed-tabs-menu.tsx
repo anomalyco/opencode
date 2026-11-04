@@ -4,6 +4,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useQueries } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -23,7 +24,7 @@ export function RecentlyClosedTabsMenu(props: {
   onNewTab: () => void
   tooltip?: JSX.Element
   vertical?: boolean
-  keybind?: string
+  keybind?: string[]
 }) {
   const language = useLanguage()
   const tabs = useTabs()
@@ -48,6 +49,7 @@ export function RecentlyClosedTabsMenu(props: {
   })
 
   const servers = createMemo(() => global.servers.list())
+
   const sessions = useQueries(() => ({
     queries: servers().map((conn) => {
       const ctx = global.serverCtx(ServerConnection.key(conn))
@@ -109,18 +111,15 @@ export function RecentlyClosedTabsMenu(props: {
           type="button"
           data-titlebar-tab-action
           data-action="vertical-tabs-new-session"
-          class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
+          class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
           onClick={props.onNewTab}
           aria-label={language.t("command.session.new")}
         >
           <Icon name="edit" class="shrink-0" />
           <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
-          <span
-            class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-            aria-hidden="true"
-          >
-            <bdi dir="ltr">{props.keybind}</bdi>
-          </span>
+          <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+            <Keybind keys={props.keybind ?? []} variant="neutral" dir="ltr" />
+          </div>
         </Menu.Context.Trigger>
       </Show>
       <Menu.Context.Portal>
@@ -135,7 +134,7 @@ export function RecentlyClosedTabsMenu(props: {
             queueMicrotask(() => search?.focus())
           }}
         >
-          <div class="recently-closed-search mx-1 mb-1" data-empty={!state.query}>
+          <div class="recently-closed-search m-1" data-empty={!state.query}>
             <TextInput
               ref={search}
               type="search"
@@ -234,7 +233,7 @@ function RecentlyClosedTabItem(props: { entry: Pick<ClosedTab, "tab" | "info">; 
   return (
     <Menu.Item class="max-w-56" onSelect={props.onSelect}>
       <span class="flex size-4 shrink-0 items-center justify-center">
-        <SessionTabAvatarView project={project()} directory={directory()} unread={false} loading={false} />
+        <SessionTabAvatarView project={project()} directory={directory()} unread={false} />
       </span>
       <Tooltip
         placement={placement}

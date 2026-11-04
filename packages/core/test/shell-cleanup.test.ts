@@ -6,23 +6,19 @@ import { Shell } from "@opencode/core/shell"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
-import { tmpdir } from "./fixture/tmpdir"
+import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(body: (fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => {
-      const layer = AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
-        Global.node.replace(Global.layerWith({ data: tmp.path })),
-      ])
-      return Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        return yield* body(fs, tmp.path)
-      }).pipe(Effect.provide(layer))
-    },
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  )
+  withTempDir((tmp) => {
+    const layer = AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
+      Global.node.replace(Global.layerWith({ data: tmp.path })),
+    ])
+    return Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      return yield* body(fs, tmp.path)
+    }).pipe(Effect.provide(layer))
+  })
 
 describe("Shell cleanup", () => {
   it.live("removes expired output files across projects", () =>

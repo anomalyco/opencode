@@ -3,6 +3,7 @@ import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import {
   displayName,
   getProjectAvatarGenerated,
@@ -46,12 +47,14 @@ export function useNewSessionLocationDialog(input: {
 }) {
   const dialog = useDialog()
 
-  return (options?: { onWorkspace?: (value: string) => void }) => {
+  /** Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. */
+  return (options?: { project?: PromptProject; onWorkspace?: (value: string) => void }) => {
     void dialog.show(
       () => (
         <NewSessionLocationDialog
           project={input.project}
           workspace={input.workspace}
+          drilled={options?.project}
           onWorkspace={options?.onWorkspace}
         />
       ),
@@ -63,6 +66,7 @@ export function useNewSessionLocationDialog(input: {
 function NewSessionLocationDialog(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
+  drilled?: PromptProject
   onWorkspace?: (value: string) => void
 }) {
   const dialog = useDialog()
@@ -74,6 +78,7 @@ function NewSessionLocationDialog(props: {
 
   const [store, setStore] = createStore<{
     drilled?: PromptProject
+    direct: boolean
     /** Picking the server to add a project to. */
     picking?: boolean
     /** Browsing server projects this client has not added. */
@@ -81,7 +86,13 @@ function NewSessionLocationDialog(props: {
     query: string
     /** The projects view to restore when stepping back out of a project or the server step. */
     back?: { query: string; active: string; others: boolean }
-  }>({ query: "", others: false })
+  }>({
+    query: "",
+    others: false,
+    drilled: props.drilled,
+    direct: !!props.drilled,
+    back: props.drilled ? { query: "", active: projectEntryID(props.drilled), others: false } : undefined,
+  })
 
   const connection = (project: PromptProject) =>
     project.server ? servers.list.find((item) => ServerConnection.key(item) === project.server!.key) : serverSDK.server
@@ -273,6 +284,7 @@ function NewSessionLocationDialog(props: {
     setStore({
       drilled: undefined,
       picking: undefined,
+      direct: false,
       others: store.drilled || store.picking ? (store.back?.others ?? false) : false,
       query: store.drilled || store.picking ? (store.back?.query ?? "") : "",
       back: undefined,
@@ -359,6 +371,14 @@ function NewSessionLocationDialog(props: {
       return
     }
 
+    if (event.key === "Escape" && store.direct && store.drilled) {
+      event.preventDefault()
+      event.stopPropagation()
+      dialog.close()
+
+      return
+    }
+
     if (
       (store.drilled || store.picking || store.others) &&
       ((event.key === backward && atStart) || (event.key === "Backspace" && !target.value) || event.key === "Escape")
@@ -397,7 +417,11 @@ function NewSessionLocationDialog(props: {
           />
         </div>
         <div class="new-session-location-divider" aria-hidden="true" />
-        <div class="command-palette-scroll" data-scrollable ref={(el) => (resultsRef = el)}>
+        <MenuScroll
+          class="min-h-0 flex-1"
+          viewportClass="command-palette-scroll"
+          viewportRef={(el) => (resultsRef = el)}
+        >
           <div id={typeahead.listID} class="command-palette-results" role="listbox">
             <div class="command-palette-group">
               <Show when={title()}>
@@ -555,7 +579,7 @@ function NewSessionLocationDialog(props: {
               </Show>
             </div>
           </div>
-        </div>
+        </MenuScroll>
       </DialogBody>
     </Dialog>
   )

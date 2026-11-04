@@ -7,7 +7,7 @@ import { stripAnsi } from "@opencode/session-ui/tools/ansi"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
-import { useComposerLaneAlignment } from "./composer-lane"
+import { composerLanePlacement, useComposerLaneAlignment } from "./composer-lane"
 import { createShellPanel, createShellTail, type ShellEnd } from "./shell-panel"
 import "./activity-chips.css"
 
@@ -80,7 +80,6 @@ export function SessionActivityChips(props: {
 
   const alignment = useComposerLaneAlignment()
 
-  const placement = () => (({ center: "top", start: "top-start", end: "top-end" }) as const)[alignment()]
 
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
@@ -229,13 +228,14 @@ export function SessionActivityChips(props: {
   return (
     <Show when={active()}>
       <div data-component="session-activity-chips" class="flex min-w-0 shrink items-center">
-        <Menu gutter={8} placement={placement()} open={open()} onOpenChange={changeOpen}>
+        <Menu gutter={8} placement={composerLanePlacement(alignment())} open={open()} onOpenChange={changeOpen}>
           <Menu.Trigger
             as="button"
             type="button"
             data-slot="session-activity-chip"
             aria-label={label()}
-            class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out motion-reduce:animate-none"
+            data-composer-pill
+            class="tabular-nums duration-150 ease-out motion-reduce:animate-none"
             classList={{ "animate-in fade-in": enter() }}
           >
             <SessionProgressIndicatorV2 class="shrink-0" />

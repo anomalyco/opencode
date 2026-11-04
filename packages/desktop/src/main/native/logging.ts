@@ -275,7 +275,8 @@ function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix
 function writeZip(fs: FileSystem.FileSystem, output: string, entries: Entry[]) {
   return Effect.gen(function* () {
     const { BlobReader, BlobWriter, ZipWriter } = yield* Effect.promise(() => import("@zip.js/zip.js"))
-    const writer = new ZipWriter(new BlobWriter("application/zip"))
+    // macOS Archive Utility and ditto reject bit-3 data descriptors without the PK\x07\x08 signature.
+    const writer = new ZipWriter(new BlobWriter("application/zip"), { dataDescriptorSignature: true })
     yield* Effect.forEach(
       entries,
       (entry) =>

@@ -1,13 +1,6 @@
-import type { OpenCodeClient } from "@opencode/client/promise"
+import { mediaHashFromUri, type OpenCodeClient } from "@opencode/client/promise"
 
-const MEDIA_REF = /^media:([0-9a-f]{64})$/
-
-/** The blob hash in a `media:<hash>` ref, the only form the server sends stored media in. */
-export function mediaHashFromUri(uri: string | undefined): string | undefined {
-  if (!uri) return undefined
-
-  return MEDIA_REF.exec(uri)?.[1]
-}
+export { mediaHashFromUri }
 
 export type MediaCache = {
   peek(uri: string, mime?: string): string | undefined

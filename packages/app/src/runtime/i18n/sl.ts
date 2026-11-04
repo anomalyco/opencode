@@ -767,6 +767,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migriram podatke {{current}}/{{total}}",
   "home.workspaceTip": "Za naslednjo sejo začnite v novem delovnem prostoru, da ohranite spremembe ločene",
   "session.tab.add": "Dodaj zavihek",
+  "session.tab.closeOthers": "Zapri druge zavihke",
   "session.queue.attachments.one": "Še {{count}} priponka",
   "session.queue.attachments.other": "Še {{count}} priponk",
   "settings.backToSettings": "Nazaj na nastavitve",

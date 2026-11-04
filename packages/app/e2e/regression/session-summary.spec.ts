@@ -128,7 +128,6 @@ test("the project menu loads changes on demand and opens review", async ({ page 
     "main",
     /1 Changed file.*\+7.*-3/,
     "",
-    "This computer",
     "C:/OpenCode/ProjectChanges",
     "",
     "Edit project",
@@ -323,7 +322,6 @@ for (const direction of ["ltr", "rtl"] as const) {
     for (const [name, empty] of [
       ["Plugins", "No plugins configured"],
       ["Skills", "No skills configured"],
-      ["LSP", "No LSP servers configured"],
     ]) {
       await summary.getByRole("button", { name, exact: true }).click()
       await expect(page.getByRole("group", { name, exact: true }).getByText(empty, { exact: true })).toBeVisible()
@@ -331,7 +329,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     }
 
     await page.keyboard.press("Escape")
-    await expect(page.getByRole("group", { name: "LSP", exact: true })).toBeHidden()
+    await expect(page.getByRole("group", { name: "Skills", exact: true })).toBeHidden()
     await page.keyboard.press("Escape")
     await expect(summary).toBeHidden()
 
@@ -345,19 +343,6 @@ for (const direction of ["ltr", "rtl"] as const) {
 test("summary catalogs load, refresh while cached, and tell errors from empty", async ({ page }) => {
   const state = { fail: true, extra: false, empty: false }
   const pluginDirectories: string[] = []
-
-  const lsp = [
-    {
-      type: "document",
-      info: {
-        lsp: {
-          typescript: { command: ["typescript-language-server", "--stdio"] },
-          rust: { command: ["rust-analyzer"] },
-        },
-      },
-    },
-    { type: "document", info: { lsp: { rust: { disabled: true } } } },
-  ]
 
   await mockStressTimeline(page, {
     mcp: () => (state.empty ? [] : [{ name: "summary-mcp", status: { status: "connected" } }]),
@@ -396,7 +381,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
             { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
             { id: "review-animations", name: "review-animations", path: "/skills/review/SKILL.md", content: "Review" },
           ],
-    configEntries: lsp,
   })
   await page.route(
     (url) => url.pathname === "/api/plugin",
@@ -450,10 +434,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   await expect(menu("Skills").getByText("find-skills", { exact: true })).toBeVisible()
   await expect(menu("Skills").getByText("review-animations", { exact: true })).toBeVisible()
   await expect(menu("Plugins")).toBeHidden()
-  await open("LSP")
-  await expect(menu("LSP").getByText("typescript", { exact: true })).toBeVisible()
-  await expect(menu("LSP").getByText("rust", { exact: true })).toHaveCount(0)
-  await expect(menu("LSP").locator(".session-service-dot")).toHaveCount(0)
   await open("MCP")
   await expect(
     menu("MCP").locator('[data-slot="truncated-text-label"]').filter({ hasText: "summary-mcp" }),
@@ -463,7 +443,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     { name: "MCP", path: "/api/mcp", item: "summary-mcp" },
     { name: "Plugins", path: "/api/plugin", item: "supermemory" },
     { name: "Skills", path: "/api/skill", item: "find-skills" },
-    { name: "LSP", path: "/api/config", item: "typescript" },
   ]) {
     await expectRefreshKeeps(page, service.name, service.path, service.item)
   }
@@ -473,13 +452,11 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   await expect(menu("Plugins").getByText("daytona", { exact: true })).toBeVisible()
 
   state.empty = true
-  lsp.length = 0
 
   for (const service of [
     { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured" },
     { name: "Plugins", path: "/api/plugin", empty: "No plugins configured" },
     { name: "Skills", path: "/api/skill", empty: "No skills configured" },
-    { name: "LSP", path: "/api/config", empty: "No LSP servers configured" },
   ]) {
     await open(service.name)
     await expectRefreshKeeps(page, service.name, service.path, service.empty)
@@ -557,6 +534,8 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
       }
     })
     .toEqual({ width: 6, height: 6, alignment: 0, gap: 8 })
+  // Like every other control in the menu, a row that toggles its server keeps the default cursor.
+  await expect(row("figma")).not.toHaveCSS("cursor", "pointer")
   await page.screenshot({ path: test.info().outputPath("mcp-toggles.png"), animations: "disabled" })
 
   for (const [index, target] of ["label", "dot", "padding", "control", "keyboard"].entries()) {
@@ -567,7 +546,11 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
         ? await holdRoute(page, /\/api\/experimental\/mcp\/figma\/disconnect(?:\?|$)/, { method: "POST" })
         : undefined
 
-    if (target === "label") await row("figma").locator('[data-slot="truncated-text-label"]').click()
+    if (target === "label") {
+      await row("figma").locator('[data-slot="truncated-text-label"]').click()
+      // A name that fits has nothing to reveal, so a click on it leaves no focus ring of its own.
+      await expect(row("figma").locator('[data-component="tooltip-v2-trigger"]')).not.toBeFocused()
+    }
 
     if (target === "dot") await row("figma").locator(".session-service-dot").click()
 
@@ -673,11 +656,15 @@ test("Extensions lists open on hover, hold course into the open list, and follow
 test("Extensions lists open config files and skills in a side tab and start setup sessions", async ({ page }) => {
   const global = "C:/Users/kit/.config/opencode/opencode.jsonc"
   const skill = `${fixture.directory}/.opencode/skills/release-notes/SKILL.md`
+  let builtinReads = 0
 
   await mockStressTimeline(page, {
     mcp: [{ name: "atlas-search", status: { status: "connected" } }],
     plugins: [],
-    skills: [{ id: "release-notes", name: "release-notes", path: skill, content: "Release notes" }],
+    skills: [
+      { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "# Built-in OpenCode guide" },
+      { id: "release-notes", name: "release-notes", path: skill, content: "Release notes" },
+    ],
     configEntries: [
       {
         type: "document",
@@ -688,6 +675,16 @@ test("Extensions lists open config files and skills in a side tab and start setu
       { type: "document", path: `${fixture.directory}/.opencode/opencode.jsonc`, info: { mcp: {} } },
     ],
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+  })
+
+  await page.route(/\/api\/fs\/read\/SKILL\.md(\?|$)/, (route) => {
+    builtinReads += 1
+
+    return route.fulfill({
+      status: 404,
+      json: { message: "Location not found: skill://opencode" },
+      headers: cors,
+    })
   })
   await page.goto(sessionHref(fixture.targetID))
   const trigger = page.getByRole("button", { name: "Session details", exact: true })
@@ -707,9 +704,19 @@ test("Extensions lists open config files and skills in a side tab and start setu
 
   await trigger.click()
   await row("Skills").hover()
-  await list("Skills").getByRole("button", { name: "release-notes", exact: true }).click()
+  await list("Skills").getByRole("button", { name: "OpenCode", exact: true }).click()
   await expect(summary).toBeHidden()
   await expect(page.getByRole("tab", { name: "SKILL.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("heading", { name: "Built-in OpenCode guide", exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+  expect(builtinReads).toBe(0)
+
+  await trigger.click()
+  await row("Skills").hover()
+  await list("Skills").getByRole("button", { name: "release-notes", exact: true }).click()
+  await expect(summary).toBeHidden()
+  await expect(page.getByRole("tab", { name: "SKILL.md", selected: true, exact: true })).toBeVisible()
+  await expect(page.getByText("contents:.opencode/skills/release-notes/SKILL.md", { exact: true })).toBeVisible()
 
   // An empty list offers a draft session in the global configuration's directory, its prompt filled in.
   await trigger.click()
@@ -752,7 +759,6 @@ test.describe("remote configuration", () => {
       { type: "document", path: `${home}/mcp.jsonc`, info: { mcp: { servers: {} } } },
       { type: "document", path: `${home}/plugins.json`, info: { plugins: [] } },
       { type: "document", path: `${home}/skills.jsonc`, info: { skills: [] } },
-      { type: "document", path: `${home}/lsp.json`, info: { lsp: false } },
       { type: "document", path: `${fixture.directory}/opencode.json`, info: {} },
       { type: "document", path: `${fixture.directory}/.opencode/agents/review.md`, info: {} },
     ]
@@ -777,7 +783,6 @@ test.describe("remote configuration", () => {
       { name: "MCP", path: `${home}/mcp.jsonc` },
       { name: "Plugins", path: `${home}/plugins.json` },
       { name: "Skills", path: `${home}/skills.jsonc` },
-      { name: "LSP", path: `${home}/lsp.json` },
     ].entries()) {
       await trigger.click()
       const item = summary.getByRole("button", { name: service.name, exact: true })
@@ -841,7 +846,14 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   await summary.getByRole("button", { name: "MCP", exact: true }).click()
   const menu = page.getByRole("group", { name: "MCP", exact: true })
   await expect(menu.locator(".session-mcp-row")).toHaveCount(30)
-  await expect.poll(() => menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  const list = menu.locator("[data-scrollable]")
+  await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  // Long names truncate; the list only scrolls vertically.
+  expect(await list.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0)
+  // The submenu shows and moves without motion unless its Knobs toggle is on.
+  expect(
+    await page.locator(".session-service-flyout").evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toBe("0s")
   await expect
     .poll(async () => {
       const bounds = (await menu.boundingBox())!

@@ -240,10 +240,6 @@
   grid-row: 2;
 }
 
-[data-component="dialog-v2"]:has(.fork-dialog) [data-slot="dialog-container"] {
-  border-radius: 10px;
-}
-
 .fork-dialog [data-slot="search-list-search"] {
   padding: 6px 6px 9px;
 
