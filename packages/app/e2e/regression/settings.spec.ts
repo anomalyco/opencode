@@ -1645,6 +1645,24 @@ test("providers: the account options rename and remove the active account", asyn
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
+test("providers: a disconnect that finds no stored credentials keeps the provider connected", async ({ page }) => {
+  // No integration lists OpenRouter, so the server's integration lookup reports no credentials to remove.
+  const { settings } = await open(page, {
+    provider: { all: [{ id: "openrouter", name: "OpenRouter", models: {} }], connected: ["openrouter"], default: {} },
+    integrations: [],
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const connected = settings.locator('[data-component="connected-providers-section"]')
+  const disconnect = connected.getByRole("button", { name: "Disconnect", exact: true })
+  await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
+
+  await disconnect.click()
+  await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
+  await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
+  await expect(disconnect).toBeVisible()
+})
+
 test("providers: switching to a Zen API key does not wait for a Console workspace", async ({ page }) => {
   const accounts = [
     { type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" },
