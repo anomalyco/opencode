@@ -85,7 +85,7 @@ impl Data {
 }
 
 /// The list read's shell type has the same fields as the event's.
-pub(crate) fn from_list(info: ShellInfo1) -> ShellInfo {
+pub(crate) fn from_list(info: ShellInfo) -> ShellInfo {
     ShellInfo {
         id: info.id,
         status: info.status,

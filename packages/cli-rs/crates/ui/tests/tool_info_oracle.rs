@@ -2,7 +2,7 @@
 //! them through the Rust port, and compares with the TypeScript output in `parity/fixtures/U.5/tool-info.json`.
 //! Regenerate it with `bun run fixtures`.
 
-use opencode_api::generated::types::SessionMessageAssistantTool;
+use opencode_api::generated::types::{SessionMessageAssistantTool, ToolContent};
 use opencode_ui::tool_info::{
     ToolInline, execute_call_summary, execute_calls, primitive_input_summary, read_display_text,
     tool_inline_info, tool_output_text, tool_path, web_search_provider_label,
@@ -85,7 +85,17 @@ fn tool_display_helpers_match_typescript() {
     let cases = |name: &str| helpers[name].as_array().unwrap().clone();
 
     for case in cases("toolOutputText") {
-        let actual = tool_output_text(str_of(&case["name"]), case["content"].as_array().unwrap());
+        // The corpus has partial items such as `{ "type": "file" }`; those stay unknown, as the TypeScript
+        // helper reads only `type`.
+        let content: Vec<ToolContent> = case["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                serde_json::from_value(item.clone()).unwrap_or(ToolContent::Unknown(item.clone()))
+            })
+            .collect();
+        let actual = tool_output_text(str_of(&case["name"]), &content);
         assert_eq!(
             actual,
             str_of(&case["expected"]),

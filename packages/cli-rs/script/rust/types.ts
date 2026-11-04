@@ -41,6 +41,8 @@ export class Types {
   private readonly visiting = new Set<string>()
   // Anonymous objects and unions by shape, so equal shapes (such as every `location` query) share one type.
   private readonly shapes = new Map<string, string>()
+  // The tag key of every generated tagged enum, so an outer union can delegate `tag()` to an inner one.
+  private readonly taggedKeys = new Map<string, string>()
 
   constructor(private readonly references: SchemaRepresentation.References) {}
 
@@ -114,6 +116,19 @@ export class Types {
   private reference(ref: string): string {
     const existing = this.referenced.get(ref)
     if (existing !== undefined) return existing
+    // The same schema reached through SSE and REST can come out as `Ref` and `Ref_1`, differing only in
+    // what Rust does not see (JSON vs unknown, finiteness checks). Such twins share one type, as
+    // httpapi-codegen collapses them (`packages/httpapi-codegen/src/index.ts:1436-1449`).
+    const base = ref.replace(/_\d+$/, "")
+    if (
+      base !== ref &&
+      this.references[base] !== undefined &&
+      this.sameRust(this.references[ref], this.references[base])
+    ) {
+      const type = this.reference(base)
+      this.referenced.set(ref, type)
+      return type
+    }
     if (this.visiting.has(ref)) throw new Error(`Recursive schema reference is not supported: ${ref}`)
     this.visiting.add(ref)
     const target = this.references[ref]
@@ -148,6 +163,13 @@ export class Types {
 
   private arrays(r: SchemaRepresentation.Arrays, hint: string): string {
     if (r.elements.length === 0 && r.rest.length === 1) return `Vec<${this.type(r.rest[0], `${hint}Item`)}>`
+    // `Schema.NonEmptyArray(T)` is `[T, ...T[]]`: leading elements of the rest type are still a list of T.
+    if (
+      r.rest.length === 1 &&
+      r.elements.every((element) => !element.isOptional && this.sameRust(element.type, r.rest[0]))
+    ) {
+      return `Vec<${this.type(r.rest[0], `${hint}Item`)}>`
+    }
     if (r.rest.length === 0 && r.elements.every((element) => !element.isOptional)) {
       return `(${r.elements.map((element, index) => `${this.type(element.type, `${hint}${index}`)},`).join(" ")})`
     }
@@ -216,6 +238,81 @@ export class Types {
     return { type: inner, attrs: [] as Array<string> }
   }
 
+  /**
+   * Whether two representations produce the same Rust type: it ignores annotations and checks other
+   * than `isInt`, treats unknown, any, and declarations alike, and follows references with equal base names.
+   * It also ignores what the JSON transport adds on the REST side (see `wire`).
+   */
+  sameRust(left: R, right: R, seen = new Set<string>()): boolean {
+    const a = wire(left)
+    const b = wire(right)
+    if (a._tag === "Suspend") return this.sameRust(a.thunk, b, seen)
+    if (b._tag === "Suspend") return this.sameRust(a, b.thunk, seen)
+    if (a._tag === "Reference" || b._tag === "Reference") {
+      if (a._tag !== "Reference" || b._tag !== "Reference") return false
+      if (a.$ref.replace(/_\d+$/, "") !== b.$ref.replace(/_\d+$/, "")) return false
+      const pair = `${a.$ref}\0${b.$ref}`
+      if (a.$ref === b.$ref || seen.has(pair)) return true
+      seen.add(pair)
+      return this.sameRust(this.references[a.$ref], this.references[b.$ref], seen)
+    }
+    // `type()` maps all three to `serde_json::Value`.
+    const value = (r: R) => ["Unknown", "Any", "Declaration"].includes(r._tag)
+    if (value(a) || value(b)) return value(a) && value(b)
+    if (a._tag !== b._tag) return false
+    switch (a._tag) {
+      case "Number":
+        return integer(a) === integer(b as SchemaRepresentation.Number)
+      case "Literal":
+        return a.literal === (b as SchemaRepresentation.Literal).literal
+      case "Arrays": {
+        const other = b as SchemaRepresentation.Arrays
+        return (
+          a.elements.length === other.elements.length &&
+          a.rest.length === other.rest.length &&
+          a.elements.every(
+            (element, index) =>
+              element.isOptional === other.elements[index].isOptional &&
+              this.sameRust(element.type, other.elements[index].type, seen),
+          ) &&
+          a.rest.every((item, index) => this.sameRust(item, other.rest[index], seen))
+        )
+      }
+      case "Objects": {
+        const other = b as Objects
+        return (
+          a.propertySignatures.length === other.propertySignatures.length &&
+          a.indexSignatures.length === other.indexSignatures.length &&
+          a.propertySignatures.every((property, index) => {
+            const peer = other.propertySignatures[index]
+            return (
+              property.name === peer.name &&
+              property.isOptional === peer.isOptional &&
+              this.sameRust(property.type, peer.type, seen)
+            )
+          }) &&
+          a.indexSignatures.every((index, i) => this.sameRust(index.type, other.indexSignatures[i].type, seen))
+        )
+      }
+      case "Union": {
+        const other = b as SchemaRepresentation.Union
+        return (
+          a.types.length === other.types.length &&
+          a.types.every((type, index) => this.sameRust(type, other.types[index], seen))
+        )
+      }
+      case "TemplateLiteral": {
+        const other = b as SchemaRepresentation.TemplateLiteral
+        return (
+          a.parts.length === other.parts.length &&
+          a.parts.every((part, index) => this.sameRust(part, other.parts[index], seen))
+        )
+      }
+      default:
+        return true
+    }
+  }
+
   /** A union. `ref` names the reference it defines, if any. */
   union(r: SchemaRepresentation.Union, hint: string, ref: string | undefined): string {
     const members = flatten(r.types).filter(
@@ -279,10 +376,13 @@ export class Types {
       const parts = member.map((objects) => one(objects, key))
       if (parts.some((part) => part === undefined)) return undefined
       if (member.length === 1) return parts[0]
-      // A nested union joins only when all its objects share one exact tag, which `tag()` then returns.
-      const exact = [...new Set(parts.flatMap((part) => part!.exact))]
-      if (exact.length !== 1 || parts.some((part) => part!.prefixes.length > 0)) return undefined
-      return { exact, prefixes: [] }
+      // A nested union contributes every tag of its objects. With one shared tag (`Session.Message.Compaction`)
+      // `tag()` returns it; with several (`Session.Event.Durable` in `SessionLogItem`) the inner enum must be
+      // tagged by the same key, and `tag()` delegates to it.
+      return {
+        exact: [...new Set(parts.flatMap((part) => part!.exact))],
+        prefixes: [...new Set(parts.flatMap((part) => part!.prefixes))],
+      }
     }
     const keys = members[0][0].propertySignatures.map((p) => String(p.name))
     const ordered = [
@@ -359,10 +459,23 @@ export class Types {
       ...arms.filter((arm) => !arm.includes("starts_with")),
       ...arms.filter((arm) => arm.includes("starts_with")),
     ]
+    const arm = (variant: string, index: number) => {
+      if (this.deref(members[index])._tag !== "Union")
+        return `            Self::${variant}(value) => value.${snake(tag.key)}.as_str(),`
+      const value = tag.values[index]
+      if (value.exact.length === 1 && value.prefixes.length === 0) {
+        return `            Self::${variant}(_) => ${JSON.stringify(value.exact[0])},`
+      }
+      if (this.taggedKeys.get(types[index]) !== tag.key) {
+        throw new Error(`${name}::${variant} has several \`${tag.key}\` tags, but ${types[index]} is not tagged by it`)
+      }
+      return `            Self::${variant}(value) => value.tag(),`
+    }
+    this.taggedKeys.set(name, tag.key)
     const tagMethod =
       kind === "boolean"
         ? ""
-        : `\n\nimpl ${name} {\n    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map((variant, index) => (this.deref(members[index])._tag === "Union" ? `            Self::${variant}(_) => ${JSON.stringify(tag.values[index].exact[0])},` : `            Self::${variant}(value) => value.${snake(tag.key)}.as_str(),`)).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }\n}`
+        : `\n\nimpl ${name} {\n    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map(arm).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }\n}`
     const doc = ref === undefined ? "" : `/// \`${ref}\`, tagged by \`${tag.key}\`.\n`
     this.items.push(
       `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n        match value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::${access}) {\n${ordered.join("\n")}\n            _ => Ok(Self::Unknown(value)),\n        }\n    }\n}${tagMethod}`,
@@ -373,6 +486,7 @@ export class Types {
   private untagged(members: Array<R>, seed: string, ref: string | undefined) {
     const name = this.name(seed)
     const seen = new Map<string, string>()
+    const guards = new Map<string, Array<[string, string | boolean]>>()
     for (const member of members) {
       const resolved = this.deref(member)
       const variant =
@@ -406,13 +520,57 @@ export class Types {
       let unique = variant
       for (let index = 2; seen.has(unique); index++) unique = `${variant}${index}`
       seen.set(unique, type)
+      guards.set(unique, resolved._tag === "Objects" ? this.literalFields(resolved) : [])
     }
+    // Members are tried in schema order, as serde's untagged enums and Effect's unions do. A member whose
+    // required literal field (`disabled: true`) holds another value is skipped, since the Rust field is a
+    // plain `bool` or `String`; otherwise `{ command, disabled: false }` would decode as `{ disabled }`.
+    const attempts = [...seen.keys()].map((variant) => {
+      const checks = guards
+        .get(variant)!
+        .map(
+          ([key, literal]) =>
+            `value.get(${JSON.stringify(key)}) == Some(&serde_json::json!(${JSON.stringify(literal)}))`,
+        )
+      const attempt = `if let Ok(member) = serde_json::from_value(value.clone()) {\n            return Ok(Self::${variant}(member));\n        }`
+      return checks.length === 0
+        ? `        ${attempt}`
+        : `        if ${checks.join(" && ")} {\n            ${attempt.replaceAll("\n", "\n    ")}\n        }`
+    })
     const doc = ref === undefined ? "" : `/// \`${ref}\`\n`
     this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]\n#[serde(untagged)]\npub enum ${name} {\n${[...seen].map(([variant, type]) => `    ${variant}(${type}),`).join("\n")}\n    /// A shape this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}`,
+      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${[...seen].map(([variant, type]) => `    ${variant}(${type}),`).join("\n")}\n    /// A shape this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n${attempts.join("\n")}\n        Ok(Self::Unknown(value))\n    }\n}`,
     )
     return name
   }
+
+  /** The required fields of an object whose schema is one string or boolean literal. */
+  private literalFields(r: Objects): Array<[string, string | boolean]> {
+    return r.propertySignatures.flatMap((property): Array<[string, string | boolean]> => {
+      if (property.isOptional) return []
+      const type = this.deref(property.type)
+      if (type._tag !== "Literal" || (typeof type.literal !== "string" && typeof type.literal !== "boolean")) return []
+      return [[String(property.name), type.literal]]
+    })
+  }
+}
+
+/**
+ * A union as Rust decodes it. `null` and `undefined` members are alike (`Option` accepts both), and the
+ * JSON transport's non-finite number literals beside a number are dropped, so `Number` on the SSE side
+ * equals `Number | "Infinity" | "-Infinity" | "NaN"` on the REST side.
+ */
+function wire(r: R): R {
+  if (r._tag !== "Union") return r
+  const members = flatten(r.types)
+  const number = members.some((member) => member._tag === "Number")
+  const kept = members.flatMap((member): Array<R> => {
+    if (member._tag === "Null") return [{ ...member, _tag: "Undefined" } as R]
+    if (number && member._tag === "Literal" && ["Infinity", "-Infinity", "NaN"].includes(String(member.literal)))
+      return []
+    return [member]
+  })
+  return kept.length === 1 ? kept[0] : { ...r, types: kept }
 }
 
 function flatten(types: ReadonlyArray<R>): Array<R> {
