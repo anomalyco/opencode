@@ -762,6 +762,61 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(missingTab).toHaveCount(0)
 })
 
+// A change reported while a file's read is in flight used to join that read, so the tab kept the bytes from before the
+// change until the next change.
+test("a file changed during its read shows the change", async ({ page }) => {
+  const reads: string[] = []
+  const arrived = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<void>()
+
+  const messages = [
+    { id: "msg_prompt", type: "user", text: "Update the lists", time: { created: 1 } },
+    {
+      id: "msg_reply",
+      type: "assistant",
+      agent: "build",
+      model: { id: "test", providerID: "opencode" },
+      content: [{ type: "text", text: "Updated [notes.txt](notes.txt) and [shopping.txt](shopping.txt)." }],
+      time: { created: 2, completed: 3 },
+    },
+  ] satisfies SessionMessageInfo[]
+
+  const workspace = await openSession(page, {
+    name: "FileReadRace",
+    fileList: () => [],
+    fileContent: async (path) => {
+      reads.push(path)
+
+      if (path !== "shopping.txt") return `contents:${path}`
+
+      if (reads.filter((item) => item === path).length > 1) return "after change"
+      arrived.resolve()
+      await held.promise
+
+      return "before change"
+    },
+    pageMessages: () => ({ items: messages }),
+  })
+
+  const panel = page.locator("#review-panel")
+  await page.getByRole("link", { name: "notes.txt", exact: true }).click()
+  await expect(panel.getByText("contents:notes.txt", { exact: true })).toBeVisible()
+
+  await page.getByRole("link", { name: "shopping.txt", exact: true }).click()
+  await arrived.promise
+  // Events arrive in order, so the reread of notes.txt shows that the change to shopping.txt was handled before it.
+  await workspace.push([
+    filesystemEvent(workspace.directory, "shopping.txt", "change"),
+    filesystemEvent(workspace.directory, "notes.txt", "change"),
+  ])
+  await expect.poll(() => reads.filter((item) => item === "notes.txt").length).toBe(2)
+  held.resolve()
+
+  await expect(panel.getByRole("tab", { name: "shopping.txt" })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("after change", { exact: true })).toBeVisible()
+  await expect(panel.getByText("before change", { exact: true })).toHaveCount(0)
+})
+
 test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
   page,
   context,
@@ -1045,7 +1100,9 @@ test("Markdown and DOCX sheets stay aligned when switching at wide and narrow pr
     await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
     await expect.poll(() => edges(markdown)).toEqual(reference)
     await expect.poll(() => toolbar.boundingBox()).toEqual(header)
-    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(true)
+    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(
+      true,
+    )
     await panel.getByRole("tab", { name: "other.docx", exact: true }).click()
     await expect(word).toHaveAttribute("data-e2e-probe", "other-warm")
     await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
