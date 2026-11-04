@@ -138,6 +138,12 @@ fn run(recording: &Recording) -> (bool, String) {
             Step::Type { text } => app.type_text(text),
             Step::Paste { paste } => app.paste(paste),
             Step::Click { click } => app.click(click[0], click[1]),
+            Step::RightClick {
+                right_click: [x, y],
+            } => {
+                app.mouse(MouseEventKind::Down(MouseButton::Right), *x, *y);
+                app.mouse(MouseEventKind::Up(MouseButton::Right), *x, *y);
+            }
             Step::Event { event } => memory.emit(event),
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
             Step::Ide { ide: message } => {
