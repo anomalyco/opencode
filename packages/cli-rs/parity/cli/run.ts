@@ -40,6 +40,11 @@ export type CliCase = {
   // Compare only the first lines of stderr, when what follows names each client's own internals (a JS stack
   // trace, the output of a different child process). The case says why.
   stderrLines?: number
+  // Files written into the working directory before the run, by relative path.
+  files?: Record<string, string | Uint8Array>
+  // Replacements applied to stdout and stderr after the normalizers, for values that differ per run (a
+  // `Date.now()` timestamp). Each says why in the scenario.
+  masks?: { pattern: RegExp; replacement: string }[]
 }
 
 export function defineCli(value: CliCase) {
@@ -50,6 +55,9 @@ export type CliRecord = Awaited<ReturnType<typeof runCli>>
 
 export async function runCli(side: Side, value: CliCase) {
   const box = await sandbox(value.env)
+  await Promise.all(
+    Object.entries(value.files ?? {}).map(([file, content]) => Bun.write(path.join(box.cwd, file), content)),
+  )
   const server = value.server ? await startFakeServer(value.server) : undefined
   const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
@@ -67,13 +75,17 @@ export async function runCli(side: Side, value: CliCase) {
   await server?.stop()
   await rm(box.root, { recursive: true, force: true })
   const context = { server: server?.url, root: box.root }
+  const mask = (text: string) =>
+    (value.masks ?? []).reduce((current, item) => current.replace(item.pattern, item.replacement), text)
   return {
     exit,
     ...(proc.signalCode ? { signal: proc.signalCode } : {}),
-    stdout: normalize(stdout, context),
-    stderr: normalize(
-      value.stderrLines === undefined ? stderr : stderr.split("\n").slice(0, value.stderrLines).join("\n"),
-      context,
+    stdout: mask(normalize(stdout, context)),
+    stderr: mask(
+      normalize(
+        value.stderrLines === undefined ? stderr : stderr.split("\n").slice(0, value.stderrLines).join("\n"),
+        context,
+      ),
     ),
     requests: requestLog(server?.requests ?? [], context),
   }
