@@ -145,7 +145,7 @@ impl Transcript {
             thinking_syntax: thinking_syntax(&syntax, theme.text.muted),
             syntax,
             theme,
-            renderers: CodeBlockRenderers::default(),
+            renderers: crate::plugins::host::code_blocks(tui),
             conceal: session.markdown.unwrap_or(MarkdownMode::Rendered) == MarkdownMode::Rendered,
             tps: tui.config.tps,
             turn_tokens: tui
