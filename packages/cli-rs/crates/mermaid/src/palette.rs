@@ -1,6 +1,6 @@
 //! The diagram palette from the TUI theme (`palette.ts`).
 
-use opencode_ui::theme::Theme;
+use opencode_ui::theme::{Theme, ThemeMode};
 use opentui::prelude::Color;
 
 use crate::core::color::{blend, with_alpha};
@@ -69,12 +69,11 @@ impl Palette {
         }
     }
 
-    /// `resolveOpenCodeDiagramPalette`. TS takes the mode from the plugin context; the Rust plugin API
-    /// passes only the theme, so a page background lighter than half luminance means light mode.
-    pub fn from_theme(theme: &Theme) -> Self {
+    /// `resolveOpenCodeDiagramPalette`, with the mode from the plugin context (`context.themeMode`).
+    pub fn from_theme(theme: &Theme, mode: ThemeMode) -> Self {
         let categorical = theme.categorical();
         let accent = categorical.get(3).or(categorical.first());
-        let dark = !is_light(theme.background.base);
+        let dark = mode == ThemeMode::Dark;
         let (soft, clear) = match accent {
             Some(scale) if dark => (scale.step(300), scale.step(200)),
             Some(scale) => (scale.step(700), scale.step(800)),
@@ -91,9 +90,4 @@ impl Palette {
             accent_clear: clear,
         })
     }
-}
-
-fn is_light(color: Color) -> bool {
-    let luminance = 0.2126 * f64::from(color.r) + 0.7152 * f64::from(color.g) + 0.0722 * f64::from(color.b);
-    luminance > 127.5
 }

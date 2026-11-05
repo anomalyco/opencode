@@ -2,7 +2,7 @@
 //! fence and a command that panic, so the loader's tests can show a panic is caught. The `v2` feature changes
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 
-use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, Toast, export_plugin};
+use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Toast, export_plugin};
 
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
@@ -34,6 +34,14 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         Some(lines.collect())
     });
     setup.code_block("sample-panic", |_| panic!("sample fence panicked"));
+    setup.code_block("sample-mode", move |_| {
+        let mode = match host.theme_mode() {
+            Some(ThemeMode::Dark) => "dark",
+            Some(ThemeMode::Light) => "light",
+            None => "unknown",
+        };
+        Some(vec![vec![Span::new(format!("sample mode {mode}"))]])
+    });
     setup.slot(SlotKind::Append, "home.footer", |_| {
         vec![vec![Span::new(format!("sample plugin {VERSION}: home.footer")).fg("text.muted")]]
     });

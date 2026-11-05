@@ -72,7 +72,7 @@ fn diagrams_match_typescript() {
     let styles: Vec<String> =
         corpus["styles"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect();
     let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
-    let palette = Palette::from_theme(&theme);
+    let palette = Palette::from_theme(&theme, ThemeMode::Dark);
     let only = std::env::var("MERMAID_ONLY").ok();
     let mut failures: Vec<String> = Vec::new();
     let mut total = 0;

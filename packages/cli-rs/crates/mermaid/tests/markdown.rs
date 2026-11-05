@@ -16,7 +16,7 @@ use opentui::testing::TestApp;
 fn streaming_fence_keeps_its_last_diagram() {
     let app = TestApp::new(80, 20);
     let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
-    let palette = Palette::from_theme(&theme);
+    let palette = Palette::from_theme(&theme, ThemeMode::Dark);
     let renderer = Renderer::default();
     let block = |code: &'static str, previous| opentui::widget::CodeBlock {
         app: &app,
@@ -48,7 +48,7 @@ fn dragging_scrolls_a_wide_diagram() {
     let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
     let source = "flowchart LR\n  A[Alpha] --> B[Bravo] --> C[Charlie]";
     // Laid out for a wide terminal, so it stays horizontal in the narrow view.
-    let Rendered::Diagram(diagram) = render(source, 120, &Palette::from_theme(&theme)) else {
+    let Rendered::Diagram(diagram) = render(source, 120, &Palette::from_theme(&theme, ThemeMode::Dark)) else {
         panic!("a diagram");
     };
     app.root().add(&widget(&app, &diagram));
@@ -78,7 +78,7 @@ fn markdown_diagrams_match_typescript() {
         },
     );
     let syntax = code::syntax_theme(&theme);
-    let palette = Palette::from_theme(&theme);
+    let palette = Palette::from_theme(&theme, ThemeMode::Dark);
     let renderer = Renderer::default();
     let mut renderers = markdown::CodeBlockRenderers::default();
     renderers
