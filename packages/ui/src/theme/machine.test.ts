@@ -307,7 +307,11 @@ test("a slow import shows the default theme, keeps the cached colors, and still 
 })
 
 test("a failed import shows the default theme, keeps the cached colors, and loads again when selected", () => {
-  const failed = run(start({ themeId: "tokyonight" }).state, { type: "theme.load.failed", id: "tokyonight", attempt: 1 })
+  const failed = run(start({ themeId: "tokyonight" }).state, {
+    type: "theme.load.failed",
+    id: "tokyonight",
+    attempt: 1,
+  })
 
   expect(selectThemeId(failed.state, bundled)).toBe("oc-2")
   expect(failed.effects).toEqual([
@@ -366,6 +370,7 @@ test("a slow or failed import never clears the cached colors of the selected bun
   expect(storage(cached.effects).at(-1)).toEqual({ type: "clear-cache" })
 
   const unknown = start({ themeId: "tokyonight" }).state
+
   const outcomes = [
     run(unknown, { type: "theme.load.timed-out", id: "tokyonight", attempt: 1 }),
     run(unknown, { type: "theme.load.failed", id: "tokyonight", attempt: 1 }),
