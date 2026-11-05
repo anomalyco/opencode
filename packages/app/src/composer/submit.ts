@@ -517,8 +517,12 @@ function restoreSubmission(
   input.removeFromHistory(value.prompt, value.mode, submission.comments)
   target.set(prompt, promptLength(prompt))
   target.mode.set(value.mode)
-  target.context.replaceComments(
-    submission.draft.context.filter(isCommentItem).map((item): ContextItem => {
+  const sent = new Set(submission.draft.context.map((item) => item.key))
+
+  // In the order it was sent: an unedited resend must send the same request, which the retry ID's fingerprint names.
+  // Files listed since the send stay after it; comments the draft gained since are replaced, as before.
+  target.context.replace([
+    ...submission.draft.context.map((item): ContextItem => {
       if (item.type === "quote")
         return {
           type: "quote",
@@ -551,20 +555,13 @@ function restoreSubmission(
         commentID: item.commentID,
         commentOrigin: item.commentOrigin,
         preview: item.preview,
-      }
-    }),
-  )
-  submission.draft.sources.forEach((item) => target.quoteSource.add(item.key, item.source))
-  submission.draft.context.forEach((item) => {
-    if (item.type === "file" && !item.comment?.trim())
-      target.context.add({
-        type: "file",
-        path: item.path,
-        selection: item.selection,
         name: item.name,
         description: item.description,
-      })
-  })
+      }
+    }),
+    ...target.context.items().filter((item) => !isCommentItem(item) && !sent.has(item.key)),
+  ])
+  submission.draft.sources.forEach((item) => target.quoteSource.add(item.key, item.source))
 
   // Only a prompt was admitted under its ID. A recovered follow-up changes the payload, so it needs a new one.
   if (submission.kind.type === "prompt" && !following)

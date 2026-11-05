@@ -425,6 +425,43 @@ describe("Composer submission", () => {
     expect(state.retry.current()).toBeUndefined()
   })
 
+  test("an unedited resend after a failed send keeps its ID and its file order", async () => {
+    const state = createMemoryComposerState({ prompt: "review these" }).capture()
+    state.context.add({ type: "file", path: "src/a.ts" })
+    state.context.add({ type: "file", path: "src/b.ts", comment: "Check this", commentID: "b" })
+    const keys = state.context.items().map((item) => item.key)
+    const sent: string[] = []
+    const failed = { settled: Promise.withResolvers<void>() }
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          prompt: async (value) => {
+            sent.push(value.id ?? "")
+            throw new Error("offline")
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.settled.resolve() },
+    )
+
+    const send = async () => {
+      failed.settled = Promise.withResolvers<void>()
+      sent.length = 0
+      await submission.submit(new Event("submit"))
+      await failed.settled.promise
+
+      return sent[0]
+    }
+
+    const first = await send()
+    // Restoring used to list the commented file first, so the resend fingerprinted differently and took a new ID.
+    expect(state.context.items().map((item) => item.key)).toEqual(keys)
+    expect(await send()).toBe(first)
+  })
+
   test("a failed server command restores its draft without a retry ID, which it never sent", async () => {
     const state = createMemoryComposerState({ prompt: "/review" }).capture()
     const failed = Promise.withResolvers<void>()
@@ -792,9 +829,10 @@ describe("Composer submission", () => {
     expect(calls).toEqual([...submitted, ...submitted])
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
+    // In the order it was sent, so the resend's request matches the first.
     expect(state.context.items()).toMatchObject([
-      note,
       { type: "file", path: "notes.md", description: "the failing version" },
+      note,
     ])
     // The caret returns after the mention text; attachments take no caret positions.
     expect(state.cursor()).toBe(17)
