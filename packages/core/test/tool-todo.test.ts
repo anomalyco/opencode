@@ -30,7 +30,12 @@ const it = testEffect(
 const setup = (experimental: ConfigExperimental.Info | undefined) =>
   Effect.gen(function* () {
     yield* registerToolPlugin(TodoTool.Plugin, { event: { subscribe: () => Stream.never } }).pipe(
-      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
+      Effect.provide(
+        Layer.mock(Config.Service)({
+          entries: () => Effect.succeed([document(experimental)]),
+          snapshot: () => [document(experimental)],
+        }),
+      ),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
     return yield* Tool.Service

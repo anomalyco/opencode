@@ -9,15 +9,48 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { BtwFailure } from "./machine"
 import type { BtwModel } from "./model"
 
 export default function SessionBtwPanel(props: { btw: BtwModel; session: MountedSession; id: string }) {
   const ctx = usePlugin()
   const i18n = useI18n()
   const system = ctx.system
-  const chat = () => props.btw.entry(props.session, props.id)
+  const view = createMemo(() => props.btw.view(props.session, props.id))
+
+  const chat = createMemo(() => {
+    const current = view()
+
+    return current.phase === "loading" || current.phase === "missing" ? undefined : current
+  })
+
+  const running = createMemo(() => view().phase === "running")
+
+  const failure = createMemo(() => {
+    const current = view()
+
+    return current.phase === "failed" ? current.failure : undefined
+  })
+
+  const answered = createMemo(() => {
+    const current = view()
+
+    return current.phase === "answered" ? current : undefined
+  })
+
   const question = () => chat()?.question
-  const answer = () => chat()?.answer
+  const answer = () => answered()?.answer
+
+  const failureDetail = (value: BtwFailure) => {
+    if (value.reason === "empty") return ctx.t("error.empty")
+
+    if (value.reason === "timeout") return ctx.t("error.timeout")
+
+    if (value.reason === "error") return value.message
+
+    return undefined
+  }
+
   // New primitive tokens clear the copied mark when text changes without being proxied by the store.
   const shownQuestion = createMemo(on(question, () => Symbol()))
   const shownAnswer = createMemo(on(answer, () => Symbol()))
@@ -63,7 +96,7 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   })
 
   const durationLabel = createMemo(() => {
-    const ms = chat()?.duration
+    const ms = answered()?.duration
 
     if (ms === undefined || !(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
@@ -147,7 +180,7 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
           </div>
 
           <Switch>
-            <Match when={props.btw.pending(props.id)}>
+            <Match when={running()}>
               <div
                 data-component="session-working"
                 role="status"
@@ -156,19 +189,26 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
                 <TextShimmer text={ctx.t("session.timeline.working")} active />
               </div>
             </Match>
-            <Match when={props.btw.error(props.session, props.id)}>
-              <div class="flex flex-col items-start gap-3 pt-4">
-                <div class="text-13-regular text-text-weak">{ctx.t("error")}</div>
-                <Button size="small" variant="outline" onClick={() => props.btw.retry(props.session, props.id)}>
-                  {ctx.t("retry")}
-                </Button>
-              </div>
+            <Match when={failure()}>
+              {(current) => (
+                <div class="flex flex-col items-start gap-3 pt-4">
+                  <div class="flex flex-col gap-1">
+                    <div class="text-13-regular text-text-weak">{ctx.t("error")}</div>
+                    <Show when={failureDetail(current())}>
+                      {(detail) => <div class="text-12-regular text-text-weak break-words">{detail()}</div>}
+                    </Show>
+                  </div>
+                  <Button size="small" variant="outline" onClick={() => props.btw.retry(props.session, props.id)}>
+                    {ctx.t("retry")}
+                  </Button>
+                </div>
+              )}
             </Match>
-            <Match when={answer()}>
-              {(text) => (
+            <Match when={answered()}>
+              {(reply) => (
                 <div data-component="text-part">
                   <div data-slot="text-part-body">
-                    <Markdown text={text()} class="text-14-regular" />
+                    <Markdown text={reply().answer} class="text-14-regular" />
                   </div>
                   <div data-slot="text-part-copy-wrapper">
                     <Tooltip

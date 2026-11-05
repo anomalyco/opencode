@@ -55,7 +55,8 @@ export interface MockServerConfig {
   onCredentialActivate?: (credentialID: string) => void
   // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
   onCredentialUpdate?: (credentialID: string, body: { label?: string }) => void
-  onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  // Runs on POST /api/integration/:id/connect/key; returning `{ error }` rejects the key with a 400 and that message.
+  onConnectKey?: (input: { integrationID: string; body: unknown }) => void | { error: string }
   // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
   // Background shell commands (`GET /api/shell`).
@@ -118,6 +119,8 @@ export interface MockServerConfig {
   onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
+  // Runs on DELETE .../connect/oauth/:attemptID, which closes an OAuth attempt the dialog left.
+  onIntegrationOAuthCancel?: (attemptID: string) => void
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -142,6 +145,9 @@ export interface MockServerConfig {
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  // POST /api/session/:id/fork creates `<id>_fork` in the same directory. The hook may hold the request, or return an
+  // answer to replace the response.
+  onFork?: (input: { sessionID: string; body: Schema.JsonObject }) => void | MockAnswer | Promise<void | MockAnswer>
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
@@ -730,6 +736,27 @@ function mockHandlers(
           return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
+      .handleRaw("sessionFork", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const body = Option.getOrElse(decodeJsonObject(input), (): Schema.JsonObject => ({}))
+          const answer = yield* Effect.promise(async () => config.onFork?.({ sessionID: ctx.params.sessionID, body }))
+
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+
+          const parent = config.sessions.find((item) => item.id === ctx.params.sessionID)
+          const id = `${ctx.params.sessionID}_fork`
+
+          const forked = currentSession(
+            { ...parent, id, title: `${parent?.title ?? ctx.params.sessionID} (fork)` },
+            config.directory,
+          )
+
+          if (!config.sessions.some((item) => item.id === id)) config.sessions.push(forked)
+
+          return HttpServerResponse.jsonUnsafe({ data: forked })
+        }),
+      )
       .handleAll({
         info: () =>
           Effect.succeed({
@@ -779,9 +806,13 @@ function mockHandlers(
             },
           })),
         integrationConnect: (ctx) =>
-          Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
-            Effect.andThen(noContent),
-          ),
+          Effect.suspend(() => {
+            const rejected = config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })
+
+            if (rejected) return Effect.fail(new MockBadRequest({ message: rejected.error }))
+
+            return noContent
+          }),
         integrationOAuthConnect: (ctx) => {
           const start = config.onIntegrationOAuth
 
@@ -820,6 +851,9 @@ function mockHandlers(
               },
             })
           }),
+        integrationOAuthCancel: (ctx) =>
+          Effect.sync(() => config.onIntegrationOAuthCancel?.(ctx.params.attemptID)).pipe(Effect.andThen(noContent)),
+        integrationConnectExternal: () => noContent,
         credentialActivate: (ctx) =>
           Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialUpdate: (ctx) =>
@@ -1042,7 +1076,13 @@ function mockHandlers(
         // Like the server, which also answers 204 for a shell that already ended.
         shellRemove: () => noContent,
         persistentPtyList: (ctx) =>
-          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+          persistentPtyEnabled.pipe(
+            Effect.andThen(() =>
+              state.persistentPty.listFails
+                ? Effect.fail(new MockInternal({ message: "Listing terminals failed" }))
+                : Effect.succeed({ data: state.persistentPty.list(ctx.params.sessionID) }),
+            ),
+          ),
         persistentPtyCreate: (ctx) =>
           persistentPtyEnabled.pipe(
             Effect.map(() => {
@@ -1573,6 +1613,7 @@ const decodeSession = Schema.decodeUnknownSync(
       Schema.Struct({
         created: lenient(Schema.Number),
         updated: lenient(Schema.Number),
+        busy: lenient(Schema.Number),
         idle: lenient(Schema.Number),
         viewed: lenient(Schema.Number),
         archived: Schema.optionalKey(Schema.Unknown),

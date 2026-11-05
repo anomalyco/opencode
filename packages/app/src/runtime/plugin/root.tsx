@@ -1,7 +1,6 @@
 import { batch, createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { pluginEnabled, runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
+import { runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
 import { builtins } from "./builtins"
-import { createInstalled } from "./installed"
 import { PluginGuiLoader, type PluginGui } from "./plugins"
 import { createMenubarItems, MenubarItemsProvider } from "./menubar-items"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -48,7 +47,6 @@ export function PluginRoot(props: ParentProps) {
   const menubar = createMenubarItems(bridge)
   const ipcs = createIpcClients(bridge)
   onCleanup(ipcs.dispose)
-  const installed = createInstalled(bridge)
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
@@ -70,22 +68,7 @@ export function PluginRoot(props: ParentProps) {
     },
   )
 
-  // Only enable preferences cross this boundary.
-  const disabled = createMemo(() => {
-    const state = installed.enableState()
-
-    if (!state) return undefined
-
-    return new Set(
-      definitions().flatMap((definition) =>
-        pluginEnabled({ id: definition.id, builtin: builtins.some((builtin) => builtin.id === definition.id) }, state)
-          ? []
-          : [definition.id],
-      ),
-    )
-  })
-
-  const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
+  const builtinIds = new Set(builtins.map((builtin) => builtin.id))
 
   return (
     <HostApisContext.Provider value={apis}>
@@ -104,13 +87,15 @@ export function PluginRoot(props: ParentProps) {
       >
         <PluginHostProvider
           definitions={definitions}
-          disabled={disabled}
+          bridge={bridge}
+          builtins={builtinIds}
+          servers
           apis={apis.apis}
           whenMounted={apis.whenMounted}
           ipc={bridge ? (token) => ipcs.client(token) : undefined}
           plugin={(id) => plugins()?.find((plugin) => plugin.definition.id === id)}
           generation={ipcs.generation}
-          failed={failed}
+          ipcFailed={ipcs.failed}
         >
           <PluginStyles />
           <PluginThemes loaded={() => plugins() !== undefined} />
@@ -120,7 +105,7 @@ export function PluginRoot(props: ParentProps) {
             </Suspense>
           )}
           <MenubarItemsProvider value={menubar}>
-            <PluginServersProvider failed={failed}>{props.children}</PluginServersProvider>
+            <PluginServersProvider>{props.children}</PluginServersProvider>
           </MenubarItemsProvider>
         </PluginHostProvider>
       </PluginsContext.Provider>

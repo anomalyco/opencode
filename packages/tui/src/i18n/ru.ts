@@ -672,6 +672,10 @@ export const dict = {
   "tui.dialogs.copyAuthorization": "Скопировать данные авторизации",
   "tui.dialogs.authorizationExpired": "Срок действия авторизации истек",
   "tui.dialogs.waitingAuthorization": "Ожидание авторизации…",
+  "tui.dialogs.redirectURL": "URL перенаправления",
+  "tui.dialogs.copyAuthorizationLink": "Скопировать ссылку авторизации",
+  "tui.dialogs.waitingAuthorizationPaste":
+    "Ожидание авторизации… Нажмите Enter, чтобы открыть ссылку. Если браузер не может подключиться к этому компьютеру, вставьте URL, на который он был перенаправлен.",
   "tui.dialogs.authorizationCode": "Код авторизации",
   "tui.dialogs.openHint": "открыть",
   "tui.dialogs.openLinkAgain": "Открыть ссылку еще раз",

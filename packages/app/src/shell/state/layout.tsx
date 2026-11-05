@@ -129,8 +129,6 @@ const sessionViewSchema = Persistence.struct({
   reviewOpen: Schema.optional(Persistence.array(Schema.String)),
   reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   reviewFile: Schema.optional(Schema.String),
-  pendingMessage: Schema.optional(Schema.String),
-  pendingMessageAt: Schema.optional(Schema.Finite),
 })
 
 export const layoutSchema = Persistence.struct({
@@ -313,7 +311,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     )
 
     const MAX_SESSION_KEYS = 50
-    const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
 
     const usage: SessionKeyUsage = {
       active: undefined,
@@ -517,53 +514,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
-        },
-      },
-      pendingMessage: {
-        set(sessionKey: string, messageID: string) {
-          const at = Date.now()
-          touch(sessionKey)
-          const current = store.sessionView[sessionKey]
-
-          if (!current) {
-            setStore("sessionView", sessionKey, {
-              scroll: {},
-              pendingMessage: messageID,
-              pendingMessageAt: at,
-            })
-            prune(usage.active ?? sessionKey)
-
-            return
-          }
-
-          setStore(
-            "sessionView",
-            sessionKey,
-            produce((draft) => {
-              draft.pendingMessage = messageID
-              draft.pendingMessageAt = at
-            }),
-          )
-        },
-        consume(sessionKey: string) {
-          const current = store.sessionView[sessionKey]
-          const message = current?.pendingMessage
-          const at = current?.pendingMessageAt
-
-          if (!message || !at) return
-
-          setStore(
-            "sessionView",
-            sessionKey,
-            produce((draft) => {
-              delete draft.pendingMessage
-              delete draft.pendingMessageAt
-            }),
-          )
-
-          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
-
-          return message
         },
       },
       /** The side region of a shell tab, and the session panel width beside it. */

@@ -178,6 +178,10 @@ export const dict = {
   "tui.dialogs.copyAuthorization": "Copy authorization details",
   "tui.dialogs.authorizationExpired": "Authorization expired",
   "tui.dialogs.waitingAuthorization": "Waiting for authorization…",
+  "tui.dialogs.redirectURL": "Redirect URL",
+  "tui.dialogs.copyAuthorizationLink": "Copy authorization link",
+  "tui.dialogs.waitingAuthorizationPaste":
+    "Waiting for authorization… Press enter to open the link. If the browser can't reach this machine, paste the URL it was redirected to.",
   "tui.dialogs.authorizationCode": "Authorization code",
   "tui.dialogs.openHint": "open",
   "tui.dialogs.openLinkAgain": "Open link again",

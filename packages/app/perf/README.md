@@ -7,14 +7,15 @@ build on the e2e mock server, so they need no backend.
 
 | File                  | Cases                                                                                                                                                                                         | Workload                                                           |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `timeline.bench.ts`   | scroll history · type in composer · find in session · expand an edit                                                                                                                          | A 120-turn session of markdown, code, tools and diffs.             |
-| `stream.bench.ts`     | stream a reply · into a tool-heavy history · with review open                                                                                                                                 | 160 markdown deltas at 40 a second from a server that never waits. |
-| `tabs.bench.ts`       | switch tab (warm, review open, after a resize, 1,200 models) · open an unvisited tab (± review)                                                                                               | Two tabs of 200 long markdown exchanges each, loaded in full.      |
+| `timeline.bench.ts`   | scroll history · type in composer · find in session · expand an edit · drag the review's edge                                                                                                 | A 120-turn session of markdown, code, tools and diffs.             |
+| `stream.bench.ts`     | stream a reply · into a tool-heavy history · with review open · with Find open · wait on a running session                                                                                    | 160 markdown deltas at 40 a second from a server that never waits. |
+| `tabs.bench.ts`       | switch tab (warm, review open, after a resize, 1,200 models) · away and back with review open · open an unvisited tab (± review)                                                              | Two tabs of 200 long markdown exchanges each, loaded in full.      |
 | `navigation.bench.ts` | Home → session · close the last tab · new session (Home, titlebar) · new session page in and out · child session · restore 8 tabs · activate a restored tab · command palette (session, Home) | The stress fixture, paginated, from a fresh document every run.    |
 | `home.bench.ts`       | load home · update a session in the background                                                                                                                                                | 500, 5,000 and 10,000 root sessions across 12 folders.             |
 | `review.bench.ts`     | open review · filter files · next file                                                                                                                                                        | 100 and 10,000 changed files of 100 lines each.                    |
 | `diff.bench.ts`       | open a long diff · open a huge diff · return to a long diff                                                                                                                                   | A 1,559-line diff, highlighted; a 15,599-line one, plain.          |
 | `composer.bench.ts`   | type in a large draft · move the cursor in it · recall a prompt from history                                                                                                                  | A 44,000-character saved draft; 100 prompts with screenshots.      |
+| `docks.bench.ts`      | open and close request docks                                                                                                                                                                  | A permission dock and an MCP elicitation over a 20-turn session.   |
 | `desktop.bench.ts`    | idle                                                                                                                                                                                          | The packaged desktop app, every process, doing nothing for 5 s.    |
 
 Every case decides `main.work` (renderer main-thread task time per run) unless it says otherwise: it is continuous,
@@ -69,10 +70,21 @@ strobe bench packages/desktop/perf/startup.bench.ts --target desktop --base app:
 bun packages/core/perf/snapshot.ts medium opencode
 strobe bench packages/core/perf/snapshot.bench.ts --base origin/dev --head .
 
-# The interactive report, and the tables and rerun command for a pull request body.
+# The interactive report, and the results block in pull request <n> (see "In a pull request").
 strobe report experiment <exp_…> --open
-strobe report experiment <exp_…> --format pr
+strobe report experiment <exp_…> --format pr --update-pr <n>
 ```
+
+### In a pull request
+
+Write the PR's own text: what strobe showed that led to the change (the command and recording id), and what the change
+does. Then `strobe report experiment <exp_…> --format pr --update-pr <n>` adds strobe's generated results block to PR
+`n`'s body, or replaces that experiment's block after a rerun, and leaves the rest of the body alone. Don't edit inside
+the block (strobe refuses to update a hand-edited one); put your reading of the numbers above or below it. Without
+`--update-pr`, the block goes to stdout for pasting.
+
+Every page target expects the `OpenCode` title (`expect`): a block that lands on another page (an error page, a blank
+document) is refused `WrongScreen` instead of timed, and the block's `On screen:` line says what each block showed.
 
 `bunx strobe` runs the strobe version pinned in the root catalog (`@hona/strobe`), which ships builds for Windows x64,
 macOS (arm64, x64) and Linux (x64, arm64); a `strobe` on your PATH also works. Script cases (core, ui) run the same on
