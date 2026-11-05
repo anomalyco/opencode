@@ -754,6 +754,7 @@ impl Mini {
         let mini = self.clone();
         let command = prompt.command.is_some();
         let text = prompt.text.clone();
+        let sent = prompt.clone();
         self.app.spawn(
             async move {
                 if !command {
@@ -769,8 +770,11 @@ impl Mini {
             },
             move |cx, result| match result {
                 Ok(()) => {
-                    mini.prompt.admitted(&id, delivery);
-                    mini.paint_status();
+                    // `session.command` answers without the inbox item; its event adds it.
+                    if !command {
+                        mini.prompt.admitted(&id, delivery, &sent);
+                        mini.paint_status();
+                    }
                     let output = mini
                         .transcript
                         .borrow_mut()
