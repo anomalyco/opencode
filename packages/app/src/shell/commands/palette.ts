@@ -438,6 +438,7 @@ export function createServerSessionEntries(props: {
       // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
       // per known session on every keystroke is what made search slow once the loaded index grew.
       const value = search.toLowerCase()
+
       const matched = known()
         .filter((session) => (session.title || props.untitled()).toLowerCase().includes(value))
         .slice(0, ENTRY_LIMIT * 10)

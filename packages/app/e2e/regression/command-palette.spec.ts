@@ -139,7 +139,9 @@ test("titlebar search asks for one bounded result set after a pause in typing", 
     const url = new URL(request.url())
 
     if (request.method() !== "GET" || url.pathname !== "/api/session") return
+
     if (!url.searchParams.get("search")) return
+
     searches.push(url)
   })
   await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
@@ -156,8 +158,10 @@ test("titlebar search asks for one bounded result set after a pause in typing", 
       url.searchParams.get("search") === "Palette fixture"
     )
   })
+
   // A burst of input in one task is one pause: every keystroke must supersede the last, and only the pause searches.
   await input.evaluate((element) => {
+    // SAFETY: the dialog's combobox is SearchList's own text input, which is an HTMLInputElement.
     const field = element as HTMLInputElement
     const value = "Palette fixture"
 

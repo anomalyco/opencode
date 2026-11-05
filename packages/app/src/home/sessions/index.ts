@@ -34,7 +34,7 @@ export async function loadHomeSessionIndex(
 
 // Keep this filter for locally known sessions merged into the fetched index.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {
-  return sessions.filter((session) => !session.parentID && typeof session.time.archived !== "number")
+  return sessions.filter((session) => !session.parentID && session.time.archived === undefined)
 }
 
 export function mergeHomeSessionIndex(fetched: SessionInfo[], known: SessionInfo[]) {

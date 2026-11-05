@@ -12,6 +12,7 @@ import {
 } from "./index"
 
 const session = (id: string, input: Partial<SessionInfo> = {}) =>
+  // SAFETY: fixtures spell every other field of the info they model, and each test only reads those fields.
   ({
     id,
     projectID: "project",
@@ -56,6 +57,7 @@ describe("Home session index", () => {
 
   test("keeps each directory's newest sessions within the page", async () => {
     const busy = history("/busy", 300)
+
     const quiet = history("/quiet", 3).map((item) => ({
       ...item,
       time: { created: item.time.created - 6000 * minute, updated: item.time.updated - 6000 * minute },
