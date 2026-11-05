@@ -116,6 +116,34 @@ impl RunPrompt {
         }
     }
 
+    /// `promptAppend`: `following` after a blank line, its mentions shifted along. The result is a normal
+    /// prompt that keeps this prompt's command, or the following one's when this text is empty.
+    pub fn append(&self, following: &RunPrompt) -> Self {
+        let text = if self.text.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n\n", self.text)
+        };
+        let offset = opencode_ui::prompt_input::parse::measure(&text);
+        let shifted = following.parts.iter().cloned().map(|mut part| {
+            if let Some(mention) = part.mention_mut() {
+                mention.start += offset;
+                mention.end += offset;
+            }
+            part
+        });
+        Self {
+            command: if self.text.is_empty() {
+                following.command.clone()
+            } else {
+                self.command.clone()
+            },
+            text: text + &following.text,
+            parts: self.parts.iter().cloned().chain(shifted).collect(),
+            ..Self::default()
+        }
+    }
+
     /// `promptSame`.
     pub fn same(&self, other: &RunPrompt) -> bool {
         self.shell == other.shell
@@ -324,5 +352,48 @@ mod tests {
         assert_eq!(back.files(), prompt.files());
         assert_eq!(back.agents(), prompt.agents());
         assert!(back.has_file());
+    }
+
+    #[test]
+    fn append_shifts_the_following_mentions() {
+        let general = |start, end| Part::Agent {
+            name: "general".into(),
+            mention: Some(Mention {
+                start,
+                end,
+                text: "@general".into(),
+            }),
+        };
+        let command = |name: &str| {
+            Some(Command {
+                name: name.into(),
+                arguments: String::new(),
+                source: None,
+            })
+        };
+        let undone = RunPrompt {
+            text: "ask @general".into(),
+            parts: vec![general(4, 12)],
+            command: command("later"),
+            ..RunPrompt::default()
+        };
+        let draft = RunPrompt {
+            shell: true,
+            command: command("draft"),
+            ..RunPrompt::text("héllo")
+        };
+        let next = draft.append(&undone);
+        assert_eq!(next.text, "héllo\n\nask @general");
+        // "héllo\n\n" is seven offsets.
+        assert_eq!(next.parts, [general(11, 19)]);
+        assert_eq!(next.command, command("draft"));
+        assert!(!next.shell);
+        // Into an empty draft: unchanged offsets and the undone prompt's command.
+        let next = RunPrompt::default().append(&undone);
+        assert_eq!(
+            (next.text.as_str(), next.parts.clone()),
+            ("ask @general", vec![general(4, 12)])
+        );
+        assert_eq!(next.command, command("later"));
     }
 }
