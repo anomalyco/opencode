@@ -360,7 +360,11 @@ export function createTimelineController(input: { session: TimelineSessionSource
 
       if (effect.type === "session.removed") {
         void navigateAfterRemoval(effect.sessionID, effect.target.parentID, effect.target.nextID)
-        notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: effect.target.removedIDs })
+        notifySessionTabsRemoved({
+          server: server.key,
+          directory: sdk().directory,
+          sessionIDs: [...effect.target.removedIDs],
+        })
 
         return
       }
