@@ -10,12 +10,14 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::generated::{
-    AgentInfo, ModelInfo, ModelRef, SessionID, SessionInboxInfo, SessionMessageAssistant,
-    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageInfo,
+    AgentInfo, ModelInfo, ModelRef, SessionID, SessionInboxInfo, SessionInfo, SessionMessageAssistant,
+    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID,
+    SessionMessageInfo, SessionStructuredError,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
@@ -99,9 +101,17 @@ struct Inner {
     specs: RefCell<Vec<Spec>>,
     /// Each row's mount cost (`rowWeight`).
     weights: RefCell<Vec<usize>>,
+    /// Each visible message's position at the last render (`Context::index`).
+    positions: RefCell<HashMap<String, usize>>,
+    /// Each visible message's [`shape`] at the last render, by position.
+    shapes: RefCell<Vec<u64>>,
+    /// The visible messages have no idle marker (`legacy`), at the last render.
+    legacy: Cell<bool>,
     rows: RefCell<HashMap<RowKey, Row>>,
     /// The keys of the scroll box's children, in order.
     mounted: RefCell<Vec<RowKey>>,
+    /// The mounted rows that show each message, by index in `specs`.
+    refs: RefCell<HashMap<String, Vec<usize>>>,
     start: RefCell<Start>,
     /// Where the mounted window ends, by row index, when it stops before the newest row
     /// (`visibleRowsEnd`): `session.first` mounts the head only.
@@ -186,8 +196,12 @@ impl Transcript {
             location: RefCell::default(),
             specs: RefCell::default(),
             weights: RefCell::default(),
+            positions: RefCell::default(),
+            shapes: RefCell::default(),
+            legacy: Cell::new(true),
             rows: RefCell::default(),
             mounted: RefCell::default(),
+            refs: RefCell::default(),
             start: RefCell::new(Start::Tail),
             end: Cell::new(None),
             pin: RefCell::default(),
@@ -216,6 +230,12 @@ impl Transcript {
             return;
         }
         let force = changes.messages(session) || changes.session(session) || catalogs || pending || permissions;
+        if !force
+            && let Some(messages) = changes.message.get(session)
+            && self.0.patch(tui, session, messages)
+        {
+            return;
+        }
         self.0.render(tui, |message| force || changes.message(session, message));
     }
 
@@ -520,31 +540,13 @@ impl Inner {
         let Some(session) = self.session.borrow().clone() else {
             return;
         };
-        let (width, _) = tui.app.size();
-        let mode = tui.theme.borrow().mode();
-        // The keymap's conditions read the store, so shortcuts are looked up before it is locked.
-        let keys = Keys {
-            background: tui.keymap.shortcut("session.background"),
-            redo: tui.keymap.shortcut("session.redo"),
-            model_list: tui.keymap.shortcut("model.list"),
-        };
+        let keys = Keys::read(tui);
         let stops = tui.data.read(|state| {
-            let messages = state.messages(&session);
-            let all = messages;
-            let info = state.session(&session);
-            let revert = info.and_then(|info| info.revert.as_ref()).map(|revert| revert.message_id.as_str());
-            let messages = match revert {
-                // Messages after the revert boundary are hidden (`rows.ts:70`).
-                Some(boundary) => {
-                    let end = messages.iter().position(|message| message.id() >= boundary).unwrap_or(messages.len());
-                    &messages[..end]
-                }
-                None => messages,
-            };
+            let visible = Visible::of(state, &session);
+            let messages = visible.messages;
             // Queued prompts show in the dock (E.10b), not the transcript (`rows.ts:63-67`).
             let queued: HashSet<&str> = crate::routes::session::queued::ids(state, &session).collect();
-            let view = self.view.get();
-            let mut rows = reduce(messages, view.turn_tokens.is_some());
+            let mut rows = reduce(messages, self.view.get().turn_tokens.is_some());
             rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id.as_str())));
             let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
             // Compactions waiting in the inbox go last (`createSessionRows`).
@@ -552,53 +554,132 @@ impl Inner {
                 SessionInboxInfo::Compaction(compaction) => Some(Spec::CompactionQueued(compaction.id.0.clone())),
                 _ => None,
             }));
-            let catalogs = self.location.borrow().as_ref().and_then(|location| state.location(Some(location)));
-            let cx = Context {
-                tui,
-                state,
-                keys: &keys,
-                directory: info.map(|info| info.location.directory.as_str()),
-                image_preview: view.image_preview,
-                session: &session,
-                agents: catalogs
-                    .and_then(|data| data.agent.as_deref())
-                    .unwrap_or_default()
-                    .iter()
-                    .filter(|agent| !agent.hidden)
-                    .collect(),
-                models: catalogs.and_then(|data| data.model.as_deref()).unwrap_or_default(),
-                app: &tui.app,
-                theme: &self.theme,
-                syntax: &self.syntax,
-                thinking_syntax: &self.thinking_syntax,
-                renderers: &self.renderers,
-                conceal: view.conceal,
-                hide_thinking: view.hide_thinking,
-                groups: &self.groups,
-                tps: view.tps,
-                verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
-                animations: opencode_ui::motion::enabled(tui.config().info.animations),
-                mode,
-                width,
-                session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
-                index: messages.iter().enumerate().map(|(index, message)| (message.id(), index)).collect(),
-                messages,
-                legacy: legacy(messages),
-            };
+            self.remember(messages);
+            let positions = self.positions.borrow();
+            let cx = self.context(tui, state, &visible, &keys, &positions);
             *self.weights.borrow_mut() = specs.iter().map(|spec| self.groups.weight(spec, cx.hide_thinking)).collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
-            self.background.update(messages, keys.background.clone(), errors::now());
-            let revert = info
-                .and_then(|info| info.revert.as_ref())
-                .map(|revert| (revert.message_id.as_str(), revert.files.as_deref().unwrap_or_default()));
-            self.revert.update(tui, &session, revert, all, keys.redo.clone());
+            self.trailing(tui, &visible, &keys);
             self.limits.check(messages, &|id| state.has_input(&session, id))
         });
         for stop in stops {
             stop.run(tui);
         }
         self.complete_group_boundary(tui);
+    }
+
+    /// Updates the rows of the messages that changed in place, when no row's shape changed: no `reduce`,
+    /// `project`, weights, or window. Returns false when the rows need a full render.
+    fn patch(&self, tui: &Tui, session: &SessionID, changed: &HashSet<SessionMessageID>) -> bool {
+        // A turn's usage row reads every step's tokens.
+        if self.view.get().turn_tokens.is_some() {
+            return false;
+        }
+        let keys = Keys::read(tui);
+        tui.data.read(|state| {
+            let visible = Visible::of(state, session);
+            let messages = visible.messages;
+            let positions = self.positions.borrow();
+            let shapes = self.shapes.borrow();
+            let same = positions.len() == messages.len()
+                && changed.iter().all(|id| {
+                    positions.get(id.as_str()).is_some_and(|&index| {
+                        messages.get(index).map(shape).is_some_and(|shape| shapes.get(index) == Some(&shape))
+                    })
+                });
+            if !same {
+                return false;
+            }
+            let cx = self.context(tui, state, &visible, &keys, &positions);
+            let (specs, rows, refs) = (self.specs.borrow(), self.rows.borrow(), self.refs.borrow());
+            let mut stale: Vec<usize> =
+                changed.iter().filter_map(|id| refs.get(id.as_str())).flatten().copied().collect();
+            stale.sort_unstable();
+            stale.dedup();
+            for index in stale {
+                if let Some(row) = rows.get(&specs[index].key()) {
+                    row.update(&cx, &specs[index]);
+                }
+            }
+            self.trailing(tui, &visible, &keys);
+            true
+        })
+    }
+
+    /// Keeps each visible message's position and shape for [`Self::patch`].
+    fn remember(&self, messages: &[SessionMessageInfo]) {
+        let mut positions = self.positions.borrow_mut();
+        for (index, message) in messages.iter().enumerate() {
+            match positions.get_mut(message.id()) {
+                Some(position) => *position = index,
+                None => {
+                    positions.insert(message.id().to_owned(), index);
+                }
+            }
+        }
+        if positions.len() > messages.len() {
+            positions.retain(|id, index| messages.get(*index).is_some_and(|message| message.id() == id));
+        }
+        let mut shapes = self.shapes.borrow_mut();
+        shapes.clear();
+        shapes.extend(messages.iter().map(shape));
+        self.legacy.set(legacy(messages));
+    }
+
+    /// The background hint and the revert banner after the rows.
+    fn trailing(&self, tui: &Tui, visible: &Visible<'_>, keys: &Keys) {
+        self.background.update(visible.messages, keys.background.clone(), errors::now());
+        let revert = visible
+            .info
+            .and_then(|info| info.revert.as_ref())
+            .map(|revert| (revert.message_id.as_str(), revert.files.as_deref().unwrap_or_default()));
+        self.revert.update(tui, visible.session, revert, visible.all, keys.redo.clone());
+    }
+
+    fn context<'a>(
+        &'a self,
+        tui: &'a Tui,
+        state: &'a State,
+        visible: &Visible<'a>,
+        keys: &'a Keys,
+        index: &'a HashMap<String, usize>,
+    ) -> Context<'a> {
+        let view = self.view.get();
+        let info = visible.info;
+        let catalogs = self.location.borrow().as_ref().and_then(|location| state.location(Some(location)));
+        Context {
+            tui,
+            state,
+            keys,
+            directory: info.map(|info| info.location.directory.as_str()),
+            image_preview: view.image_preview,
+            session: visible.session,
+            agents: catalogs
+                .and_then(|data| data.agent.as_deref())
+                .unwrap_or_default()
+                .iter()
+                .filter(|agent| !agent.hidden)
+                .collect(),
+            models: catalogs.and_then(|data| data.model.as_deref()).unwrap_or_default(),
+            app: &tui.app,
+            theme: &self.theme,
+            syntax: &self.syntax,
+            thinking_syntax: &self.thinking_syntax,
+            renderers: &self.renderers,
+            conceal: view.conceal,
+            hide_thinking: view.hide_thinking,
+            groups: &self.groups,
+            tps: view.tps,
+            verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
+            animations: opencode_ui::motion::enabled(tui.config().info.animations),
+            mode: tui.theme.borrow().mode(),
+            width: tui.app.size().0,
+            session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
+            index,
+            messages: visible.messages,
+            legacy: self.legacy.get(),
+        }
     }
 
     /// `completeGroupBoundary`: a page boundary can cut the oldest group in half, so while the oldest row is a
@@ -660,13 +741,28 @@ impl Inner {
                 Some(Pin { height: self.scroll.content_view().rect().height, frame: cx.app.frame_number() });
         }
 
-        for (spec, key) in specs[start..].iter().zip(&keys) {
+        // The entries stay allocated for the next render.
+        let mut refs = self.refs.borrow_mut();
+        refs.values_mut().for_each(Vec::clear);
+        for (index, (spec, key)) in specs[start..].iter().zip(&keys).enumerate() {
+            let index = start + index;
+            let messages = spec.messages();
+            for id in &messages {
+                match refs.get_mut(*id) {
+                    Some(indices) if indices.last() == Some(&index) => {}
+                    Some(indices) => indices.push(index),
+                    None => {
+                        refs.insert((*id).to_owned(), vec![index]);
+                    }
+                }
+            }
             let fresh = !rows.contains_key(key);
             let row = rows.entry(key.clone()).or_insert_with(|| Row::new(cx, spec));
-            if fresh || spec.messages().into_iter().any(&changed) {
+            if fresh || messages.into_iter().any(&changed) {
                 row.update(cx, spec);
             }
         }
+        refs.retain(|_, indices| !indices.is_empty());
         for (index, key) in keys.iter().enumerate() {
             if mounted.get(index) == Some(key) {
                 continue;
@@ -827,6 +923,100 @@ pub struct Keys {
     pub model_list: Option<String>,
 }
 
+impl Keys {
+    /// The keymap's conditions read the store, so this must run before it is locked.
+    fn read(tui: &Tui) -> Self {
+        Self {
+            background: tui.keymap.shortcut("session.background"),
+            redo: tui.keymap.shortcut("session.redo"),
+            model_list: tui.keymap.shortcut("model.list"),
+        }
+    }
+}
+
+/// A session's messages as the transcript shows them.
+struct Visible<'a> {
+    session: &'a SessionID,
+    info: Option<&'a SessionInfo>,
+    /// Every loaded message.
+    all: &'a [SessionMessageInfo],
+    /// The messages before the revert boundary, which hides the ones after it (`rows.ts:70`).
+    messages: &'a [SessionMessageInfo],
+}
+
+impl<'a> Visible<'a> {
+    fn of(state: &'a State, session: &'a SessionID) -> Self {
+        let all = state.messages(session);
+        let info = state.session(session);
+        let messages = match info.and_then(|info| info.revert.as_ref()) {
+            Some(revert) => {
+                let boundary = revert.message_id.as_str();
+                &all[..all.iter().position(|message| message.id() >= boundary).unwrap_or(all.len())]
+            }
+            None => all,
+        };
+        Self { session, info, all, messages }
+    }
+}
+
+/// What `reduce` and `grouping::project` read from a message, hashed: while it stays the same, a change to
+/// the message changes no row's shape, only the content of its rows. `debug.turn_tokens` is left out, so its
+/// usage rows always take a full render.
+fn shape(message: &SessionMessageInfo) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    std::mem::discriminant(message).hash(&mut hasher);
+    message.id().hash(&mut hasher);
+    fn error(error: &SessionStructuredError) -> (&str, &str) {
+        (&error.r#type, &error.message)
+    }
+    match message {
+        SessionMessageInfo::Assistant(assistant) => {
+            // The part rows `reduce` makes: an empty text or reasoning makes none but counts in the ordinals.
+            let (mut texts, mut reasonings) = (0usize, 0usize);
+            for item in &assistant.content {
+                match item {
+                    SessionMessageAssistantContentItem::Text(text) => {
+                        texts += 1;
+                        if !text.text.trim().is_empty() {
+                            (0u8, texts).hash(&mut hasher);
+                        }
+                    }
+                    SessionMessageAssistantContentItem::Reasoning(reasoning) => {
+                        reasonings += 1;
+                        if !reasoning.text.trim().is_empty() {
+                            let done = reasoning.time.as_ref().is_some_and(|time| time.completed.is_some());
+                            (1u8, reasonings, done).hash(&mut hasher);
+                        }
+                    }
+                    SessionMessageAssistantContentItem::Tool(tool) => (2u8, &tool.id, &tool.name).hash(&mut hasher),
+                    SessionMessageAssistantContentItem::Unknown(_) => {}
+                }
+            }
+            (terminal(assistant), assistant.retry.is_some(), assistant.error.as_ref().map(error)).hash(&mut hasher);
+        }
+        SessionMessageInfo::Idle(idle) => idle.error.as_ref().map(error).hash(&mut hasher),
+        SessionMessageInfo::Synthetic(synthetic) => {
+            synthetic.description.as_deref().is_none_or(|text| text.trim().is_empty()).hash(&mut hasher);
+            grouping::instruction_paths(Some(message)).hash(&mut hasher);
+        }
+        SessionMessageInfo::Compaction(compaction) => {
+            std::mem::discriminant(compaction).hash(&mut hasher);
+            if let SessionMessageCompaction::Failed(failed) = compaction {
+                error(&failed.error).hash(&mut hasher);
+            }
+        }
+        _ => {}
+    }
+    hasher.finish()
+}
+
+/// The step ended its turn, or failed: it gets a footer.
+fn terminal(assistant: &SessionMessageAssistant) -> bool {
+    assistant.finish.as_ref().is_some_and(|finish| {
+        !matches!(finish, SessionMessageAssistantFinish::ToolCalls | SessionMessageAssistantFinish::Unknown2)
+    }) || assistant.error.is_some()
+}
+
 /// What rows read while they render.
 pub struct Context<'a> {
     /// Never call into the keymap or `tui.data.read` from a row: the store is locked while rows
@@ -866,7 +1056,7 @@ pub struct Context<'a> {
     pub models: &'a [ModelInfo],
     /// The visible messages, oldest first, and each one's position.
     pub messages: &'a [SessionMessageInfo],
-    pub index: HashMap<&'a str, usize>,
+    pub index: &'a HashMap<String, usize>,
     /// No idle markers: a turn ends at the next prompt (`SessionTurn.legacy`).
     pub legacy: bool,
 }
@@ -1085,9 +1275,7 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
             };
             rows.push(Spec::Part { message: assistant.id.0.clone(), part });
         }
-        let terminal = assistant.finish.as_ref().is_some_and(|finish| {
-            !matches!(finish, SessionMessageAssistantFinish::ToolCalls | SessionMessageAssistantFinish::Unknown2)
-        }) || assistant.error.is_some();
+        let terminal = terminal(assistant);
         if terminal || assistant.retry.is_some() {
             rows.push(Spec::Footer(assistant.id.0.clone()));
         }
@@ -1306,6 +1494,49 @@ mod tests {
             usage.last(),
             Some(&Spec::TurnUsage { messages: vec!["msg_2".into(), "msg_3".into()], previous: None })
         );
+    }
+
+    #[test]
+    fn a_shape_changes_with_the_rows_and_not_with_streamed_content() {
+        let streaming = assistant(
+            "msg_1",
+            json!([
+                { "type": "reasoning", "text": "think", "time": { "created": 1 } },
+                { "type": "text", "text": "a" },
+                { "type": "tool", "id": "call_1", "name": "read", "state": { "status": "streaming", "input": "" }, "time": { "created": 1 } },
+            ]),
+            None,
+        );
+        let base = shape(&messages(json!([streaming.clone()]))[0]);
+        let edit = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut message = streaming.clone();
+            change(&mut message);
+            shape(&messages(json!([message]))[0])
+        };
+        // Streamed text, reasoning, tool input and running state reach the rows in place.
+        assert_eq!(edit(&|m| m["content"][1]["text"] = json!("a longer answer")), base);
+        assert_eq!(edit(&|m| m["content"][0]["text"] = json!("thinking more")), base);
+        assert_eq!(
+            edit(&|m| m["content"][2]["state"] = json!({ "status": "running", "input": {}, "metadata": {} })),
+            base
+        );
+        // A text that starts empty makes no row yet.
+        assert_eq!(edit(&|m| m["content"].as_array_mut().unwrap().push(json!({ "type": "text", "text": "" }))), base);
+        // What `reduce` and `project` read changes the shape.
+        let changes: [&dyn Fn(&mut serde_json::Value); 8] = [
+            &|m| m["content"][1]["text"] = json!("  "),
+            // An empty text before the answer moves its ordinal.
+            &|m| m["content"].as_array_mut().unwrap().insert(0, json!({ "type": "text", "text": "" })),
+            &|m| m["content"][0]["time"]["completed"] = json!(2),
+            &|m| m["content"][2]["name"] = json!("shell"),
+            &|m| m["content"].as_array_mut().unwrap().insert(0, json!({ "type": "text", "text": "b" })),
+            &|m| m["finish"] = json!("stop"),
+            &|m| m["error"] = json!({ "type": "provider", "message": "boom" }),
+            &|m| m["retry"] = json!({ "attempt": 1, "at": 2, "error": { "type": "provider", "message": "busy" } }),
+        ];
+        for change in changes {
+            assert_ne!(edit(change), base);
+        }
     }
 
     #[test]
