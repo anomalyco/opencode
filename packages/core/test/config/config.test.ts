@@ -860,7 +860,7 @@ describe("Config", () => {
       Effect.gen(function* () {
         const real = path.join(tmp.path, "real")
         const link = path.join(tmp.path, "link")
-        const file = path.join(real, process.platform === "win32" ? "OpenCode.JSON" : "opencode.json")
+        const file = path.join(real, process.platform === "linux" ? "opencode.json" : "OpenCode.JSON")
         yield* Effect.promise(async () => {
           await fs.mkdir(real)
           await fs.symlink(real, link, "junction")
