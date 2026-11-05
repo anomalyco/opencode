@@ -54,6 +54,20 @@ describe("transitionLineComment", () => {
     expect(editing).toEqual({ status: "editing", id: "c1", range: line(2), text: "updated" })
   })
 
+  test("the viewer echoing an opened comment's range keeps the comment open", () => {
+    // A focused comment used to close at once: its highlight came back as a selection and moved it to `selecting`.
+    const viewing = transitionLineComment(
+      { status: "selecting", range: line(9) },
+      { type: "comment.focused", id: "c1", range: line(2) },
+    ).state
+
+    expect(transitionLineComment(viewing, { type: "line.selected", range: line(2) }).state).toBe(viewing)
+    expect(transitionLineComment(viewing, { type: "line.selected", range: line(3) }).state).toEqual({
+      status: "selecting",
+      range: line(3),
+    })
+  })
+
   test("the viewer echoing a restored range back keeps the same state", () => {
     const editing: LineCommentMode = { status: "editing", id: "c1", range: line(2), text: "x" }
     const restored = transitionLineComment(editing, { type: "line.selected", range: line(8) }).state

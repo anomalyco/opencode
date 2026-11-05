@@ -59,10 +59,10 @@ export function transitionLineComment(state: LineCommentMode, event: LineComment
     case "line.selected":
       if (!event.range) return clear(state)
 
-      if (state.status === "editing") return restore(state, event.range)
+      // The viewer reports every highlight it applies, including the range this mode just handed it.
+      if (state.status !== "idle" && sameSelectedRange(state.range, event.range)) return stay(state)
 
-      if ((state.status === "drafting" || state.status === "selecting") && sameSelectedRange(state.range, event.range))
-        return stay(state)
+      if (state.status === "editing") return restore(state, event.range)
 
       if (state.status === "drafting")
         return enter({ status: "drafting", range: cloneSelectedLineRange(event.range), text: state.text })
