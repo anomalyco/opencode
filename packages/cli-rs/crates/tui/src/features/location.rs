@@ -146,13 +146,5 @@ fn upload_environment(tui: &Tui, id: &SessionID) {
     *tui.location.uploaded.borrow_mut() = Some(id.clone());
     let client = tui.data.client().clone();
     let id = id.clone();
-    let weak = tui.weak();
-    tui.app.spawn(
-        async move { opencode_store::environment::upload(&client, &id, variables).await },
-        move |_, result| {
-            if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                tui.toasts.error(error.to_string());
-            }
-        },
-    );
+    tui.request(async move { opencode_store::environment::upload(&client, &id, variables).await }, |_, ()| {});
 }

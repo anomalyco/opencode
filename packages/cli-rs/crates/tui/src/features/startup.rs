@@ -12,7 +12,6 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use opencode_api::generated::{SessionForkInput, SessionID, SessionListInput, SessionListInputOrder};
 use opencode_local::model_pref::Model;
-use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
 
 use crate::app::Tui;
@@ -184,45 +183,31 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
         directory: Some(tui.directory.clone().into()),
         ..SessionListInput::default()
     };
-    tui.app.spawn(
-        async move { client.session_list(&input).await },
-        bind!(tui, |tui, _, result| {
-            match result {
-                Ok(response) => {
-                    let Some(session) = response.data.into_iter().next() else {
-                        return;
-                    };
-                    if fork_it {
-                        fork(&tui, session.id);
-                        return;
-                    }
-                    let id = session.id.clone();
-                    tui.data.remember(session);
-                    tui.startup.arrive(&id);
-                    tui.navigate(Route::Session { id });
-                }
-                Err(error) => tui.toasts.error(error.to_string()),
-            }
-        }),
-    );
+    tui.request(async move { client.session_list(&input).await }, move |tui, response| {
+        let Some(session) = response.data.into_iter().next() else {
+            return;
+        };
+        if fork_it {
+            return fork(tui, session.id);
+        }
+        let id = session.id.clone();
+        tui.data.remember(session);
+        tui.startup.arrive(&id);
+        tui.navigate(Route::Session { id });
+    });
 }
 
 /// `session.fork`, then opens the fork.
 fn fork(tui: &Tui, id: SessionID) {
     let client = tui.data.client().clone();
-    tui.app.spawn(
+    tui.request(
         async move { client.session_fork(&SessionForkInput { session_id: id, before: None }).await },
-        bind!(tui, |tui, _, result| {
-            match result {
-                Ok(session) => {
-                    let id = session.id.clone();
-                    tui.data.remember(session);
-                    tui.startup.arrive(&id);
-                    tui.navigate(Route::Session { id });
-                }
-                Err(error) => tui.toasts.error(error.to_string()),
-            }
-        }),
+        |tui, session| {
+            let id = session.id.clone();
+            tui.data.remember(session);
+            tui.startup.arrive(&id);
+            tui.navigate(Route::Session { id });
+        },
     );
 }
 
