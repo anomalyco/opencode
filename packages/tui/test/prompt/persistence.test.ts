@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "path"
-import { mkdtemp, rm } from "fs/promises"
+import { mkdir, mkdtemp, rm } from "fs/promises"
 import { tmpdir } from "os"
 import { appendText, readJson, readText, writeJsonAtomic, writeText } from "../../src/util/persistence"
 
@@ -46,6 +46,22 @@ test("an append made while the file is rewritten lands in the new file", async (
     const file = path.join(root, "prompt-stash.jsonl")
     await writeText(file, "A\n")
     await Promise.all([writeText(file, ""), appendText(file, "B\n")])
+    expect(await readText(file)).toBe("B\n")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("a write after a failed one to the same file, under any spelling of its path, still runs in order", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
+  try {
+    const file = path.join(root, "prompt-stash.jsonl")
+    // A directory with an entry cannot be renamed over.
+    await mkdir(path.join(file, "entry"), { recursive: true })
+    await expect(writeText(file, "A\n")).rejects.toThrow()
+    await rm(file, { recursive: true })
+    await writeText(file, "A\n")
+    await Promise.all([writeText(path.relative(process.cwd(), file), ""), appendText(file, "B\n")])
     expect(await readText(file)).toBe("B\n")
   } finally {
     await rm(root, { recursive: true, force: true })

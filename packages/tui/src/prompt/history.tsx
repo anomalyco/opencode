@@ -21,8 +21,9 @@ export type PastedText = {
   }
 }
 
-// `path` is the local file a pasted attachment was read from. It stays in the TUI.
-export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string }
+// `path` is the local file a pasted attachment was read from. `recalled` marks a `file:` uri without a path that history
+// or the stash read back, which may name a file on another server's machine. Both stay in the TUI.
+export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string; recalled?: boolean }
 
 export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "agents" | "skills">> & {
   files?: PromptFile[]
@@ -184,7 +185,17 @@ export function parsePromptInfo(value: unknown): PromptInfo | undefined {
   if (!value || typeof value !== "object") return
   const input = value as Record<string, unknown>
   if (typeof input.text !== "string" || !Array.isArray(input.pasted)) return
-  return input as PromptInfo
+  const prompt = input as PromptInfo
+  // Every TUI on this machine shares these files, whatever server it talks to. Only an `@` mention names a file the
+  // server finds again itself.
+  return {
+    ...prompt,
+    files: prompt.files?.map((file) =>
+      file.uri.startsWith("file:") && !file.path && !file.mention?.text.startsWith("@")
+        ? { ...file, recalled: true }
+        : file,
+    ),
+  }
 }
 
 const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimpleContext({

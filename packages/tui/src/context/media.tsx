@@ -97,6 +97,8 @@ function init(directory: string) {
   let boxes = new Set<ScrollBoxRenderable>()
   // The tiles keeping a player, each with when it dropped out of the ranking; Infinity while it ranks.
   let players = new Map<string, number>()
+  // The tiles a hidden ancestor hid at the last placement.
+  let hidden = new Set<string>()
   let measuring = false
   let expiry: TimerHandle | undefined
   const invalidate = () => {
@@ -110,14 +112,23 @@ function init(directory: string) {
     box.viewport[method]("resize", invalidate)
     box.content[method]("resize", invalidate)
   }
+  // Hiding or showing an ancestor moves nothing and fires no event, so each frame looks for a tile with a player, or
+  // one hidden at the last placement, whose ancestors changed. Without such a tile it does nothing.
+  const check = () => {
+    if (measuring || (players.size === 0 && hidden.size === 0)) return
+    const changed = (key: string) => {
+      const element = tracked.get(key)
+      return element !== undefined && underHidden(element) !== hidden.has(key)
+    }
+    if ([...players.keys()].some(changed) || [...hidden].some(changed)) place()
+  }
   const place = () => {
     measuring = false
     const now = renderer.clock.now()
     const seen = new Set<ScrollBoxRenderable>()
     const tiles = [...tracked].map(([key, element]) => ({ key, ...measure(element, renderer, seen) }))
     const near = tiles.filter((tile) => tile.near)
-    // Showing a hidden ancestor again moves nothing, so measure every frame while one hides a tile.
-    if (tiles.some((tile) => tile.hidden)) invalidate()
+    hidden = new Set(tiles.filter((tile) => tile.hidden).map((tile) => tile.key))
     // Fully visible tiles rank first, then those showing more of themselves. Tiles under the viewer do not rank.
     const ranked = viewer() ? [] : near.toSorted((a, b) => b.share - a.share).slice(0, POSTER_LIMIT)
     const kept = [...players]
@@ -155,6 +166,7 @@ function init(directory: string) {
   )
   onCleanup(() => {
     renderer.off(CliRenderEvents.FRAME, place)
+    renderer.off(CliRenderEvents.FRAME, check)
     renderer.off(CliRenderEvents.RESIZE, invalidate)
     for (const box of boxes) watch(box, "off")
     if (expiry) renderer.clock.clearTimeout(expiry)
@@ -195,12 +207,18 @@ function init(directory: string) {
     setActiveTile,
     /** Follows where an inline video tile is, until the returned function stops it. */
     trackPoster(key: string, element: Renderable) {
-      if (tracked.size === 0) renderer.on(CliRenderEvents.RESIZE, invalidate)
+      if (tracked.size === 0) {
+        renderer.on(CliRenderEvents.RESIZE, invalidate)
+        renderer.on(CliRenderEvents.FRAME, check)
+      }
       tracked.set(key, element)
       invalidate()
       return () => {
         tracked.delete(key)
-        if (tracked.size === 0) renderer.off(CliRenderEvents.RESIZE, invalidate)
+        if (tracked.size === 0) {
+          renderer.off(CliRenderEvents.RESIZE, invalidate)
+          renderer.off(CliRenderEvents.FRAME, check)
+        }
         invalidate()
       }
     },
@@ -234,10 +252,10 @@ export function useMedia() {
  * them, and whether a hidden ancestor hides it. Adds those scroll boxes to `boxes`.
  */
 function measure(element: Renderable, screen: { width: number; height: number }, boxes: Set<ScrollBoxRenderable>) {
+  if (underHidden(element)) return { share: 0, near: false, hidden: true }
   const clips = [{ x: 0, y: 0, width: screen.width, height: screen.height }]
-  for (let node: Renderable | null = element; node; node = node.parent) {
-    if (!node.visible) return { share: 0, near: false, hidden: true }
-    if (node === element || !(node instanceof ScrollBoxRenderable)) continue
+  for (let node: Renderable | null = element.parent; node; node = node.parent) {
+    if (!(node instanceof ScrollBoxRenderable)) continue
     boxes.add(node)
     const viewport = node.viewport
     clips.push({ x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height })
@@ -251,6 +269,11 @@ function measure(element: Renderable, screen: { width: number; height: number },
     return Math.max(0, right - left) * Math.max(0, bottom - top)
   }
   return { share: area(0) / (rect.width * rect.height || 1), near: area(0.5) > 0, hidden: false }
+}
+
+function underHidden(element: Renderable) {
+  for (let node: Renderable | null = element; node; node = node.parent) if (!node.visible) return true
+  return false
 }
 
 function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>) {
