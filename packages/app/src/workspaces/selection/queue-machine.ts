@@ -97,8 +97,7 @@ export function transitionPriorityQueue(
   const next = state.user.at(-1) ?? state.background[0]
   const cancel: readonly PriorityQueueEffect[] = event.type === "aborted" ? [{ type: "cancel", keys: [event.key] }] : []
 
-  if (next === undefined)
-    return { state: running.length === 0 ? IDLE : { ...state, running }, effects: cancel }
+  if (next === undefined) return { state: running.length === 0 ? IDLE : { ...state, running }, effects: cancel }
 
   return {
     state: {

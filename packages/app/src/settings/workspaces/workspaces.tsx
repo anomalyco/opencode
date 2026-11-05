@@ -118,9 +118,7 @@ export const SettingsWorkspaces: Component<{
   // Fetch sessions per workspace directory instead of paging through every session on the server.
   const loadSessions = async (directories: readonly string[], signal?: AbortSignal) => {
     const fetched = await Promise.all(
-      directories.map((directory) =>
-        listAllSessions(serverSDK.api.session, { order: "desc", directory }, { signal }),
-      ),
+      directories.map((directory) => listAllSessions(serverSDK.api.session, { order: "desc", directory }, { signal })),
     )
 
     const sessions = fetched.flat()

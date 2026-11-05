@@ -46,7 +46,7 @@ type ProvidersBase = {
  * An account action closes any rename and disables every account menu until it settles.
  */
 export type SettingsProvidersState<T = unknown> =
-  | (ProvidersBase & { readonly status: "live"; readonly renaming?: string })
+  | (ProvidersBase & { readonly status: "live"; readonly account?: undefined; readonly renaming?: string })
   | (ProvidersBase & {
       readonly status: "holding"
       readonly held: readonly T[]

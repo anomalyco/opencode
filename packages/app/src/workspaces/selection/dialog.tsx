@@ -118,10 +118,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return keys
   })
 
-  const home = createMemo(
-    () =>
-      sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""),
-  )
+  const home = createMemo(() => sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""))
 
   const subtitle = createMemo(() => (servers.local(props.server) ? undefined : serverName(props.server)))
 

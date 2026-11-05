@@ -65,7 +65,7 @@ export function transitionExtensionLoad<T, K>(
 
   if (event.type === "target.synced") {
     if (state.status !== "idle" && Object.is(state.key, event.key)) return { state, effects: [] }
-    const next = load(state.issued, event.key)
+    const next = load<T, K>(state.issued, event.key)
 
     if (state.status === "loading" || state.status === "refreshing")
       return { state: next.state, effects: [abort(state.attempt), ...next.effects] }
@@ -78,7 +78,7 @@ export function transitionExtensionLoad<T, K>(
   if (event.type === "invalidated") {
     if (state.status === "ready") return refresh(state.issued, state.key, state.value)
 
-    if (state.status === "error") return load(state.issued, state.key)
+    if (state.status === "error") return load<T, K>(state.issued, state.key)
 
     if (state.queued) return { state, effects: [] }
 
@@ -88,7 +88,7 @@ export function transitionExtensionLoad<T, K>(
   if (event.type === "retry.requested") {
     if (state.status !== "error") return { state, effects: [] }
 
-    return load(state.issued, state.key)
+    return load<T, K>(state.issued, state.key)
   }
 
   if ((state.status !== "loading" && state.status !== "refreshing") || state.attempt !== event.attempt)
@@ -104,7 +104,10 @@ export function transitionExtensionLoad<T, K>(
   }
 
   if (state.queued) {
-    const next = state.status === "refreshing" ? refresh(state.issued, state.key, state.value) : load(state.issued, state.key)
+    const next =
+      state.status === "refreshing"
+        ? refresh(state.issued, state.key, state.value)
+        : load<T, K>(state.issued, state.key)
 
     return { state: next.state, effects: [settle, ...next.effects] }
   }
@@ -150,6 +153,6 @@ function refresh<T, K>(issued: number, key: K, value: T): ExtensionLoadTransitio
   }
 }
 
-function abort<K>(attempt: number): ExtensionLoadEffect<K> {
+function abort(attempt: number): ExtensionLoadEffect<never> {
   return { type: "abort", attempt }
 }

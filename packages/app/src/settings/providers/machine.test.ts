@@ -174,7 +174,13 @@ test("the dialog's late catalog refresh does not unfreeze the list while an acco
   expect(switching.effects).toEqual([
     { type: "dialog.open", attempt: 1, provider: undefined },
     { type: "catalog.refresh", attempt: 1 },
-    { type: "account.activate.run", attempt: 2, integrationID: "opencode", providerName: "OpenCode", account: personal },
+    {
+      type: "account.activate.run",
+      attempt: 2,
+      integrationID: "opencode",
+      providerName: "OpenCode",
+      account: personal,
+    },
   ])
   expect(availableProviders(switching.state, transient)).toEqual(before)
   expect(providerAccountView(switching.state).busy).toBe(true)

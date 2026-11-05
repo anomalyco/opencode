@@ -2,7 +2,17 @@ import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
 import { isLocationNotFoundError } from "@opencode/client/promise"
-import { type Component, For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX, untrack } from "solid-js"
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  type JSX,
+  untrack,
+} from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useMcpController } from "@/providers/connect/mcp"
 import { mcpRowView } from "@/providers/connect/mcp-machine"

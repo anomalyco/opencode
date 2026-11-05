@@ -172,9 +172,9 @@ describe("workspace delete machine", () => {
       checking,
     ).state
 
-    expect(
-      transitionWorkspaceDelete(retried, { type: "inspect.succeeded", attempt: 2, inspection: clean }).state,
-    ).toBe(retried)
+    expect(transitionWorkspaceDelete(retried, { type: "inspect.succeeded", attempt: 2, inspection: clean }).state).toBe(
+      retried,
+    )
   })
 
   test("a collapsed row stays hidden until the inventory drops it", () => {
