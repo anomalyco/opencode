@@ -426,7 +426,7 @@ struct Label {
     truncate: bool,
 }
 
-/// One list row: a row box with the action colors and its [`Label`]. `hover` runs when the pointer enters it,
+/// One list row: a row box with the action colors and its [`Label`]. `hover` runs when the pointer moves over it,
 /// `click` on release.
 fn row(
     tui: &Tui,
@@ -459,15 +459,11 @@ fn row(
                 .wrap(WrapMode::None),
         );
     }
-    view.on_hover(move |_, over| {
-        if over {
-            hover();
-        }
-    });
-    view.on_mouse(move |_, event| {
-        if matches!(event.kind, MouseEventKind::Up(_)) {
-            click();
-        }
+    // `onMouseMove`, not hover: each redraw builds new rows, and a row built under a resting pointer gets a hover enter.
+    view.on_mouse(move |_, event| match event.kind {
+        MouseEventKind::Moved => hover(),
+        MouseEventKind::Up(_) => click(),
+        _ => {}
     });
     view
 }
