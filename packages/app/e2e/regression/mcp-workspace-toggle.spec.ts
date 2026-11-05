@@ -239,6 +239,97 @@ test("the MCP popover shows a failed server and reconnects it from its details",
   ])
 })
 
+test("the MCP dialog keeps a retrying server's error open, and its other servers stay free", async ({ page }) => {
+  const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
+  const again = "Streamable HTTP error: Error POSTing to endpoint: 503 Service Unavailable"
+  const retries = { connecting: false, failing: true }
+
+  const view = await open(page, {
+    surface: "dialog",
+    mcp: (target) => [
+      {
+        name: "figma-desktop",
+        status:
+          target !== workspace
+            ? { status: "connected" }
+            : retries.connecting
+              ? { status: "pending" }
+              : { status: "failed", error },
+      },
+      { name: "zeta-mcp", status: { status: "disabled" } },
+    ],
+    // The first retry fails again with another error, reported by the refreshed status; the second connects.
+    onMcpAction: (input) => {
+      if (input.server !== "figma-desktop" || input.action !== "connect" || !retries.failing) return
+      retries.failing = false
+
+      return { status: "failed", error: again }
+    },
+  })
+
+  const details = page.getByRole("dialog", { name: "figma-desktop", exact: true })
+  const retry = details.getByRole("button", { name: "Try again", exact: true })
+  const figma = view.panel.getByRole("switch", { name: "figma-desktop", exact: true })
+  const zeta = view.panel.getByRole("switch", { name: "zeta-mcp", exact: true })
+  await view.panel.getByRole("button", { name: "View error for figma-desktop", exact: true }).click()
+  await expect(details.getByText(error, { exact: true })).toBeVisible()
+
+  const connect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, { method: "POST" })
+  await retry.click()
+  await connect.arrived
+  // The server reports that it is connecting; the error stays open while the retry runs, and takes no second retry.
+  retries.connecting = true
+
+  const listed = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/mcp" &&
+      url.searchParams.get("location[directory]") === workspace
+    )
+  })
+
+  await view.push([
+    {
+      id: "evt_mcp_dialog_connecting",
+      created: 1,
+      type: "mcp.status.changed",
+      location: { directory: workspace },
+      data: { server: "figma-desktop" },
+    },
+  ])
+  await listed
+  await expect(details.getByText(error, { exact: true })).toBeVisible()
+  await expect(retry).toBeDisabled()
+  await expect(details.getByRole("button", { name: "Disable", exact: true })).toBeDisabled()
+  connect.release()
+  // A retry that fails again shows its new error in place.
+  await expect(details.getByText(again, { exact: true })).toBeVisible()
+  await expect(retry).toBeEnabled()
+
+  const reconnect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, {
+    method: "POST",
+  })
+
+  await retry.click()
+  await reconnect.arrived
+  await details.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(details).toBeHidden()
+
+  // While figma-desktop connects, only its own row waits; another server still toggles.
+  await expect(figma).toBeDisabled()
+  await expect(zeta).toBeEnabled()
+  view.requests.length = 0
+  await view.panel.getByRole("option").filter({ hasText: "zeta-mcp" }).locator('[data-slot="switch-control"]').click()
+  await expect(zeta).toBeChecked()
+  expect(view.requests).toContainEqual({ path: "/api/experimental/mcp/zeta-mcp/connect", directory: workspace })
+  await expect(figma).toBeDisabled()
+  reconnect.release()
+  await expect(figma).toHaveAccessibleDescription("Connected")
+  await expect(figma).toBeEnabled()
+})
+
 for (const surface of ["dialog"] as const) {
   test(`shows connection failures from the MCP ${surface} and allows reconnecting`, async ({ page }) => {
     const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
