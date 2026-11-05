@@ -57,7 +57,7 @@ export function text(fixture: Fixture) {
     .join("\n")
 }
 
-export type Comparison = { equal: boolean; differences: number; report: string }
+export type Comparison = { equal: boolean; differences: number; colorOnly: number; report: string }
 
 // Cells differ when their symbol, colors, or attributes differ. The report has the shape of crates/parity's:
 // each differing row from both sides with markers, then the first differing cells.
@@ -66,6 +66,7 @@ export function compareFixtures(expected: Fixture, actual: Fixture): Comparison 
     return {
       equal: false,
       differences: expected.width * expected.height,
+      colorOnly: 0,
       report: `size ${expected.width}x${expected.height} expected, ${actual.width}x${actual.height} actual`,
     }
   const a = cells(expected)
@@ -76,10 +77,19 @@ export function compareFixtures(expected: Fixture, actual: Fixture): Comparison 
     ),
   )
   if (differences.length === 0)
-    return { equal: true, differences: 0, report: `all ${expected.width * expected.height} cells equal` }
+    return { equal: true, differences: 0, colorOnly: 0, report: `all ${expected.width * expected.height} cells equal` }
+  // A deviation allows a whole checkpoint, so name the cells whose text matches and whose colors do not, as
+  // crates/parity's summary does: a background, or a foreground behind a visible symbol.
+  const colorOnly = differences.filter(({ want, got }) => {
+    if (want.symbol !== got.symbol) return false
+    const [wantFg, wantBg] = want.style.split(" ")
+    const [gotFg, gotBg] = got.style.split(" ")
+    return wantBg !== gotBg || (want.symbol !== " " && wantFg !== gotFg)
+  }).length
   const rows = [...new Set(differences.map((cell) => cell.y))]
   const lines = [
-    `${differences.length} of ${expected.width * expected.height} cells differ (${expected.width}x${expected.height})`,
+    `${differences.length} of ${expected.width * expected.height} cells differ (${expected.width}x${expected.height})` +
+      (colorOnly > 0 ? `, ${colorOnly} in color only` : ""),
     ...rows.flatMap((y) => {
       const marker = Array.from({ length: expected.width }, (_, x) =>
         differences.some((cell) => cell.x === x && cell.y === y) ? "^" : " ",
@@ -102,7 +112,7 @@ export function compareFixtures(expected: Fixture, actual: Fixture): Comparison 
     }),
     ...(differences.length > REPORT_CELLS ? [`... and ${differences.length - REPORT_CELLS} more cells`] : []),
   ]
-  return { equal: false, differences: differences.length, report: lines.join("\n") }
+  return { equal: false, differences: differences.length, colorOnly, report: lines.join("\n") }
 }
 
 function cells(fixture: Fixture) {
