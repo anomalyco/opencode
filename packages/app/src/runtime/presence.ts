@@ -147,9 +147,11 @@ function measureExit(element: HTMLElement | null, started: string): PresenceExit
   const ms = maxCssTimeMs(styles.transitionDuration, styles.transitionDelay)
 
   if (ms <= 0 || !styles.transitionProperty || styles.transitionProperty === "none") return NO_EXIT
-  // Only transitions that are running now hold the element: an idle `transition-colors` rule must not.
+
+  // Only transitions that are running now hold the element: an idle `transition-colors` rule must not. Without the
+  // Web Animations API (happy-dom), trust the computed transition.
   const transitions =
-    typeof element.getAnimations === "function"
+    "getAnimations" in element
       ? element.getAnimations().filter((animation) => "transitionProperty" in animation).length
       : 1
 

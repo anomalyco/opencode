@@ -35,11 +35,7 @@ export function createAnimatedPresence<T>(
         }),
         { type: "linger.elapsed", attempt: elapsed() },
       ),
-    createAnimatedPresenceState(
-      untrack(value),
-      untrack(() => identity?.()),
-      Date.now(),
-    ),
+    createAnimatedPresenceState({ value: untrack(value), identity: untrack(() => identity?.()), now: Date.now() }),
   )
 
   createEffect(() => {

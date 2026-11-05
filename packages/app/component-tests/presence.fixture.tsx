@@ -7,11 +7,7 @@ import { LanguageProvider } from "../src/runtime/i18n/language"
 
 type Lane = "bottom" | "row" | "none"
 
-const [state, setState] = createStore({
-  hint: undefined as string | undefined,
-  lane: "bottom" as Lane,
-  active: false,
-})
+const [state, setState] = createStore<{ hint?: string; lane: Lane; active: boolean }>({ lane: "bottom", active: false })
 
 const host = document.createElement("div")
 
@@ -24,6 +20,7 @@ export function mountPresence() {
   document.body.appendChild(host)
   render(() => {
     const [ref, setRef] = createSignal<HTMLDivElement>()
+
     const presence = createAnimatedPresence(
       () => state.hint,
       () => ref() ?? null,
@@ -59,4 +56,4 @@ export function mountPresence() {
   }, host)
 }
 
-export const setPresence = (patch: { hint?: string | undefined; lane?: Lane; active?: boolean }) => setState(patch)
+export const setPresence = (patch: { hint?: string; lane?: Lane; active?: boolean }) => setState(patch)

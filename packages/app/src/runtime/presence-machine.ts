@@ -179,14 +179,15 @@ export type AnimatedPresenceEvent<T> =
     }
   | { readonly type: "linger.elapsed"; readonly attempt: number }
 
-export function createAnimatedPresenceState<T>(
-  value: T | undefined,
-  identity: unknown,
-  now: number,
-): AnimatedPresenceState<T> {
-  if (value === undefined) return { status: "hidden", attempt: 0, identity, value, animate: false }
+export function createAnimatedPresenceState<T>(input: {
+  value: T | undefined
+  identity: unknown
+  now: number
+}): AnimatedPresenceState<T> {
+  if (input.value === undefined)
+    return { status: "hidden", attempt: 0, identity: input.identity, value: undefined, animate: false }
 
-  return { status: "shown", attempt: 0, identity, value, animate: false, shownAt: now }
+  return { status: "shown", attempt: 0, identity: input.identity, value: input.value, animate: false, shownAt: input.now }
 }
 
 export function transitionAnimatedPresence<T>(
