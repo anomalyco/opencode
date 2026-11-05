@@ -248,19 +248,22 @@ pub fn read_envelope(reader: impl Read) -> Result<(String, Result<Request, Strin
         request: serde_json::Value,
     }
     let raw: RawEnvelope = read_frame(reader)?;
-    let op = raw
-        .request
-        .get("op")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let request = serde_json::from_value::<Request>(raw.request).map_err(|error| {
-        if error.to_string().starts_with("unknown variant") {
-            format!("unsupported request: {op}")
-        } else {
-            format!("invalid {op} request: {error}")
-        }
-    });
+    let Some(op) = raw.request.get("op").and_then(serde_json::Value::as_str) else {
+        return Ok((raw.token, Err("invalid request: missing field `op`".into())));
+    };
+    let op = op.to_string();
+    // With only the tag, the one possible "unknown variant" is the op itself;
+    // a bad enum value in a known request must not look like an unknown op.
+    let known = serde_json::from_value::<Request>(serde_json::json!({ "op": op })).map_or_else(
+        |error| !error.to_string().starts_with("unknown variant"),
+        |_| true,
+    );
+    let request = if known {
+        serde_json::from_value::<Request>(raw.request)
+            .map_err(|error| format!("invalid {op} request: {error}"))
+    } else {
+        Err(format!("unsupported request: {op}"))
+    };
     Ok((raw.token, request))
 }
 
@@ -592,6 +595,18 @@ mod tests {
         assert_eq!(request.unwrap_err(), "unsupported request: teleport");
         let (_, request) = parse(json!({"op": "get"}));
         assert!(request.unwrap_err().starts_with("invalid get request"));
+        let (_, request) = parse(json!({"op": "signal", "id": 1, "signal": "SIGHUP"}));
+        assert!(
+            request
+                .unwrap_err()
+                .starts_with("invalid signal request: unknown variant `SIGHUP`")
+        );
+        let (_, request) = parse(json!({"op": "list", "mode": "bogus"}));
+        assert!(request.unwrap_err().starts_with("invalid list request"));
+        let (_, request) = parse(json!({"id": 1}));
+        assert_eq!(request.unwrap_err(), "invalid request: missing field `op`");
+        let (_, request) = parse(json!({"op": 3}));
+        assert_eq!(request.unwrap_err(), "invalid request: missing field `op`");
         let (_, request) = parse(json!({"op": "ping"}));
         assert!(matches!(request, Ok(Request::Ping)));
         // A frame that is not an envelope at all still fails the connection.
