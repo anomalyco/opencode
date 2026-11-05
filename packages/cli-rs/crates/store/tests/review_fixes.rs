@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{CreateSession, Data, Options};
+use opencode_store::{Catalog, CreateSession, Data, Options};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -351,20 +351,20 @@ fn connect_works_from_a_thread_outside_the_runtime() {
     drop(connection);
 }
 
-/// MS1 `carbon-5`: the store mutex is not reentrant. A read inside a read on the same thread panics in debug
-/// builds instead of hanging; reads of another store nest.
+/// MS1 `carbon-5`, after `store-ui-flow`: a read inside a read on the same thread reuses the outer guard, and reads
+/// of another store nest. A write inside a read panics in every build instead of hanging.
 #[tokio::test]
-async fn a_reentrant_read_panics_instead_of_deadlocking() {
+async fn a_nested_read_works_and_a_write_inside_a_read_panics() {
     let data = common::data(handler(|_| async { ok(json!({})) }), Options::default());
     let other = common::data(handler(|_| async { ok(json!({})) }), Options::default());
-    assert!(data.read(|_| other.read(|_| true)));
+    assert!(data.read(|_| other.read(|_| data.read(|_| true))));
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            data.read(|_| data.read(|_| ()));
+            data.read(|_| data.catalog_invalidate(Catalog::Model, None));
         }));
         let _ = sender.send(result.is_err());
     });
     let panicked = receiver.recv_timeout(std::time::Duration::from_secs(2));
-    assert_eq!(panicked, Ok(true), "a reentrant read must panic, not hang");
+    assert_eq!(panicked, Ok(true), "a write inside a read must panic, not hang");
 }
