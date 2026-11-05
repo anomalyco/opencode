@@ -883,9 +883,11 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
         const viewport = element.closest('[data-component="composer-scroll"]')!
         const range = document.createRange()
         range.selectNodeContents(element)
+
         const line = Array.from(range.getClientRects()).reduce((last, rect) =>
           rect.bottom > last.bottom ? rect : last,
         )
+
         const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
 
         return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))
