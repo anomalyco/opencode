@@ -70,9 +70,6 @@
     {
       "checkpoint": "selected",
       "until": "src/index.ts#2-3",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.5/zed/selected"
     }
   ],

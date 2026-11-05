@@ -63,7 +63,6 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "message reverted",
-      deviation: ["V01-plain-transcript"],
     },
   ],
 })
