@@ -917,11 +917,16 @@ test("a file changed during its read shows the change", async ({ page }) => {
 test("rereads a file each time the file browser opens it", async ({ page }) => {
   const directory = "C:/OpenCode/BrowserReopen"
   const file = { content: "first draft" }
+  const reads: string[] = []
 
   await openSession(page, {
     name: "BrowserReopen",
     fileList: (path) => (path ? [] : [fileNode(directory, "shopping.txt")]),
-    fileContent: () => file,
+    fileContent: (path) => {
+      reads.push(path)
+
+      return file
+    },
     seed: {
       panes: { ses_browserreopen: { review: true } },
       storage: reviewTabs(directory, "ses_browserreopen"),
@@ -946,6 +951,8 @@ test("rereads a file each time the file browser opens it", async ({ page }) => {
   await expect(tab).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
   await expect(panel.getByText("first draft", { exact: true })).toHaveCount(0)
+  // One read per open: the tab's own load joins the forced read rather than asking for a second one.
+  expect(reads).toEqual(["shopping.txt", "shopping.txt"])
 })
 
 test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
