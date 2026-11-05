@@ -161,6 +161,7 @@ describe("session source machine", () => {
       { type: "search.aborted", attempt: 1 },
       { type: "debounce.fired", attempt: 1 },
     ])
+
     expect(waiting.state).toMatchObject({ status: "idle", issued: 1 })
     expect(waiting.effects.slice(1)).toEqual([{ type: "attempt.cancel", attempt: 1 }])
 
@@ -170,12 +171,14 @@ describe("session source machine", () => {
       { type: "search.aborted", attempt: 1 },
       { type: "fetch.succeeded", attempt: 1, sessions: [sessionA] },
     ])
+
     expect(fetching.state).toEqual({ status: "idle", issued: 1, loaded: [] })
     expect(fetching.effects.at(-1)).toEqual({ type: "attempt.cancel", attempt: 1 })
   })
 
   test("found sessions are kept by ID across searches, and a failure answers its caller", () => {
     const renamed = { ...sessionA, title: "Palette renamed" }
+
     const result = source([
       { type: "search.requested", query: "pal", delayMs: 100 },
       { type: "debounce.fired", attempt: 1 },
@@ -184,9 +187,11 @@ describe("session source machine", () => {
       { type: "debounce.fired", attempt: 2 },
       { type: "fetch.succeeded", attempt: 2, sessions: [renamed] },
     ])
+
     expect(result.state.loaded).toEqual([renamed])
 
     const error = new Error("offline")
+
     const failed = source(
       [
         { type: "search.requested", query: "x", delayMs: 100 },
@@ -195,6 +200,7 @@ describe("session source machine", () => {
       ],
       result.state,
     )
+
     expect(failed.effects.at(-1)).toEqual({ type: "attempt.reject", attempt: 3, error })
     expect(failed.state.loaded).toEqual([renamed])
   })

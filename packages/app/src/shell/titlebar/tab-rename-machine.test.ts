@@ -46,12 +46,14 @@ describe("tab rename machine", () => {
       [{ type: "save.failed", attempt: 1, currentTitle: "B", error: new Error("first") }],
       saving.state,
     )
+
     expect(first.effects).toEqual([])
 
     const second = replay(
       [{ type: "save.failed", attempt: 2, currentTitle: "B", error: new Error("second") }],
       first.state,
     )
+
     expect(remembered(second.effects)).toEqual(["Original"])
     expect(second.effects.at(-1)).toMatchObject({ type: "toast.failed" })
     expect(second.state).toMatchObject({ status: "idle", save: { status: "idle", settledAttempt: 2 } })
@@ -134,6 +136,7 @@ describe("tab rename machine", () => {
       ],
       arming.state,
     )
+
     expect(saved.state.status).toBe("idle")
     expect(saved.effects).toEqual([
       { type: "editor.reset" },

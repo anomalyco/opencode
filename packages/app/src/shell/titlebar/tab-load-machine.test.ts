@@ -87,6 +87,7 @@ describe("session tab load machine", () => {
 
   test("activating a background tab fetches it while its stored title stays", () => {
     const background = { ...tab, active: false, persistedTitle: true }
+
     const result = replay([
       { type: "sync", tabs: [background] },
       { type: "sync", tabs: [{ ...background, active: true }] },
@@ -124,6 +125,7 @@ describe("session tab load machine", () => {
       ],
       timedOut.state,
     )
+
     expect(retried.effects.filter((effect) => effect.type === "load.start")).toMatchObject([{ attempt: 2 }])
   })
 
@@ -134,6 +136,7 @@ describe("session tab load machine", () => {
       { type: "sync", tabs: [{ ...tab, connected: false }] },
       { type: "sync", tabs: [tab] },
     ])
+
     expect(offline.effects.filter((effect) => effect.type === "load.start")).toMatchObject([
       { attempt: 1 },
       { attempt: 2 },
@@ -145,6 +148,7 @@ describe("session tab load machine", () => {
       { type: "sync", tabs: [{ ...tab, missing: true, connected: false }] },
       { type: "sync", tabs: [{ ...tab, missing: true }] },
     ])
+
     expect(missing.effects.filter((effect) => effect.type === "load.start")).toHaveLength(1)
     expect(missing.state).toEqual({ status: "active", issued: 1, entries: {} })
   })
@@ -159,6 +163,7 @@ describe("session tab load machine", () => {
       ],
       loading.state,
     )
+
     expect(closed.effects).toEqual([{ type: "load.clear", attempt: 1 }])
     expect(selectSessionTabView(closed.state, tab.key, input).phase).toBe("loading")
 
@@ -166,6 +171,7 @@ describe("session tab load machine", () => {
       [{ type: "disposed" }, { type: "load.timed-out", key: tab.key, attempt: 1, connected: true }],
       loading.state,
     )
+
     expect(disposed.state).toEqual({ status: "disposed" })
     expect(disposed.effects).toEqual([{ type: "load.clear", attempt: 1 }])
   })
