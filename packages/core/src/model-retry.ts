@@ -41,6 +41,7 @@ const schedule = Schedule.max([
 // hour after the first one. A refused connection is left out: something answered, so it is the server's state.
 const UNREACHABLE_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH", "ENETDOWN"])
 export const UNREACHABLE_WINDOW = Duration.hours(1)
+const UNREACHABLE_GAP_MAX = 30_000
 
 /** Whether the provider's host could not be reached at all, so the request was never sent. */
 export const isUnreachable = (error: AIError) => {
@@ -56,12 +57,15 @@ export const isUnreachable = (error: AIError) => {
 }
 
 const unreachableSchedule = Schedule.max([
-  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced("30 seconds")]),
+  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced(Duration.millis(UNREACHABLE_GAP_MAX))]),
   Schedule.during(UNREACHABLE_WINDOW),
 ]).pipe(
   Schedule.jittered,
   Schedule.setInputType<Input>(),
-  Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))),
+  // Jitter scales the capped gap by up to 1.2, so cap it again after.
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.millis(Math.min(Math.ceil(Duration.toMillis(duration)), UNREACHABLE_GAP_MAX))),
+  ),
 )
 
 // A timed-out attempt already waited minutes before failing, so the general allowance would let a

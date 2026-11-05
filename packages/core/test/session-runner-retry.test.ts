@@ -88,9 +88,9 @@ describe("SessionRunnerRetry.policy", () => {
       }
       const waited = (yield* Clock.currentTimeMillis) - started
       expect(delays.length).toBeGreaterThan(100)
-      expect(Math.max(...delays)).toBeLessThanOrEqual(36_000)
+      expect(Math.max(...delays)).toBeLessThanOrEqual(30_000)
       expect(waited).toBeGreaterThanOrEqual(Duration.toMillis(ModelRetry.UNREACHABLE_WINDOW))
-      expect(waited).toBeLessThan(Duration.toMillis(ModelRetry.UNREACHABLE_WINDOW) + 36_000)
+      expect(waited).toBeLessThanOrEqual(Duration.toMillis(ModelRetry.UNREACHABLE_WINDOW) + 30_000)
     }),
   )
 
