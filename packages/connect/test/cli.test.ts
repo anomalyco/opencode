@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { mkdirSync, utimesSync } from "node:fs"
 import path from "node:path"
 import { ConnectStore } from "@opencode/client-core/store"
 import { WorkspaceSnapshot } from "@opencode/client-core/snapshot"
@@ -155,6 +156,51 @@ describe("opencode-connect", () => {
     expect(check.stdout).toBe(
       '{"effect":"deny","message":"Blocked until your organization\'s policy loads from OpenCode Console"}\n',
     )
+    expect(check.code).toBe(2)
+  })
+
+  test("decides within 3 seconds when the Console is slow, and the background sync still lands", async () => {
+    await using home = await tmpdir("opencode-connect-cli-")
+    const console = serve({ config: () => Bun.sleep(4_000).then(() => Response.json({ policies })) })
+    const env = { OPENCODE_API_KEY: "oc_sk_ci", OPENCODE_CONNECT_SERVER: console.url }
+    const stdin = JSON.stringify({ action: "shell", resources: ["rm -rf ./probe"] })
+
+    const started = Date.now()
+    const check = await connect(home.path, ["check"], { stdin, env })
+
+    expect(Date.now() - started).toBeLessThan(3_900)
+    expect(JSON.parse(check.stdout).message).toBe(
+      "Blocked until your organization's policy loads from OpenCode Console",
+    )
+    await until(() => WorkspaceSnapshot.read(storeOf(home.path)) !== undefined)
+    expect((await connect(home.path, ["check"], { stdin, env })).stdout).toBe(
+      '{"effect":"deny","message":"Blocked by your organization\'s policy"}\n',
+    )
+  })
+
+  test("still decides when it can't start a background sync", async () => {
+    await using home = await tmpdir("opencode-connect-cli-")
+    const store = storeOf(home.path)
+    const console = serve()
+    ConnectStore.write(
+      ConnectStore.credentialFile(store),
+      JSON.stringify(signIn(console.state, Date.now() + 3_600_000, console.url)),
+    )
+    WorkspaceSnapshot.write(store, {
+      owner: JSON.stringify([console.url, "usr_ada", "org_acme"]),
+      organization: "Acme",
+      fetched: Date.now() - 120_000,
+      config: { policies },
+    })
+    // A directory where the claim file goes makes writing it fail.
+    mkdirSync(path.join(ConnectStore.syncClaimFile(store), "blocked"), { recursive: true })
+    utimesSync(ConnectStore.syncClaimFile(store), new Date(0), new Date(0))
+
+    const check = await connect(home.path, ["check"], {
+      stdin: JSON.stringify({ action: "shell", resources: ["rm -rf ./probe"] }),
+    })
+
+    expect(check.stdout).toBe('{"effect":"deny","message":"Blocked by Acme\'s policy"}\n')
     expect(check.code).toBe(2)
   })
 

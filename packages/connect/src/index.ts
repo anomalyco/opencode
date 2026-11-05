@@ -1,13 +1,23 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process"
+import { parseArgs } from "node:util"
 import type { Effect } from "effect"
 import type { HttpClient } from "effect/http"
 import { version } from "../package.json" with { type: "json" }
 
 // Harness hooks run `check` before every tool call, so each command imports only what it needs.
-const args = process.argv.slice(2)
-const command = args[0]
-const flags = parseFlags(args.slice(1))
+const parsed = parseArgs({
+  allowPositionals: true,
+  strict: false,
+  options: {
+    harness: { type: "string" },
+    server: { type: "string" },
+    json: { type: "boolean" },
+    quiet: { type: "boolean" },
+  },
+})
+const command = parsed.positionals[0]
+const flags = parsed.values
 const harness = flag("harness") ?? process.env.OPENCODE_CONNECT_HARNESS
 const NOT_SIGNED_IN = "Not signed in. Run `opencode-connect login` or set OPENCODE_API_KEY."
 
@@ -27,16 +37,18 @@ if (!run) {
 }
 process.exitCode = await run().catch((error: unknown) => {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
-  return 1
+  // A hook that can't decide must block: harnesses treat other failures as allow.
+  return command === "check" ? 2 : 1
 })
 
 /**
  * Reads `{ action, resources, directory?, shell? }` from stdin and answers with the workspace policy's decision:
  * `{"effect":"allow"}` and exit code 0, or `{"effect":"deny","message":...}` and exit code 2.
  *
- * It decides from the stored workspace config without waiting on the network. A config older than a minute is
- * refreshed in the background for the next call; only a sign-in with no config yet waits, for up to 3 seconds. A
- * signed-in workspace whose policy is still unknown after that is denied, so a Console outage never lifts policy.
+ * It decides from the stored workspace config and never calls the Console itself. A config older than a minute is
+ * refreshed by a background `sync` for the next call; a sign-in with no config yet starts one and waits up to 3 seconds
+ * for it. A signed-in workspace whose policy is still unknown after that is denied, so a Console outage never lifts
+ * policy, and a refresh still in flight is never cut short.
  */
 async function check() {
   const { Effect, Option, Schema } = await import("effect")
@@ -62,9 +74,16 @@ async function check() {
   const store = ConnectStore.make()
   const credential = ConsoleCredentials.read(store)
   const cached = credential ? WorkspaceSnapshot.read(store) : undefined
+  const owner = credential && ConsoleCredentials.owner(credential)
   const snapshot =
-    credential && cached?.owner !== ConsoleCredentials.owner(credential)
-      ? await refresh({ wait: 3_000 })
+    owner && cached?.owner !== owner
+      ? await (async () => {
+          await background({ always: true })
+          return waitFor(() => {
+            const next = WorkspaceSnapshot.read(store)
+            return next?.owner === owner ? next : undefined
+          }, 3_000)
+        })()
       : cached && WorkspaceSnapshot.stale(cached, Date.now())
         ? (await background(), cached)
         : cached
@@ -209,17 +228,12 @@ async function token() {
   return 0
 }
 
-async function refresh(options: { readonly wait?: number } = {}) {
+async function refresh() {
   const { Effect } = await import("effect")
   const { ConnectStore } = await import("@opencode/client-core/store")
   const { WorkspaceSync } = await import("@opencode/client-core/workspace-sync")
   return withConsole((http) =>
-    WorkspaceSync.sync(ConnectStore.make(), http).pipe(
-      Effect.map((result) => result.snapshot),
-      options.wait === undefined
-        ? (effect) => effect
-        : Effect.timeoutOrElse({ duration: options.wait, orElse: () => Effect.succeed(undefined) }),
-    ),
+    WorkspaceSync.sync(ConnectStore.make(), http).pipe(Effect.map((result) => result.snapshot)),
   )
 }
 
@@ -236,19 +250,35 @@ async function withConsole<A, E>(body: (http: HttpClient.HttpClient) => Effect.E
   )
 }
 
-// Detached, so a harness never waits on the Console; the next check reads what it stored. At most one starts every
-// 30 seconds, so a Console outage doesn't start a process on every tool call.
-async function background() {
+// Detached, so a harness never waits on the Console and a refresh outlives the check that started it; the next check
+// reads what it stored. At most one starts every 30 seconds, so a Console outage doesn't start a process on every tool
+// call. A store or process failure here never stops the check from deciding.
+async function background(options: { readonly always?: boolean } = {}) {
   const { ConnectStore } = await import("@opencode/client-core/store")
   const claim = ConnectStore.syncClaimFile(ConnectStore.make())
   const claimed = ConnectStore.modified(claim)
-  if (claimed !== undefined && Date.now() - claimed < 30_000) return
-  ConnectStore.write(claim, "")
-  const self = compiled() ? [process.execPath] : [process.execPath, process.argv[1]]
-  spawn(self[0], [...self.slice(1), "sync", "--quiet", ...(harness ? ["--harness", harness] : [])], {
-    detached: true,
-    stdio: "ignore",
-  }).unref()
+  if (!options.always && claimed !== undefined && Date.now() - claimed < 30_000) return
+  try {
+    ConnectStore.write(claim, "")
+    const self = compiled() ? [process.execPath] : [process.execPath, process.argv[1]]
+    spawn(self[0], [...self.slice(1), "sync", "--quiet", ...(harness ? ["--harness", harness] : [])], {
+      detached: true,
+      stdio: "ignore",
+    })
+      .on("error", () => undefined)
+      .unref()
+  } catch {
+    return
+  }
+}
+
+async function waitFor<A>(read: () => A | undefined, timeout: number) {
+  const deadline = Date.now() + timeout
+  for (;;) {
+    const value = read()
+    if (value !== undefined || Date.now() >= deadline) return value
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
 }
 
 function count(value: number, one: string, many: string) {
@@ -256,7 +286,7 @@ function count(value: number, one: string, many: string) {
 }
 
 function compiled() {
-  return /^(\/\$bunfs\/|[A-Z]:\\~BUN\\)/.test(process.argv[1] ?? "")
+  return /^(\/\$bunfs\/|[A-Za-z]:[\\/]~BUN[\\/])/.test(process.argv[1] ?? "")
 }
 
 async function stdin() {
@@ -272,21 +302,6 @@ function message(error: unknown) {
 function flag(name: string) {
   const value = flags[name]
   return typeof value === "string" ? value : undefined
-}
-
-function parseFlags(input: string[]) {
-  return input.reduce<{ flags: Record<string, string | true>; pending?: string }>(
-    (state, item) => {
-      if (item.startsWith("--")) {
-        const [name, value] = item.slice(2).split("=", 2)
-        if (value !== undefined) return { flags: { ...state.flags, [name]: value } }
-        return { flags: { ...state.flags, [name]: true }, pending: name }
-      }
-      if (state.pending) return { flags: { ...state.flags, [state.pending]: item } }
-      return state
-    },
-    { flags: {} },
-  ).flags
 }
 
 function usage() {
