@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import type { IntegrationInfo } from "@opencode/client"
-import { loginChoices } from "../src/commands/handlers/auth/login"
+import type { ConfigEntry, IntegrationInfo } from "@opencode/client"
+import { disabledBy, loginChoices } from "../src/commands/handlers/auth/login"
 
 const integration = (value: Partial<IntegrationInfo> & Pick<IntegrationInfo, "id" | "name">): IntegrationInfo => ({
   methods: [{ type: "key" }],
@@ -27,4 +27,45 @@ test("groups the CLI choices like /connect while keeping stable login IDs", () =
     { value: "openai", label: "OpenAI", category: "Popular", connected: false },
     { value: "mistral", label: "Mistral", category: "Services", connected: false },
   ])
+})
+
+test("reports the config file that disables a provider", () => {
+  const document = (path: string, policies: { resource: string; effect: "allow" | "deny" }[]): ConfigEntry => ({
+    type: "document",
+    path,
+    info: { policies: policies.map((policy) => ({ action: "provider.use", ...policy })) },
+  })
+  const global = document("/home/me/.config/opencode/opencode.jsonc", [{ resource: "opencode-go", effect: "deny" }])
+
+  expect(disabledBy([global], "opencode-go")?.path).toBe("/home/me/.config/opencode/opencode.jsonc")
+  expect(disabledBy([global], "openai")).toBeUndefined()
+  // Within a document the last statement wins; across documents the earliest-loaded one does, as in core.
+  expect(
+    disabledBy(
+      [
+        document("/a", [
+          { resource: "opencode-go", effect: "deny" },
+          { resource: "opencode-go", effect: "allow" },
+        ]),
+      ],
+      "opencode-go",
+    ),
+  ).toBeUndefined()
+  expect(
+    disabledBy([document("/managed", [{ resource: "opencode-go", effect: "allow" }]), global], "opencode-go"),
+  ).toBeUndefined()
+  // A later wildcard allow wins, as in core.
+  expect(
+    disabledBy(
+      [
+        document("/c", [
+          { resource: "opencode-go", effect: "deny" },
+          { resource: "*", effect: "allow" },
+        ]),
+      ],
+      "opencode-go",
+    ),
+  ).toBeUndefined()
+  // enabled_providers' wildcard deny also covers integrations that supply no provider.
+  expect(disabledBy([document("/b", [{ resource: "*", effect: "deny" }])], "opencode-go")).toBeUndefined()
 })
