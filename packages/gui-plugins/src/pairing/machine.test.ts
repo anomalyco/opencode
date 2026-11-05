@@ -484,7 +484,13 @@ describe("the display sleep setting", () => {
     expect(retried.effects).toEqual([
       { type: "read-screen", generation: 1, attempt: read, timeoutMs: SCREEN_TIMEOUT_MS },
     ])
-    expect(retried.state.screen).toEqual({ status: "loading", generation: 1, attempt: read, step: "reading", failures: 0 })
+    expect(retried.state.screen).toEqual({
+      status: "loading",
+      generation: 1,
+      attempt: read,
+      step: "reading",
+      failures: 0,
+    })
     expect(viewPairingPage(retried.state)).toMatchObject({ screenError: false, screenDisabled: true })
     expect(step(retried.state, { type: "screen.retry" }).state).toBe(retried.state)
     expect(step(retried.state, { type: "screen.read.succeeded", attempt: read, enabled: true }).state.screen).toEqual({
