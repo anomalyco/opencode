@@ -10,8 +10,9 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Schema } from "effect"
-import { Frontend, Handshake, JsonRpc } from "@opencode/protocol/simulation"
+import { Frontend, Handshake } from "@opencode/protocol/simulation"
 import { buildRust, command, parityRoot, sandbox, type Side } from "../../cli/client"
+import { connectDrive } from "../../sim/drive"
 
 const viewport = { cols: 100, rows: 30 }
 const password = "drive-parity"
@@ -129,38 +130,8 @@ async function drive(side: Side, port: number) {
   })
   children.push(client)
   await waitForLine(path.join(box.root, `${side}.stderr`), "opencode drive ui websocket:")
-  const socket = new WebSocket(`ws://127.0.0.1:${port}`)
-  await new Promise((resolve, reject) => {
-    socket.onopen = resolve
-    socket.onerror = reject
-  })
-  const pending = new Map<number, (value: JsonRpc.Response) => void>()
-  socket.onmessage = (event) => {
-    const response = Schema.decodeUnknownSync(JsonRpc.Response)(JSON.parse(String(event.data)))
-    pending.get(Number(response.id))?.(response)
-  }
-  let id = 0
-  const send = (method: string, params: unknown, ms: number) =>
-    new Promise<JsonRpc.Response | undefined>((resolve) => {
-      id++
-      const timer = setTimeout(() => resolve(undefined), ms)
-      pending.set(id, (response) => {
-        clearTimeout(timer)
-        resolve(response)
-      })
-      socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) }))
-    })
-  // The TS endpoint never answers a `ui.matches` whose screen read meets a frame in flight (`OutputBusy` is a defect
-  // its control server only logs), so a read that goes unanswered is sent again.
-  const call = async (method: string, params?: unknown) => {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const response = await send(method, params, method === "ui.matches" ? 2_000 : 30_000)
-      if (response) return response
-      if (method !== "ui.matches") break
-      console.error(`${side} ${method}: no response, sending it again`)
-    }
-    throw new Error(`${side} ${method}: no response`)
-  }
+  const drive = await connectDrive(`ws://127.0.0.1:${port}`, side)
+  const call = drive.call
   const captures: Record<string, Frontend.CapturedFrame> = {}
   const outcomes: unknown[] = []
   for (const step of steps) {
@@ -180,7 +151,7 @@ async function drive(side: Side, port: number) {
     if (step.capture) captures[step.capture] = decoded as Frontend.CapturedFrame
     outcomes.push(summary(step.method, decoded))
   }
-  socket.close()
+  drive.close()
   client.kill()
   await client.exited
   return { captures, outcomes }
@@ -199,7 +170,14 @@ function summary(method: string, decoded: unknown) {
 }
 
 function text(frame: Frontend.CapturedFrame) {
-  return frame.lines.map((line) => line.spans.map((span) => span.text).join("").trimEnd()).join("\n")
+  return frame.lines
+    .map((line) =>
+      line.spans
+        .map((span) => span.text)
+        .join("")
+        .trimEnd(),
+    )
+    .join("\n")
 }
 
 // Cells that differ in text, colors, or attributes, and the rows with a text difference.
@@ -256,7 +234,9 @@ async function waitForServer(url: string) {
 async function waitForLine(file: string, prefix: string) {
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
-    const text = await Bun.file(file).text().catch(() => "")
+    const text = await Bun.file(file)
+      .text()
+      .catch(() => "")
     if (text.includes(prefix)) return
     await Bun.sleep(100)
   }
