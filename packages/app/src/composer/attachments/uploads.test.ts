@@ -82,29 +82,6 @@ describe("uploads", () => {
     expect(uploads.items()).toEqual([])
   })
 
-  test("progress keeps each row's identity and writes only its own row", async () => {
-    const reports: ((loaded: number) => void)[] = []
-
-    const work = (report: (loaded: number) => void) => {
-      reports.push(report)
-
-      return new Promise<string>(() => {})
-    }
-
-    const first = uploads.track({ id: "one", scope: scopeA, filename: "one.bin", mime: "", size: 100 }, work)
-    const second = uploads.track({ id: "two", scope: scopeA, filename: "two.bin", mime: "", size: 100 }, work)
-    const rows = uploads.items()
-    const [one, two] = [rows[0], rows[1]]
-
-    reports[1]?.(40)
-    expect(uploads.items()[0]).toBe(one)
-    expect(uploads.items()[1]).toBe(two)
-    expect(uploads.items().map((item) => item.loaded)).toEqual([0, 40])
-
-    uploads.cancelScope(scopeA)
-    expect(await Promise.all([first, second])).toEqual([undefined, undefined])
-  })
-
   test("an upload with no progress fails after the stall timeout instead of blocking sends", async () => {
     jest.useFakeTimers()
     const pending = uploads.track(

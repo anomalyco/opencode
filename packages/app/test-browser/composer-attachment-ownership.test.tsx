@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { createComposerAttachments } from "@/composer/attachments/attachments"
+import { uploads } from "@/composer/attachments/uploads"
 import { createMemoryComposerState } from "@/composer/state"
 import type { ComposerPrompt } from "@/composer/types"
 
@@ -60,6 +61,29 @@ describe("Composer attachment ownership", () => {
         }, rejectTest)
       })
     })
+  })
+
+  test("upload progress keeps each row's identity and writes only its own row", async () => {
+    const scope = {}
+    const reports: ((loaded: number) => void)[] = []
+
+    const work = (report: (loaded: number) => void) => {
+      reports.push(report)
+
+      return new Promise<string>(() => {})
+    }
+
+    const first = uploads.track({ id: "one", scope, filename: "one.bin", mime: "", size: 100 }, work)
+    const second = uploads.track({ id: "two", scope, filename: "two.bin", mime: "", size: 100 }, work)
+    const rows = [...uploads.items()]
+
+    reports[1]?.(40)
+    expect(uploads.items()[0]).toBe(rows[0]!)
+    expect(uploads.items()[1]).toBe(rows[1]!)
+    expect(uploads.items().map((item) => item.loaded)).toEqual([0, 40])
+
+    uploads.cancelScope(scope)
+    expect(await Promise.all([first, second])).toEqual([undefined, undefined])
   })
 
   test("keeps an upload pending for its draft across a remount, and stops it when the draft closes", async () => {
