@@ -38,6 +38,7 @@ describe("transitionSlidePaint", () => {
     ])
 
     const painted = bitmap()
+
     const done = transitionSlidePaint(start.state, {
       type: "pass.succeeded",
       index: 0,
@@ -155,7 +156,10 @@ describe("transitionSlidePaint", () => {
   test("a first pass that hangs times out, is withdrawn and shows the notice", () => {
     const timed = replay([started(), { type: "pass.timed-out", index: 0, attempt: 1 }])
 
-    expect(timed.effects).toEqual([{ type: "abort-paint", attempt: 1 }, { type: "clear-canvas", index: 0 }])
+    expect(timed.effects).toEqual([
+      { type: "abort-paint", attempt: 1 },
+      { type: "clear-canvas", index: 0 },
+    ])
     expect(slidePaintFailed(timed.state, 0)).toBe(true)
   })
 
@@ -208,6 +212,7 @@ describe("transitionVectorRaster", () => {
     expect(vectorNeedsRaster(failed, { width: 800, height: 600 })).toBe(true)
 
     const smaller = bitmap(800, 600)
+
     const rasterized = transitionVectorRaster(failed, {
       type: "raster.settled",
       size: { width: 800, height: 600 },
@@ -224,6 +229,7 @@ describe("transitionVectorRaster", () => {
   test("a failed finer size keeps the coarser bitmap and is not asked for again", () => {
     const coarse = bitmap(400, 300)
     const rasterized: VectorRasterState = { status: "rasterized", bitmap: coarse, failedTarget: undefined }
+
     const upgrade = transitionVectorRaster(rasterized, {
       type: "raster.settled",
       size: { width: 1200, height: 900 },
@@ -242,7 +248,11 @@ describe("transitionVectorRaster", () => {
     const fine = bitmap(1200, 900)
 
     expect(
-      transitionVectorRaster(upgrade.state, { type: "raster.settled", size: { width: 1200, height: 900 }, bitmap: fine }),
+      transitionVectorRaster(upgrade.state, {
+        type: "raster.settled",
+        size: { width: 1200, height: 900 },
+        bitmap: fine,
+      }),
     ).toEqual({
       state: { status: "rasterized", bitmap: fine, failedTarget: undefined },
       effects: [{ type: "close-bitmap", bitmap: coarse }],

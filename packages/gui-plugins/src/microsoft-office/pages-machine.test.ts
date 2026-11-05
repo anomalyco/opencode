@@ -82,9 +82,9 @@ describe("transitionOfficePages", () => {
     ])
 
     expect(ready.effects).toEqual([{ type: "scroll-to", index: 0, topOffset: 30 }])
-    expect(transitionOfficePages(ready.state, { type: "scroll.requested", index: 9, y: 0, rowMounted: false }).state).toBe(
-      ready.state,
-    )
+    expect(
+      transitionOfficePages(ready.state, { type: "scroll.requested", index: 9, y: 0, rowMounted: false }).state,
+    ).toBe(ready.state)
   })
 
   // Bug: a waiting scroll survived a page replacement and ran against the new geometry.
@@ -252,11 +252,7 @@ describe("transitionOfficePages", () => {
   })
 
   test("disposal cancels the timers and ignores later events", () => {
-    const busy = replay([
-      { type: "pages.changed", pages: pages(20) },
-      measured(800),
-      measured(700),
-    ]).state
+    const busy = replay([{ type: "pages.changed", pages: pages(20) }, measured(800), measured(700)]).state
     const disposed = transitionOfficePages(busy, { type: "disposed" })
 
     expect(disposed.effects).toEqual([{ type: "cancel-settle" }, { type: "cancel-growth" }])

@@ -119,7 +119,13 @@ function picked(
   }
 
   const attempt = (state.status === "selecting" ? state.attempt : state.issued) + 1
-  const request: SheetPickEffect = { type: "request-show", attempt, sheet: event.sheet, timeoutMs: SHEET_SHOW_TIMEOUT_MS }
+
+  const request: SheetPickEffect = {
+    type: "request-show",
+    attempt,
+    sheet: event.sheet,
+    timeoutMs: SHEET_SHOW_TIMEOUT_MS,
+  }
 
   return {
     state: { status: "selecting", attempt, selecting: event.sheet, target, shown: state.shown },

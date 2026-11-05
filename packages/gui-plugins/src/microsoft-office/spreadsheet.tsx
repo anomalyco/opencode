@@ -306,6 +306,7 @@ function SpreadsheetGrid(props: {
   let shown: { grid: GridMeta | undefined; links: DisplayList } | undefined
   // The pointer gesture: what a pointer that is down drags across, and the cell a click without a drag follows.
   const [pointerState, setPointerState] = createSignal<SheetPointerState>(IDLE_SHEET_POINTER_STATE)
+
   // Built once: every pointer move during a drag writes them in place.
   const moveEvent: MoveEvent = {
     type: "pointer.moved",
@@ -316,6 +317,7 @@ function SpreadsheetGrid(props: {
     focusRow: 0,
     focusCol: 0,
   }
+
   const spot: PointerSpot = { x: 0, y: 0 }
   // The frames the worker draws, which the newest reply on screen stays until the next replaces it.
   const [frameState, setFrameState] = createSignal(createSheetFrameState())

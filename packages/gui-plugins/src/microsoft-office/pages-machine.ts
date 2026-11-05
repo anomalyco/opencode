@@ -158,8 +158,7 @@ export function transitionOfficePages(state: OfficePagesState, event: OfficePage
     return event.rowMounted ? flush(pending) : { state: pending, effects: NONE }
   }
 
-  if (event.type === "row.mounted")
-    return state.scroll?.index === event.index ? flush(state) : { state, effects: NONE }
+  if (event.type === "row.mounted") return state.scroll?.index === event.index ? flush(state) : { state, effects: NONE }
 
   const zoom =
     event.type === "zoom.in"
@@ -336,7 +335,8 @@ function stepped(
   const slice = nextGrowthSlice(event.previousElapsedMs, event.previousAdded, growth.slice)
   const mounted = Math.min(state.pages.length, growth.mounted + slice)
 
-  if (mounted >= state.pages.length) return { state: { ...state, growth: { status: "complete", mounted } }, effects: NONE }
+  if (mounted >= state.pages.length)
+    return { state: { ...state, growth: { status: "complete", mounted } }, effects: NONE }
 
   return {
     state: { ...state, growth: { status: "growing", mounted, slice, attempt: growth.attempt } },

@@ -58,7 +58,10 @@ export type SheetPointerEffect =
   | { readonly type: "extend-selection"; readonly focus: CellAddr }
   | { readonly type: "follow-link"; readonly cell: CellAddr }
 
-export type SheetPointerTransition = { readonly state: SheetPointerState; readonly effects: readonly SheetPointerEffect[] }
+export type SheetPointerTransition = {
+  readonly state: SheetPointerState
+  readonly effects: readonly SheetPointerEffect[]
+}
 
 export const IDLE_SHEET_POINTER_STATE: SheetPointerState = Object.freeze({ status: "idle" })
 
@@ -98,6 +101,7 @@ export function transitionSheetPointer(state: SheetPointerState, event: SheetPoi
     state.axis === "cells" && state.pressed && (state.pressed.row !== event.row || state.pressed.col !== event.col)
       ? { ...state, pressed: undefined }
       : state
+
   const row = state.axis === "columns" ? 0 : event.row
   const col = state.axis === "rows" ? 0 : event.col
 

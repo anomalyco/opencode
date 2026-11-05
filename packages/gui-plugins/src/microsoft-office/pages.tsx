@@ -236,22 +236,22 @@ export function OfficePages(props: {
               onCleanup(() => rows.delete(index))
 
               return (
-              <div class="flex shrink-0 flex-col items-center gap-3">
-                <OfficePage
-                  ref={(element) => rows.set(index, element)}
-                  watch={watch}
-                  index={index}
-                  page={page()}
-                  scale={fit(width(), page().width)}
-                  rasterScale={fit(settled(), page().width)}
-                  ratio={ratio()}
-                  paint={props.paint}
-                  overlay={props.overlay}
-                  text={props.text ?? false}
-                  label={props.label(index)}
-                />
-                {props.footer?.(index)}
-              </div>
+                <div class="flex shrink-0 flex-col items-center gap-3">
+                  <OfficePage
+                    ref={(element) => rows.set(index, element)}
+                    watch={watch}
+                    index={index}
+                    page={page()}
+                    scale={fit(width(), page().width)}
+                    rasterScale={fit(settled(), page().width)}
+                    ratio={ratio()}
+                    paint={props.paint}
+                    overlay={props.overlay}
+                    text={props.text ?? false}
+                    label={props.label(index)}
+                  />
+                  {props.footer?.(index)}
+                </div>
               )
             }}
           </Index>

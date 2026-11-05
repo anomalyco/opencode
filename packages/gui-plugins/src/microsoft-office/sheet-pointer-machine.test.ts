@@ -70,12 +70,7 @@ describe("transitionSheetPointer", () => {
 
   // Bug: `pressed` survived the drag, so dragging off a link cell and back onto it followed the link on release.
   test("dragging off a link cell and back onto it never follows the link", () => {
-    const back = replay([
-      down(cell(0, 0)),
-      moved(1, 1, { row: 0, col: 0 }),
-      moved(0, 0, { row: 1, col: 1 }),
-      up(0, 0),
-    ])
+    const back = replay([down(cell(0, 0)), moved(1, 1, { row: 0, col: 0 }), moved(0, 0, { row: 1, col: 1 }), up(0, 0)])
 
     expect(back.state).toBe(IDLE_SHEET_POINTER_STATE)
     expect(back.effects).toEqual([])

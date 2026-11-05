@@ -100,7 +100,13 @@ export function transitionSlidePaint(state: SlidePaintState, event: SlidePaintEv
       },
       effects: [
         ...(previous && inflight(previous) ? [{ type: "abort-paint" as const, attempt: previous.attempt }] : []),
-        { type: "request-paint", index: event.index, attempt, density: event.density, timeoutMs: SLIDE_PAINT_TIMEOUT_MS },
+        {
+          type: "request-paint",
+          index: event.index,
+          attempt,
+          density: event.density,
+          timeoutMs: SLIDE_PAINT_TIMEOUT_MS,
+        },
       ],
     }
   }
@@ -197,7 +203,9 @@ export function slidePaintFailed(state: SlidePaintState, index: number) {
 }
 
 function inflight(slot: SlideSlotState) {
-  return slot.status === "painting" || slot.status === "rasterizing-vectors" || slot.status === "repainting-with-vectors"
+  return (
+    slot.status === "painting" || slot.status === "rasterizing-vectors" || slot.status === "repainting-with-vectors"
+  )
 }
 
 function settle(state: Extract<SlidePaintState, { status: "active" }>, index: number, slot: SlideSlotState) {
