@@ -213,18 +213,18 @@ export function PaneTabs(props: {
   const language = useLanguage()
   const { tabs } = useSessionLayout()
   const menu = createSessionPanelMenuEntries()
-  const primary = createMemo(() => menu().find((entry) => entry.item.primary)?.item)
+  const primary = createMemo(() => menu().find((entry) => entry.item.primary))
   const launchers = createMemo(() => menu().filter((entry) => !entry.item.primary && !entry.item.opened))
 
-  // The next tab this pane's "+" menu opens lands in this pane.
-  const target = () => tabs().target(props.pane.id)
+  // The next tab of the chosen entry's plugin lands in this pane. Menu entries and tabs are both keyed `${plugin}:…`.
+  const target = (key: string) => tabs().target(props.pane.id, key.slice(0, key.indexOf(":")))
 
   const closed = {
     get entries() {
       return props.region.recent()
     },
     onReopen: (key: string) => {
-      target()
+      target(key)
       props.region.reopen(key)
     },
   }
@@ -341,7 +341,7 @@ export function PaneTabs(props: {
           </For>
           <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
             <Show
-              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0]?.item : undefined)}
+              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0] : undefined)}
               fallback={
                 <Show
                   when={launchers().length > 0}
@@ -377,7 +377,7 @@ export function PaneTabs(props: {
                 </Show>
               }
             >
-              {(item) => <AddButton item={item()} onChoose={target} />}
+              {(entry) => <AddButton item={entry().item} onChoose={() => target(entry().key)} />}
             </Show>
           </div>
         </Tabs.List>
@@ -505,7 +505,7 @@ function AddButton(props: { item: SessionPanelMenuItem; onChoose: () => void }):
   )
 }
 
-function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () => void }): JSX.Element {
+function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (key: string) => void }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
   const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
@@ -513,7 +513,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
   // A chosen item runs once the closing menu has returned focus to "+", and the tab strip has passed it on to the
   // selected tab. Releasing that focus first lets the item move it where its tab needs it, e.g. into a new terminal,
   // without the strip taking it back for the tab it remembers.
-  let chosen: SessionPanelMenuItem | undefined
+  let chosen: SessionPanelMenuEntry | undefined
 
   return (
     <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
@@ -531,14 +531,14 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
         <Menu.Portal>
           <Menu.Content
             onCloseAutoFocus={() => {
-              const item = chosen
+              const entry = chosen
 
-              if (!item) return
+              if (!entry) return
               chosen = undefined
               setTimeout(() => {
                 if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-                props.onChoose()
-                item.run()
+                props.onChoose(entry.key)
+                entry.item.run()
               })
             }}
           >
@@ -555,7 +555,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
                     return (
                       <Menu.Item
                         class="!gap-6"
-                        onSelect={() => (chosen = item())}
+                        onSelect={() => (chosen = { key, item: item() })}
                         shortcut={
                           <Show when={keybind().length > 0}>
                             <Keybind keys={keybind()} variant="neutral" />
@@ -582,7 +582,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
 /** The + menu items as rows, then the session's recently closed tabs, in the new tab view. */
 function Launchers(props: {
   items: readonly SessionPanelMenuEntry[]
-  onChoose: () => void
+  onChoose: (key: string) => void
   closed: { entries: readonly ClosedSideTab[]; onReopen: (key: string) => void }
 }): JSX.Element {
   const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
@@ -593,7 +593,9 @@ function Launchers(props: {
       <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
         <For each={keys()}>
           {(key) => (
-            <Show when={byKey().get(key)}>{(item) => <LauncherRow item={item()} onChoose={props.onChoose} />}</Show>
+            <Show when={byKey().get(key)}>
+              {(item) => <LauncherRow item={item()} onChoose={() => props.onChoose(key)} />}
+            </Show>
           )}
         </For>
         <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
