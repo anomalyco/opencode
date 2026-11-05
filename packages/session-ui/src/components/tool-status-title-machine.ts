@@ -109,7 +109,13 @@ export function viewToolStatusTitle(state: ToolStatusTitleState) {
     return { active: false, animating: false, width: undefined, showActive: false, showDone: true }
 
   if (state.status === "idle")
-    return { active: state.active, animating: false, width: undefined, showActive: state.active, showDone: !state.active }
+    return {
+      active: state.active,
+      animating: false,
+      width: undefined,
+      showActive: state.active,
+      showDone: !state.active,
+    }
 
   // Both texts stay mounted so one fades out while the other fades in.
   return {
