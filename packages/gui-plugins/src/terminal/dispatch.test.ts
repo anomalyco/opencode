@@ -7,7 +7,9 @@ type Event = { readonly type: "start" | "finish" | "noop" | "failed" }
 
 type Effect = { readonly type: "explode" | "log" }
 
-const transition = (state: State, event: Event): { state: State; effects: readonly Effect[] } => {
+type Transition = { readonly state: State; readonly effects: readonly Effect[] }
+
+const transition = (state: State, event: Event): Transition => {
   if (event.type === "start") return { state: { status: "working" }, effects: [{ type: "explode" }, { type: "log" }] }
 
   if (event.type === "failed") return { state: { status: "failed" }, effects: [] }
