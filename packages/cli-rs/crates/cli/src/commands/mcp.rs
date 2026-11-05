@@ -106,7 +106,10 @@ fn add(args: &McpAddArgs) -> anyhow::Result<()> {
         }
     };
     let directory = if args.global {
-        Paths::from_env()?.config
+        // TS's `Global.Service` creates the config directory before the handler runs.
+        let config = Paths::from_env()?.config;
+        std::fs::create_dir_all(&config)?;
+        config
     } else {
         std::env::current_dir()?
     };
