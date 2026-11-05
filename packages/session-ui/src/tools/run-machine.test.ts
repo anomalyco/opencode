@@ -41,14 +41,14 @@ describe("transitionShellRun", () => {
       status: "completed",
       input: command,
       metadata: result,
-      output: "out\n\nExited with code 1",
+      output: "Exit code: 1\nOutput:\nout\n",
     })
 
     expect(viewShellRun(done)).toMatchObject({
       pending: false,
       basicStatus: "completed",
       follow: undefined,
-      output: "out\n\nExited with code 1",
+      output: "out\n",
     })
     expect(transitionShellRun(done, { type: "output.received", shellID: "shl_1", output: "late\n" })).toBe(done)
   })

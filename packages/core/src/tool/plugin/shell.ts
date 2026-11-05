@@ -76,8 +76,7 @@ type Output = typeof Output.Type
 
 const resultMessages = (output: Output, timeout?: number) => {
   if (output.status === "running") return [...(output.output ? [output.output] : []), BACKGROUND_INSTRUCTION]
-  const status = ShellResult.status(output, timeout)
-  return [...(status ? [status] : []), ...(output.output ? [output.output] : [])]
+  return [ShellResult.report(output, timeout)]
 }
 
 const toolResult = (output: Output, timeout?: number) => {

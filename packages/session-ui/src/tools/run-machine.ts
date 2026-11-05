@@ -29,11 +29,18 @@ export function shellRunProps(tool: ShellTool, shellRunning: (id: string) => boo
   return {
     status: tool.status,
     command: tool.input.command ?? tool.metadata.command ?? "",
-    output: tool.output ?? "",
+    output: tool.metadata.status === "completed" ? resultOutput(tool.output ?? "") : (tool.output ?? ""),
     shellID,
     saved: tool.metadata.status !== undefined && SAVED_STATUSES.has(tool.metadata.status),
     shellRunning: shellID !== undefined && shellRunning(shellID),
   }
+}
+
+// A completed agent result leads with a one-line model-facing status, then `Output:`, then the command output.
+function resultOutput(text: string) {
+  const index = text.indexOf("\nOutput:\n")
+  if (index === -1 || text.lastIndexOf("\n", index - 1) !== -1) return text
+  return text.slice(index + "\nOutput:\n".length)
 }
 
 type ShellRunShared = { readonly command: string; readonly output: string }

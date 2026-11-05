@@ -21,6 +21,7 @@ import {
   canonicalToolName,
   finiteNumber,
   primitiveInputSummary,
+  shellOutputText,
   toolDisplayContent,
   toolDisplayMetadata,
   webSearchProviderLabel,
@@ -156,16 +157,10 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
-const SHELL_STATUS = /^\[(?:exit -?\d+|timed out(?: after [\d.]+s)?|killed by [^\]]+)\]/
-
 export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }> | undefined) {
   if (!content) return ""
-  if (canonicalToolName(name) === "shell") {
-    // V2 shell content leads with a model-only status when the command failed, then the command output, then any
-    // model-only instruction.
-    const texts = content.flatMap((item) => (item.type === "text" && item.text !== undefined ? [item.text] : []))
-    return (texts.length > 1 && SHELL_STATUS.test(texts[0]) ? texts[1] : texts[0]) ?? ""
-  }
+  if (canonicalToolName(name) === "shell")
+    return shellOutputText(content.find((item) => item.type === "text")?.text ?? "")
   const joined = content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
   if (canonicalToolName(name) === "read") return readDisplayText(joined) ?? joined
   return joined
