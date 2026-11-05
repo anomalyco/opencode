@@ -6,9 +6,9 @@ import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import { ConfigDiscovery } from "./discovery.js"
 
+// Case-insensitive everywhere: macOS volumes usually are too, and a false match only costs a reload.
 function key(file: string) {
-  const normalized = path.normalize(file)
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+  return path.normalize(file).toLowerCase()
 }
 
 /** Paths whose content or presence feeds the loaded config; other writes under watched roots do not. */
