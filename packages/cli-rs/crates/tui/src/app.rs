@@ -457,9 +457,9 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     tui
 }
 
-/// Runs the TUI on the terminal until it quits.
-pub fn run(launch: Launch) -> opentui::Result<()> {
-    let mut options = AppOptions {
+/// The app options of the TUI, before the terminal's mouse setting.
+pub fn options() -> AppOptions {
+    AppOptions {
         exit_on_ctrl_c: false,
         // `terminal.suspend` (E.20) owns Ctrl+Z, so `keybinds` can turn it off.
         suspend_on_ctrl_z: false,
@@ -468,8 +468,15 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
         // `--print-logs` records and stray stderr writes would draw over the screen; they go to the console and
         // reach the real stderr once the terminal is restored.
         capture_stderr: true,
+        // `autoFocus: false` (`app.tsx:258`): a click moves no focus unless its handler does.
+        focus_on_click: false,
         ..AppOptions::default()
-    };
+    }
+}
+
+/// Runs the TUI on the terminal until it quits.
+pub fn run(launch: Launch) -> opentui::Result<()> {
+    let mut options = options();
     options.host.terminal.mouse =
         crate::features::system_commands::mouse_tracking(&launch.deps.config);
     if let Some(manifest) = crate::features::drive::manifest() {
