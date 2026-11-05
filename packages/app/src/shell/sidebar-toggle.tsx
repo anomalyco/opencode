@@ -41,7 +41,7 @@ export function macVerticalTrafficLights(zoom: number) {
   return { x, y, width: x + macTrafficLightsBaseWidth - 14 }
 }
 
-const macTrafficLightsGap = 10
+const macTrafficLightsGap = 14
 
 // The toggle's 28px plus a 4px gap before the header contents.
 const slotWidth = 32

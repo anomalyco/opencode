@@ -6,7 +6,7 @@ const panelRadius = 10
 const panelInset = 8
 
 // Room between the traffic lights and the pocket the panel bends around them.
-const pocketPadding = 6
+const pocketPadding = 10
 
 // The native buttons' size in points; they keep it at every renderer zoom.
 const trafficLightSize = 14
