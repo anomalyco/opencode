@@ -23,9 +23,11 @@ import {
   toCreateInput,
   When,
 } from "@opencode/schema/schedule"
+import { App } from "./app.js"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
+import { Flag } from "./flag.js"
 import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
@@ -227,6 +229,7 @@ const layer = Layer.effect(
     // Shell actions run in the background so one slow command never stalls the tick loop. Layer-scoped, so a shutdown
     // interrupts them; remove() interrupts one run, pause() lets it finish.
     const running = yield* FiberMap.make<ID, void, never>()
+    const flags = yield* Flag.resolver
 
     // Config is per location, so a schedule follows the config where its Session lives.
     const readSettings = Effect.gen(function* () {
@@ -234,7 +237,7 @@ const layer = Layer.effect(
       if (Option.isNone(config)) return { enabled: false, timezone: undefined }
       const entries = yield* config.value.entries()
       return {
-        enabled: Config.latest(entries, "experimental")?.schedules === true,
+        enabled: flags(entries).schedules.enabled,
         timezone: Config.latest(entries, "timezone"),
       }
     })
@@ -1030,5 +1033,5 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Database.node, Session.node, SessionExecution.node, Instance.node, Global.node, LocationServiceMap.node],
+  deps: [App.node, Database.node, Session.node, SessionExecution.node, Instance.node, Global.node, LocationServiceMap.node],
 })

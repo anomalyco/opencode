@@ -1,28 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { createSidecarResolver, initializationData } from "./initialization"
-
-function failure(error: Error | string) {
-  try {
-    initializationData(Object.assign(() => undefined, { error }))
-  } catch (caught) {
-    return caught
-  }
-}
+import { createSidecarResolver, localServerStartupError } from "./initialization"
 
 describe("desktop renderer initialization", () => {
-  test("throws the original initialization error, marked as a local server startup, before rendering", () => {
+  test("keeps the original initialization error, marked as a local server startup", () => {
     const error = new Error("Cannot migrate session_message projections")
-    expect(failure(error)).toBe(error)
+    expect(localServerStartupError(error)).toBe(error)
     expect(error).toHaveProperty("localServerStartup", true)
     // The RPC error text reaches the error screen unchanged.
     expect(error.message).toBe("Cannot migrate session_message projections")
     // A falsy error is still an error.
-    const empty = failure("")
+    const empty = localServerStartupError("")
     expect(empty).toBeInstanceOf(Error)
     expect(empty).toHaveProperty("message", "")
     expect(empty).toHaveProperty("localServerStartup", true)
-    const sidecar = { url: "http://127.0.0.1:1234" }
-    expect(initializationData(Object.assign(() => sidecar, { error: undefined }))).toBe(sidecar)
   })
 
   test("refreshes the managed sidecar endpoint", async () => {

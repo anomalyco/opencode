@@ -34,7 +34,7 @@ const image: ImageAttachmentPart = {
 const session: ComposerSession = {
   id: "session-1",
   directory: "C:/repo",
-  handoff: { set() {}, clear() {} },
+  handoff: { set() {}, settle() {}, clear() {} },
   api: {
     command: async () => undefined,
     shell: async () => undefined,

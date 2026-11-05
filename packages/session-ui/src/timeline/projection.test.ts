@@ -6,7 +6,6 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { Predicate } from "effect"
 import {
   createTimelineProjection,
   reasoningHeading,
@@ -255,59 +254,6 @@ describe("reuseTimelineRows", () => {
 })
 
 describe("createTimelineProjection", () => {
-  test("keeps new tools folded into seen work above the new-messages notice", () => {
-    const messages = [
-      { id: "user", type: "user", text: "Read files", time: { created: 1 } },
-      {
-        id: "assistant",
-        type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
-        time: { created: 2, completed: 3 },
-        content: [
-          ...["seen", "new"].map(
-            (id): SessionMessageAssistantTool => ({
-              type: "tool",
-              id,
-              name: "read",
-              state: {
-                status: "completed",
-                input: { filePath: `${id}.ts` },
-                content: [{ type: "text", text: id }],
-                metadata: {},
-              },
-              time: { created: 2, completed: 3 },
-            }),
-          ),
-          { type: "text", text: "The result" },
-        ],
-      },
-    ] satisfies SessionMessageInfo[]
-
-    const folded = createTimelineProjection({
-      sessionMessages: messages,
-      status: { type: "idle" },
-      reasoningMode: "full",
-      newMessages: new Set(["new"]),
-    })
-
-    expect(folded.rows.some((row) => Predicate.isTagged(row, "NewMessages"))).toBe(false)
-
-    const result = createTimelineProjection({
-      sessionMessages: messages,
-      status: { type: "idle" },
-      reasoningMode: "full",
-      newMessages: new Set(["new", "assistant:text:0"]),
-    })
-
-    const index = result.rows.findIndex((row) => Predicate.isTagged(row, "NewMessages"))
-
-    expect(result.rows[index]).toEqual(
-      new TimelineRow.NewMessages({ userMessageID: "user", partID: "assistant:text:0", read: false }),
-    )
-    expect(result.rows[index + 1]).toEqual(folded.rows[index])
-  })
-
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef

@@ -99,6 +99,7 @@ const metrics = ["run.duration", "interaction.p50"]
 export default bench({
   targets: {
     web: web({
+      expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
       async prepare({ case: name, playwright, mock, url }) {
         const server = new URL(url).origin

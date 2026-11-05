@@ -180,7 +180,6 @@ function TouchComposer(props: { state: State }) {
     setVisibility() {},
     variant: {
       configured: () => "high",
-      selected: () => session.variant,
       current: () => session.variant,
       list: () => ["medium", "high"],
       set: (variant: string | undefined) => setSession("variant", variant ?? "high"),

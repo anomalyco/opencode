@@ -81,7 +81,7 @@ recorded.effect.with(
             size: "1024x1024",
           }),
         ],
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
       })
       const compiled = yield* compileRequest(request)
       expect(compiled.body.tools).toMatchObject([

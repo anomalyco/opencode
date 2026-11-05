@@ -38,6 +38,7 @@ import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
+import { createDisclosure } from "../components/disclosure"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
 import { springStyle } from "@opencode/ui/motion/solid"
@@ -52,6 +53,7 @@ import type {
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
+import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 import {
   createMessageActionState,
@@ -61,33 +63,14 @@ import {
   type MessageActionCapabilities,
   type MessageActionEvent,
 } from "./action-machine"
-
-export async function writeClipboard(text: string): Promise<boolean> {
-  const written = await navigator.clipboard?.writeText(text).then(
-    () => true,
-    () => false,
-  )
-
-  if (written) return true
-  // The textarea sits beside the focused element so a focus trap, such as an open menu's, keeps its selection.
-  const active = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
-  const host = active && active !== document.body ? (active.parentElement ?? document.body) : document.body
-  const textarea = document.createElement("textarea")
-  textarea.value = text
-  textarea.setAttribute("readonly", "")
-  textarea.setAttribute("aria-hidden", "true")
-  textarea.tabIndex = -1
-  textarea.style.position = "fixed"
-  textarea.style.opacity = "0"
-  textarea.style.pointerEvents = "none"
-  host.appendChild(textarea)
-  textarea.select()
-  const copied = document.execCommand("copy")
-  textarea.remove()
-  active?.focus({ preventScroll: true })
-
-  return copied
-}
+import {
+  createPacedTextState,
+  DISPOSED_PACED_TEXT_EVENT,
+  TEXT_RENDER_PACE_MS,
+  transitionPacedText,
+  type PacedTextEvent,
+} from "./paced-text-machine"
+import { createCopyFeedback, writeClipboard } from "../components/copy"
 
 type MetaItem = { label: string; variant?: boolean }
 
@@ -101,9 +84,7 @@ function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssis
 }
 
 function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
-  return (
-    a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
-  )
+  return a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
 }
 
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
@@ -166,108 +147,47 @@ function UserMessageTransition(props: { active: boolean; children: JSX.Element }
   )
 }
 
-const TEXT_RENDER_PACE_MS = 24
-
-const TEXT_RENDER_IMMEDIATE = 512
-
-const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/
-
-function step(size: number) {
-  if (size <= 12) return 2
-
-  if (size <= 48) return 4
-
-  if (size <= 96) return 8
-
-  return Math.min(256, Math.ceil(size / 4))
-}
-
-function next(text: string, start: number) {
-  const end = Math.min(text.length, start + step(text.length - start))
-  const max = Math.min(text.length, end + 8)
-
-  for (let i = end; i < max; i++) {
-    if (TEXT_RENDER_SNAP.test(text[i] ?? "")) return i + 1
-  }
-
-  return end
-}
-
+// Token streaming dispatches here on every delta: the driver reuses one sync and one tick event, and the machine
+// returns the same state when a delta changes nothing.
 function createPacedValue(getValue: () => string, live?: () => boolean) {
-  const [value, setValue] = createSignal(getValue())
-  let shown = getValue()
-  let timeout: ReturnType<typeof setTimeout> | undefined
+  let state = createPacedTextState(untrack(getValue))
+  const [value, setValue] = createSignal(untrack(getValue))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const syncEvent = { type: "sync" as const, text: "", live: false }
+  const tickEvent = { type: "tick" as const, attempt: 0 }
 
-  const clear = () => {
-    if (!timeout) return
-    clearTimeout(timeout)
-    timeout = undefined
+  const tick = () => {
+    timer = undefined
+    dispatch(tickEvent)
   }
 
-  const sync = (text: string) => {
-    shown = text
-    setValue(text)
-  }
+  const dispatch = (event: PacedTextEvent) => {
+    const previous = state
+    state = transitionPacedText(previous, event)
 
-  const run = () => {
-    timeout = undefined
-    const text = getValue()
+    if (state === previous) return
 
-    if (!live?.()) {
-      sync(text)
-
-      return
+    if (state.status !== "pacing") {
+      clearTimeout(timer)
+      timer = undefined
     }
 
-    if (!text.startsWith(shown) || text.length <= shown.length) {
-      sync(text)
+    if (state.status === "disposed" || previous.status === "disposed") return
 
-      return
-    }
+    if (state.shown !== previous.shown) setValue(state.shown)
 
-    if (text.length - shown.length <= TEXT_RENDER_IMMEDIATE) {
-      sync(text)
-
-      return
-    }
-
-    const end = next(text, shown.length)
-    sync(text.slice(0, end))
-
-    if (end < text.length) timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
+    if (state.status !== "pacing" || (previous.status === "pacing" && previous.attempt === state.attempt)) return
+    tickEvent.attempt = state.attempt
+    timer = setTimeout(tick, TEXT_RENDER_PACE_MS)
   }
 
   createEffect(() => {
-    const text = getValue()
-
-    if (!live?.()) {
-      clear()
-      sync(text)
-
-      return
-    }
-
-    if (!text.startsWith(shown) || text.length < shown.length) {
-      clear()
-      sync(text)
-
-      return
-    }
-
-    if (text.length - shown.length <= TEXT_RENDER_IMMEDIATE) {
-      clear()
-      sync(text)
-
-      return
-    }
-
-    if (text.length === shown.length || timeout) return
-    timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
+    syncEvent.text = getValue()
+    syncEvent.live = live?.() ?? false
+    dispatch(syncEvent)
   })
 
-  onCleanup(() => {
-    clear()
-  })
+  onCleanup(() => dispatch(DISPOSED_PACED_TEXT_EVENT))
 
   return value
 }
@@ -335,14 +255,13 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const [state, setState] = createStore({ expanded: false })
+  const fold = createDisclosure({
+    open: () => props.expanded,
+    onOpenChange: (expanded) => props.onExpandedChange?.(expanded),
+  })
 
-  const expanded = () => props.expanded ?? state.expanded
-
-  const setExpanded = (value: boolean) => {
-    if (props.onExpandedChange) return props.onExpandedChange(value)
-    setState("expanded", value)
-  }
+  const expanded = fold.open
+  const setExpanded = fold.setOpen
 
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
   const pending = createMemo(() => status() !== undefined && status() !== "queued")
@@ -1164,11 +1083,7 @@ export function AssistantTextContent(props: {
   onMount(() => (rendered = true))
   const sources = () => (props.showCopy && sourcesHost?.enabled ? props.sources : undefined)
 
-  const interrupted = () => {
-    const type = props.message.error?.type.toLowerCase()
-
-    return !!type && (type.includes("abort") || type.includes("interrupt"))
-  }
+  const interrupted = () => isInterruptedError(props.message.error)
 
   const labels = createMemo<MetaItem[]>(() => {
     const agent = agentLabel(props.message.agent, data.agents)
@@ -1220,13 +1135,7 @@ export function AssistantTextContent(props: {
     })
   })
 
-  const [copied, setCopied] = createSignal(false)
-
-  const copy = async () => {
-    if (!(await writeClipboard(props.text))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const copy = createCopyFeedback()
 
   return (
     <Show when={props.text}>
@@ -1255,12 +1164,12 @@ export function AssistantTextContent(props: {
     return (
       <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
         <MessageActionButton
-          icon={copied() ? "check" : "copy"}
+          icon={copy.copied() ? "check" : "copy"}
           size="small"
-          label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+          label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={copy}
-          aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+          onClick={() => copy.copy(props.text)}
+          aria-label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
         />
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
@@ -1290,8 +1199,6 @@ export function AssistantReasoningContent(props: {
   onContentRendered?: () => void
 }) {
   const i18n = useI18n()
-  const [state, setState] = createStore<{ open?: boolean }>({})
-  const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
   const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
 
   const duration = createMemo(() => {
@@ -1318,13 +1225,13 @@ export function AssistantReasoningContent(props: {
         hasContent
         allowOpenWhilePending
         hideDetails={!props.content.text.trim()}
-        open={open()}
+        open={props.open}
+        defaultOpen={props.defaultOpen}
         onOpenChange={(value) => {
-          setState("open", value)
           props.onOpenChange?.(value)
           props.onContentRendered?.()
         }}
-        trigger={
+        trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
@@ -1347,7 +1254,7 @@ export function AssistantReasoningContent(props: {
               </Show>
             </div>
           </div>
-        }
+        )}
       >
         <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
       </BasicTool>

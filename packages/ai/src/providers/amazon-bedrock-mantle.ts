@@ -173,7 +173,7 @@ const fromSettings = ({
     auth,
     baseURL,
     credentials,
-    generation: topP === undefined ? undefined : { topP },
+    topP,
     headers,
     http: body === undefined ? undefined : { body },
     profile,

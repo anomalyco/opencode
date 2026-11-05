@@ -7,10 +7,11 @@ import {
   onCleanup,
   Show,
   Suspense,
+  untrack,
   type ParentProps,
   type Signal,
 } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import {
@@ -45,7 +46,30 @@ import {
 } from "@opencode/plugin/gui/file"
 import type File from "./index"
 import { FileVisual } from "./label"
+import {
+  createLinkExistsState,
+  linkExistsAnswer,
+  transitionLinkExists,
+  type LinkExistsEvent,
+  type LinkExistsState,
+} from "./link-exists-machine"
+import {
+  createLinkOpenState,
+  transitionLinkOpen,
+  type LinkOpenEffect,
+  type LinkOpenEvent,
+  type LinkResolution,
+  type LinkRoute,
+} from "./link-open-machine"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import {
+  createPickerState,
+  pickerBrowsing,
+  pickerFilterText,
+  pickerFocusRequest,
+  transitionPicker,
+  type PickerEvent,
+} from "./picker-machine"
 import tabStyles from "./tabs.css?inline"
 import { onIdle, BuiltinPanel, BuiltinSlot, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
@@ -61,15 +85,28 @@ const TABPANEL = "session-side-panel-file-browser-tabpanel"
 
 const HANDOFF_SESSIONS = 40
 
-const FILTER_SESSIONS = 40
-
 const DEFAULT_LINE_HEIGHT = 24
 
 type Handoff = { sessions: Record<string, Record<string, LineRange | null>> }
 
 type StyleLoad = { loaded?: Promise<void> }
 
-type LinkCheck = { result: boolean | Promise<boolean>; expires: number; known?: true }
+/** The pending "Open file" focus request's timeout. */
+type FocusTimer = { handle?: ReturnType<typeof setTimeout> }
+
+/** A link click's work in flight: its controller and timeout, and the screen it was clicked on. */
+type LinkAttempt = { controller: AbortController; timer: ReturnType<typeof setTimeout>; screen: SessionScreen }
+
+/** One link existence check in flight; `settle` answers the renders waiting on `result`. */
+type LinkCheck = {
+  controller: AbortController
+  timer: ReturnType<typeof setTimeout>
+  result: Promise<boolean>
+  settle: (exists: boolean) => void
+}
+
+/** The link existence cache of one screen and server connection, and its checks in flight. */
+type LinkChecks = { state: LinkExistsState; inFlight: Map<number, LinkCheck> }
 
 const setup: Plugin.Setup<typeof File> = (ctx) => {
   const sessions = ctx.sessions
@@ -80,10 +117,11 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const preference = desktop ? ctx.stores.app : undefined
   const [request, setRequest] = createStore<{ app?: OpenApp }>({})
 
-  const [filters, setFilters] = createStore<Record<string, { text: string; browsing: boolean } | undefined>>({})
+  const [machines, setMachines] = createStore({ linkOpen: createLinkOpenState(), picker: createPickerState() })
 
   const revealListeners = new Map<string, Set<() => void>>()
-  let clickController: AbortController | undefined
+  const linkAttempts = new Map<number, LinkAttempt>()
+  const focusTimer: FocusTimer = {}
 
   // Tab objects per session screen, which stays while it routes another session, reused so neither strip updates nor a
   // session switch rebuild a trigger. `close` prunes them.
@@ -112,21 +150,20 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     return state === "active" || state === "visible"
   }
 
-  const updateFilter = (session: string, patch: { text?: string; browsing?: boolean }) => {
-    setFilters(
-      produce((draft) => {
-        const current = draft[session]
-        const text = patch.text ?? current?.text ?? ""
-        const browsing = patch.browsing ?? current?.browsing ?? false
-        delete draft[session]
+  const dispatchPicker = (event: PickerEvent) => {
+    // Renders read the filters; a dispatch from one must not subscribe it to every change.
+    const previous = untrack(() => unwrap(machines.picker))
+    const next = transitionPicker(previous, event)
 
-        if (!text && !browsing) return
-        draft[session] = { text, browsing }
-        const keys = Object.keys(draft)
+    if (next.state !== previous) setMachines(produce((draft) => void (draft.picker = next.state)))
 
-        keys.slice(0, Math.max(0, keys.length - FILTER_SESSIONS)).forEach((item) => delete draft[item])
-      }),
-    )
+    next.effects.forEach((effect) => {
+      clearTimeout(focusTimer.handle)
+      focusTimer.handle =
+        effect.type === "start-focus-timer"
+          ? setTimeout(() => dispatchPicker({ type: "focus.ended", request: effect.request }), effect.timeoutMs)
+          : undefined
+    })
   }
 
   // Opens on the session screen, whose file model serves the routed session `session` is.
@@ -138,7 +175,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     // Not batched: the mobile tab strip must register the new tab before it leaves the browser, or Kobalte falls back
     // to the first tab and reselects it.
     layout.open(key(screen.file, path), session, options)
-    updateFilter(session.key, { browsing: false })
+    dispatchPicker({ type: "file.opened", sessionKey: session.key })
     void screen.file.sync(path)
   }
 
@@ -163,24 +200,23 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       ? undefined
       : layout.stored(session).find((id) => isLauncher(id) && active(session, id))
 
+    const narrow = layout.narrow()
+    const tab = selected ?? (narrow ? OPEN : `${OPEN}:${uuid()}`)
+
     batch(() => {
-      updateFilter(session.key, { text: query, browsing: true })
+      // Before the tab opens, so selecting the launcher keeps the focus request for its filter input.
+      dispatchPicker({
+        type: "picker.opened",
+        sessionKey: session.key,
+        query,
+        target: narrow ? { kind: "mobile" } : { kind: "launcher", tabId: tab },
+        background: Boolean(options?.background),
+      })
 
-      if (selected || layout.narrow())
-        layout.open(`file:${selected ?? OPEN}`, session, { tab: "preview", background: options?.background })
-      else layout.open(`file:${OPEN}:${uuid()}`, session, { tab: "select" })
+      if (selected || narrow) layout.open(`file:${tab}`, session, { tab: "preview", background: options?.background })
+      else layout.open(`file:${tab}`, session, { tab: "select" })
 
-      if (!options?.background && layout.narrow() && !layout.side.opened(session)) layout.side.toggle(session)
-    })
-
-    if (options?.background) return
-
-    queueMicrotask(() => {
-      const element = shared.filter.element
-
-      if (element?.isConnected) return element.focus()
-
-      shared.filter.pending = true
+      if (!options?.background && narrow && !layout.side.opened(session)) layout.side.toggle(session)
     })
   }
 
@@ -188,10 +224,12 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     changes: ctx.use(Changes),
     browser: ctx.use(Browser),
     filter: {
-      get: (session) => filters[session]?.text ?? "",
-      set: (session, value) => updateFilter(session, { text: value }),
-      browsing: (session) => filters[session]?.browsing ?? false,
-      setBrowsing: (session, value) => updateFilter(session, { browsing: value }),
+      get: (session) => pickerFilterText(machines.picker, session),
+      set: (session, value) => dispatchPicker({ type: "filter.changed", sessionKey: session, text: value }),
+      browsing: (session) => pickerBrowsing(machines.picker, session),
+      setBrowsing: (session, value) => dispatchPicker({ type: "browsing.set", sessionKey: session, browsing: value }),
+      focusRequest: (view) => pickerFocusRequest(machines.picker, view),
+      focused: (request) => dispatchPicker({ type: "focus.ended", request }),
     },
     installed: new Map(),
     app: preference && {
@@ -348,6 +386,9 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     close(input) {
       tabs.get(input.screen)?.delete(input.tab.id)
 
+      if (isLauncher(input.tab.id))
+        dispatchPicker({ type: "launcher.closed", sessionKey: input.session.key, tabId: input.tab.id })
+
       if (isFileTab(input.tab.id)) input.screen.file.unwatch(fileTabPath(input.screen.file, input.tab.id))
     },
     render: (props) => {
@@ -368,6 +409,10 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     },
     focus(input) {
       if (!isFileTab(input.tab.id)) return
+
+      // A file the user selects on a wide screen is what the narrow-screen view shows too, not the browser. Narrow
+      // screens skip this: their side region falls back to a file tab while the launcher opens.
+      if (!input.restored && !layout.narrow()) dispatchPicker({ type: "file.opened", sessionKey: input.session.key })
 
       focused.set(input.screen, input.tab.id)
       void input.screen.file.sync(fileTabPath(input.screen.file, input.tab.id), { silent: true })
@@ -542,26 +587,25 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
   // Screens survive tab switches, unlike Markdown and MountedSession objects. Weak client keys also drop results
   // from an old server connection without retaining its controller.
-  const linkChecks = new WeakMap<SessionScreen, WeakMap<ServerRef["client"], Map<string, LinkCheck>>>()
+  const linkChecks = new WeakMap<SessionScreen, WeakMap<ServerRef["client"], LinkChecks>>()
 
-  // Messages style a path as a link only when this says the file exists.
+  // Messages style a path as a link only when this says the file exists. Markdown renders call it, so the cache is no
+  // Solid state.
   const linkExists = (link: Link): boolean | Promise<boolean> => {
     const session = sessions.current()
     const screen = ctx.screen.current()
     const files = screen?.file
 
-    if (!session || !screen || !files || (link.session && link.session.key !== session.key)) return false
+    if (ctx.signal.aborted || !session || !screen || !files || (link.session && link.session.key !== session.key))
+      return false
 
-    const clients = linkChecks.get(screen) ?? new WeakMap<ServerRef["client"], Map<string, LinkCheck>>()
+    const clients = linkChecks.get(screen) ?? new WeakMap<ServerRef["client"], LinkChecks>()
     linkChecks.set(screen, clients)
     const client = session.server.client
-    const checks = clients.get(client) ?? new Map<string, LinkCheck>()
+    const checks = clients.get(client) ?? { state: createLinkExistsState(), inFlight: new Map<number, LinkCheck>() }
     clients.set(client, checks)
     const root = files.root
-    const key = JSON.stringify([session.key, root, link.base ?? null, link.href])
-    const cached = checks.get(key)
-
-    if (cached && cached.expires > Date.now()) return cached.known ?? cached.result
+    const cacheKey = JSON.stringify([session.key, root, link.base ?? null, link.href])
 
     const current = () =>
       !ctx.signal.aborted &&
@@ -569,46 +613,250 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       files.root === root &&
       session.server.client === client
 
-    const pending = import("./resolve-link")
-      .then(async ({ checkFileLinkExists, parseFileLink }) => {
-        if (!current()) return false
+    const dispatch = (event: LinkExistsEvent) => {
+      const next = transitionLinkExists(checks.state, event)
+      checks.state = next.state
 
-        // A link in a previewed document opens relative to it, so only that path counts.
-        const path = parseFileLink(link.href).path
+      next.effects.forEach((effect) => {
+        if (effect.type === "abort-check") {
+          const check = checks.inFlight.get(effect.attempt)
+          checks.inFlight.delete(effect.attempt)
+          clearTimeout(check?.timer)
+          check?.controller.abort()
+          check?.settle(false)
 
-        const direct =
-          link.base === undefined || path.startsWith("//") || path.startsWith("~")
-            ? undefined
-            : resolve(files, path, link.base)
+          return
+        }
 
-        const exists = await (link.base === undefined
-          ? checkFileLinkExists({ files, href: link.href, signal: ctx.signal })
-          : direct
-            ? files.exists(direct)
-            : false)
+        const attempt = effect.attempt
+        const controller = new AbortController()
+        const signal = AbortSignal.any([ctx.signal, controller.signal])
+        const drop = () => dispatch({ type: "check.dropped", key: effect.key, attempt })
+        const answer: Pick<LinkCheck, "settle"> = { settle: () => undefined }
 
-        if (!current()) return false
+        const result = new Promise<boolean>((resolve) => {
+          answer.settle = resolve
+        })
 
-        if (checks.get(key)?.result === pending)
-          checks.set(key, { result: exists, expires: Date.now() + (exists ? 60_000 : 5_000) })
+        checks.inFlight.set(attempt, {
+          controller,
+          timer: setTimeout(drop, effect.timeoutMs),
+          result,
+          settle: answer.settle,
+        })
+        // A reload ends the check; the listener goes with the check's controller.
+        ctx.signal.addEventListener("abort", drop, { once: true, signal: controller.signal })
 
-        return exists
+        void import("./resolve-link")
+          .then(async ({ checkFileLinkExists, parseFileLink }) => {
+            if (!current()) return false
+
+            // A link in a previewed document opens relative to it, so only that path counts.
+            const path = parseFileLink(link.href).path
+
+            const direct =
+              link.base === undefined || path.startsWith("//") || path.startsWith("~")
+                ? undefined
+                : resolve(files, path, link.base)
+
+            if (link.base === undefined) return checkFileLinkExists({ files, href: link.href, signal })
+
+            return direct ? files.exists(direct) : false
+          })
+          .then((exists) => {
+            // Aborted, failed or no-longer-current checks are retryable, not cached negatives.
+            if (!current()) return drop()
+
+            checks.inFlight.get(attempt)?.settle(exists)
+            dispatch({ type: "check.settled", key: effect.key, attempt, exists, now: Date.now() })
+          }, drop)
       })
-      .catch(() => false)
-      .finally(() => {
-        // Aborted, failed or no-longer-current checks are retryable, not cached negatives.
-        if (checks.get(key)?.result === pending) checks.delete(key)
-      })
+    }
 
-    // Revalidate known paths without bringing back their plain-code flash. Expired negatives await a fresh check.
-    const known = cached?.result === true ? true : undefined
-    checks.delete(key)
-    checks.set(key, { result: pending, expires: Infinity, known })
+    dispatch({ type: "check.requested", key: cacheKey, now: Date.now() })
 
-    while (checks.size > 512) checks.delete(checks.keys().next().value!)
+    const answer = linkExistsAnswer(checks.state, cacheKey)
 
-    return known ?? pending
+    return answer.kind === "value" ? answer.value : (checks.inFlight.get(answer.attempt)?.result ?? false)
   }
+
+  // Where the user is now, compared with where a link was clicked before its result counts.
+  const linkRoute = (screen: SessionScreen): LinkRoute => ({
+    sessionKey: sessions.current()?.key,
+    root: screen.file.root,
+    sameScreen: ctx.screen.current() === screen,
+  })
+
+  const dispatchLink = (event: LinkOpenEvent) => {
+    const previous = untrack(() => unwrap(machines.linkOpen))
+    const next = transitionLinkOpen(previous, event)
+
+    if (next.state !== previous) setMachines(produce((draft) => void (draft.linkOpen = next.state)))
+
+    next.effects.forEach(runLink)
+  }
+
+  const runLink = (effect: LinkOpenEffect) => {
+    if (effect.type === "resolve") {
+      const screen = ctx.screen.current()
+      const attempt = effect.attempt
+
+      if (!screen) return dispatchLink({ type: "link.cancelled", attempt })
+
+      const controller = new AbortController()
+
+      linkAttempts.set(attempt, {
+        controller,
+        screen,
+        timer: setTimeout(() => dispatchLink({ type: "link.timed-out", attempt }), effect.timeoutMs),
+      })
+
+      void resolveLink(screen, effect, AbortSignal.any([ctx.signal, controller.signal])).then(
+        (resolution) => dispatchLink({ type: "link.resolved", attempt, route: linkRoute(screen), resolution }),
+        (cause) =>
+          dispatchLink({
+            type: "link.failed",
+            attempt,
+            route: linkRoute(screen),
+            error: cause instanceof Error ? cause.message : String(cause),
+          }),
+      )
+
+      return
+    }
+
+    if (effect.type === "sync") {
+      const handle = linkAttempts.get(effect.attempt)
+
+      if (!handle) return
+
+      const files = handle.screen.file
+      const attempt = effect.attempt
+
+      // Confirm the file exists before a tab appears for it, and always reread: a cached copy can be stale. Silent,
+      // because this click reports its own outcome, and a superseded click none.
+      void files.sync(effect.path, { force: true, silent: true }).then(
+        () => {
+          const state = files.get(effect.path)
+          const routed = sessions.current()
+
+          dispatchLink({
+            type: "file.synced",
+            attempt,
+            route: linkRoute(handle.screen),
+            loaded: Boolean(state?.loaded),
+            notFound: Boolean(state?.notFound),
+            opened: !!routed && layout.stored(routed).includes(fileTabId(files, effect.path)),
+            error: state?.error,
+          })
+        },
+        (cause) =>
+          dispatchLink({
+            type: "link.failed",
+            attempt,
+            route: linkRoute(handle.screen),
+            error: cause instanceof Error ? cause.message : String(cause),
+          }),
+      )
+
+      return
+    }
+
+    if (effect.type === "abort") {
+      const handle = linkAttempts.get(effect.attempt)
+      linkAttempts.delete(effect.attempt)
+      clearTimeout(handle?.timer)
+      handle?.controller.abort()
+
+      return
+    }
+
+    if (effect.type === "toast-failed") {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("load.failed"),
+        description: effect.error ?? ctx.t("tab.notFound", { name: getFilename(effect.path) || effect.path }),
+      })
+
+      return
+    }
+
+    if (effect.type === "toast-timeout") {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("load.failed"),
+        description: ctx.t("load.timeout", { name: getFilename(effect.path) || effect.path }),
+      })
+
+      return
+    }
+
+    const routed = sessions.current()
+    const screen = ctx.screen.current()
+
+    if (!routed || !screen) return
+
+    if (effect.type === "open-exact") return open(routed, effect.path, { background: effect.background })
+
+    if (effect.type === "open-picker") return openPicker(routed, effect.query, { background: effect.background })
+
+    if (effect.type === "open-browser") {
+      const pane = shared.browser()
+
+      if (pane.status === "active") pane.value.open(routed, effect.url)
+
+      return
+    }
+
+    batch(() => {
+      applySelection(routed, screen.file, effect.path, effect.selection)
+      layout.open(key(screen.file, effect.path), routed, { background: effect.background })
+
+      // A tapped link switches the narrow-screen view; the side region still opens for when the window is wide.
+      if (layout.narrow() && !layout.side.opened(routed)) layout.side.toggle(routed)
+    })
+    // After the batch, as in `open`: the mobile tab strip registers the tab before it leaves the browser.
+    dispatchPicker({ type: "file.opened", sessionKey: routed.key })
+  }
+
+  const resolveLink = async (
+    screen: SessionScreen,
+    link: { href: string; base?: string; background: boolean },
+    signal: AbortSignal,
+  ): Promise<LinkResolution> => {
+    const { findFileLink, isAbsoluteLink, parseFileLink } = await import("./resolve-link")
+    const parsed = parseFileLink(link.href)
+    const direct = resolve(screen.file, parsed.path, link.base)
+
+    if (!direct) return { kind: "missing" }
+
+    // Absolute paths, links written relative to a document, and agent previews name one exact file.
+    if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background)
+      return fileOrPage(screen, direct, parsed.selection)
+
+    const target = await findFileLink({ files: screen.file, path: parsed.path, signal })
+
+    if (target?.kind === "picker") return { kind: "picker", query: target.query }
+
+    // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
+    return fileOrPage(screen, target?.path ?? direct, parsed.selection)
+  }
+
+  // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
+  const fileOrPage = (screen: SessionScreen, path: string, selection: LineRange | undefined): LinkResolution => {
+    const pane = shared.browser()
+    const routed = sessions.current()
+
+    if (routed && artifactKind(path) === "html" && pane.status === "active" && pane.value.canOpen(routed, path))
+      return { kind: "browser", url: workspaceFileUrl(screen.file.root, path) }
+
+    return { kind: "file", path, selection }
+  }
+
+  onCleanup(() => {
+    dispatchLink({ type: "disposed" })
+    dispatchPicker({ type: "disposed" })
+  })
 
   // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
   // a browser tab for HTML when the desktop can load the file directly.
@@ -622,94 +870,23 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
       if (!session || !screen || !files || (link.session && link.session.key !== session.key)) return
 
-      clickController?.abort()
-
       // A known workspace file (the palette, a file comment) opens at once with every file listed.
-      if (link.exact || link.origin === "file") {
-        const path = files.resolve(link.href)
-
-        if (!path) return
-
-        open(session, path, { background: link.background })
-
-        return
-      }
-
-      const controller = new AbortController()
-      clickController = controller
-      const signal = AbortSignal.any([ctx.signal, controller.signal])
-      const sessionKey = session.key
-
-      const stillCurrent = () => {
-        const current = sessions.current()
-
-        return !signal.aborted && current?.key === sessionKey && ctx.screen.current() === screen ? current : undefined
-      }
-
-      const openResolvedFile = (targetPath: string, selection?: LineRange) => {
-        const routed = stillCurrent()
-
-        if (!routed) return Promise.resolve()
-
-        // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
-        const pane = ctx.use(Browser)()
-
-        if (artifactKind(targetPath) === "html" && pane.status === "active" && pane.value.canOpen(routed, targetPath)) {
-          pane.value.open(routed, workspaceFileUrl(files.root, targetPath))
-
-          return Promise.resolve()
-        }
-
-        // Confirm the file exists before a tab appears for it; a file deleted since its link rendered shows the load
-        // error. Always reread: a cached copy can be stale.
-        return files.sync(targetPath, { force: true }).then(() => {
-          const latest = stillCurrent()
-
-          if (!latest || !files.get(targetPath)?.loaded) return
-
-          batch(() => {
-            applySelection(latest, files, targetPath, selection)
-            layout.open(key(files, targetPath), latest, { background: link.background })
-
-            // A tapped link switches the narrow-screen view; the side region still opens for when the window is wide.
-            if (layout.narrow() && !layout.side.opened(latest)) layout.side.toggle(latest)
-          })
-          // After the batch, as in `open`: the mobile tab strip registers the tab before it leaves the browser.
-          updateFilter(latest.key, { browsing: false })
+      if (link.exact || link.origin === "file")
+        return dispatchLink({
+          type: "link.exact",
+          href: link.href,
+          path: files.resolve(link.href),
+          background: Boolean(link.background),
         })
-      }
 
-      void (async () => {
-        const { findFileLink, isAbsoluteLink, parseFileLink } = await import("./resolve-link")
-
-        if (!stillCurrent()) return
-
-        const parsed = parseFileLink(link.href)
-        const direct = resolve(files, parsed.path, link.base)
-
-        if (!direct) return
-
-        // Absolute paths, links written relative to a document, and agent previews name one exact file.
-        if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background) {
-          await openResolvedFile(direct, parsed.selection)
-
-          return
-        }
-
-        const target = await findFileLink({ files, path: parsed.path, signal })
-        const latest = stillCurrent()
-
-        if (!latest) return
-
-        if (target?.kind === "picker") {
-          openPicker(latest, target.query)
-
-          return
-        }
-
-        // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
-        await openResolvedFile(target?.path ?? direct, parsed.selection)
-      })()
+      dispatchLink({
+        type: "link.clicked",
+        sessionKey: session.key,
+        root: files.root,
+        href: link.href,
+        base: link.base,
+        background: Boolean(link.background),
+      })
     },
   })
 

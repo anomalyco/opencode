@@ -468,6 +468,13 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
     (error) => ({ ok: false as const, error }),
   )
 
+  // Settled here rather than when the composer settles, which an aborted promotion never reaches.
+  if (value.delivery === "steer")
+    void sending.then((result) => {
+      if (result.ok || session.admitted(value.id)) return session.handoff.settle(value.id)
+      session.handoff.clear(value.id)
+    })
+
   return {
     // The composer settles after clearing its captured draft; a quote settles before removing only its context.
     settled: (restore) =>
@@ -734,8 +741,6 @@ function failSubmission(
   rollback?: () => void,
 ) {
   if (messageID && session.admitted(messageID)) return true
-
-  if (messageID) session.handoff.clear(messageID)
   rollback?.()
   restore()
   input.notify.failed(kind, error)

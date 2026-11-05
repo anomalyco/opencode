@@ -1,10 +1,9 @@
 import { createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode/session-ui/file"
 import { useFileComponent } from "@opencode/ui/context/file"
-import { cloneSelectedLineRange, previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
+import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
@@ -58,8 +57,6 @@ function FileCommentMenu(props: {
 type ScrollPos = { x: number; y: number }
 
 type ScrollSyncState = { scroll?: HTMLDivElement; scrollFrame?: number; restoreFrame?: number; pending?: ScrollPos }
-
-type NoteState = { openedComment: string | null; commenting: LineRange | null; selected: LineRange | null }
 
 type FindState = { find: FileSearchHandle | null }
 
@@ -308,17 +305,6 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
 
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
-  const [note, setNote] = createStore<NoteState>({ openedComment: null, commenting: null, selected: null })
-
-  const syncSelected = (range: LineRange | null) => {
-    const p = path()
-
-    if (!p) return
-    file.selection.set(p, range ? cloneSelectedLineRange(range) : null)
-  }
-
-  const activeSelection = () => note.selected ?? selectedLines()
-
   const commentsUi = createLineCommentControllerV2({
     comments: fileComments,
     label: ctx.t("ui.lineComment.submit"),
@@ -327,15 +313,11 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       items: (query) => file.search(query, { kind: "any" }),
     },
     getSide: selectionSide,
-    state: {
-      opened: () => note.openedComment,
-      setOpened: (id) => setNote("openedComment", id),
-      selected: () => note.selected,
-      setSelected: (range) => setNote("selected", range),
-      commenting: () => note.commenting,
-      setCommenting: (range) => setNote("commenting", range),
-      syncSelected,
-      hoverSelected: syncSelected,
+    onSyncSelected: (range) => {
+      const p = path()
+
+      if (!p) return
+      file.selection.set(p, range)
     },
     onSubmit: ({ comment, selection }) => {
       const p = path()
@@ -388,7 +370,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   // A new path, e.g. after the workspace directory changes, drops the comment draft and selection of the old one.
   const moved = createMemo(on(path, () => ({}), { defer: true }))
 
-  createKeyed(moved, () => commentsUi.note.reset())
+  createKeyed(moved, () => commentsUi.reset())
 
   // A comment focused elsewhere, e.g. from its composer chip, opens here once this file shows.
   createKeyed(
@@ -403,7 +385,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       return target && { target }
     },
     (focus) => {
-      commentsUi.note.openComment(focus.target.id, focus.target.selection, { cancelDraft: true })
+      commentsUi.focusComment(focus.target.id, focus.target.selection)
       requestAnimationFrame(() => comment.focus.set(null))
     },
   )
@@ -419,7 +401,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     (target) =>
       onCleanup(
         shared.reveal.register(target.session, target.path, () => {
-          setNote("selected", null)
+          commentsUi.clearPassive()
           scrollSync.queueRestore()
         }),
       ),
@@ -460,7 +442,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
         }}
         enableLineSelection
         enableGutterUtility
-        selectedLines={activeSelection()}
+        selectedLines={commentsUi.selected() ?? selectedLines()}
         commentedLines={commentedLines()}
         onRendered={() => {
           scrollSync.queueRestore()
@@ -472,17 +454,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
           commentsUi.onLineSelected(range)
         }}
         onLineSelectionEnd={(range: LineRange | null) => {
-          if (!range) {
-            commentsUi.note.select(null)
-            commentsUi.note.cancelDraft()
-
-            return
-          }
-
           commentsUi.onLineSelectionEnd(range)
-        }}
-        onLineNumberSelectionEnd={(range: LineRange | null) => {
-          commentsUi.onLineNumberSelectionEnd(range)
         }}
         search={search}
         class="select-text"

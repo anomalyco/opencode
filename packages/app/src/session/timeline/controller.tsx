@@ -22,9 +22,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
-import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
-import { createNewMessages } from "./new-messages"
 
 const emptyMessages: SessionMessageInfo[] = []
 
@@ -57,11 +55,7 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: {
-  session: TimelineSessionSource
-  active: Accessor<boolean>
-  caughtUp: Accessor<boolean>
-}) {
+export function createTimelineController(input: { session: TimelineSessionSource; active: Accessor<boolean> }) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -73,8 +67,8 @@ export function createTimelineController(input: {
   const language = useLanguage()
   const platform = usePlatform()
 
-  // Pending inputs hold with the history while the view is detached, so a hidden view never shows one against
-  // history it has not caught up with.
+  // Pending inputs and the handoff hold with the history while the view is detached, so a hidden view never shows
+  // one against history it has not caught up with.
   const pendingItems = createMemo<{ value: ReturnType<typeof data.session.pending.list> } | undefined>(
     (previous) => {
       if (previous && !input.active()) return previous
@@ -88,6 +82,16 @@ export function createTimelineController(input: {
 
   const pendingList = () => pendingItems()!.value
 
+  const handoffItem = createMemo<{ value: ReturnType<typeof server.ctx.handoff.get> } | undefined>(
+    (previous) => {
+      if (previous && !input.active()) return previous
+
+      return { value: server.ctx.handoff.get(input.session.identity.sessionID()) }
+    },
+    undefined,
+    { equals: (previous, next) => previous?.value === next?.value },
+  )
+
   const visibleMessages = createMemo(() =>
     visibleTimelineMessages(
       input.session.history.messages(),
@@ -98,11 +102,7 @@ export function createTimelineController(input: {
 
   // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
   const projectedMessages = createMemo(() =>
-    applyTimelineMessageHandoff(
-      visibleMessages(),
-      getSessionMessageHandoff(input.session.identity.sessionKey()),
-      input.session.data.info(),
-    ),
+    applyTimelineMessageHandoff(visibleMessages(), handoffItem()!.value, input.session.data.info()),
   )
 
   // Inputs that wait behind the active turn. A starting steer opens the next turn instead, so the turn before it
@@ -186,17 +186,6 @@ export function createTimelineController(input: {
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
-  const newMessages = createNewMessages({
-    scope: serverSDK.scope,
-    directory: sdk().directory,
-    sessionID: input.session.identity.sessionID()!,
-    messages: projectedMessages,
-    active: input.active,
-    enabled: settings.general.newMessagesDivider,
-    caughtUp: input.caughtUp,
-    pendingInputIDs,
-  })
-
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
@@ -207,8 +196,6 @@ export function createTimelineController(input: {
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
-    newMessages: newMessages.parts,
-    newMessagesRead: newMessages.dismissed,
   })
 
   const [pending, setPending] = createStore({ rename: false })
@@ -358,7 +345,6 @@ export function createTimelineController(input: {
       childTitle,
       showHeader,
       projection,
-      newMessages,
       timelineDetail,
       reasoningMode,
       shellToolPartsExpanded,
