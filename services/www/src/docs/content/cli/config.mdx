@@ -118,6 +118,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 {
   "session": {
     "sidebar": "auto",
+    "context": "expanded",
     "scrollbar": false,
     "submit_scroll": "bottom",
     "thinking": "hide",
@@ -136,6 +137,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | Setting                 | Values                      | Description                                                                  |
 | ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
 | `session.sidebar`       | `auto` or `hide`            | Shows the sidebar when space permits or always hides it.                     |
+| `session.context`       | `expanded` or `compact`     | Shows the sidebar's tokens, percent used and cost on separate lines, or on one line that abbreviates as the sidebar narrows. Clicking the Context heading switches between them. |
 | `session.scrollbar`     | boolean                     | Shows the transcript scrollbar.                                              |
 | `session.submit_scroll` | `bottom` or `keep`          | Jumps to the latest message when you send a prompt, or keeps your position.  |
 | `session.thinking`      | `show` or `hide`            | Shows or hides model reasoning by default.                                   |

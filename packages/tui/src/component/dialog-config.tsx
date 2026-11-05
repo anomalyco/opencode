@@ -66,6 +66,14 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "Sidebar context",
+    category: "Session",
+    path: ["session", "context"],
+    default: "expanded",
+    values: ["expanded", "compact"],
+    keywords: ["tokens", "cost", "usage", "sidebar"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],
