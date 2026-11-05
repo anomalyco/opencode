@@ -22,31 +22,11 @@ pub fn js_string(value: &Value) -> String {
         Value::Number(number) => match (number.as_i64(), number.as_u64(), number.as_f64()) {
             (Some(value), _, _) => value.to_string(),
             (_, Some(value), _) => value.to_string(),
-            (_, _, Some(value)) => js_number(value),
+            (_, _, Some(value)) => crate::js::number_to_string(value),
             _ => number.to_string(),
         },
         Value::Array(items) => items.iter().map(js_string).collect::<Vec<_>>().join(","),
         Value::Object(_) => "[object Object]".to_owned(),
-    }
-}
-
-/// JavaScript's `Number.prototype.toString()`: shortest round-trip digits, with exponent notation
-/// outside `[1e-6, 1e21)`.
-fn js_number(value: f64) -> String {
-    if value == 0.0 {
-        return "0".to_owned();
-    }
-    let magnitude = value.abs();
-    if (1e-6..1e21).contains(&magnitude) {
-        return format!("{value}");
-    }
-    // Rust writes `1e21` and `1e-7`; JavaScript writes `1e+21` and `1e-7`.
-    let text = format!("{value:e}");
-    match text.split_once('e') {
-        Some((mantissa, exponent)) if !exponent.starts_with('-') => {
-            format!("{mantissa}e+{exponent}")
-        }
-        _ => text,
     }
 }
 

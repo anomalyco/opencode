@@ -27,6 +27,7 @@ use opencode_api::generated::{
     IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
     ModelInfoStatus, ModelListInput, ProviderListInput,
 };
+use opencode_api::js::locale_compare;
 use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
@@ -40,7 +41,7 @@ use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 
 use crate::app::Tui;
-use crate::dialogs::model::{Local, locale_compare};
+use crate::dialogs::model::Local;
 
 /// `INTEGRATION_PRIORITY`: these come first, as "Popular".
 const PRIORITY: [&str; 6] = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"];

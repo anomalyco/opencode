@@ -13,7 +13,6 @@ pub use opencode_ui::prompt_input::parse;
 pub mod parts;
 
 use std::cell::{Cell, OnceCell, RefCell};
-use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{self, AtomicU64};
@@ -23,6 +22,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     AgentInfoMode, FileFindInput, FileListInput, FileSystemEntryType, LocationQueryInput, ReferenceSource,
 };
+use opencode_api::js::locale_compare;
 use opencode_local::jsonl::{self, Frecency};
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
@@ -1095,27 +1095,6 @@ fn command_items(tui: &Tui, location: &Location) -> Vec<Item> {
         item.display.push_str(&" ".repeat(pad));
     }
     items
-}
-
-/// An approximation of `localeCompare` under the root collation: letters compare without case
-/// first, punctuation sorts before digits and digits before letters, and lowercase wins a tie.
-fn locale_compare(a: &str, b: &str) -> Ordering {
-    let key = |text: &str| -> Vec<(u8, char)> {
-        text.chars()
-            .flat_map(char::to_lowercase)
-            .map(|c| {
-                let class = if c.is_alphabetic() {
-                    2
-                } else if c.is_numeric() {
-                    1
-                } else {
-                    0
-                };
-                (class, c)
-            })
-            .collect()
-    };
-    key(a).cmp(&key(b)).then_with(|| b.cmp(a))
 }
 
 /// Visible subagents (`agents` memo).

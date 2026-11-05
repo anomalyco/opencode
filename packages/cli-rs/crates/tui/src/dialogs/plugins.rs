@@ -8,7 +8,6 @@
 //! again so slots follow; on another row it opens the error, if any.
 
 use std::cell::{Cell, RefCell};
-use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
@@ -16,6 +15,7 @@ use opencode_api::generated::{
     LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginState, PluginUpdateInput,
     V2Event,
 };
+use opencode_api::js::locale_compare;
 use opencode_plugin::{Definition, Setup, Source, Status};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
@@ -648,11 +648,6 @@ fn error(entry: &Entry) -> Option<String> {
         },
         Entry::Tui { error, .. } => error.clone(),
     }
-}
-
-/// `localeCompare` for plugin labels: by letters ignoring case, lowercase first on a tie.
-fn locale_compare(a: &str, b: &str) -> Ordering {
-    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| b.cmp(a))
 }
 
 #[cfg(test)]

@@ -1,8 +1,7 @@
 //! Session config options: model, effort, and mode (`packages/cli/src/acp/config-option.ts`).
 
-use std::cmp::Ordering;
-
 use opencode_api::generated::{ModelInfo, ModelRef, ProviderID};
+use opencode_api::js::locale_compare;
 use serde_json::{Map, Value, json};
 
 use crate::catalog::{BUILTIN_COMMANDS, Catalog, find_model};
@@ -226,9 +225,4 @@ fn title_case(value: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// An approximation of `localeCompare`: case-insensitive first, then by code point.
-fn locale_compare(a: &str, b: &str) -> Ordering {
-    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| a.cmp(b))
 }
