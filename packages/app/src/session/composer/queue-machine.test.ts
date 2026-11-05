@@ -370,6 +370,36 @@ describe("an operation past its bound", () => {
     expect(transitionQueue(timedOut.state, { type: "mutation.failed", attempt, hidden: [] }).state).toBe(timedOut.state)
   })
 
+  test("a steered edit whose admission is in flight keeps the edit until the server answers", () => {
+    const sent = replay(createQueueState([one, two]), [
+      { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
+      { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 edited"), ids },
+    ])
+
+    const attempt = runs(sent.effects)[0].attempt
+    const waiting = transitionQueue(sent.state, { type: "mutation.timed-out", attempt, hidden: [], stage: "committed" })
+
+    // The replacement may already be delivered: the composer must not get the edit back while it may have gone out.
+    expect(waiting.state).toBe(sent.state)
+    expect(waiting.effects).toEqual([])
+
+    // Delivered, a later failure of the original's cancel leaves the edit with the server.
+    const admitted = transitionQueue(waiting.state, { type: "mutation.admitted", attempt }).state
+
+    expect(
+      transitionQueue(admitted, { type: "mutation.failed", attempt, hidden: [] }).effects.some(
+        (effect) => effect.type === "draft.merge",
+      ),
+    ).toBe(false)
+
+    // Refused, it really did not go out, so it returns to the composer.
+    expect(transitionQueue(waiting.state, { type: "mutation.failed", attempt, hidden: [] }).effects).toContainEqual({
+      type: "draft.merge",
+      prompt: prompt("inb_1 edited"),
+      context: [],
+    })
+  })
+
   test("an undo whose cancel is in flight waits for the server's answer", () => {
     const undoing = transitionQueue(createQueueState([one]), { type: "undo.requested", id: "inb_1", mode: "normal" })
     const attempt = runs(undoing.effects)[0].attempt

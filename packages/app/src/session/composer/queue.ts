@@ -302,17 +302,10 @@ export function createSessionQueue(input: {
       throw new Error("Queued prompt was delivered before the edit")
     signal.throwIfAborted()
     const background = input.background()
-    await data.session.prompt(admission)
-
-    // The bound ran out while the replacement was sent, and the composer already has the edit back: withdraw it.
-    if (signal.aborted) {
-      await server.api.session.inbox
-        .cancel({ sessionID: input.sessionID, inboxID: admission.id })
-        .catch(() => undefined)
-      signal.throwIfAborted()
-    }
-
+    // A steered replacement can be delivered before a withdrawal reaches it, so the bound waits for the admission and
+    // the edit returns to the composer only if it really did not go out.
     progress.stage = "committed"
+    await data.session.prompt(admission)
     void background?.move()
     dispatch({ type: "mutation.admitted", attempt: operation.attempt })
     // Cancelling is a no-op once the original is gone, so one retry is safe.

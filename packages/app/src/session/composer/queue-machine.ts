@@ -95,9 +95,9 @@ const NO_MOVES: Readonly<Record<string, string>> = Object.freeze({})
 export const QUEUE_MUTATION_TIMEOUT_MS = 60_000
 
 /**
- * How far a timed-out operation got. `committed`: a step it cannot take back is in flight (an undo's cancel, or the
- * cancels of a rewrite's originals once every copy is in), so the operation waits for its result. `settled`: the server
- * holds the whole change and only re-reading its queue stalled.
+ * How far a timed-out operation got. `committed`: a step it cannot take back is in flight (an undo's cancel, a steered
+ * edit's admission, or the cancels of a rewrite's originals once every copy is in), so the operation waits for its
+ * result. `settled`: the server holds the whole change and only re-reading its queue stalled.
  */
 export type QueueMutationStage = "running" | "committed" | "settled"
 
