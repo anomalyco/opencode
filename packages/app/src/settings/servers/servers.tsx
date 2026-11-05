@@ -7,6 +7,7 @@ import { PluginServerRow } from "@/servers/registry/plugin-row"
 import { AddServerMenu } from "@/servers/registry/add-menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
+import { isServerFailed, isServerUnauthorized } from "@/runtime/server/health-machine"
 import { useServerCollectionController } from "@/servers/registry/controller"
 import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
@@ -33,7 +34,7 @@ export const SettingsServerGeneral: Component<{ entry: SettingsServer; onAddServ
           </SettingsList>
         </section>
 
-        <Show when={props.entry.connection && health()?.healthy !== false ? props.entry.connection : undefined} keyed>
+        <Show when={props.entry.connection && !isServerFailed(health()) ? props.entry.connection : undefined} keyed>
           {(server) => (
             <section class="settings-section">
               <h3 class="settings-section-title">{language.t("settings.tab.preferences")}</h3>
@@ -75,7 +76,7 @@ export const SettingsServerList: Component<{
                 <ServerConnectionRow entry={entry} onServerChange={props.onServerChange} />
                 <Show
                   when={
-                    entry.connection && controller.collection.health()[entry.key]?.healthy !== false
+                    entry.connection && !isServerFailed(controller.collection.health()[entry.key])
                       ? entry.connection
                       : undefined
                   }
@@ -126,7 +127,7 @@ function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (s
 
   // An HTTP server that rejects its saved credentials signs in again through the edit dialog.
   const signedOut = (server: ServerConnection.Any) =>
-    server.type === "http" && health()?.unauthorized ? server : undefined
+    server.type === "http" && isServerUnauthorized(health()) ? server : undefined
 
   return (
     <Show
@@ -137,13 +138,13 @@ function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (s
           {(server) => (
             <div class="settings-servers-row">
               <div class="settings-servers-lead">
-                <ServerHealthIndicator health={health()} authenticationRequired={!!health()?.unauthorized} />
+                <ServerHealthIndicator health={health()} />
                 <div class="settings-servers-copy">
                   <bdi class="settings-servers-name" dir="auto">
                     {props.entry.name}
                   </bdi>
                   <bdi class="settings-servers-meta" dir="ltr">
-                    {server().http.url}
+                    {ServerConnection.http(server())?.url}
                   </bdi>
                 </div>
               </div>

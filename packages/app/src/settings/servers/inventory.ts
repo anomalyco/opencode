@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePluginServers, type PluginServer } from "@/runtime/plugin/servers"
-import type { ServerHealth } from "@/runtime/server/health"
+import { isServerFailed, type ServerHealth } from "@/runtime/server/health-machine"
 
 export type SettingsServer = {
   key: ServerConnection.Key
@@ -56,5 +56,5 @@ export function useSettingsServers() {
 
 /** Whether a server's pages can load: it runs and its last health check did not fail. */
 export function settingsServerReachable(server: SettingsServer, health: ServerHealth | undefined) {
-  return !!server.connection && health?.healthy !== false
+  return !!server.connection && !isServerFailed(health)
 }

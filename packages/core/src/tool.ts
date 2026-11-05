@@ -86,6 +86,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
+    const permission = yield* Permission.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -133,6 +134,11 @@ const layer = Layer.effect(
       input: unknown,
       context: Tool.Context,
     ) {
+      yield* Effect.annotateCurrentSpan({
+        "gen_ai.tool.name": name,
+        "gen_ai.tool.call.id": context.id,
+        "session.id": context.sessionID,
+      })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
         Effect.catchTag("Tool.Error", (failure) => Effect.succeed({ failure })),
@@ -172,6 +178,9 @@ const layer = Layer.effect(
       }
     })
 
+    const run = (tool: Tool.Info, name: string, input: unknown, context: Tool.Context) =>
+      beforeExecute(name, input, context).pipe(Effect.flatMap((event) => executeTool(tool, name, event.input, context)))
+
     let catalog:
       | {
           data: Data
@@ -201,19 +210,8 @@ const layer = Layer.effect(
           editor.namespaces.set(namespace.name, { ...namespace })
         },
         add: (tool) => {
-          const registered = register(tool)
-          if (Result.isFailure(registered)) {
-            editor.errors.push({
-              kind: "tool",
-              name: tool.name,
-              namespace: tool.options?.namespace,
-              error: registered.failure,
-            })
-            return
-          }
           const id = effectiveName(tool)
-          editor.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
-          editor.definitions.set(id, registered.success)
+          commit(editor, id, { ...tool, id, options: tool.options && { ...tool.options } })
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
@@ -224,18 +222,7 @@ const layer = Layer.effect(
           tool.id = id
           if (tool.options?.namespace !== current.options?.namespace)
             tool.options = { ...tool.options, namespace: current.options?.namespace }
-          const registered = register(tool)
-          if (Result.isFailure(registered)) {
-            editor.errors.push({
-              kind: "tool",
-              name: tool.name,
-              namespace: tool.options?.namespace,
-              error: registered.failure,
-            })
-            return
-          }
-          editor.tools.set(id, tool)
-          editor.definitions.set(id, registered.success)
+          commit(editor, id, tool)
         },
         remove: (id) => {
           editor.tools.delete(id)
@@ -283,10 +270,10 @@ const layer = Layer.effect(
           const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
-                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                ),
+            ? CodeModeTool.create(
+                codeModeInventory,
+                (name, tool, input, context) => run(tool, name, input, context),
+                permission,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -365,14 +352,31 @@ const layer = Layer.effect(
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
               }
-              const event = yield* beforeExecute(name, toolInput, context)
-              return yield* executeTool(tool, name, event.input, context)
+              return yield* run(tool, name, toolInput, context)
             }),
         )
       }),
     })
   }),
 )
+
+/** Store a valid tool under its effective name, or record why it was skipped. */
+function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
+  // JavaScript plugins may leave out `input` for a tool that takes none.
+  const tool = input.input === undefined || input.input === null ? { ...input, input: {} } : input
+  const registered = register(tool)
+  if (Result.isFailure(registered)) {
+    editor.errors.push({
+      kind: "tool",
+      name: tool.name,
+      namespace: tool.options?.namespace,
+      error: registered.failure,
+    })
+    return
+  }
+  editor.tools.set(id, tool)
+  editor.definitions.set(id, registered.success)
+}
 
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
@@ -398,6 +402,11 @@ function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationEr
   const id = effectiveName(tool)
   if (tool.options?.codemode === false && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  // Standard Schema libraries such as ArkType make schemas that are functions.
+  if (typeof tool.input !== "object" && typeof tool.input !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+    )
   return Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>
@@ -413,5 +422,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node],
+  deps: [PluginHooks.node, Image.node, Permission.node],
 })

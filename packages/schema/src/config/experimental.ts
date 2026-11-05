@@ -20,6 +20,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Store new session media once in a deduplicated blob table instead of inline in every message row. Defaults to false.",
   }),
+  part_rows: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
+  }),
   image_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({
@@ -36,6 +40,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     }),
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
+  }),
+  artifacts: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
   }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",

@@ -4,11 +4,12 @@ import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useQueryClient } from "@tanstack/solid-query"
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useFile } from "@/workspaces/files/model"
-import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
+import type { ServerCtx } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -85,12 +86,11 @@ export type PaletteHighlight = { cleanup: (() => void) | void; committed: boolea
 
 export function createCommandPaletteModel(props: { filesOnly?: () => boolean; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
-  const global = useGlobal()
   const language = useLanguage()
   const file = useFile()
   const dialog = useDialog()
   const serverSDK = useServerSDK()
-  const serverCtx = global.ensureServerCtx(serverSDK.server)
+  const serverCtx = useServer().ctx
   const appTabs = useTabs()
   const attachment = usePluginAttachment()
   const openFile = createCommandPaletteFileOpener(props.onOpenFile)
@@ -151,7 +151,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
 
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(serverSDK.server),
-    known: createKnownServerSessions(serverCtx),
+    known: createKnownServerSessions(() => serverCtx),
     projects: serverCtx.projects.list,
     load: (search, signal) =>
       serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
@@ -242,6 +242,7 @@ type SessionSearchState = {
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
+  archived?: boolean
   known?: () => SessionInfo[]
   /** Hides sessions deleted since they were loaded. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
@@ -276,7 +277,7 @@ export function createServerSessionEntries(props: {
     const category = search ? props.category() : props.recentCategory()
 
     return sessions.flatMap((session) => {
-      if (session.time.archived) return []
+      if (!!session.time.archived !== !!props.archived) return []
 
       const project = projectForSession(session, projects)
 
@@ -359,10 +360,14 @@ export function createServerSessionEntries(props: {
   })
 }
 
-export function createKnownServerSessions(server: ServerCtx) {
+export function createKnownServerSessions(context: Accessor<ServerCtx | undefined>) {
   const queryClient = useQueryClient()
 
   return () => {
+    const server = context()
+
+    if (!server) return []
+
     // Reuse the Home index already loaded before opening the palette; do not fetch an index for search.
     const cached =
       queryClient.getQueryData<SessionInfo[]>(["home-sessions", server.sdk.server]) ??

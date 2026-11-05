@@ -8,6 +8,7 @@ import {
   promiseOmitEndpoints,
 } from "@opencode/protocol/client"
 import { Agent } from "@opencode/schema/agent"
+import { Artifact } from "@opencode/schema/artifact"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { Credential } from "@opencode/schema/credential"
@@ -20,6 +21,7 @@ import { Generate } from "@opencode/schema/generate"
 import { Instruction } from "@opencode/schema/instruction"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Integration } from "@opencode/schema/integration"
+import { Job } from "@opencode/schema/job"
 import { Location } from "@opencode/schema/location"
 import { Mcp } from "@opencode/schema/mcp"
 import { Model } from "@opencode/schema/model"
@@ -65,6 +67,7 @@ const effectContract = compile(ClientApi, {
 })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
+  ...namespaceTypes("Artifact", "@opencode/schema/artifact", Artifact),
   ...namespaceTypes("Command", "@opencode/schema/command", Command),
   ...namespaceTypes("Config", "@opencode/schema/config", Config),
   ...namespaceTypes("Credential", "@opencode/schema/credential", Credential),
@@ -77,6 +80,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Instruction", "@opencode/schema/instruction", Instruction),
   ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
+  ...namespaceTypes("Job", "@opencode/schema/job", Job),
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
   ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),

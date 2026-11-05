@@ -6,8 +6,6 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
-  NoRouteError,
-  ModelID,
   ProviderID,
   ProviderInternalError,
   QuotaExceededError,
@@ -66,18 +64,6 @@ describe("toSessionError", () => {
         ),
       ),
     ).toEqual({ type: "provider.unsupported-operation", message: "no compact endpoint" })
-    expect(
-      toSessionError(
-        llm(
-          new NoRouteError({
-            message: "failed",
-            route: "route",
-            provider: ProviderID.make("provider"),
-            model: ModelID.make("model"),
-          }),
-        ),
-      ).type,
-    ).toBe("provider.no-route")
     expect(toSessionError(llm(new UnknownProviderError({ message: "unknown" }))).type).toBe("provider.unknown")
   })
 
@@ -347,18 +333,10 @@ describe("toSessionError", () => {
       llm(new InvalidProviderOutputError({ message: "output" })),
       llm(new InvalidRequestError({ message: "request" })),
       llm(new UnsupportedOperationError({ message: "unsupported", operation: "compact" })),
-      llm(
-        new NoRouteError({
-          message: "failed",
-          route: "route",
-          provider: ProviderID.make("provider"),
-          model: ModelID.make("model"),
-        }),
-      ),
     ]
 
     expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true, true])
-    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
+    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false])
   })
 
   test("retries accepted transport reads but not accepted writes or rejected requests", () => {

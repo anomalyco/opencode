@@ -30,6 +30,7 @@ const JsonPayload = Schema.Unknown.pipe(HttpApiSchema.asJson())
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
   parentID: Schema.optional(Schema.String),
+  archived: Schema.optional(Schema.String),
   search: Schema.optional(Schema.String),
   order: Schema.optional(Schema.String),
   cursor: Schema.optional(Schema.String),
@@ -94,8 +95,6 @@ export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("Mock
 
 const Unsupported = MockUnsupported.pipe(HttpApiSchema.status(501))
 
-const PtyMissing = [MockNotFound.pipe(HttpApiSchema.status(404)), MockPtyNotFound.pipe(HttpApiSchema.status(404))]
-
 const PersistentPtyUnavailable = MockServiceUnavailable.pipe(HttpApiSchema.status(503))
 
 const PersistentPtyMissing = [MockPtyNotFound.pipe(HttpApiSchema.status(404)), PersistentPtyUnavailable]
@@ -132,6 +131,7 @@ const Group = HttpApiGroup.make("mock")
       params: { integrationID: Schema.String },
       payload: JsonPayload,
       success: NoContent,
+      error: MockBadRequest.pipe(HttpApiSchema.status(400)),
     }),
   )
   .add(
@@ -274,52 +274,10 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.get("ptyList", "/api/pty", {
-      success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("ptyCreate", "/api/pty", {
-      payload: Pty.CreateInput,
-      success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("ptyGet", "/api/pty/:ptyID", {
-      params: PtyParams,
-      success: Json,
-      error: PtyMissing,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.put("ptyUpdate", "/api/pty/:ptyID", {
-      params: PtyParams,
-      payload: Pty.UpdateInput,
-      success: Json,
-      error: PtyMissing,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.delete("ptyRemove", "/api/pty/:ptyID", {
-      params: PtyParams,
-      success: NoContent,
-      error: PtyMissing,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("ptyConnectToken", "/api/pty/:ptyID/connect-token", {
-      params: PtyParams,
-      success: Json,
-      error: PtyMissing,
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("persistentPtyList", "/api/experimental/session/:sessionID/terminal", {
       params: SessionParams,
       success: Json,
-      error: PersistentPtyUnavailable,
+      error: [PersistentPtyUnavailable, MockInternal.pipe(HttpApiSchema.status(500))],
     }),
   )
   .add(
@@ -392,6 +350,12 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.delete("sessionRemove", "/api/session/:sessionID", {
+      params: SessionParams,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
       success: NoContent,
     }),

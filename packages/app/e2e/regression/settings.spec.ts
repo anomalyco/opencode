@@ -885,7 +885,13 @@ test.describe("pages open before slow data", () => {
         { name: "stripe", integrationID: "stripe-oauth", status: { status: "needs_auth", error: "Sign in required" } },
       ],
       integrations: [
-        { id: "stripe-oauth", name: "Stripe", methods: [{ id: "oauth", type: "oauth" }], connections: [] },
+        {
+          id: "stripe-oauth",
+          name: "Stripe",
+          methods: [{ id: "oauth", type: "oauth" }],
+          connections: [],
+          metadata: { source: "mcp" },
+        },
       ],
       onIntegrationOAuth: (input) => {
         signIns.push(input.integrationID)
@@ -1322,6 +1328,82 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
   expect(attempts).toEqual([])
 })
 
+test("providers: a rejected API key shows the server error and can be sent again", async ({ page }) => {
+  const keys: unknown[] = []
+
+  const { settings } = await open(page, {
+    integrations: [{ id: "openrouter", name: "OpenRouter", methods: [{ type: "key" }], connections: [] }],
+    onConnectKey: (input) => {
+      keys.push(input.body)
+
+      return { error: "Invalid API key" }
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenRouter" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Connect OpenRouter", exact: true })
+  const submit = dialog.getByRole("button", { name: "Continue", exact: true })
+  await dialog.getByPlaceholder("API key").fill("sk-bad")
+  await submit.click()
+
+  await expect(dialog.getByRole("alert")).toHaveText("Invalid API key")
+  await expect(dialog.getByPlaceholder("API key")).toHaveValue("sk-bad")
+  await expect(submit).toBeEnabled()
+  expect(keys).toEqual([expect.objectContaining({ key: "sk-bad" })])
+})
+
+test("providers: Back during a pending API key request does not report the provider as connected", async ({
+  page,
+}) => {
+  const keys: string[] = []
+
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "openrouter",
+        name: "OpenRouter",
+        methods: [
+          { id: "oauth", type: "oauth", label: "Sign in" },
+          { type: "key", label: "API key" },
+        ],
+        connections: [],
+      },
+    ],
+    onConnectKey: (input) => {
+      keys.push(input.integrationID)
+    },
+  })
+
+  const held = await holdRoute(page, /\/api\/integration\/openrouter\/connect\/key(\?|$)/, { method: "POST" })
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenRouter" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Connect OpenRouter", exact: true })
+  await dialog.getByRole("button", { name: "API key", exact: true }).click()
+  await dialog.getByPlaceholder("API key").fill("sk-late")
+  await dialog.getByRole("button", { name: "Continue", exact: true }).click()
+  await held.arrived
+  await expect(dialog.getByRole("button", { name: "Continue", exact: true })).toBeDisabled()
+
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(dialog.getByRole("button", { name: "Sign in", exact: true })).toBeVisible()
+
+  // The server still saves the key, so its late success reloads the catalogs without leaving the method list.
+  const synced = page.waitForResponse(/\/api\/model(\?|$)/)
+  held.release()
+  await synced
+  expect(keys).toEqual(["openrouter"])
+  await expect(page.getByText("OpenRouter connected", { exact: true })).toHaveCount(0)
+  await dialog.getByRole("button", { name: "API key", exact: true }).click()
+  await expect(dialog.getByPlaceholder("API key")).toHaveValue("")
+})
+
 test("providers: the free tier upsell opens Go on its own, sized to its content", async ({ page }) => {
   const view = await openSession(page, { name: "FreeTier", integrations: consoleIntegrations })
   await view.push([
@@ -1369,6 +1451,13 @@ test("providers: the connect dialog lists connected providers and manages their 
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
       { id: "anthropic", name: "Anthropic", methods: [{ type: "key", label: "API key" }], connections: [] },
+      {
+        id: "linear",
+        name: "Linear",
+        methods: [{ id: "oauth", type: "oauth", label: "Sign in" }],
+        connections: [],
+        metadata: { source: "mcp" },
+      },
     ],
     onCredentialActivate: (credentialID) => {
       activated.push(credentialID)
@@ -1389,6 +1478,9 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(
     dialog.locator('[data-provider-id="anthropic"]').locator('[data-slot="provider-connected"]'),
   ).toHaveCount(0)
+  // MCP servers connect from the MCPs dialog and settings, not here.
+  await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
+  await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
   await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
   const picker = await container.boundingBox()
@@ -1551,6 +1643,24 @@ test("providers: the account options rename and remove the active account", asyn
   await settings.getByRole("button", { name: "Shared options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
   await expect.poll(() => removed).toEqual(["cred_work"])
+})
+
+test("providers: a disconnect that finds no stored credentials keeps the provider connected", async ({ page }) => {
+  // No integration lists OpenRouter, so the server's integration lookup reports no credentials to remove.
+  const { settings } = await open(page, {
+    provider: { all: [{ id: "openrouter", name: "OpenRouter", models: {} }], connected: ["openrouter"], default: {} },
+    integrations: [],
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const connected = settings.locator('[data-component="connected-providers-section"]')
+  const disconnect = connected.getByRole("button", { name: "Disconnect", exact: true })
+  await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
+
+  await disconnect.click()
+  await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
+  await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
+  await expect(disconnect).toBeVisible()
 })
 
 test("providers: switching to a Zen API key does not wait for a Console workspace", async ({ page }) => {
@@ -1806,6 +1916,44 @@ test("the add server dialog pairs from a one-time link and explains a spent one"
   )
 })
 
+test("a server check that answers after its dialog closed saves nothing and leaves the next dialog open", async ({
+  page,
+}) => {
+  const late = "http://127.0.0.1:4098"
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+  await mockOpenCodeServer(page, {
+    server: late,
+    directory: "/remote/late",
+    project: project({ id: "proj_late", directory: "/remote/late" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  const check = await holdRoute(page, /^http:\/\/127\.0\.0\.1:4098\/api\/info/)
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  await settings.getByRole("button", { name: "Add server" }).click()
+  const editor = page.getByRole("dialog", { name: "Add server" })
+  await editor.getByRole("button", { name: "Use password", exact: true }).click()
+  await editor.getByLabel("Server address", { exact: true }).fill(late)
+  await editor.getByRole("button", { name: "Add server", exact: true }).click()
+  await check.arrived
+  await page.keyboard.press("Escape")
+  await expect(editor).toHaveCount(0)
+
+  await settings.getByRole("button", { name: "Add server" }).click()
+  const link = editor.getByLabel("Pairing link", { exact: true })
+  await expect(link).toBeFocused()
+  const answered = page.waitForResponse(/^http:\/\/127\.0\.0\.1:4098\/api\/info/)
+  check.release()
+  await answered
+  // A round trip after the answer: the cancelled check had every chance to save and close by now.
+  await link.fill("still open")
+
+  await expect(link).toHaveValue("still open")
+  await expect(settings.getByText(late, { exact: true })).toHaveCount(0)
+})
+
 test("a pairing code with several addresses keeps the first one that works with its token", async ({ page }) => {
   // Both addresses reach one server. The second spends the code first, so the first answers 401, and the token works on
   // it as on every address of that server.
@@ -1845,7 +1993,7 @@ test("a pairing code with several addresses keeps the first one that works with 
 
 test("the Side tabs interface mode switches to vertical tabs and survives reload", async ({ page }) => {
   const { settings } = await open(page)
-  const layout = settings.getByRole("group", { name: "Interface" })
+  const layout = settings.getByRole("group", { name: "Interface layout", exact: true })
   await expect(layout.getByRole("radio", { name: "Top tabs", exact: true })).toBeChecked()
   await layout.getByText("Side tabs", { exact: true }).click()
   await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
@@ -1862,13 +2010,15 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 720, bottom: false },
   { name: "mobile", width: 390, height: 844, bottom: true },
 ]) {
-  test(`settings layout (${viewport.name}): every page scrolls inside its panel with room below`, async ({ page }) => {
+  test(`settings layout (${viewport.name}): every page scrolls inside settings with room below`, async ({ page }) => {
     await page.route("https://api.github.com/repos/anomalyco/opencode/contributors?*", (route) =>
       route.fulfill({ json: [] }),
     )
     const { settings } = await open(page)
     await page.setViewportSize(viewport)
     const panel = settings.locator(".settings-content > .settings-panel:visible")
+    // The wide layout scrolls the whole view beside a sticky sidebar; the narrow one scrolls the page's own panel.
+    const scroller = viewport.name === "desktop" ? settings.locator(":scope > .settings") : panel
     const main = page.getByRole("main")
 
     if (viewport.bottom) {
@@ -1883,10 +2033,15 @@ for (const viewport of [
     await expect(main).toHaveJSProperty("scrollTop", 0)
 
     if (viewport.name === "desktop") {
-      // Wheel over the settings gutter scrolls the page beside it.
+      // Wheel over the settings gutter or the page list scrolls the page beside it.
       await settings.hover({ position: { x: 16, y: 200 } })
       await page.mouse.wheel(0, 200)
-      await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      const top = await scroller.evaluate((element) => element.scrollTop)
+      await settings.getByRole("tab", { name: "Preferences", exact: true }).hover()
+      await page.mouse.wheel(0, 200)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(top)
+      await expect(settings.getByRole("button", { name: "Back to app" })).toBeInViewport()
     }
 
     const pages = [
@@ -1929,7 +2084,7 @@ for (const viewport of [
       await panel.hover()
       await page.mouse.wheel(0, 10000)
       await expect
-        .poll(() => panel.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+        .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
         .toBeLessThanOrEqual(1)
       await expect
         .poll(

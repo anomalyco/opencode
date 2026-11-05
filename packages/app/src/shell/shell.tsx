@@ -23,13 +23,9 @@ import {
   measureSidebarToggles,
   paintCollapsedSlots,
 } from "@/shell/sidebar-toggle"
-import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
+import { createPanelMotion, guardClosingFocus, panelOpacity, setPanelResizing } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
-
-// How far Home steps along a peek's header to clear the collapsed toggle: to the toggle's end, from the sidebar's 18px
-// start padding.
-const homeClearance = collapsedSidebarToggleEnd - 18
 
 type SidebarPose = { closed: number; peek: number | undefined }
 
@@ -53,13 +49,16 @@ export default function Layout(props: ParentProps) {
     tabsAside: HTMLElement | undefined
     tabsPanel: HTMLElement | undefined
   }>({
-    tabsWidth: 276,
+    tabsWidth: 240,
     tabsMount: undefined,
     tabsAside: undefined,
     tabsPanel: undefined,
   })
 
   const verticalTabs = () => preferences.appearance.tabLayout() !== "horizontal" && !mobile()
+
+  const organizedSidebar = () =>
+    preferences.appearance.tabLayout() === "vertical" && preferences.general.sidebarOrganize() === "projects"
 
   const toggleSidebar = () => preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen())
 
@@ -103,7 +102,9 @@ export default function Layout(props: ParentProps) {
       peekHome = mount.querySelector<HTMLElement>('[data-slot="sidebar-header"][data-home] > :first-child')
 
     if (peekHome)
-      peekHome.style.transform = peeking ? `translateX(${(rtl ? -1 : 1) * homeClearance * sidebar.closed}px)` : ""
+      peekHome.style.transform = peeking
+        ? `translateX(calc(${(rtl ? -1 : 1) * sidebar.closed} * (${collapsedSidebarToggleEnd}px - var(--sidebar-inset-start))))`
+        : ""
 
     if (!peeking) peekHome = undefined
   }
@@ -179,7 +180,7 @@ export default function Layout(props: ParentProps) {
               if (!entry.sessionID || !entry.directory || !entry.server) return
               const sessionID = entry.sessionID
               const server = entry.server
-              global.ensureServerCtx(conn).projects.touch(entry.project?.worktree ?? entry.directory)
+              global.serverCtx(server)?.projects.touch(entry.project?.worktree ?? entry.directory)
               void startTransition(() => {
                 tabs.select(tabs.addSessionTab({ server, sessionId: sessionID }))
               })
@@ -209,6 +210,11 @@ export default function Layout(props: ParentProps) {
       style={{
         // Mobile panels only need clearance for their outer border.
         "--shell-inline-inset": mobile() ? "1px" : "8px",
+        "--session-header-inset-end": verticalTabs() ? "10px" : "12px",
+        "--sidebar-inset-start": "11px",
+        "--sidebar-inset-end": "3px",
+        "--sidebar-divider-bleed":
+          preferences.appearance.tabLayout() === "inbox" || organizedSidebar() ? "var(--shell-inline-inset)" : "0px",
         // A bottom mobile titlebar leaves main's top edge to the safe area. Native Windows chrome supplies the gap;
         // retain outer-outline clearance.
         "--shell-top-inset": bottomTitlebar()
@@ -247,8 +253,11 @@ export default function Layout(props: ParentProps) {
             <div
               ref={(element) => setState("tabsPanel", element)}
               data-slot="vertical-tabs-panel"
-              class="absolute inset-0 overflow-hidden [contain:layout_style_paint]"
-              classList={{ "[content-visibility:hidden]": !sidebarMotion.present() && !peek.shown() }}
+              class="absolute inset-0 overflow-clip [contain:layout_style_paint] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
+              classList={{
+                "z-20": organizedSidebar(),
+                "[content-visibility:hidden]": !sidebarMotion.present() && !peek.shown(),
+              }}
             >
               {/* Under a peek's contents, so they dim over the sidebar's own background, as when docking, rather than
                   showing the content beneath through them. */}
@@ -262,7 +271,7 @@ export default function Layout(props: ParentProps) {
               <div
                 ref={(element) => setState("tabsMount", element)}
                 data-slot="vertical-tabs-mount"
-                class="absolute inset-y-0 end-0 contain-strict will-change-[opacity] flex min-h-0 flex-col bg-v2-background-bg-deep pe-2.5 ps-4.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
+                class="absolute inset-y-0 end-0 contain-strict [overflow-clip-margin:var(--sidebar-divider-bleed,0px)] will-change-[opacity] flex min-h-0 flex-col bg-v2-background-bg-deep ps-[var(--sidebar-inset-start)] pe-[var(--sidebar-inset-end)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
                 style={{
                   width: `${state.tabsWidth}px`,
                   "padding-bottom": "max(10px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
@@ -276,12 +285,12 @@ export default function Layout(props: ParentProps) {
             />
             <Show when={preferences.appearance.sidebarOpen()}>
               <ResizeHandle
-                class="-end-1"
                 direction="horizontal"
                 size={state.tabsWidth}
                 min={136}
                 max={640}
                 onResize={(width) => setState("tabsWidth", width)}
+                onDraggingChange={setPanelResizing}
               />
             </Show>
           </aside>
@@ -291,10 +300,11 @@ export default function Layout(props: ParentProps) {
           class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
           style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
+            // A docked composer touch bar takes over the safe area.
             "padding-bottom":
               bottomTitlebar() || settings.active()
                 ? "0px"
-                : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
+                : "var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
             "--settings-bottom-inset": bottomTitlebar()
               ? "40px"
               : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
@@ -306,6 +316,9 @@ export default function Layout(props: ParentProps) {
         </main>
         <CollapsedSidebarToggle />
       </div>
+      {/* On touch devices the active composer moves its actions here: the bottom edge, or the top of the keyboard.
+          Last in order, so it stays below a bottom titlebar (also order-last, but earlier in the DOM). */}
+      <div data-slot="composer-touch-bar-mount" class="order-last shrink-0" />
       <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
       <UploadToastHost />

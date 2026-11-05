@@ -231,6 +231,79 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
+  page,
+}) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock)
+  const interrupts: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`)) interrupts.push(request.url())
+  })
+  const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
+
+  await expect(stop).toBeVisible()
+  await view.input.click()
+  await view.input.press("Enter")
+  await view.input.press("ControlOrMeta+Enter")
+  await view.input.pressSequentially("   ")
+  await view.input.press("Enter")
+
+  const interrupted = page.waitForRequest((request) =>
+    new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+  )
+
+  await stop.click()
+  await interrupted
+
+  expect(interrupts).toHaveLength(1)
+  expect(mock.prompts).toEqual([])
+})
+
+test.describe("touch keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("the touch bar stops, queues and steers a running session while Return only adds a line", async ({ page }) => {
+    const mock = createQueueMock([])
+    const view = await openQueue(page, mock, "steer")
+    const bar = page.locator('[data-slot="composer-touch-bar"]')
+    const stop = bar.getByRole("button", { name: "Stop", exact: true })
+
+    const interrupted = page.waitForRequest((request) =>
+      new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+    )
+
+    await stop.tap()
+    await interrupted
+
+    await view.input.fill("check the logs")
+    await expect(stop).toHaveCount(0)
+    await view.input.press("Enter")
+    await view.input.pressSequentially("then the tests")
+    expect(mock.prompts).toEqual([])
+    await bar.getByRole("button", { name: "Queue", exact: true }).tap()
+    await expect
+      .poll(() => mock.prompts.map((prompt) => [prompt.delivery, prompt.text]))
+      .toEqual([["queue", "check the logs\nthen the tests"]])
+
+    await view.input.fill("use the staging database")
+    await bar.getByRole("button", { name: "Steer", exact: true }).tap()
+    await expect
+      .poll(() => mock.prompts.map((prompt) => [prompt.delivery, prompt.text]))
+      .toEqual([
+        ["queue", "check the logs\nthen the tests"],
+        ["steer", "use the staging database"],
+      ])
+    await expect(view.input).toBeEmpty()
+
+    // Editing a queued prompt: the primary action puts it back in the queue, the other steers it.
+    await view.rows.filter({ hasText: "check the logs" }).locator('[data-action="session-queue-edit"]').tap()
+    await expect(view.input).toHaveText(/check the logs/)
+    await expect(bar.locator('[data-action="composer-alternate-delivery"]')).toHaveText("Steer")
+    await expect(bar.locator('[data-action="composer-submit"]')).toHaveText("Queue")
+  })
+})
+
 test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {
@@ -513,6 +586,25 @@ test("editing restores the existing draft and replaces only the original queue p
     { inboxID: "inb_seed_2", action: "cancel" },
   ])
   expect(mock.log[0]).toBe("prompt:queue")
+})
+
+test("a queued prompt the server delivers mid-edit returns the draft typed before the edit", async ({ page }) => {
+  const mock = createQueueMock(["first queued prompt", "tighten the error copy"])
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(2)
+
+  await view.input.fill("my in-progress draft")
+  await view.rows.getByText("tighten the error copy", { exact: true }).click()
+  await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
+
+  // The running turn ends and the server delivers the prompt being edited.
+  const [delivered] = mock.rows.splice(1, 1)
+  mock.emit("session.inbox.delivered", { sessionID, inboxID: delivered.id })
+
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(["first queued prompt"])
+  await expect(view.input).toHaveText("my in-progress draft")
+  await expect(view.input).toBeFocused()
 })
 
 for (const delivery of ["queue", "steer"] as const) {

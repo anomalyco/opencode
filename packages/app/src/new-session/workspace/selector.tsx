@@ -4,23 +4,24 @@ import { Popover } from "@kobalte/core/popover"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
+import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Typeahead } from "@opencode/ui/typeahead"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useCommand } from "@/shell/commands/command"
 import type { NewSessionWorkspaceController } from "./controller"
 
-export function NewSessionBranch(props: {
-  workspace: NewSessionWorkspaceController
-  onDone: () => void
-  /** Opens the project's worktree picker; the checkout branch is static text without it. */
-  onWorktree?: () => void
-}) {
+export function NewSessionBranch(props: { workspace: NewSessionWorkspaceController; onDone: () => void }) {
   const language = useLanguage()
+
+  const command = useCommand()
 
   const [state, setState] = createStore({ open: false, truncated: false })
 
   let outside = false
+
   let trigger: HTMLButtonElement | undefined
+
   const creating = () => props.workspace.selection.value() === "create"
 
   // Fetch before opening and retain the result across closes, rather than showing a smaller loading panel.
@@ -41,6 +42,33 @@ export function NewSessionBranch(props: {
 
     return result?.directory === props.workspace.project.root() ? result : undefined
   }
+
+  const changeOpen = (open: boolean) => {
+    setState("open", open)
+
+    // Revalidate on every open; the loaded list stays on screen meanwhile.
+    if (open && initial()) branchActions.refetch()
+  }
+
+  command.register("new-session-branch", () => [
+    {
+      id: "session.branch.choose",
+      title: language.t("command.session.branch.choose"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+alt+b",
+      disabled: !creating() || !props.workspace.bar.branch(),
+      onSelect: (source) => {
+        changeOpen(source === "palette" || !state.open)
+
+        // Pending opens have no close-autofocus handler.
+        if (!state.open && !initial()) props.onDone()
+      },
+    },
+  ])
+
+  createEffect(() => {
+    if (!creating()) setState("open", false)
+  })
 
   // Until content mounts, Kobalte has no dismissable layer to cancel a pending open.
   createEffect(() => {
@@ -69,9 +97,6 @@ export function NewSessionBranch(props: {
       ? language.t("session.new.workspace.fromBranch", { branch: props.workspace.bar.branch() ?? "" })
       : props.workspace.bar.branch()
 
-  // A truncated name keeps its full-text tooltip; otherwise the clickable checkout branch explains its action.
-  const hint = () => !creating() && !!props.onWorktree && !state.truncated
-
   const observe = (element: HTMLSpanElement) =>
     createResizeObserver(element, () => setState("truncated", element.scrollWidth > element.clientWidth))
 
@@ -79,58 +104,43 @@ export function NewSessionBranch(props: {
     <Show when={props.workspace.bar.branch()}>
       <Tooltip
         placement="top"
-        openDelay={hint() ? 800 : undefined}
-        value={hint() ? language.t("session.location.worktree") : label()}
-        disabled={!state.truncated && !hint()}
+        openDelay={creating() ? 800 : 400}
+        value={
+          <Show when={creating()} fallback={label()}>
+            <div class="flex flex-col gap-1">
+              <span class="flex items-center gap-2">
+                {language.t("command.session.branch.choose")}
+                <Show when={command.keybindParts("session.branch.choose").length}>
+                  <Keybind keys={command.keybindParts("session.branch.choose")} variant="neutral" />
+                </Show>
+              </span>
+              <Show when={state.truncated}>{label()}</Show>
+            </div>
+          </Show>
+        }
+        disabled={!creating() && !state.truncated}
         class="flex min-w-0 max-w-[220px]"
         contentClass="max-w-[calc(100vw-32px)] break-all"
       >
         <Show
           when={creating()}
           fallback={
-            <Show
-              when={props.onWorktree}
-              fallback={
-                <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-faint">
-                  <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                  <span ref={observe} dir="auto" class="min-w-0 truncate">
-                    {label()}
-                  </span>
-                </div>
-              }
-            >
-              <button
-                type="button"
-                aria-haspopup="dialog"
-                aria-description={language.t("session.location.worktree")}
-                class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm ps-1.5 pe-2 text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
-                onClick={() => props.onWorktree?.()}
-              >
-                <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                <span ref={observe} dir="auto" class="min-w-0 truncate">
-                  {label()}
-                </span>
-              </button>
-            </Show>
+            <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-faint">
+              <Icon name="branch" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+              <span ref={observe} dir="auto" class="min-w-0 truncate">
+                {label()}
+              </span>
+            </div>
           }
         >
-          <Popover
-            open={state.open}
-            onOpenChange={(open) => {
-              setState("open", open)
-
-              // Revalidate on every open, as before the preload; the loaded list stays on screen meanwhile.
-              if (open && initial()) branchActions.refetch()
-            }}
-            placement="bottom-start"
-            gutter={4}
-          >
+          <Popover open={state.open} onOpenChange={changeOpen} placement="bottom-start" gutter={4}>
             <Popover.Trigger
               ref={trigger}
               aria-busy={branches.loading}
+              aria-description={language.t("command.session.branch.choose")}
               class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm px-1.5 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
             >
-              <Icon name="branch-out" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name="branch-out" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
               <span ref={observe} dir="auto" class="min-w-0 truncate">
                 {label()}
               </span>

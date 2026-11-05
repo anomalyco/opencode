@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
+import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
@@ -557,7 +558,6 @@ describe("SessionRestart background recovery", () => {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
-      const kv = yield* KV.Service
       const parent = Session.ID.make("ses_background_foreign_parent")
       const child = Session.ID.make("ses_background_foreign_child")
       yield* seedSessions(database, [parent])
@@ -567,28 +567,50 @@ describe("SessionRestart background recovery", () => {
         suspended_pid: process.ppid,
       })
       // Persisted by a server that is still running (the test runner's parent stands in for it).
-      const notificationID = SessionMessage.ID.create()
-      yield* kv.set(`job.background/${notificationID}`, {
-        id: "sh_foreign",
-        notificationID,
-        recovery: { kind: "shell", sessionID: parent, shellID: "sh_foreign", command: "sleep 60" },
-        status: "running",
-        pid: process.ppid,
-      })
-      const childNotificationID = SessionMessage.ID.create()
-      yield* kv.set(`job.background/${childNotificationID}`, {
-        id: child,
-        notificationID: childNotificationID,
-        recovery: {
+      const now = Date.now()
+      const insertForeign = (
+        notificationID: SessionMessage.ID,
+        id: string,
+        recovery: Job.Recovery,
+        childSessionID: Session.ID | null,
+        title: string,
+      ) =>
+        database.db
+          .insert(JobTable)
+          .values({
+            notification_id: notificationID,
+            id,
+            session_id: parent,
+            child_session_id: childSessionID,
+            kind: recovery.kind,
+            title,
+            status: "running",
+            pid: process.ppid,
+            recovery,
+            time_created: now,
+            time_updated: now,
+          })
+          .run()
+      yield* insertForeign(
+        SessionMessage.ID.create(),
+        "sh_foreign",
+        { kind: "shell", sessionID: parent, shellID: "sh_foreign", command: "sleep 60" },
+        null,
+        "sleep 60",
+      )
+      yield* insertForeign(
+        SessionMessage.ID.create(),
+        child,
+        {
           kind: "subagent",
           parentSessionID: parent,
           childSessionID: child,
           agent: "explore",
           description: "Inspect recovery",
         },
-        status: "running",
-        pid: process.ppid,
-      })
+        child,
+        "Inspect recovery",
+      )
       expect(yield* jobs.pendingBackground).toHaveLength(2)
 
       const scope = yield* Scope.make()

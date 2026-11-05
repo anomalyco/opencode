@@ -233,6 +233,15 @@ const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : scrip
 
 export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls.",
+  "desktop.documentsFolderUsage":
+    "OpenCode uses files in your Documents folder for projects you open and commands you run there.",
+  "desktop.desktopFolderUsage": "OpenCode uses files on your Desktop for projects you open and commands you run there.",
+  "desktop.downloadsFolderUsage":
+    "OpenCode uses files in your Downloads folder for projects you open and commands you run there.",
+  "desktop.networkVolumesUsage":
+    "OpenCode uses files on network volumes for projects you open and commands you run there.",
+  "desktop.removableVolumesUsage":
+    "OpenCode uses files on removable volumes for projects you open and commands you run there.",
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",

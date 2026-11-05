@@ -1,6 +1,9 @@
-.session-summary-popover {
-  transform-origin: var(--kb-popover-content-transform-origin);
-  animation: menu-v2-in 120ms ease-out;
+/* Only the card scrolls, so neither its shadow nor the Extensions flyout beside it is clipped. */
+.session-summary-popover .session-summary-card {
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
 }
 
 [data-component="session-summary-panel"] {
@@ -44,13 +47,13 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 32px;
+  min-height: 28px;
   padding: 4px 12px;
   border-radius: 4px;
   color: var(--v2-text-text-base);
   font-size: 13px;
   font-weight: 440;
-  line-height: var(--line-height-base);
+  line-height: var(--line-height-compact);
   text-align: start;
 }
 
@@ -92,12 +95,13 @@ button.session-service-row:focus-visible,
 }
 
 .session-summary-row[data-expanded] {
-  background: var(--v2-overlay-simple-overlay-pressed);
+  background: var(--v2-overlay-simple-overlay-hover);
 }
 
 .session-summary-heading {
   color: var(--v2-text-text-faint);
-  font-weight: 530;
+  font-weight: 440;
+  user-select: none;
 }
 
 .session-summary-label {
@@ -154,9 +158,6 @@ button.session-service-row:focus-visible,
 }
 
 .session-service-flyout-body {
-  /* The shadow follows the clipped surface, so it is a filter rather than a box shadow. */
-  filter: drop-shadow(0 8px 8px var(--v2-alpha-dark-4)) drop-shadow(0 4px 4px var(--v2-alpha-dark-8))
-    drop-shadow(0 0 0.5px var(--v2-alpha-dark-12));
   opacity: 0;
   scale: 0.96;
   translate: 4px 0;
@@ -174,21 +175,18 @@ button.session-service-row:focus-visible,
   }
 }
 
-[data-color-scheme="dark"] .session-service-flyout-body {
-  filter: drop-shadow(0 8px 8px var(--v2-alpha-dark-30)) drop-shadow(0 4px 4px var(--v2-alpha-dark-30))
-    drop-shadow(0 0 0.5px var(--v2-alpha-light-16));
-}
-
 .session-service-flyout-surface {
   display: grid;
-  padding: 2px;
+  height: var(--flyout-height);
+  overflow: hidden;
+  padding: 2px 0;
   border-radius: 6px;
   background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
   color: var(--v2-text-text-base);
   font-size: 13px;
   font-weight: 440;
   line-height: var(--line-height-compact);
-  clip-path: inset(0 0 calc(100% - var(--flyout-height)) 0 round 6px);
 }
 
 /* Motion is off unless the "Extensions submenu motion" knob sets data-motion. */
@@ -218,20 +216,20 @@ button.session-service-row:focus-visible,
   }
 
   .session-service-flyout-surface {
-    transition: clip-path 0.3s var(--spring-snap);
+    transition: height 0.3s var(--spring-snap);
   }
 }
 
 .session-service-pane {
   grid-area: 1 / 1;
   align-self: start;
+  /* The list scrolls above its actions, which stay in view. */
+  display: flex;
+  flex-direction: column;
   max-height: min(480px, calc(100dvh - 36px));
-  /* Only vertical: long names truncate rather than scroll sideways. */
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Long names truncate inside the list instead of widening it. */
+  min-width: 0;
   outline: none;
-  --session-service-scrollbar: 0px;
 
   /* Lists swap at once; only the box glides and resizes, so two lists never show together. */
   &:not([data-active]) {
@@ -240,8 +238,25 @@ button.session-service-row:focus-visible,
   }
 }
 
-/* A long list keeps the menu's 2px inset at both ends, and fades only at an edge with rows scrolled past it. The
-   scrollbar's strip stays unmasked, so the thumb never fades. */
+.session-service-scroll {
+  min-height: 0;
+  /* Only vertical: long names truncate rather than scroll sideways. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The list and its actions own the menu's inline inset, so a separator can run edge to edge. */
+.session-service-pane-content,
+.session-service-pane > .session-service-footer {
+  padding-inline: 2px;
+}
+
+.session-service-pane > .session-service-footer {
+  flex-shrink: 0;
+}
+
+/* A long list keeps the menu's 2px inset at both ends, and fades only at an edge with rows scrolled past it. */
 @property --session-service-fade-start {
   syntax: "<length>";
   inherits: false;
@@ -273,23 +288,14 @@ button.session-service-row:focus-visible,
 }
 
 @supports (animation-timeline: scroll()) {
-  .session-service-pane[data-overflow] {
-    mask-image:
-      linear-gradient(#000, #000),
-      linear-gradient(
-        to bottom,
-        transparent,
-        #000 var(--session-service-fade-start),
-        #000 calc(100% - var(--session-service-fade-end)),
-        transparent
-      );
-    mask-size:
-      var(--session-service-scrollbar) 100%,
-      100% 100%;
-    mask-position:
-      right top,
-      left top;
-    mask-repeat: no-repeat;
+  .session-service-pane[data-overflow] .session-service-scroll {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--session-service-fade-start),
+      #000 calc(100% - var(--session-service-fade-end)),
+      transparent
+    );
     animation:
       session-service-fade-start linear both,
       session-service-fade-end linear both;
@@ -297,33 +303,6 @@ button.session-service-row:focus-visible,
     animation-range:
       0 16px,
       calc(100% - 16px) 100%;
-
-    &:dir(rtl) {
-      mask-position:
-        left top,
-        left top;
-    }
-  }
-}
-
-/* The thumb sits 6px inside the menu's edge and clear of its corners, rather than against the border. */
-@media (hover: hover) and (pointer: fine) {
-  @supports selector(::-webkit-scrollbar) {
-    .session-service-pane {
-      --session-service-scrollbar: 12px;
-    }
-
-    .session-service-pane::-webkit-scrollbar {
-      width: 12px;
-    }
-
-    .session-service-pane::-webkit-scrollbar-track:vertical {
-      margin: 6px 0;
-    }
-
-    .session-service-pane::-webkit-scrollbar-thumb {
-      border-width: 2px 4px;
-    }
   }
 }
 
@@ -381,7 +360,8 @@ button.session-service-row:focus-visible,
 
   strong {
     padding: 8px 12px;
-    font-weight: 530;
+    font-weight: 440;
+    user-select: none;
   }
 }
 
@@ -390,7 +370,7 @@ button.session-service-row:focus-visible,
   color: var(--v2-text-text-faint);
   overflow-wrap: anywhere;
 }
-:is(.session-service-pane-content, .session-service-drawer) > .session-service-footer {
+:is(.session-service-pane, .session-service-drawer) > .session-service-footer {
   padding-block-start: 6px;
 }
 .session-service-config-separator {
@@ -401,11 +381,6 @@ button.session-service-row:focus-visible,
   background: var(--v2-border-border-muted);
 }
 
-/* Inside a submenu's scroll box, a full-bleed separator would overflow it sideways. */
-.session-service-pane .session-service-config-separator {
-  width: auto;
-  margin-inline: 0;
-}
 .session-service-config {
   display: inline-flex;
   align-items: center;
@@ -492,6 +467,11 @@ button.session-service-dot {
   height: 6px;
 }
 
+/* The 16px switch sits 6px from the row's top, bottom and end. */
+.session-mcp-row {
+  padding-inline-end: 6px;
+}
+
 .session-mcp-trailing {
   display: flex;
   flex-shrink: 0;
@@ -544,7 +524,7 @@ button.session-service-dot {
 .session-summary-dismiss {
   position: absolute;
   inset-inline-end: 8px;
-  bottom: 8px;
+  bottom: 6px;
   width: 20px;
   height: 20px;
   display: flex;
@@ -569,7 +549,6 @@ button.session-service-dot {
 }
 
 :root[data-motion="reduce"] {
-  .session-summary-popover,
   .session-service-dot::before {
     animation: none;
   }

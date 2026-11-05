@@ -495,6 +495,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.media_blob = value
       }
+      if (own(experimental, "part_rows")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.part_rows,
+          experimental.part_rows,
+          ["experimental", "part_rows"],
+          diagnostics,
+        )
+        if (value !== undefined) result.part_rows = value
+      }
       if (own(experimental, "image_generate")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.image_generate,
@@ -512,6 +521,15 @@ function normalizeExperimental(
           diagnostics,
         )
         if (value !== undefined) result.schedules = value
+      }
+      if (own(experimental, "artifacts")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.artifacts,
+          experimental.artifacts,
+          ["experimental", "artifacts"],
+          diagnostics,
+        )
+        if (value !== undefined) result.artifacts = value
       }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(

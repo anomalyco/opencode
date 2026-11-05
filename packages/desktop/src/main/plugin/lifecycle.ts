@@ -1,5 +1,6 @@
 import { Scope } from "@opencode/plugin/gui/host"
 import type { Cleanup } from "@opencode/plugin/gui/main"
+import { isQuitting, keptScope, type Handoff, type State } from "../lifecycle/machine"
 
 /** How long disposal waits for an instance's finalizers and a setup still running. */
 const CLEANUP_TIMEOUT_MS = 3_000
@@ -59,6 +60,10 @@ export function createLifecycle(input: {
   readonly enabled: (id: string) => boolean
   /** A failure was recorded. */
   readonly changed: () => void
+  /** Where the app stands between running and exiting; plugins start only while it is not quitting. */
+  readonly state: () => State
+  /** Stops every plugin but the one whose scope is `keep`, then runs the handoff or relaunches. */
+  readonly restart: (keep: Scope, handoff?: Handoff) => Promise<void>
   readonly log: ErrorLog
 }) {
   const active = new Map<string, Running>()
@@ -70,12 +75,9 @@ export function createLifecycle(input: {
   // The revision whose setup last succeeded since the plugin was last stopped; a failed reload returns to it.
   const last = new Map<string, Revision>()
   const errors = new Map<string, string>()
-  // Scopes a restart handoff keeps. Quitting skips their instances, so a failed handoff leaves them working and a
-  // successful one keeps their state and contributions until the app has quit.
-  const kept = new Set<Scope>()
-  const status = { quitting: false }
 
-  const current = (id: string, signal: AbortSignal) => !signal.aborted && input.enabled(id) && !status.quitting
+  const current = (id: string, signal: AbortSignal) =>
+    !signal.aborted && input.enabled(id) && !isQuitting(input.state())
 
   const fail = (id: string, cause: unknown) => {
     errors.set(id, cause instanceof Error ? cause.message : String(cause))
@@ -340,27 +342,24 @@ export function createLifecycle(input: {
       errors.delete(id)
     },
     /**
-     * Runs a restart handoff that keeps `keep`, an instance's scope: quitting skips that instance until the handoff
-     * settles. Rejects without running the handoff when no instance has that scope.
+     * Restarts the app keeping `keep`, an instance's scope: stopping skips that instance while the handoff runs, so a
+     * failed handoff leaves it working. Rejects without running the handoff when no instance has that scope.
      */
-    restart(keep: Scope, handoff: () => Promise<void>) {
+    restart(keep: Scope, handoff?: Handoff) {
       if (![...active.values()].some((running) => running.instance.scope === keep))
         return Promise.reject(new Error("Lifecycle.restart keeps only an active plugin's ctx.scope"))
-      kept.add(keep)
 
-      return Promise.resolve()
-        .then(handoff)
-        .finally(() => kept.delete(keep))
+      return input.restart(keep, handoff)
     },
-    /** Stops every plugin but a kept one; settles once each lifecycle has. */
-    async dispose() {
-      status.quitting = true
-      // Every other plugin with an instance or a queued step stops; quitting waits for each lifecycle to settle.
+    /** Stops every plugin but the one the app keeps; settles once each lifecycle has. */
+    async stop() {
+      const keep = keptScope(input.state())
+      // Every other plugin with an instance or a queued step stops; stopping waits for each lifecycle to settle.
       await Promise.all(
         [...new Set([...active.keys(), ...queues.keys()])].flatMap((id) => {
           const running = active.get(id)
 
-          return running && kept.has(running.instance.scope) ? [] : [deactivate(id)]
+          return running && running.instance.scope === keep ? [] : [deactivate(id)]
         }),
       )
     },

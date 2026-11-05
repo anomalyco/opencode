@@ -2,6 +2,7 @@ import { AmazonBedrockPlugin } from "./provider/amazon-bedrock.js"
 import { AzurePlugin } from "./provider/azure.js"
 import { CerebrasPlugin } from "./provider/cerebras.js"
 import { ChatGPTPlugin } from "./provider/chatgpt.js"
+import { ClaudeAgentPlugin } from "./provider/claude-agent/index.js"
 import { CloudflareAIGatewayPlugin } from "./provider/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai.js"
 import { DatabricksPlugin } from "./provider/databricks.js"
@@ -59,4 +60,5 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   VLLMPlugin,
   XAIPlugin,
   ZenmuxPlugin,
+  ClaudeAgentPlugin,
 ]

@@ -88,6 +88,16 @@ type Factory = <R>(ctx: Interpreter<R>) => Value
 const table: Record<string, Factory> = {
   tools: () => new ToolReference([]),
   search: (ctx) => native(ctx.builtins, { name: "search", call: (_, args) => ctx.search(args), callback: false }),
+  require: (ctx) =>
+    native(ctx.builtins, {
+      name: "require",
+      length: 1,
+      call: (_, args, site) => {
+        const specifier = args[0]
+        if (typeof specifier !== "string") throw typeError("require expects a module name string.")
+        return ctx.module(specifier, site)
+      },
+    }),
   undefined: () => undefined,
   NaN: () => NaN,
   Infinity: () => Infinity,

@@ -15,7 +15,7 @@ export const useSessionHashScroll = (input: {
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: SessionMessageUser | undefined) => void
-  follow: { unpin: () => void; toBottom: () => void }
+  follow: { detach: () => void; toBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   revealMessage?: (id: string) => void
@@ -131,7 +131,7 @@ export const useSessionHashScroll = (input: {
     const messageId = messageIdFromHash(hash)
 
     if (messageId) {
-      input.follow.unpin()
+      input.follow.detach()
       const msg = messageById().get(messageId)
 
       if (msg) {
@@ -146,7 +146,7 @@ export const useSessionHashScroll = (input: {
     const target = document.getElementById(hash)
 
     if (target) {
-      input.follow.unpin()
+      input.follow.detach()
       scrollToElement(target, behavior)
 
       return
@@ -202,7 +202,7 @@ export const useSessionHashScroll = (input: {
 
     if (input.currentMessageId() === targetId && !pending) return
 
-    input.follow.unpin()
+    input.follow.detach()
     cancel()
     queue(() => scrollToMessage(msg, "auto"))
   })

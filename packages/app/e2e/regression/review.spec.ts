@@ -762,6 +762,61 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(missingTab).toHaveCount(0)
 })
 
+// A change reported while a file's read is in flight used to join that read, so the tab kept the bytes from before the
+// change until the next change.
+test("a file changed during its read shows the change", async ({ page }) => {
+  const reads: string[] = []
+  const arrived = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<void>()
+
+  const messages = [
+    { id: "msg_prompt", type: "user", text: "Update the lists", time: { created: 1 } },
+    {
+      id: "msg_reply",
+      type: "assistant",
+      agent: "build",
+      model: { id: "test", providerID: "opencode" },
+      content: [{ type: "text", text: "Updated [notes.txt](notes.txt) and [shopping.txt](shopping.txt)." }],
+      time: { created: 2, completed: 3 },
+    },
+  ] satisfies SessionMessageInfo[]
+
+  const workspace = await openSession(page, {
+    name: "FileReadRace",
+    fileList: () => [],
+    fileContent: async (path) => {
+      reads.push(path)
+
+      if (path !== "shopping.txt") return `contents:${path}`
+
+      if (reads.filter((item) => item === path).length > 1) return "after change"
+      arrived.resolve()
+      await held.promise
+
+      return "before change"
+    },
+    pageMessages: () => ({ items: messages }),
+  })
+
+  const panel = page.locator("#review-panel")
+  await page.getByRole("link", { name: "notes.txt", exact: true }).click()
+  await expect(panel.getByText("contents:notes.txt", { exact: true })).toBeVisible()
+
+  await page.getByRole("link", { name: "shopping.txt", exact: true }).click()
+  await arrived.promise
+  // Events arrive in order, so the reread of notes.txt shows that the change to shopping.txt was handled before it.
+  await workspace.push([
+    filesystemEvent(workspace.directory, "shopping.txt", "change"),
+    filesystemEvent(workspace.directory, "notes.txt", "change"),
+  ])
+  await expect.poll(() => reads.filter((item) => item === "notes.txt").length).toBe(2)
+  held.resolve()
+
+  await expect(panel.getByRole("tab", { name: "shopping.txt" })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("after change", { exact: true })).toBeVisible()
+  await expect(panel.getByText("before change", { exact: true })).toHaveCount(0)
+})
+
 test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
   page,
   context,
@@ -769,6 +824,29 @@ test("artifact actions copy and download content, switch source, and follow the 
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
   const source = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80"/></svg>'
   const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
+
+  const notes = [
+    "---",
+    "description: Release checklist",
+    "mode: primary",
+    "model: opencode/test",
+    "temperature: 0.2",
+    "steps: 12",
+    "color: accent",
+    "hidden: false",
+    'title: "Release"',
+    "tools:",
+    "  write: false",
+    "---",
+    "",
+    "# Notes",
+    "",
+    "A document with a visible top edge.",
+    "",
+    "---",
+    "",
+    "Trailing section.",
+  ].join("\n")
 
   const workspace = await openSession(page, {
     name: "ArtifactActions",
@@ -778,7 +856,7 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "data.csv") return { content: table }
 
-      if (path === "notes.md") return { content: "# Notes\n\nA document with a visible top edge." }
+      if (path === "notes.md") return { content: notes }
 
       return { type: "binary", content: "AAEC", encoding: "base64" }
     },
@@ -790,7 +868,10 @@ test("artifact actions copy and download content, switch source, and follow the 
           agent: "build",
           model: { id: "test", providerID: "opencode" },
           content: [
-            { type: "text", text: "[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)" },
+            {
+              type: "text",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)",
+            },
           ],
           time: { created: 1, completed: 2 },
         },
@@ -866,9 +947,38 @@ test("artifact actions copy and download content, switch source, and follow the 
   expect(download.suggestedFilename()).toBe("data.csv")
   expect(await readFile((await download.path())!, "utf8")).toBe(table)
 
+  await expect(page.getByRole("heading", { name: "description: Chat heading", exact: true })).toBeVisible()
   await page.getByRole("link", { name: "Notes", exact: true }).click()
   await expect(panel.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
   const paper = panel.locator('[data-slot="artifact-markdown-page"]')
+  await expect(paper.getByRole("heading")).toHaveText(["Notes"])
+  await expect(paper.locator("code.language-yaml")).toHaveCount(0)
+  await expect(paper.locator("hr")).toHaveCount(1)
+  const terms = paper.getByRole("term")
+  await expect(terms).toHaveText(["description", "mode", "model", "temperature", "steps", "color"])
+  await paper.getByRole("button", { name: "Show all 9 properties", exact: true }).click()
+  await expect(terms).toHaveText([
+    "description",
+    "mode",
+    "model",
+    "temperature",
+    "steps",
+    "color",
+    "hidden",
+    "title",
+    "tools",
+  ])
+  await expect(paper.getByRole("definition")).toHaveText([
+    "Release checklist",
+    "primary",
+    "opencode/test",
+    "0.2",
+    "12",
+    "accent",
+    "false",
+    "Release",
+    "write: false",
+  ])
   await expect(paper).toHaveCSS("border-radius", "8px")
   await expect(paper).toHaveAttribute("data-component", "document-surface")
   expect(await paper.evaluate((element) => getComputedStyle(element, "::after").borderTopStyle)).toBe("solid")
@@ -876,6 +986,16 @@ test("artifact actions copy and download content, switch source, and follow the 
   const bar = (await toolbar.boundingBox())!
   expect(surface.y - bar.y - bar.height).toBe(1)
   await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
+  await copy.click()
+  // Chromium writes CRLF to the Windows clipboard.
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n")))
+    .toBe(notes)
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click()
+  await sourceAction.click()
+  await expect(paper).toHaveCount(0)
+  await expect(panel.locator('diffs-container [data-line="1"]')).toHaveText("---")
+  await expect(panel.locator('diffs-container [data-line="2"]')).toContainText("description: Release checklist")
 
   await page.getByRole("link", { name: "Binary", exact: true }).click()
   await expect(panel.getByText(/Binary file/)).toBeVisible()
@@ -980,7 +1100,9 @@ test("Markdown and DOCX sheets stay aligned when switching at wide and narrow pr
     await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
     await expect.poll(() => edges(markdown)).toEqual(reference)
     await expect.poll(() => toolbar.boundingBox()).toEqual(header)
-    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(true)
+    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(
+      true,
+    )
     await panel.getByRole("tab", { name: "other.docx", exact: true }).click()
     await expect(word).toHaveAttribute("data-e2e-probe", "other-warm")
     await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
@@ -1746,8 +1868,9 @@ test("Review from a new tab keeps the file browser and preview open", async ({ p
 
   await openFileLauncher(panel)
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  // The empty panel's own New tab stays beside the one the file browser replaced, so the added one is the last.
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("New tab").last()).toHaveAttribute("aria-selected", "true")
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(tab("Review")).toHaveAttribute("aria-selected", "true")
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
@@ -1762,7 +1885,7 @@ test("Review from a new tab keeps the file browser and preview open", async ({ p
 
   // Choosing Review also leaves a single-click file preview open beside it.
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("New tab").last()).toHaveAttribute("aria-selected", "true")
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await expect(tab("README.md")).toHaveCount(1)

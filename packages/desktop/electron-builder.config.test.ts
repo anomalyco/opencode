@@ -88,13 +88,22 @@ test("legacy Linux launcher stays hidden", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
-test.each(channels)("macOS icon format for $channel", ({ channel }) => {
+test.each(channels)("macOS bundle for $channel", ({ channel }) => {
   const config = load(channel)
   expect(config.mac?.icon).toBe(channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns")
   expect(config.dmg?.icon).toBe(channel === "prod" ? "resources/icons/icon.icns" : undefined)
   // The prod override must keep the rest of the shared macOS settings.
   expect(config.mac?.target).toEqual(["dmg", "zip"])
-  expect(config.mac?.extendInfo?.NSMicrophoneUsageDescription).toBeTruthy()
+
+  for (const key of [
+    "NSMicrophoneUsageDescription",
+    "NSDocumentsFolderUsageDescription",
+    "NSDesktopFolderUsageDescription",
+    "NSDownloadsFolderUsageDescription",
+    "NSNetworkVolumesUsageDescription",
+    "NSRemovableVolumesUsageDescription",
+  ])
+    expect(config.mac?.extendInfo?.[key], key).toMatch(/\S/)
 })
 
 test("the production Icon Composer package references its bundled artwork", async () => {

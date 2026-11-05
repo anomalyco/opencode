@@ -6,6 +6,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
+import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
@@ -100,11 +101,6 @@ export const Plugin = {
               })
             }
             return Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
               if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
               const hunks = yield* Effect.fromResult(parsed).pipe(
                 Effect.mapError((error) => new ToolFailure({ message: `patch verification failed: ${error.message}` })),
@@ -203,11 +199,7 @@ export const Plugin = {
                     updates.set(target.absolute, next)
                   }
                 }).pipe(
-                  Effect.mapError((error) =>
-                    error instanceof ToolFailure
-                      ? error
-                      : new ToolFailure({ message: `Unable to prepare patch at ${hunk.path}`, error }),
-                  ),
+                  Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)),
                 )
               }
 
@@ -225,31 +217,24 @@ export const Plugin = {
                   diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
                   files: patchFiles,
                 },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
+                ...Permission.invocation(context),
               })
 
               yield* Effect.forEach(
                 prepared,
                 (change) =>
                   Effect.gen(function* () {
-                    if (change.type === "delete") {
+                    const moveTarget = change.type === "update" ? change.moveTarget : undefined
+                    const target = moveTarget ?? change.target
+                    if (change.type === "delete")
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
-                      applied.push({
-                        type: change.type,
-                        resource: change.target.resource,
-                        target: change.target.absolute,
-                      })
-                      return
-                    }
-                    if (change.type === "update" && change.moveTarget) {
-                      const moveTarget = change.moveTarget
+                    if (change.type !== "delete")
                       yield* environment.files
-                        .write(moveTarget.absolute, new TextEncoder().encode(change.content))
-                        .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
+                        .write(target.absolute, new TextEncoder().encode(change.content))
+                        .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
+                    if (moveTarget)
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(
@@ -257,21 +242,7 @@ export const Plugin = {
                             fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
                           ),
                         )
-                      applied.push({
-                        type: change.type,
-                        resource: change.moveTarget.resource,
-                        target: change.moveTarget.absolute,
-                      })
-                      return
-                    }
-                    yield* environment.files
-                      .write(change.target.absolute, new TextEncoder().encode(change.content))
-                      .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
-                    applied.push({
-                      type: change.type,
-                      resource: change.target.resource,
-                      target: change.target.absolute,
-                    })
+                    applied.push({ type: change.type, resource: target.resource, target: target.absolute })
                   }),
                 { discard: true },
               )
@@ -307,9 +278,7 @@ export const Plugin = {
                 content: toModelContent(output),
                 metadata: { files: output.files },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to apply patch", error }),
-              ),
+              Effect.mapError(toolFailure("Unable to apply patch")),
             )
           },
         }),
