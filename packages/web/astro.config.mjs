@@ -340,8 +340,8 @@ function configSchema() {
     hooks: {
       "astro:build:done": async () => {
         execFileSync("bun", ["../schema/script/config-schema.ts", "./dist/client/config.json"], { stdio: "inherit" })
-        // The V1 TUI schema is frozen in services/meta since packages/opencode lives on the v1 branch.
-        copyFileSync("../../services/meta/public/tui.json", "./dist/client/tui.json")
+        // The V1 TUI schema is frozen in services/www since packages/opencode lives on the v1 branch.
+        copyFileSync("../../services/www/site/public/tui.json", "./dist/client/tui.json")
       },
     },
   }

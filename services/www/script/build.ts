@@ -37,7 +37,7 @@ await Bun.$`bun script/pagefind.ts`.cwd(root).env(env)
 await Bun.$`bun run validate`.cwd(root).env(env)
 await Bun.$`bun script/prepare-cloudflare.ts`.cwd(root).env(env)
 
-// The site, as David's build ran it, without the schema files (services/meta serves /config.json).
+// The site, as David's build ran it. `bun run generate` above wrote site/public/config.json.
 await Bun.$`bun ./script/build-stamp.ts`.cwd(site).env(env)
 await Bun.$`bun ./script/github-snapshot.ts`.cwd(site).env(env)
 await requireSnapshot()
@@ -130,10 +130,9 @@ async function mergeSiteAssets(from: string, into: string) {
   const shipped = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: into, dot: true }))
   const heavy = shipped.filter((file) => mediaFile.test(file))
   if (heavy.length) throw new Error(`heavy media in Worker assets: ${heavy.join(", ")}`)
-  const meta = shipped.filter((file) =>
-    ["config.json", "tui.json", "oauth/opencode/client.json", ".well-known/apple-app-site-association"].includes(file),
-  )
-  if (meta.length) throw new Error(`services/meta files in Worker assets: ${meta.join(", ")}`)
+  // Every opencode.json and V1 TUI config names these as its $schema.
+  const schemas = ["config.json", "tui.json"].filter((file) => !shipped.includes(file))
+  if (schemas.length) throw new Error(`schema files missing from Worker assets: ${schemas.join(", ")}`)
   console.log(`www: ${shipped.length} assets (${(await readdir(into)).length} top-level entries)`)
 }
 

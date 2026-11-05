@@ -21,6 +21,7 @@ import humansTxt from "~/lib/humans.txt?raw"
 import { robotsTxt } from "~/lib/robots-txt"
 import { mediaUrl } from "~/lib/media"
 import { legacyRedirect } from "~/lib/legacy"
+import { metaResponse } from "~/lib/meta"
 import { v1DocsOrigin } from "~/lib/docs"
 
 // The page middleware, then the HTML cache headers and edge cache (lib/html-cache.ts), which see
@@ -29,6 +30,10 @@ import { v1DocsOrigin } from "~/lib/docs"
 export default [
   ...createMiddleware({
     async onRequest(event) {
+      // The OAuth client document and the Apple app association, before anything else (lib/meta.ts).
+      const meta = metaResponse(event.request)
+      if (meta) return meta
+
       event.request = sanitizeServerActionRequest(event.request)
 
       const url = new URL(event.request.url)
