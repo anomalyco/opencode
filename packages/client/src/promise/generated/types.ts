@@ -382,6 +382,8 @@ export type ConfigModelReasoning =
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
+export type ConfigFlagState = { enabled: boolean; source: "env" | "config" | "default" }
+
 export type LocationPublicRef = { directory: AbsolutePath }
 
 export type FileSystemWrite = { path: AbsolutePath }
@@ -987,6 +989,15 @@ export type ConfigModelCapabilities = {
   output?: Array<string>
   temperature?: boolean
   reasoning?: ConfigModelReasoning
+}
+
+export type ConfigFlagResolved = {
+  todo: ConfigFlagState
+  background_compaction: ConfigFlagState
+  media_blob: ConfigFlagState
+  schedules: ConfigFlagState
+  artifacts: ConfigFlagState
+  side_chat: ConfigFlagState
 }
 
 export type SessionMessageLocationSwitched = {
@@ -2551,6 +2562,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          side_chat?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -4852,6 +4864,12 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
+export type ExperimentalConfigFlagsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalConfigFlagsOutput = { data: ConfigFlagResolved }["data"]
+
 export type ExperimentalConfigUpdateInput = { readonly shell: string | null }
 
 export type ExperimentalConfigUpdateOutput = void
@@ -4999,6 +5017,12 @@ export type UsageLimitsInput = ExperimentalUsageLimitsInput
 
 /** @deprecated Use `ExperimentalUsageLimitsOutput`. Removed in the next minor. */
 export type UsageLimitsOutput = ExperimentalUsageLimitsOutput
+
+/** @deprecated Use `ExperimentalConfigFlagsInput`. Removed in the next minor. */
+export type ConfigFlagsInput = ExperimentalConfigFlagsInput
+
+/** @deprecated Use `ExperimentalConfigFlagsOutput`. Removed in the next minor. */
+export type ConfigFlagsOutput = ExperimentalConfigFlagsOutput
 
 /** @deprecated Use `ExperimentalConfigUpdateInput`. Removed in the next minor. */
 export type ConfigUpdateInput = ExperimentalConfigUpdateInput

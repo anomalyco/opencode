@@ -10,6 +10,10 @@ export type BtwChatModel = {
 /** One chat as the session store keeps it. */
 export type BtwSavedChat = {
   readonly id: string
+  /** The thread's first question, for a follow-up in a side chat; omitted on the first question itself. */
+  readonly thread?: string
+  /** How many of the thread's turns were shared with the agent; kept on the first question. */
+  readonly shared?: number
   readonly question: string
   readonly answer?: string
   readonly agent?: string
@@ -19,6 +23,7 @@ export type BtwSavedChat = {
 }
 
 type ChatInfo = {
+  readonly thread?: string
   readonly question: string
   readonly created?: number
   readonly agent?: string
@@ -60,6 +65,8 @@ export type BtwEvent =
       readonly type: "chat.asked"
       readonly sessionKey: string
       readonly id: string
+      /** The first question's id when this asks a follow-up in its thread. */
+      readonly thread?: string
       readonly question: string
       readonly created: number
       readonly agent?: string
@@ -100,6 +107,7 @@ export type BtwEffect =
   | {
       readonly type: "persist-question"
       readonly id: string
+      readonly thread?: string
       readonly question: string
       readonly created: number
       readonly agent?: string
@@ -109,6 +117,7 @@ export type BtwEffect =
   | {
       readonly type: "generate"
       readonly id: string
+      readonly thread?: string
       readonly attempt: number
       readonly question: string
       readonly timeout: number
@@ -153,7 +162,14 @@ export function transitionBtw(state: BtwState, event: BtwEvent): BtwTransition {
 
   if (chat?.status !== "running" || chat.attempt !== event.attempt) return next(state)
 
-  const info = { question: chat.question, created: chat.created, agent: chat.agent, model: chat.model }
+  const info = {
+    thread: chat.thread,
+    question: chat.question,
+    created: chat.created,
+    agent: chat.agent,
+    model: chat.model,
+  }
+
   const abort: BtwEffect = { type: "abort", attempt: chat.attempt }
 
   if (event.type === "generate.timed-out") {
@@ -221,7 +237,13 @@ export function btwChatView(
   const live = liveChat(state, sessionKey, id)
 
   if (live) {
-    const info = { question: live.question, created: live.created, agent: live.agent, model: live.model }
+    const info = {
+      thread: live.thread,
+      question: live.question,
+      created: live.created,
+      agent: live.agent,
+      model: live.model,
+    }
 
     if (live.status === "running") return { ...info, phase: "running" }
 
@@ -234,7 +256,15 @@ export function btwChatView(
   const stored = saved.find((item) => item.id === id)
 
   if (!stored) return { phase: "missing" }
-  const info = { question: stored.question, created: stored.created, agent: stored.agent, model: stored.model }
+
+  const info = {
+    thread: stored.thread,
+    question: stored.question,
+    created: stored.created,
+    agent: stored.agent,
+    model: stored.model,
+  }
+
   const answer = stored.answer?.trim()
 
   if (answer) return { ...info, phase: "answered", answer, duration: stored.duration }
@@ -243,12 +273,35 @@ export function btwChatView(
   return { ...info, phase: "failed", failure: { reason: stored.answer === undefined ? "interrupted" : "empty" } }
 }
 
+/**
+ * A thread's turns in the order they were asked: its first question, then the follow-ups that name it, from both this
+ * instance and the session store, so a follow-up shows before its write lands.
+ */
+export function btwThreadTurns(
+  state: BtwState,
+  saved: readonly BtwSavedChat[] | undefined,
+  sessionKey: string,
+  id: string,
+): string[] {
+  const live = state.status === "active" ? [...(state.sessions.get(sessionKey) ?? new Map()).entries()] : []
+  const turns = new Map<string, number>([[id, 0]])
+
+  live.forEach(([key, chat]) => {
+    if (chat.thread === id) turns.set(key, chat.created ?? 0)
+  })
+  saved?.forEach((chat) => {
+    if (chat.thread === id && !turns.has(chat.id)) turns.set(chat.id, chat.created ?? 0)
+  })
+
+  return [...turns.entries()].toSorted((a, b) => a[1] - b[1]).map(([key]) => key)
+}
+
 function asked(state: ActiveState, event: Extract<BtwEvent, { type: "chat.asked" }>) {
   const question = event.question.trim()
 
   if (!question || state.sessions.get(event.sessionKey)?.has(event.id)) return next(state)
   const attempt = state.issued + 1
-  const info = { question, created: event.created, agent: event.agent, model: event.model }
+  const info = { thread: event.thread, question, created: event.created, agent: event.agent, model: event.model }
 
   return next(
     put({ ...state, issued: attempt }, event.sessionKey, event.id, {
@@ -259,8 +312,8 @@ function asked(state: ActiveState, event: Extract<BtwEvent, { type: "chat.asked"
     }),
     [
       { type: "persist-question", id: event.id, ...info },
-      { type: "open-tab", id: event.id },
-      { type: "generate", id: event.id, attempt, question, timeout: BTW_GENERATE_TIMEOUT_MS },
+      { type: "open-tab", id: event.thread ?? event.id },
+      { type: "generate", id: event.id, thread: event.thread, attempt, question, timeout: BTW_GENERATE_TIMEOUT_MS },
     ],
   )
 }
@@ -278,12 +331,22 @@ function retried(state: ActiveState, event: Extract<BtwEvent, { type: "chat.retr
       status: "running",
       attempt,
       started: event.now,
+      thread: chat.thread,
       question: chat.question,
       created: chat.created,
       agent: event.agent ?? chat.agent,
       model: event.model ?? chat.model,
     }),
-    [{ type: "generate", id: event.id, attempt, question: chat.question, timeout: BTW_GENERATE_TIMEOUT_MS }],
+    [
+      {
+        type: "generate",
+        id: event.id,
+        thread: chat.thread,
+        attempt,
+        question: chat.question,
+        timeout: BTW_GENERATE_TIMEOUT_MS,
+      },
+    ],
   )
 }
 

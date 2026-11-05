@@ -8,11 +8,7 @@ import { Config } from "./config.js"
 
 export type Key = ConfigFlag.Key
 
-export interface State {
-  readonly enabled: boolean
-  /** Where `enabled` came from, highest priority first. */
-  readonly source: "env" | "config" | "default"
-}
+export type State = ConfigFlag.State
 
 /**
  * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off, and

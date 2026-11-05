@@ -3,6 +3,7 @@ import {
   BTW_GENERATE_TIMEOUT_MS,
   btwChatView,
   btwTabView,
+  btwThreadTurns,
   createBtwState,
   transitionBtw,
   type BtwEffect,
@@ -288,5 +289,69 @@ describe("exits", () => {
     const later: BtwEvent[] = [asked, retried(), succeeded(1, "Late"), { type: "disposed" }]
 
     later.forEach((event) => expect(transitionBtw(disposed.state, event).state).toBe(disposed.state))
+  })
+})
+
+describe("side chat threads", () => {
+  const followUp: BtwEvent = { ...asked, id: "c2", thread: "c1", question: "And on Linux?", created: 2_000 }
+
+  test("a follow-up is stored in its thread, keeps the thread's tab and generates with the thread", () => {
+    const { effects } = play(createBtwState(), asked, followUp)
+
+    expect(effects.slice(3)).toEqual([
+      {
+        type: "persist-question",
+        id: "c2",
+        thread: "c1",
+        question: "And on Linux?",
+        created: 2_000,
+        agent: "build",
+        model,
+      },
+      { type: "open-tab", id: "c1" },
+      {
+        type: "generate",
+        id: "c2",
+        thread: "c1",
+        attempt: 2,
+        question: "And on Linux?",
+        timeout: BTW_GENERATE_TIMEOUT_MS,
+      },
+    ])
+  })
+
+  test("a retried follow-up still generates with its thread", () => {
+    const failed = play(createBtwState(), asked, followUp, {
+      type: "generate.failed",
+      sessionKey: "s1",
+      id: "c2",
+      attempt: 2,
+    }).state
+
+    const retry = transitionBtw(failed, { type: "chat.retried", sessionKey: "s1", id: "c2", now: 3_000 })
+
+    expect(retry.effects).toEqual([
+      {
+        type: "generate",
+        id: "c2",
+        thread: "c1",
+        attempt: 3,
+        question: "And on Linux?",
+        timeout: BTW_GENERATE_TIMEOUT_MS,
+      },
+    ])
+  })
+
+  test("a thread lists its first question, then follow-ups in asked order from memory and the store", () => {
+    const live = play(createBtwState(), asked, { ...followUp, id: "c4", created: 4_000 }).state
+
+    const saved: BtwSavedChat[] = [
+      { id: "c1", question: "Why?" },
+      { id: "c3", thread: "c1", question: "Stored follow-up", created: 3_000 },
+      { id: "c5", question: "Another thread" },
+    ]
+
+    expect(btwThreadTurns(live, saved, "s1", "c1")).toEqual(["c1", "c3", "c4"])
+    expect(btwThreadTurns(live, saved, "s1", "c5")).toEqual(["c5"])
   })
 })

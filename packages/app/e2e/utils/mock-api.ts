@@ -227,6 +227,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("configShells", "/api/config/shell", { success: Json }))
+  .add(HttpApiEndpoint.get("configFlags", "/api/experimental/config/flag", { success: Json }))
   .add(
     HttpApiEndpoint.patch("configUpdate", "/api/experimental/config", {
       payload: Schema.Struct({ shell: Schema.NullOr(Schema.String) }),
@@ -461,6 +462,13 @@ const Group = HttpApiGroup.make("mock")
       payload: JsonPayload,
       success: NoContent,
       error: Unsupported,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionSynthetic", "/api/session/:sessionID/synthetic", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
     }),
   )
   .add(

@@ -316,6 +316,8 @@ import type {
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
+  ExperimentalConfigFlagsInput,
+  ExperimentalConfigFlagsOutput,
   ExperimentalConfigUpdateInput,
   ExperimentalConfigUpdateOutput,
 } from "../api/api.js"
@@ -1952,12 +1954,21 @@ const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
   shells: EndpointConfigShells(raw),
 })
 
+const EndpointExperimentalConfigFlags = (raw: RawClient["server.config"]) => (input?: ExperimentalConfigFlagsInput) =>
+  preserveEffect<ExperimentalConfigFlagsOutput>()(
+    raw["config.flags"]({ query: { location: input?.["location"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointExperimentalConfigUpdate = (raw: RawClient["server.config"]) => (input: ExperimentalConfigUpdateInput) =>
   preserveEffect<ExperimentalConfigUpdateOutput>()(
     raw["config.update"]({ payload: { shell: input["shell"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupExperimentalConfig = (raw: RawClient["server.config"]) => ({
+  flags: EndpointExperimentalConfigFlags(raw),
   update: EndpointExperimentalConfigUpdate(raw),
 })
 
@@ -2094,6 +2105,8 @@ const adaptClient = (raw: RawClient) => {
     },
     config: {
       ...client.config,
+      /** @deprecated Use `client.experimental.config.flags`. Removed in the next minor. */
+      flags: client.experimental.config.flags,
       /** @deprecated Use `client.experimental.config.update`. Removed in the next minor. */
       update: client.experimental.config.update,
     },

@@ -1,19 +1,41 @@
 import { batch, createSignal, onCleanup, untrack } from "solid-js"
 import { showToast } from "@opencode/ui/toast"
 import { uuid } from "@opencode/util/uuid"
-import type { MountedSession, SetupContext } from "@opencode/plugin/gui"
+import {
+  readSideChatAnswer,
+  sharedThreadText,
+  sideChatDescription,
+  sideChatPrompt,
+  sideNoteText,
+  sideQuestionPrompt,
+} from "@opencode/util/side-chat"
+import { createLatest, type MountedSession, type SetupContext } from "@opencode/plugin/gui"
 import type Btw from "./index"
-import { btwChatView, btwTabView, createBtwState, transitionBtw, type BtwEffect, type BtwEvent } from "./machine"
-
-const instructions = [
-  "The user is asking a quick side question about the conversation so far.",
-  "Answer directly and concisely in markdown from what you already know.",
-  "Do not call any tools and do not take any actions.",
-].join(" ")
+import {
+  btwChatView,
+  btwTabView,
+  btwThreadTurns,
+  createBtwState,
+  transitionBtw,
+  type BtwEffect,
+  type BtwEvent,
+} from "./machine"
 
 /** One-shot side questions per session, one tab each, stored until the tab closes. */
 export function createBtw(ctx: SetupContext<typeof Btw>) {
   const [state, setState] = createSignal(createBtwState())
+
+  // The side_chat feature flag as the current session's server resolves it; until it answers, /btw stays one-shot.
+  const flags = createLatest(
+    () => {
+      const session = ctx.sessions.current()
+
+      return session && { server: session.server, directory: session.directory }
+    },
+    (target, signal) => target.server.client.experimental.config.flags({ location: { directory: target.directory } }, { signal }),
+  )
+
+  const sideChat = () => flags.latest?.side_chat.enabled === true
   // Driver handles only: the machine decides which attempt runs, these end its request and timeout.
   const inFlight = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -57,6 +79,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
       store.update((draft) => {
         draft.chats.push({
           id: effect.id,
+          thread: effect.thread,
           question: effect.question,
           created: effect.created,
           agent: effect.agent,
@@ -90,8 +113,9 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     }
 
     if (effect.type === "delete-chat") {
+      // Closing a thread's tab forgets its follow-ups too.
       store.update((draft) => {
-        draft.chats = draft.chats.filter((item) => item.id !== effect.id)
+        draft.chats = draft.chats.filter((item) => item.id !== effect.id && item.thread !== effect.id)
       })
 
       return
@@ -114,13 +138,30 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
 
     session.server.client.session
       .generate(
-        { sessionID: session.id, prompt: [instructions, effect.question].join("\n\n") },
+        {
+          sessionID: session.id,
+          prompt: sideChat()
+            ? sideChatPrompt(earlier(session, effect), effect.question)
+            : sideQuestionPrompt(effect.question),
+        },
         { signal: AbortSignal.any([ctx.signal, controller.signal]) },
       )
       .then(
         (reply) => {
           if (ctx.signal.aborted) return
-          dispatch({ type: "generate.succeeded", ...result, text: reply.text, now: Date.now() }, session)
+
+          if (!sideChat()) {
+            dispatch({ type: "generate.succeeded", ...result, text: reply.text, now: Date.now() }, session)
+
+            return
+          }
+
+          const read = readSideChatAnswer(reply.text)
+          const text = read.answer || (read.note ? ctx.t("note.only") : "")
+
+          dispatch({ type: "generate.succeeded", ...result, text, now: Date.now() }, session)
+
+          if (read.note) relay(session, effect.id, read.note, effect.question)
         },
         (cause) => {
           if (ctx.signal.aborted) return
@@ -131,6 +172,52 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
   }
 
   onCleanup(() => dispatch({ type: "disposed" }))
+
+  // Passes a note the side model wrote to the agent, the same way a shared thread reaches it, and keeps its inbox item
+  // so the user can take it back before the agent reads it.
+  const relay = (session: MountedSession, id: string, note: string, question: string) => {
+    const store = ctx.stores.chats(session)
+
+    const mark = (value: { inboxID?: string; failed?: boolean }) =>
+      store.update((draft) => {
+        const chat = draft.chats.find((item) => item.id === id)
+
+        if (chat) chat.note = { text: note, ...value }
+      })
+
+    mark({})
+    session.server.client.session
+      .synthetic({
+        sessionID: session.id,
+        text: sideNoteText(note, question),
+        description: sideChatDescription(note),
+        metadata: { source: "btw", turnID: id, relayed: true },
+        delivery: "steer",
+        resume: false,
+      })
+      .then(
+        (item) => {
+          if (!ctx.signal.aborted) mark({ inboxID: item.id })
+        },
+        () => {
+          if (!ctx.signal.aborted) mark({ failed: true })
+        },
+      )
+  }
+
+  // The answered turns asked before this one in its thread, which a follow-up's answer builds on.
+  const earlier = (session: MountedSession, effect: { readonly id: string; readonly thread?: string }) => {
+    if (!effect.thread) return []
+    const current = untrack(state)
+    const stored = saved(session)
+    const ids = btwThreadTurns(current, stored, session.key, effect.thread)
+
+    return ids.slice(0, ids.indexOf(effect.id)).flatMap((id) => {
+      const view = btwChatView(current, stored, session.key, id)
+
+      return view.phase === "answered" ? [{ question: view.question, answer: view.answer }] : []
+    })
+  }
 
   const selection = (session: MountedSession) => {
     const info = session.id ? session.server.data.session.get(session.id) : undefined
@@ -172,8 +259,103 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     )
   }
 
+  const turns = (session: MountedSession, id: string) => btwThreadTurns(state(), saved(session), session.key, id)
+
   return {
     ask,
+    turns,
+    sideChat,
+    /** The note a turn passed to the agent, and whether it still waits in the session's inbox. */
+    note: (session: MountedSession, id: string) => {
+      const note = saved(session)?.find((item) => item.id === id)?.note
+
+      if (!note) return undefined
+
+      const waiting =
+        !!note.inboxID &&
+        !note.undone &&
+        session.server.data.session.pending.list(session.id).some((item) => item.id === note.inboxID)
+
+      return { ...note, waiting }
+    },
+    /** Takes back a turn's note while the agent has not read it yet. */
+    undo: async (session: MountedSession, id: string) => {
+      const inboxID = saved(session)?.find((item) => item.id === id)?.note?.inboxID
+
+      if (!inboxID) return
+      await session.server.client.session.inbox.cancel({ sessionID: session.id, inboxID })
+
+      if (ctx.signal.aborted) return
+      ctx.stores.chats(session).update((draft) => {
+        const chat = draft.chats.find((item) => item.id === id)
+
+        if (chat?.note) chat.note.undone = true
+      })
+    },
+    /** Asks a follow-up in the thread whose first question is `id`. */
+    follow: (session: MountedSession, id: string, value: string) => {
+      const question = value.trim()
+
+      if (!question || !session.id) return
+      dispatch(
+        {
+          type: "chat.asked",
+          sessionKey: session.key,
+          id: uuid(),
+          thread: id,
+          question,
+          created: Date.now(),
+          ...selection(session),
+        },
+        session,
+      )
+    },
+    /** How many answered turns of the thread the agent has not seen yet. */
+    unshared: (session: MountedSession, id: string) => {
+      const shared = saved(session)?.find((item) => item.id === id)?.shared ?? 0
+
+      return turns(session, id)
+        .slice(shared)
+        .filter((turn) => btwChatView(state(), saved(session), session.key, turn).phase === "answered").length
+    },
+    shared: (session: MountedSession, id: string) => saved(session)?.find((item) => item.id === id)?.shared ?? 0,
+    /**
+     * Adds the thread's answered turns the agent has not seen to the session as one synthetic message. It steers, so a
+     * working agent reads it at its next step; an idle session keeps it pending for the next prompt rather than waking
+     * the agent to react to it.
+     */
+    share: async (session: MountedSession, id: string) => {
+      const ids = turns(session, id)
+      const views = ids.map((turn) => btwChatView(state(), saved(session), session.key, turn))
+      const upTo = views.findLastIndex((view) => view.phase === "answered") + 1
+      const from = saved(session)?.find((item) => item.id === id)?.shared ?? 0
+
+      const answered = views
+        .slice(from, upTo)
+        .flatMap((view) => (view.phase === "answered" ? [{ question: view.question, answer: view.answer }] : []))
+
+      if (answered.length === 0 || !session.id) return "empty" as const
+      const busy = session.server.data.session.status(session.id) === "running"
+      const title = views[0]?.phase === "loading" || views[0]?.phase === "missing" ? "" : (views[0]?.question ?? "")
+
+      await session.server.client.session.synthetic({
+        sessionID: session.id,
+        text: sharedThreadText(answered),
+        description: sideChatDescription(title),
+        metadata: { source: "btw", threadID: id, turns: upTo },
+        delivery: "steer",
+        resume: false,
+      })
+
+      if (ctx.signal.aborted) return "empty" as const
+      ctx.stores.chats(session).update((draft) => {
+        const root = draft.chats.find((item) => item.id === id)
+
+        if (root) root.shared = upTo
+      })
+
+      return busy ? ("steered" as const) : ("pending" as const)
+    },
     tab: (session: MountedSession, id: string) => btwTabView(state(), saved(session), session.key, id),
     view: (session: MountedSession, id: string) => btwChatView(state(), saved(session), session.key, id),
     retry: (session: MountedSession, id: string) => {
@@ -191,10 +373,15 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     },
     /** Closing a tab forgets its question and answer. */
     remove: (session: MountedSession, id: string) =>
-      dispatch({ type: "chat.removed", sessionKey: session.key, id }, session),
+      batch(() =>
+        turns(session, id)
+          .toReversed()
+          .forEach((turn) => dispatch({ type: "chat.removed", sessionKey: session.key, id: turn }, session)),
+      ),
     /** Ends the requests of sessions whose shell tab closed and forgets their chats. */
     prune: (keep: ReadonlySet<string>) => dispatch({ type: "sessions.pruned", keep }),
   }
 }
 
 export type BtwModel = ReturnType<typeof createBtw>
+

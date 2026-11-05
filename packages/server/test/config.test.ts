@@ -2,6 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { Config } from "@opencode/schema/config"
+import { ConfigFlag } from "@opencode/schema/config/flag"
 import { Effect, Schema } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -96,6 +97,33 @@ it.live("updates the global shell without replacing unrelated JSONC", () =>
     )
     expect(shells.status).toBe(200)
     expect(Array.isArray(yield* Effect.promise(() => shells.json()))).toBe(true)
+  }),
+)
+
+it.live("resolves feature flags for the requested directory", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-config-flags-")))
+    const global = path.join(tmp.path, "global")
+    const project = path.join(tmp.path, "project")
+    yield* Effect.promise(() =>
+      Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })]),
+    )
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ experimental: { schedules: false } })),
+    )
+    // A dev build turns unset flags on, so this also proves handlers see the server's channel.
+    const server = yield* startServer(global, "dev")
+    const url = new URL("/api/experimental/config/flag", server.base)
+    url.searchParams.set("location[directory]", project)
+    const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    const body = Schema.decodeUnknownSync(Schema.Struct({ data: ConfigFlag.Resolved }))(
+      yield* Effect.promise(() => response.json()),
+    )
+
+    expect(response.status).toBe(200)
+    expect(body.data.schedules).toEqual({ enabled: false, source: "config" })
+    expect(body.data.side_chat).toEqual({ enabled: true, source: "default" })
+    expect(Object.keys(body.data).sort()).toEqual(Object.keys(ConfigFlag.registry).sort())
   }),
 )
 

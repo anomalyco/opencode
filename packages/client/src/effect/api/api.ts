@@ -2781,9 +2781,27 @@ export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
   readonly shells: ConfigShellsOperation<E>
 
+  /** @deprecated Use `client.experimental.config.flags`. Removed in the next minor. */
+  readonly flags: ExperimentalConfigFlagsOperation<E>
+
   /** @deprecated Use `client.experimental.config.update`. Removed in the next minor. */
   readonly update: ExperimentalConfigUpdateOperation<E>
 }
+
+export type ExperimentalConfigFlagsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type ExperimentalConfigFlagsOutput = {
+  readonly todo: { readonly enabled: boolean; readonly source: "env" | "config" | "default" }
+  readonly background_compaction: { readonly enabled: boolean; readonly source: "env" | "config" | "default" }
+  readonly media_blob: { readonly enabled: boolean; readonly source: "env" | "config" | "default" }
+  readonly schedules: { readonly enabled: boolean; readonly source: "env" | "config" | "default" }
+  readonly artifacts: { readonly enabled: boolean; readonly source: "env" | "config" | "default" }
+  readonly side_chat: { readonly enabled: boolean; readonly source: "env" | "config" | "default" }
+}
+export type ExperimentalConfigFlagsOperation<E = never> = (
+  input?: ExperimentalConfigFlagsInput,
+) => Effect.Effect<ExperimentalConfigFlagsOutput, E>
 
 export type ExperimentalConfigUpdateInput = { readonly shell: string | null }
 export type ExperimentalConfigUpdateOutput = void
@@ -2792,6 +2810,7 @@ export type ExperimentalConfigUpdateOperation<E = never> = (
 ) => Effect.Effect<ExperimentalConfigUpdateOutput, E>
 
 export interface ExperimentalConfigApi<E = never> {
+  readonly flags: ExperimentalConfigFlagsOperation<E>
   readonly update: ExperimentalConfigUpdateOperation<E>
 }
 
@@ -3004,6 +3023,15 @@ export type UsageLimitsOutput = ExperimentalUsageLimitsOutput
 
 /** @deprecated Use `ExperimentalUsageLimitsOperation`. Removed in the next minor. */
 export type UsageLimitsOperation<E = never> = ExperimentalUsageLimitsOperation<E>
+
+/** @deprecated Use `ExperimentalConfigFlagsInput`. Removed in the next minor. */
+export type ConfigFlagsInput = ExperimentalConfigFlagsInput
+
+/** @deprecated Use `ExperimentalConfigFlagsOutput`. Removed in the next minor. */
+export type ConfigFlagsOutput = ExperimentalConfigFlagsOutput
+
+/** @deprecated Use `ExperimentalConfigFlagsOperation`. Removed in the next minor. */
+export type ConfigFlagsOperation<E = never> = ExperimentalConfigFlagsOperation<E>
 
 /** @deprecated Use `ExperimentalConfigUpdateInput`. Removed in the next minor. */
 export type ConfigUpdateInput = ExperimentalConfigUpdateInput

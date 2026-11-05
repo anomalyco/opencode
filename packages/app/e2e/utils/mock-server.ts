@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import { ConfigFlag } from "@opencode/schema/config/flag"
 import { Permission } from "@opencode/schema/permission"
 import { Model } from "@opencode/schema/model"
 import { Worktree } from "@opencode/schema/worktree"
@@ -59,6 +60,8 @@ export interface MockServerConfig {
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void | { error: string }
   // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
+  // Feature flags to turn on (`/api/experimental/config/flag`); every other flag is off, as in a release build.
+  flags?: readonly ConfigFlag.Key[]
   // Background shell commands (`GET /api/shell`).
   shellCommands?: Resolvable<unknown[]>
   // All output a shell command has captured so far in `directory`, or undefined for an unknown command (404
@@ -161,6 +164,7 @@ export interface MockServerConfig {
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  onSynthetic?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   // POST /api/session/:id/fork creates `<id>_fork` in the same directory. The hook may hold the request, or return an
   // answer to replace the response.
   onFork?: (input: { sessionID: string; body: Schema.JsonObject }) => void | MockAnswer | Promise<void | MockAnswer>
@@ -928,6 +932,15 @@ function mockHandlers(
             canonical: projectSeed(config)?.canonical ?? config.directory,
           }),
         configShells: () => Effect.succeed(config.shells ?? []),
+        configFlags: () =>
+          Effect.succeed({
+            data: Object.fromEntries(
+              Object.keys(ConfigFlag.registry).map((key) => [
+                key,
+                { enabled: config.flags?.some((flag) => flag === key) ?? false, source: "default" },
+              ]),
+            ),
+          }),
         configUpdate: () => noContent,
         websearchProviders: () =>
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
@@ -1301,6 +1314,23 @@ function mockHandlers(
                 type: "compaction",
                 payload: {},
                 delivery: "steer",
+              },
+            }
+          }),
+        // Like the server, a synthetic message is admitted as an inbox item under the proposed ID.
+        sessionSynthetic: (ctx) =>
+          Effect.sync(() => {
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), (): Schema.JsonObject => ({}))
+            config.onSynthetic?.({ sessionID: ctx.params.sessionID, body })
+
+            return {
+              data: {
+                id: Predicate.isString(body.id) ? body.id : `inb_mock_${Date.now()}`,
+                sessionID: ctx.params.sessionID,
+                time: { created: Date.now() },
+                type: "synthetic",
+                payload: { text: body.text, description: body.description, metadata: body.metadata },
+                delivery: body.delivery === "queue" ? "queue" : "steer",
               },
             }
           }),

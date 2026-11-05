@@ -22,7 +22,10 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request, 
     case "ui.snapshot":
       return Effect.sync(() => SimulationActions.snapshot(harness))
     case "ui.matches":
-      return Effect.sync(() => SimulationActions.matches(harness, request.params.text))
+      // While a frame is being written its buffer is leased, and reading it then fails with OutputBusy.
+      return Effect.promise(() => harness.renderer.idle()).pipe(
+        Effect.map(() => SimulationActions.matches(harness, request.params.text)),
+      )
     case "ui.recording.finish":
       return SimulationRenderer.finish(harness.renderer)
     case "ui.type":
