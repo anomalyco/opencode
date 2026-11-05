@@ -180,17 +180,15 @@ impl Tabs {
         })
     }
 
-    /// Whether `group` of `session` is open in that tab, when the tab remembers it (E.8).
-    pub fn group_expanded(&self, session: &str, group: &str) -> Option<bool> {
-        self.groups.borrow().get(session)?.get(group).copied()
+    /// The groups of `session` the reader opened or closed, by group ID (E.8, `sessionTabs.groupExpanded`). They
+    /// outlive the session's view.
+    pub fn expanded_groups(&self, session: &str) -> HashMap<String, bool> {
+        self.groups.borrow().get(session).cloned().unwrap_or_default()
     }
 
-    pub fn set_group_expanded(&self, session: &str, group: &str, expanded: bool) {
-        self.groups
-            .borrow_mut()
-            .entry(session.to_owned())
-            .or_default()
-            .insert(group.to_owned(), expanded);
+    /// `sessionTabs.setGroupExpanded` for every group of `session`.
+    pub fn set_expanded_groups(&self, session: &str, groups: HashMap<String, bool>) {
+        self.groups.borrow_mut().insert(session.to_owned(), groups);
     }
 
     /// The tabs file, for tests and the P-FILE proof.
