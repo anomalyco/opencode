@@ -22,6 +22,11 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { Shell } from "@opencode/core/shell"
+import { Agent } from "@opencode/core/agent"
+import { ID } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { daemonShells } from "./fixture/shell-daemon"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -461,6 +466,151 @@ describe("SessionRestart background recovery", () => {
       expect(drained).toHaveLength(2)
       expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toHaveLength(1)
       expect((yield* store.context(child)).filter((message) => message.type === "synthetic")).toHaveLength(1)
+    }),
+  )
+
+  it.live("watches shell jobs whose commands survived the restart", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const bus = yield* Bus.Service
+      const parent = Session.ID.make("ses_background_shell_survived")
+      yield* seedSessions(database, [parent])
+      const daemon = yield* daemonShells()
+      const before = yield* daemon.withShell("/project", (shell) =>
+        Effect.gen(function* () {
+          const running = yield* shell.create({ shell: "/bin/sh", command: "running", cwd: "/tmp" })
+          const finished = yield* shell.create({ shell: "/bin/sh", command: "finished", cwd: "/tmp" })
+          return { running, finished }
+        }),
+      )
+      yield* seedBackground(jobs, parent, [
+        { id: before.running.id, shellID: before.running.id, command: "running" },
+        { id: before.finished.id, shellID: before.finished.id, command: "finished" },
+      ])
+      // The finished command ended while no server watched it.
+      daemon.daemon.output(2, "done\n")
+      daemon.daemon.exit(2, 0)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const shell = yield* daemon.openShell("/project").pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) => SessionInbox.promote(database.db, bus, sessionID, "steer").pipe(Effect.asVoid),
+        undefined,
+        restarted,
+        shell,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      const notices = Effect.gen(function* () {
+        return (yield* store.context(parent)).filter(
+          (message) => message.type === "synthetic" && message.metadata?.source === "shell",
+        )
+      })
+      while ((yield* notices).length < 1) yield* Effect.sleep(5)
+      expect(yield* notices).toMatchObject([
+        {
+          text: expect.stringContaining("done"),
+          metadata: { source: "shell", shellID: before.finished.id, state: "completed", exit: 0 },
+        },
+      ])
+      expect((yield* restarted.get(before.running.id))?.status).toBe("running")
+      expect((yield* restarted.pendingBackground).map((item) => item.id)).toEqual([before.running.id])
+
+      daemon.daemon.exit(1, 2)
+      while ((yield* notices).length < 2) yield* Effect.sleep(5)
+      expect((yield* notices)[1]).toMatchObject({
+        text: expect.stringContaining("Exited with code 2"),
+        metadata: { source: "shell", shellID: before.running.id, state: "completed", exit: 2 },
+      })
+      expect(yield* restarted.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.live("settles a shell call a killed server left running as moved to the background", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
+      const parent = Session.ID.make("ses_background_shell_killed")
+      yield* seedSessions(database, [parent], { time_suspended: Date.now() })
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("fake-model"), providerID: Provider.ID.make("fake") },
+        started: 0,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent,
+        assistantMessageID,
+        id: "call-shell",
+        name: "shell",
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent,
+        assistantMessageID,
+        id: "call-shell",
+        input: { command: "sleep 60" },
+        executed: false,
+      })
+      const daemon = yield* daemonShells()
+      const info = yield* daemon.withShell("/project", (shell) =>
+        shell.create({
+          shell: "/bin/sh",
+          command: "sleep 60",
+          cwd: "/tmp",
+          timeout: 120_000,
+          toolCall: { sessionID: parent, assistantMessageID, callID: "call-shell" },
+        }),
+      )
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const shell = yield* daemon.openShell("/project").pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) => SessionInbox.promote(database.db, bus, sessionID, "steer").pipe(Effect.asVoid),
+        undefined,
+        restarted,
+        shell,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      const [assistant] = (yield* store.context(parent)).filter((message) => message.type === "assistant")
+      expect(assistant?.type === "assistant" ? assistant.content : []).toMatchObject([
+        {
+          type: "tool",
+          id: "call-shell",
+          state: {
+            status: "completed",
+            content: [
+              {
+                type: "text",
+                text: `Command moved to the background (shell ID: ${info.id}).\nOutput is streaming to: ${info.file}`,
+              },
+              { type: "text", text: expect.stringContaining("You will be notified automatically") },
+            ],
+          },
+        },
+      ])
+      expect((yield* restarted.get(info.id))?.status).toBe("running")
+      expect(daemon.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
+
+      daemon.daemon.exit(1, 0)
+      const notices = Effect.gen(function* () {
+        return (yield* store.context(parent)).filter(
+          (message) => message.type === "synthetic" && message.metadata?.source === "shell",
+        )
+      })
+      while ((yield* notices).length < 1) yield* Effect.sleep(5)
+      expect((yield* notices)[0]).toMatchObject({ metadata: { source: "shell", shellID: info.id, state: "completed" } })
     }),
   )
 
@@ -1378,6 +1528,7 @@ function buildExecution(
   drain: (input: Parameters<SessionRunner.Interface["drain"]>[0]) => Effect.Effect<void, SessionRunner.RunError>,
   options?: SessionRestart.Options,
   overrideJobs?: Job.Interface,
+  shell?: Shell.Interface,
 ) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
@@ -1408,9 +1559,12 @@ function buildExecution(
       LocationServiceMap.Service,
       LayerMap.make(
         () =>
-          // The local execution test only needs the Session runner from the Location graph.
+          // The local execution test only needs the Session runner (and the Shell, if given) from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          runner as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+          (shell ? Layer.merge(runner, Layer.succeed(Shell.Service, shell)) : runner) as unknown as Layer.Layer<
+            LocationServices,
+            FileSystem.DirectoryNotFoundError
+          >,
       ),
     )
     return yield* Layer.buildWithScope(

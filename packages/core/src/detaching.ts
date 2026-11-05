@@ -1,7 +1,10 @@
 export * as Detaching from "./detaching.js"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Duration, Effect, Layer, Scope } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+
+// What detaching hooks may take together: shutdown should not wait on them.
+const HOOK_BUDGET = Duration.millis(500)
 
 /**
  * Planned-shutdown state of this server process.
@@ -14,9 +17,14 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 export interface Interface {
   /** Records that a daemon handoff was prepared successfully. */
   readonly handoffPrepared: Effect.Effect<void>
-  /** Called once shutdown starts, before any service is torn down. Returns whether this server is detaching. */
+  /**
+   * Called once shutdown starts, before any service is torn down. Returns whether this server is detaching,
+   * after running the detaching hooks (best effort, bounded) when it is.
+   */
   readonly begin: Effect.Effect<boolean>
   readonly isDetaching: () => boolean
+  /** Runs `hook` when this server starts detaching, while every service is still open. Removed with the scope. */
+  readonly onDetach: (hook: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Detaching") {}
@@ -24,15 +32,31 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/De
 export const make = Effect.sync(() => {
   let prepared = false
   let detaching = false
+  const hooks = new Set<Effect.Effect<void>>()
   return Service.of({
     handoffPrepared: Effect.sync(() => {
       prepared = true
     }),
-    begin: Effect.sync(() => {
+    begin: Effect.gen(function* () {
       detaching = prepared
-      return detaching
+      if (!detaching) return false
+      yield* Effect.forEach(hooks, (hook) => hook.pipe(Effect.catchCause(() => Effect.void)), {
+        concurrency: "unbounded",
+        discard: true,
+      }).pipe(Effect.timeoutOption(HOOK_BUDGET))
+      return true
     }),
     isDetaching: () => detaching,
+    onDetach: (hook) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          // A fresh reference per registration, so the same effect can be registered twice.
+          const entry = Effect.suspend(() => hook)
+          hooks.add(entry)
+          return entry
+        }),
+        (entry) => Effect.sync(() => hooks.delete(entry)),
+      ).pipe(Effect.asVoid),
   })
 })
 

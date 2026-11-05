@@ -2,92 +2,27 @@ import { describe, expect } from "bun:test"
 import { existsSync } from "node:fs"
 import { mkdir, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Context, Effect, Layer } from "effect"
-import { ChildProcessSpawner } from "effect/process"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Config } from "@opencode/core/config"
-import { Environment } from "@opencode/core/environment/index"
-import { Location } from "@opencode/core/location"
 import { PersistentPty } from "@opencode/core/persistent-pty"
-import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
-import { hostEnvironmentLayer } from "./fixture/environment"
-import { location } from "./fixture/location"
-import { fakeDaemon } from "./fixture/persistent-pty-daemon"
+import { daemonShells } from "./fixture/shell-daemon"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const unix = process.platform !== "win32"
 const test = unix ? it.live : it.live.skip
 
-// One fake daemon and data directory shared by every Location (and server) a test builds.
-const setup = Effect.fn(function* () {
-  const daemon = yield* fakeDaemon()
-  const data = (yield* tmpdirScoped()).path
-  const global = Global.layerWith({ data, state: path.join(data, "state") })
-  const context = yield* Layer.build(
-    AppNodeBuilder.build(PersistentPty.configured(daemon.options), [Global.node.replace(global)]),
-  )
-  const pty = Context.get(context, PersistentPty.Service)
-  let spawned = 0
-  const environment = Layer.effect(
-    Environment.Service,
-    Effect.gen(function* () {
-      const host = yield* Environment.Service
-      return Environment.Service.of({
-        ...host,
-        spawner: ChildProcessSpawner.make(() =>
-          Effect.sync(() => spawned++).pipe(Effect.andThen(Effect.die("the spawner must not be used"))),
-        ),
-      })
-    }),
-  ).pipe(Layer.provide(hostEnvironmentLayer))
-  const shellLayer = (directory: string) =>
-    AppNodeBuilder.build(Shell.node, [
-      Location.node.replace(
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(location(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
-        ),
-      ),
-      Global.node.replace(global),
-      Config.node.replace(Config.testLayer()),
-      Environment.node.replace(environment),
-      PersistentPty.node.replace(Layer.succeed(PersistentPty.Service, pty)),
-    ])
-  // Runs `body` against the Location's Shell, then closes it as a restart or an eviction would.
-  const withShell = <A, E>(directory: string, body: (shell: Shell.Interface) => Effect.Effect<A, E>) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const shell = yield* Shell.Service
-        return yield* body(shell)
-      }).pipe(Effect.provide(shellLayer(directory))),
-    )
-  const directory = (yield* tmpdirScoped()).path
-  return {
-    daemon,
-    data,
-    directory,
-    global,
-    pty,
-    withShell,
-    spawned: () => spawned,
-    created: () => daemon.requests.filter((request) => request.op === "create_pipe"),
-    signals: (id: number) =>
-      daemon.requests.flatMap((request) => (request.op === "signal" && request.id === id ? [request.signal] : [])),
-  }
-})
-
 const lines = (count: number) => Array.from({ length: count }, (_, index) => `line ${index + 1}\n`).join("")
 
 describe("Shell on the process daemon", () => {
   test("runs a command with the server's environment, an absolute cwd and its recovery metadata", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       yield* Effect.promise(() => mkdir(path.join(env.directory, "sub")))
       process.env.OPENCODE_TEST_REMOVED = "1"
       yield* Effect.addFinalizer(() => Effect.sync(() => delete process.env.OPENCODE_TEST_REMOVED))
@@ -167,7 +102,7 @@ describe("Shell on the process daemon", () => {
 
   test("counts lines like the spawner and reads only what reached the file after a write error", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
           const long = yield* shell.create({ shell: "/bin/sh", command: "long" })
@@ -197,7 +132,7 @@ describe("Shell on the process daemon", () => {
 
   test("fails a command the daemon rejected instead of spawning it", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       env.daemon.failCreate.message = "output path is a symlink"
       yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
@@ -213,7 +148,7 @@ describe("Shell on the process daemon", () => {
     "stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it",
     () =>
       Effect.gen(function* () {
-        const env = yield* setup()
+        const env = yield* daemonShells()
         env.daemon.trap.add(1)
         yield* env.withShell(env.directory, (shell) =>
           Effect.gen(function* () {
@@ -239,7 +174,7 @@ describe("Shell on the process daemon", () => {
 
   test("forgets a command in the daemon before deleting its file, on remove and on eviction", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
           const running = yield* shell.create({ shell: "/bin/sh", command: "sleep 60" })
@@ -271,7 +206,7 @@ describe("Shell on the process daemon", () => {
 
   test("takes its commands back after a restart and leaves other Locations' alone", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       env.daemon.trap.add(4)
       const before = yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
@@ -327,7 +262,7 @@ describe("Shell on the process daemon", () => {
 
   test("records a command moved to the background at shutdown so the next server never times it out", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       const info = yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
           const info = yield* shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 100 })
@@ -349,7 +284,7 @@ describe("Shell on the process daemon", () => {
 
   test("the sweep keeps a running command's file and forgets a finished one before deleting its file", () =>
     Effect.gen(function* () {
-      const env = yield* setup()
+      const env = yield* daemonShells()
       const ids = yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
           const running = yield* shell.create({ shell: "/bin/sh", command: "running" })
