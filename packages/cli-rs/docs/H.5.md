@@ -20,6 +20,8 @@ Each side runs alone, one after the other, so the two clients never share a serv
 1. **Sandbox.** One temporary root per run (`parity/cli/client.ts` `sandbox`). Each side gets a fresh `home`
    (HOME and the XDG roots) and `tmp`; `work`, the working directory, is the same path for both sides, so paths on
    screen match. The environment starts empty. Nothing reads or writes the user's config, state, or service.
+   `OPENCODE_TEST_HOME` is the sandbox home too: Bun's `os.homedir()` ignores HOME, and without it the server
+   watched the user's skill folders.
 2. **Server.** `opencode serve --port <private>` from source with `OPENCODE_SIMULATE=1`, `OPENCODE_DB=:memory:`,
    `OPENCODE_DRIVE=server`, and a drive manifest in the sandbox (`packages/simulation/src/manifest.ts`) whose
    backend endpoint is a private port. `OPENCODE_CONFIG_DIR` holds `opencode.jsonc` with the `simulation`
@@ -27,8 +29,9 @@ Each side runs alone, one after the other, so the two clients never share a serv
    `model: "simulation/gpt-sim-model"`, `snapshots: false`, and the scenario's permission rules.
 3. **Backend driver** (`parity/sim/backend.ts`). It connects to the backend endpoint, runs
    `simulation.handshake` (role `backend`) and `llm.attach`, and answers each `llm.request` notification with the
-   scenario's next reply: `llm.chunk` with its items, then `llm.finish` with its reason. Requests that are not
-   turns of the session (the title request) get a fixed answer, so the scripted replies stay in order.
+   scenario's next reply: `llm.chunk` with its items, then `llm.finish` with its reason. A request that offers no
+   tools is the title request; it gets the title `Simulated session`, so the scripted replies stay in order.
+   `report.json` lists every model call with the tool names it offered (the shell tool is `shell`, not `bash`).
 4. **Recording proxy** (`parity/sim/proxy.ts`). The client talks to a proxy on a private port that forwards to
    the server, streams responses (the event stream included), and logs each request: method, path, decoded
    query, and JSON body.
@@ -71,7 +74,8 @@ One file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with `export def
   file that does not exist fails the checkpoint.
 - Requests: writes (anything but GET and plugin `get` RPCs, H.2's `isRead`) must match in order by method, path,
   and body after the plan 7.5 normalizers (prefixed IDs, the sandbox root, ports). Reads that one side sent and the
-  other did not are listed, not failed, as in H.2.
+  other did not are listed, not failed, as in H.2. Bodies are compared as JSON values (key order does not count),
+  and epoch-millisecond times and other server-minted IDs (`sh_…`) are normalized, because the server is live.
 - Files per run: `parity/fixtures/H.5/<name>/<checkpoint>.<side>.json` (cells after masks) and `.txt` (text), and
   `report.json`. With `--sides ts,ts` the second side is named `ts2`.
 
@@ -79,11 +83,20 @@ One file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with `export def
 
 The TS endpoint never answers a `ui.matches` whose screen read meets a frame in flight (H.4's report:
 `OutputBusy`, logged by the control server, no response). `parity/sim/drive.ts` resends a `ui.matches` that gets
-no answer within 2 s. It is the only place with this workaround; H.4's `drive.ts` uses the same client.
+no answer within 2 s, and a `ui.capture` after 5 s (both are reads). It is the only place with this workaround; H.4's
+`drive.ts` uses the same client.
+
+## Writing a scenario
+
+- Wait for readiness with `until`, not with time. On home, wait for the model line (`Simulated Model`): the Rust TUI
+  ignores Enter until its catalogs have loaded, and in TS the line appears at the same point.
+- Find coordinates for `mouse` steps in the `.txt` files of a TS run (row and column from 0).
+- On failure the runner prints both processes' stderr, the model calls, the requests, and the last screen, and keeps
+  the sandbox (with the server log under `home/.local/share/opencode/log`).
 
 ## Proof
 
 - TS against TS on the MS1 scenario: every checkpoint equal, writes equal.
 - TS against Rust on `H.5/permission-reply`: open a new session from home, send a prompt, the simulated model
-  streams text and one `bash` tool call, the client shows the permission request, the scenario allows it, the model
-  streams the final reply, and the final screens are compared.
+  streams text and one `shell` tool call, the client shows the permission request, the scenario clicks "Allow once",
+  the model streams the final reply, and the final screens are compared.
