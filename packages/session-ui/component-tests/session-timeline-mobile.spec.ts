@@ -8,7 +8,7 @@ story.describe("touch timeline", () => {
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
 
     for (const action of [
-      { slot: "user-message-copy-wrapper", name: "More actions" },
+      { slot: "user-message-menu", name: "More actions" },
       { slot: "text-part-copy-wrapper", name: "Copy response" },
     ]) {
       const actions = timeline.locator(`[data-slot="${action.slot}"]`)
@@ -27,6 +27,46 @@ story.describe("touch timeline", () => {
     await expect(responseMeta).not.toContainText("Sonnet")
     await expect(responseMeta.locator('[data-slot="text-part-meta-speed"]')).toHaveText("·60.0 tok/s")
     await expect(responseMeta.locator('[data-slot="text-part-meta-speed"]')).toBeHidden()
+  })
+
+  story("keeps the always-shown chevron clear of the prompt's text", async ({ mount }) => {
+    const timeline = await mount("current-prompt-message--pending")
+    await timeline.getByLabel("Delivery state").selectOption("delivered")
+    const bubble = timeline.locator('[data-slot="user-message-text"]')
+    await expect(bubble.getByRole("button", { name: "More actions", exact: true })).toBeVisible()
+
+    // Every rendered line box of the prompt, against the chevron's box: none may overlap.
+    const overlaps = await bubble.evaluate((element) => {
+      const menu = element.querySelector('[data-slot="user-message-menu"]')
+      const chevron = menu?.querySelector("button")?.getBoundingClientRect()
+
+      if (!menu || !chevron) throw new Error("The chevron is not rendered")
+
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+        acceptNode: (node) => (menu.contains(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      })
+
+      const lines: DOMRect[] = []
+
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        lines.push(...range.getClientRects())
+      }
+
+      if (lines.length === 0) throw new Error("The prompt has no text")
+
+      return lines.filter(
+        (line) =>
+          line.width > 0 &&
+          line.left < chevron.right &&
+          line.right > chevron.left &&
+          line.top < chevron.bottom &&
+          line.bottom > chevron.top,
+      ).length
+    })
+
+    expect(overlaps).toBe(0)
   })
 
   story("keeps shell copy visible without hover", async ({ mount }) => {
@@ -63,7 +103,7 @@ story("desktop message actions still appear on hover and keyboard focus", async 
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
   for (const action of [
-    { slot: "user-message-copy-wrapper", name: "More actions" },
+    { slot: "user-message-menu", name: "More actions" },
     { slot: "text-part-copy-wrapper", name: "Copy response" },
   ]) {
     const actions = timeline.locator(`[data-slot="${action.slot}"]`)
