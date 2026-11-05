@@ -22,22 +22,23 @@ import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { usePlugin } from "./context"
 
-// Contain render-time plugin crashes: a throwing slot or route must not take
-// down the app or the other plugins. The crash surfaces as one error toast.
-function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
+// Contain render-time plugin crashes: a throwing slot, route or dialog must not
+// take down the app or the other plugins. The crash surfaces as one error toast.
+export function PluginBoundary(props: ParentProps<{ id: string; where: string; onCrash?: () => void }>) {
   const toast = useToast()
   return (
     <ErrorBoundary
       fallback={(error) => {
         // One toast per crash: onMount is untracked, so prop updates while
         // the boundary is latched cannot re-toast.
-        onMount(() =>
+        onMount(() => {
           toast.show({
             variant: "error",
             title: "Plugin",
             message: `${props.id} crashed in ${props.where}: ${errorMessage(error)}`,
-          }),
-        )
+          })
+          props.onCrash?.()
+        })
         return null
       }}
     >
