@@ -4,7 +4,7 @@ export const privacyPolicy: LegalDocumentContent = {
   path: "/legal/privacy-policy",
   title: "Privacy Policy",
   metaTitle: "OpenCode | Privacy Policy for the website and services",
-  effective: "Effective date: Mar 6, 2026",
+  effective: "Effective date: Nov 4, 2026",
   description:
     "How OpenCode collects, uses, shares and protects your personal data when you use the OpenCode website, apps and hosted services, and the choices you have.",
   body: [
@@ -59,7 +59,12 @@ export const privacyPolicy: LegalDocumentContent = {
         ],
       ],
       ["li", {}, ["a", { href: "#how-we-disclose" }, "How We Disclose Your Personal Data"]],
-      ["li", {}, ["a", { href: "#tracking-tools" }, "Tracking Tools and Opt-Out"]],
+      [
+        "li",
+        {},
+        ["a", { href: "#tracking-tools" }, "Tracking Tools and Opt-Out"],
+        ["ul", {}, ["li", {}, ["a", { href: "#product-analytics" }, "Product Analytics on opencode.ai/console"]]],
+      ],
       ["li", {}, ["a", { href: "#data-security" }, "Data Security"]],
       ["li", {}, ["a", { href: "#personal-data-of-children" }, "Personal Data of Children"]],
       ["li", {}, ["a", { href: "#california-resident-rights" }, 'California Resident Rights ("CCPA")']],
@@ -438,6 +443,71 @@ export const privacyPolicy: LegalDocumentContent = {
       "To find out more information about Cookies generally, including information about how to manage and delete Cookies, please visit ",
       ["a", { href: "http://www.allaboutcookies.org/" }, "http://www.allaboutcookies.org/"],
       ".",
+    ],
+    // Carried over from dev: #61905 (first-party product analytics) and #62084 (no cookie banner). Needs legal sign-off.
+    ["h3", { id: "product-analytics" }, "Product Analytics on opencode.ai/console"],
+    [
+      "p",
+      {},
+      "When you visit pages under opencode.ai/console, including the sign-in pages, we record the pages you view, how long each page is visible, how long you're active on it and how far you scroll, the links and buttons you click, and the type of any sign-in error. In the Console we record the pages you open and the controls you use in its navigation, plan, billing and onboarding screens. We also record account and workspace events: when you sign up, sign in, verify your email, approve a device, create or delete a workspace, invite or remove members, create API keys, connect providers or clients, and start or complete a checkout or payment, including its amount and any decline reason. We use these records to understand how people find OpenCode and where they stop before signing up or subscribing, so we can improve the Services.",
+    ],
+    [
+      "p",
+      {},
+      "With each record sent from your browser, we keep the country, region and time zone your request came from, the type of device, operating system and browser you used, and the size of your browser window. We use your IP address to determine your country and region and to limit requests, but we don't store it, your email address or anything you type in these records.",
+    ],
+    [
+      "p",
+      {},
+      "We set the following first-party Cookies. Your browser sends them only to opencode.ai/console. We also keep a list in your browser's local storage of which events it has already reported that day.",
+    ],
+    [
+      "div",
+      { class: "table-wrapper", tabindex: "0", role: "region", "aria-label": "Product analytics Cookies" },
+      [
+        "table",
+        {},
+        ["thead", {}, ["tr", {}, ["th", {}, "Cookie"], ["th", {}, "What it holds"], ["th", {}, "How long it lasts"]]],
+        [
+          "tbody",
+          {},
+          [
+            "tr",
+            {},
+            ["td", {}, "oc_vid"],
+            ["td", {}, "A random ID for your browser"],
+            ["td", {}, "1 year from when it's first set"],
+          ],
+          [
+            "tr",
+            {},
+            ["td", {}, "oc_sid"],
+            ["td", {}, "An ID for your current visit and the time it started"],
+            ["td", {}, "30 minutes without activity, and at most 24 hours"],
+          ],
+          [
+            "tr",
+            {},
+            ["td", {}, "oc_attr"],
+            [
+              "td",
+              {},
+              "How you first and most recently arrived: the page you landed on, the domain of the website that referred you, any campaign (UTM) parameters in the link, and the last sign-up or sign-in link you clicked",
+            ],
+            ["td", {}, "1 year"],
+          ],
+        ],
+      ],
+    ],
+    [
+      "p",
+      {},
+      "When you create an account, sign in, verify your email or approve a device, we link the records from that browser to your account. Records made while you're signed in carry your account ID directly.",
+    ],
+    [
+      "p",
+      {},
+      "We delete these records from our analytics database within a month after they turn 24 months old. We keep an archive copy of these records for longer. It contains your account ID if you were signed in, but not your name, email address or IP address. When you delete your account, we delete your email address, our record of how you first arrived and our list of the browsers linked to your account. Event records that include your account ID, and the browser IDs recorded with them, remain until they're deleted at 24 months, and in the archive, but we can no longer connect that account ID to you.",
     ],
     ["h2", { id: "data-security" }, "Data Security"],
     [

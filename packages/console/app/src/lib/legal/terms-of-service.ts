@@ -61,7 +61,7 @@ export const termsOfService: LegalDocumentContent = {
     [
       "p",
       {},
-      'OpenCode is an AI-powered coding agent that helps you write, understand, and modify code using large language models. Certain of these large language models are provided by third parties ("Third Party Models") and certain of these models are provided directly by us if you use the OpenCode Zen paid offering ("Zen"). Regardless of whether you use Third Party Models or Zen, OpenCode enables you to access the functionality of models through a coding agent running within your terminal.',
+      'OpenCode is an AI-powered coding agent that helps you write, understand, and modify code using large language models. Certain of these large language models are provided by third parties ("Third Party Models") and certain of these models are provided directly by us if you use the OpenCode Models paid offering ("OpenCode Models"). Regardless of whether you use Third Party Models or OpenCode Models, OpenCode enables you to access the functionality of models through a coding agent running within your terminal.',
     ],
     ["h2", { id: "will-these-terms-ever-change" }, "Will these Terms ever change?"],
     [
@@ -234,8 +234,8 @@ export const termsOfService: LegalDocumentContent = {
     [
       "p",
       {},
-      'Certain of our Services, including Zen, may be subject to payments now or in the future (the "Paid Services"). Please see our Paid Services page ',
-      ["a", { href: "/zen" }, "https://opencode.ai/zen"],
+      'Certain of our Services, including OpenCode Models, may be subject to payments now or in the future (the "Paid Services"). Please see our Paid Services page ',
+      ["a", { href: "https://opencode.ai/console/models" }, "https://opencode.ai/console/models"],
       " for a description of the current Paid Services. Please note that any payment terms presented to you in the process of using or signing up for a Paid Service are deemed part of these Terms.",
     ],
     ["h3", { id: "billing" }, "Billing"],
