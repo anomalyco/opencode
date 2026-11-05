@@ -1,4 +1,13 @@
-import { createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
+import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
+import {
+  createAnimatedPresenceState,
+  DISPOSED_ANIMATED_EVENT,
+  selectAnimatedAnimate,
+  selectAnimatedShow,
+  selectAnimatedValue,
+  transitionAnimatedPresence,
+  type AnimatedPresenceEvent,
+} from "./presence-machine"
 import { createPresence } from "./presence"
 
 export function createAnimatedPresence<T>(
@@ -7,46 +16,54 @@ export function createAnimatedPresence<T>(
   identity?: Accessor<unknown>,
   minimumDuration = 0,
 ) {
-  const [tick, setTick] = createSignal(0)
+  const hasIdentity = identity !== undefined
+  let current = createAnimatedPresenceState(untrack(value), untrack(() => identity?.()), Date.now())
+  const [machine, setMachine] = createSignal(current)
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const animation = createMemo<{
-    identity?: unknown
-    show: boolean
-    animate: boolean
-    value: T | undefined
-    started: number
-  }>((previous) => {
-    tick()
-    const currentIdentity = identity?.()
-    const current = value()
-    const same = !identity || previous?.identity === currentIdentity
-    const started = same && previous?.show ? previous.started : performance.now()
+  const dispatch = (event: AnimatedPresenceEvent<T>) => {
+    const previous = current
+    const next = transitionAnimatedPresence(previous, event)
 
-    const remaining =
-      current === undefined && same && previous?.show ? minimumDuration - (performance.now() - started) : 0
+    if (next === previous) return
+    current = next
 
-    const show = current !== undefined || remaining > 0
-
-    if (remaining > 0) {
-      const timer = setTimeout(() => setTick((value) => value + 1), remaining)
-      onCleanup(() => clearTimeout(timer))
+    if (previous.status === "lingering") {
+      clearTimeout(timer)
+      timer = undefined
     }
 
-    return {
-      identity: currentIdentity,
-      show,
-      started,
-      animate: previous !== undefined && same && (previous.animate || previous.show !== show),
-      value: current ?? (same ? previous?.value : undefined),
+    if (next.status === "lingering") {
+      const attempt = next.attempt
+      // Rounded up: a timer cut short by a fraction of a millisecond would leave the linger unfinished.
+      timer = setTimeout(() => dispatch({ type: "linger.elapsed", attempt }), Math.ceil(next.delayMs))
     }
+
+    if (next.status !== "disposed") setMachine(next)
+  }
+
+  createEffect(() => {
+    const nextValue = value()
+    const nextIdentity = identity?.()
+
+    untrack(() =>
+      dispatch({ type: "sync", value: nextValue, identity: nextIdentity, hasIdentity, minimumDuration, now: Date.now() }),
+    )
   })
 
-  const presence = createPresence({ show: () => animation().show, element })
+  onCleanup(() => dispatch(DISPOSED_ANIMATED_EVENT))
+
+  const presence = createPresence({
+    show: () => selectAnimatedShow(machine()),
+    element,
+    // A change that does not animate (another identity) must not wait for the previous identity's exit.
+    instant: () => !selectAnimatedAnimate(machine()),
+  })
 
   return {
     ...presence,
-    show: () => animation().show,
-    animate: () => animation().animate,
-    value: () => animation().value,
+    show: () => selectAnimatedShow(machine()),
+    animate: () => selectAnimatedAnimate(machine()),
+    value: () => selectAnimatedValue(machine()),
   }
 }
