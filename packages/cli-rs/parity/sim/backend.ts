@@ -3,7 +3,9 @@
 import { Schema } from "effect"
 import { Backend, JsonRpc } from "@opencode/protocol/simulation"
 
-export type Reply = { items: Backend.Item[]; finish?: Backend.FinishReason }
+// The items stream in order. At `{ hold: name }` the reply waits, its step still running, until the scenario's
+// `{ release: name }` step; the items before it are sent first.
+export type Reply = { items: (Backend.Item | { hold: string })[]; finish?: Backend.FinishReason }
 
 export type Invocation = { id: string; url: string; body: unknown }
 
@@ -17,6 +19,8 @@ export async function startBackend(url: string, answer: (invocation: Invocation)
   const pending = new Map<number, (value: JsonRpc.Response) => void>()
   const invocations: Invocation[] = []
   const failures: string[] = []
+  const holds = new Map<string, PromiseWithResolvers<void>>()
+  const hold = (name: string) => holds.get(name) ?? holds.set(name, Promise.withResolvers()).get(name)!
   let id = 0
   const call = (method: string, params?: unknown) =>
     new Promise<unknown>((resolve, reject) => {
@@ -30,6 +34,22 @@ export async function startBackend(url: string, answer: (invocation: Invocation)
       })
       socket.send(JSON.stringify({ jsonrpc: "2.0", id: current, method, ...(params === undefined ? {} : { params }) }))
     })
+  const stream = async (invocation: Invocation, reply: Reply) => {
+    const batch: Backend.Item[] = []
+    const flush = async () => {
+      if (batch.length) await call("llm.chunk", { id: invocation.id, items: batch.splice(0) })
+    }
+    for (const item of reply.items) {
+      if (!("hold" in item)) {
+        batch.push(item)
+        continue
+      }
+      await flush()
+      await hold(item.hold).promise
+    }
+    await flush()
+    await call("llm.finish", { id: invocation.id, reason: reply.finish ?? "stop" })
+  }
   socket.onmessage = (event) => {
     const message = JSON.parse(String(event.data))
     if (message.id !== undefined && message.id !== null) {
@@ -40,10 +60,7 @@ export async function startBackend(url: string, answer: (invocation: Invocation)
     if (notification.method !== "llm.request") return
     const invocation = notification.params
     invocations.push(invocation)
-    const reply = answer(invocation)
-    call("llm.chunk", { id: invocation.id, items: reply.items })
-      .then(() => call("llm.finish", { id: invocation.id, reason: reply.finish ?? "stop" }))
-      .catch((error: Error) => failures.push(error.message))
+    stream(invocation, answer(invocation)).catch((error: Error) => failures.push(error.message))
   }
   await call("simulation.handshake", {
     client: { name: "opencode-parity", version: "1" },
@@ -53,5 +70,5 @@ export async function startBackend(url: string, answer: (invocation: Invocation)
     optionalCapabilities: [],
   })
   await call("llm.attach")
-  return { invocations, failures, close: () => socket.close() }
+  return { invocations, failures, release: (name: string) => hold(name).resolve(), close: () => socket.close() }
 }
