@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ocu/auto",
+  "providers": {
+    "ocu": {
+      "name": "OCU Smart Gateway",
+      "env": ["OCU_GATEWAY_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:8787/v1",
+        "headerTimeout": false,
+        "chunkTimeout": false
+      },
+      "models": {
+        "auto": { "name": "OCU Auto (hybrid)" },
+        "local": { "name": "OCU Local" },
+        "cloud": { "name": "OCU Cloud" }
+      }
+    }
+  }
+}
