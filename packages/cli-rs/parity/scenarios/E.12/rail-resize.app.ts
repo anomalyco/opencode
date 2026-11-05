@@ -20,6 +20,9 @@ export default defineApp({
     { path: "/api/session/ses_b/inbox", json: { data: [] } },
   ],
   steps: [
+    // The first session's terminals are read only if its frame mounts before the select lands. In TS the frame
+    // waits for plugins, so that raced; showing the first session before the select makes both clients read them.
+    { checkpoint: "first", until: "The parser drops the last token." },
     { event: { id: "evt_1", created: 3, type: "tui.session.select", location: here, data: { sessionID: "ses_b" } } },
     { checkpoint: "rail", until: "The notes are written." },
     { drag: [[41, 10], [30, 10]] },
