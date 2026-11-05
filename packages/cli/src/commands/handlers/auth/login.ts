@@ -1,6 +1,6 @@
 import { intro, log, outro, select, spinner, text } from "@clack/prompts"
 import { Effect, Option } from "effect"
-import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
+import type { ConfigEntry, FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
@@ -53,8 +53,28 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
   const method = yield* chooseMethod(methods, input.method)
   const answer = yield* answerForm(method.type === "command" ? undefined : method.form, input.answer)
   yield* authenticate(client, integration, method, answer)
+  const disabled = disabledBy(
+    yield* request((signal) => client.config.get({ location }, { signal })).pipe(Effect.orElseSucceed(() => [])),
+    integration.id,
+  )
+  if (disabled)
+    log.warn(
+      disabled.path
+        ? `${integration.name} is disabled in ${disabled.path} (disabled_providers or policies), so its models won't be listed.`
+        : `${integration.name} is disabled by your organization's policy, so its models won't be listed.`,
+    )
   outro("Done")
 })
+
+/** The exact `provider.use` deny core applies to `providerID`; wildcard denies also hit non-provider integrations. */
+export function disabledBy(entries: ConfigEntry[], providerID: string) {
+  const policy = entries
+    .filter((entry) => entry.type === "document")
+    .toReversed()
+    .flatMap((entry) => (entry.info.policies ?? []).map((policy) => ({ ...policy, path: entry.path })))
+    .findLast((policy) => policy.action === "provider.use" && new Bun.Glob(policy.resource).match(providerID))
+  return policy?.effect === "deny" && policy.resource === providerID ? policy : undefined
+}
 
 const findIntegration = Effect.fn("cli.auth.login.integration")(function* (client: OpenCodeClient, target?: string) {
   if (target && URL.canParse(target)) {
