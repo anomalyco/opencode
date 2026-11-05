@@ -665,19 +665,7 @@ export const dict = {
   "enterprise.form.inferenceSpend.over100k": "$100K or more",
   "enterprise.form.error.invalidInferenceSpend": "Select a valid inference spend range.",
   "enterprise.form.error.captcha": "Captcha verification failed. Please try again.",
-  // Still used by dev's old home and changelog pages until its replacement lands in a later commit.
-  "home.faq.a1": "OpenCode is an open source agent that helps you write and run code with any AI model. It's available as a terminal-based interface, desktop app, or IDE extension.",
-  "home.faq.a3.p2.afterZen": ".",
-  "home.faq.a3.p2.beforeZen": "Aside from these, you can use any of the popular coding models with",
-  "home.faq.a3.p3": "While we encourage users to use OpenCode Models, OpenCode also works with all popular providers such as OpenAI, Anthropic, xAI etc.",
-  "home.faq.a3.p4.localLink": "local models",
-  "home.faq.a5.and": "and",
-  "home.faq.a5.beforeDesktop": "Not anymore! OpenCode is now available as an app for your",
-  "home.faq.a5.desktop": "desktop",
-  "home.faq.a5.web": "web",
-  "home.zenCta.body": "OpenCode Models give you access to a handpicked set of AI models that OpenCode has tested and benchmarked specifically for coding agents. No need to worry about inconsistent performance and quality across providers. Use validated models that work.",
-  "home.zenCta.link": "Learn about OpenCode Models",
-  "home.zenCta.title": "Access reliable optimized models for coding agents",
+  // Still used by dev's old changelog page until its replacement lands in a later commit.
   "changelog.empty": "No changelog entries found.",
   "changelog.viewJson": "View JSON",
 } as const

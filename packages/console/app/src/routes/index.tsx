@@ -1,832 +1,1478 @@
+import { joinSentences, rich, sentenceGap } from "~/i18n/rich"
 import "./index.css"
+import "~/component/site/hero-title.css"
+import { rollsByCharacter, titleCells } from "~/component/site/hero-title"
+import "@kitlangton/rolling-number/styles.css"
+import { RollingNumber, RollingText } from "@kitlangton/rolling-number/solid"
 import { Title, Meta } from "@solidjs/meta"
-//import { HttpHeader } from "@solidjs/start"
-import video from "../asset/lander/opencode-min.mp4"
-import videoPoster from "../asset/lander/opencode-poster.png"
-import { IconCopy, IconCheck } from "../component/icon"
 import { createAsync } from "@solidjs/router"
-import { createMemo } from "solid-js"
-import { EmailSignup } from "~/component/email-signup"
-import { Tabs } from "@kobalte/core/tabs"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  Index,
+  lazy,
+  on,
+  onCleanup,
+  onMount,
+  Match,
+  Show,
+  Suspense,
+  Switch,
+} from "solid-js"
 import { Faq } from "~/component/faq"
-import { Header } from "~/component/header"
-import { Footer } from "~/component/footer"
-import { Legal } from "~/component/legal"
-import { github } from "~/lib/github"
-import { config } from "~/config"
+import { ConsoleField } from "~/component/site/console-field"
+import { ChevronRight, ExternalArrow } from "~/component/site/icons"
+import { LogoWall } from "~/component/site/logo-wall"
+import { createWash, revealMotion, washStartTime, washStep } from "~/component/site/reveal"
+import { OpenSourceFork } from "~/component/site/open-source-fork"
+import { OpenSourceProof } from "~/component/site/open-source-proof"
+import { ConsoleWidget } from "~/component/site/console-widget"
+import {
+  carouselCss,
+  ProductAction,
+  ProductCarousel,
+  ProductCarouselSkeleton,
+  useDevicePlatform,
+} from "~/component/site/products"
+import { ProviderLogos } from "~/component/site/provider-logos"
+import { PhoneFeatures } from "~/component/site/phone-features"
+import { byos } from "~/lib/byos"
+import { localize, useContent } from "~/i18n/content"
+import "~/component/site/byos.css"
+import { getStarted } from "~/lib/get-started"
+import "~/component/site/get-started.css"
+import { SignupSection } from "~/component/site/signup"
+import { installs } from "~/component/site/product-data"
+import { isMobile } from "~/lib/platform"
+import { LocaleLinks } from "~/component/locale-links"
+import { ShareMeta } from "~/component/share-meta"
+import { ogImage } from "~/lib/og"
+import { faqData, JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
+import { Rich } from "~/component/site/rich-text"
+import { homeOrderDefaultCss, homeOrderScript, homeOrderStyleId, useHomeOrder } from "~/component/site/home-order"
+import { designCopy, designEditing } from "~/component/site/design-copy"
+import type { CopyId } from "~/component/site/design-mode"
+import type { RichText } from "~/lib/markdown"
+import { Site, siteSettings } from "~/component/site/site"
+import { logoLabels, setSiteSetting } from "~/component/site/settings"
+import { announcementCopy, announcements } from "~/component/site/announcement"
+import { useMarkdown } from "~/component/site/use-markdown"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { LocaleLinks } from "~/component/locale-links"
-import { SocialMeta } from "~/component/social-meta"
+import { homeContent, linkPhrases } from "~/lib/home-content"
+import { tag } from "~/lib/language"
+import { dict as en } from "~/i18n/en"
+import { homeMarkdown } from "~/lib/home-markdown"
+import { repoStats, type RepoStats } from "~/lib/github"
+import { inlineKey } from "~/lib/direction"
+import { copyOnClick } from "~/lib/clipboard"
 
-function CopyStatus() {
-  return (
-    <div data-component="copy-status">
-      <IconCopy data-slot="copy" />
-      <IconCheck data-slot="check" />
-    </div>
-  )
-}
+// Only rendered inside the settings panel, so it loads with it.
+// Settings rows are a development tool (component/site/settings-panel.tsx), left out of production.
+const PageSettings = import.meta.env.DEV ? lazy(() => import("~/component/site/page-settings")) : () => undefined
 
 export default function Home() {
   const i18n = useI18n()
   const language = useLanguage()
-  const githubData = createAsync(() => github())
-  // Formatted like the footer so both show the same figure.
-  const starsCompact = createMemo(() =>
-    githubData()?.stars
-      ? new Intl.NumberFormat(language.tag(language.locale()), { notation: "compact" }).format(githubData()!.stars!)
-      : config.github.starsFormatted.compact,
+  const markdown = useMarkdown("/", homeMarkdown)
+  useHomeOrder()
+  const [statsVisible, setStatsVisible] = createSignal(false)
+  // Live repo numbers (lib/github.ts), streamed in under the config's numbers.
+  const repo = createAsync(() => repoStats())
+
+  const heroVariant = () => siteSettings.hero
+  // Console layout "block" is the whole section, so it sets the panel option and the name on the
+  // left itself: older saved Console and Console label values can't break it. "off" still hides it.
+  const consoleSection = () =>
+    siteSettings.consoleLayout === "block" && siteSettings.consoleSection !== "off"
+      ? "panel"
+      : siteSettings.consoleSection
+  const content = createMemo(() => homeContent(i18n.t, language.route))
+  // Its own meta description (140–155 characters). Until a locale translates it, the locale keeps
+  // the tagline and hero subtitle it already has in its language.
+  const description = () =>
+    language.locale() === "en" || i18n.t("home.meta.description") !== en["home.meta.description"]
+      ? i18n.t("home.meta.description")
+      : joinSentences([i18n.t("app.meta.description"), ...content().hero.subtitle])
+  const title = () => designCopy("home.hero.title", content().hero.title)
+  const subtitleParts = () => designCopy("home.hero.subtitle", content().hero.subtitle.join("\n")).split("\n")
+
+  // The open source numbers start as they approach the window (a fifth of a window early), so they
+  // are already spinning when they come into view; the avatars' wash follows once the wall itself is
+  // in view, never before the numbers. Already on screen at load, they start 300ms after the page's
+  // code runs. With reduced motion the numbers simply show. The stats render twice when the live
+  // numbers stream in after the page (first with the config's numbers), so a second one joins a
+  // start already set.
+  const [openSourceStart, setOpenSourceStart] = createSignal<number>()
+  const observeStats = (element: HTMLDListElement) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setStatsVisible(true)
+    if (openSourceStart() !== undefined) return
+    let first = true
+    const statsObserver = new IntersectionObserver(
+      (entries) => {
+        const initial = first
+        first = false
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        statsObserver.disconnect()
+        const at = washStartTime(initial)
+        setOpenSourceStart(at)
+        setTimeout(() => setStatsVisible(true), Math.max(0, at - performance.now()))
+      },
+      { rootMargin: "0px 0px 20% 0px" },
+    )
+    statsObserver.observe(element)
+    onCleanup(() => statsObserver.disconnect())
+  }
+
+  // The open source stats, with the stars and contributors live from GitHub when it answered. The
+  // contributors round down to whole thousands ("1K+") to fit the column; the exact count is in the
+  // open source proof.
+  const openSourceStats = (live?: RepoStats) => {
+    const values = [
+      live?.stars ? new Intl.NumberFormat("en-US", { notation: "compact" }).format(live.stars) : undefined,
+      live?.contributors
+        ? live.contributors < 1000
+          ? String(live.contributors)
+          : `${Math.floor(live.contributors / 1000)}K+`
+        : undefined,
+    ]
+    return (
+      <dl data-component="stats" data-design="stats" ref={observeStats} data-visible={statsVisible() ? "" : undefined}>
+        <For each={content().openSource.stats}>
+          {(stat, index) => (
+            <div>
+              <dt>{stat.label}</dt>
+              <dd>
+                <Switch>
+                  <Match when={siteSettings.stats === "slot"}>
+                    <SlotStat value={values[index()] ?? stat.value} start={openSourceStart()} stat={index()} />
+                  </Match>
+                  <Match when={siteSettings.stats === "rolling"}>
+                    <RollingStat value={values[index()] ?? stat.value} visible={statsVisible()} />
+                  </Match>
+                  <Match when={siteSettings.stats === "odometer"}>
+                    <Odometer value={values[index()] ?? stat.value} />
+                  </Match>
+                </Switch>
+              </dd>
+            </div>
+          )}
+        </For>
+      </dl>
+    )
+  }
+
+  // The logo row's label in every layout: the translated label, unless Settings › Logo label picks
+  // another (English, Design mode only) or Design mode copy overrides it.
+  const logoLabel = () =>
+    siteSettings.logoWall === "providers"
+      ? content().providers.label
+      : designCopy(
+          "home.logos.label",
+          siteSettings.logoLabel === logoLabels[0] ? content().companies.label : siteSettings.logoLabel,
+        )
+  // The translated label's short form, only while the row shows that label unchanged.
+  const logoLabelShort = () =>
+    siteSettings.logoWall === "companies" && logoLabel() === content().companies.label
+      ? content().companies.labelShort
+      : undefined
+  // One logo row, rendered on its own or inside the "section" layout's home section.
+  const logoWall = () => (
+    <LogoWall
+      kind={siteSettings.logoWall === "providers" ? "providers" : "companies"}
+      layout={siteSettings.logoLayout}
+      label={logoLabel()}
+      shortLabel={logoLabelShort()}
+      items={siteSettings.logoWall === "providers" ? content().providers.items : content().companies.items}
+      animation={siteSettings.logoAnimation}
+      tuning={siteSettings.logoTuning}
+      interval={siteSettings.logoInterval}
+      stagger={siteSettings.logoStagger}
+      opacity={siteSettings.logoOpacity}
+    />
   )
-  // Round down so the "over N stars" copy stays true.
-  const starsFull = createMemo(() =>
-    githubData()?.stars
-      ? new Intl.NumberFormat(language.tag(language.locale())).format(Math.floor(githubData()!.stars! / 1000) * 1000)
-      : config.github.starsFormatted.full,
+
+  return (
+    <Site
+      page="home"
+      settings={import.meta.env.DEV ? (section) => <PageSettings home section={section} /> : undefined}
+      markdown={markdown}
+    >
+      <Title>{content().title}</Title>
+      <LocaleLinks path="/" />
+      <ShareMeta title={content().title} description={description()} image={ogImage("/")} />
+      <Meta name="description" content={description()} />
+      <JsonLd data={organizationData} />
+      <JsonLd data={websiteData(tag(language.locale()))} />
+      <JsonLd
+        data={softwareData({
+          name: "OpenCode",
+          description: description(),
+          path: language.route("/"),
+          image: ogImage("/").src,
+          operatingSystem: "macOS, Windows, Linux",
+        })}
+      />
+      <JsonLd data={faqData(content().faq.items)} />
+
+      {/* The default section order from the server; a saved one (Design mode, development only)
+          replaces it before the sections paint. */}
+      <style id={homeOrderStyleId} innerHTML={homeOrderDefaultCss} />
+      {import.meta.env.DEV && <script innerHTML={homeOrderScript} />}
+      {/* The carousel's cards per screen, which also size the hero (its title and subtitle follow the
+          card width): here, ahead of the hero, as the carousel's own copy of these rules only arrives
+          with the carousel, and the hero would otherwise resize once it has painted. */}
+      <style>{carouselCss()}</style>
+      <Announcement />
+      <section
+        data-component="hero"
+        data-design="hero heroTitleSize heroText heroInstall homeAnnouncement"
+        data-variant={heroVariant()}
+        data-title-size={siteSettings.heroTitleSize}
+        style={{ "--title-chars": titleCells(title()) }}
+      >
+        <Show
+          when={siteSettings.heroText !== "static" && rollsByCharacter(title()) && !designEditing("home.hero.title")}
+          fallback={<h1 data-design-copy="home.hero.title">{title()}</h1>}
+        >
+          <HeroTitle text={title()} mode={siteSettings.heroText === "flap" ? "flap" : "roll"} />
+        </Show>
+        <p
+          data-design-copy="home.hero.subtitle"
+          data-design="subtitleWidth"
+          data-width={siteSettings.subtitleWidth.charAt(0)}
+        >
+          {/* Two inline spans so Design mode keeps the copy's two parts; the text wraps naturally. */}
+          <span>{subtitleParts()[0]}</span>
+          {sentenceGap(subtitleParts()[0])}
+          <span>{subtitleParts()[1] ?? ""}</span>
+        </p>
+        {/* Every Hero install option renders; the site root's data-hero-install (set before first
+            paint for a saved value) shows the chosen one, so nothing appears or goes after load. */}
+        <HeroInstall mode="line" />
+        <HeroInstall mode="tabs" />
+      </section>
+
+      {/* The carousel's frame until the carousel itself has streamed in (products.tsx). */}
+      <ProductCarouselSkeleton />
+
+      <Show when={siteSettings.logoWall !== "off"}>
+        <Show when={siteSettings.logoLayout === "section"} fallback={logoWall()}>
+          {/* The logo row as a home section: its label is the section title. */}
+          <section data-component="block" data-section="logos" data-design="logoWall logoLayout logoDividers">
+            <h2
+              data-slot="label"
+              data-design-copy={siteSettings.logoWall === "companies" ? "home.logos.label" : undefined}
+            >
+              {logoLabel()}
+            </h2>
+            <div data-slot="body">{logoWall()}</div>
+          </section>
+        </Show>
+      </Show>
+
+      <ProductCarousel header={<InstallRow />} />
+
+      <section
+        data-component="block"
+        data-section="what"
+        data-phone-features={siteSettings.phoneFeatures}
+        data-design="phoneFeatures whatColumns whatCopyColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
+        data-columns={siteSettings.whatColumns.charAt(0)}
+        data-copy-columns={copyColumnsAttribute(siteSettings.whatCopyColumns, siteSettings.whatColumns)}
+      >
+        <h2 data-slot="label">{content().what.title}</h2>
+        <div data-slot="body">
+          <p data-slot="lead">
+            {/* The sentence before the docs link is editable in Design mode; the link always ends it. */}
+            <span data-design-copy="home.what.lead">
+              {designCopy("home.what.lead", String(content().what.lead[0]).trim())}
+            </span>{" "}
+            <Rich value={content().what.lead.slice(1)} />
+          </p>
+          <ProviderLogos />
+          <ul id="home-features" data-component="features">
+            <For each={content().what.features}>
+              {(feature) => (
+                <li>
+                  <a href={feature.href}>
+                    <strong>
+                      <Show when={"copy" in feature && feature.copy} fallback={feature.title}>
+                        {(copy) => (
+                          <span data-design-copy={`home.feature.${copy()}.title`}>
+                            {copy() === "anyDevice"
+                              ? designCopy("home.feature.anyDevice.title", feature.title)
+                              : feature.title}
+                          </span>
+                        )}
+                      </Show>
+                      <ExternalArrow />
+                    </strong>
+                    <Show when={"copy" in feature && feature.copy} fallback={<span>{feature.body}</span>}>
+                      {(copy) => (
+                        <span data-design-copy={`home.feature.${copy()}.body`}>
+                          {designCopy(`home.feature.${copy()}.body`, feature.body)}
+                        </span>
+                      )}
+                    </Show>
+                  </a>
+                </li>
+              )}
+            </For>
+          </ul>
+          <PhoneFeatures
+            listID="home-features"
+            features={content().what.features.map((feature) => ({
+              href: feature.href,
+              title:
+                "copy" in feature && feature.copy === "anyDevice"
+                  ? designCopy("home.feature.anyDevice.title", feature.title)
+                  : feature.title,
+              body:
+                "copy" in feature && feature.copy
+                  ? designCopy(`home.feature.${feature.copy}.body`, feature.body)
+                  : feature.body,
+            }))}
+          />
+        </div>
+      </section>
+
+      <GetStarted />
+
+      <BringYourOwnSubs />
+
+      <Show when={siteSettings.toolsSection === "on"}>
+        <section
+          data-component="block"
+          data-section="tools"
+          data-design="toolsColumns toolsCopyColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
+          data-columns={siteSettings.toolsColumns.charAt(0)}
+          data-copy-columns={copyColumnsAttribute(siteSettings.toolsCopyColumns, siteSettings.toolsColumns)}
+        >
+          <h2 data-slot="label">{content().tools.title}</h2>
+          <div data-slot="body">
+            <p data-slot="lead" data-design-copy="home.tools.lead">
+              <Rich value={richCopy("home.tools.lead", content().tools.lead, content().copyLinks)} />
+            </p>
+            <ToolGrid items={content().tools.items} />
+          </div>
+        </section>
+      </Show>
+
+      <section
+        data-component="block"
+        data-section="openSource"
+        data-oss-variant={siteSettings.ossVariant}
+        data-design="openSourceColumns openSourceCopyColumns ossProof ossVariant spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
+        data-columns={siteSettings.openSourceColumns.charAt(0)}
+        data-copy-columns={copyColumnsAttribute(siteSettings.openSourceCopyColumns, siteSettings.openSourceColumns)}
+      >
+        <h2 data-slot="label">{content().openSource.title}</h2>
+        <div data-slot="body">
+          {/* The page's own lead is HTML (bold numbers); a Design mode option is plain text. */}
+          <Show
+            when={
+              designCopy("home.openSource.lead", stripTags(content().openSource.lead)) !==
+              stripTags(content().openSource.lead)
+            }
+            fallback={
+              <p data-slot="lead" data-design-copy="home.openSource.lead" innerHTML={content().openSource.lead} />
+            }
+          >
+            <p data-slot="lead" data-design-copy="home.openSource.lead">
+              {designCopy("home.openSource.lead", stripTags(content().openSource.lead))}
+            </p>
+          </Show>
+          <Suspense
+            fallback={
+              <>
+                {openSourceStats()}
+                <Show when={siteSettings.ossProof === "stats"}>
+                  <OpenSourceProof layout="stats" pending start={openSourceStart()} />
+                </Show>
+              </>
+            }
+          >
+            {openSourceStats(repo())}
+            <Show when={siteSettings.ossProof === "stats"}>
+              <OpenSourceProof layout="stats" stats={repo()} start={openSourceStart()} />
+            </Show>
+          </Suspense>
+        </div>
+        <OpenSourceFork />
+      </section>
+
+      <Show when={siteSettings.ossProof === "section"}>
+        <section
+          data-component="block"
+          data-section="openSourceProof"
+          data-design="openSourceColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
+          data-columns={siteSettings.openSourceColumns.charAt(0)}
+        >
+          <h2 data-slot="label">{i18n.t("home.openSource.builtInTheOpen")}</h2>
+          <div data-slot="body">
+            <Suspense fallback={<OpenSourceProof layout="section" pending />}>
+              <OpenSourceProof layout="section" stats={repo()} />
+            </Suspense>
+          </div>
+        </section>
+      </Show>
+
+      <section
+        data-component="block"
+        data-section="privacy"
+        data-design="privacyColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
+        data-columns={siteSettings.privacyColumns.charAt(0)}
+      >
+        <h2 data-slot="label" data-design-copy="home.privacy.title">
+          {designCopy("home.privacy.title", content().privacy.title)}
+        </h2>
+        <div data-slot="body">
+          <p data-slot="lead" data-design-copy="home.privacy.body">
+            <Rich value={richCopy("home.privacy.body", content().privacy.body, content().copyLinks)} />
+          </p>
+        </div>
+      </section>
+
+      <section
+        data-component="block"
+        data-section="faq"
+        data-design="faqColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
+        data-columns={siteSettings.faqColumns.charAt(0)}
+      >
+        <h2 data-slot="label">{content().faq.title}</h2>
+        <div data-slot="body">
+          <ul data-component="faq">
+            <For each={content().faq.items}>
+              {(item) => (
+                <li>
+                  <Faq question={item.question}>
+                    <Show
+                      when={"copy" in item && item.copy ? (item.copy as CopyId) : undefined}
+                      fallback={<Rich value={item.answer} />}
+                    >
+                      {(copy) => (
+                        <span data-design-copy={copy()}>
+                          <Rich value={richCopy(copy(), item.answer, content().copyLinks)} />
+                        </span>
+                      )}
+                    </Show>
+                  </Faq>
+                </li>
+              )}
+            </For>
+          </ul>
+        </div>
+      </section>
+
+      <SignupSection />
+
+      <section
+        data-component="block"
+        data-section="console"
+        data-design="consoleSection consoleHeight consoleColumns consoleCopyColumns consoleLabel consoleLayout"
+        data-columns={siteSettings.consoleColumns.charAt(0)}
+        data-copy-columns={copyColumnsAttribute(siteSettings.consoleCopyColumns, siteSettings.consoleColumns)}
+        data-console={consoleSection()}
+        data-console-height={siteSettings.consoleHeight}
+        data-console-label={siteSettings.consoleLayout === "block" ? "left" : siteSettings.consoleLabel}
+        data-console-layout={siteSettings.consoleLayout}
+        style={{ "--clearing-strength": siteSettings.consoleClearing / 100 }}
+      >
+        {/* Shown instead of the eyebrow when Console label is "left"; both render so the setting
+            only switches an attribute. */}
+        <h2 data-slot="label">{content().console.title}</h2>
+        <Show when={consoleSection() === "slim"}>
+          <div data-slot="slim">
+            <ConsoleField dot={1} />
+            <h3>{content().console.slimHeadline}</h3>
+            <div data-slot="actions">
+              <a href={content().console.sales.href} data-component="site-button" data-variant="neutral">
+                {content().console.sales.text}
+              </a>
+              <a href={content().console.cta.href} rel="external" data-component="site-button">
+                {content().console.cta.text}
+              </a>
+            </div>
+          </div>
+        </Show>
+        <div data-slot="console">
+          <ConsoleField dot={consoleSection() === "inline" ? 1 : 2} />
+          <div data-slot="copy">
+            <h2 data-slot="eyebrow">{content().console.title}</h2>
+            <h3>{content().console.headline}</h3>
+            <p>{content().console.body}</p>
+            <div data-slot="actions">
+              <a href={content().console.cta.href} rel="external" data-component="site-button">
+                {content().console.cta.text}
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Show when={consoleSection() === "corner"}>
+        <ConsoleWidget
+          title={content().console.title}
+          headline={content().console.headline}
+          cta={content().console.cta}
+        />
+      </Show>
+    </Site>
   )
-  const handleCopyClick = (event: Event) => {
-    const button = event.currentTarget as HTMLButtonElement
-    const text = button.textContent
-    if (text) {
-      void navigator.clipboard.writeText(text)
-      button.setAttribute("data-copied", "")
-      setTimeout(() => {
-        button.removeAttribute("data-copied")
-      }, 1500)
-    }
+}
+
+/**
+ * Settings › Announcement: a "New" bar level with the logo, over the hero's three card columns
+ * (in the page's flow on phones). It always renders; the site root's data-home-announcement (set
+ * before first paint for a saved value) opens it, and changes animate its height and opacity.
+ * ⇧A (or the older ⇧N) toggles it, like ⇧S and ⇧D for Settings and Design mode, except while typing.
+ */
+function Announcement() {
+  const language = useLanguage()
+  const i18n = useI18n()
+  const translated = useContent()
+  const message = () => designCopy("home.announcement", announcementCopy(announcements[0]))
+  const item = () => announcements.find((entry) => announcementCopy(entry) === message())
+  // The chosen announcement in this locale, with its link text; a custom Design mode message stays as typed.
+  const local = () => {
+    const index = announcements.findIndex((entry) => announcementCopy(entry) === message())
+    return index < 0 ? undefined : translated().announcements[index]
+  }
+  const shown = () => (local() ? `${local()!.text} ${local()!.link}` : message())
+
+  return (
+    <aside
+      data-component="announcement"
+      data-style={siteSettings.announcementStyle}
+      data-design="homeAnnouncement announcementStyle"
+      aria-label={i18n.t("site.announcement.aside")}
+    >
+      <div data-slot="clip">
+        {/* Both styles render; data-style (set before first paint for a saved value) shows one. */}
+        <p data-slot="line">
+          <span data-slot="new">{i18n.t("home.banner.badge")}</span>{" "}
+          <span data-design-copy="home.announcement">
+            <Show when={item()} fallback={message()}>
+              {(entry) => (
+                <a href={language.route(entry().href)}>
+                  {shown()}
+                  <ChevronRight />
+                </a>
+              )}
+            </Show>
+          </span>
+        </p>
+        <div data-slot="bar">
+          <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+          <p data-design-copy="home.announcement">
+            <Show when={item()} fallback={message()}>
+              {(entry) => (
+                <>
+                  {local()?.text ?? entry().text}{" "}
+                  <a href={language.route(entry().href)}>
+                    {local()?.link ?? entry().link}
+                    <ChevronRight />
+                  </a>
+                </>
+              )}
+            </Show>
+          </p>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+/**
+ * Settings › Hero install "line" and "tabs", on desktop only, under the hero: the curl install
+ * command with Copy and a link to /product, or a tab per install method beside its command.
+ */
+function HeroInstall(props: { mode: "line" | "tabs" }) {
+  const language = useLanguage()
+  const i18n = useI18n()
+  const id = createUniqueId()
+  const [selected, setSelected] = createSignal(0)
+  const [copied, setCopied] = createSignal(false)
+  const tabs = () => props.mode === "tabs"
+  let timer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => clearTimeout(timer))
+
+  const select = (index: number) => {
+    clearTimeout(timer)
+    setCopied(false)
+    setSelected(index)
+  }
+
+  const keyDown = (event: KeyboardEvent, index: number) => {
+    const next = {
+      ArrowLeft: (index - 1 + installs.length) % installs.length,
+      ArrowRight: (index + 1) % installs.length,
+      Home: 0,
+      End: installs.length - 1,
+    }[inlineKey(event)]
+    if (next === undefined) return
+    event.preventDefault()
+    select(next)
+    document.getElementById(`${id}-tab-${next}`)?.focus()
+  }
+
+  const copy = () => {
+    void navigator.clipboard.writeText(installs[selected()].command).then(() => {
+      clearTimeout(timer)
+      setCopied(true)
+      timer = setTimeout(() => setCopied(false), 1500)
+    })
   }
 
   return (
-    <main data-page="opencode">
-      {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>{i18n.t("home.title")}</Title>
-      <Meta name="description" content={i18n.t("app.meta.description")} />
-      <LocaleLinks path="/" />
-      <SocialMeta title={i18n.t("home.title")} description={i18n.t("app.meta.description")} path="/" />
-      <div data-component="container">
-        <Header />
-
-        <div data-component="content">
-          <section data-component="hero">
-            <div data-slot="hero-copy">
-              {/*<a data-slot="releases"*/}
-              {/*   href={release()?.url ?? `${config.github.repoUrl}/releases`}*/}
-              {/*   target="_blank">*/}
-              {/*  What’s new in {release()?.name ?? "the latest release"}*/}
-              {/*</a>*/}
-              <h1>{i18n.t("home.hero.title")}</h1>
-              <p>
-                {i18n.t("home.hero.subtitle.a")} <span data-slot="br"></span>
-                {i18n.t("home.hero.subtitle.b")}
-              </p>
-            </div>
-            <div data-slot="installation">
-              <Tabs
-                as="section"
-                aria-label={i18n.t("home.install.ariaLabel")}
-                class="tabs"
-                data-component="tabs"
-                data-active="curl"
-                defaultValue="curl"
+    <div data-component="hero-install" data-mode={props.mode}>
+      <Show when={tabs()}>
+        <div data-slot="tabs" role="tablist" aria-label={i18n.t("site.action.installMethod")}>
+          <For each={installs}>
+            {(item, index) => (
+              <button
+                type="button"
+                role="tab"
+                id={`${id}-tab-${index()}`}
+                aria-controls={`${id}-panel`}
+                aria-selected={selected() === index() ? "true" : "false"}
+                tabIndex={selected() === index() ? 0 : -1}
+                onClick={() => select(index())}
+                onKeyDown={(event) => keyDown(event, index())}
               >
-                <Tabs.List data-slot="tablist">
-                  <Tabs.Trigger value="curl" data-slot="tab">
-                    curl
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="npm" data-slot="tab">
-                    npm
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="bun" data-slot="tab">
-                    bun
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="brew" data-slot="tab">
-                    brew
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="paru" data-slot="tab">
-                    paru
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="yay" data-slot="tab">
-                    yay
-                  </Tabs.Trigger>
-                  <Tabs.Indicator />
-                </Tabs.List>
-                <div data-slot="panels">
-                  <Tabs.Content as="pre" data-slot="panel" value="curl">
-                    <button data-copy data-slot="command" onClick={handleCopyClick}>
-                      <span data-slot="command-script">
-                        <span>curl -fsSL </span>
-                        <span data-slot="protocol">https://</span>
-                        <span data-slot="highlight">opencode.ai/v2/install</span>
-                        <span> | bash</span>
-                      </span>
-                      <CopyStatus />
-                    </button>
-                  </Tabs.Content>
-                  <Tabs.Content as="pre" data-slot="panel" value="npm">
-                    <button data-copy data-slot="command" onClick={handleCopyClick}>
-                      <span>
-                        <span data-slot="protocol">npm install -g </span>
-                        <span data-slot="highlight">@opencode/cli</span>
-                      </span>
-                      <CopyStatus />
-                    </button>
-                  </Tabs.Content>
-                  <Tabs.Content as="pre" data-slot="panel" value="bun">
-                    <button data-copy data-slot="command" onClick={handleCopyClick}>
-                      <span>
-                        <span data-slot="protocol">bun install -g --trust </span>
-                        <span data-slot="highlight">@opencode/cli</span>
-                      </span>
-                      <CopyStatus />
-                    </button>
-                  </Tabs.Content>
-                  <Tabs.Content as="pre" data-slot="panel" value="brew">
-                    <button data-copy data-slot="command" onClick={handleCopyClick}>
-                      <span>
-                        <span data-slot="protocol">brew install </span>
-                        <span data-slot="highlight">anomalyco/tap/opencode-v2</span>
-                      </span>
-                      <CopyStatus />
-                    </button>
-                  </Tabs.Content>
-                  <Tabs.Content as="pre" data-slot="panel" value="paru">
-                    <button data-copy data-slot="command" onClick={handleCopyClick}>
-                      <span>
-                        <span data-slot="protocol">paru -S </span>
-                        <span data-slot="highlight">opencode-beta</span>
-                      </span>
-                      <CopyStatus />
-                    </button>
-                  </Tabs.Content>
-                  <Tabs.Content as="pre" data-slot="panel" value="yay">
-                    <button data-copy data-slot="command" onClick={handleCopyClick}>
-                      <span>
-                        <span data-slot="protocol">yay -S </span>
-                        <span data-slot="highlight">opencode-beta</span>
-                      </span>
-                      <CopyStatus />
-                    </button>
-                  </Tabs.Content>
-                </div>
-              </Tabs>
-            </div>
-          </section>
+                {item.id}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+      <div
+        data-slot="command"
+        id={`${id}-panel`}
+        role={tabs() ? "tabpanel" : undefined}
+        aria-labelledby={tabs() ? `${id}-tab-${selected()}` : undefined}
+      >
+        <code>{installs[selected()].command}</code>
+        <button type="button" data-slot="copy" aria-live="polite" onClick={copy}>
+          {copied() ? i18n.t("site.action.copied") : i18n.t("site.action.copy")}
+        </button>
+      </div>
+      <Show when={props.mode === "line"}>
+        <a href={language.route("/product")} data-slot="more">
+          {i18n.t("home.install.more")}
+        </a>
+      </Show>
+    </div>
+  )
+}
 
-          <section data-component="video">
-            <video src={video} autoplay playsinline loop muted preload="auto" poster={videoPoster}>
-              {i18n.t("common.videoUnsupported")}
-            </video>
-          </section>
+/**
+ * Settings › Hero install "above carousel": the curl command as one copy button, like a row of the
+ * Terminal card's install menu, and an action that copies an install prompt for a coding agent.
+ * Every layout of Settings › Install row style renders; the row's data-style (set before first
+ * paint for a saved value) shows the parts that layout uses, so a saved style never moves the page.
+ */
+function InstallRow() {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+  const [promptCopied, setPromptCopied] = createSignal(false)
+  // The "segmented" layout's toggle: what the one row copies.
+  const [target, setTarget] = createSignal<"terminal" | "agent">("terminal")
+  const label = () => designCopy("home.install.agent", i18n.t("home.install.agent"))
+  const agentName = () => i18n.t("home.install.agentLabel")
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let promptTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    clearTimeout(timer)
+    clearTimeout(promptTimer)
+  })
 
-          <section data-component="what">
-            <div data-slot="section-title">
-              <h3>{i18n.t("home.what.title")}</h3>
-              <p>{i18n.t("home.what.body")}</p>
-            </div>
-            <ul>
+  const flash = (set: (on: boolean) => void, previous: ReturnType<typeof setTimeout> | undefined) => {
+    clearTimeout(previous)
+    set(true)
+    return setTimeout(() => set(false), 1500)
+  }
+  const copyCommand = () =>
+    void navigator.clipboard.writeText(installs[0].command).then(() => (timer = flash(setCopied, timer)))
+  const copyPrompt = () =>
+    void navigator.clipboard.writeText(agentPrompt).then(() => (promptTimer = flash(setPromptCopied, promptTimer)))
+  // The row copies the prompt only in the "segmented" layout with Agent chosen.
+  const agent = () => siteSettings.installRowStyle === "segmented" && target() === "agent"
+
+  // The agent action's visible label: the Design mode copy, or "Copied" in the same cell, so the
+  // width holds; the copy icon turns into a check.
+  const Action = (props: { text?: string }) => (
+    <>
+      <span data-slot="copy-labels" aria-hidden="true">
+        <span
+          data-active={promptCopied() ? undefined : ""}
+          data-design-copy={props.text ? undefined : "home.install.agent"}
+        >
+          {props.text ?? label()}
+        </span>
+        <span data-active={promptCopied() ? "" : undefined}>{i18n.t("site.action.copied")}</span>
+      </span>
+      <Show when={promptCopied()} fallback={<CopyIcon />}>
+        <CheckIcon />
+      </Show>
+    </>
+  )
+
+  return (
+    <div
+      data-component="hero-install"
+      data-mode="row"
+      data-style={siteSettings.installRowStyle}
+      data-design="heroInstall installRowStyle"
+    >
+      <div data-slot="segmented" role="group" aria-label={i18n.t("home.install.target")}>
+        <button
+          type="button"
+          aria-pressed={target() === "terminal" ? "true" : "false"}
+          onClick={() => setTarget("terminal")}
+        >
+          {i18n.t("home.install.terminal")}
+        </button>
+        <button type="button" aria-pressed={target() === "agent" ? "true" : "false"} onClick={() => setTarget("agent")}>
+          {i18n.t("home.install.agentTab")}
+        </button>
+      </div>
+      <button type="button" data-slot="ghost" aria-label={agentName()} onClick={copyPrompt}>
+        <Action />
+      </button>
+      <button
+        type="button"
+        data-slot="install"
+        data-copied={(agent() ? promptCopied() : copied()) ? "" : undefined}
+        aria-label={agent() ? agentName() : i18n.t("home.install.copyCommand", { command: installs[0].command })}
+        onClick={() => (agent() ? copyPrompt() : copyCommand())}
+      >
+        <code data-slot="text">{agent() ? agentPrompt : installs[0].command}</code>
+        <span data-slot="status" aria-hidden="true">
+          <span data-slot="idle">
+            <CopyIcon />
+          </span>
+          <span data-slot="done">
+            <CheckIcon />
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        data-slot="agent-icon"
+        data-tip={i18n.t("home.install.agentTip")}
+        data-copied={promptCopied() ? "" : undefined}
+        aria-label={agentName()}
+        onClick={copyPrompt}
+      >
+        <Show when={promptCopied()} fallback={<AgentIcon />}>
+          <CheckIcon />
+        </Show>
+      </button>
+      <span data-slot="or" aria-hidden="true">
+        {i18n.t("home.install.or")}
+      </span>
+      <button type="button" data-slot="agent-link" aria-label={agentName()} onClick={copyPrompt}>
+        <Action />
+      </button>
+      <p data-slot="agent-note">
+        {i18n.t("home.install.agentNote")}{" "}
+        <button type="button" data-slot="agent-link" aria-label={agentName()} onClick={copyPrompt}>
+          <Action text={i18n.t("home.install.copyPrompt")} />
+        </button>
+      </p>
+      <button
+        type="button"
+        data-slot="agent-button"
+        data-component="site-button"
+        data-variant="neutral"
+        aria-label={agentName()}
+        onClick={copyPrompt}
+      >
+        <Action />
+      </button>
+      <span data-slot="sr-only" aria-live="polite">
+        {copied() || promptCopied() ? i18n.t("site.action.copied") : ""}
+      </span>
+    </div>
+  )
+}
+
+// A robot face on the 16px icon grid, as in the footer's "View as agent" button.
+function AgentIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.25"
+      aria-hidden="true"
+    >
+      <rect x="2.125" y="2.125" width="11.75" height="11.75" />
+      <path d="M0.875 6V10M15.125 6V10" />
+      <rect x="4.875" y="5.75" width="2" height="4.5" fill="currentColor" stroke="none" />
+      <rect x="9.125" y="5.75" width="2" height="4.5" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+// For the agent action above the carousel: the Terminal section of the download page's Markdown lists every
+// install command.
+const agentPrompt = `Install the OpenCode terminal app on this machine. Follow the Download section of https://opencode.ai/terminal.md and pick the method that fits this system (for example \`${installs[0].command}\`), then run \`opencode --version\` to check that it works.`
+
+function CopyIcon() {
+  return (
+    <svg data-slot="copy-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M7.5 7.5V3.75H16.25V12.5H12.5M3.75 7.5H12.5V16.25H3.75V7.5Z" stroke="currentColor" stroke-width="1.5" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg data-slot="copy-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M4.5 10.5L8.25 14.25L15.5 6" stroke="currentColor" stroke-width="1.5" />
+    </svg>
+  )
+}
+
+// Rolls every digit up through at least one full turn, like an odometer, once the parent sets
+// data-visible. Digits after the first spin an extra turn so smaller place values move faster;
+// letters and symbols rise in as the digits settle.
+// Letters and digits roll through a wheel; other glyphs crossfade in place.
+const heroCharset = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+
+/**
+ * The hero title shuffled in with rolling-number: it starts as blank slots of the same length and
+ * rolls (or flaps) into the title once the page is on screen. Words are separate hosts so the
+ * title still wraps between them.
+ */
+function HeroTitle(props: { text: string; mode: "roll" | "flap" }) {
+  const [shown, setShown] = createSignal(false)
+  onMount(() => requestAnimationFrame(() => setShown(true)))
+  const words = () => props.text.split(" ")
+  return (
+    <h1 aria-label={props.text} data-design-copy="home.hero.title" data-rolling={props.mode}>
+      <For each={words()}>
+        {(word, index) => (
+          <>
+            {index() > 0 ? " " : ""}
+            <RollingText
+              aria-hidden="true"
+              text={shown() ? word : " ".repeat(word.length)}
+              mode={props.mode}
+              charset={heroCharset}
+              stagger="start"
+              duration={1400}
+              motionBlur
+            />
+          </>
+        )}
+      </For>
+    </h1>
+  )
+}
+
+/**
+ * A stat like "205K" or "1K+": the number rolls up from zero with rolling-number when the stats
+ * come into view, and the suffix sits after it.
+ */
+/**
+ * A stat like "224K" as a slot machine (Settings › Stats "slot"). It shows the final value until
+ * `start` (a performance.now() time, set as the stats near the window), then each digit spins a
+ * reel of random digits and eases out onto its own, left to right and stat by stat (`stat`), in
+ * about 1.5s. Each reel begins and ends on the digit itself, so starting never jumps or shows a
+ * zero. Letters and symbols ("K", "+") stay put. The random digits are drawn only once it starts,
+ * so the server and the first client render agree.
+ */
+function SlotStat(props: { value: string; start?: number; stat: number }) {
+  const chars = () => [...props.value]
+  // Each digit's place among the stat's digits, for the stagger and the number of turns.
+  const place = (index: number) =>
+    chars()
+      .slice(0, index)
+      .filter((char) => /\d/.test(char)).length
+  return (
+    <span data-component="slot-stat" role="img" aria-label={props.value}>
+      <For each={chars()}>
+        {(char, index) => (
+          <Show when={/\d/.test(char)} fallback={<span aria-hidden="true">{char}</span>}>
+            <SlotDigit digit={Number(char)} start={props.start} place={place(index())} stat={props.stat} />
+          </Show>
+        )}
+      </For>
+    </span>
+  )
+}
+
+function SlotDigit(props: { digit: number; start?: number; place: number; stat: number }) {
+  const [reel, setReel] = createSignal([props.digit])
+  let strip: HTMLSpanElement | undefined
+  createEffect(
+    on(
+      () => props.start,
+      (start) => {
+        if (start === undefined || !strip) return
+        // More turns for later digits, so the right of the number spins faster and lands last.
+        const turns = 14 + props.place * 5 + props.stat * 3
+        const digits = [
+          props.digit,
+          ...Array.from({ length: turns }, () => Math.floor(Math.random() * 10)),
+          props.digit,
+        ]
+        setReel(digits)
+        const line = strip.parentElement?.getBoundingClientRect().height ?? 0
+        const animation = strip.animate(
+          [{ transform: "translateY(0)" }, { transform: `translateY(${-(digits.length - 1) * line}px)` }],
+          {
+            duration: 1100,
+            delay: Math.max(0, start - performance.now()) + props.stat * 120 + props.place * 70,
+            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+            fill: "both",
+          },
+        )
+        animation.onfinish = () => {
+          setReel([props.digit])
+          animation.cancel()
+        }
+        onCleanup(() => animation.cancel())
+      },
+    ),
+  )
+  return (
+    <span data-slot="reel" aria-hidden="true" data-spinning={reel().length > 1 ? "" : undefined}>
+      <span data-slot="strip" ref={strip}>
+        <Index each={reel()}>{(digit) => <span>{digit()}</span>}</Index>
+      </span>
+    </span>
+  )
+}
+
+function RollingStat(props: { value: string; visible: boolean }) {
+  const parts = () => /^([\d.,]+)(.*)$/.exec(props.value)
+  // Start the roll a beat after the stats come into view, once the library has measured them.
+  // A digit only rolls when it changes, so a 0 in the target (the middle of "205") would sit still.
+  // Each 0 first heads towards 5, then the roll retargets upwards and carries on round to 0.
+  const [stage, setStage] = createSignal<"start" | "spin" | "done">("start")
+  createEffect(() => {
+    if (!props.visible) return
+    const spin = setTimeout(() => setStage("spin"), 100)
+    const done = setTimeout(() => setStage("done"), 350)
+    onCleanup(() => {
+      clearTimeout(spin)
+      clearTimeout(done)
+    })
+  })
+  const digits = () => (parts()?.[1] ?? "0").replace(/,/g, "")
+  const value = () => {
+    if (stage() === "start") return 0
+    return Number(stage() === "spin" ? digits().replace(/0/g, "5") : digits())
+  }
+  return (
+    <span data-component="rolling-stat" aria-label={props.value} role="img">
+      <RollingNumber
+        aria-hidden="true"
+        value={value()}
+        direction="up"
+        locales="en-US"
+        // Every digit slot is there from the start ("000" for 205), so the digits only roll in
+        // place and nothing slides in from the side.
+        format={{ minimumIntegerDigits: (parts()?.[1] ?? "0").replace(/\D/g, "").length, useGrouping: false }}
+        // About as long as the avatars' wash (~1.3s), which starts at the same moment.
+        duration={1200}
+        stagger="start"
+        motionBlur
+        // The stats observer already waits until they're on screen; the library's own offscreen
+        // check would otherwise race it and skip the roll.
+        pauseOffscreen={false}
+      />
+      <span aria-hidden="true">{parts()?.[2] ?? ""}</span>
+    </span>
+  )
+}
+
+function Odometer(props: { value: string }) {
+  const digits = () => [...props.value].filter((char) => /\d/.test(char)).length
+  return (
+    <span data-component="odometer" role="img" aria-label={props.value}>
+      <For each={[...props.value]}>
+        {(char, index) => {
+          const position = () => [...props.value].slice(0, index()).filter((item) => /\d/.test(item)).length
+          const turns = () => (position() === 0 && digits() > 1 ? 1 : 2)
+          return (
+            <Show
+              when={/\d/.test(char)}
+              fallback={
+                <span data-slot="suffix" aria-hidden="true" style={{ "--index": position() }}>
+                  {char}
+                </span>
+              }
+            >
+              <span
+                data-slot="digit"
+                aria-hidden="true"
+                style={{ "--target": turns() * 10 + Number(char), "--index": position() }}
+              >
+                <span data-slot="strip">
+                  <For each={Array.from({ length: 30 }, (_, item) => item % 10)}>{(digit) => <span>{digit}</span>}</For>
+                </span>
+              </span>
+            </Show>
+          )
+        }}
+      </For>
+    </span>
+  )
+}
+
+/**
+ * Design mode copy over copy with links: the page's own copy keeps its links, and an option links
+ * the phrases in `links` (homeContent's copyLinks) wherever they appear.
+ */
+function richCopy(id: CopyId, rich: RichText, links: readonly { text: string; href: string }[]) {
+  const plain = rich.map((item) => (typeof item === "string" ? item : "code" in item ? item.code : item.text)).join("")
+  const text = designCopy(id, plain)
+  return text === plain ? rich : linkPhrases(text, links)
+}
+
+function stripTags(html: string) {
+  return html.replace(/<[^>]+>/g, "")
+}
+
+/**
+ * "Get started", before "Bring your own subs": download, start with the free models, then bring a
+ * subscription or use OpenCode Go (lib/get-started.ts). Laid out like the sections below it, with
+ * the tools' column settings. Settings › Get started style explores five treatments of the body;
+ * every one renders and the section's data-style (set before first paint for a saved value) shows
+ * one.
+ */
+function GetStarted() {
+  const i18n = useI18n()
+  const language = useLanguage()
+  const content = createMemo(() => localize(language.locale(), "getStarted", getStarted(language.route)))
+  // On a phone or tablet, Download is that device's app; on a computer, the desktop build.
+  const platform = useDevicePlatform()
+  const downloadSlug = () => (isMobile(platform()) ? "mobile" : "desktop")
+  // On a phone or tablet the lead links only "OpenCode Go"; the other phrases stay plain words (no
+  // link to tab to or announce), decided from the request's platform so the server renders it.
+  const leadPhrases = () =>
+    isMobile(platform()) ? content().phrases.filter((phrase) => phrase.text === "OpenCode Go") : content().phrases
+  const [copied, setCopied] = createSignal(false)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => clearTimeout(timer))
+  const copy = () =>
+    void navigator.clipboard.writeText(installs[0].command).then(() => {
+      clearTimeout(timer)
+      setCopied(true)
+      timer = setTimeout(() => setCopied(false), 1500)
+    })
+  // The log-ins as one list in the page's language ("A, B or C"), each a link, inside one sentence.
+  const subscriptionLinks = () => (
+    <Rich
+      value={rich(
+        i18n.t("home.getStarted.moreModels", {
+          subs: new Intl.ListFormat(language.locale() === "en" ? "en-GB" : language.tag(language.locale()), {
+            type: "disjunction",
+          }).format(content().subscriptions.map((item) => `[${item.name}](subs)`)),
+        }),
+        { subs: content().links.subs, go: content().plans[0].href, goPlus: content().plans[1].href },
+      )}
+    />
+  )
+  return (
+    <section
+      data-component="block"
+      data-section="getStarted"
+      data-style={siteSettings.getStartedStyle}
+      data-design="getStartedStyle"
+      data-columns={siteSettings.toolsColumns.charAt(0)}
+      data-copy-columns={copyColumnsAttribute(siteSettings.toolsCopyColumns, siteSettings.toolsColumns)}
+    >
+      <h2 data-slot="label">{content().title}</h2>
+      <div data-slot="body">
+        <p data-slot="lead" data-design-copy="home.getStarted.lead">
+          <Rich value={linkPhrases(designCopy("home.getStarted.lead", content().lead), leadPhrases())} />
+        </p>
+
+        {/* "steps": a numbered path, each step with its action. */}
+        <ol data-slot="steps">
+          <For each={content().steps}>
+            {(step, index) => (
               <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.multiSession.title")}</strong> {i18n.t("home.what.multiSession.body")}
+                <span data-slot="number" aria-hidden="true">
+                  {String(index() + 1).padStart(2, "0")}
+                </span>
+                <div data-slot="text">
+                  <h3>{step.title}</h3>
+                  <p>{step.line}</p>
+                </div>
+                <div data-slot="action">
+                  <Switch>
+                    <Match when={index() === 0}>
+                      <ProductAction slug={downloadSlug()} split />
+                    </Match>
+                    <Match when={index() === 1}>
+                      <a href={content().links.free} data-slot="more">
+                        {i18n.t("home.getStarted.freeModels")}
+                        <ChevronRight />
+                      </a>
+                    </Match>
+                    <Match when={index() === 2}>
+                      <a href={content().links.go} data-slot="more">
+                        OpenCode Go
+                        <ChevronRight />
+                      </a>
+                    </Match>
+                  </Switch>
                 </div>
               </li>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.copilot.title")}</strong> {i18n.t("home.what.copilot.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.chatgptPlus.title")}</strong> {i18n.t("home.what.chatgptPlus.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.anyModel.title")}</strong> {i18n.t("home.what.anyModel.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.anyEditor.title")}</strong> {i18n.t("home.what.anyEditor.body")}
-                </div>
-              </li>
-            </ul>
-            <a href="/v2/docs">
-              <span>{i18n.t("home.what.readDocs")} </span>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="square"
-                />
-              </svg>
+            )}
+          </For>
+        </ol>
+
+        {/* "ladder": three rungs, free first. */}
+        <ul data-slot="ladder">
+          <li>
+            <a href={content().links.download}>
+              <span data-slot="rung">
+                {i18n.t("home.getStarted.free")}
+                <span data-slot="marker">{i18n.t("home.getStarted.mostPeople")}</span>
+              </span>
+              <span data-slot="detail">{i18n.t("home.getStarted.freeDetail", { model: content().freeModels[0] })}</span>
+              <span data-slot="price">$0</span>
+              <ChevronRight />
             </a>
-          </section>
-
-          <section data-component="growth">
-            <div data-slot="section-title">
-              <h3>{i18n.t("home.growth.title")}</h3>
-              <div>
-                <span>[*]</span>
-                <p
-                  innerHTML={i18n.t("home.growth.body", {
-                    stars: starsFull(),
-                    contributors: config.stats.contributors,
-                    commits: config.stats.commits,
-                    monthlyUsers: config.stats.monthlyUsers,
-                  })}
-                />
-              </div>
-
-              <div data-component="growth-stats">
-                <div data-component="growth-stat">
-                  <div data-component="stat-illustration">
-                    <svg width="205" height="264" viewBox="0 0 205 264" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <g opacity="0.5" clip-path="url(#clip0_236_15902)">
-                        <mask
-                          id="mask0_236_15902"
-                          style="mask-type:alpha"
-                          maskUnits="userSpaceOnUse"
-                          x="0"
-                          y="0"
-                          width="205"
-                          height="264"
-                        >
-                          <path
-                            d="M27.2119 253.122L0 264H205V0L192.109 17.8482L175.297 43.8089L152.877 59.95L137.902 77.6701L126.989 87.3251L118.603 106.449L103.114 123.643L93.359 141.714L84.2883 160.311L78.7262 177.329L67.773 193.997L62.8098 212.068L57.3332 231.191L42.5292 243.824L27.2119 253.122Z"
-                            fill="url(#paint0_linear_236_15902)"
-                          />
-                        </mask>
-                        <g mask="url(#mask0_236_15902)">
-                          <path
-                            d="M150.932 -135.014L-251.766 267.684M154.115 -131.832L-248.582 270.865M157.295 -128.65L-245.402 274.047M160.479 -125.469L-242.219 277.229M163.662 -122.287L-239.035 280.41M166.842 -119.105L-235.855 283.592M170.025 -115.924L-232.672 286.773M173.205 -112.742L-229.492 289.955M176.385 -109.561L-226.312 293.137M179.568 -106.377L-223.129 296.32M182.752 -103.193L-219.945 299.504M185.936 -100.012L-216.762 302.686M189.119 -96.8301L-213.578 305.867M192.295 -93.6484L-210.402 309.049M195.479 -90.4668L-207.219 312.23M198.662 -87.2852L-204.035 315.412M201.842 -84.1035L-200.855 318.594M205.025 -80.9219L-197.672 321.775M208.209 -77.7383L-194.488 324.959M211.389 -74.5586L-191.309 328.139M214.568 -71.375L-188.129 331.322M217.752 -68.1934L-184.945 334.504M220.936 -65.0117L-181.762 337.686M224.119 -61.8281L-178.578 340.869M227.303 -58.6465L-175.395 344.051M230.482 -55.4668L-172.215 347.23M233.662 -52.2832L-169.035 350.414M236.846 -49.0996L-165.852 353.598M240.025 -45.9199L-162.672 356.777M243.209 -42.7383L-159.488 359.959M246.393 -39.5547L-156.305 363.143M249.572 -36.375L-153.125 366.322M252.756 -33.1934L-149.941 369.504M255.936 -30.0098L-146.762 372.688M259.119 -26.8281L-143.578 375.869M262.303 -23.6465L-140.395 379.051M265.486 -20.4609L-137.211 382.236M268.666 -17.2812L-134.031 385.416M271.85 -14.0996L-130.848 388.598M275.029 -10.918L-127.668 391.779M278.209 -7.73633L-124.488 394.961M281.393 -4.55469L-121.305 398.143M284.576 -1.37305L-118.121 401.324M287.756 1.80859L-114.941 404.506M290.94 4.99023L-111.758 407.688M294.119 8.17383L-108.578 410.871M297.303 11.3574L-105.395 414.055M300.486 14.5391L-102.211 417.236M303.67 17.7207L-99.0273 420.418M306.85 20.9023L-95.8477 423.6M310.033 24.084L-92.6641 426.781M313.213 27.2656L-89.4844 429.963M316.393 30.4473L-86.3047 433.145M319.576 33.6289L-83.1211 436.326M322.76 36.8125L-79.9375 439.51M325.94 39.9941L-76.7578 442.691M329.123 43.1758L-73.5742 445.873M332.307 46.3574L-70.3906 449.055M335.486 49.541L-67.2109 452.238M338.67 52.7227L-64.0273 455.42M341.854 55.9043L-60.8438 458.602M345.033 59.0859L-57.6641 461.783M348.217 62.2676L-54.4805 464.965M351.397 65.4512L-51.3008 468.148M354.576 68.6328L-48.1211 471.33M357.76 71.8145L-44.9375 474.512M360.943 74.9961L-41.7539 477.693M364.123 78.1777L-38.5742 480.875M367.307 81.3594L-35.3906 484.057M370.49 84.541L-32.207 487.238M373.67 87.7246L-29.0273 490.422M376.854 90.9062L-25.8438 493.604M380.033 94.0859L-22.6641 496.783M383.217 97.2695L-19.4805 499.967M386.4 100.453L-16.2969 503.15M389.58 103.633L-13.1172 506.33M392.76 106.816L-9.9375 509.514"
-                            stroke="#8E8B8B"
-                          />
-                        </g>
-                        <path
-                          d="M0 264L27.2119 253.122L42.5292 243.824L57.3332 231.191L62.8098 212.068L67.773 193.997L78.7262 177.329L84.2883 160.311L93.359 141.714L103.114 123.643L118.603 106.449L126.989 87.3251L137.902 77.6701L152.877 59.95L175.297 43.8089L192.109 17.8482L205 0"
-                          stroke="#BCBBBB"
-                        />
-                      </g>
-                      <defs>
-                        <linearGradient
-                          id="paint0_linear_236_15902"
-                          x1="102.5"
-                          y1="-34.8571"
-                          x2="102.5"
-                          y2="264"
-                          gradientUnits="userSpaceOnUse"
-                        >
-                          <stop stop-color="#565656" />
-                          <stop offset="1" stop-color="#F1F0F0" stop-opacity="0" />
-                        </linearGradient>
-                        <clipPath id="clip0_236_15902">
-                          <rect width="205" height="264" fill="white" />
-                        </clipPath>
-                      </defs>
-                    </svg>
-                  </div>
-                  <span>
-                    <figure>{i18n.t("common.figure", { n: 1 })}</figure> <strong>{starsCompact()}</strong>{" "}
-                    {i18n.t("home.growth.githubStars")}
-                  </span>
-                </div>
-
-                <div data-component="growth-stat">
-                  <div data-component="stat-illustration">
-                    <svg width="205" height="264" viewBox="0 0 205 264" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <g opacity="0.5" clip-path="url(#clip0_236_15557)">
-                        <g clip-path="url(#clip1_236_15557)">
-                          <rect opacity="0.81" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.46" x="14" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.86" x="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.08" x="42" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.23" x="56" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.9" x="70" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.59" x="84" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.8" x="98" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.21" x="112" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.22" x="126" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.62" x="140" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.41" x="154" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.22" x="168" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.25" x="182" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.34" x="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.84" y="14" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.79" x="14" y="14" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.49" x="28" y="14" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.49" x="42" y="14" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.05" x="56" y="14" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.59" x="70" y="14" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.44" x="84" y="14" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.21" x="98" y="14" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.53" x="112" y="14" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.81" x="126" y="14" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.24" x="140" y="14" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.61" x="154" y="14" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.14" x="168" y="14" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.26" x="182" y="14" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.8" x="196" y="14" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.02" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.69" x="14" y="28" width="6" height="6" fill="#CFCECD" />
-                          <rect x="28" y="28" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.4" x="42" y="28" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.88" x="56" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.38" x="70" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.38" x="84" y="28" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.78" x="98" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.49" x="112" y="28" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.13" x="126" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.76" x="140" y="28" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.35" x="154" y="28" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.59" x="168" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.34" x="182" y="28" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.3" x="196" y="28" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.6" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.3" x="14" y="42" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.65" x="28" y="42" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.41" x="42" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.84" x="56" y="42" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.33" x="70" y="42" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.81" x="84" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.78" x="98" y="42" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.72" x="112" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.71" x="126" y="42" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.46" x="140" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.06" x="154" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.05" x="168" y="42" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.44" x="182" y="42" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.09" x="196" y="42" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.03" y="56" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.58" x="14" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.24" x="28" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.1" x="42" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.09" x="56" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.3" x="70" y="56" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.6" x="84" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.39" x="98" y="56" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.53" x="112" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.83" x="126" y="56" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.25" x="140" y="56" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.87" x="154" y="56" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.38" x="168" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.19" x="182" y="56" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.89" x="196" y="56" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.98" y="70" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.26" x="14" y="70" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.79" x="28" y="70" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.67" x="56" y="70" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.48" x="70" y="70" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.76" x="84" y="70" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.72" x="98" y="70" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.01" x="112" y="70" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.46" x="126" y="70" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.27" x="140" y="70" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.78" x="154" y="70" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.16" x="168" y="70" width="6" height="6" fill="#CFCECD" />
-                          <rect x="182" y="70" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.86" x="196" y="70" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.18" y="84" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.04" x="14" y="84" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.61" x="28" y="84" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.47" x="42" y="84" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.81" x="56" y="84" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.98" x="70" y="84" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.3" x="84" y="84" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.1" x="98" y="84" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.42" x="112" y="84" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.66" x="126" y="84" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.68" x="140" y="84" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.35" x="154" y="84" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.6" x="168" y="84" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.95" x="182" y="84" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.05" x="196" y="84" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.77" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.06" x="14" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.45" x="28" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.73" x="42" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.21" x="70" y="98" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.18" x="84" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.92" x="98" y="98" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.26" x="112" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.21" x="126" y="98" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.27" x="140" y="98" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.84" x="154" y="98" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.74" x="168" y="98" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.53" x="182" y="98" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.9" x="196" y="98" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.32" y="112" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.75" x="14" y="112" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.69" x="28" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.66" x="42" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.93" x="56" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.32" x="70" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.52" x="84" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.02" x="98" y="112" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.88" x="126" y="112" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.12" x="140" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.93" x="154" y="112" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.79" x="168" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.24" x="182" y="112" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.64" x="196" y="112" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.57" y="126" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.6" x="14" y="126" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.05" x="28" y="126" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.28" x="42" y="126" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.21" x="56" y="126" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.93" x="70" y="126" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.63" x="84" y="126" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.58" x="98" y="126" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.64" x="112" y="126" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.74" x="126" y="126" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.74" x="140" y="126" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.1" x="154" y="126" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.93" x="168" y="126" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.43" x="182" y="126" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.45" x="196" y="126" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.77" y="140" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.78" x="14" y="140" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.18" x="28" y="140" width="6" height="6" fill="#DAD9D9" />
-                          <rect x="42" y="140" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.39" x="56" y="140" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.53" x="70" y="140" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.06" x="84" y="140" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.81" x="98" y="140" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.49" x="112" y="140" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.45" x="126" y="140" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.37" x="140" y="140" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.58" x="154" y="140" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.8" x="168" y="140" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.35" x="182" y="140" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.73" x="196" y="140" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.92" y="154" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.32" x="14" y="154" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.3" x="28" y="154" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.03" x="42" y="154" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.65" x="56" y="154" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.66" x="70" y="154" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.83" x="84" y="154" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.52" x="98" y="154" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.82" x="112" y="154" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.95" x="126" y="154" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.89" x="140" y="154" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.2" x="154" y="154" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.61" x="168" y="154" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.34" x="196" y="154" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.9" y="168" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.99" x="14" y="168" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.49" x="28" y="168" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.84" x="42" y="168" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.67" x="56" y="168" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.92" x="70" y="168" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.79" x="84" y="168" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.8" x="98" y="168" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.74" x="112" y="168" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.38" x="126" y="168" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.56" x="140" y="168" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.7" x="154" y="168" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.47" x="168" y="168" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.92" x="182" y="168" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.19" x="196" y="168" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.12" y="182" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.16" x="14" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.98" x="28" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.6" x="42" y="182" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.15" x="56" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.17" x="70" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.26" x="84" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.3" x="98" y="182" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.12" x="112" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.31" x="126" y="182" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.62" x="140" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.74" x="154" y="182" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.8" x="168" y="182" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.89" x="182" y="182" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.75" x="196" y="182" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.1" y="196" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.11" x="14" y="196" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.79" x="28" y="196" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.69" x="42" y="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.39" x="56" y="196" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.31" x="70" y="196" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.33" x="84" y="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.2" x="98" y="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.21" x="112" y="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.02" x="126" y="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.82" x="140" y="196" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.28" x="154" y="196" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.19" x="168" y="196" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.97" x="182" y="196" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.45" x="196" y="196" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.88" y="210" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.58" x="14" y="210" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.53" x="28" y="210" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.89" x="42" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.38" x="56" y="210" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.73" x="70" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.87" x="84" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.35" x="98" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.61" x="112" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.8" x="126" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.87" x="140" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.77" x="154" y="210" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.94" x="168" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.59" x="182" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.37" x="196" y="210" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.7" y="224" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.72" x="14" y="224" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.95" x="28" y="224" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.26" x="42" y="224" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.68" x="56" y="224" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.55" x="70" y="224" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.2" x="84" y="224" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.63" x="98" y="224" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.5" x="112" y="224" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.79" x="126" y="224" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.02" x="140" y="224" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.17" x="154" y="224" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.99" x="168" y="224" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.82" x="182" y="224" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.28" x="196" y="224" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.76" y="238" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.39" x="14" y="238" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.14" x="28" y="238" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.17" x="42" y="238" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.37" x="56" y="238" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.13" x="70" y="238" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.35" x="84" y="238" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.13" x="98" y="238" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.55" x="112" y="238" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.83" x="126" y="238" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.86" x="140" y="238" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.63" x="154" y="238" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.38" x="168" y="238" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.57" x="182" y="238" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.13" x="196" y="238" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.9" y="252" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.63" x="14" y="252" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.23" x="28" y="252" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.56" x="42" y="252" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.38" x="56" y="252" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.19" x="70" y="252" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.29" x="84" y="252" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.78" x="98" y="252" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.14" x="112" y="252" width="6" height="6" fill="#BCBBBB" />
-                          <rect opacity="0.64" x="126" y="252" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.27" x="140" y="252" width="6" height="6" fill="#CFCECD" />
-                          <rect opacity="0.85" x="154" y="252" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.02" x="168" y="252" width="6" height="6" fill="#DAD9D9" />
-                          <rect opacity="0.29" x="182" y="252" width="6" height="6" fill="#8E8B8B" />
-                          <rect opacity="0.4" x="196" y="252" width="6" height="6" fill="#8E8B8B" />
-                        </g>
-                      </g>
-                      <defs>
-                        <clipPath id="clip0_236_15557">
-                          <rect width="205" height="264" fill="white" />
-                        </clipPath>
-                        <clipPath id="clip1_236_15557">
-                          <rect width="236" height="264" fill="white" transform="translate(-0.164062)" />
-                        </clipPath>
-                      </defs>
-                    </svg>
-                  </div>
-                  <span>
-                    <figure>{i18n.t("common.figure", { n: 2 })}</figure> <strong>{config.stats.contributors}</strong>{" "}
-                    {i18n.t("home.growth.contributors")}
-                  </span>
-                </div>
-
-                <div data-component="growth-stat">
-                  <div data-component="stat-illustration">
-                    <svg width="205" height="264" viewBox="0 0 205 264" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <g opacity="0.5">
-                        <path d="M205 0H203.985V264H205V0Z" fill="#8E8B8B" />
-                        <path d="M197.896 34H196.881V264H197.896V34Z" fill="#8E8B8B" />
-                        <path d="M189.777 26H188.762V264H189.777V26Z" fill="#8E8B8B" />
-                        <path d="M183.688 52H182.673V264H183.688V52Z" fill="#8E8B8B" />
-                        <path d="M176.584 0H175.569V264H176.584V0Z" fill="#8E8B8B" />
-                        <path d="M169.48 29H168.465V264H169.48V29Z" fill="#8E8B8B" />
-                        <path d="M162.376 44H161.361V264H162.376V44Z" fill="#8E8B8B" />
-                        <path d="M155.272 65H154.257V264H155.272V65Z" fill="#8E8B8B" />
-                        <path d="M149.183 29H148.168V264H149.183V29Z" fill="#8E8B8B" />
-                        <path d="M142.079 36H141.064V264H142.079V36Z" fill="#8E8B8B" />
-                        <path d="M134.975 48H133.96V264H134.975V48Z" fill="#8E8B8B" />
-                        <path d="M127.871 7H126.856V264H127.871V7Z" fill="#8E8B8B" />
-                        <path d="M120.767 0H119.752V264H120.767V0Z" fill="#8E8B8B" />
-                        <path d="M113.663 14H112.649V264H113.663V14Z" fill="#8E8B8B" />
-                        <path d="M106.559 27H105.545V264H106.559V27Z" fill="#8E8B8B" />
-                        <path d="M99.4554 70H98.4406V264H99.4554V70Z" fill="#8E8B8B" />
-                        <path d="M92.3515 32H91.3366V264H92.3515V32Z" fill="#8E8B8B" />
-                        <path d="M85.2475 35H84.2327V264H85.2475V35Z" fill="#8E8B8B" />
-                        <path d="M78.1436 36H77.1287V264H78.1436V36Z" fill="#8E8B8B" />
-                        <path d="M71.0396 10H70.0248V264H71.0396V10Z" fill="#8E8B8B" />
-                        <path d="M63.9356 42H62.9208V264H63.9356V42Z" fill="#8E8B8B" />
-                        <path d="M56.8317 43H55.8168V264H56.8317V43Z" fill="#8E8B8B" />
-                        <path d="M49.7277 38H48.7129V264H49.7277V38Z" fill="#8E8B8B" />
-                        <path d="M42.6238 56H41.6089V264H42.6238V56Z" fill="#8E8B8B" />
-                        <path d="M36.5347 36H35.5198V264H36.5347V36Z" fill="#8E8B8B" />
-                        <path d="M29.4307 8H28.4158V264H29.4307V8Z" fill="#8E8B8B" />
-                        <path d="M22.3267 20H21.3119V264H22.3267V20Z" fill="#8E8B8B" />
-                        <path d="M15.2228 1H14.2079V264H15.2228V1Z" fill="#8E8B8B" />
-                        <path d="M8.11881 9H7.10396V264H8.11881V9Z" fill="#8E8B8B" />
-                        <path d="M1.01485 31H0V264H1.01485V31Z" fill="#8E8B8B" />
-                      </g>
-                    </svg>
-                  </div>
-                  <span>
-                    <figure>{i18n.t("common.figure", { n: 3 })}</figure> <strong>{config.stats.monthlyUsers}</strong>{" "}
-                    {i18n.t("home.growth.monthlyDevs")}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section data-component="privacy">
-            <div data-slot="privacy-title">
-              <h3>{i18n.t("home.privacy.title")}</h3>
-              <div>
-                <span>[*]</span>
-
-                <p>
-                  {i18n.t("home.privacy.body")} {i18n.t("home.privacy.learnMore")}{" "}
-                  <a href="/v2/docs/policies/">{i18n.t("home.privacy.link")}</a>.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section data-component="faq">
-            <div data-slot="section-title">
-              <h3>{i18n.t("common.faq")}</h3>
-            </div>
-            <ul>
-              <li>
-                <Faq question={i18n.t("home.faq.q1")}>{i18n.t("home.faq.a1")}</Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q2")}>
-                  {i18n.t("home.faq.a2.before")} <a href="/v2/docs">{i18n.t("home.faq.a2.link")}</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q3")}>
-                  {i18n.t("home.faq.a3.p1")} {i18n.t("home.faq.a3.p2.beforeZen")}{" "}
-                  <a href="https://opencode.ai/console/models">{i18n.t("nav.zen")}</a>
-                  {i18n.t("home.faq.a3.p2.afterZen")} {i18n.t("home.faq.a3.p3")} {i18n.t("home.faq.a3.p4.beforeLocal")}{" "}
-                  <a href="/v2/docs/models/#local" target="_blank">
-                    {i18n.t("home.faq.a3.p4.localLink")}
-                  </a>
-                  .
-                </Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q4")}>
-                  {i18n.t("home.faq.a4.p1")} <a href="/v2/docs/providers/">{i18n.t("common.learnMore")}</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q5")}>
-                  {i18n.t("home.faq.a5.beforeDesktop")}{" "}
-                  <a href={language.route("/download")}>{i18n.t("home.faq.a5.desktop")}</a> {i18n.t("home.faq.a5.and")}{" "}
-                  <a href="/v2/docs/cli/web/">{i18n.t("home.faq.a5.web")}</a>!
-                </Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q6")}>{i18n.t("home.faq.a6")}</Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q7")}>
-                  {i18n.t("home.faq.a7.p1")} {i18n.t("home.faq.a7.p2.beforeModels")}{" "}
-                  <a href="/v2/docs/console/models/#privacy">{i18n.t("home.faq.a7.p2.modelsLink")}</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question={i18n.t("home.faq.q8")}>
-                  {i18n.t("home.faq.a8.p1")}{" "}
-                  <a href={config.github.repoUrl} target="_blank">
-                    {i18n.t("nav.github")}
-                  </a>{" "}
-                  {i18n.t("home.faq.a8.p2")}{" "}
-                  <a href={`${config.github.repoUrl}?tab=MIT-1-ov-file#readme`} target="_blank">
-                    {i18n.t("home.faq.a8.mitLicense")}
-                  </a>
-                  {i18n.t("home.faq.a8.p3")}
-                </Faq>
-              </li>
-            </ul>
-          </section>
-
-          <section data-component="zen-cta">
-            <div data-slot="zen-cta-copy">
-              <strong>{i18n.t("home.zenCta.title")}</strong>
-              <p>{i18n.t("home.zenCta.body")}</p>
-              <div data-slot="model-logos">
-                <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <mask
-                      id="mask0_79_128586"
-                      style="mask-type:luminance"
-                      maskUnits="userSpaceOnUse"
-                      x="1"
-                      y="1"
-                      width="22"
-                      height="22"
-                    >
-                      <path d="M23 1.5H1V22.2952H23V1.5Z" fill="white" />
-                    </mask>
-                    <g mask="url(#mask0_79_128586)">
-                      <path
-                        d="M9.43799 9.06943V7.09387C9.43799 6.92749 9.50347 6.80267 9.65601 6.71959L13.8206 4.43211C14.3875 4.1202 15.0635 3.9747 15.7611 3.9747C18.3775 3.9747 20.0347 5.9087 20.0347 7.96734C20.0347 8.11288 20.0347 8.27926 20.0128 8.44564L15.6956 6.03335C15.434 5.88785 15.1723 5.88785 14.9107 6.03335L9.43799 9.06943ZM19.1624 16.7637V12.0431C19.1624 11.7519 19.0315 11.544 18.7699 11.3984L13.2972 8.36234L15.0851 7.3849C15.2377 7.30182 15.3686 7.30182 15.5212 7.3849L19.6858 9.67238C20.8851 10.3379 21.6917 11.7519 21.6917 13.1243C21.6917 14.7047 20.7106 16.1604 19.1624 16.7636V16.7637ZM8.15158 12.6047L6.36369 11.6066C6.21114 11.5235 6.14566 11.3986 6.14566 11.2323V6.65735C6.14566 4.43233 7.93355 2.7478 10.3538 2.7478C11.2697 2.7478 12.1199 3.039 12.8396 3.55886L8.54424 5.92959C8.28268 6.07508 8.15181 6.28303 8.15181 6.57427V12.6049L8.15158 12.6047ZM12 14.7258L9.43799 13.3533V10.4421L12 9.06965L14.5618 10.4421V13.3533L12 14.7258ZM13.6461 21.0476C12.7303 21.0476 11.8801 20.7564 11.1604 20.2366L15.4557 17.8658C15.7173 17.7203 15.8482 17.5124 15.8482 17.2211V11.1905L17.658 12.1886C17.8105 12.2717 17.876 12.3965 17.876 12.563V17.1379C17.876 19.3629 16.0662 21.0474 13.6461 21.0474V21.0476ZM8.47863 16.4103L4.314 14.1229C3.11471 13.4573 2.30808 12.0433 2.30808 10.6709C2.30808 9.06965 3.31106 7.6348 4.85903 7.03168V11.773C4.85903 12.0642 4.98995 12.2721 5.25151 12.4177L10.7025 15.4328L8.91464 16.4103C8.76209 16.4934 8.63117 16.4934 8.47863 16.4103ZM8.23892 19.8207C5.77508 19.8207 3.96533 18.0531 3.96533 15.8696C3.96533 15.7032 3.98719 15.5368 4.00886 15.3704L8.30418 17.7412C8.56574 17.8867 8.82752 17.8867 9.08909 17.7412L14.5618 14.726V16.7015C14.5618 16.8679 14.4964 16.9927 14.3438 17.0758L10.1792 19.3633C9.61225 19.6752 8.93631 19.8207 8.23869 19.8207H8.23892ZM13.6461 22.2952C16.2844 22.2952 18.4865 20.5069 18.9882 18.1362C21.4301 17.5331 23 15.3495 23 13.1245C23 11.6688 22.346 10.2548 21.1685 9.23581C21.2775 8.79908 21.343 8.36234 21.343 7.92582C21.343 4.95215 18.8137 2.72691 15.892 2.72691C15.3034 2.72691 14.7365 2.80999 14.1695 2.99726C13.1882 2.08223 11.8364 1.5 10.3538 1.5C7.71557 1.5 5.51352 3.28829 5.01185 5.65902C2.56987 6.26214 1 8.44564 1 10.6707C1 12.1264 1.65404 13.5404 2.83147 14.5594C2.72246 14.9961 2.65702 15.4328 2.65702 15.8694C2.65702 18.8431 5.1863 21.0683 8.108 21.0683C8.69661 21.0683 9.26354 20.9852 9.83046 20.7979C10.8115 21.713 12.1634 22.2952 13.6461 22.2952Z"
-                        fill="currentColor"
+          </li>
+          <li>
+            <a href={content().links.subs}>
+              <span data-slot="rung">{i18n.t("home.getStarted.yours")}</span>
+              <span data-slot="detail">
+                <span data-slot="logos" aria-hidden="true">
+                  <For each={content().subscriptions}>
+                    {(item) => (
+                      <span
+                        data-slot="logo"
+                        style={{ "mask-image": `url(${item.logo})`, "-webkit-mask-image": `url(${item.logo})` }}
                       />
-                    </g>
-                  </svg>
-                </div>
-                <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13.7891 3.93164L20.2223 20.0677H23.7502L17.317 3.93164H13.7891Z" fill="currentColor" />
-                    <path
-                      d="M6.32538 13.6824L8.52662 8.01177L10.7279 13.6824H6.32538ZM6.68225 3.93164L0.25 20.0677H3.84652L5.16202 16.6791H11.8914L13.2067 20.0677H16.8033L10.371 3.93164H6.68225Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 50 50"
-                    fill="currentColor"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path d="M49.04,24.001l-1.082-0.043h-0.001C36.134,23.492,26.508,13.866,26.042,2.043L25.999,0.96C25.978,0.424,25.537,0,25,0	s-0.978,0.424-0.999,0.96l-0.043,1.083C23.492,13.866,13.866,23.492,2.042,23.958L0.96,24.001C0.424,24.022,0,24.463,0,25	c0,0.537,0.424,0.978,0.961,0.999l1.082,0.042c11.823,0.467,21.449,10.093,21.915,21.916l0.043,1.083C24.022,49.576,24.463,50,25,50	s0.978-0.424,0.999-0.96l0.043-1.083c0.466-11.823,10.092-21.449,21.915-21.916l1.082-0.042C49.576,25.978,50,25.537,50,25	C50,24.463,49.576,24.022,49.04,24.001z"></path>
-                  </svg>
-                </div>
-                <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M9.16861 16.0529L17.2018 9.85156C17.5957 9.54755 18.1586 9.66612 18.3463 10.1384C19.3339 12.6288 18.8926 15.6217 16.9276 17.6766C14.9626 19.7314 12.2285 20.1821 9.72948 19.1557L6.9995 20.4775C10.9151 23.2763 15.6699 22.5841 18.6411 19.4749C20.9979 17.0103 21.7278 13.6508 21.0453 10.6214L21.0515 10.6278C20.0617 6.17736 21.2948 4.39847 23.8207 0.760904C23.8804 0.674655 23.9402 0.588405 24 0.5L20.6762 3.97585V3.96506L9.16658 16.0551"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M7.37742 16.7017C4.67579 14.0395 5.14158 9.91963 7.44676 7.54383C9.15135 5.78544 11.9442 5.06779 14.3821 6.12281L17.0005 4.87559C16.5288 4.52392 15.9242 4.14566 15.2305 3.87986C12.0948 2.54882 8.34069 3.21127 5.79171 5.8386C3.33985 8.36779 2.56881 12.2567 3.89286 15.5751C4.88192 18.0552 3.26056 19.8094 1.62731 21.5801C1.04853 22.2078 0.467774 22.8355 0 23.5L7.3754 16.7037"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      fill-rule="evenodd"
-                      clip-rule="evenodd"
-                      d="M12.6043 1.34016C12.9973 2.03016 13.3883 2.72215 13.7783 3.41514C13.7941 3.44286 13.8169 3.46589 13.8445 3.48187C13.8721 3.49786 13.9034 3.50624 13.9353 3.50614H19.4873C19.6612 3.50614 19.8092 3.61614 19.9332 3.83314L21.3872 6.40311C21.5772 6.74011 21.6272 6.88111 21.4112 7.24011C21.1512 7.6701 20.8982 8.1041 20.6512 8.54009L20.2842 9.19809C20.1782 9.39409 20.0612 9.47809 20.2442 9.71008L22.8962 14.347C23.0682 14.648 23.0072 14.841 22.8532 15.117C22.4162 15.902 21.9712 16.681 21.5182 17.457C21.3592 17.729 21.1662 17.832 20.8382 17.827C20.0612 17.811 19.2863 17.817 18.5113 17.843C18.4946 17.8439 18.4785 17.8489 18.4644 17.8576C18.4502 17.8664 18.4385 17.8785 18.4303 17.893C17.5361 19.4773 16.6344 21.0573 15.7253 22.633C15.5563 22.926 15.3453 22.996 15.0003 22.997C14.0033 23 12.9983 23.001 11.9833 22.999C11.8889 22.9987 11.7961 22.9735 11.7145 22.9259C11.6328 22.8783 11.5652 22.8101 11.5184 22.728L10.1834 20.405C10.1756 20.3898 10.1637 20.3771 10.149 20.3684C10.1343 20.3598 10.1174 20.3554 10.1004 20.356H4.98244C4.69744 20.386 4.42944 20.355 4.17745 20.264L2.57447 17.494C2.52706 17.412 2.50193 17.319 2.50158 17.2243C2.50123 17.1296 2.52567 17.0364 2.57247 16.954L3.77945 14.834C3.79665 14.8041 3.80569 14.7701 3.80569 14.7355C3.80569 14.701 3.79665 14.667 3.77945 14.637C3.15073 13.5485 2.52573 12.4579 1.90448 11.3651L1.11449 9.97008C0.954488 9.66008 0.941489 9.47409 1.20949 9.00509C1.67448 8.1921 2.13647 7.38011 2.59647 6.56911C2.72847 6.33512 2.90046 6.23512 3.18046 6.23412C4.04344 6.23048 4.90644 6.23015 5.76943 6.23312C5.79123 6.23295 5.81259 6.22704 5.83138 6.21597C5.85016 6.20491 5.8657 6.1891 5.87643 6.17012L8.68239 1.27516C8.72491 1.2007 8.78631 1.13875 8.86039 1.09556C8.93448 1.05238 9.01863 1.02948 9.10439 1.02917C9.62838 1.02817 10.1574 1.02917 10.6874 1.02317L11.7044 1.00017C12.0453 0.997165 12.4283 1.03217 12.6043 1.34016ZM9.17238 1.74316C9.16185 1.74315 9.15149 1.74592 9.14236 1.75119C9.13323 1.75645 9.12565 1.76403 9.12038 1.77316L6.25442 6.78811C6.24066 6.81174 6.22097 6.83137 6.19729 6.84505C6.17361 6.85873 6.14677 6.86599 6.11942 6.86611H3.25346C3.19746 6.86611 3.18346 6.89111 3.21246 6.94011L9.02239 17.096C9.04739 17.138 9.03539 17.158 8.98839 17.159L6.19342 17.174C6.15256 17.1727 6.11214 17.1828 6.07678 17.2033C6.04141 17.2238 6.01253 17.2539 5.99342 17.29L4.67344 19.6C4.62944 19.678 4.65244 19.718 4.74144 19.718L10.4574 19.726C10.5034 19.726 10.5374 19.746 10.5614 19.787L11.9643 22.241C12.0103 22.322 12.0563 22.323 12.1033 22.241L17.1093 13.481L17.8923 12.0991C17.897 12.0905 17.904 12.0834 17.9125 12.0785C17.9209 12.0735 17.9305 12.0709 17.9403 12.0709C17.9501 12.0709 17.9597 12.0735 17.9681 12.0785C17.9765 12.0834 17.9835 12.0905 17.9883 12.0991L19.4123 14.629C19.4229 14.648 19.4385 14.6637 19.4573 14.6746C19.4761 14.6855 19.4975 14.6912 19.5193 14.691L22.2822 14.671C22.2893 14.6711 22.2963 14.6693 22.3024 14.6658C22.3086 14.6623 22.3137 14.6572 22.3172 14.651C22.3206 14.6449 22.3224 14.638 22.3224 14.631C22.3224 14.624 22.3206 14.6172 22.3172 14.611L19.4173 9.52508C19.4068 9.50809 19.4013 9.48853 19.4013 9.46859C19.4013 9.44864 19.4068 9.42908 19.4173 9.41209L19.7102 8.90509L20.8302 6.92811C20.8542 6.88711 20.8422 6.86611 20.7952 6.86611H9.20038C9.14138 6.86611 9.12738 6.84011 9.15738 6.78911L10.5914 4.28413C10.6021 4.26706 10.6078 4.24731 10.6078 4.22714C10.6078 4.20697 10.6021 4.18721 10.5914 4.17014L9.22538 1.77416C9.22016 1.7647 9.21248 1.75682 9.20315 1.75137C9.19382 1.74591 9.18319 1.74307 9.17238 1.74316ZM15.4623 9.76308C15.5083 9.76308 15.5203 9.78308 15.4963 9.82308L14.6643 11.2881L12.0513 15.873C12.0464 15.8819 12.0392 15.8894 12.0304 15.8945C12.0216 15.8996 12.0115 15.9022 12.0013 15.902C11.9912 15.902 11.9813 15.8993 11.9725 15.8942C11.9637 15.8891 11.9564 15.8818 11.9513 15.873L8.49839 9.84108C8.47839 9.80708 8.48839 9.78908 8.52639 9.78708L8.74239 9.77508L15.4643 9.76308H15.4623Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M12.6241 11.346L20.3848 3.44816C20.5309 3.29931 20.4487 3 20.2601 3H16.0842C16.0388 3 15.9949 3.01897 15.9594 3.05541L7.59764 11.5629C7.46721 11.6944 7.27446 11.5771 7.27446 11.3666V3.25183C7.27446 3.11242 7.18515 3 7.07594 3H4.19843C4.08932 3 4 3.11242 4 3.25183V20.7482C4 20.8876 4.08932 21 4.19843 21H7.07594C7.18515 21 7.27446 20.8876 7.27446 20.7482V17.1834C7.27446 17.1073 7.30136 17.0344 7.34815 16.987L9.94075 14.3486C10.0031 14.2853 10.0895 14.2757 10.159 14.3232L17.0934 19.5573C18.2289 20.3412 19.4975 20.8226 20.786 20.9652C20.9008 20.9778 21 20.8606 21 20.7133V17.3559C21 17.2276 20.9249 17.1232 20.8243 17.1073C20.0659 16.9853 19.326 16.6845 18.6569 16.222L12.6538 11.764C12.5291 11.6785 12.5135 11.4584 12.6241 11.346Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M12.0962 3L10.0998 5.6577H1.59858L3.59417 3H12.0972H12.0962ZM22.3162 18.3432L20.3215 21H11.8497L13.8425 18.3432H22.3162ZM23 3L9.492 21H1L14.508 3H23Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <a href="https://opencode.ai/console/models">
-                <span>{i18n.t("home.zenCta.link")} </span>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              </a>
-            </div>
-          </section>
+                    )}
+                  </For>
+                </span>
+                ChatGPT, Copilot, Claude Code
+              </span>
+              <span data-slot="price">{i18n.t("home.getStarted.yourPlan")}</span>
+              <ChevronRight />
+            </a>
+          </li>
+          <li>
+            <a href={content().links.go}>
+              <span data-slot="rung">OpenCode Go</span>
+              <span data-slot="detail">{i18n.t("home.getStarted.goDetail")}</span>
+              <span data-slot="price">$10 / $40</span>
+              <ChevronRight />
+            </a>
+          </li>
+        </ul>
 
-          <EmailSignup />
+        {/* "sentence": the whole path in one large sentence, then the download button. */}
+        <div data-slot="sentence">
+          <p>
+            <Rich value={linkPhrases(content().sentence, content().phrases)} />
+          </p>
+          <ProductAction slug={downloadSlug()} split />
+        </div>
 
-          <Footer />
+        {/* "terminal": install, run, pick a free model. */}
+        <div data-slot="terminal">
+          <div data-slot="window">
+            <button
+              type="button"
+              data-slot="copy"
+              aria-label={i18n.t("home.install.copyCommand", { command: installs[0].command })}
+              onClick={copy}
+            >
+              <Show when={copied()} fallback={<CopyIcon />}>
+                <CheckIcon />
+              </Show>
+              <span aria-live="polite">{copied() ? i18n.t("site.action.copied") : i18n.t("site.action.copy")}</span>
+            </button>
+            <pre>
+              <code>
+                <span data-slot="input" data-copy-command {...copyOnClick(copy)}>
+                  {installs[0].command}
+                </span>
+                {"\n"}
+                <span data-slot="input">opencode</span>
+                {"\n"}
+                <span data-slot="input">/models</span>
+                {"\n\n"}
+                <span data-slot="output">Select model</span>
+                {"\n"}
+                <span data-slot="output">OpenCode</span>
+                <For each={content().freeModels}>
+                  {(model, index) => (
+                    <>
+                      {"\n"}
+                      <span data-slot={index() === 0 ? "selected" : "option"}>
+                        {`${index() === 0 ? "●" : " "} ${model.padEnd(28)}Free`}
+                      </span>
+                    </>
+                  )}
+                </For>
+              </code>
+            </pre>
+          </div>
+          <p data-slot="caption">{subscriptionLinks()}</p>
+        </div>
+
+        {/* "cards": two cells in the tools grid's borders. */}
+        <ul
+          data-component="tools"
+          data-slot="cards"
+          data-grid={siteSettings.toolGrid}
+          aria-label={i18n.t("home.getStarted.waysToStart")}
+        >
+          <li>
+            <a href={content().links.download}>
+              <h3>
+                {i18n.t("home.getStarted.startFree")}
+                <ChevronRight />
+              </h3>
+              <p>{i18n.t("home.getStarted.startFreeBody")}</p>
+            </a>
+          </li>
+          <li>
+            <a href={content().links.go}>
+              <h3>
+                {i18n.t("home.getStarted.goFurther")}
+                <ChevronRight />
+              </h3>
+              <p>{i18n.t("home.getStarted.goFurtherBody")}</p>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * "Bring your own subs", before "Bring your own tools": log in with a subscription you have, or use
+ * an OpenCode plan (lib/byos.ts). Laid out like that section, and the logos are its grid's tiles
+ * (logos only, the names as tooltips), so they arrive with the same entrance. Settings ›
+ * Subscriptions style explores three arrangements; every one renders and the section's data-style
+ * (set before first paint for a saved value) shows one.
+ */
+function BringYourOwnSubs() {
+  const i18n = useI18n()
+  const language = useLanguage()
+  const subs = createMemo(() => localize(language.locale(), "byos", byos))
+  const [tab, setTab] = createSignal<"yours" | "ours">("yours")
+  const yours = () => <ToolGrid items={subs().yours.items} label={subs().yours.label} iconTiles />
+  const providers = () => <ToolGrid items={subs().providers} label={i18n.t("home.byos.providersLabel")} iconTiles />
+  const goHref = () => subs().plansHref
+  const select = (next: "yours" | "ours", focus?: boolean) => {
+    setTab(next)
+    if (focus) document.getElementById(`byos-tab-${next}`)?.focus()
+  }
+  return (
+    <section
+      data-component="block"
+      data-section="byos"
+      data-style={siteSettings.subsStyle}
+      data-design="subsStyle"
+      data-columns={siteSettings.toolsColumns.charAt(0)}
+      data-copy-columns={copyColumnsAttribute(siteSettings.toolsCopyColumns, siteSettings.toolsColumns)}
+    >
+      {/* Laid out like "Bring your own tools" below it, with its column settings. */}
+      <h2 data-slot="label">{subs().title}</h2>
+      <div data-slot="body">
+        <p data-slot="lead">
+          <span data-design-copy="home.byos.headline">{designCopy("home.byos.headline", subs().headline)}</span>{" "}
+          <span data-design-copy="home.byos.line">
+            <Rich
+              value={linkPhrases(
+                designCopy("home.byos.line", subs().line),
+                subs().planLinks.map((text) => ({ text, href: goHref() })),
+              )}
+            />
+          </span>
+        </p>
+
+        {/* "grid": the providers' grid. */}
+        <div data-slot="grid">{providers()}</div>
+
+        {/* "split": your subscriptions beside the models in OpenCode's plans. */}
+        <div data-slot="split">
+          <div>
+            <h3>{subs().yours.label}</h3>
+            {yours()}
+          </div>
+          <div>
+            <h3>{subs().ours.label}</h3>
+            {providers()}
+          </div>
+        </div>
+
+        {/* "tabs": one side at a time, in /brand's badge tabs. */}
+        <div data-slot="tabs">
+          <div data-slot="tab-list" role="tablist" aria-label={i18n.t("site.nav.subscriptions")}>
+            <For each={["yours", "ours"] as const}>
+              {(id) => (
+                <button
+                  type="button"
+                  role="tab"
+                  id={`byos-tab-${id}`}
+                  aria-controls={`byos-panel-${id}`}
+                  aria-selected={tab() === id ? "true" : "false"}
+                  tabIndex={tab() === id ? 0 : -1}
+                  onClick={() => select(id)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return
+                    event.preventDefault()
+                    select(id === "yours" ? "ours" : "yours", true)
+                  }}
+                >
+                  {id === "yours" ? subs().yours.label : subs().ours.label}
+                </button>
+              )}
+            </For>
+          </div>
+          <div id="byos-panel-yours" role="tabpanel" aria-labelledby="byos-tab-yours" hidden={tab() !== "yours"}>
+            {yours()}
+          </div>
+          <div id="byos-panel-ours" role="tabpanel" aria-labelledby="byos-tab-ours" hidden={tab() !== "ours"}>
+            {providers()}
+          </div>
         </div>
       </div>
-      <Legal />
-    </main>
+    </section>
   )
+}
+
+/**
+ * "Bring your own tools": a tile per service. With Settings › Tools animation on, the tiles arrive
+ * in the shared entrance wash (reveal.ts), diagonally from the top left, the first time the grid
+ * scrolls into view. Off by default.
+ */
+function ToolGrid(props: {
+  items: readonly {
+    name: string
+    logo: string
+    wordmark?: string
+    metrics?: { aspect: number; density: number; centerY: number }
+  }[]
+  /** The list's accessible name. */
+  label?: string
+  /** Logo-only tiles whatever Settings › Tool tiles says: the mark centred, its name as a tooltip. */
+  iconTiles?: boolean
+}) {
+  const i18n = useI18n()
+  let grid: HTMLUListElement | undefined
+  const animation = () => {
+    const style = siteSettings.toolsAnimation
+    if (style === "off") return undefined
+    return style === "same as logos" ? siteSettings.logoAnimation : style
+  }
+  const wash = createWash(
+    () => grid,
+    () => animation() !== undefined,
+  )
+  const motion = () => {
+    const style = animation()
+    return wash.armed() && style ? { animation: style, vars: revealMotion(style, siteSettings.logoTuning) } : undefined
+  }
+  createEffect(on([animation, () => siteSettings.toolsStagger], wash.replay, { defer: true }))
+
+  return (
+    <ul
+      data-component="tools"
+      data-design="toolTiles toolGrid toolsAnimation toolsStagger"
+      data-tiles={props.iconTiles ? "icon" : siteSettings.toolTiles}
+      data-grid={siteSettings.toolGrid}
+      data-entrance
+      data-mounted={wash.mounted() ? "" : undefined}
+      data-reveal={motion() ? "" : undefined}
+      data-armed={motion() ? "" : undefined}
+      data-animation={motion()?.animation}
+      style={motion()?.vars}
+      ref={grid}
+      aria-label={props.label ?? i18n.t("home.tools.label")}
+    >
+      <For each={props.items}>
+        {(tool, index) => {
+          const delay = () => {
+            const start = wash.start()
+            if (!motion() || start === undefined) return undefined
+            const at = start + washStep(index(), wash.columns() ?? 1, props.items.length) * siteSettings.toolsStagger
+            return Math.max(0, Math.round(at - performance.now()))
+          }
+          return (
+            <li>
+              <span
+                data-slot="brand"
+                data-state={delay() === undefined ? undefined : "in"}
+                style={
+                  delay() === undefined ? undefined : { "--logo-delay": `${delay()}ms`, "--wipe-delay": `${delay()}ms` }
+                }
+              >
+                <span data-slot="mark">
+                  <Show
+                    when={!props.iconTiles && siteSettings.toolTiles === "logo" && tool.wordmark}
+                    fallback={
+                      <>
+                        <span
+                          data-slot="icon"
+                          role={props.iconTiles ? "img" : undefined}
+                          aria-label={props.iconTiles ? tool.name : undefined}
+                          aria-hidden={props.iconTiles ? undefined : "true"}
+                          style={{ "mask-image": `url(${tool.logo})`, "-webkit-mask-image": `url(${tool.logo})` }}
+                        />
+                        {props.iconTiles ? null : tool.name}
+                      </>
+                    }
+                  >
+                    <span
+                      data-slot="wordmark"
+                      aria-hidden="true"
+                      style={{
+                        "mask-image": `url(${tool.wordmark})`,
+                        "-webkit-mask-image": `url(${tool.wordmark})`,
+                        ...(tool.metrics ? balanceLogo(tool.metrics) : {}),
+                      }}
+                    />
+                    <span data-slot="name">{tool.name}</span>
+                  </Show>
+                </span>
+              </span>
+            </li>
+          )
+        }}
+      </For>
+    </ul>
+  )
+}
+
+// logo-soup's normalisation, as in LogoWall: wide logos grow less than their aspect ratio, and light
+// logos grow while heavy ones shrink. Sizes are in multiples of --logo-size.
+function balanceLogo(metrics: { aspect: number; density: number; centerY: number }) {
+  const scale = Math.min(2, Math.max(0.5, (0.35 / metrics.density) ** 0.25))
+  const width = metrics.aspect ** 0.5 * scale
+  const height = width / metrics.aspect
+  return {
+    "--width": width.toFixed(3),
+    "--height": height.toFixed(3),
+    "--shift": (-metrics.centerY * height).toFixed(3),
+  }
+}
+
+// Settings › Copy columns: only marked when the copy differs from the body columns, so matching
+// widths keep each section's own copy measure (the Console's 34rem at two columns).
+function copyColumnsAttribute(copy: "2 columns" | "3 columns", body: "2 columns" | "3 columns") {
+  return copy === body ? undefined : copy.charAt(0)
 }
