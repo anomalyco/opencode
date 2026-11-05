@@ -952,6 +952,53 @@ test.describe("touch keyboard", () => {
       .poll(() => prompts.map((body) => body.text))
       .toEqual(["first line\nsecond line", "from the iPad keyboard"])
   })
+
+  test("the / and @ keys toggle their lists, and Backspace or typing in the editor closes them", async ({ page }) => {
+    const view = await openSession(page, { name: "ComposerTouchSlash" })
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    const slash = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-commands"]')
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("/")
+    await slash.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toBeEmpty()
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await page.keyboard.press("Backspace")
+    await expect(suggestions).toBeHidden()
+
+    // With a draft, / opens the searchable menu instead. Backspace backs out of it and keeps the draft, from the editor
+    // as well: iOS keeps the keyboard there rather than moving it to the menu's search.
+    await view.editor.fill("keep me")
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await view.editor.press("Backspace")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me")
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    // Focusing the editor programmatically leaves the caret wherever the browser puts it, so move it to the end first.
+    await expect(suggestions.getByRole("textbox", { name: "Commands", exact: true })).toBeFocused()
+    await view.editor.focus()
+    await page.keyboard.press("End")
+    await page.keyboard.type(" now")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now")
+
+    // @ toggles the same way, taking back only the @ it typed.
+    const at = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-context"]')
+    await view.editor.pressSequentially(" ")
+    await at.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("keep me now @")
+    await at.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now ")
+  })
 })
 
 test("a key-up never moves the caret back after later navigation", async ({ page }) => {
