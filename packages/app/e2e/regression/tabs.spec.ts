@@ -396,6 +396,36 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
   })
 }
 
+test("a tab whose overlapping renames both fail shows its saved title again", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+  const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
+  await expect(title).toHaveText(a.title)
+  const released = Promise.withResolvers<void>()
+  const saves: string[] = []
+  await page.route(new RegExp(`/api/session/${a.id}(\\?|$)`), async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    saves.push(route.request().postDataJSON().title)
+    await released.promise
+    await route.fulfill({ status: 500, json: { message: "Rename failed" } })
+  })
+
+  for (const name of ["First name", "Second name"]) {
+    await title.dblclick()
+    await expect(editor).toBeFocused()
+    await editor.fill(name)
+    await editor.press("Enter")
+    await expect(title).toHaveText(name)
+  }
+
+  await expect.poll(() => saves).toEqual(["First name", "Second name"])
+  released.resolve()
+  // The rollback restores the title the server holds, never the first rename that was never saved.
+  await expect(title).toHaveText(a.title)
+  await expect(page.locator('[data-testid^="toast-v2-"]').filter({ hasText: "Request failed" })).toHaveCount(1)
+})
+
 for (const tabLayout of ["horizontal", "vertical"] as const) {
   test(`a ${tabLayout} tab deletes its session after confirmation`, async ({ page }) => {
     await mockWorkspace(page, { name: "Tabs", sessions: [a, b], seed: { settings: { appearance: { tabLayout } } } })
