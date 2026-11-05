@@ -340,7 +340,7 @@ const layer = Layer.effect(
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
         const boundary = yield* db
-          .select({ id: SessionMessageTable.id, time: SessionMessageTable.time_created })
+          .select({ id: SessionMessageTable.id })
           .from(SessionMessageTable)
           .where(
             and(
@@ -381,16 +381,33 @@ const layer = Layer.effect(
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         const forked = yield* result.get(sessionID).pipe(Effect.orDie)
+        // The copy is the only writer before this point and the notice is admitted after it, so the fork's newest
+        // row is the last copied message. A `before` boundary is the first message left behind, and for a running
+        // assistant or shell the boundary row is skipped by the copy's settlement filter, so neither is the copy's
+        // last message. A fork that copied nothing has no row at all, which is what `cutoff` undefined means.
+        const copied = yield* db
+          .select({ time: SessionMessageTable.time_created })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, sessionID))
+          .orderBy(desc(SessionMessageTable.seq))
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie)
         // Append-only: the notice is a new admission after the copied rows, so the
         // copied prompt-cache prefix stays byte-identical. It waits in the inbox as a
         // steer and never wakes this fork's runner on creation.
         const children = yield* store.list({ parentID: parent.id }).pipe(Effect.orDie)
-        const subagents = yield* ForkNotice.collect({ db, sessionID, children, jobs })
+        const subagents = yield* ForkNotice.collect({ db, sessionID, children, jobs, cutoff: copied?.time })
         yield* result
           .synthetic({
             sessionID,
             description: "Fork notice",
-            text: ForkNotice.text({ forkOf: parent.id, title: parent.title, time: boundary.time, subagents }),
+            text: ForkNotice.text({
+              forkOf: parent.id,
+              title: parent.title,
+              copiedThrough: copied?.time,
+              subagents,
+            }),
             metadata: { source: "fork", forkOf: parent.id },
             resume: false,
           })

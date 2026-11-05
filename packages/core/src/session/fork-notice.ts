@@ -28,7 +28,7 @@ type Part = SessionMessage.AssistantContentEncoded
 
 /**
  * Names the original's work that keeps reporting to the original: launches in the copied history with no later
- * report, and children that still hold a running subagent job.
+ * report, and children the copied history can reach that still hold a running subagent job.
  *
  * One pass in transcript order, straight from the copied rows: a launch enters the set and a later report deletes
  * it, so no launch rescans the transcript and no media blob is ever hydrated.
@@ -38,6 +38,8 @@ export const collect = (input: {
   readonly sessionID: Session.ID
   readonly children: readonly Session.Info[]
   readonly jobs: Pick<Job.Interface, "get">
+  /** Creation time of the last message copied into the fork; undefined when the fork copied nothing. */
+  readonly cutoff?: number
 }): Effect.Effect<readonly Subagent[]> =>
   Effect.gen(function* () {
     // Map order keeps transcript order for launched entries while deduping by child.
@@ -67,6 +69,9 @@ export const collect = (input: {
       }
     }
     for (const child of input.children) {
+      // A child created after the fork point is unreachable from the copied history, even while it runs.
+      if (input.cutoff === undefined) continue
+      if (DateTime.toEpochMillis(child.time.created) > input.cutoff) continue
       const job = yield* input.jobs.get(child.id)
       // Finished jobs stay in the in-memory map, so only a running job is outstanding.
       if (job?.type !== "subagent" || job.status !== "running") continue
@@ -148,13 +153,16 @@ const forget = (subagents: Map<string, Subagent>, text: string) => {
 export const text = (input: {
   readonly forkOf: Session.ID
   readonly title?: string
-  readonly time: number
+  /** Creation time of the last message copied into the fork; undefined when the fork copied nothing. */
+  readonly copiedThrough?: number
   readonly subagents: readonly Subagent[]
 }) => {
   const title = input.title === undefined ? "untitled" : `"${input.title}"`
+  const opening = `This session is a fork of ${input.forkOf} (${title})`
   const first =
-    `This session is a fork of ${input.forkOf} (${title}), copied through its message at ` +
-    `${DateTime.formatIso(DateTime.makeUnsafe(input.time))}; work started before the fork keeps reporting to the original, not here.`
+    input.copiedThrough === undefined
+      ? `${opening}. It starts with none of the original's messages; work started before the fork keeps reporting to the original, not here.`
+      : `${opening}, copied through its message at ${DateTime.formatIso(DateTime.makeUnsafe(input.copiedThrough))}; work started before the fork keeps reporting to the original, not here.`
   if (input.subagents.length === 0) return first
   return [
     first,
