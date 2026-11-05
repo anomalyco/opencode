@@ -134,8 +134,6 @@ const CANCEL_PLACE: readonly QuoteEffect[] = [{ type: "cancel-place" }]
 
 const UNMEASURED: QuoteSize = { width: 0, height: 0 }
 
-const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"])
-
 /** A fresh state per toolbar. */
 export function createQuoteState(): QuoteState {
   return { status: "idle", issued: 0, revision: 0, resized: 0 }
@@ -203,7 +201,7 @@ export function transitionQuote(state: QuoteState, event: QuoteEvent): QuoteTran
   }
 
   if (event.type === "key.pressed") {
-    if (event.modified || MODIFIER_KEYS.has(event.key)) return { state, effects: NONE }
+    if (event.modified || ["Shift", "Control", "Alt", "Meta"].includes(event.key)) return { state, effects: NONE }
 
     if (state.status !== "settling" && state.status !== "shown") return { state, effects: NONE }
 
