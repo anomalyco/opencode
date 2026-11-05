@@ -52,8 +52,6 @@ const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
     if (!match) {
       const hex = current.trim()
 
-      if (/^#[0-9a-fA-F]{8}$/.test(hex)) return hex.slice(0, 7)
-
       return hex
     }
 
