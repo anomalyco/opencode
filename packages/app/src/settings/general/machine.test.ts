@@ -147,6 +147,36 @@ describe("optimistic setting machine", () => {
     )
   })
 
+  test("a timed-out write with a newer choice queued reads the source again once the queued write saves", () => {
+    const next = replay([
+      ...loaded,
+      { type: "write.requested", value: "bash" },
+      { type: "write.requested", value: "fish" },
+      { type: "write.timed-out", attempt: 2 },
+    ])
+
+    expect(next.effects).toEqual([{ type: "write", attempt: 3, source: "server-a", value: "fish", timeoutMs: 15_000 }])
+
+    // The late "bash" write lands after "fish", so the source keeps "bash": the read shows that.
+    const saved = replay([{ type: "write.succeeded", attempt: 3 }], next.state)
+    expect(saved.effects).toEqual([{ type: "load", attempt: 4, source: "server-a" }])
+
+    const read = replay([{ type: "load.succeeded", attempt: 4, value: "bash", meta: [] }], saved.state)
+    expect(selectSettingValue(read.state)).toBe("bash")
+  })
+
+  test("a timed-out write whose revert is queued reads the source again", () => {
+    const reverted = replay([
+      ...loaded,
+      { type: "write.requested", value: "bash" },
+      { type: "write.requested", value: "/bin/zsh" },
+      { type: "write.timed-out", attempt: 2 },
+    ])
+
+    expect(reverted.state).toMatchObject({ status: "idle", value: "/bin/zsh" })
+    expect(reverted.effects).toEqual([{ type: "load", attempt: 3, source: "server-a" }])
+  })
+
   test("without a source the setting keeps its value and takes no writes", () => {
     const disabled = replay([...loaded, { type: "source.synced", source: undefined }])
     expect(disabled.state).toMatchObject({ status: "disabled", value: "/bin/zsh" })

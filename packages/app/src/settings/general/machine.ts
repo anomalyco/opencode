@@ -31,6 +31,8 @@ export type OptimisticSettingState<T, M, S> =
       readonly confirmed: T
       readonly active: T
       readonly queued: { readonly value: T } | undefined
+      /** An earlier write in this run timed out and may still land, so the source is read again when the run ends. */
+      readonly reread: boolean
     }
 
 export type OptimisticSettingEvent<T, M, S> =
@@ -133,6 +135,7 @@ function requested<T, M, S>(
       confirmed: state.value,
       active: value,
       queued: undefined,
+      reread: false,
     },
     effects: [write(attempt, state.source, value)],
   }
@@ -165,51 +168,53 @@ function loaded<T, M, S>(
 function succeeded<T, M, S>(state: Writing<T, M, S>): OptimisticSettingTransition<T, M, S> {
   const load = state.load && { attempt: state.load.attempt, metaOnly: true }
 
-  if (!state.queued || Object.is(state.queued.value, state.active)) {
-    return {
-      state: { status: "idle", issued: state.issued, source: state.source, value: state.active, meta: state.meta, load },
-      effects: [],
-    }
-  }
+  if (!state.queued || Object.is(state.queued.value, state.active))
+    return settled({ ...state, load }, state.active, state.reread, [])
 
-  return next({ ...state, load, confirmed: state.active }, state.queued.value)
+  return next({ ...state, load, confirmed: state.active }, state.queued.value, state.reread)
 }
 
 // A failure rolls back to what the source last accepted, unless a newer choice is waiting: that one goes next.
 function failed<T, M, S>(state: Writing<T, M, S>, failure: SettingWriteFailure): OptimisticSettingTransition<T, M, S> {
-  if (state.queued && !Object.is(state.queued.value, state.confirmed)) return next(state, state.queued.value)
+  // A write that timed out may still land after the next one, so the source is read again once the queue settles.
+  const reread = state.reread || failure.kind === "timeout"
 
-  const rolledBack = {
+  if (state.queued && !Object.is(state.queued.value, state.confirmed)) return next(state, state.queued.value, reread)
+
+  // The user already chose the confirmed value again, so nothing they see is lost.
+  return settled(state, state.confirmed, reread, state.queued ? [] : [{ type: "notify.error", failure }])
+}
+
+// Back to idle on `value`, reading the source again when a timed-out write may still land and show what it kept.
+function settled<T, M, S>(
+  state: Writing<T, M, S>,
+  value: T,
+  reread: boolean,
+  effects: OptimisticSettingEffect<T, S>[],
+): OptimisticSettingTransition<T, M, S> {
+  const idle = {
     status: "idle" as const,
     issued: state.issued,
     source: state.source,
-    value: state.confirmed,
+    value,
     meta: state.meta,
     load: state.load,
   }
 
-  // The user already chose the confirmed value again, so nothing they see is lost.
-  if (state.queued) return { state: rolledBack, effects: [] }
-
-  if (failure.kind === "failed") return { state: rolledBack, effects: [{ type: "notify.error", failure }] }
-
-  // A write that timed out may still land, so read the source again to show what it kept.
+  if (!reread) return { state: idle, effects }
   const attempt = state.issued + 1
 
   return {
-    state: { ...rolledBack, issued: attempt, load: { attempt, metaOnly: false } },
-    effects: [
-      { type: "notify.error", failure },
-      { type: "load", attempt, source: state.source },
-    ],
+    state: { ...idle, issued: attempt, load: { attempt, metaOnly: false } },
+    effects: [...effects, { type: "load", attempt, source: state.source }],
   }
 }
 
-function next<T, M, S>(state: Writing<T, M, S>, value: T): OptimisticSettingTransition<T, M, S> {
+function next<T, M, S>(state: Writing<T, M, S>, value: T, reread: boolean): OptimisticSettingTransition<T, M, S> {
   const attempt = state.issued + 1
 
   return {
-    state: { ...state, issued: attempt, attempt, active: value, queued: undefined },
+    state: { ...state, issued: attempt, attempt, active: value, queued: undefined, reread },
     effects: [write(attempt, state.source, value)],
   }
 }
