@@ -122,6 +122,32 @@ story.describe("message actions menu", () => {
   })
 })
 
+story("copies a message with its quotes", async ({ mount, page }) => {
+  const timeline = await mount("current-prompt-message--pending")
+  const message = timeline.locator('[data-component="user-message"]')
+  const more = timeline.getByRole("button", { name: "More actions", exact: true })
+  const copy = page.getByRole("menuitem", { name: "Copy message", exact: true })
+  const clipboard = async () => (await page.evaluate(() => navigator.clipboard.readText())).replaceAll("\r\n", "\n")
+  const quotes = "> The menu is hovered.\n> It stays open.\n\nKeep it open on blur\n\n> Timeline rows reuse the prompt styling."
+
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await timeline.getByLabel("Delivery state").selectOption("delivered")
+  await timeline.getByLabel("Quotes", { exact: true }).check()
+  await message.hover()
+  await more.click()
+  await copy.click()
+  await expect
+    .poll(clipboard)
+    .toBe(`Keep the prompt styling consistent with the rest of the timeline.\n\n${quotes}`)
+
+  // Quotes alone are still worth copying.
+  await timeline.getByLabel("Prompt text", { exact: true }).uncheck()
+  await message.hover()
+  await more.click()
+  await copy.click()
+  await expect.poll(clipboard).toBe(quotes)
+})
+
 story("keeps pending steer actions usable after a request fails", async ({ mount }) => {
   const timeline = await mount("current-prompt-message--pending")
   const queue = timeline.getByRole("button", { name: "Move to queue", exact: true })

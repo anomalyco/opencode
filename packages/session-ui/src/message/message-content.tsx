@@ -279,6 +279,22 @@ export function CurrentUserMessageDisplay(props: {
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
 
+  // Quotes follow the text as Markdown blockquotes, the order the model receives them in.
+  const copyText = createMemo(() => {
+    const parts = props.text ? [props.text] : []
+
+    for (const comment of comments()) {
+      if (comment.type !== "quote") continue
+      const quote = comment.text
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n")
+      parts.push(comment.comment ? `${quote}\n\n${comment.comment}` : quote)
+    }
+
+    return parts.join("\n\n")
+  })
+
   const sent = createMemo(() =>
     new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(
       props.message.time.created,
@@ -468,7 +484,7 @@ export function CurrentUserMessageDisplay(props: {
               <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
                 {i18n.t("ui.message.forkMessage")}
               </Menu.Item>
-              <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
+              <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
                 {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
               {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
