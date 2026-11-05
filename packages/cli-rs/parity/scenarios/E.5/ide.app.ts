@@ -3,7 +3,6 @@
 // lines at the cursor. The recording also keeps what the TUI sent the server.
 import { defineApp, session, user } from "../../lib/app"
 
-const deviation = ["V01-plain-transcript"]
 const file = "/tmp/opencode/packages/tui/src/parser.ts"
 
 export default defineApp({
@@ -15,7 +14,7 @@ export default defineApp({
     { path: "/api/session/ses_b/inbox", json: { data: [] } },
   ],
   steps: [
-    { checkpoint: "open", until: "Why does the parser fail?", deviation },
+    { checkpoint: "open", until: "Why does the parser fail?" },
     {
       ide: {
         method: "selection_changed",
@@ -26,9 +25,9 @@ export default defineApp({
         },
       },
     },
-    { checkpoint: "selected", until: "parser.ts#3-5", deviation },
+    { checkpoint: "selected", until: "parser.ts#3-5" },
     { type: "see " },
     { ide: { method: "at_mentioned", params: { filePath: file, lineStart: 3, lineEnd: 5 } } },
-    { checkpoint: "mentioned", until: "see @src/parser.ts#3-5", deviation },
+    { checkpoint: "mentioned", until: "see @src/parser.ts#3-5" },
   ],
 })

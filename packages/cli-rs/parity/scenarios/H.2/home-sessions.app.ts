@@ -34,14 +34,11 @@ export default defineApp({
     {
       checkpoint: "list",
       until: "Write docs",
-      // The dialog panel itself matches (E.11a/session-list); the home's prompt behind it differs.
-      deviation: ["T17-home-prompt"],
     },
     { keys: ["enter"] },
     {
       checkpoint: "session",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript"],
     },
   ],
 })
