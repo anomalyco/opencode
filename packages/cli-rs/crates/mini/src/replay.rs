@@ -13,12 +13,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use opencode_api::client::{Call, Client};
-use opencode_api::generated::{EventSubscribeInput, ExperimentalSessionWaitInput, SessionID, SessionInterruptInput};
+use opencode_api::client::Client;
+use opencode_api::generated::{
+    EventSubscribeInput, ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder,
+    ModelDefaultInput, SessionID, SessionInterruptInput,
+};
 use opencode_api::transport::SseResponse;
 use opentui::app::ProxyError;
 use opentui::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::scrollback::{Commit, EntryKind, Phase, Source};
 
@@ -744,9 +747,13 @@ pub enum Incoming {
 
 /// `projectedMessages`: the newest `limit` messages, oldest first.
 pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<Value>, String> {
-    let mut call = Call::new("GET", format!("/api/session/{}/message", encode(session)), 200, &[400, 401, 404, 500]);
-    call.query("limit", &limit).map_err(|error| error.to_string())?;
-    call.query("order", "desc").map_err(|error| error.to_string())?;
+    let input = MessageListInput {
+        session_id: SessionID(session.to_owned()),
+        limit: Some(i64::from(limit)),
+        order: Some(MessageListInputOrder::Desc),
+        ..Default::default()
+    };
+    let call = Client::message_list_call(&input).map_err(|error| error.to_string())?;
     let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
     let mut data = list["data"].as_array().cloned().unwrap_or_default();
     data.reverse();
@@ -755,7 +762,7 @@ pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<
 
 /// Whether the session is running (`session.active`).
 pub async fn active(client: &Client, session: &str) -> bool {
-    let call = Call::new("GET", "/api/session/active".to_owned(), 200, &[400, 401]);
+    let Ok(call) = Client::session_active_call() else { return false };
     client.json::<Value>(call).await.is_ok_and(|active| active["data"].get(session).is_some())
 }
 
@@ -763,11 +770,6 @@ pub async fn active(client: &Client, session: &str) -> bool {
 pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<(Vec<Value>, bool), String> {
     let messages = messages(client, session, limit).await?;
     Ok((messages, active(client, session).await))
-}
-
-/// A path segment, encoded as the generated client encodes one.
-pub fn encode(segment: &str) -> String {
-    opencode_api::client::path_param(segment).unwrap_or_else(|_| segment.to_owned())
 }
 
 /// `connect`: subscribes, hydrates after `server.connected`, then forwards events, reconnecting after 250 ms
@@ -832,9 +834,8 @@ pub async fn post(proxy: &AppProxy, incoming: Incoming) -> bool {
 
 /// `model.default` at `directory`: the model a session without one uses, as `(providerID, id)`.
 pub async fn default_model(client: &Client, directory: &str) -> Option<(String, String)> {
-    let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
-    call.query("location", &json!({ "directory": directory })).ok()?;
-    let value: Value = client.json(call).await.ok()?;
+    let input = ModelDefaultInput { location: Some(LocationQueryInput { directory: Some(directory.to_owned()) }) };
+    let value: Value = client.json(Client::model_default_call(&input).ok()?).await.ok()?;
     let data = &value["data"];
     Some((data["providerID"].as_str()?.to_owned(), data["id"].as_str()?.to_owned()))
 }
@@ -854,6 +855,7 @@ pub async fn interrupt(client: &Client, session: &str, resume: Option<bool>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     /// The two-press interrupt sends `resume` as a query value, as `session.interrupt` declares, and takes the
     /// server's 200 as success.

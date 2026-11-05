@@ -18,10 +18,10 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use opencode_api::client::{Call, Client};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     FormInfo, PermissionListInput, PermissionReplyInput, PermissionRequest, SessionFormCancelInput,
-    SessionFormListInput, SessionFormReplyInput, SessionID,
+    SessionFormListInput, SessionFormReplyInput, SessionID, SessionMessageGetInput,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::input::KeyEvent;
@@ -33,7 +33,6 @@ use self::menu::{Item, Tone};
 use self::panel::{Entry, Outcome, Panel, Spec};
 use crate::prompt::status::mono_shortcut;
 use crate::prompt::{Delivery, Prompt};
-use crate::replay::encode;
 use crate::theme::RunTheme;
 
 /// `PERMISSION_ROWS`.
@@ -347,12 +346,13 @@ async fn source(client: &Client, session: &str, info: PermissionRequest) -> perm
     let Some(source) = request.info.source.clone().filter(|source| source.r#type == "tool") else {
         return request;
     };
-    let call = Call::new(
-        "GET",
-        format!("/api/session/{}/message/{}", encode(session), encode(&source.message_id)),
-        200,
-        &[400, 401, 404],
-    );
+    let input = SessionMessageGetInput {
+        session_id: SessionID(session.to_owned()),
+        message_id: source.message_id.as_str().into(),
+    };
+    let Ok(call) = Client::session_message_get_call(&input) else {
+        return request;
+    };
     let Ok(message) = client.json::<Value>(call).await else {
         return request;
     };
