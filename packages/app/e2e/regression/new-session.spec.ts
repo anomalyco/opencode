@@ -59,6 +59,13 @@ test("the new session screen does not show session details", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
 })
 
+test("the new session screen does not show the project path", async ({ page }) => {
+  const view = await openDraft(page, { name: "NoPath" })
+  const screen = page.locator('[data-component="new-session"]')
+  await expect(screen.locator('[data-action="prompt-project"]')).toBeVisible()
+  await expect(screen.getByText(view.directory)).toHaveCount(0)
+})
+
 test("the location shortcuts choose worktrees from every state and keep cycling", async ({ page }) => {
   const existing = "C:/OpenCode/LocationShortcut/.worktrees/quiet-river"
 
@@ -69,16 +76,14 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
 
   const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
 
-  const path = page.locator('[data-slot="new-session-location-path"]')
-
   const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
 
-  await expect(path).toHaveText(view.directory)
+  await expect(newSessionWorktree(page)).toHaveText("Local")
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
   await page.getByRole("option", { name: /^quiet-river / }).click()
   await expect(view.editor).toBeFocused()
-  await expect(path).toHaveText(existing)
+  await expect(newSessionWorktree(page)).toHaveText("quiet-river")
   await expect(page.locator('[data-slot="new-session-location-icon"]')).toHaveCount(0)
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
@@ -88,7 +93,7 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
   await page.getByRole("option", { name: /^quiet-river / }).click()
-  await expect(path).toHaveText(existing)
+  await expect(newSessionWorktree(page)).toHaveText("quiet-river")
   await expect(view.editor).toBeFocused()
 })
 
@@ -236,44 +241,6 @@ test("picker scrollbars overlay full-width rows and support dragging", async ({ 
   await page.mouse.up()
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBe(0)
 })
-
-for (const row of [
-  {
-    name: "POSIX",
-    directory: "/Users/alice/.local/share/opencode/worktree/123456/my-project",
-    pattern: /^\/Users\/.*…\/123456\/my-project$/,
-  },
-  {
-    name: "Windows",
-    directory: "C:\\Users\\alice\\Documents\\opencode\\worktree\\123456\\my-project",
-    pattern: /^C:\\.*…\\123456\\my-project$/,
-  },
-]) {
-  test(`the location path keeps its start and final two segments on ${row.name}`, async ({ page }) => {
-    await page.setViewportSize({ width: 600, height: 700 })
-    await openDraft(page, { name: "A project with a long name", directory: row.directory })
-    const path = page.locator('[data-slot="new-session-location-path"]')
-    await expect(path).toHaveText(row.pattern)
-    await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    await path.hover()
-    await expect(page.getByRole("tooltip")).toHaveText(row.directory)
-
-    if (row.name !== "POSIX") return
-    await expect(path).toHaveCSS("user-select", "text")
-    await path.click()
-    await path.evaluate((element) => {
-      const range = document.createRange()
-
-      range.selectNodeContents(element)
-      window.getSelection()?.removeAllRanges()
-      window.getSelection()?.addRange(range)
-    })
-    const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
-
-    await page.keyboard.press(`${modifier}+c`)
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(row.directory)
-  })
-}
 
 test("the combined location picker shows checkout branches and chooses the base for a new worktree", async ({
   page,
