@@ -74,9 +74,11 @@ function symbol(name: IconName) {
   const existing = symbols.get(name)
 
   if (existing) return existing
+
   const [state, setState] = createSignal(
     FALLBACK_ICONS.has(name) ? READY_FILE_ICON_SYMBOL_STATE : INITIAL_FILE_ICON_SYMBOL_STATE,
   )
+
   const entry: SymbolEntry = { state, setState }
   symbols.set(name, entry)
 
@@ -134,6 +136,7 @@ function toIconName(path: string) {
 
 function insertSymbol(name: string, text: string) {
   const id = symbolID(name)
+
   // Icons share the document now, so scope their internal ids (gradients, clip paths) and drop their unstyled
   // classes, which app CSS such as Tailwind utilities would otherwise match.
   const scoped = text
@@ -141,6 +144,7 @@ function insertSymbol(name: string, text: string) {
     .replace(/\sid="([^"]*)"/g, ` id="${id}-$1"`)
     .replace(/url\(#([^)]*)\)/g, `url(#${id}-$1)`)
     .replace(/href="#([^"]*)"/g, `href="#${id}-$1"`)
+
   const svg = new DOMParser().parseFromString(scoped, "image/svg+xml").documentElement
   const symbol = document.createElementNS("http://www.w3.org/2000/svg", "symbol")
   Array.from(svg.attributes)
@@ -689,8 +693,10 @@ const ICON_MAPS: IconMaps = {
 const toOpenVariant = (icon: IconName): IconName => {
   if (!icon.startsWith("Folder")) return icon
 
+  // SAFETY: the icon generator writes an `Open` variant for every folder icon, light ones included.
   if (icon.endsWith("_light")) return icon.replace("_light", "Open_light") as IconName
 
+  // SAFETY: as above, every dark folder icon has its `Open` variant.
   if (!icon.endsWith("Open")) return (icon + "Open") as IconName
 
   return icon
