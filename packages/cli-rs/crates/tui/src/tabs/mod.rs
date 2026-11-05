@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::Tui;
 use crate::routes::Route;
+use crate::routes::session::messages::list::ScrollAnchor;
 use model::{Closed, History, NEW_SESSION_TAB_TITLE, Tab, Unread};
 
 const VIEW_RETRY_DELAY: Duration = Duration::from_millis(250);
@@ -91,6 +92,7 @@ pub struct Tabs {
     cancelled: RefCell<HashSet<String>>,
     pulses: RefCell<HashMap<String, u32>>,
     groups: RefCell<HashMap<String, HashMap<String, bool>>>,
+    anchors: RefCell<HashMap<String, ScrollAnchor>>,
     new_tab: Cell<bool>,
     /// The routed session the last [`route_changed`] admitted, so a remount does not record it twice.
     routed: RefCell<Option<String>>,
@@ -193,6 +195,29 @@ impl Tabs {
     /// `sessionTabs.setGroupExpanded` for every group of `session`.
     pub fn set_expanded_groups(&self, session: &str, groups: HashMap<String, bool>) {
         self.groups.borrow_mut().insert(session.to_owned(), groups);
+    }
+
+    /// Where the reader left `session`'s transcript, while its tab is open (`sessionTabs.scrollAnchor`).
+    pub fn scroll_anchor(&self, tui: &Tui, session: &str) -> Option<ScrollAnchor> {
+        self.is_open(tui, session)
+            .then(|| self.anchors.borrow().get(session).cloned())
+            .flatten()
+    }
+
+    /// `sessionTabs.setScrollAnchor`: kept only while the session's tab is open.
+    pub fn set_scroll_anchor(&self, tui: &Tui, session: &str, anchor: Option<ScrollAnchor>) {
+        match anchor.filter(|_| self.is_open(tui, session)) {
+            Some(anchor) => self.anchors.borrow_mut().insert(session.to_owned(), anchor),
+            None => self.anchors.borrow_mut().remove(session),
+        };
+    }
+
+    fn is_open(&self, tui: &Tui, session: &str) -> bool {
+        let root = tui
+            .data
+            .read(|state| state.root(&SessionID(session.to_owned())))
+            .0;
+        self.tabs(tui).iter().any(|tab| tab.session_id == root)
     }
 
     /// The tabs file, for tests and the P-FILE proof.
@@ -520,6 +545,7 @@ fn remove(tui: &Tui, session: &str, navigate: bool) {
     });
     for id in &family {
         tabs.groups.borrow_mut().remove(id);
+        tabs.anchors.borrow_mut().remove(id);
     }
     let open = tabs.tabs(tui);
     let closed = model::close(&open, &target);
