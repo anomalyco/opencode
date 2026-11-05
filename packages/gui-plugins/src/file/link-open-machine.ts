@@ -112,7 +112,11 @@ export type LinkOpenEffect =
 
 export type LinkOpenTransition = { readonly state: LinkOpenState; readonly effects: readonly LinkOpenEffect[] }
 
-export const initialLinkOpenState: LinkOpenState = { status: "idle", issued: 0 }
+// A fresh object, never a shared constant: the renderer keeps this state in a Solid store, which writes into the
+// objects it holds.
+export function createLinkOpenState(): LinkOpenState {
+  return { status: "idle", issued: 0 }
+}
 
 const NONE: readonly LinkOpenEffect[] = []
 

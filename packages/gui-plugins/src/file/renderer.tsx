@@ -54,7 +54,7 @@ import {
   type LinkExistsState,
 } from "./link-exists-machine"
 import {
-  initialLinkOpenState,
+  createLinkOpenState,
   transitionLinkOpen,
   type LinkOpenEffect,
   type LinkOpenEvent,
@@ -63,7 +63,7 @@ import {
 } from "./link-open-machine"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
 import {
-  initialPickerState,
+  createPickerState,
   pickerBrowsing,
   pickerFilterText,
   pickerFocusRequest,
@@ -117,7 +117,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const preference = desktop ? ctx.stores.app : undefined
   const [request, setRequest] = createStore<{ app?: OpenApp }>({})
 
-  const [machines, setMachines] = createStore({ linkOpen: initialLinkOpenState, picker: initialPickerState })
+  const [machines, setMachines] = createStore({ linkOpen: createLinkOpenState(), picker: createPickerState() })
 
   const revealListeners = new Map<string, Set<() => void>>()
   const linkAttempts = new Map<number, LinkAttempt>()
