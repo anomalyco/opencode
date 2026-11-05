@@ -11,19 +11,21 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap};
 use std::rc::{Rc, Weak};
 
+use base64::Engine;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    FileDiffInfo, FileDiffInfoStatus, LocationQueryInput, SessionDiffInput, SessionID,
-    VcsBaseInput, VcsDiffInput, VcsMode,
+    FileDiffInfo, FileDiffInfoStatus, FileReadInput, LocationQueryInput, SessionDiffInput,
+    SessionID, VcsBaseInput, VcsDiffInput, VcsMode,
 };
 use opencode_local::cli_config::{DiffSource, DiffView as PreferredView};
 use opencode_plugin::{Definition, Setup, Slotted};
 use opencode_store::Location;
 use opencode_ui::theme::Theme;
 use opentui::keymap::{Condition, Disposer};
+use opentui::native::ImageFit;
 use opentui::prelude::*;
 use opentui::style::Attributes;
-use opentui::widget::DiffView;
+use opentui::widget::{DiffView, ImageView};
 use serde_json::{Value, json};
 
 use super::hunks::{self, Hunk, Selected};
@@ -296,6 +298,16 @@ struct Parts {
     tree: Option<View>,
     /// What the last full render showed; an equal key rebuilds only the tree.
     key: Option<String>,
+    /// The body of each image card on screen, by file, filled when its image loads.
+    images: Vec<(String, View)>,
+}
+
+/// The working-tree bytes of an image card (`DiffViewerImage`'s resource).
+#[derive(Clone)]
+enum Preview {
+    Loading,
+    Failed,
+    Ready(Rc<Vec<u8>>),
 }
 
 struct Card {
@@ -315,6 +327,8 @@ pub struct Viewer {
     place: Place,
     state: RefCell<State>,
     parts: RefCell<Parts>,
+    /// Image previews by file, read once per file list.
+    previews: RefCell<HashMap<String, Preview>>,
     layer: RefCell<Option<Disposer>>,
     /// The open file menu (`fileMenu`); new files close it.
     pub(super) menu: RefCell<Option<super::file_menu::Menu>>,
@@ -388,6 +402,7 @@ impl Viewer {
                 pending: None,
             }),
             parts: RefCell::default(),
+            previews: RefCell::default(),
             layer: RefCell::default(),
             menu: RefCell::default(),
             turn_status: Cell::new(None),
@@ -777,6 +792,7 @@ impl Viewer {
     /// New files: the tree opens fully, and the selection and reviewed marks start over.
     fn reset(&self) {
         drop(self.menu.take());
+        self.previews.borrow_mut().clear();
         let files = self.files();
         let mut state = self.state.borrow_mut();
         state.tree = tree::build(files.iter().map(|file| file.file.as_str()));
@@ -1601,7 +1617,10 @@ impl Viewer {
         rows: &mut Vec<AnyWidget>,
     ) -> View {
         let app = &tui.app;
-        if !(mode == Mode::Committed && image) && !image && !entry.patch.is_empty() {
+        if image && mode != Mode::Committed && entry.status != tree::Status::Deleted {
+            return self.image(tui, theme, &entry.file);
+        }
+        if !image && !entry.patch.is_empty() {
             let view = if entry.status == tree::Status::Modified {
                 view
             } else {
@@ -1634,8 +1653,6 @@ impl Viewer {
             _ if entry.status == tree::Status::Deleted && image => {
                 "Deleted image. The previous revision is not available for preview."
             }
-            // TS previews the working-tree image here (`DiffViewerImage`); see F15-image-diffs.
-            _ if image => "Image preview is not available in opencode-rs.",
             _ => "No patch available for this file.",
         };
         View::new(app)
@@ -1645,6 +1662,90 @@ impl Viewer {
             .padding_edge(Edge::Right, 1)
             .padding_edge(Edge::Bottom, 1)
             .child(&Text::new(app, text).fg(theme.text.muted))
+    }
+
+    /// `DiffViewerImage`: the working-tree image, read with `file.read` once per file list. A click opens it in
+    /// the image preview dialog.
+    fn image(&self, tui: &Tui, theme: &Theme, file: &str) -> View {
+        let app = &tui.app;
+        let height = (app.size().1 / 4).clamp(3, 8);
+        let slot = View::new(app)
+            .column()
+            .height(height + 2)
+            .shrink(0.0)
+            .gap(1);
+        let cached = self.previews.borrow().get(file).cloned();
+        let preview = cached.unwrap_or_else(|| {
+            self.read_image(tui, file);
+            Preview::Loading
+        });
+        fill_image(tui, theme, &slot, file, height, &preview);
+        self.parts
+            .borrow_mut()
+            .images
+            .push((file.to_owned(), slot.clone()));
+        View::new(app)
+            .column()
+            .width(Length::percent(100.0))
+            .shrink(0.0)
+            .gap(1)
+            .padding_edge(Edge::Left, 1)
+            .padding_edge(Edge::Right, 1)
+            .padding_edge(Edge::Bottom, 1)
+            .child(&Text::new(app, "Working tree preview").fg(theme.text.muted))
+            .child(&slot)
+    }
+
+    fn read_image(&self, tui: &Tui, file: &str) {
+        self.previews
+            .borrow_mut()
+            .insert(file.to_owned(), Preview::Loading);
+        let client = tui.data.client().clone();
+        let input = FileReadInput {
+            location: self.location(),
+            path: file.to_owned(),
+        };
+        let (weak, file, generation) = (
+            self.this.clone(),
+            file.to_owned(),
+            self.state.borrow().generation,
+        );
+        tui.app.spawn(
+            async move { client.file_read(&input, &RequestOptions::default()).await },
+            move |_, result| {
+                let Some(viewer) = weak.upgrade() else { return };
+                let Some(tui) = viewer.tui.upgrade() else {
+                    return;
+                };
+                if viewer.state.borrow().generation != generation {
+                    return;
+                }
+                let preview = match result {
+                    Ok(bytes) => Preview::Ready(Rc::new(bytes.to_vec())),
+                    Err(error) => {
+                        log::warn!("{ID}: {file}: {error}");
+                        Preview::Failed
+                    }
+                };
+                viewer
+                    .previews
+                    .borrow_mut()
+                    .insert(file.clone(), preview.clone());
+                let slot = viewer
+                    .parts
+                    .borrow()
+                    .images
+                    .iter()
+                    .find(|(shown, _)| *shown == file)
+                    .map(|(_, slot)| slot.clone());
+                if let Some(slot) = slot {
+                    let theme = tui.page();
+                    let height = (tui.app.size().1 / 4).clamp(3, 8);
+                    fill_image(&tui, &theme, &slot, &file, height, &preview);
+                    tui.app.request_redraw();
+                }
+            },
+        );
     }
 
     /// The footer of the compact layout: how to leave, and the shortcuts.
@@ -1904,6 +2005,68 @@ fn stored_view(view: Option<PreferredView>) -> Option<DiffView> {
         PreferredView::Unified => Some(DiffView::Unified),
         PreferredView::Auto => None,
     }
+}
+
+/// The body of an image card: a loading or error line, or the image with its size and "Click to enlarge".
+fn fill_image(tui: &Tui, theme: &Theme, slot: &View, file: &str, height: u16, preview: &Preview) {
+    let app = &tui.app;
+    slot.clear();
+    let line = |text: &str, color: Color| Text::new(app, text).fg(color);
+    let error = |text: &str| {
+        slot.add(&line(text, theme.text.feedback.error.base));
+    };
+    let bytes = match preview {
+        Preview::Loading => {
+            slot.add(&line("Loading image…", theme.text.muted));
+            return;
+        }
+        Preview::Failed => return error("Could not load image"),
+        Preview::Ready(bytes) => bytes.clone(),
+    };
+    let decoded = opentui::native::Image::decode(app.session().context(), &bytes)
+        .and_then(|image| image.info().map(|info| (image, info)));
+    let Ok((image, info)) = decoded else {
+        return error("Could not decode image");
+    };
+    let open = {
+        let (tui, file) = (tui.weak(), file.to_owned());
+        move |cx: &mut Cx<'_>, event: &MouseEvent| {
+            if event.kind != MouseEventKind::Up(MouseButton::Left) {
+                return;
+            }
+            cx.stop_propagation();
+            let Some(tui) = tui.upgrade() else { return };
+            let uri = format!(
+                "data:application/octet-stream;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes.as_slice())
+            );
+            crate::dialogs::image_preview::show(&tui, vec![(uri, Some(file.clone()))], 0);
+        }
+    };
+    let picture = View::new(app)
+        .width(Length::percent(100.0))
+        .height(height)
+        .child(
+            &ImageView::new(app)
+                .image(Some(image))
+                .fit(ImageFit::Contain)
+                .width(Length::percent(100.0))
+                .height(Length::percent(100.0)),
+        );
+    picture.on_mouse(open.clone());
+    let enlarge = Text::new(app, "Click to enlarge").fg(theme.text.action.secondary.base);
+    enlarge.on_mouse(open);
+    slot.add(&picture);
+    slot.add(
+        &View::new(app)
+            .row()
+            .justify(Justify::SpaceBetween)
+            .child(&line(
+                &format!("{} x {}", info.width, info.height),
+                theme.text.muted,
+            ))
+            .child(&enlarge),
+    );
 }
 
 fn query(location: &Location) -> Option<LocationQueryInput> {
