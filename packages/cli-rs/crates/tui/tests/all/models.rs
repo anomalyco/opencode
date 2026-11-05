@@ -11,21 +11,17 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bytes::Bytes;
 use opencode_api::client::Client;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
 use opencode_local::model_pref::Model;
-use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_parity::{assert_fixture, fixtures_dir};
 use opencode_store::location::Location;
 use opencode_store::{Data, Options as StoreOptions};
-use opencode_tui::app::Roots;
 use opencode_tui::dialogs::go_upsell::{self, Offer};
 use opencode_tui::dialogs::model::{self, Files, Local};
 use opencode_tui::dialogs::{agent, usage, usage_model, variant};
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::{Deps, Route};
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
 use opencode_ui::keymap::{Keybinds, Options};
 use opencode_ui::theme::{Catalog, Theme, ThemeMode};
@@ -34,7 +30,7 @@ use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::support::WAIT;
+use crate::support::{self, Harness, WAIT, deref_harness};
 
 /// Serves the E.16 routes and records every request (method and path with query).
 struct Server {
@@ -98,18 +94,13 @@ impl Transport for Server {
             }
             _ => (404, json!({})),
         };
-        let body = serde_json::to_vec(&body).unwrap();
         let slow =
             path == "/api/experimental/usage/limits" && self.slow_usage.load(std::sync::atomic::Ordering::SeqCst);
         Box::pin(async move {
             if slow {
                 tokio::time::sleep(Duration::from_millis(300)).await;
             }
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
+            Ok(support::respond(status, &body))
         })
     }
 }
@@ -139,15 +130,7 @@ struct Kit {
 }
 
 fn kit(width: u16, height: u16) -> Kit {
-    let app = TestApp::with_options(
-        width,
-        height,
-        AppOptions {
-            theme: opentui::theme::Theme { background: theme().background.base, ..opentui::theme::Theme::default() },
-            light_theme: None,
-            ..AppOptions::default()
-        },
-    );
+    let app = support::dark_app(width, height);
     let keymap = Rc::new(DialogKeymap::new(Keybinds::defaults(), Options::default()));
     route_keys(&app, keymap.clone());
     let toasts = Toasts::new(&app, theme(), &app.root());
@@ -272,56 +255,37 @@ fn dialogs_send_reads_only() {
 
 // The whole TUI, with real roots in a temp dir.
 
-struct Harness {
-    app: TestApp,
-    tui: Rc<Tui>,
+struct Models {
+    harness: Harness,
     fixture: Arc<Server>,
     state: PathBuf,
     _home: tempfile::TempDir,
 }
 
-fn mount() -> Harness {
+deref_harness!(Models);
+
+fn mount() -> Models {
     let home = tempfile::tempdir().unwrap();
-    let root = home.path().to_owned();
-    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
     std::fs::write(paths.state.join("model.json"), preferences().to_string()).unwrap();
     let state = paths.state.clone();
     let fixture = Server::new();
-    let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
-    let app = TestApp::new(100, 34);
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(Info::default(), |_| None),
-            roots: Some(Roots { paths, storage_channel: "test".into() }),
-            route: Route::Home,
-            continue_: false,
-            events: false,
-        },
-    );
-    let local = tui.local.clone();
-    let loaded = app.wait_until(WAIT, || {
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(fixture.clone()) };
+    let harness = support::mount(100, 34, deps);
+    let local = harness.tui.local.clone();
+    let loaded = harness.app.wait_until(WAIT, || {
         local.ready() && local.catalog_ready() && local.integrations().is_some() && !local.agents().is_empty()
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
     // Keys go to the home prompt once it shows its agent and model.
-    let harness = Harness { app, tui, fixture, state, _home: home };
+    let harness = Models { harness, fixture, state, _home: home };
     harness.wait_for("Build · Claude Sonnet");
     harness.app.wait_until(Duration::from_millis(100), || false);
     harness
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
+impl Models {
     fn model_json(&self) -> Value {
         serde_json::from_str(&std::fs::read_to_string(self.state.join("model.json")).unwrap()).unwrap()
     }

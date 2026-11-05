@@ -2,16 +2,14 @@
 //! keys behind (carbon-2), keymap conditions that lock the store (carbon-5), and permission reads and focus
 //! after a reconnect or under a dialog (carbon-6).
 
+use crate::support::{self, WAIT};
+
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
-use opencode_tui::{Args, Deps, Route, Tui};
+use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use opentui::widget::Widget;
 use serde_json::{Value, json};
@@ -31,13 +29,7 @@ impl Transport for Server {
             return self.memory.send(request);
         }
         let body = json!({ "data": *self.permissions.lock().unwrap() });
-        Box::pin(async move {
-            Ok(Response {
-                status: 200,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(serde_json::to_vec(&body).unwrap()))])),
-            })
-        })
+        Box::pin(async move { Ok(support::respond(200, &body)) })
     }
 }
 
@@ -45,16 +37,8 @@ fn routes() -> Vec<MemoryRoute> {
     let location =
         json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
-    let agent = json!({
-        "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-        "request": { "settings": {}, "headers": {}, "body": {} },
-    });
-    let model = json!({
-        "id": "model", "modelID": "model", "providerID": "demo", "name": "Demo Model",
-        "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-        "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-        "enabled": true, "limit": { "context": 1000, "output": 100 },
-    });
+    let agent = support::agent("build", "primary", false);
+    let model = support::model("demo", "model", "Demo Model");
     let missing = json!({ "_tag": "LocationNotFoundError", "message": "Location not found" });
     vec![
         MemoryRoute::json("GET", "/api/location", 404, &missing)
@@ -94,27 +78,14 @@ struct Harness {
 
 fn mount(route: Route) -> Harness {
     let server = Arc::new(Server { memory: Memory::new(routes()), permissions: Mutex::default() });
-    let client = Client::with_transport("http://opencode.local", server.clone()).unwrap();
-    let app = TestApp::new(100, 30);
-    let tui = opencode_tui::mount_with(
-        &app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(Info::default(), |_| None),
-            roots: None,
-            route,
-            continue_: false,
-            events: true,
-        },
-        Args::default(),
-    );
+    let support::Harness { app, tui } =
+        support::mount(100, 30, Deps { route, events: true, ..support::deps(server.clone()) });
     Harness { app, tui, server }
 }
 
 impl Harness {
     fn wait_for(&self, what: &str, check: impl Fn(&str) -> bool) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || check(&self.app.text()));
+        let found = self.app.wait_until(WAIT, || check(&self.app.text()));
         let screen = self.app.text();
         let gets: Vec<_> = self
             .server
@@ -150,7 +121,7 @@ impl Harness {
 
 #[test]
 fn leaving_a_missing_location_session_gives_enter_back_to_the_prompt() {
-    let h = mount(Route::Session { id: SessionID("ses_gone".into()) });
+    let h = mount(support::session_route("ses_gone"));
     h.wait_for("the location view", |screen| screen.contains("Session location unavailable"));
     h.tui.navigate(Route::Home);
     h.app.advance(Duration::from_millis(1));
@@ -162,13 +133,13 @@ fn leaving_a_missing_location_session_gives_enter_back_to_the_prompt() {
     h.app.press("return");
     h.app.advance(Duration::from_millis(1));
     assert!(!h.app.text().contains("Choose directory"), "enter opened the location dialog:\n{}", h.app.text());
-    let sent = h.app.wait_until(Duration::from_secs(5), || h.writes().contains(&"POST /api/session".to_owned()));
+    let sent = h.app.wait_until(WAIT, || h.writes().contains(&"POST /api/session".to_owned()));
     assert!(sent, "the home prompt did not submit: {:?}", h.writes());
 }
 
 #[test]
 fn keymap_queries_do_not_lock_the_store() {
-    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
+    let h = mount(support::session_route("ses_a"));
     h.wait_for("the session", |screen| screen.contains("Review"));
     // `session.list`'s `suggested` and the prompt's `running` conditions run inside `commands`.
     let commands = h.tui.data.read(|_| h.commands());
@@ -177,7 +148,7 @@ fn keymap_queries_do_not_lock_the_store() {
 
 #[test]
 fn a_reconnect_reads_permissions_again() {
-    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
+    let h = mount(support::session_route("ses_a"));
     h.wait_for("the session", |screen| screen.contains("Review"));
     h.app.advance(Duration::from_millis(50));
     // Asked while the stream was down: only the read after the reconnect can see it.
@@ -188,7 +159,7 @@ fn a_reconnect_reads_permissions_again() {
 
 #[test]
 fn a_resolved_permission_leaves_an_open_dialog_focused() {
-    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
+    let h = mount(support::session_route("ses_a"));
     h.wait_for("the session", |screen| screen.contains("Review"));
     h.server.memory.emit(&json!({
         "id": "evt_asked", "created": 1, "type": "permission.asked", "data": permission(),
