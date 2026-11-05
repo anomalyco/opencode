@@ -876,6 +876,53 @@ const UserMessageLinks = {
   ),
 }
 
+const storyChart = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120"><rect width="160" height="120" fill="#f3f4f6"/><path d="M16 96h128" stroke="#9ca3af"/><rect x="28" y="56" width="20" height="40" fill="#009fff"/><rect x="60" y="36" width="20" height="60" fill="#009fff"/><rect x="92" y="68" width="20" height="28" fill="#009fff"/><rect x="124" y="24" width="12" height="72" fill="#009fff"/></svg>',
+)}`
+
+const flakyMedia = `media:${"a".repeat(64)}`
+
+const MediaAttachmentRetry = {
+  render: () => {
+    // The first read of `flakyMedia` fails, as an offline server would; a retry reads it.
+    const failed = new Set<string>()
+
+    return (
+      <CurrentSessionTimelineStory
+        title="Prompt with unreadable media"
+        description="A stored image that fails to load shows a failed tile; clicking it reads the image again."
+        readMedia={(uri) => {
+          if (uri !== flakyMedia || failed.has(uri)) return Promise.resolve(storyChart)
+          failed.add(uri)
+
+          return Promise.reject(new Error("offline"))
+        }}
+        document={{
+          ...thinkingDocument,
+          status: { type: "idle" },
+          messages: [
+            {
+              id: "msg_story_media_user",
+              type: "user",
+              text: "Compare these charts",
+              agents: [],
+              // SAFETY: stored files reach the timeline as `media:` refs, a variant the generated message type does not list.
+              files: [
+                { mime: "image/svg+xml", name: "flaky.svg", source: { type: "inline" }, uri: flakyMedia },
+                { mime: "image/svg+xml", name: "ready.svg", source: { type: "inline" }, uri: `media:${"b".repeat(64)}` },
+              ] as unknown as SessionMessageUserFiles,
+              time: { created: 1_735_689_633_000 },
+            },
+          ],
+        }}
+        width="620px"
+      />
+    )
+  },
+}
+
+type SessionMessageUserFiles = Extract<SessionMessageInfo, { type: "user" }>["files"]
+
 const conversationScenarios = {
   reasoning: AgentReasoning,
   hidden: WorkingWithoutReasoningDetails,
@@ -887,6 +934,7 @@ const conversationScenarios = {
   models: AliasedModelNotices,
   attachments: RichUserAttachments,
   links: UserMessageLinks,
+  media: MediaAttachmentRetry,
 }
 
 export const Conversation = {
