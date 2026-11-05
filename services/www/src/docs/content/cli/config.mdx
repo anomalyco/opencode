@@ -106,9 +106,34 @@ Configure mouse capture, scrolling, editor context, pastes, and prompt image pre
 | `scroll.acceleration`      | boolean                         | Accelerates repeated scrolling. When enabled, it takes precedence over speed. |
 | `prompt.editor`            | boolean                         | Includes the active editor file or selection as prompt context.             |
 | `prompt.paste`             | `compact` or `full`             | Shows large pastes as compact placeholders or as full text.                  |
+| `prompt.paste_summary`     | object                          | When a compact paste becomes a placeholder, and what it says. See below.    |
 | `prompt.image_preview`     | boolean                         | Shows image attachment previews above the prompt input.                     |
 
 </div>
+
+### Paste summary
+
+With `prompt.paste` set to `compact`, a paste of three lines or more, or of more than 150 characters, goes into the prompt as a placeholder such as `[Pasted ~12 lines]`; the pasted text is sent in its place. `prompt.paste_summary` changes when that happens and what the placeholder says:
+
+```json title="cli.json"
+{
+  "prompt": {
+    "paste_summary": {
+      "lines": 10,
+      "characters": 2000,
+      "format": "[Pasted {lines} lines, {bytes} B: {excerpt}]",
+      "excerpt": 40
+    }
+  }
+}
+```
+
+- `lines` - A paste of at least this many lines is summarized. Defaults to `3`.
+- `characters` - A paste longer than this many characters is summarized. Defaults to `150`.
+- `format` - The placeholder. Defaults to `"[Pasted ~{lines} lines]"`. `{lines}` is the paste's line count, `{characters}` its length, `{bytes}` its size in UTF-8 bytes, and `{excerpt}` its start, with line breaks and repeated spaces collapsed.
+- `excerpt` - How many characters `{excerpt}` shows before it is cut with `…`. Defaults to `30`.
+
+With the example above, a 12-line stack trace that starts with `TypeError: Cannot read properties of undefined` shows as `[Pasted 12 lines, 1834 B: TypeError: Cannot read properties of und…]`.
 
 ## Sessions
 
