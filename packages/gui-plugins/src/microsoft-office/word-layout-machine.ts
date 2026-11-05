@@ -1,8 +1,5 @@
 import type { WordPageSize } from "./word-protocol"
 
-/** How long one layout step may run before the window stops waiting for the rest of the document. */
-export const WORD_LAYOUT_STEP_TIMEOUT_MS = 60_000
-
 /** How long one worker step may hold back a paint that waits behind it, in milliseconds. */
 export const WORD_STEP_BUDGET_MS = 24
 
@@ -16,6 +13,9 @@ export const WORD_MAX_STEP_BLOCKS = 8192
  * The window's view of a Word document's layout. The worker opens a document with its first pages laid out; a long one
  * lays out the rest a step at a time once the first pages asked for their paints, or at once when a bookmark needs it.
  * Each run of steps takes the next attempt number, so a reply whose attempt the state no longer holds is stale.
+ *
+ * A step has no timeout: the worker runs it synchronously, so withdrawing it would only discard a step that may still
+ * succeed, and the document would look complete when it is not. A worker that dies ends the viewer instead.
  */
 export type WordLayoutState =
   /** Only the first pages are laid out, and no paint has asked for any yet. */
@@ -23,14 +23,17 @@ export type WordLayoutState =
   /** The rest of the document lays out, a step at a time. */
   | { readonly status: "laying-out"; readonly pages: readonly WordPageSize[]; readonly attempt: number }
   | { readonly status: "complete"; readonly pages: readonly WordPageSize[] }
-  /** A step failed or hung: the pages laid out so far stay readable, and a bookmark past them tries again. */
+  /**
+   * A step threw: the pages laid out so far stay readable, a notice under the last one offers to try again, and a
+   * bookmark past them tries again too.
+   */
   | { readonly status: "failed"; readonly pages: readonly WordPageSize[]; readonly attempt: number }
   | { readonly status: "disposed" }
 
 export type WordLayoutEvent =
   /** A page asked the worker for its paint. */
   | { readonly type: "paint.queued" }
-  /** A bookmark is not in the pages laid out so far. */
+  /** A bookmark is not in the pages laid out so far, or the user asked to try a failed layout again. */
   | { readonly type: "layout.requested" }
   /** A step laid out more of the document, and more is left. */
   | { readonly type: "step.progressed"; readonly attempt: number }
@@ -41,17 +44,17 @@ export type WordLayoutEvent =
       readonly pages: readonly WordPageSize[]
       readonly kept: readonly boolean[]
     }
+  /** The step threw in the worker, or its call rejected. */
   | { readonly type: "step.failed"; readonly attempt: number }
-  | { readonly type: "step.timed-out"; readonly attempt: number }
   | { readonly type: "disposed" }
 
 export type WordLayoutEffect =
   /**
-   * Ends the attempt's previous step, arms its timeout and asks the worker for one step. `defer` waits a microtask, so
-   * every paint the first pages ask for in the same task reaches the worker's queue ahead of the step.
+   * Asks the worker for one step. `defer` waits a microtask, so every paint the first pages ask for in the same task
+   * reaches the worker's queue ahead of the step.
    */
-  | { readonly type: "start-step"; readonly attempt: number; readonly defer: boolean; readonly timeoutMs: number }
-  /** Clears the attempt's timeout and withdraws its step. */
+  | { readonly type: "start-step"; readonly attempt: number; readonly defer: boolean }
+  /** Withdraws the attempt's step. */
   | { readonly type: "end-step"; readonly attempt: number }
   | { readonly type: "report-details"; readonly pageCount: number }
   /** Answers the bookmarks waiting for the layout: `completed` when the whole document is laid out. */
@@ -83,8 +86,8 @@ export function transitionWordLayout(state: WordLayoutState, event: WordLayoutEv
           : [{ type: "resolve-waiters", completed: false }],
     }
 
-  // The first paint starts the rest of the layout; a failed layout waits for a bookmark rather than retrying on every
-  // scroll.
+  // The first paint starts the rest of the layout; a failed layout waits for Retry or a bookmark rather than retrying on
+  // every scroll.
   if (event.type === "paint.queued") return state.status === "prefix" ? start(state, 1, true) : { state, effects: NONE }
 
   if (event.type === "layout.requested") {
@@ -98,10 +101,7 @@ export function transitionWordLayout(state: WordLayoutState, event: WordLayoutEv
   if (state.status !== "laying-out" || event.attempt !== state.attempt) return { state, effects: NONE }
 
   if (event.type === "step.progressed")
-    return {
-      state,
-      effects: [{ type: "start-step", attempt: state.attempt, defer: false, timeoutMs: WORD_LAYOUT_STEP_TIMEOUT_MS }],
-    }
+    return { state, effects: [{ type: "start-step", attempt: state.attempt, defer: false }] }
 
   if (event.type === "step.completed") {
     const pages = mergeWordPages(state.pages, event.pages, event.kept)
@@ -109,7 +109,6 @@ export function transitionWordLayout(state: WordLayoutState, event: WordLayoutEv
     return {
       state: { status: "complete", pages },
       effects: [
-        { type: "end-step", attempt: state.attempt },
         { type: "report-details", pageCount: pages.length },
         { type: "resolve-waiters", completed: true },
       ],
@@ -118,10 +117,7 @@ export function transitionWordLayout(state: WordLayoutState, event: WordLayoutEv
 
   return {
     state: { status: "failed", pages: state.pages, attempt: state.attempt },
-    effects: [
-      { type: "end-step", attempt: state.attempt },
-      { type: "resolve-waiters", completed: false },
-    ],
+    effects: [{ type: "resolve-waiters", completed: false }],
   }
 }
 
@@ -157,6 +153,11 @@ export function wordLayoutLoading(state: WordLayoutState) {
   return state.status === "prefix" || state.status === "laying-out"
 }
 
+/** Whether the last page shows the notice that the rest could not be laid out, with Retry. */
+export function wordLayoutFailed(state: WordLayoutState) {
+  return state.status === "failed"
+}
+
 /** Whether a bookmark not found so far may still turn up once the layout runs. */
 export function wordLayoutIncomplete(state: WordLayoutState) {
   return state.status === "prefix" || state.status === "laying-out" || state.status === "failed"
@@ -169,7 +170,7 @@ function start(
 ): WordLayoutTransition {
   return {
     state: { status: "laying-out", pages: state.pages, attempt },
-    effects: [{ type: "start-step", attempt, defer, timeoutMs: WORD_LAYOUT_STEP_TIMEOUT_MS }],
+    effects: [{ type: "start-step", attempt, defer }],
   }
 }
 

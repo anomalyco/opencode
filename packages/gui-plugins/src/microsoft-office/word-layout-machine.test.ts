@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   WORD_INITIAL_BLOCK_COST_MS,
-  WORD_LAYOUT_STEP_TIMEOUT_MS,
   WORD_MAX_STEP_BLOCKS,
   createWordLayoutState,
   createWorkerLayoutState,
@@ -9,6 +8,7 @@ import {
   stepBlocks,
   transitionWordLayout,
   transitionWorkerLayout,
+  wordLayoutFailed,
   wordLayoutIncomplete,
   wordLayoutLoading,
   wordLayoutPages,
@@ -37,7 +37,7 @@ describe("transitionWordLayout", () => {
 
     expect(painted).toEqual({
       state: { status: "laying-out", pages: wordLayoutPages(prefix), attempt: 1 },
-      effects: [{ type: "start-step", attempt: 1, defer: true, timeoutMs: WORD_LAYOUT_STEP_TIMEOUT_MS }],
+      effects: [{ type: "start-step", attempt: 1, defer: true }],
     })
 
     const again = transitionWordLayout(painted.state, { type: "paint.queued" })
@@ -61,9 +61,7 @@ describe("transitionWordLayout", () => {
     const progressed = transitionWordLayout(laying.state, { type: "step.progressed", attempt: 1 })
 
     expect(progressed.state).toBe(laying.state)
-    expect(progressed.effects).toEqual([
-      { type: "start-step", attempt: 1, defer: false, timeoutMs: WORD_LAYOUT_STEP_TIMEOUT_MS },
-    ])
+    expect(progressed.effects).toEqual([{ type: "start-step", attempt: 1, defer: false }])
   })
 
   test("a failed step keeps the pages, stops the loader and lets a bookmark try again", () => {
@@ -72,10 +70,7 @@ describe("transitionWordLayout", () => {
 
     expect(failed).toEqual({
       state: { status: "failed", pages: wordLayoutPages(prefix), attempt: 1 },
-      effects: [
-        { type: "end-step", attempt: 1 },
-        { type: "resolve-waiters", completed: false },
-      ],
+      effects: [{ type: "resolve-waiters", completed: false }],
     })
     expect(wordLayoutLoading(failed.state)).toBe(false)
     expect(wordLayoutIncomplete(failed.state)).toBe(true)
@@ -87,7 +82,7 @@ describe("transitionWordLayout", () => {
 
     expect(retry).toEqual({
       state: { status: "laying-out", pages: wordLayoutPages(prefix), attempt: 2 },
-      effects: [{ type: "start-step", attempt: 2, defer: false, timeoutMs: WORD_LAYOUT_STEP_TIMEOUT_MS }],
+      effects: [{ type: "start-step", attempt: 2, defer: false }],
     })
 
     const full = [page(1056), page(1056), page(1056), page(900)]
@@ -101,25 +96,50 @@ describe("transitionWordLayout", () => {
 
     expect(completed.state.status).toBe("complete")
     expect(completed.effects).toEqual([
-      { type: "end-step", attempt: 2 },
       { type: "report-details", pageCount: 4 },
       { type: "resolve-waiters", completed: true },
     ])
   })
 
-  test("a hung step times out like a failed one", () => {
-    const timedOut = replay([{ type: "paint.queued" }, { type: "step.timed-out", attempt: 1 }], longDocument())
+  test("a slow step keeps the loader up until it lands, so the first pages never pass for the whole document", () => {
+    const laying = replay([{ type: "paint.queued" }], longDocument())
 
-    expect(timedOut.state.status).toBe("failed")
-    expect(timedOut.effects).toEqual([
-      { type: "end-step", attempt: 1 },
-      { type: "resolve-waiters", completed: false },
+    // No step carries a deadline: the worker runs it synchronously and cannot be stopped, only discarded.
+    expect(laying.effects).toEqual([{ type: "start-step", attempt: 1, defer: true }])
+    expect(wordLayoutLoading(laying.state)).toBe(true)
+    expect(wordLayoutFailed(laying.state)).toBe(false)
+
+    const completed = transitionWordLayout(laying.state, {
+      type: "step.completed",
+      attempt: 1,
+      pages: [page(1056), page(1056), page(1056), page(1056)],
+      kept: [true, true, true, false],
+    })
+
+    expect(completed.state.status).toBe("complete")
+    expect(completed.effects).toEqual([
+      { type: "report-details", pageCount: 4 },
+      { type: "resolve-waiters", completed: true },
     ])
+  })
+
+  test("a step that throws shows the notice, and Retry starts a new run", () => {
+    const failed = replay([{ type: "paint.queued" }, { type: "step.failed", attempt: 1 }], longDocument())
+
+    expect(wordLayoutFailed(failed.state)).toBe(true)
+    expect(wordLayoutLoading(failed.state)).toBe(false)
+
+    // Retry dispatches the same event a bookmark past the laid-out pages does.
+    const retry = transitionWordLayout(failed.state, { type: "layout.requested" })
+
+    expect(retry.effects).toEqual([{ type: "start-step", attempt: 2, defer: false }])
+    expect(wordLayoutFailed(retry.state)).toBe(false)
+    expect(wordLayoutLoading(retry.state)).toBe(true)
   })
 
   test("a bookmark before the first paint starts the layout at once", () => {
     expect(transitionWordLayout(longDocument(), { type: "layout.requested" }).effects).toEqual([
-      { type: "start-step", attempt: 1, defer: false, timeoutMs: WORD_LAYOUT_STEP_TIMEOUT_MS },
+      { type: "start-step", attempt: 1, defer: false },
     ])
 
     const laying = replay([{ type: "paint.queued" }], longDocument())
@@ -136,7 +156,6 @@ describe("transitionWordLayout", () => {
     for (const event of [
       { type: "step.progressed", attempt: 1 },
       { type: "step.failed", attempt: 1 },
-      { type: "step.timed-out", attempt: 1 },
       { type: "step.completed", attempt: 1, pages: [page(1)], kept: [false] },
     ] satisfies WordLayoutEvent[]) {
       const stale = transitionWordLayout(retry.state, event)

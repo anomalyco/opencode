@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
+import { Button } from "@opencode/ui/button"
 import { Loader } from "@opencode/ui/loader"
 import { createLatest, usePlugin } from "@opencode/plugin/gui"
 import { createOfficeWorker, type WorkerClient } from "./office-worker"
@@ -6,6 +7,7 @@ import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
 import {
   createWordLayoutState,
   transitionWordLayout,
+  wordLayoutFailed,
   wordLayoutIncomplete,
   wordLayoutLoading,
   wordLayoutPages,
@@ -33,10 +35,8 @@ type Opened = {
 /** Scrolls the page column; set once the column mounts. */
 type Scroll = { to: ScrollToPage | undefined }
 
-/** The layout step the worker runs, with its timeout, until the next step or the end of the layout replaces it. */
-type Step = {
-  current: { readonly controller: AbortController; readonly timer: ReturnType<typeof setTimeout> } | undefined
-}
+/** The layout step the worker runs, withdrawn when the document closes. */
+type Step = { current: AbortController | undefined }
 
 /**
  * A read-only, paginated Word document. Its engine runs in a worker of its own (`document.worker.ts`), which opens the
@@ -100,6 +100,7 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
   const texts = new WeakMap<WordPageSize, readonly WordSpan[]>()
   const pages = createMemo(() => wordLayoutPages(layout()))
   const loading = createMemo(() => wordLayoutLoading(layout()))
+  const failed = createMemo(() => wordLayoutFailed(layout()))
   // Every paint dispatches it, so it is built once.
   const queued: WordLayoutEvent = { type: "paint.queued" }
 
@@ -111,21 +112,19 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
   }
 
   const run = (effect: WordLayoutEffect) => {
-    if (effect.type === "start-step") return startStep(effect.attempt, effect.defer, effect.timeoutMs)
+    if (effect.type === "start-step") return startStep(effect.attempt, effect.defer)
 
-    if (effect.type === "end-step") return endStep()
+    if (effect.type === "end-step") return step.current?.abort()
 
     if (effect.type === "report-details") return props.onDetails([ctx.plural("pages", effect.pageCount)])
 
     waiters.splice(0).forEach((resolve) => resolve(effect.completed))
   }
 
-  const startStep = (attempt: number, defer: boolean, timeoutMs: number) => {
-    endStep()
-
+  const startStep = (attempt: number, defer: boolean) => {
     const controller = new AbortController()
 
-    step.current = { controller, timer: setTimeout(() => dispatch({ type: "step.timed-out", attempt }), timeoutMs) }
+    step.current = controller
 
     const call = () =>
       void client.call("layout", undefined, { signal: controller.signal }).then(
@@ -141,12 +140,6 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
     if (defer) return queueMicrotask(call)
 
     call()
-  }
-
-  const endStep = () => {
-    clearTimeout(step.current?.timer)
-    step.current?.controller.abort()
-    step.current = undefined
   }
 
   onCleanup(() => dispatch({ type: "disposed" }))
@@ -226,8 +219,18 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
       overlay={(input) => <WordTextLayer index={input.index} page={pages()[input.index]} text={text} follow={follow} />}
       text
       footer={(index) => (
-        <Show when={loading() && index === pages().length - 1}>
-          <Loader />
+        <Show when={index === pages().length - 1}>
+          <Show when={loading()}>
+            <Loader />
+          </Show>
+          <Show when={failed()}>
+            <div role="status" class="flex items-center gap-2 text-12-regular text-v2-text-text-muted">
+              {ctx.t("document.layoutFailed")}
+              <Button size="small" variant="outline" onClick={() => dispatch({ type: "layout.requested" })}>
+                {ctx.t("common.retry")}
+              </Button>
+            </div>
+          </Show>
         </Show>
       )}
       onScrollTo={(scrollTo) => {
