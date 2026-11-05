@@ -684,8 +684,6 @@ impl Inner {
             Mode::Shell => theme.text.action.primary.selected,
             Mode::Normal => agent_color.unwrap_or(theme.border.base),
         };
-        self.frame.border_color(highlight);
-        self.bottom.border_color(highlight);
         self.spinner.set_color(
             if opencode_ui::motion::enabled(tui.config().info.animations) {
                 scanner_colors(&scanner(agent_color.unwrap_or(theme.border.base)))
@@ -718,6 +716,15 @@ impl Inner {
             },
             Mode::Normal => display,
         };
+        // `borderHighlight` tints toward the highlight as the agent label fades in; `tint` returns an opaque
+        // color, so a border token with alpha draws at full strength as in TS.
+        let border = opencode_ui::theme::tint(
+            theme.border.base,
+            highlight,
+            if display.agent.is_some() { 1.0 } else { 0.0 },
+        );
+        self.frame.border_color(border);
+        self.bottom.border_color(border);
         self.metadata
             .set(&theme, mode, &display, highlight, self.app.size().0);
 
