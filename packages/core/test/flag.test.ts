@@ -4,7 +4,8 @@ import { Config } from "@opencode/core/config"
 import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
-import { Effect, Layer } from "effect"
+import { ConfigFlag } from "@opencode/schema/config/flag"
+import { Effect, Layer, Record } from "effect"
 import { testEffect } from "./lib/effect"
 
 const document = (experimental?: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
@@ -12,6 +13,8 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
     type: "document",
     info: new Info(experimental === undefined ? {} : { experimental: new ConfigExperimental.Info(experimental) }),
   })
+
+const every = (state: Flag.State) => Record.map(ConfigFlag.registry, () => state)
 
 describe("Flag.resolve", () => {
   test("turns flags on by default only in local and dev builds", () => {
@@ -48,6 +51,48 @@ describe("Flag.resolve", () => {
       channel: "latest",
     })
     expect([flags.todo.enabled, flags.todo.source]).toEqual([false, "default"])
+  })
+
+  test("OPENCODE_FLAGS=all turns every flag on, and a -key in the same list still wins", () => {
+    const entries = [document({ media_blob: false })]
+    expect(Flag.resolve({ entries, channel: "latest", overrides: "all" })).toEqual(
+      every({ enabled: true, source: "env" }),
+    )
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: " -media_blob , all, " })).toEqual({
+      ...every({ enabled: true, source: "env" }),
+      media_blob: { enabled: false, source: "env" },
+    })
+    expect(Flag.resolve({ entries, channel: "latest", overrides: "-all" })).toEqual(
+      Flag.resolve({ entries, channel: "latest" }),
+    )
+  })
+
+  test("experimental.all_flags turns every flag on below OPENCODE_FLAGS and below a per-flag setting", () => {
+    const entries = [document({ all_flags: true, media_blob: false })]
+    expect(Flag.resolve({ entries, channel: "latest", overrides: "-artifacts" })).toEqual({
+      ...every({ enabled: true, source: "config" }),
+      media_blob: { enabled: false, source: "config" },
+      artifacts: { enabled: false, source: "env" },
+    })
+  })
+
+  test("experimental.all_flags: false is not a kill switch, and all_flags in OPENCODE_FLAGS does nothing", () => {
+    expect(Flag.resolve({ entries: [document({ all_flags: false })], channel: "dev" })).toEqual(
+      every({ enabled: true, source: "default" }),
+    )
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "all_flags" })).toEqual(
+      Flag.resolve({ entries: [], channel: "latest" }),
+    )
+  })
+
+  test("a global all_flags survives a project experimental block, and a project all_flags: false stops it", () => {
+    const global = document({ all_flags: true })
+    expect(
+      Flag.resolve({ entries: [global, document({ subagent_depth: 2, todo: false })], channel: "latest" }),
+    ).toEqual({ ...every({ enabled: true, source: "config" }), todo: { enabled: false, source: "config" } })
+    expect(Flag.resolve({ entries: [global, document({ all_flags: false })], channel: "latest" })).toEqual(
+      every({ enabled: false, source: "default" }),
+    )
   })
 })
 

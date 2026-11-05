@@ -16655,6 +16655,9 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "all_flags": {
+                "type": "boolean"
+              },
               "todo": {
                 "type": "boolean"
               },

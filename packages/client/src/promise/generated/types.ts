@@ -2545,6 +2545,7 @@ export type ConfigEntry =
         }
         experimental?: {
           portable_shell_scanner?: boolean
+          all_flags?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
