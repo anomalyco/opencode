@@ -1,6 +1,6 @@
 import type { SessionDocument } from "../document"
 import { File } from "../components/file"
-import { DataProvider } from "../context/data"
+import { DataProvider, type ReadMediaUrlFn } from "../context/data"
 import type { SessionUserActions } from "../message/current-message"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 import { SessionTimeline } from "../timeline/session-timeline"
@@ -12,6 +12,7 @@ import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 export function CurrentSessionProviders(props: {
   document: SessionDocument
   backgroundCompaction?: boolean
+  readMedia?: ReadMediaUrlFn
   children: JSX.Element
 }) {
   return (
@@ -19,6 +20,7 @@ export function CurrentSessionProviders(props: {
       directory="C:/workspaces/opencode"
       sessionID={props.document.sessionID}
       backgroundCompaction={props.backgroundCompaction}
+      readMedia={props.readMedia}
       data={{
         agent: [
           { name: "build", color: "blue" },
@@ -84,6 +86,7 @@ export function CurrentSessionTimelineStory(props: {
   editToolDefaultOpen?: boolean
   turnDiffs?: boolean
   backgroundCompaction?: boolean
+  readMedia?: ReadMediaUrlFn
 }) {
   // Inline story documents rebuild their messages on every prop read, and the timeline projection keys text by identity.
   const document = createMemo(() => props.document)
@@ -122,7 +125,11 @@ export function CurrentSessionTimelineStory(props: {
         <Show when={revision()} keyed>
           {(revision) => (
             <div data-story-revision={revision}>
-              <CurrentSessionProviders document={document()} backgroundCompaction={props.backgroundCompaction}>
+              <CurrentSessionProviders
+                document={document()}
+                backgroundCompaction={props.backgroundCompaction}
+                readMedia={props.readMedia}
+              >
                 <SessionTimeline
                   document={document()}
                   presentation={props.presentation}

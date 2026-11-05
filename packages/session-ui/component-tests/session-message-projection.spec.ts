@@ -387,6 +387,20 @@ story("renders user image, file attachment, file reference, and agent reference"
   expect(bodyBox!.y - (attachmentsBox!.y + attachmentsBox!.height)).toBe(8)
 })
 
+story("a stored image that fails to load shows a failed tile that retries", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "media" } })
+  const tiles = timeline.locator('[data-slot="user-message-attachment"]')
+
+  await expect(timeline.getByAltText("ready.svg")).toBeVisible()
+  // A failed read used to keep the loading placeholder forever.
+  const failed = tiles.first()
+  await expect(failed.getByRole("img", { name: "Unable to load image." })).toBeVisible()
+  await expect(failed).not.toHaveAttribute("data-placeholder")
+
+  await failed.click()
+  await expect(timeline.getByAltText("flaky.svg")).toBeVisible()
+})
+
 story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {
   const gallery = await mount("current-session-timeline-rows--note-attachments")
 
