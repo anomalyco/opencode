@@ -7,8 +7,8 @@
 //! The TypeScript works on untyped JSON and falls back to a generic summary when a rule throws. This
 //! port reads the part as JSON the same way, and a rule that would throw returns `None`.
 
-use opencode_api::generated::types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
-use opencode_api::query::js_string;
+use opencode_api_types::js::js_string;
+use opencode_api_types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
 use serde_json::{Map, Value};
 
 /// The summary of one tool call.

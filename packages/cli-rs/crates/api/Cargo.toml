@@ -10,6 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+opencode-api-types.workspace = true
 base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
