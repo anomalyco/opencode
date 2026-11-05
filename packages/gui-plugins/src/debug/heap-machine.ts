@@ -1,6 +1,3 @@
-/** Bounds a whole capture, so one that never settles cannot hold the queue. */
-export const HEAP_CAPTURE_TIMEOUT_MS = 15 * 60_000
-
 export type HeapCaptureResult = {
   readonly directory: string
   readonly complete: boolean
@@ -25,7 +22,9 @@ export type HeapCaptureJob =
 /**
  * Main's heap snapshot queue. One capture runs (`active`) and at most one of the other source waits (`pending`):
  * a repeated command joins the command job, and a repeated `SIGUSR2` joins the signal job, so repeats never fill the
- * disk with queued dumps. Every outcome, a timeout included, starts `pending`.
+ * disk with queued dumps. `pending` starts only once the running capture settles, so two never run at once. The capture
+ * has no deadline of its own: each step that waits on another process is bounded and records a timeout as a failed
+ * snapshot, so a capture always settles through its steps.
  */
 export type HeapCaptureState =
   | { readonly status: "idle"; readonly attempt: number }
@@ -47,19 +46,10 @@ export type HeapCaptureEvent =
   | { readonly type: "signal.received"; readonly root: string; readonly includeServer: boolean }
   | { readonly type: "capture.succeeded"; readonly attempt: number; readonly result: HeapCaptureResult }
   | { readonly type: "capture.failed"; readonly attempt: number; readonly error: Error }
-  | { readonly type: "capture.timed-out"; readonly attempt: number }
   | { readonly type: "disposed" }
 
 export type HeapCaptureEffect =
-  /** Starts a capture and arms its timeout. */
-  | {
-      readonly type: "capture.run"
-      readonly attempt: number
-      readonly root: string
-      readonly includeServer: boolean
-      readonly timeoutMs: number
-    }
-  | { readonly type: "timer.cancel" }
+  | { readonly type: "capture.run"; readonly attempt: number; readonly root: string; readonly includeServer: boolean }
   | {
       readonly type: "replies.settle"
       readonly replies: readonly HeapCaptureReply[]
@@ -91,10 +81,7 @@ export function transitionHeapCapture(state: HeapCaptureState, event: HeapCaptur
 
     return {
       state: { status: "disposed" },
-      effects: [
-        { type: "timer.cancel" },
-        ...(replies.length ? [settle(replies, { ok: false, error: new Error("Heap capture disposed") })] : []),
-      ],
+      effects: replies.length ? [settle(replies, { ok: false, error: new Error("Heap capture disposed") })] : [],
     }
   }
 
@@ -148,19 +135,14 @@ export function transitionHeapCapture(state: HeapCaptureState, event: HeapCaptur
   const outcome =
     event.type === "capture.succeeded"
       ? { ok: true as const, result: event.result }
-      : {
-          ok: false as const,
-          error: event.type === "capture.failed" ? event.error : new Error("Heap capture timed out"),
-        }
+      : { ok: false as const, error: event.error }
 
-  const settled: HeapCaptureEffect[] = [
-    { type: "timer.cancel" },
-    ...(state.active.source === "command"
+  const settled: HeapCaptureEffect[] =
+    state.active.source === "command"
       ? [settle(state.active.replies, outcome)]
       : outcome.ok
         ? []
-        : [{ type: "signal.failed" as const, error: outcome.error.message }]),
-  ]
+        : [{ type: "signal.failed", error: outcome.error.message }]
 
   if (!state.pending) return { state: { status: "idle", attempt: state.attempt }, effects: settled }
   const next = start(state.attempt + 1, state.pending)
@@ -171,15 +153,7 @@ export function transitionHeapCapture(state: HeapCaptureState, event: HeapCaptur
 function start(attempt: number, job: HeapCaptureJob): HeapCaptureTransition {
   return {
     state: { status: "capturing", attempt, active: job, pending: undefined },
-    effects: [
-      {
-        type: "capture.run",
-        attempt,
-        root: job.root,
-        includeServer: job.includeServer,
-        timeoutMs: HEAP_CAPTURE_TIMEOUT_MS,
-      },
-    ],
+    effects: [{ type: "capture.run", attempt, root: job.root, includeServer: job.includeServer }],
   }
 }
 

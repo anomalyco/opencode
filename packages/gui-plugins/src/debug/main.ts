@@ -132,7 +132,9 @@ const setup: Plugin.MainSetup = (ctx) => {
       }),
     )
 
-    const gpu = await app.getGPUInfo("basic").catch((error: Error) => ({ error: error.message }))
+    const gpu = await within(app.getGPUInfo("basic"), 15_000, "The GPU process did not answer within 15 seconds.").catch(
+      (error: Error) => ({ error: error.message }),
+    )
 
     // One readable answer to "where is the memory", per process, in MiB.
     await write(directory, "memory.json", {
@@ -178,7 +180,6 @@ const setup: Plugin.MainSetup = (ctx) => {
   }
 
   let heapState = createHeapCaptureState()
-  let heapTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatchHeap = (event: HeapCaptureEvent) => {
     const next = transitionHeapCapture(heapState, event)
@@ -193,8 +194,6 @@ const setup: Plugin.MainSetup = (ctx) => {
   }
 
   const runHeap = (effect: HeapCaptureEffect) => {
-    if (effect.type === "timer.cancel") return clearTimeout(heapTimer)
-
     if (effect.type === "replies.settle") {
       const outcome = effect.outcome
 
@@ -205,7 +204,6 @@ const setup: Plugin.MainSetup = (ctx) => {
       return ctx.log.write("error", "heap snapshot capture failed", { error: effect.error })
     }
 
-    heapTimer = setTimeout(() => dispatchHeap({ type: "capture.timed-out", attempt: effect.attempt }), effect.timeoutMs)
     void Promise.try(() => capture(effect.root, effect.includeServer)).then(
       (result) => dispatchHeap({ type: "capture.succeeded", attempt: effect.attempt, result }),
       (cause: unknown) =>

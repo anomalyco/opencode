@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   createHeapCaptureState,
   createHeapCommandState,
-  HEAP_CAPTURE_TIMEOUT_MS,
   isHeapCommandEnabled,
   transitionHeapCapture,
   transitionHeapCommand,
@@ -41,15 +40,12 @@ describe("transitionHeapCapture", () => {
     const joined = transitionHeapCapture(started.state, command(second))
 
     expect(started.effects).toEqual([
-      { type: "capture.run", attempt: 1, root: "/downloads", includeServer: true, timeoutMs: HEAP_CAPTURE_TIMEOUT_MS },
+      { type: "capture.run", attempt: 1, root: "/downloads", includeServer: true },
     ])
     expect(joined.effects).toEqual([])
     expect(transitionHeapCapture(joined.state, { type: "capture.succeeded", attempt: 1, result })).toEqual({
       state: { status: "idle", attempt: 1 },
-      effects: [
-        { type: "timer.cancel" },
-        { type: "replies.settle", replies: [first, second], outcome: { ok: true, result } },
-      ],
+      effects: [{ type: "replies.settle", replies: [first, second], outcome: { ok: true, result } }],
     })
   })
 
@@ -87,26 +83,28 @@ describe("transitionHeapCapture", () => {
         pending: undefined,
       },
       effects: [
-        { type: "timer.cancel" },
         { type: "replies.settle", replies: [first], outcome: { ok: false, error } },
-        { type: "capture.run", attempt: 2, root: "/heap", includeServer: false, timeoutMs: HEAP_CAPTURE_TIMEOUT_MS },
+        { type: "capture.run", attempt: 2, root: "/heap", includeServer: false },
       ],
     })
   })
 
-  test("a capture that never settles times out, logs for a signal, and starts the queued command", () => {
+  test("a queued capture starts only once the running one settles, however long it runs", () => {
     const queued = reply()
-    const state = captureAfter(signal, command(queued))
-    const timedOut = transitionHeapCapture(state, { type: "capture.timed-out", attempt: 1 })
+    const running = transitionHeapCapture(captureAfter(signal), command(queued))
 
-    expect(timedOut.state).toMatchObject({ status: "capturing", attempt: 2, active: { replies: [queued] } })
-    expect(timedOut.effects).toEqual([
-      { type: "timer.cancel" },
-      { type: "signal.failed", error: "Heap capture timed out" },
-      { type: "capture.run", attempt: 2, root: "/downloads", includeServer: true, timeoutMs: HEAP_CAPTURE_TIMEOUT_MS },
+    expect(running.effects).toEqual([])
+    expect(transitionHeapCapture(running.state, command()).effects).toEqual([])
+
+    const failed = transitionHeapCapture(running.state, { type: "capture.failed", attempt: 1, error: new Error("EIO") })
+
+    expect(failed.state).toMatchObject({ status: "capturing", attempt: 2, active: { replies: [queued] } })
+    expect(failed.effects).toEqual([
+      { type: "signal.failed", error: "EIO" },
+      { type: "capture.run", attempt: 2, root: "/downloads", includeServer: true },
     ])
-    expect(transitionHeapCapture(timedOut.state, { type: "capture.succeeded", attempt: 1, result }).state).toBe(
-      timedOut.state,
+    expect(transitionHeapCapture(failed.state, { type: "capture.succeeded", attempt: 1, result }).state).toBe(
+      failed.state,
     )
   })
 
@@ -118,7 +116,6 @@ describe("transitionHeapCapture", () => {
     expect(disposed).toEqual({
       state: { status: "disposed" },
       effects: [
-        { type: "timer.cancel" },
         {
           type: "replies.settle",
           replies: [first, second],
