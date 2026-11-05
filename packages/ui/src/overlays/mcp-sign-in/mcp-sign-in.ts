@@ -103,7 +103,10 @@ export function createMcpSignIn(host: McpSignInHost) {
 
     if (effect.type === "sync") {
       clearTimeout(syncTimer)
-      syncTimer = setTimeout(() => dispatch({ type: "sync.timed-out", syncAttempt: effect.syncAttempt }), effect.timeoutMs)
+      syncTimer = setTimeout(
+        () => dispatch({ type: "sync.timed-out", syncAttempt: effect.syncAttempt }),
+        effect.timeoutMs,
+      )
       void Promise.try(host.sync).then(
         () => dispatch({ type: "sync.succeeded", syncAttempt: effect.syncAttempt }),
         (error) => dispatch({ type: "sync.failed", syncAttempt: effect.syncAttempt, message: describe(error) }),
