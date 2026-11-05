@@ -199,6 +199,39 @@ const subagentStep = (input: { readonly sessionID: Session.ID; readonly calls: R
     })
   })
 
+/** Starts a child with a running subagent job, so a fork notice names its work as outstanding. */
+const runningChild = (parentID: Session.ID, title: string) =>
+  Effect.gen(function* () {
+    const session = yield* Session.Service
+    const jobs = yield* Job.Service
+    const child = yield* session.create({ parentID, title })
+    yield* jobs.start({
+      id: child.id,
+      type: "subagent",
+      title,
+      recovery: {
+        kind: "subagent",
+        parentSessionID: parentID,
+        childSessionID: child.id,
+        agent: "reviewer",
+        description: title,
+      },
+      run: Effect.never,
+    })
+    return child
+  })
+
+/** The fork notice still waiting in the inbox, before a promote delivers it. */
+const noticeText = (forkID: Session.ID) =>
+  Effect.gen(function* () {
+    const session = yield* Session.Service
+    const notices = (yield* session.inbox(forkID)).filter((item) => item.type === "synthetic")
+    expect(notices).toHaveLength(1)
+    const notice = notices[0]
+    if (notice?.type !== "synthetic") return yield* Effect.die(new Error("Fork notice not found"))
+    return notice.payload.text
+  })
+
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
@@ -713,7 +746,17 @@ describe("Session.create", () => {
       const parentContext = yield* session.context(parent.id)
       const forkContext = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
+      const [notice] = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
+      const copy = yield* noticeText(forked.id)
 
+      expect(notice).toMatchObject({
+        sessionID: forked.id,
+        delivery: "steer",
+        payload: { description: "Fork notice", metadata: { source: "fork", forkOf: parent.id } },
+      })
+      expect(copy).toContain(`This session is a fork of ${parent.id} ("Parent"), copied through its message at`)
+      expect(copy).toContain("work started before the fork keeps reporting to the original, not here.")
+      expect(copy).not.toContain("Don't wait for these")
       expect(forked).toMatchObject({ title: "Parent (fork #1)", fork: { sessionID: parent.id } })
       expect(forked.parentID).toBeUndefined()
       expect(forkContext).toMatchObject([Expected.user("First"), { type: "synthetic", text: "parent note" }])
@@ -749,17 +792,14 @@ describe("Session.create", () => {
       yield* SessionInbox.promote(db, bus, forked.id, "steer")
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
-      expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual([
-        "user",
-        "synthetic",
-        "synthetic",
-        "user",
-      ])
-      expect((yield* session.context(forked.id)).at(-2)).toMatchObject({
+      const forkedContext = yield* session.context(forked.id)
+      expect(forkedContext.map((message) => message.type)).toEqual(["user", "synthetic", "synthetic", "user"])
+      expect(forkedContext.at(-2)).toMatchObject({
         type: "synthetic",
+        id: notice?.id,
         text: expect.stringContaining(`This session is a fork of ${parent.id} ("Parent")`),
       })
-      expect((yield* session.context(forked.id)).at(-1)).toMatchObject({ text: "Child continues" })
+      expect(forkedContext.at(-1)).toMatchObject({ text: "Child continues" })
       expect(
         Array.from(yield* Stream.runCollect(logEvents(session, forked.id))).map(
           (event): number | undefined => event.durable?.seq,
@@ -769,63 +809,83 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("tells a fork it is a fork when nothing is outstanding", () =>
+  it.effect("names copied launches that never reported, and not the ones that did", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const { db } = yield* Database.Service
-      const parent = yield* session.create({ location, title: "Original" })
-      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Launch subagents", resume: false })
       yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const unreported = Session.ID.create()
+      const backgrounded = Session.ID.create()
+      const reported = Session.ID.create()
+      const completed = Session.ID.create()
+
+      yield* subagentStep({
+        sessionID: parent.id,
+        calls: [
+          {
+            callID: "call_unreported",
+            input: { background: true, description: "review the diff" },
+            metadata: { sessionID: unreported, status: "running" },
+          },
+          {
+            callID: "call_backgrounded",
+            // No `background: true`: the foreground call was moved to the background while it blocked.
+            input: { description: "review the diff" },
+            content: [
+              {
+                type: "text",
+                text: `The subagent is working in the background (sessionID: ${backgrounded}). You will be notified automatically when it finishes.`,
+              },
+            ],
+            metadata: { sessionID: backgrounded, status: "running" },
+          },
+          {
+            callID: "call_reported",
+            input: { background: true, description: "check the tests" },
+            metadata: { sessionID: reported, status: "running" },
+            report: reported,
+          },
+          {
+            callID: "call_launch",
+            input: { background: true, description: "review the diff" },
+            metadata: { sessionID: completed, status: "running" },
+          },
+          {
+            callID: "call_followup",
+            input: { sessionID: completed, description: "review the diff" },
+            content: [
+              { type: "text", text: `<subagent sessionID="${completed}" state="completed">\ndone\n</subagent>` },
+            ],
+            metadata: { sessionID: completed, status: "completed" },
+          },
+        ],
+      })
 
       const forked = yield* session.fork({ sessionID: parent.id })
-      const notice = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
+      const text = yield* noticeText(forked.id)
 
-      expect(notice).toHaveLength(1)
-      expect(notice[0]).toMatchObject({
-        sessionID: forked.id,
-        delivery: "steer",
-        payload: { description: "Fork notice", metadata: { source: "fork", forkOf: parent.id } },
-      })
-      const text = notice[0]?.type === "synthetic" ? notice[0].payload.text : ""
-      expect(text).toContain(`This session is a fork of ${parent.id} ("Original"), copied through its message at`)
-      expect(text).toContain("work started before the fork keeps reporting to the original, not here.")
-      expect(text).not.toContain("Don't wait for these")
-
-      yield* SessionInbox.promote(db, bus, forked.id, "steer")
-      const context = yield* session.context(forked.id)
-      // The notice is appended after the copied rows, which keep their own identities.
-      expect(context.map((message) => message.type)).toEqual(["user", "synthetic"])
-      expect(context[0]).toMatchObject({ text: "First" })
-      expect(context[1]).toMatchObject({ type: "synthetic" })
-      expect(context[1]?.id).toBe(notice[0]?.id)
+      expect(text).toContain(`- ${unreported} "review the diff" (unreported)`)
+      expect(text).toContain(`- ${backgrounded} "review the diff" (unreported)`)
+      expect(text).not.toContain(reported)
+      expect(text).not.toContain(completed)
+      expect(text).toContain(
+        "Don't wait for these. Their results won't arrive here. Start a new subagent if this fork needs that work.",
+      )
     }),
   )
 
-  it.effect("names the original's running subagents in the fork notice", () =>
+  it.effect("names only subagents created at or before the last copied message", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const { db } = yield* Database.Service
       const parent = yield* session.create({ location, title: "Original" })
-      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      const child = yield* session.create({ parentID: parent.id, title: "background review" })
-      yield* jobs.start({
-        id: child.id,
-        type: "subagent",
-        title: "review the diff",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent.id,
-          childSessionID: child.id,
-          agent: "reviewer",
-          description: "review the diff",
-        },
-        run: Effect.never,
-      })
-      // A finished job stays in the in-memory map; only a running one is outstanding.
+      // Both children predate the cutoff, so only a running job makes one outstanding.
+      const earlier = yield* runningChild(parent.id, "review the diff")
       const finished = yield* session.create({ parentID: parent.id, title: "done review" })
       yield* jobs.start({
         id: finished.id,
@@ -842,161 +902,6 @@ describe("Session.create", () => {
       })
       yield* jobs.wait({ id: finished.id })
 
-      const forked = yield* session.fork({ sessionID: parent.id })
-      yield* SessionInbox.promote(db, bus, forked.id, "steer")
-      const context = yield* session.context(forked.id)
-
-      expect(context).toHaveLength(2)
-      const text = context[1]?.type === "synthetic" ? context[1].text : ""
-      expect(text).toContain(`- ${child.id} "review the diff" (running)`)
-      expect(text).toContain(
-        "Don't wait for these. Their results won't arrive here. Start a new subagent if this fork needs that work.",
-      )
-      yield* jobs.cancel(child.id)
-    }),
-  )
-
-  it.effect("names background launches in the copied history that never reported", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location })
-      yield* session.prompt({ sessionID: parent.id, text: "Launch subagents", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      const unreported = Session.ID.create()
-      const reported = Session.ID.create()
-
-      yield* subagentStep({
-        sessionID: parent.id,
-        calls: [
-          {
-            callID: "call_unreported",
-            input: { background: true, description: "review the diff" },
-            metadata: { sessionID: unreported, status: "running" },
-          },
-          {
-            callID: "call_reported",
-            input: { background: true, description: "check the tests" },
-            metadata: { sessionID: reported, status: "running" },
-            report: reported,
-          },
-        ],
-      })
-
-      const forked = yield* session.fork({ sessionID: parent.id })
-      yield* SessionInbox.promote(db, bus, forked.id, "steer")
-      const notice = (yield* session.context(forked.id)).at(-1)
-
-      expect(notice).toMatchObject({ type: "synthetic" })
-      const text = notice?.type === "synthetic" ? notice.text : ""
-      expect(text).toContain(`- ${unreported} "review the diff" (unreported)`)
-      expect(text).not.toContain(reported)
-    }),
-  )
-
-  it.effect("names a foreground subagent that was moved to the background before the fork", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location })
-      yield* session.prompt({ sessionID: parent.id, text: "Review the diff", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      const child = Session.ID.create()
-
-      yield* subagentStep({
-        sessionID: parent.id,
-        calls: [
-          {
-            callID: "call_backgrounded",
-            // No `background: true`: the foreground call was moved to the background while it blocked.
-            input: { description: "review the diff" },
-            content: [
-              {
-                type: "text",
-                text: `The subagent is working in the background (sessionID: ${child}). You will be notified automatically when it finishes.`,
-              },
-            ],
-            metadata: { sessionID: child, status: "running" },
-          },
-        ],
-      })
-
-      const forked = yield* session.fork({ sessionID: parent.id })
-      yield* SessionInbox.promote(db, bus, forked.id, "steer")
-      const notice = (yield* session.context(forked.id)).at(-1)
-
-      expect(notice).toMatchObject({ type: "synthetic" })
-      const text = notice?.type === "synthetic" ? notice.text : ""
-      expect(text).toContain(`- ${child} "review the diff" (unreported)`)
-    }),
-  )
-
-  it.effect("does not name a launch whose report is in the copied history", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location })
-      yield* session.prompt({ sessionID: parent.id, text: "Launch a subagent", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      const child = Session.ID.create()
-
-      // The child reported back through a foreground follow-up before the fork.
-      yield* subagentStep({
-        sessionID: parent.id,
-        calls: [
-          {
-            callID: "call_launch",
-            input: { background: true, description: "review the diff" },
-            metadata: { sessionID: child, status: "running" },
-          },
-          {
-            callID: "call_followup",
-            input: { sessionID: child, description: "review the diff" },
-            content: [{ type: "text", text: `<subagent sessionID="${child}" state="completed">\ndone\n</subagent>` }],
-            metadata: { sessionID: child, status: "completed" },
-          },
-        ],
-      })
-
-      const forked = yield* session.fork({ sessionID: parent.id })
-      yield* SessionInbox.promote(db, bus, forked.id, "steer")
-      const notice = (yield* session.context(forked.id)).at(-1)
-
-      expect(notice).toMatchObject({ type: "synthetic" })
-      const text = notice?.type === "synthetic" ? notice.text : ""
-      expect(text).not.toContain(child)
-      expect(text).not.toContain("Don't wait for these")
-    }),
-  )
-
-  it.effect("names only subagents created at or before the last copied message", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const jobs = yield* Job.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location, title: "Original" })
-      // A running job stays in the in-memory map, so the cutoff alone decides whether a child is reachable.
-      const run = (child: Session.ID, description: string) =>
-        jobs.start({
-          id: child,
-          type: "subagent",
-          title: description,
-          recovery: {
-            kind: "subagent",
-            parentSessionID: parent.id,
-            childSessionID: child,
-            agent: "reviewer",
-            description,
-          },
-          run: Effect.never,
-        })
-      const earlier = yield* session.create({ parentID: parent.id, title: "earlier review" })
-      yield* run(earlier.id, "review the diff")
-
       yield* TestClock.setTime(1_000)
       yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
       yield* SessionInbox.promote(db, bus, parent.id, "steer")
@@ -1006,15 +911,17 @@ describe("Session.create", () => {
       yield* SessionInbox.promote(db, bus, parent.id, "steer")
 
       yield* TestClock.setTime(3_000)
-      const later = yield* session.create({ parentID: parent.id, title: "later review" })
-      yield* run(later.id, "check the tests")
+      const later = yield* runningChild(parent.id, "check the tests")
 
       const forked = yield* session.fork({ sessionID: parent.id, before: second.id })
-      const notice = (yield* session.inbox(forked.id)).find((item) => item.type === "synthetic")
-      const text = notice?.type === "synthetic" ? notice.payload.text : ""
+      const text = yield* noticeText(forked.id)
 
       expect(text).toContain(`- ${earlier.id} "review the diff" (running)`)
       expect(text).not.toContain(later.id)
+      expect(text).not.toContain(finished.id)
+      expect(text).toContain(
+        "Don't wait for these. Their results won't arrive here. Start a new subagent if this fork needs that work.",
+      )
       // The copied history ends at First; Second is the boundary the fork left behind.
       expect(text).toContain(`copied through its message at ${DateTime.formatIso(DateTime.makeUnsafe(1_000))}`)
       expect(text).not.toContain(DateTime.formatIso(DateTime.makeUnsafe(2_000)))
@@ -1031,27 +938,13 @@ describe("Session.create", () => {
       const { db } = yield* Database.Service
       const parent = yield* session.create({ location, title: "Original" })
       // Created at the clock's start, so a cutoff defaulted to 0 would wrongly keep it.
-      const child = yield* session.create({ parentID: parent.id, title: "background review" })
-      yield* jobs.start({
-        id: child.id,
-        type: "subagent",
-        title: "review the diff",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent.id,
-          childSessionID: child.id,
-          agent: "reviewer",
-          description: "review the diff",
-        },
-        run: Effect.never,
-      })
+      const child = yield* runningChild(parent.id, "review the diff")
       yield* TestClock.setTime(1_000)
       const first = yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
       yield* SessionInbox.promote(db, bus, parent.id, "steer")
 
       const forked = yield* session.fork({ sessionID: parent.id, before: first.id })
-      const notice = (yield* session.inbox(forked.id)).find((item) => item.type === "synthetic")
-      const text = notice?.type === "synthetic" ? notice.payload.text : ""
+      const text = yield* noticeText(forked.id)
 
       expect(text).toContain(
         `This session is a fork of ${parent.id} ("Original"). It starts with none of the original's messages`,
@@ -1085,10 +978,8 @@ describe("Session.create", () => {
       yield* transfer.import({ data: { info: { ...template, id: sessionID }, messages }, location })
 
       const forked = yield* session.fork({ sessionID })
-      const notice = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
-      const text = notice[0]?.type === "synthetic" ? notice[0].payload.text : ""
+      const text = yield* noticeText(forked.id)
 
-      expect(notice).toHaveLength(1)
       expect(text).toContain(
         `This session is a fork of ${sessionID} (untitled), copied through its message at ${DateTime.formatIso(DateTime.makeUnsafe(100))}`,
       )
