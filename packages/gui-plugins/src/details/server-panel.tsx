@@ -1697,7 +1697,7 @@ function McpSignInDialog(props: {
 
     if (value.type === "auth-failed") return ctx.t("mcp.signIn.failed", { error: value.message })
 
-    if (value.type === "sync-failed") return value.message
+    if (value.type === "sync-failed") return ctx.t("mcp.signIn.syncFailed", { name: props.name, error: value.message })
 
     return ctx.t("mcp.timedOut", { name: props.name })
   }

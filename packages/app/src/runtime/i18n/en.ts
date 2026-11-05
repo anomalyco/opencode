@@ -392,6 +392,7 @@ export const dict = {
   "dialog.mcp.signIn.paste.label": "Redirect URL",
   "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
   "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
+  "dialog.mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",

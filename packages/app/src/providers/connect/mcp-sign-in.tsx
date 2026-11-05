@@ -177,7 +177,8 @@ export function DialogMcpSignIn(props: {
 
     if (value.type === "auth-failed") return language.t("provider.connect.status.failed", { error: value.message })
 
-    if (value.type === "sync-failed") return value.message
+    if (value.type === "sync-failed")
+      return language.t("dialog.mcp.signIn.syncFailed", { name: props.name, error: value.message })
 
     return language.t("mcp.timedOut", { name: props.name })
   }

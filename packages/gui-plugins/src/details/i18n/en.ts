@@ -61,6 +61,7 @@ export default {
   "mcp.signIn.paste.label": "Redirect URL",
   "mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
   "mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
+  "mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "mcp.error.open": "{{name}} failed, view error",
   "mcp.error.title": "MCP server: {{name}}",
   "mcp.error.copy": "Copy details",

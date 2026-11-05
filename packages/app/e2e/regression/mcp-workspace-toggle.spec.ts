@@ -601,6 +601,8 @@ for (const surface of ["popover", "dialog"] as const) {
     await view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Sign in to figma-desktop", exact: true })
     const redirect = dialog.getByRole("textbox", { name: "Redirect URL", exact: true })
+    // The details popover closes behind the dialog and returns focus to its trigger; type once that settled.
+    if (surface === "popover") await expect(view.panel).toBeHidden()
     await redirect.fill("http://127.0.0.1:19876/callback?code=abc")
 
     // A second Enter while the paste is in flight does not send it again.
