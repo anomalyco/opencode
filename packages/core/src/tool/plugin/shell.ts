@@ -329,9 +329,10 @@ export const Plugin = {
       const result = yield* shell.result(info)
       // The stopped job settles from the same exit; this only releases it.
       yield* jobs.cancel(jobID)
+      // No `shellID`: clients read it as a background call and show the shell's live output instead of this result.
+      // The text names the shell and its output file.
       const output = {
         ...ShellResult.interrupted(result),
-        shellID: info.id,
         interrupted: true,
         status: "completed" as const,
       }

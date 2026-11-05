@@ -1843,7 +1843,9 @@ describe("ShellTool", () => {
             const info = yield* shell.get(shellID)
             expect(info.status).toBe("killed")
             expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("first\nsecond\n")
-            expect(result?.metadata).toMatchObject({ shellID, interrupted: true, truncated: false })
+            expect(result?.metadata).toMatchObject({ interrupted: true, truncated: false, status: "completed" })
+            // A shell ID marks a background call, whose live output clients show instead of the result.
+            expect(result?.metadata).not.toHaveProperty("shellID")
             expect(result?.content).toEqual([
               {
                 type: "text",
