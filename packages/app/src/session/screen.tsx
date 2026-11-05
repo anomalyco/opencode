@@ -301,7 +301,6 @@ function SessionScreenContent(props: {
         <PluginLinks session={own()} active={active()}>
           <MessageTimeline
             active={active()}
-            caughtUp={timeline.resource.state === "ready" && timeline.resource.latest === source.identity.sessionID()}
             hideHeader={!isDesktop()}
             registerHeaderGap={registerHeaderGap}
             session={source}

@@ -1008,9 +1008,6 @@ export const dict = {
   "settings.timeline.custom": "Custom",
   "settings.timeline.row.turnDiffs.title": "Changed files",
   "settings.timeline.row.turnDiffs.description": "List the files each turn changed when it finishes",
-  "settings.timeline.row.newMessagesDivider.title": "New messages divider",
-  "settings.timeline.row.newMessagesDivider.description":
-    "When you return to a session, jump to the first unread message.",
   "settings.timeline.advanced": "Advanced",
   "settings.timeline.advanced.description": "Set placement and details for each activity category.",
   "settings.timeline.group": "Group",
