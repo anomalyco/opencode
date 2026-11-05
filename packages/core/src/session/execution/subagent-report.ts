@@ -111,10 +111,12 @@ export const make = (deps: Deps) => {
     // A job that finished or was cancelled mid-period already reported through its observer.
     if (!live && snap.remembered) return
     // The child's own background work will wake it again, and that later settlement reports the
-    // final state. Failures and user interrupts report now.
-    if (outcome.type === "succeeded" && (yield* deps.pending(child.id))) {
+    // final state. Failures and user interrupts report now. Mark held before asking, so a silent
+    // descendant settling meanwhile still wakes this child; a spurious wake sends nothing.
+    if (outcome.type === "succeeded") {
       held.add(child.id)
-      return
+      if (yield* deps.pending(child.id)) return
+      held.delete(child.id)
     }
 
     const recovery = subagentRecovery(live?.notificationID ? snap.recovery : undefined, child, parentID)
