@@ -3,7 +3,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -266,7 +266,7 @@ const forkInlineParent = Effect.fnUntraced(function* (id: string, directory: str
   const row = yield* db
     .select()
     .from(SessionMessageTable)
-    .where(eq(SessionMessageTable.session_id, child.id))
+    .where(and(eq(SessionMessageTable.session_id, child.id), eq(SessionMessageTable.type, "user")))
     .get()
     .pipe(Effect.orDie)
   return row!

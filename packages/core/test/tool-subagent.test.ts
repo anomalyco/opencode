@@ -723,7 +723,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("rejects continuing the original's subagent from a fork", () =>
+  it.live("rejects continuing the original's subagent from a fork of a fork", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -739,7 +739,8 @@ describe("SubagentTool", () => {
             title: "original review",
             agent: Agent.ID.make("reviewer"),
           })
-          const forked = yield* sessions.fork({ sessionID: parent.id })
+          const first = yield* sessions.fork({ sessionID: parent.id })
+          const forked = yield* sessions.fork({ sessionID: first.id })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(forked.location)))
@@ -759,7 +760,7 @@ describe("SubagentTool", () => {
             status: "error",
             error: {
               type: "tool.execution",
-              message: `Session ${child.id} belongs to the original session ${parent.id}; this session is a fork of it, so that subagent reports there. Start a new subagent here instead.`,
+              message: `Session ${child.id} belongs to ${parent.id}, which this session was forked from, so that subagent reports there. Start a new subagent here instead.`,
             },
           })
         }),

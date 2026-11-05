@@ -110,6 +110,7 @@ const projectIt = testEffect(
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = Session.ID.create()
+const forkNoticeMessage = { type: "synthetic", description: "Fork notice" }
 
 /** Public session events from a `log` read, without synced markers. */
 const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: boolean) =>
@@ -631,22 +632,20 @@ describe("Session.create", () => {
       const parentContext = yield* session.context(parent.id)
       const forkContext = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
-      const notices = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
 
-      expect(notices).toMatchObject([
-        {
-          sessionID: forked.id,
-          delivery: "steer",
-          payload: {
-            description: "Fork notice",
-            text: `This session is a fork of ${parent.id} ("Parent"). Subagents started before the fork belong to the original and report there, not here. Don't wait for them; start a new subagent if this fork needs that work.`,
-            metadata: { source: "fork", forkOf: parent.id },
-          },
-        },
-      ])
+      // The notice is history, not an inbox item, so nothing waits to start a turn on the idle fork.
+      expect(yield* session.inbox(forked.id)).toEqual([])
       expect(forked).toMatchObject({ title: "Parent (fork #1)", fork: { sessionID: parent.id } })
       expect(forked.parentID).toBeUndefined()
-      expect(forkContext).toMatchObject([Expected.user("First"), { type: "synthetic", text: "parent note" }])
+      expect(forkContext).toMatchObject([
+        Expected.user("First"),
+        { type: "synthetic", text: "parent note" },
+        {
+          type: "synthetic",
+          description: "Fork notice",
+          text: `This session is a fork of ${parent.id} ("Parent"). Subagents started before the fork belong to the original and report there, not here. Don't wait for them; start a new subagent if this fork needs that work.`,
+        },
+      ])
       expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
       expect(history).toHaveLength(2)
       expect(history[0]).toMatchObject({
@@ -655,8 +654,8 @@ describe("Session.create", () => {
         data: { sessionID: forked.id, parentID: parent.id },
       })
       expect(history[1]).toMatchObject({
-        type: "session.inbox.enqueued",
-        data: { sessionID: forked.id, item: { type: "synthetic", delivery: "steer" } },
+        type: "session.synthetic",
+        data: { sessionID: forked.id, metadata: { source: "fork", forkOf: parent.id } },
       })
       expect(yield* SessionInbox.find(db, forkContext[0].id)).toBeUndefined()
       expect(yield* SessionInbox.find(db, forkContext[1].id)).toBeUndefined()
@@ -680,13 +679,8 @@ describe("Session.create", () => {
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       const forkedContext = yield* session.context(forked.id)
       expect(forkedContext.map((message) => message.type)).toEqual(["user", "synthetic", "synthetic", "user"])
-      expect(forkedContext.at(-2)).toMatchObject({ type: "synthetic", id: notices[0]?.id })
+      expect(forkedContext.at(-2)).toMatchObject(forkNoticeMessage)
       expect(forkedContext.at(-1)).toMatchObject({ text: "Child continues" })
-      expect(
-        Array.from(yield* Stream.runCollect(logEvents(session, forked.id))).map(
-          (event): number | undefined => event.durable?.seq,
-        ),
-      ).toEqual([0, 5, 6, 7, 8])
       expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
     }),
   )
@@ -724,20 +718,23 @@ describe("Session.create", () => {
         .select()
         .from(EventTable)
         .where(eq(EventTable.aggregate_id, forked.id))
-        .get()
+        .orderBy(EventTable.seq)
+        .all()
         .pipe(Effect.orDie)
-      if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
+      expect(recorded).toHaveLength(2)
 
       yield* bus.remove(forked.id)
       yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
-      yield* bus.replay({
-        id: recorded.id,
-        created: recorded.created,
-        aggregateID: recorded.aggregate_id,
-        seq: recorded.seq,
-        type: recorded.type,
-        data: recorded.data,
-      })
+      yield* Effect.forEach(recorded, (event) =>
+        bus.replay({
+          id: event.id,
+          created: event.created,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        }),
+      )
 
       expect((yield* session.context(forked.id)).map((message) => message.id)).toEqual(original)
     }),
@@ -841,7 +838,7 @@ describe("Session.create", () => {
         Expected.user("Run both tools"),
         Expected.assistant({}, [{ type: "tool", id: "call_running", state: { status: "running" } }]),
       ])
-      expect(yield* session.context(forked.id)).toMatchObject([Expected.user("Run both tools")])
+      expect(yield* session.context(forked.id)).toMatchObject([Expected.user("Run both tools"), forkNoticeMessage])
     }),
   )
 
@@ -871,7 +868,7 @@ describe("Session.create", () => {
         Expected.user("Run a shell"),
         { type: "shell", command: "sleep 10", status: "running" },
       ])
-      expect(yield* session.context(running.id)).toMatchObject([Expected.user("Run a shell")])
+      expect(yield* session.context(running.id)).toMatchObject([Expected.user("Run a shell"), forkNoticeMessage])
 
       yield* bus.publish(SessionEvent.Shell.Ended, {
         sessionID: parent.id,
@@ -880,10 +877,11 @@ describe("Session.create", () => {
       })
       const completed = yield* session.fork({ sessionID: parent.id })
 
-      expect(yield* session.context(running.id)).toMatchObject([Expected.user("Run a shell")])
+      expect(yield* session.context(running.id)).toMatchObject([Expected.user("Run a shell"), forkNoticeMessage])
       expect(yield* session.context(completed.id)).toMatchObject([
         Expected.user("Run a shell"),
         { type: "shell", command: "sleep 10", status: "exited", output: { output: "complete" } },
+        forkNoticeMessage,
       ])
     }),
   )
@@ -951,18 +949,20 @@ describe("Session.create", () => {
         sessionID: parent.id,
         boundary: { type: "before", messageID: second.id },
       })
-      expect(context).toMatchObject([{ text: "First" }])
+      expect(context).toMatchObject([{ text: "First" }, forkNoticeMessage])
       expect(context[0]?.id).not.toBe(first.id)
       expect(history[0]).toMatchObject({
         data: { boundary: { type: "before", messageID: second.id } },
       })
       expect(forked).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
-      expect(yield* session.context(beforeFirst.id)).toEqual([])
+      // A fork before the first message gets the notice too, so an untitled empty fork still learns what it is.
+      expect(yield* session.context(beforeFirst.id)).toMatchObject([forkNoticeMessage])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(yield* session.context(complete.id)).toMatchObject([
         Expected.user("First"),
         Expected.user("Second"),
         { type: "assistant", finish: "stop" },
+        forkNoticeMessage,
       ])
       expect(complete).toMatchObject({
         cost: 0,

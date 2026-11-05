@@ -162,12 +162,20 @@ export const Plugin = {
                         ),
                       )
               if (existing !== undefined && existing.parentID !== context.sessionID) {
-                // A fork's parent is the original, so a child of the original reports there, not here.
-                const original = parent.fork?.sessionID
+                // A child of any session this one was forked from (a fork of a fork too) reports there, not here.
+                const seen = new Set<string>([parent.id])
+                let original = parent.fork?.sessionID
+                while (original !== undefined && original !== existing.parentID && !seen.has(original)) {
+                  seen.add(original)
+                  original = yield* sessions.get(original).pipe(
+                    Effect.map((session) => session.fork?.sessionID),
+                    Effect.orElseSucceed(() => undefined),
+                  )
+                }
                 return yield* new ToolFailure({
                   message:
                     original !== undefined && original === existing.parentID
-                      ? `Session ${existing.id} belongs to the original session ${existing.parentID}; this session is a fork of it, so that subagent reports there. Start a new subagent here instead.`
+                      ? `Session ${existing.id} belongs to ${existing.parentID}, which this session was forked from, so that subagent reports there. Start a new subagent here instead.`
                       : `Session ${existing.id} is not a child of the current session`,
                 })
               }

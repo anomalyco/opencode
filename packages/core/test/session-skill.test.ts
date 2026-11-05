@@ -189,8 +189,9 @@ describe("Session.skill", () => {
       yield* SessionInbox.promote(database.db, bus, session.id, "steer")
       const forked = yield* sessions.fork({ sessionID: session.id, before: selected })
 
-      expect(yield* sessions.messages({ sessionID: forked.id })).toEqual([
+      expect(yield* sessions.messages({ sessionID: forked.id, order: "asc" })).toEqual([
         expect.objectContaining({ type: "user", text: "Before the skill" }),
+        expect.objectContaining({ type: "synthetic", description: "Fork notice" }),
       ])
     }),
   )

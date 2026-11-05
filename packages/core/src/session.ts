@@ -385,20 +385,16 @@ const layer = Layer.effect(
             ...inherited,
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
-        const forked = yield* result.get(sessionID).pipe(Effect.orDie)
-        // Appended after the copied rows, so the prompt-cache prefix stays byte-identical. It waits in the inbox as a
-        // steer and doesn't wake the fork.
-        yield* result
-          .synthetic({
-            sessionID,
-            description: "Fork notice",
-            text: forkNotice(parent),
-            metadata: { source: "fork", forkOf: parent.id },
-            resume: false,
-          })
-          // A fresh message ID cannot conflict; keep the public error channel unchanged.
-          .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
-        return forked
+        // Appended to history after the copied rows, so the prompt-cache prefix stays byte-identical. Written directly
+        // rather than through the inbox: an inbox steer would be promoted, and start a turn, on the fork's next move,
+        // compaction or revert.
+        yield* bus.publish(SessionEvent.Synthetic, {
+          sessionID,
+          description: "Fork notice",
+          text: forkNotice(parent),
+          metadata: { source: "fork", forkOf: parent.id },
+        })
+        return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
       environment: Effect.fn("Session.environment")(function* (input) {
