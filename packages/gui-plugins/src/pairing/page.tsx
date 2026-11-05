@@ -129,7 +129,9 @@ export default function PairingPage(props: {
     if (effect.type === "wait") {
       const attempt = effect.attempt
 
-      return void start(attempt, effect.delayMs, () => dispatch({ type: "wait.ended", attempt }))
+      const phase = effect.for
+
+      return void start(attempt, effect.delayMs, () => dispatch({ type: "wait.ended", for: phase, attempt }))
     }
 
     const attempt = effect.attempt

@@ -5,6 +5,7 @@ import {
   REMOTE_READ_RETRIES,
   REMOTE_READ_TIMEOUT_MS,
   TUNNEL_RETRIES,
+  TUNNEL_RETRY_DELAY_MS,
   TUNNEL_TIMEOUT_MS,
   createPairingState,
   dialogUrl,
@@ -47,7 +48,7 @@ const failReads = (state: PairingState) =>
         last.state,
         remote.step === "reading"
           ? { type: "read.failed", attempt: remote.attempt }
-          : { type: "wait.ended", attempt: remote.attempt },
+          : { type: "wait.ended", for: "read", attempt: remote.attempt },
       )
 
       return { state: next.state, effects: [...last.effects, ...next.effects] }
@@ -126,14 +127,14 @@ describe("transitionPairing", () => {
     expect(failed.state.remote).toEqual({ status: "loading", generation: 1, attempt: 2, step: "waiting", failures: 1 })
     expect(failed.effects).toEqual([
       { type: "abort", attempt: 1 },
-      { type: "wait", attempt: 2, delayMs: 1_000 },
+      { type: "wait", for: "read", attempt: 2, delayMs: 1_000 },
     ])
     // The page keeps the row loading meanwhile, without the error.
     expect(viewPairingPage(failed.state)).toMatchObject({ remoteError: false, remoteDisabled: true })
     // A late answer from the failed read changes nothing.
     expect(step(failed.state, { type: "read.succeeded", attempt: 1, enabled: true }).state).toBe(failed.state)
 
-    const again = step(failed.state, { type: "wait.ended", attempt: 2 })
+    const again = step(failed.state, { type: "wait.ended", for: "read", attempt: 2 })
 
     expect(again.effects).toEqual([
       { type: "abort", attempt: 2 },
@@ -152,6 +153,46 @@ describe("transitionPairing", () => {
     ])
     expect(exhausted.effects.filter((effect) => effect.type === "read-remote")).toHaveLength(REMOTE_READ_RETRIES)
     expect(exhausted.state.remote).toEqual({ status: "failed", generation: 1, previous: undefined })
+  })
+
+  test("a tunnel wait that ends while main restarts and the setting is read again still polls", () => {
+    const waiting = step(polling, { type: "tunnel.missing", attempt: 2 })
+
+    expect(waiting.effects).toContainEqual({ type: "wait", for: "tunnel", attempt: 3, delayMs: TUNNEL_RETRY_DELAY_MS })
+
+    // Main restarts: the dialog keeps its tunnel wait while the new generation reads the setting, and that read fails.
+    const reading = step(waiting.state, { type: "main.changed", main: { status: "active", generation: 2 } }).state
+    const retrying = step(reading, { type: "read.failed", attempt: 4 }).state
+
+    expect(retrying.remote).toMatchObject({ status: "loading", step: "waiting", attempt: 5 })
+    expect(retrying.dialog).toEqual({ status: "tunnel", attempt: 3, step: "waiting", retries: 1 })
+
+    // The tunnel wait ends during the read, and during the read's own wait: neither swallows it.
+    ;[reading, retrying].forEach((state) => {
+      const polled = step(state, { type: "wait.ended", for: "tunnel", attempt: 3 })
+
+      expect(polled.state.dialog).toEqual({ status: "tunnel", attempt: state.issued + 1, step: "polling", retries: 1 })
+      expect(polled.effects).toContainEqual({
+        type: "poll-tunnel",
+        attempt: state.issued + 1,
+        timeoutMs: TUNNEL_TIMEOUT_MS,
+      })
+      expect(polled.state.remote).toBe(state.remote)
+    })
+
+    // The read's wait ends on its own branch and leaves the tunnel wait alone.
+    const reread = step(retrying, { type: "wait.ended", for: "read", attempt: 5 })
+
+    expect(reread.state.dialog).toBe(retrying.dialog)
+    expect(reread.effects).toContainEqual({
+      type: "read-remote",
+      generation: 2,
+      attempt: 6,
+      timeoutMs: REMOTE_READ_TIMEOUT_MS,
+    })
+    // A wait for one phase never ends the other with the same attempt number.
+    expect(step(retrying, { type: "wait.ended", for: "read", attempt: 3 }).state).toBe(retrying)
+    expect(step(retrying, { type: "wait.ended", for: "tunnel", attempt: 5 }).state).toBe(retrying)
   })
 
   test("after reads give up, the switch still works: its change reads the setting first", () => {
@@ -236,7 +277,7 @@ describe("transitionPairing", () => {
         state,
         dialog.step === "polling"
           ? { type: "tunnel.missing", attempt: dialog.attempt }
-          : { type: "wait.ended", attempt: dialog.attempt },
+          : { type: "wait.ended", for: "tunnel", attempt: dialog.attempt },
       ).state
     }, polling)
 
@@ -339,7 +380,7 @@ describe("transitionPairing", () => {
   test("answers for another attempt change nothing", () => {
     expect(step(started, { type: "read.succeeded", attempt: 9, enabled: true }).state).toBe(started)
     expect(step(polling, { type: "tunnel.found", attempt: 1, tunnel: TUNNEL }).state).toBe(polling)
-    expect(step(polling, { type: "wait.ended", attempt: 2 }).state).toBe(polling)
+    expect(step(polling, { type: "wait.ended", for: "tunnel", attempt: 2 }).state).toBe(polling)
     expect(step(ready, { type: "code.loaded", attempt: 3, code: "x", expiresIn: 60, now: 0 }).state).toBe(ready)
     expect(step(ready, { type: "change.succeeded", attempt: 1 }).state).toBe(ready)
     expect(step(started, { type: "main.changed", main: { status: "active", generation: 1 } }).state).toBe(started)

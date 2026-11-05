@@ -117,8 +117,8 @@ export type PairingEvent =
   | { readonly type: "tunnel.found"; readonly attempt: number; readonly tunnel: string }
   /** The server advertises no tunnel yet, or the request failed or timed out. */
   | { readonly type: "tunnel.missing"; readonly attempt: number }
-  /** A `wait` effect's delay ended. */
-  | { readonly type: "wait.ended"; readonly attempt: number }
+  /** A `wait` effect's delay ended; `for` names the phase it belongs to, as the effect did. */
+  | { readonly type: "wait.ended"; readonly for: "read" | "tunnel"; readonly attempt: number }
   | {
       readonly type: "code.loaded"
       readonly attempt: number
@@ -145,8 +145,11 @@ export type PairingEffect =
       readonly timeoutMs: number
     }
   | { readonly type: "poll-tunnel"; readonly attempt: number; readonly timeoutMs: number }
-  /** Waits before the next read of the setting or the next ask for the tunnel; ends with `wait.ended`. */
-  | { readonly type: "wait"; readonly attempt: number; readonly delayMs: number }
+  /**
+   * Waits before the next read of the setting or the next ask for the tunnel; ends with `wait.ended` for the same
+   * phase, so a read retry and a tunnel retry that wait at once never take each other's event.
+   */
+  | { readonly type: "wait"; readonly for: "read" | "tunnel"; readonly attempt: number; readonly delayMs: number }
   | { readonly type: "fetch-code"; readonly attempt: number; readonly timeoutMs: number }
   /** Ends an attempt's request and timer. */
   | { readonly type: "abort"; readonly attempt: number }
@@ -234,12 +237,13 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
         issued: attempt,
         remote: { ...remote, attempt, step: "waiting", failures: remote.failures + 1 },
       },
-      effects: [...effects, { type: "wait", attempt, delayMs: remoteReadDelay(remote.failures) }],
+      effects: [...effects, { type: "wait", for: "read", attempt, delayMs: remoteReadDelay(remote.failures) }],
     }
   }
 
-  if (event.type === "wait.ended" && remote.status === "loading") {
-    if (remote.step !== "waiting" || remote.attempt !== event.attempt) return { state, effects: NONE }
+  if (event.type === "wait.ended" && event.for === "read") {
+    if (remote.status !== "loading" || remote.step !== "waiting" || remote.attempt !== event.attempt)
+      return { state, effects: NONE }
 
     const attempt = state.issued + 1
 
@@ -339,12 +343,12 @@ function transitionCode(state: PairingState, event: PairingEvent): PairingTransi
       },
       effects: [
         { type: "abort", attempt: event.attempt },
-        { type: "wait", attempt, delayMs: TUNNEL_RETRY_DELAY_MS },
+        { type: "wait", for: "tunnel", attempt, delayMs: TUNNEL_RETRY_DELAY_MS },
       ],
     }
   }
 
-  if (event.type === "wait.ended") {
+  if (event.type === "wait.ended" && event.for === "tunnel") {
     if (dialog.status !== "tunnel" || dialog.step !== "waiting" || dialog.attempt !== event.attempt)
       return { state, effects: NONE }
 
@@ -563,7 +567,7 @@ export function pairingEffectFailed(effect: PairingEffect): PairingEvent | undef
 
   if (effect.type === "poll-tunnel") return { type: "tunnel.missing", attempt: effect.attempt }
 
-  if (effect.type === "wait") return { type: "wait.ended", attempt: effect.attempt }
+  if (effect.type === "wait") return { type: "wait.ended", for: effect.for, attempt: effect.attempt }
 
   if (effect.type === "fetch-code") return { type: "code.failed", attempt: effect.attempt }
 
