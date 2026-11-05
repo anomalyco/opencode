@@ -1,6 +1,6 @@
 export * as SubagentReport from "./subagent-report.js"
 
-import { Effect } from "effect"
+import { Effect, Fiber, Scope } from "effect"
 import type { Job } from "../../job.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionMessage } from "../message.js"
@@ -10,6 +10,12 @@ import { SubagentCompletion } from "../subagent-completion.js"
 import { SubagentMetadata } from "../subagent-metadata.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
+
+type Bound = {
+  readonly generation: number
+  settled: Job.Info | undefined
+  fiber: Fiber.Fiber<void> | undefined
+}
 
 /** The terminal outcome of one busy period, the same mapping execution publishes. */
 export type Outcome =
@@ -25,7 +31,11 @@ export type Snapshot = {
   readonly blocked: boolean
   readonly job: Job.Info | undefined
   readonly recovery: Job.Recovery | undefined
-  readonly remembered: boolean
+  /**
+   * The job generation running when this period began was cancelled during it, so its observer or
+   * its cancelled caller already owns the result.
+   */
+  readonly owned: boolean
   /** The child's newest answer when the period began; undefined when that was never read. */
   readonly baseline: { readonly id: SessionMessage.ID | undefined } | undefined
 }
@@ -37,6 +47,8 @@ export type Deps = {
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** True while the child still has background work or undelivered input that will wake it again. */
   readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
+  /** Long-lived scope for per-period job watchers. */
+  readonly scope: Scope.Scope
 }
 
 /**
@@ -45,9 +57,10 @@ export type Deps = {
  * same notification ID, so first admission wins and the parent sees one message.
  */
 export const make = (deps: Deps) => {
-  // Busy periods that began with a running job. That job owns its report whenever it finishes or
-  // is cancelled before settlement, so settlement must not send a second one.
-  const jobPeriods = new Set<SessionSchema.ID>()
+  // The job generation running when a busy period began. Its watcher records that generation's
+  // terminal when it settles within the period, because only a cancellation there owns the
+  // period's report: completion or failure is settling an earlier period. Dropped at settlement.
+  const periods = new Map<SessionSchema.ID, { readonly job: Bound | undefined }>()
   // Children whose last succeeded period held its report for background work. Process-local: after
   // a restart, recovery and background notices wake the child instead.
   const held = new Set<SessionSchema.ID>()
@@ -65,24 +78,60 @@ export const make = (deps: Deps) => {
   })
 
   const started = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+    // A record left behind means the previous period never settled; drop its watcher so it cannot
+    // write into this one.
+    const leftover = periods.get(sessionID)
+    if (leftover) {
+      periods.delete(sessionID)
+      if (leftover.job?.fiber) yield* Fiber.interrupt(leftover.job.fiber)
+    }
     const job = yield* deps.jobs.get(sessionID)
-    if (job?.status === "running") jobPeriods.add(sessionID)
     // A finished entry from an earlier generation must not make a re-prompt silently reconcile.
-    else jobPeriods.delete(sessionID)
+    if (job?.status !== "running") periods.set(sessionID, { job: undefined })
+    else {
+      const bound: Bound = { generation: job.started_at, settled: undefined, fiber: undefined }
+      // Record before forking: startImmediately can run the watcher inline when this generation
+      // already settled. Every write is guarded by the record, so an old watcher cannot mark a
+      // later period.
+      periods.set(sessionID, { job: bound })
+      bound.fiber = yield* deps.jobs.wait({ id: sessionID }).pipe(
+        Effect.flatMap((result) =>
+          Effect.sync(() => {
+            if (periods.get(sessionID)?.job !== bound) return
+            const info = result.info
+            if (info === undefined || info.status === "running" || info.started_at !== bound.generation) return
+            bound.settled = info
+          }),
+        ),
+        Effect.forkIn(deps.scope, { startImmediately: true }),
+      )
+    }
     baselines.delete(sessionID)
     if (!(yield* deps.store.get(sessionID))?.parentID) return
     baselines.set(sessionID, (yield* lastAssistant(sessionID))?.id)
   })
 
   const snapshot = Effect.fnUntraced(function* (sessionID: SessionSchema.ID): Effect.fn.Return<Snapshot> {
-    const remembered = jobPeriods.delete(sessionID)
+    const period = periods.get(sessionID)
+    periods.delete(sessionID)
+    const job = yield* deps.jobs.get(sessionID)
+    const bound = period?.job
+    // A cancellation whose watcher continuation has not been scheduled yet: the entry still names
+    // the generation that began this period.
+    const settled =
+      bound?.settled ??
+      (bound !== undefined && job !== undefined && job.status !== "running" && job.started_at === bound.generation
+        ? job
+        : undefined)
+    // Read the watcher's write before interrupting it, or a resumed continuation loses it.
+    if (bound?.fiber) yield* Fiber.interrupt(bound.fiber)
     const baseline = baselines.has(sessionID) ? { id: baselines.get(sessionID) } : undefined
     baselines.delete(sessionID)
     return {
       blocked: yield* deps.jobs.isBlocked(sessionID),
-      job: yield* deps.jobs.get(sessionID),
+      job,
       recovery: yield* deps.jobs.recovery(sessionID),
-      remembered,
+      owned: settled?.status === "cancelled",
       baseline,
     }
   })
@@ -114,8 +163,10 @@ export const make = (deps: Deps) => {
     // A running job without a notification is a foreground spawn whose block has not registered,
     // or one whose block already returned. Either way that job owns the result.
     if (live && !live.notificationID) return
-    // A job that finished or was cancelled mid-period already reported through its observer.
-    if (!live && snap.remembered) return
+    // A generation that began this period and was cancelled during it already reported through its
+    // observer or its cancelled caller. One that completed or failed during the period was settling
+    // an earlier period, so this period still reports its own answer with a fresh message ID.
+    if (!live && snap.owned) return
     // The child's own background work will wake it again, and that later settlement reports the
     // final state. Failures and user interrupts report now. Mark held before asking, so a silent
     // descendant settling meanwhile still wakes this child; a spurious wake sends nothing.

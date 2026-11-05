@@ -1,6 +1,6 @@
 export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Scope } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
@@ -56,6 +56,7 @@ export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?:
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const scope = yield* Scope.Scope
     const store = yield* SessionStore.Service
     const instances = yield* Instance.Service
     const bus = yield* Bus.Service
@@ -113,6 +114,8 @@ export const layer = Layer.effect(
       store,
       jobs,
       inbox,
+      // Long-lived: each busy period forks one job watcher here and settlement interrupts it.
+      scope,
       // The coordinator is created below; a report only runs after a busy period has settled.
       wake: (sessionID) => coordinator.wake(sessionID),
       pending: (sessionID) => SessionBackground.unsettled(jobs, store, db, sessionID),

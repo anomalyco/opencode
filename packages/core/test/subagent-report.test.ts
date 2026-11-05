@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -88,6 +88,29 @@ const synthetics = (sessions: Session.Interface, sessionID: Session.ID) =>
     Effect.map((messages) => messages.filter((message) => message.type === "synthetic")),
   )
 
+/**
+ * A job that stands in for the child's spawn without an observer or a notification ID, so only
+ * settlement can report a busy period it overlaps.
+ */
+const startChildJob = (
+  jobs: Job.Interface,
+  parent: SessionSchema.Info,
+  child: SessionSchema.Info,
+  run: Effect.Effect<string, unknown>,
+) =>
+  jobs.start({
+    id: child.id,
+    type: "subagent",
+    recovery: {
+      kind: "subagent",
+      parentSessionID: parent.id,
+      childSessionID: child.id,
+      agent: "reviewer",
+      description: "Review fixture",
+    },
+    run,
+  })
+
 describe("subagent report", () => {
   it.live("reports a directly prompted child to its parent once", () =>
     Effect.gen(function* () {
@@ -157,6 +180,79 @@ describe("subagent report", () => {
       expect(reports[0]).toMatchObject({
         metadata: { source: "subagent", childID: child.id, state: "cancelled" },
       })
+    }),
+  )
+
+  it.live("reports a period whose starting job completed during it", () =>
+    Effect.gen(function* () {
+      const { sessions, parent, child } = yield* family()
+      const jobs = yield* Job.Service
+      const release = yield* Deferred.make<void>()
+      const llm = yield* TestLLM.Test
+      const gate = yield* llm.gate()
+      yield* startChildJob(
+        jobs,
+        parent,
+        child,
+        Deferred.await(release).pipe(Effect.as("stale answer")),
+      )
+      yield* sessions.prompt({ sessionID: child.id, text: "Review the fixture" })
+      yield* gate.started
+      // The generation that began this period finishes on its own, settling an earlier period.
+      yield* Deferred.succeed(release, undefined)
+      expect((yield* jobs.wait({ id: child.id })).info?.status).toBe("completed")
+      yield* gate.release
+      yield* sessions.wait(child.id)
+      yield* sessions.wait(parent.id)
+
+      const reports = yield* synthetics(sessions, parent.id)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        metadata: { source: "subagent", childID: child.id, state: "completed" },
+      })
+      expect(reports[0]?.text).toContain(childText)
+    }),
+  )
+
+  it.live("stays silent when the starting job is cancelled during the period", () =>
+    Effect.gen(function* () {
+      const { sessions, parent, child } = yield* family()
+      const jobs = yield* Job.Service
+      const llm = yield* TestLLM.Test
+      const gate = yield* llm.gate()
+      yield* startChildJob(jobs, parent, child, Effect.never)
+      yield* sessions.prompt({ sessionID: child.id, text: "Review the fixture" })
+      yield* gate.started
+      yield* jobs.cancel(child.id)
+      yield* gate.release
+      yield* sessions.wait(child.id)
+      yield* sessions.wait(parent.id)
+
+      expect(yield* synthetics(sessions, parent.id)).toEqual([])
+    }),
+  )
+
+  it.live("does not let a cancelled earlier period silence a later one", () =>
+    Effect.gen(function* () {
+      const { sessions, parent, child } = yield* family()
+      const jobs = yield* Job.Service
+      yield* startChildJob(jobs, parent, child, Effect.never)
+      yield* sessions.prompt({ sessionID: child.id, text: "Review the fixture" })
+      yield* sessions.wait(child.id)
+      yield* sessions.wait(parent.id)
+      // The running job owns period one, so only its cancellation could have reported it.
+      expect(yield* synthetics(sessions, parent.id)).toEqual([])
+      yield* jobs.cancel(child.id)
+      yield* sessions.prompt({ sessionID: child.id, text: "Review it again" })
+      yield* sessions.wait(child.id)
+      yield* sessions.wait(parent.id)
+
+      const reports = yield* synthetics(sessions, parent.id)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        metadata: { source: "subagent", childID: child.id, state: "completed" },
+      })
+      expect(reports[0]?.text).toContain(childText)
     }),
   )
 
