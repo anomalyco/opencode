@@ -40,7 +40,7 @@ pub struct Strip {
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
-    Custom::new(
+    let strip = Custom::new(
         app,
         Strip {
             tui,
@@ -59,7 +59,16 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
     )
     .height(1)
     .shrink(0.0)
-    .z_index(1)
+    .z_index(1);
+    // Runs before `Strip::mouse`, so it may read the component.
+    let hover = strip.clone();
+    strip.on_mouse(move |_, event| {
+        if event.kind == MouseEventKind::Moved {
+            let x = i32::from(event.x) - hover.element().rect().screen_x.floor() as i32;
+            let clickable = hover.with(|strip| strip.slot_at(x).is_some() || strip.on_plus(x));
+            hover.mouse_pointer(opencode_ui::click_pointer(clickable));
+        }
+    })
 }
 
 /// Clears the hover state when the pointer leaves the strip.
@@ -197,6 +206,10 @@ impl Strip {
             .iter()
             .find(|(start, width, _)| x >= *start as i32 && x < (start + width) as i32)
             .map(|(_, _, session)| session.clone())
+    }
+
+    fn on_plus(&self, x: i32) -> bool {
+        self.plus.get().is_some_and(|plus| x >= plus as i32 && x < (plus + ADD_TAB_WIDTH) as i32)
     }
 }
 
@@ -379,7 +392,7 @@ impl Component for Strip {
 
     fn mouse(&mut self, cx: &mut Cx<'_>, event: &MouseEvent, local: (i32, i32)) -> bool {
         let x = local.0;
-        let on_plus = self.plus.get().is_some_and(|plus| x >= plus as i32 && x < (plus + ADD_TAB_WIDTH) as i32);
+        let on_plus = self.on_plus(x);
         let slot = self.slot_at(x);
         let close = |session: &str, slots: &[(usize, usize, String)]| {
             slots

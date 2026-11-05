@@ -56,6 +56,8 @@ impl Notice {
         let weak = Rc::downgrade(&inner);
         inner.root.on_hover(move |_, hovered| {
             let Some(inner) = weak.upgrade() else { return };
+            let child = matches!(&*inner.rendered.borrow(), Some(Line::Completion { child: Some(_), .. }));
+            inner.root.mouse_pointer(opencode_ui::click_pointer(child));
             inner.hover.set(hovered);
             inner.paint();
         });

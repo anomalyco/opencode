@@ -442,7 +442,7 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
     let close = Text::new(&cx.app, props.close_label.as_deref().unwrap_or("esc")).fg(theme.text.muted).shrink(0.0);
     let dialogs = cx.dialogs.clone();
     let on_close = props.on_close;
-    close.on_mouse(move |_cx, event| {
+    close.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
         if matches!(event.kind, MouseEventKind::Up(_)) {
             match &on_close {
                 Some(on_close) => on_close(),
@@ -627,6 +627,7 @@ fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget 
     item.on_hover(move |_cx, over| {
         hover_item.bg(if over && enabled { hovered } else { Color::TRANSPARENT });
     });
+    item.mouse_pointer(crate::click_pointer(enabled));
     item.on_mouse(move |_cx, event| {
         if matches!(event.kind, MouseEventKind::Up(_))
             && !action.disabled

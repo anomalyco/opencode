@@ -25,6 +25,10 @@ pub fn install(tui: &Rc<Tui>) {
             .into_iter()
             .all(|modifier| !event.modifiers.contains(modifier));
         match event.kind {
+            // The root's shape reaches every widget without one of its own, such as transcript text.
+            MouseEventKind::Moved => {
+                tui.app.root().mouse_pointer(opencode_ui::click_pointer(link_at(&tui.app, event.x, event.y).is_some()));
+            }
             MouseEventKind::Down(MouseButton::Left) => {
                 pressed.set(plain.then_some((event.x, event.y)));
             }

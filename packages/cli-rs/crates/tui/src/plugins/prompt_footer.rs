@@ -253,7 +253,7 @@ fn live_view(tui: &Tui, live: &Live) -> View {
         cx.app().request_redraw();
     });
     let weak = tui.weak();
-    text.on_mouse(move |_, event| {
+    text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         if matches!(event.kind, MouseEventKind::Up(_))
             && let Some(tui) = weak.upgrade()
         {

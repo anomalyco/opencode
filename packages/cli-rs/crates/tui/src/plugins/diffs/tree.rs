@@ -251,7 +251,7 @@ pub fn pane(
                 .min_width(0),
         );
     }
-    switch.on_click(move |cx, _| {
+    switch.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
         cx.stop_propagation();
         on_source();
     });
@@ -323,7 +323,7 @@ pub fn pane(
             });
         }
         let on_row = on_row.clone();
-        container.on_click(move |cx, _| {
+        container.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
             cx.stop_propagation();
             on_row(&row);
         });

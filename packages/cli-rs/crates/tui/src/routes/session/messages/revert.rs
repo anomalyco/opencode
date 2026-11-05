@@ -74,7 +74,7 @@ impl Banner {
             inner.body.bg(if hovered { inner.theme.decrease(&raised, 1) } else { raised });
         });
         let weak = Rc::downgrade(&inner);
-        inner.root.on_click(move |_, _| {
+        inner.root.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.clear();
             }

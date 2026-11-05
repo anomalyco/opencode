@@ -69,7 +69,7 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
         cx.request_redraw();
     });
     let menu = weak.clone();
-    row.on_mouse(move |cx, event| match event.kind {
+    row.mouse_pointer(MousePointer::POINTER).on_mouse(move |cx, event| match event.kind {
         MouseEventKind::Down(button) => {
             if button == MouseButton::Right {
                 close(&menu);

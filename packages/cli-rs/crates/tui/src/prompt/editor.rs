@@ -832,6 +832,7 @@ fn connect_location(inner: &Rc<Inner>) {
         let Some(prompt) = weak.upgrade() else { return };
         prompt.hovered.set(hovered);
         if let Some(tui) = prompt.tui.upgrade() {
+            prompt.footer.mouse_pointer(opencode_ui::click_pointer(!prompt.running(&tui)));
             prompt.refresh(&tui);
         }
     });

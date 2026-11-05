@@ -50,7 +50,7 @@ impl User {
         // actions (E.10b); a release that ends a text selection opens neither.
         let id = Rc::new(RefCell::new(String::new()));
         let (weak, session, clicked) = (cx.tui.weak(), cx.session.clone(), id.clone());
-        body.on_mouse(move |_, event| {
+        body.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
             if event.kind != MouseEventKind::Up(MouseButton::Left) {
                 return;
             }

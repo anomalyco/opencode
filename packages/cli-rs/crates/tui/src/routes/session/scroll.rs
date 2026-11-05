@@ -131,7 +131,7 @@ impl Inner {
             inner.register(tui);
         });
         let weak = self.this.clone();
-        self.latest.on_click(move |_, _| {
+        self.latest.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             let Some(inner) = weak.upgrade() else { return };
             let Some(tui) = inner.tui.upgrade() else {
                 return;

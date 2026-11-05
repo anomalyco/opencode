@@ -71,7 +71,7 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
     let status = Text::new(app, "").fg(theme.text.muted);
     let close = Text::new(app, "esc").fg(theme.text.muted).shrink(0.0);
     let dialogs = cx.dialogs.clone();
-    close.on_mouse(move |_, event| {
+    close.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         if matches!(event.kind, MouseEventKind::Up(_)) {
             dialogs.clear();
         }
