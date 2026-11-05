@@ -7,7 +7,7 @@ import { checksum } from "@opencode/util/encode"
 import { showToast } from "@opencode/ui/toast"
 import { createQuery, useQueries, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
-import { createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
+import { createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createKeyed,
@@ -29,12 +29,22 @@ import {
   reviewFolderDirectory,
   reviewRootDirectory,
 } from "./kinds"
+import {
+  INITIAL_REVIEW_SCROLL_STATE,
+  sameReviewScrollContext,
+  transitionReviewScroll,
+  type ReviewScrollEvent,
+  type ReviewScrollState,
+} from "./scroll-machine"
 
 export type ChangeMode = "git" | "branch" | "turn"
 
 type FileSelection = { startLine: number; endLine: number; startChar: number; endChar: number }
 
 export type Demand = { tree: number; files: number; panel: number; details: number }
+
+/** The narrow review's list and the animation frame that scrolls it to a focused file. */
+type ScrollTarget = { element?: HTMLDivElement; frame?: number }
 
 const selectionFromLines = (range: LineRange): FileSelection => ({
   startLine: Math.min(range.start, range.end),
@@ -66,9 +76,6 @@ export function createReviewModel(input: {
     initializingGit: {},
   })
 
-  // The review panel's scroller and the file it scrolls to belong to the session the view shows.
-  const [scroll, setScroll] = createVisitState<HTMLDivElement | undefined>(undefined)
-  const [pendingFile, setPendingFile] = createVisitState<string | undefined>(undefined)
   const [rendered, setRendered] = createVisitState(false)
 
   // The routed session's review state. Desktop loads it asynchronously; until it has, its defaults are not the
@@ -574,50 +581,54 @@ export function createReviewModel(input: {
     update((draft) => {
       draft.file = path
     })
-    setPendingFile(path)
+    dispatchScroll({ type: "file.focused", path })
   }
 
-  // Scrolls the review panel to a focused file once its diff has rendered.
+  // The narrow review's list: the element lives here, the machine knows only whether it is mounted.
+  const scroller: ScrollTarget = {}
+  const [hasScroller, setHasScroller] = createSignal(false)
+  const [scrollState, setScrollState] = createSignal<ReviewScrollState>(INITIAL_REVIEW_SCROLL_STATE)
+  // The machine keeps numbers, not the visit objects that tell routing visits apart.
+  const visits = { ids: new WeakMap<MountedSession["visit"], number>(), last: 0 }
+
+  const visitID = (visit: MountedSession["visit"]) => {
+    const existing = visits.ids.get(visit)
+
+    if (existing !== undefined) return existing
+    visits.last += 1
+    visits.ids.set(visit, visits.last)
+
+    return visits.last
+  }
+
+  const dispatchScroll = (event: ReviewScrollEvent) => {
+    const next = transitionReviewScroll(untrack(scrollState), event)
+
+    setScrollState(next.state)
+    next.effects.forEach((effect) => {
+      if (scroller.frame !== undefined) cancelAnimationFrame(scroller.frame)
+      scroller.frame = undefined
+
+      if (effect.type === "frame.cancel") return
+
+      // Scrolls the list to the file's diff, and settles once the diff stays at the top as the list above renders.
+      scroller.frame = requestAnimationFrame(() => {
+        scroller.frame = undefined
+        const element = scroller.element
+        const top = element && scrollToFile(element, effect.path) ? reviewDiffTop(element, effect.path) : undefined
+        const settled = !!element && top !== undefined && Math.abs(element.scrollTop - top) <= 1
+
+        dispatchScroll({ type: "frame.stepped", attempt: effect.attempt, outcome: settled ? "settled" : "retry" })
+      })
+    })
+  }
+
   createKeyed(
-    () => {
-      const pending = pendingFile()
-
-      if (!pending || !scroll() || !ready()) return
-
-      return { pending }
-    },
-    (current) => {
-      const attempt = (count: number) => {
-        if (pendingFile() !== current.pending) return
-
-        if (count > 60) {
-          setPendingFile(undefined)
-
-          return
-        }
-
-        const element = scroll()
-
-        if (!element || !scrollToFile(element, current.pending)) {
-          requestAnimationFrame(() => attempt(count + 1))
-
-          return
-        }
-
-        const top = reviewDiffTop(element, current.pending)
-
-        if (top === undefined || Math.abs(element.scrollTop - top) > 1) {
-          requestAnimationFrame(() => attempt(count + 1))
-
-          return
-        }
-
-        setPendingFile(undefined)
-      }
-
-      requestAnimationFrame(() => attempt(0))
-    },
+    () => ({ visitID: visitID(view().visit), narrow: layout.narrow(), scroller: hasScroller(), ready: ready() }),
+    (context) => dispatchScroll({ type: "context.synced", context }),
+    { equals: sameReviewScrollContext },
   )
+  onCleanup(() => dispatchScroll({ type: "disposed" }))
 
   const idled = createMemo(
     on(
@@ -699,7 +710,13 @@ export function createReviewModel(input: {
       update((draft) => {
         draft.mode = value
       }),
-    setScroll,
+    /** The narrow review's list mounted, or unmounted with `undefined`. */
+    setScroll: (element: HTMLDivElement | undefined) => {
+      scroller.element = element
+      setHasScroller(!!element)
+    },
+    /** The user scrolled the narrow review: it stops scrolling to a focused file. */
+    cancelScroll: () => dispatchScroll({ type: "interacted" }),
   }
 }
 
