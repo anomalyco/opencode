@@ -163,7 +163,7 @@ describe("createShellPanel", () => {
     view.setShells([server])
 
     expect(view.ends.map((end) => end.id)).toEqual(["sh_test"])
-    expect(view.panel.view().ending).toBe(true)
+    expect(view.panel.view().stopDisabled).toBe(true)
     view.dispose()
   })
 
@@ -178,7 +178,7 @@ describe("createShellPanel", () => {
     await flush()
 
     expect(view.panel.view().end).toEqual({ status: "exited", exit: 1, completed: 7_000 })
-    expect(view.panel.view().ending).toBe(false)
+    expect(view.panel.view().stopDisabled).toBe(false)
     view.dispose()
   })
 })
