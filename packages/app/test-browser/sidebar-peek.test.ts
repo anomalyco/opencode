@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "bun:test"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createSidebarPeek } from "../src/shell/sidebar-peek"
 
 const cleanups: (() => void)[] = []
@@ -17,21 +17,26 @@ function mount() {
   aside.append(panel)
   row.append(aside, content)
   document.body.append(row)
+  const [open, setOpen] = createSignal(false)
+  const [enabled, setEnabled] = createSignal(true)
+  const painted: (number | undefined)[] = []
+  const docked: (() => void)[] = []
 
   const peek = createRoot((dispose) => {
     cleanups.push(dispose)
 
     return createSidebarPeek({
-      available: () => true,
-      open: () => false,
+      available: () => !open(),
+      open,
+      enabled,
       aside: () => aside,
       panel: () => panel,
-      paint: () => {},
-      whenDocked: (run) => run(),
+      paint: (shown) => painted.push(shown),
+      whenDocked: (run) => docked.push(run),
     })
   })
 
-  return { peek, content }
+  return { peek, content, setOpen, setEnabled, painted, docked }
 }
 
 // Rests the pointer on the window's start edge, below the header band.
@@ -69,11 +74,12 @@ it("doesn't peek while a mouse button is held, as when a text selection drags in
   expect(view.peek.shown()).toBe(false)
 })
 
-it("a press, a drag, a dialog or a resize clears the pending peek", async () => {
+it("a press, a drag, a dialog, a resize or a window blur clears the pending peek", async () => {
   const interruptions = [
     () => document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" })),
     () => document.dispatchEvent(new Event("dragstart", { bubbles: true })),
     () => window.dispatchEvent(new Event("resize")),
+    () => window.dispatchEvent(new Event("blur")),
     () => {
       const dialog = document.createElement("div")
       dialog.setAttribute("role", "dialog")
@@ -91,4 +97,47 @@ it("a press, a drag, a dialog or a resize clears the pending peek", async () => 
     for (const cleanup of cleanups.splice(0)) cleanup()
     document.body.innerHTML = ""
   }
+})
+
+it("a press released outside the window no longer holds the peek open", async () => {
+  const view = mount()
+  restOnEdge(view.content)
+  await Bun.sleep(60)
+  expect(view.peek.shown()).toBe(true)
+
+  // Pressed, then out of the window, where no pointerup reaches the page.
+  document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, buttons: 1, pointerType: "mouse" }))
+  document.documentElement.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }))
+  await Bun.sleep(1000)
+  expect(view.peek.shown()).toBe(false)
+
+  restOnEdge(view.content)
+  await Bun.sleep(60)
+  expect(view.peek.shown()).toBe(true)
+})
+
+it("a dock from a peek ends the hand-off once the docked sidebar lands", async () => {
+  const view = mount()
+  restOnEdge(view.content)
+  await Bun.sleep(60)
+  view.setOpen(true)
+  expect(view.peek.handedOff()).toBe(true)
+  expect(view.peek.shown()).toBe(true)
+
+  await Promise.resolve()
+  view.docked.forEach((run) => run())
+  expect(view.peek.handedOff()).toBe(false)
+  expect(view.peek.shown()).toBe(false)
+  expect(view.painted.at(-1)).toBeUndefined()
+})
+
+it("ends a peek at once when the vertical sidebar goes away", async () => {
+  const view = mount()
+  restOnEdge(view.content)
+  await Bun.sleep(60)
+  expect(view.peek.shown()).toBe(true)
+
+  view.setEnabled(false)
+  expect(view.peek.shown()).toBe(false)
+  expect(view.painted.at(-1)).toBeUndefined()
 })

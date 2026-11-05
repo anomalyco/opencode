@@ -808,6 +808,47 @@ for (const [screen, href] of [
   })
 }
 
+test("the collapsed sidebar peeks from a resting toggle, Escape cancels a pending peek, and a click docks it", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a],
+    seed: { settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+
+  const toggle = page
+    .locator('[data-slot="collapsed-sidebar-toggle"]')
+    .getByRole("button", { name: "Toggle sidebar", exact: true })
+
+  await expect(sidebar).toHaveAttribute("data-state", "closed")
+  await expect(toggle).toBeVisible()
+  // See "tab preview opens cold": pause at a fixed offset from an explicit install time.
+  const start = Date.now()
+  await page.clock.install({ time: start })
+  await page.clock.pauseAt(start + 10_000)
+
+  // The toggle's 500ms dwell, cut short by Escape, never peeks.
+  await toggle.hover()
+  await page.keyboard.press("Escape")
+  await page.clock.runFor(600)
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+
+  await page.mouse.move(600, 400)
+  await toggle.hover()
+  await page.clock.runFor(600)
+  await expect(sidebar).toHaveAttribute("data-peek", "")
+
+  // Docking from the peek hands the sidebar over, and the peek ends once the dock lands.
+  await toggle.click()
+  await page.clock.runFor(2000)
+  await expect(sidebar).toHaveAttribute("data-state", "open")
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+})
+
 test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
