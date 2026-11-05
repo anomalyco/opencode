@@ -24,6 +24,8 @@ use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
+use crate::support::wait::WAIT;
+
 const DIRECTORY: &str = "/tmp/opencode/app";
 /// The location query every integration request carries.
 const QUERY: &str = "location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
@@ -277,17 +279,15 @@ impl Kit {
         };
         kit.wait_for("Model M");
         // The integrations are read at startup, so the dialog opens on the list.
-        let read = kit.app.wait_until(Duration::from_secs(5), || {
-            kit.tui.local.integrations().is_some()
-        });
+        let read = kit
+            .app
+            .wait_until(WAIT, || kit.tui.local.integrations().is_some());
         assert!(read, "the integrations were never read");
         kit
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -336,9 +336,7 @@ impl Kit {
     }
 
     fn wait_writes(&self, count: usize) -> Vec<Logged> {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.writes().len() >= count);
+        let found = self.app.wait_until(WAIT, || self.writes().len() >= count);
         assert!(found, "fewer than {count} writes: {:?}", self.writes());
         self.writes()
     }
@@ -415,8 +413,9 @@ fn an_api_key_connects_and_opens_the_provider_models() {
     // An empty key sends nothing.
     kit.app.press("return");
     kit.app.type_text("sk-test");
-    kit.app.press("return");
+    // Counted before the submit: the catalog read after it can land during the key press.
     let integration_reads = kit.reads("/api/integration");
+    kit.app.press("return");
     assert_eq!(
         kit.wait_writes(1),
         [write(
@@ -426,7 +425,9 @@ fn an_api_key_connects_and_opens_the_provider_models() {
         )]
     );
     kit.wait_for("Connected OpenAI");
-    // The catalog is read again, then the model dialog of the connected provider opens.
+    // The catalog is read again, then the model dialog of the connected provider opens. The home footer
+    // already shows "Model M", so wait for the dialog's search.
+    kit.wait_for("Search models");
     kit.wait_for("Model M");
     assert!(kit.reads("/api/integration") > integration_reads);
     assert!(kit.tui.dialogs.is_open());

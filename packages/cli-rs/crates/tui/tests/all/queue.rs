@@ -15,6 +15,8 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
+use crate::support::wait::WAIT;
+
 type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 
 const LOCATION: &str = "/project";
@@ -192,9 +194,7 @@ impl Kit {
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -203,27 +203,26 @@ impl Kit {
     fn wait_gone(&self, text: &str) {
         let gone = self
             .app
-            .wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
+            .wait_until(WAIT, || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
-    /// The cell where `text` starts.
-    fn find(&self, text: &str) -> (u16, u16) {
-        let screen = self.wait_for(text);
-        screen
-            .lines()
-            .enumerate()
-            .find_map(|(y, line)| {
-                let at = line.find(text)?;
-                Some((line[..at].chars().count() as u16, y as u16))
-            })
-            .unwrap()
-    }
-
-    /// A single click: the clock moves past the double-click window first, which would select a word.
+    /// A single click where `text` starts: the clock moves past the double-click window first, which would
+    /// select a word. Hit testing uses the last frame, so the click waits for a frame that nothing changed
+    /// after (a late response can rebuild the widget under `text`).
     fn click(&self, text: &str) {
-        let (x, y) = self.find(text);
         self.app.advance(Duration::from_secs(1));
+        let mut at = None;
+        let settled = self.app.wait_until(WAIT, || {
+            at = self.app.text().lines().enumerate().find_map(|(y, line)| {
+                let x = line.find(text)?;
+                Some((line[..x].chars().count() as u16, y as u16))
+            });
+            self.app.advance(Duration::ZERO);
+            at.is_some() && !self.app.needs_frame()
+        });
+        let (x, y) = at.unwrap_or_else(|| panic!("{text:?} never showed:\n{}", self.app.text()));
+        assert!(settled, "the screen never settled:\n{}", self.app.text());
         self.app.click(x, y);
     }
 
@@ -241,9 +240,7 @@ impl Kit {
     }
 
     fn wait_writes(&self, count: usize) -> Vec<String> {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.writes().len() >= count);
+        let found = self.app.wait_until(WAIT, || self.writes().len() >= count);
         assert!(found, "expected {count} writes: {:?}", self.writes());
         self.app.advance(Duration::from_millis(20));
         self.writes()
@@ -424,9 +421,9 @@ fn message_actions_revert_and_fork() {
         kit.wait_writes(1),
         [r#"POST /api/session/ses_a/revert/stage {"messageID":"msg_01"}"#]
     );
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
-        kit.prompt_text() == "Read the parser"
-    });
+    let found = kit
+        .app
+        .wait_until(WAIT, || kit.prompt_text() == "Read the parser");
     assert!(found, "{:?}", kit.prompt_text());
 
     let kit = Kit::new(vec![]);
