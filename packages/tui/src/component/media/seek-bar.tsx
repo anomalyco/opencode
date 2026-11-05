@@ -5,7 +5,7 @@ import { useMedia, type MediaPlayback } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { createMediaClick, formatDuration } from "./tile"
 
-export type Transport = ReturnType<typeof createTransport>
+type Transport = ReturnType<typeof createTransport>
 
 /** Playback state and controls for one `<video>`, which spreads `events`. `start` applies each time it opens. */
 export function createTransport(start: MediaPlayback) {
@@ -277,7 +277,7 @@ function SeekPreview(props: {
 }
 
 /** Elapsed time as `m:ss`, counting only whole seconds that have passed. */
-export function formatTimecode(seconds: number) {
+function formatTimecode(seconds: number) {
   return formatDuration(Math.floor(Math.max(0, seconds)))
 }
 

@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { TextRenderable, type VideoRenderable } from "@opentui/core"
-import { descendants, image, renderMedia, video } from "../fixture/media"
+import { ManualClock } from "@opentui/core/testing"
+import { descendants, image, longVideoFixture, renderMedia, video } from "../fixture/media"
 
 type Host = Awaited<ReturnType<typeof renderMedia>>
 
@@ -25,6 +26,16 @@ test("the viewer hands a video to picture-in-picture and takes it back at the sa
   expect(host.media().pip()).toBeUndefined()
   expect(host.media().viewer()).toMatchObject({ items: [{ id: "clip" }], index: 0, playing: false })
   expectCarried(host.videos("media-viewer-stage")[0]!)
+})
+
+test("the viewer hands picture-in-picture the time a pending seek is headed to", async () => {
+  const clock = new ManualClock()
+  await using host = await renderMedia(() => null, false, clock)
+  host.media().openViewer([video("clip", { path: longVideoFixture })], 0)
+  await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
+  // "0" seeks at once, so the next seek waits out the interval while the player stays at 0 s.
+  for (const key of [" ", "0", "shift+right", "p"]) await host.press(key)
+  expect(host.media().pip()).toMatchObject({ time: 1, playing: false })
 })
 
 test("drags by its title and plays from its controls", async () => {

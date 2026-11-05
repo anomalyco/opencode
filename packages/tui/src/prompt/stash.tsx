@@ -4,7 +4,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
-import { parsePromptInfo, persistablePrompt, type PromptInfo } from "./history"
+import { parsePromptInfo, persistablePrompt, prunePromptMedia, type PromptInfo } from "./history"
 
 export type StashEntry = {
   prompt: PromptInfo
@@ -42,7 +42,8 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
       const lines = parsePromptStash(await readText(stashPath).catch(() => ""))
       setStore("entries", lines)
       if (lines.length > 0)
-        writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        await writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+      await prunePromptMedia(paths.state)
     })
 
     const [store, setStore] = createStore({ entries: [] as StashEntry[] })
@@ -68,7 +69,9 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         )
 
         if (trimmed) {
-          writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n")
+            .then(() => prunePromptMedia(paths.state))
+            .catch(() => {})
           return
         }
         appendText(stashPath, JSON.stringify(stash) + "\n").catch(() => {})

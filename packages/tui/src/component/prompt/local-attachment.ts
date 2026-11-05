@@ -100,13 +100,28 @@ export async function oversizedPastedVideo(text: string, platform: string) {
   }
 }
 
-// Reads again the videos a draft, history, or the stash kept as local paths. `unreadable` names the ones left out.
-export async function readKeptAttachments<T extends { uri: string; path?: string }>(files: readonly T[]) {
+type KeptFile = { uri: string; path?: string; name?: string; mention?: { text: string } }
+
+/**
+ * Whether sending reads `file` here: a `file://` file with a local path, which a draft, history, or the stash kept. A
+ * remote server never gets this machine's `file://` uri, so there an unmentioned one without a path is left out. Only
+ * an `@` mention names a file the server reads itself.
+ */
+export function isKeptAttachment(file: KeptFile, localServer: boolean) {
+  if (!file.uri.startsWith("file:")) return false
+  return !!file.path || (!localServer && !file.mention?.text.startsWith("@"))
+}
+
+// Reads again the files a draft, history, or the stash kept as local paths. `unreadable` names the ones left out.
+// The paste cap for videos does not apply: a restored video may be as large as core accepts.
+export async function readKeptAttachments<T extends KeptFile>(files: readonly T[], localServer: boolean) {
   const read = await Promise.all(
     files.map(async (file) => {
-      if (!file.path || !file.uri.startsWith("file:")) return file
-      const content = await readFileBounded(file.path, MAX_LOCAL_VIDEO_BYTES).catch(() => undefined)
-      if (!content) return path.basename(file.path)
+      if (!isKeptAttachment(file, localServer)) return file
+      const name = file.name ?? path.basename(file.path ?? file.uri)
+      if (!file.path) return name
+      const content = await readFileBounded(file.path, MAX_LOCAL_ATTACHMENT_BYTES).catch(() => undefined)
+      if (!content) return name
       const extension = path.extname(file.path).toLowerCase()
       const mime = mimeTypes[extension] ?? `video/${extension.slice(1)}`
       return { ...file, uri: `data:${mime};base64,${content.toString("base64")}` }
@@ -118,14 +133,24 @@ export async function readKeptAttachments<T extends { uri: string; path?: string
   }
 }
 
-// Keep the captured bytes: a local server may not have the terminal's access to the source file.
+// Keep the captured bytes: a local server may not have the terminal's access to the source file. A file under
+// `keptDirectory` is the TUI's own copy of a restored video, not a source, so it goes without one.
 export function promptFilesForServer<T extends { uri: string; path?: string }>(
   files: readonly T[] | undefined,
   localServer: boolean,
+  keptDirectory: string,
 ) {
   return files?.map(({ path: file, ...rest }) =>
-    file && localServer ? { ...rest, source: { type: "uri" as const, uri: pathToFileURL(file).href } } : rest,
+    file && localServer && path.dirname(file) !== keptDirectory
+      ? { ...rest, source: { type: "uri" as const, uri: pathToFileURL(file).href } }
+      : rest,
   )
+}
+
+/** The local path of a `file://` uri whose extension names a video of any type. */
+export function videoFilePath(uri: string) {
+  const file = decodeFileURL(uri, process.platform)
+  return file && Bun.file(file).type.startsWith("video/") ? file : undefined
 }
 
 const mimeTypes: Record<string, string> = {

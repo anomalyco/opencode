@@ -1,5 +1,6 @@
 import path from "path"
-import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
+import { mkdirSync, renameSync, statSync, writeFileSync } from "node:fs"
+import { readdir, rm, stat } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
 import { onMount } from "solid-js"
@@ -64,6 +65,11 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
   }
 }
 
+/** Where history and the stash keep the videos they were given as bytes. */
+export function promptMediaDirectory(state: string) {
+  return path.join(state, "prompt-media")
+}
+
 // History and the stash never keep a video's bytes. A video keeps its local file as a `file://` uri, and one without a
 // file gets one under `state` now, so an entry written right after a restore has it too. Sending reads it again.
 export function persistablePrompt(prompt: PromptInfo, state: string): PromptInfo {
@@ -72,7 +78,7 @@ export function persistablePrompt(prompt: PromptInfo, state: string): PromptInfo
     files: prompt.files?.map((file) => {
       const video = /^data:(video\/[^;,]+);base64,/.exec(file.uri)
       const local =
-        video && (file.path ?? writeVideo(path.join(state, "prompt-media"), file.uri.slice(video[0].length), video[1]!))
+        video && (file.path ?? writeVideo(promptMediaDirectory(state), file.uri.slice(video[0].length), video[1]!))
       return local ? { ...file, uri: pathToFileURL(local).href, path: local } : file
     }),
   }
@@ -82,16 +88,47 @@ export function persistablePrompt(prompt: PromptInfo, state: string): PromptInfo
 function writeVideo(directory: string, base64: string, mime: string) {
   const bytes = Buffer.from(base64, "base64")
   const file = path.join(directory, Bun.SHA256.hash(bytes, "hex") + keptVideoExtension(mime))
+  const temporary = `${file}.${crypto.randomUUID()}.tmp`
   try {
-    if (existsSync(file)) return file
+    if (statSync(file, { throwIfNoEntry: false })?.isFile()) return file
     mkdirSync(directory, { recursive: true })
-    const temporary = `${file}.${crypto.randomUUID()}.tmp`
     writeFileSync(temporary, bytes)
     renameSync(temporary, file)
     return file
   } catch {
+    void rm(temporary, { force: true }).catch(() => {})
     return undefined
   }
+}
+
+// Long enough for a draft in another window to reach history or the stash.
+const PROMPT_MEDIA_GRACE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Deletes the kept videos that no history or stash entry names. A file is named for its content, so its name in either
+ * file's text is a reference. A file written within the grace window may belong to another window's draft and stays,
+ * and nothing is deleted when either file cannot be read.
+ */
+export async function prunePromptMedia(state: string) {
+  const directory = promptMediaDirectory(state)
+  const names = await readdir(directory).catch(() => [])
+  if (names.length === 0) return
+  const [history, stash] = await Promise.all(
+    ["prompt-history.jsonl", "prompt-stash.jsonl"].map((name) =>
+      readText(path.join(state, name)).catch((error) => (error?.code === "ENOENT" ? "" : undefined)),
+    ),
+  )
+  if (history === undefined || stash === undefined) return
+  await Promise.all(
+    names
+      .filter((name) => !history.includes(name) && !stash.includes(name))
+      .map(async (name) => {
+        const file = path.join(directory, name)
+        const info = await stat(file).catch(() => undefined)
+        if (!info?.isFile() || Date.now() - info.mtimeMs < PROMPT_MEDIA_GRACE_MS) return
+        await rm(file, { force: true }).catch(() => {})
+      }),
+  )
 }
 
 export const MAX_HISTORY_ENTRIES = 50
@@ -134,7 +171,8 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
       // Rewrite valid retained entries to self-heal corruption and enforce the limit.
       if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        await writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+      await prunePromptMedia(paths.state)
     })
 
     const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
@@ -170,7 +208,9 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         )
 
         if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n")
+            .then(() => prunePromptMedia(paths.state))
+            .catch(() => {})
           return
         }
         appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})

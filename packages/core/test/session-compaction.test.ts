@@ -10,6 +10,7 @@ import {
   type LLMRequest,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Cohere } from "@opencode/ai/providers"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -537,6 +538,13 @@ it.effect("auto compaction estimates current content against the buffered prompt
     ]
     expect(SessionCompaction.estimateContext({ ...watching, messages: clip(1_000_000) })).toBe(2_020)
     expect(SessionCompaction.estimateContext({ ...watching, messages: clip(100_000) })).toBe(1_520)
+    // A protocol that cannot send video gets the unsupported-media text instead, so the clip costs only that text.
+    const cohere = {
+      ...watching,
+      model: { ...watching.model, model: Cohere.configure({ apiKey: "fixture" }).model("command-a-03-2025") },
+    }
+    expect(SessionCompaction.estimateContext({ ...cohere, messages: clip(1_000_000) })).toBe(41)
+    expect(SessionCompaction.recentUserMessages(clip(1_000_000), cohere.model, 1_000)).toHaveLength(1)
 
     const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
       id: SessionMessage.ID.create(),

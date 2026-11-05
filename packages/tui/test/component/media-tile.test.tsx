@@ -148,7 +148,7 @@ test("a tile that failed tries again when its item changes", async () => {
   expect(descendants(tiles.app.renderer.root).some((node) => node instanceof ImageRenderable)).toBe(true)
 })
 
-test("only tiles in the scroll viewport keep a poster player, at most four, the last to come into view", async () => {
+test("at most four tiles in view keep a poster player, the rest name their video", async () => {
   let scroll: ScrollBoxRenderable | undefined
   const items = Array.from({ length: 8 }, (_, index) => video(`v${index}`))
   await using tiles = await renderMedia(() => (
@@ -157,11 +157,49 @@ test("only tiles in the scroll viewport keep a poster player, at most four, the 
     </scrollbox>
   ))
   const labels = () => items.filter((item) => tiles.frame().includes(`▶ ${item.name}`)).map((item) => item.id)
-  // Rows 0-11 show the first six tiles; the last four of them to come into view keep a player.
-  await tiles.until(() => tiles.videos().length === 4 && labels().join() === "v0,v1")
-  // Scrolled to the end, the first two leave the viewport, and the two that came into view take players.
+  // Rows 0-11 show the first six tiles whole; the first four take players.
+  await tiles.until(() => tiles.videos().length === 4 && labels().join() === "v4,v5")
+  // Scrolled to the end, the tiles still in view keep their players and v4 and v5 take the players v0 and v1 leave.
   scroll!.scrollTo(4)
-  await tiles.until(() => tiles.videos().length === 4 && labels().join() === "v2,v3")
+  await tiles.until(() => labels().join() === "v6,v7")
+})
+
+test("scrolling back and forth over tiles opens a bounded number of players", async () => {
+  // The players' grace period runs on this clock, which stays put, so tiles that leave keep their players.
+  const clock = new ManualClock()
+  let scroll: ScrollBoxRenderable | undefined
+  const items = Array.from({ length: 12 }, (_, index) => video(`v${index}`))
+  await using tiles = await renderMedia(
+    () => (
+      <scrollbox ref={(element: ScrollBoxRenderable) => (scroll = element)} height={9}>
+        <For each={items}>{(item) => <MediaTile item={item} width={30} height={3} />}</For>
+      </scrollbox>
+    ),
+    false,
+    clock,
+  )
+  await tiles.until(() => tiles.videos().length === 4)
+  const players = new Set(tiles.videos())
+  let most = 0
+  const settle = async () => {
+    await tiles.app.renderOnce()
+    tiles.videos().forEach((player) => players.add(player))
+    most = Math.max(most, tiles.videos().length)
+  }
+  // A tile at a time down to the end and back up, twice, with the wheel jittering a row each way at every step.
+  const steps = [
+    ...Array.from({ length: 10 }, (_, index) => index * 3),
+    ...Array.from({ length: 10 }, (_, index) => 27 - index * 3),
+  ]
+  for (const top of [...steps, ...steps])
+    for (const offset of [0, 1, 0, -1, 0]) {
+      scroll!.scrollTo(top + offset)
+      await settle()
+    }
+  // The first four tiles open players, and the first sweep down the other eight. After that, tiles that left keep
+  // their players, up to four more than the four on screen, so each sweep opens only the four that left longest ago.
+  expect(players.size).toBe(4 + 8 + 3 * 4)
+  expect(most).toBe(8)
 })
 
 test("a video tile plays once the pointer rests on it, not as the pointer sweeps across tiles", async () => {

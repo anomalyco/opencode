@@ -9,9 +9,18 @@ export async function readJson<T>(filePath: string) {
   return JSON.parse(await readFile(filePath, "utf8")) as T
 }
 
+// Written to a temporary file and renamed into place, so a reader sees the old or the new content, never part of it.
 export async function writeText(filePath: string, content: string) {
   await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, content)
+  const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`
+  await writeFile(temporary, content).catch(async (error) => {
+    await rm(temporary, { force: true }).catch(() => undefined)
+    throw error
+  })
+  await rename(temporary, filePath).catch(async (error) => {
+    await rm(temporary, { force: true }).catch(() => undefined)
+    throw error
+  })
 }
 
 export async function appendText(filePath: string, content: string) {
@@ -20,14 +29,5 @@ export async function appendText(filePath: string, content: string) {
 }
 
 export async function writeJsonAtomic(filePath: string, value: unknown) {
-  await mkdir(path.dirname(filePath), { recursive: true })
-  const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`
-  await writeFile(temporary, JSON.stringify(value)).catch(async (error) => {
-    await rm(temporary, { force: true }).catch(() => undefined)
-    throw error
-  })
-  await rename(temporary, filePath).catch(async (error) => {
-    await rm(temporary, { force: true }).catch(() => undefined)
-    throw error
-  })
+  await writeText(filePath, JSON.stringify(value))
 }

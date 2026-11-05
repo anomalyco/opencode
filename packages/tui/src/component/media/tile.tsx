@@ -79,7 +79,7 @@ export function MediaTile(props: {
         <Match when={isPlayableVideo(props.item) && (props.still || media.posterShown(key))}>
           <TileLabel item={props.item} text={`▶ ${props.item.name ?? "video"}`} />
         </Match>
-        {/* Off screen, a video tile draws nothing. */}
+        {/* Further off screen, a video tile draws nothing. */}
         <Match when={isPlayableVideo(props.item)}>{null}</Match>
       </Switch>
     </box>
