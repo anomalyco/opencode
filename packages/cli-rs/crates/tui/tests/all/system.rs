@@ -25,6 +25,8 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
+use crate::support::wait::WAIT;
+
 const DIRECTORY: &str = "/tmp/opencode/app";
 
 type Answer = Box<dyn Fn(&str, &str, &Value) -> Option<(u16, Value)> + Send + Sync>;
@@ -124,7 +126,7 @@ fn mount(app: &TestApp, info: Info) -> Rc<Tui> {
 }
 
 fn wait_for(app: &TestApp, text: &str) -> String {
-    let found = app.wait_until(Duration::from_secs(5), || app.text().contains(text));
+    let found = app.wait_until(WAIT, || app.text().contains(text));
     let screen = app.text();
     assert!(found, "{text:?} never showed:\n{screen}");
     screen
@@ -135,9 +137,7 @@ fn wait_for(app: &TestApp, text: &str) -> String {
 #[track_caller]
 fn assert_dialog(app: &TestApp, name: &str, title: &str) {
     // Deferred work (a dialog built again, a read) may still be on its way.
-    app.wait_until(Duration::from_secs(2), || {
-        dialog_diff(app, name, title).is_ok()
-    });
+    app.wait_until(WAIT, || dialog_diff(app, name, title).is_ok());
     if let Err(message) = dialog_diff(app, name, title) {
         panic!("{message}");
     }
@@ -209,7 +209,7 @@ fn theme_list_matches_typescript_and_previews_in_the_dialog() {
 
     // The move previews `opencode2`; the dialog is drawn again in it.
     app.press("down");
-    app.wait_until(Duration::from_secs(5), || theme(&tui) == "opencode2");
+    app.wait_until(WAIT, || theme(&tui) == "opencode2");
     app.render();
     assert_dialog(&app, "E.18b/themes-down", "Search themes");
 
@@ -223,7 +223,7 @@ fn theme_list_matches_typescript_and_previews_in_the_dialog() {
     theme_list::show(&tui, None);
     wait_for(&app, "Search themes");
     app.type_text("tokyo");
-    app.wait_until(Duration::from_secs(5), || theme(&tui) == "tokyonight");
+    app.wait_until(WAIT, || theme(&tui) == "tokyonight");
     app.render();
     assert_dialog(&app, "E.18b/themes-filter", "tokyo");
     app.press("enter");
@@ -239,11 +239,11 @@ fn clearing_the_filter_previews_the_opening_theme_again() {
     theme_list::show(&tui, None);
     wait_for(&app, "Search themes");
     app.type_text("nord");
-    app.wait_until(Duration::from_secs(5), || theme(&tui) == "nord");
+    app.wait_until(WAIT, || theme(&tui) == "nord");
     for _ in 0.."nord".len() {
         app.press("backspace");
     }
-    app.wait_until(Duration::from_secs(5), || theme(&tui) == "opencode");
+    app.wait_until(WAIT, || theme(&tui) == "opencode");
     assert_eq!(theme(&tui), "opencode");
     wait_for(&app, "Search themes");
 }
@@ -259,7 +259,7 @@ fn settings_theme_opens_the_list_and_comes_back() {
 
     // Escape goes back to Settings on Theme, with the opening theme.
     app.press("down");
-    app.wait_until(Duration::from_secs(5), || theme(&tui) == "opencode2");
+    app.wait_until(WAIT, || theme(&tui) == "opencode2");
     app.press("escape");
     wait_for(&app, "Search settings");
     assert_eq!(theme(&tui), "opencode");
@@ -269,7 +269,7 @@ fn settings_theme_opens_the_list_and_comes_back() {
     app.press("enter");
     wait_for(&app, "Search themes");
     app.press("down");
-    app.wait_until(Duration::from_secs(5), || theme(&tui) == "opencode2");
+    app.wait_until(WAIT, || theme(&tui) == "opencode2");
     app.press("enter");
     wait_for(&app, "opencode2 ↵");
     assert_eq!(configured_theme(&tui).as_deref(), Some("opencode2"));
@@ -437,9 +437,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     app.press("down");
     wait_for(&app, "update ctrl+u");
     app.press("ctrl+u");
-    app.wait_until(Duration::from_secs(5), || {
-        mounted.requests("/api/plugin").len() == 3
-    });
+    app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 3);
     let update = mounted
         .log
         .lock()
@@ -455,9 +453,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     // ctrl+r checks for updates and takes the fresh flags.
     app.press("ctrl+r");
     wait_for(&app, "dadba13");
-    app.wait_until(Duration::from_secs(5), || {
-        !app.text().contains("update available")
-    });
+    app.wait_until(WAIT, || !app.text().contains("update available"));
     assert!(!app.text().contains("update available"), "{}", app.text());
     assert_eq!(
         mounted.requests("/api/plugin"),
@@ -659,7 +655,7 @@ fn highlights_open_once_after_an_update_into_an_idle_home() {
     let tui = mount_rooted(&app, home.path(), json!({}));
     highlights::startup(&tui, &release, false);
     let storage = tui.storage().unwrap();
-    app.wait_until(Duration::from_secs(5), || {
+    app.wait_until(WAIT, || {
         storage.load("highlights", &json!({})).unwrap() == json!({ "seen": "2.0.27" })
     });
     assert!(!app.text().contains("What's new"), "{}", app.text());
@@ -873,12 +869,10 @@ fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
     assert_dialog(&app, "E.18b/update-available", "Update available");
     // Skip dismisses the notice and remembers it.
     click_on(&app, "skip");
-    app.wait_until(Duration::from_secs(5), || {
-        !app.text().contains("to install v2.0.28")
-    });
+    app.wait_until(WAIT, || !app.text().contains("to install v2.0.28"));
     assert!(!app.text().contains("Update available"), "{}", app.text());
     let storage = tui.storage().unwrap();
-    app.wait_until(Duration::from_secs(5), || {
+    app.wait_until(WAIT, || {
         storage.load("update-notifications", &json!({})).unwrap()
             == json!({ "versions": ["client:2.0.28"] })
     });
