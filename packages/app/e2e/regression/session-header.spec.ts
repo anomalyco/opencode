@@ -290,6 +290,20 @@ test.describe("location", () => {
       await header.screenshot({ path: test.info().outputPath(`location-${state.width}.png`) })
     }
 
+    // Find takes room from the title, so the usage details give way, and come back once Find closes.
+    const search = header.locator('[data-component="timeline-search-bar"] input')
+    await row.evaluate((element) => (element.style.inlineSize = "680px"))
+    await expect(usage).toBeVisible()
+    await page.keyboard.press("ControlOrMeta+f")
+    await expect(search).toBeFocused()
+    await expect(usageMenu).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-open.png") })
+    await search.press("Escape")
+    await expect(search).toHaveCount(0)
+    await expect(project).toBeVisible()
+    await expect(usage).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-closed.png") })
+
     await row.evaluate((element) => element.style.removeProperty("inline-size"))
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
