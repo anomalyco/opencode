@@ -93,6 +93,8 @@ type PaneFixtureState = {
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
+  /** Main drops picker requests unanswered, as when the tab has no page or no registration yet. */
+  dropInspect: boolean
   highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
   /** The page's zoom as main last reported it. */
@@ -158,6 +160,7 @@ export function mountBrowserPane(input: PaneHost) {
       captures: 0,
       holdCapture: false,
       picker: {},
+      dropInspect: false,
       highlights: [],
       comments: [],
       zoom: 1,
@@ -354,6 +357,8 @@ export function mountBrowserPane(input: PaneHost) {
         const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
 
         if (!key) throw new Error("Unknown picker binding")
+
+        if (store.dropInspect) return
         setStore("picker", key, value.enabled)
         emit(key, { type: "inspect", tabID: value.tabID, active: value.enabled })
       },
@@ -540,6 +545,7 @@ export function mountBrowserPane(input: PaneHost) {
             </For>
             <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
             <button onClick={pick}>Pick element</button>
+            <button onClick={() => setStore("dropInspect", true)}>Drop picker requests</button>
             <select
               aria-label="Picked element scenario"
               onChange={(event) => setStore("selection", event.currentTarget.value)}

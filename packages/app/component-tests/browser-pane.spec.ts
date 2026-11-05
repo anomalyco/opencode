@@ -310,6 +310,31 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
+story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
+  await picker.click()
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  await expect(address).toBeFocused()
+  await address.press("Escape")
+  await expect(address).not.toBeFocused()
+})
+
+story("replaces an open page note with the comment for an element picked meanwhile", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.locator('[data-component="browser-address"]').hover()
+  await root.getByRole("button", { name: "Add page to session", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(1)
+  await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
+})
+
 story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
