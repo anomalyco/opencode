@@ -355,11 +355,13 @@ async fn write_loop<W: AsyncWrite + Unpin>(
     mut output: W,
     closed: mpsc::UnboundedSender<Closed>,
 ) {
+    let mut line = Vec::new();
     while let Some(outgoing) = writer.0.recv().await {
-        let mut line = outgoing.message.to_string();
-        line.push('\n');
+        line.clear();
         let written = async {
-            output.write_all(line.as_bytes()).await?;
+            serde_json::to_writer(&mut line, &outgoing.message)?;
+            line.push(b'\n');
+            output.write_all(&line).await?;
             output.flush().await
         }
         .await;
@@ -395,8 +397,7 @@ async fn read_loop<R: AsyncRead + Unpin>(
         };
         if read == 0 {
             if !pending.is_empty() {
-                let line = std::mem::take(&mut pending);
-                receive_line(&connection, &handler, strip_cr(&line));
+                receive_line(&connection, &handler, strip_cr(&pending));
             }
             let _ = closed.send(Closed::Eof);
             return;
@@ -408,8 +409,8 @@ async fn read_loop<R: AsyncRead + Unpin>(
                 return;
             }
             pending.extend_from_slice(&rest[..newline]);
-            let line = std::mem::take(&mut pending);
-            receive_line(&connection, &handler, strip_cr(&line));
+            receive_line(&connection, &handler, strip_cr(&pending));
+            pending.clear();
             rest = &rest[newline + 1..];
         }
         if line_length(&pending, rest) > MAX_MESSAGE_BYTES {
