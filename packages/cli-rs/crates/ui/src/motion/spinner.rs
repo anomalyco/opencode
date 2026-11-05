@@ -67,6 +67,8 @@ struct SpinnerView {
     animations: bool,
     still: String,
     clock: Clock,
+    /// Painted since the last tick of the stepped driver.
+    painted: Rc<Cell<bool>>,
 }
 
 impl Spinner {
@@ -80,6 +82,7 @@ impl Spinner {
             animations: true,
             still: "⋯".to_owned(),
             clock: Clock::default(),
+            painted: Rc::new(Cell::new(false)),
         };
         let spinner = Self { widget: Custom::measured(app, view).shrink(0.0), app: app.clone() };
         spinner.restart();
@@ -181,10 +184,10 @@ impl Spinner {
 
     /// Replaces the clock, which stops the old driver, and starts the one the settings need.
     fn restart(&self) {
-        let (clock, interval, every_frame) = self.widget.update(|view| {
+        let (clock, interval, every_frame, painted) = self.widget.update(|view| {
             view.clock = Rc::new(Cell::new(view.clock.get()));
             let moving = view.animations && (view.glyphs.len() > 1 || view.shimmer.is_some());
-            (moving.then(|| Rc::clone(&view.clock)), view.interval, view.shimmer.is_some())
+            (moving.then(|| Rc::clone(&view.clock)), view.interval, view.shimmer.is_some(), Rc::clone(&view.painted))
         });
         let Some(clock) = clock else { return };
         if every_frame {
@@ -192,7 +195,7 @@ impl Spinner {
             return;
         }
         if !interval.is_zero() {
-            tick_every(&self.app, interval, &clock);
+            tick_every(&self.app, interval, &clock, &painted);
         }
     }
 }
@@ -214,6 +217,7 @@ impl SpinnerView {
 
 impl Component for SpinnerView {
     fn paint(&self, painter: &mut Painter<'_>) {
+        self.painted.set(true);
         let base = self.color.base();
         if !self.animations {
             painter.text(0, 0, &self.line(), Style::new().fg(base).bg(Color::TRANSPARENT));
