@@ -1238,7 +1238,7 @@ fn completed_lines(message: &str, printed: usize) -> (usize, &str) {
     if end <= printed {
         return (printed, "");
     }
-    (end, message[printed..end].trim())
+    (end, message.get(printed..end).unwrap_or("").trim())
 }
 
 /// Runs a cancel request to completion within 5 s, on a runtime of its own; errors are ignored.
@@ -1863,6 +1863,8 @@ mod tests {
         assert_eq!(completed_lines("one\ntw", 0), (4, "one"));
         assert_eq!(completed_lines("one\ntwo\nthr", 4), (8, "two"));
         assert_eq!(completed_lines("one\ntwo\nthr", 8), (8, ""));
+        // A status text the server replaced can put the printed offset inside a character.
+        assert_eq!(completed_lines("aé\nb\n", 2), (6, ""));
     }
 
     #[test]
