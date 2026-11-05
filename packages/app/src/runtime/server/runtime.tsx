@@ -231,9 +231,9 @@ function createServerController(
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
   })
 
-  // Execution and collected Shell activity can arrive before session metadata. Load missing ancestors so a
-  // descendant still keeps its root busy after reconnecting, without reading transcripts.
+  // Side bar previews need the parent of an active child even when neither session has an open tab.
   createEffect(() => {
+    if (settings.appearance.tabLayout() !== "sidebar") return
     new Set([...data.session.active(), ...data.shell.activeSessions()].map((id) => data.session.root(id))).forEach(
       (id) => {
         if (data.session.get(id)) return
