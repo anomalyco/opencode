@@ -7,6 +7,7 @@ import { clonePrompt } from "./prompt-parts"
 import { uploads } from "./attachments/uploads"
 import { createQuoteCommentController, type QuoteCommentController } from "./quote-comment-machine"
 import { createComposerQuoteSource } from "./quote-source"
+import type { ComposerRetry } from "./retry"
 import {
   ComposerStore,
   DEFAULT_PROMPT,
@@ -53,7 +54,7 @@ function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
       batch(() => {
-        setStore({ prompt: clonePrompt(prompt), retry: undefined })
+        setStore("prompt", clonePrompt(prompt))
 
         // An omitted cursor keeps the current one.
         if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
@@ -104,7 +105,8 @@ export interface ComposerStateValue {
   }
   readonly retry: {
     readonly current: () => ComposerStore["retry"]
-    readonly set: (retry: NonNullable<ComposerStore["retry"]>) => void
+    readonly set: (retry: ComposerRetry) => void
+    readonly clear: () => void
   }
   readonly context: {
     readonly items: () => ComposerStore["context"]["items"]
@@ -140,31 +142,27 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
 
   const retainQuoteSources = () => quoteSource.retain(store.context.items.map((item) => item.key))
 
-  const clearRetry = () => {
-    if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
-  }
-
   const value = {
     store: [() => store, setStore] satisfies [Accessor<ComposerStore>, SetStoreFunction<ComposerStore>],
     current: () => store.prompt,
     cursor: () => store.cursor,
     model: {
       current: () => store.model,
-      set: (model: PromptModel | undefined) => {
-        setStore("model", model)
-        clearRetry()
-      },
+      set: (model: PromptModel | undefined) => setStore("model", model),
     },
     mode: {
       current: () => store.mode ?? "normal",
       set: (mode: "normal" | "shell") => {
-        if (untrack(() => store.mode === mode && store.retry === undefined)) return
-        setStore({ mode, retry: undefined })
+        if (untrack(() => (store.mode ?? "normal") === mode)) return
+        setStore("mode", mode)
       },
     },
     retry: {
       current: () => store.retry,
-      set: (retry: NonNullable<ComposerStore["retry"]>) => setStore("retry", retry),
+      set: (retry: ComposerRetry) => setStore("retry", { id: retry.id, fingerprint: retry.fingerprint }),
+      clear: () => {
+        if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
+      },
     },
     context: {
       items: () => store.context.items,
@@ -173,18 +171,15 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
 
         if (store.context.items.find((x) => x.key === key)) return
         setStore("context", "items", (items) => [...items, { key, ...item }])
-        clearRetry()
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
         retainQuoteSources()
-        clearRetry()
       },
       /** Removes the file comment, note, or quote with this commentID. */
       removeComment(commentID: string) {
         setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
         retainQuoteSources()
-        clearRetry()
       },
       /** Edits the file comment, note, or quote with this commentID; only file comments carry a preview. */
       updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }) {
@@ -202,7 +197,6 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
             return { ...value, key: contextItemKey(value) }
           },
         )
-        clearRetry()
       },
       /** Replaces every item, as restoring a sent prompt replaces the whole draft. */
       replace(items: ContextItem[]) {
@@ -215,7 +209,6 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
           })),
         )
         retainQuoteSources()
-        clearRetry()
       },
       replaceComments(items: ContextItem[]) {
         setStore("context", "items", (current) => [
@@ -223,7 +216,6 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
         ])
         retainQuoteSources()
-        clearRetry()
       },
     },
     quoteComment,

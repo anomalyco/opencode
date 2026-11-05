@@ -191,6 +191,30 @@ story(
     await expect(composer).toHaveCSS("height", `${restoredHeight}px`)
     await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
     await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
+
+    // A click elsewhere cancels the preview too; it used to leave the previewed prompt in place of the draft.
+    await input.press("Shift+ArrowUp")
+    await expect(input).toHaveText("Explain the latest changes")
+    await page.mouse.click(1, 1)
+    await expect(options).toHaveCount(0)
+    await expect(input).toBeEmpty()
+    await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
+    await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
+
+    // A click into the draft keeps the previewed prompt to edit.
+    await input.press("Shift+ArrowUp")
+    await expect(search).toBeFocused()
+    await input.click()
+    await expect(options).toHaveCount(0)
+    await expect(input).toHaveText("Explain the latest changes")
+
+    // Opening the file picker while browsing keeps the way back to the draft; it used to end browsing.
+    await input.fill("")
+    await input.press("ArrowUp")
+    await expect(input).toHaveText("Explain the latest changes")
+    await input.press("ControlOrMeta+u")
+    await input.press("ArrowDown")
+    await expect(input).toBeEmpty()
   },
 )
 

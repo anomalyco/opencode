@@ -99,7 +99,6 @@ function submitInput(
     removeFromHistory: (prompt) =>
       history.push(`remove:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
     resetHistory() {},
-    setMode() {},
     closePopover() {},
     notify,
     comments: { capture: () => [], clear() {}, restore() {} },
@@ -358,6 +357,133 @@ describe("Composer submission", () => {
       { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
     ])
     expect(calls.filter((call) => call === "send")).toHaveLength(2)
+  })
+
+  test("resends a failed prompt under its ID only while what it sends is unchanged", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+
+    const note = {
+      type: "note" as const,
+      origin: "browser",
+      label: "button#save",
+      icon: "select-element",
+      subject: 'the "button#save" element',
+      live: { subject: 'the "button#save" element (browser ref @e42)' },
+      comment: "Rename this",
+      commentID: "note",
+    }
+
+    state.context.add(note)
+    const sent: string[] = []
+    const run = { fail: true, queued: false, settled: Promise.withResolvers<void>() }
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          prompt: async (value) => {
+            sent.push(value.id ?? "")
+
+            if (run.fail) throw new Error("offline")
+            run.settled.resolve()
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => run.settled.resolve() },
+      "normal",
+      undefined,
+      undefined,
+      undefined,
+      () => (run.queued ? "queue" : "steer"),
+    )
+
+    const send = async () => {
+      run.settled = Promise.withResolvers<void>()
+      sent.length = 0
+      await submission.submit(new Event("submit"))
+      await run.settled.promise
+
+      return sent[0]
+    }
+
+    const first = await send()
+    expect(state.retry.current()).toMatchObject({ id: first })
+    expect(await send()).toBe(first)
+
+    // The browser plugin re-picked the element, so the note now names another ref.
+    state.context.replaceComments([{ ...note, live: { subject: 'the "button#save" element (browser ref @e7)' } }])
+    const edited = await send()
+    expect(edited).not.toBe(first)
+
+    run.queued = true
+    const queued = await send()
+    expect(queued).not.toBe(edited)
+
+    run.fail = false
+    expect(await send()).toBe(queued)
+    expect(state.retry.current()).toBeUndefined()
+  })
+
+  test("an unedited resend after a failed send keeps its ID and its file order", async () => {
+    const state = createMemoryComposerState({ prompt: "review these" }).capture()
+    state.context.add({ type: "file", path: "src/a.ts" })
+    state.context.add({ type: "file", path: "src/b.ts", comment: "Check this", commentID: "b" })
+    const keys = state.context.items().map((item) => item.key)
+    const sent: string[] = []
+    const failed = { settled: Promise.withResolvers<void>() }
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          prompt: async (value) => {
+            sent.push(value.id ?? "")
+            throw new Error("offline")
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.settled.resolve() },
+    )
+
+    const send = async () => {
+      failed.settled = Promise.withResolvers<void>()
+      sent.length = 0
+      await submission.submit(new Event("submit"))
+      await failed.settled.promise
+
+      return sent[0]
+    }
+
+    const first = await send()
+    // Restoring used to list the commented file first, so the resend fingerprinted differently and took a new ID.
+    expect(state.context.items().map((item) => item.key)).toEqual(keys)
+    expect(await send()).toBe(first)
+  })
+
+  test("a failed server command restores its draft without a retry ID, which it never sent", async () => {
+    const state = createMemoryComposerState({ prompt: "/review" }).capture()
+    const failed = Promise.withResolvers<void>()
+
+    await submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          command: async () => {
+            throw new Error("offline")
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.resolve() },
+      "normal",
+      () => [{ name: "review" }],
+    ).submit(new Event("submit"))
+    await failed.promise
+
+    expect(text(state)).toBe("/review")
+    expect(state.retry.current()).toBeUndefined()
   })
 
   test("applies the selection and runs a client argument command without admitting it to the session", async () => {
@@ -703,9 +829,10 @@ describe("Composer submission", () => {
     expect(calls).toEqual([...submitted, ...submitted])
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
+    // In the order it was sent, so the resend's request matches the first.
     expect(state.context.items()).toMatchObject([
-      note,
       { type: "file", path: "notes.md", description: "the failing version" },
+      note,
     ])
     // The caret returns after the mention text; attachments take no caret positions.
     expect(state.cursor()).toBe(17)

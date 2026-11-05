@@ -80,7 +80,7 @@ export function createSessionQueue(input: {
           : effect.stash.prompt
 
       const cursor = prompt === effect.stash.prompt ? effect.stash.cursor : promptLength(prompt)
-      // Mode first, then prompt, then retry: mode and prompt writes both clear the retry marker.
+      // The stashed retry fingerprints its own payload, so a merged prompt sends under a new ID.
       input.draft.mode.set(effect.stash.mode)
       input.draft.set(prompt, cursor)
 

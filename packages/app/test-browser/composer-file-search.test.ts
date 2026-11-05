@@ -3,6 +3,7 @@ import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ComposerPersistedState, ComposerSuggestion } from "@/composer/types"
 import { createComposerEditor } from "@/composer/editor/interaction"
+import { composerPopoverActiveID } from "@/composer/suggestions/machine"
 
 afterEach(() => {
   jest.useRealTimers()
@@ -140,7 +141,7 @@ async function flush() {
 }
 
 function activeID(value: ReturnType<typeof setup>) {
-  return value.editor.state.popover.type === "closed" ? undefined : value.editor.state.popover.activeID
+  return composerPopoverActiveID(value.editor.state)
 }
 
 function file(path: string): ComposerSuggestion {

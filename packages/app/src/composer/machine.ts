@@ -4,6 +4,7 @@ import { parseSlashCommand } from "./client-slash-command"
 import type { PromptHistoryComment } from "./history/entry"
 import { isAttachment } from "./prompt-parts"
 import type { QuoteSource } from "./quote-source"
+import { claimRetry, type ComposerRetry } from "./retry"
 import { isCommentItem, type ComposerStore, type ImageAttachmentPart, type Prompt } from "./state"
 import type { ComposerStateTarget } from "./submission-state"
 
@@ -82,7 +83,7 @@ export type SubmitSnapshot = {
   delivery: ComposerDelivery
   selection: ComposerSelection | undefined
   loading: boolean
-  retry: ComposerStore["retry"]
+  retry: ComposerRetry | undefined
   id: SessionMessage.ID
   commands: readonly { name: string }[] | undefined
   clientCommand: (() => void | Promise<void>) | undefined
@@ -298,8 +299,13 @@ function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: Subm
   if (snapshot.mode === "shell" && snapshot.delivery === "queue")
     return { state, effects: [{ type: "notify.unqueueable" }, { type: "done", done, sent: false }] }
 
-  const value: ComposerSubmission = {
-    id: retryID(snapshot.retry, snapshot.selection) ?? snapshot.id,
+  // Capture command intent before starting a session in a worktree whose catalog has not loaded.
+  const command = snapshot.mode === "normal" ? findCommand(snapshot.commands, snapshot.text) : undefined
+
+  const kind: SubmissionKind =
+    snapshot.mode === "shell" ? { type: "shell" } : command ? { type: "command", command } : { type: "prompt" }
+
+  const payload = {
     mode: snapshot.mode,
     prompt: snapshot.draft.prompt,
     context: snapshot.draft.context,
@@ -309,11 +315,11 @@ function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: Subm
     delivery: snapshot.delivery,
   }
 
-  // Capture command intent before starting a session in a worktree whose catalog has not loaded.
-  const command = snapshot.mode === "normal" ? findCommand(snapshot.commands, snapshot.text) : undefined
-
-  const kind: SubmissionKind =
-    snapshot.mode === "shell" ? { type: "shell" } : command ? { type: "command", command } : { type: "prompt" }
+  // Only a prompt is admitted under its ID; shell commands and server commands always start fresh.
+  const value: ComposerSubmission = {
+    ...payload,
+    id: kind.type === "prompt" ? claimRetry(snapshot.retry, payload, snapshot.id) : snapshot.id,
+  }
 
   return {
     state: { type: "preparing", attempt, draft: snapshot.draft, value, kind, comments: snapshot.comments, done },
@@ -367,17 +373,6 @@ function blank(snapshot: SubmitSnapshot) {
     snapshot.mode === "shell" ||
     (!snapshot.draft.prompt.some(isAttachment) && !snapshot.draft.context.some(isCommentItem))
   )
-}
-
-function retryID(retry: ComposerStore["retry"], selection: ComposerSelection) {
-  if (
-    retry &&
-    retry.agent === selection.agent &&
-    retry.providerID === selection.model.providerID &&
-    retry.modelID === selection.model.modelID &&
-    (retry.variant ?? "default") === (selection.variant ?? "default")
-  )
-    return retry.id
 }
 
 function findCommand(commands: SubmitSnapshot["commands"], text: string) {
