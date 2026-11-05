@@ -1212,6 +1212,48 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
+  it.effect("clears a silent child's marker when its resume budget is exhausted", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const parent = Session.ID.make("ses_subagent_silent_exhausted_parent")
+      const child = Session.ID.make("ses_subagent_silent_exhausted_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        resume_attempts: 10,
+        metadata: { "subagent.notify": false },
+      })
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Silent exhausted inspection",
+        },
+        run: Effect.never,
+      })
+      yield* jobs.background(child)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Scope.provide(scope))
+      const context = yield* buildExecution(
+        scope,
+        () => Effect.die("A silent child must not wake its parent"),
+        undefined,
+        restarted,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
+    }),
+  )
+
   it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
