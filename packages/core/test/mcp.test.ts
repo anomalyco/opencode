@@ -2745,9 +2745,13 @@ const gatedServer = Effect.gen(function* () {
 })
 
 // The real Mcp layer behind the tool registry; the bus never delivers, so only flush can register tools.
-const startupRegistry = (url: string) =>
+const startupRegistry = (url: string, timeout?: ConfigMCP.Timeout) =>
   AppNodeBuilder.build(LayerNode.group([Mcp.node, Tool.node, McpTool.node]), [
-    Mcp.node.replace(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false }))),
+    Mcp.node.replace(
+      resourceMcpLayer(
+        new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false, ...(timeout ? { timeout } : {}) }),
+      ),
+    ),
     Permission.node.replace(permissions),
     Bus.node.replace(events),
     Image.node.replace(imagePassthrough),
@@ -2775,7 +2779,7 @@ testEffect(Layer.empty).effect("flush waits for a server that connects within it
   }),
 )
 
-testEffect(Layer.empty).effect("flush stops waiting for a hung server when its startup window ends", () =>
+testEffect(Layer.empty).effect("flush stops waiting for a hung server when the default startup window ends", () =>
   Effect.gen(function* () {
     const gated = yield* gatedServer
     yield* Effect.gen(function* () {
@@ -2795,6 +2799,28 @@ testEffect(Layer.empty).effect("flush stops waiting for a hung server when its s
       // Shutting down mid-handshake would wait on the held request.
       Effect.ensuring(Deferred.succeed(gated.release, undefined)),
       Effect.provide(startupRegistry(gated.server.url)),
+    )
+  }),
+)
+
+testEffect(Layer.empty).effect("flush waits as long as a server's own startup timeout", () =>
+  Effect.gen(function* () {
+    const gated = yield* gatedServer
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      yield* Deferred.await(gated.started)
+      const flush = yield* registration.flush.pipe(Effect.forkChild({ startImmediately: true }))
+      // Well past the default window, which would have dropped a server that is still handshaking.
+      yield* TestClock.adjust("3500 millis")
+      expect(flush.pollUnsafe()).toBeUndefined()
+
+      yield* Deferred.succeed(gated.release, undefined)
+      yield* Fiber.join(flush)
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toContain("resources_echo")
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(gated.release, undefined)),
+      Effect.provide(startupRegistry(gated.server.url, new ConfigMCP.Timeout({ startup: 10_000 }))),
     )
   }),
 )
