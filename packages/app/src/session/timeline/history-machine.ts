@@ -30,8 +30,8 @@ export type TimelineHistoryState =
     }
   | { readonly status: "loading"; readonly target: HistoryTarget; readonly attempt: number }
   /**
-   * The last page failed. Only the reader's own scroll or a content change retries it, and the scroll only once
-   * `coolingDown` ends; a hash target does not, so a broken server is not polled.
+   * The last page failed. Once `coolingDown` ends, the reader's own scroll retries it, and a following view checks its
+   * fill once; a hash target does not, so a detached view does not poll a broken server.
    */
   | {
       readonly status: "failed"
@@ -39,12 +39,15 @@ export type TimelineHistoryState =
       readonly attempt: number
       readonly coolingDown: boolean
     }
-  /** `more`: the store still has a cursor, but the last page added nothing, so paging stops instead of looping. */
+  /**
+   * `stalled`: the store still has a cursor, but the last page added nothing, so paging stops instead of looping. It
+   * holds the oldest loaded message then; a resync or reload that replaces the transcript changes it and starts again.
+   */
   | {
       readonly status: "exhausted"
       readonly target: HistoryTarget
       readonly attempt: number
-      readonly more: boolean
+      readonly stalled?: { readonly oldest: string | undefined }
     }
 
 export type TimelineHistoryEvent =
@@ -54,6 +57,8 @@ export type TimelineHistoryEvent =
       readonly ready: boolean
       readonly more: boolean
       readonly following: boolean
+      /** The oldest loaded message. */
+      readonly oldest: string | undefined
     }
   /** A detached reader scrolled near the top. */
   | { readonly type: "scroll.top" }
@@ -62,16 +67,18 @@ export type TimelineHistoryEvent =
   /** A hash or pending message target is not loaded yet. */
   | { readonly type: "seek.requested" }
   | { readonly type: "probe.settled"; readonly attempt: number; readonly load: boolean }
+  /** A page made progress when the oldest loaded message changed: an older page landed, or the transcript resynced. */
   | {
       readonly type: "page.loaded"
       readonly attempt: number
-      readonly added: number
+      readonly previous: string | undefined
+      readonly oldest: string | undefined
       readonly more: boolean
       readonly following: boolean
     }
   | { readonly type: "page.failed"; readonly attempt: number }
   | { readonly type: "page.timed-out"; readonly attempt: number }
-  | { readonly type: "cooldown.settled"; readonly attempt: number }
+  | { readonly type: "cooldown.settled"; readonly attempt: number; readonly following: boolean }
   | { readonly type: "disposed" }
 
 export type TimelineHistoryEffect =
@@ -139,6 +146,9 @@ export function transitionTimelineHistory(
   if (event.type === "cooldown.settled") {
     if (state.status !== "failed" || !state.coolingDown || state.attempt !== event.attempt) return unchanged(state)
 
+    // A short, following view cannot scroll to retry, so it checks the fill once per cooldown.
+    if (event.following) return probe(state.target, state.attempt + 1, "fill", NO_EFFECTS)
+
     return changed({ ...state, coolingDown: false })
   }
 
@@ -146,8 +156,10 @@ export function transitionTimelineHistory(
   const attempt = state.attempt + 1
 
   if (event.type === "page.loaded") {
-    if (!event.more || event.added <= 0)
-      return changed({ status: "exhausted", target: state.target, attempt, more: event.more })
+    if (!event.more) return changed({ status: "exhausted", target: state.target, attempt })
+
+    if (event.oldest === event.previous)
+      return changed({ status: "exhausted", target: state.target, attempt, stalled: { oldest: event.oldest } })
 
     return probe(state.target, attempt, event.following ? "fill" : "top", NO_EFFECTS)
   }
@@ -186,19 +198,20 @@ function synced(
   if (state.status === "loading") return unchanged(state)
 
   if (state.status === "exhausted") {
-    // A reloaded transcript has a cursor again.
-    if (!state.more && event.more) return enter(state.target, state.attempt + 1, event, NO_EFFECTS)
+    if (!event.more)
+      return state.stalled
+        ? changed({ status: "exhausted", target: state.target, attempt: state.attempt })
+        : unchanged(state)
 
-    if (state.more && !event.more) return changed({ ...state, more: false })
+    // A reloaded or resynced transcript has a cursor again, or a different oldest message than the stalled page left.
+    if (!state.stalled || state.stalled.oldest !== event.oldest)
+      return enter(state.target, state.attempt + 1, event, NO_EFFECTS)
 
     return unchanged(state)
   }
 
   if (!event.more)
-    return changed(
-      { status: "exhausted", target: state.target, attempt: state.attempt + 1, more: false },
-      cancel(state),
-    )
+    return changed({ status: "exhausted", target: state.target, attempt: state.attempt + 1 }, cancel(state))
 
   if (state.status === "failed" || !event.following || state.probe === "fill") return unchanged(state)
 
@@ -211,7 +224,7 @@ function enter(
   event: Extract<TimelineHistoryEvent, { type: "sync" }>,
   effects: readonly TimelineHistoryEffect[],
 ): TimelineHistoryTransition {
-  if (!event.more) return changed({ status: "exhausted", target, attempt, more: false }, effects)
+  if (!event.more) return changed({ status: "exhausted", target, attempt }, effects)
 
   if (event.following) return probe(target, attempt, "fill", effects)
 

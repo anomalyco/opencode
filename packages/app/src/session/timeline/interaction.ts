@@ -1,7 +1,7 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, createSignal, on, onCleanup, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { frameLoop } from "@opencode/ui/motion"
 import { useLayout } from "@/shell/state/layout"
@@ -83,6 +83,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   let historyProbe: (() => void) | undefined
   let historyLoad: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
   let historyCooldown: ReturnType<typeof setTimeout> | undefined
+  // Changes only when an older page lands or the transcript is replaced, not while a reply streams.
+  const oldestMessage = createMemo(() => timeline.messages()[0]?.id)
   const visibleUserMessages = timeline.visibleUserMessages
   const anchor = (id: string) => `message-${id}`
 
@@ -305,7 +307,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
     if (effect.type === "load.start") {
       abortHistoryLoad()
-      const before = timeline.messages().length
+      const previous = oldestMessage()
 
       const load = {
         controller: new AbortController(),
@@ -329,7 +331,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
           settle({
             type: "page.loaded",
             attempt: effect.attempt,
-            added: timeline.messages().length - before,
+            previous,
+            oldest: oldestMessage(),
             more: timeline.history.more(),
             following: follow.following(),
           }),
@@ -351,7 +354,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     if (effect.type === "cooldown.cancel") return
     historyCooldown = setTimeout(() => {
       historyCooldown = undefined
-      dispatchHistory({ type: "cooldown.settled", attempt: effect.attempt })
+      dispatchHistory({ type: "cooldown.settled", attempt: effect.attempt, following: follow.following() })
     }, HISTORY_RETRY_COOLDOWN_MS)
   }
 
@@ -412,6 +415,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       ready: timeline.ready(),
       more: timeline.history.more(),
       following: follow.following(),
+      oldest: oldestMessage(),
     })
   })
   createResizeObserver(
