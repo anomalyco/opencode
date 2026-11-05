@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Database } from "@opencode/core/database/database"
+import { Detaching } from "@opencode/core/detaching"
 import jobMigration from "@opencode/core/database/migration/20261030054400_job"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
@@ -454,6 +455,75 @@ describe("Job", () => {
       yield* Deferred.await(interrupted).pipe(Effect.timeout("1 second"))
       // The abandoned in-memory registry is not a durable observation channel.
       expect((yield* jobs.get(job.id))?.status).toBe("running")
+    }),
+  )
+
+  it.live("interrupts observers without settling a background job when its registry is torn down", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const jobs = yield* Job.make.pipe(Scope.provide(scope))
+      const job = yield* jobs.start({
+        id: "shell_teardown",
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_teardown"),
+          shellID: "shell_teardown",
+          command: "sleep 60",
+        },
+        run: Effect.never,
+      })
+      const background = yield* jobs.background(job.id)
+      const observer = yield* jobs.wait({ id: job.id }).pipe(Effect.forkChild({ startImmediately: true }))
+
+      yield* Scope.close(scope, Exit.void)
+
+      const observed = yield* Fiber.await(observer).pipe(Effect.timeout("1 second"))
+      expect(Exit.isFailure(observed) && Cause.hasInterruptsOnly(observed.cause)).toBe(true)
+      const current = yield* Job.make
+      expect(yield* current.pendingBackground).toMatchObject([
+        { id: job.id, notificationID: background?.notificationID, status: "running" },
+      ])
+      if (background?.notificationID) yield* current.completeBackground(background.notificationID)
+    }),
+  )
+
+  it.live("leaves interrupted work unsettled while detaching, but still cancels on request", () =>
+    Effect.gen(function* () {
+      const detaching = yield* Detaching.make
+      const jobs = yield* Job.make.pipe(Effect.provideService(Detaching.Service, detaching))
+      const recovery = (id: string) => ({
+        kind: "shell" as const,
+        sessionID: SessionSchema.ID.make("ses_detaching"),
+        shellID: id,
+        command: "sleep 60",
+      })
+      const interrupt = yield* Deferred.make<void>()
+      const detached = yield* jobs.start({
+        id: "shell_detached",
+        type: "shell",
+        recovery: recovery("shell_detached"),
+        run: Deferred.await(interrupt).pipe(Effect.andThen(Effect.interrupt)),
+      })
+      const cancelled = yield* jobs.start({
+        id: "shell_cancelled",
+        type: "shell",
+        recovery: recovery("shell_cancelled"),
+        run: Effect.never,
+      })
+      const background = yield* jobs.background(detached.id)
+      const observer = yield* jobs.wait({ id: detached.id }).pipe(Effect.forkChild({ startImmediately: true }))
+
+      yield* detaching.handoffPrepared
+      expect(yield* detaching.begin).toBe(true)
+      yield* Deferred.succeed(interrupt, undefined)
+
+      const observed = yield* Fiber.await(observer).pipe(Effect.timeout("1 second"))
+      expect(Exit.isFailure(observed) && Cause.hasInterruptsOnly(observed.cause)).toBe(true)
+      expect(yield* jobs.pendingBackground).toMatchObject([{ id: detached.id, status: "running" }])
+      expect(yield* jobs.cancel(cancelled.id)).toMatchObject({ status: "cancelled" })
+      expect((yield* jobs.wait({ id: cancelled.id })).info?.status).toBe("cancelled")
+      if (background?.notificationID) yield* jobs.completeBackground(background.notificationID)
     }),
   )
 

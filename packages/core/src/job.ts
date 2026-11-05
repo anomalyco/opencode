@@ -1,9 +1,23 @@
 export * as Job from "./job.js"
 
 import { asc, eq, or } from "drizzle-orm"
-import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
+import {
+  Array,
+  Cause,
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Schema,
+  Scope,
+  SynchronizedRef,
+} from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
+import { Detaching } from "./detaching.js"
 import { JobList } from "./job/list.js"
 import { type Recovery, RecoverySchema } from "./job/recovery.js"
 import { JobTable } from "./job/sql.js"
@@ -59,6 +73,8 @@ type State = {
 type FinishResult = {
   info?: Info
   done?: Deferred.Deferred<Info>
+  // Teardown interrupted the work: `done` is interrupted instead of settled.
+  interrupted?: boolean
   scope?: Scope.Closeable
   generation?: Scope.Closeable
 }
@@ -187,6 +203,8 @@ function decrementSession(input: Map<SessionSchema.ID, number>, sessionID: Sessi
  */
 export const make = Effect.gen(function* () {
   const db = (yield* Database.Service).db
+  // Optional so registries built outside the application graph (tests, tools) need not provide it.
+  const detaching = Option.getOrUndefined(yield* Effect.serviceOption(Detaching.Service))
   const state: State = {
     jobs: yield* SynchronizedRef.make(new Map()),
     scope: yield* Scope.Scope,
@@ -248,6 +266,15 @@ export const make = Effect.gen(function* () {
         if (!job) return [{}, jobs]
         if (job.scope !== scope) return [{}, jobs]
         if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
+        // Teardown (this registry closing, or a planned shutdown) is not a terminal outcome: leave the job
+        // and its durable row running for the next server, and interrupt rather than settle its observers.
+        // A user cancel has already settled the job as cancelled before interrupting its work.
+        if (
+          Exit.isFailure(exit) &&
+          Cause.hasInterruptsOnly(exit.cause) &&
+          (scope.state._tag === "Closed" || detaching?.isDetaching())
+        )
+          return [{ done: job.done, scope: job.scope, interrupted: true }, jobs]
         const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
           ? "completed"
           : Cause.hasInterruptsOnly(exit.cause)
@@ -268,6 +295,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )
+    if (result.interrupted && result.done) yield* Deferred.interrupt(result.done)
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
@@ -295,6 +323,8 @@ export const make = Effect.gen(function* () {
               return [{ info: snapshot(existing) }, jobs]
             }
             const scope = yield* Scope.fork(state.scope, "parallel")
+            // Closing the registry interrupts the work without settling it; interrupt its observers too.
+            yield* Scope.addFinalizer(scope, Deferred.interrupt(done))
             const job = {
               info: {
                 id: input.id,
@@ -551,4 +581,4 @@ export const make = Effect.gen(function* () {
 
 const layer = Layer.effect(Service, make)
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Detaching.node] })
