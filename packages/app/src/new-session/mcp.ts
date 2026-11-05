@@ -69,18 +69,21 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     },
   }
 
-  const apply = async (directory: string, states: Readonly<Record<string, boolean>>) => {
+  // Resolves whether the directory's servers match `states`, and rejects with the reason when one cannot. Once `signal`
+  // aborts it starts no further toggles; toggles already running belong to the shared controller and finish there.
+  const prepare = async (directory: string, states: Readonly<Record<string, boolean>>, signal: AbortSignal) => {
     const settled = pool.peek(directory)?.settle()
 
     if (settled && !(await settled)) return false
     const entries = Object.entries(states)
 
     if (entries.length === 0) return true
-    const catalog = await sdk.api.mcp.list({ location: { directory } })
+    const catalog = await sdk.api.mcp.list({ location: { directory } }, { signal })
     const missing = entries.find(([name, enabled]) => enabled && !catalog.data.some((server) => server.name === name))
 
     if (missing) throw new Error(language.t("session.summary.mcp.unavailable", { name: missing[0] }))
 
+    if (signal.aborted) return false
     const results = await Promise.all(
       entries.flatMap(([name, enabled]) => {
         const status = catalog.data.find((server) => server.name === name)?.status.status
@@ -92,7 +95,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     )
 
     if (results.some((success) => !success)) return false
-    const current = await sdk.api.mcp.list({ location: { directory } })
+    const current = await sdk.api.mcp.list({ location: { directory } }, { signal })
 
     const unresolved = entries.find(([name, enabled]) => {
       const status = current.data.find((server) => server.name === name)?.status.status
@@ -121,17 +124,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     remember(directory: string, states: Readonly<Record<string, boolean>>) {
       tabs.updateDraft(input.draftID, { mcp: { target: key(directory), states: { ...states } } })
     },
-    prepare(directory: string, states: Readonly<Record<string, boolean>>) {
-      return apply(directory, states).catch((error) => {
-        showToast({
-          variant: "error",
-          title: language.t("session.summary.mcp.prepareFailed"),
-          description: error instanceof Error ? error.message : String(error),
-        })
-
-        return false
-      })
-    },
+    prepare,
   }
 }
 

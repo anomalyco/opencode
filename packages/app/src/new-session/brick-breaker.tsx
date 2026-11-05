@@ -1,13 +1,25 @@
 import { For, onCleanup, onMount } from "solid-js"
+import {
+  BRICK_BREAKER_LIVES,
+  BRICK_BREAKER_TIMING,
+  acceptsBrickBreakerInput,
+  brickBreakerSpares,
+  createBrickBreakerState,
+  isBrickBreakerBallMoving,
+  movesBrickBreakerPaddle,
+  transitionBrickBreaker,
+  type BrickBreakerEvent,
+  type BrickBreakerExit,
+  type BrickBreakerState,
+} from "./brick-breaker-machine"
 import type { PinBoardHandle } from "./pin-board"
 import { PinSound } from "./pin-sound"
 import type { LodgerBall } from "./wordmark"
 
-const LIVES = 3
-const ENTER = 0.85
-const EXIT = 1
+const LAUNCH: BrickBreakerEvent = Object.freeze({ type: "launch" })
 
-type Phase = "enter" | "serve" | "play" | "miss" | "exit"
+const DISPOSE: BrickBreakerEvent = Object.freeze({ type: "dispose" })
+
 type Box = { x: number; y: number; w: number; h: number; r: number }
 
 /**
@@ -54,7 +66,7 @@ export function NewSessionBrickBreaker(props: {
           class="absolute right-4 top-3 font-mono text-[11px] leading-[16px] tabular-nums text-v2-text-text-faint"
         />
         <div class="absolute bottom-4 left-4 flex gap-1.5">
-          <For each={Array.from({ length: LIVES - 1 })}>
+          <For each={Array.from({ length: BRICK_BREAKER_LIVES - 1 })}>
             {(_, i) => (
               <span
                 ref={(el) => (spares[i()] = el)}
@@ -89,10 +101,15 @@ function mountGame(
   const surface = form ? getComputedStyle(form).backgroundColor : ""
   // The arena is exactly as wide as the wordmark, like Arkanoid's tall, narrow playfield.
   const view = { left: 0, top: 0, w: 0, h: 0, l: 0, r: 0 }
-  const g = { phase: "enter" as Phase, t0: performance.now() / 1000, last: 0, raf: 0, lives: LIVES, score: 0 }
+  let state: BrickBreakerState = createBrickBreakerState(performance.now() / 1000)
+  let last = 0
+  let raf = 0
+  let score = 0
+  // Reused by every frame, so a frame that crosses no phase threshold allocates nothing.
+  const tick = { type: "frame" as const, now: 0 }
   const rally = { combo: 0, hits: 0, base: 0, speed: 0 }
   const pad = { x: 0, target: 0, v: 0, w: 0, h: 12, y: 0, tilt: 0, kickAt: -1, steer: 1 }
-  const b = { x: 0, y: 0, vx: 0, vy: 0, hitAt: -1, hitAngle: 0, hitAmp: 0, squintUntil: 0, curl: 0.85, landed: false }
+  const b = { x: 0, y: 0, vx: 0, vy: 0, hitAt: -1, hitAngle: 0, hitAmp: 0, squintUntil: 0, curl: 0.85 }
   const keys = { left: false, right: false }
   const start = { ball: ball.at(), composer: composerBox(), from: composerBox() }
   // The paddle's drawn shape, so the exit morph starts from wherever the paddle is.
@@ -131,25 +148,70 @@ function mountGame(
 
   const paddleBox = (): Box => ({ x: pad.x - pad.w / 2, y: pad.y, w: pad.w, h: pad.h, r: pad.h / 2 })
 
+  // Crosses any phase threshold first, then animates the one phase the frame is in. A phase entered while animating
+  // (a miss or the last brick) starts animating next frame, from its own start.
   const frame = (ms: number) => {
-    g.raf = 0
+    raf = 0
     const now = ms / 1000
-    const dt = Math.min(1 / 30, Math.max(1 / 240, now - g.last))
-    g.last = now
-    const t = now - g.t0
+    const dt = Math.min(1 / 30, Math.max(1 / 240, now - last))
+    last = now
+    tick.now = now
+    dispatch(tick)
+    if (state.status === "disposed") return onDone()
     movePaddle(dt, now)
-    if (g.phase === "enter") enter(t)
-    if (g.phase === "serve") serve(t)
-    if (g.phase === "play") play(dt, now)
-    if (g.phase === "miss") miss(t)
-    if (g.phase === "exit") return exit(t)
-    pose(now)
-    board.steer(b.x, b.y)
-    g.raf = requestAnimationFrame(frame)
+    animate(dt, now)
+    if (state.status !== "exit") {
+      pose(now)
+      board.steer(b.x, b.y)
+    }
+    raf = requestAnimationFrame(frame)
+  }
+
+  const animate = (dt: number, now: number) => {
+    if (state.status === "enter") return enter(now - state.startedAt)
+    if (state.status === "serve")
+      return serve(state.landed ? 1 : seg(now - state.startedAt, 0, BRICK_BREAKER_TIMING.serveDrop))
+    if (state.status === "play") return play(dt, now)
+    if (state.status === "exit") return exit(now - state.startedAt)
+  }
+
+  const dispatch = (event: BrickBreakerEvent) => {
+    const prev = state
+    state = transitionBrickBreaker(prev, event)
+    if (state !== prev) changed(prev, state)
+  }
+
+  // What happens once as the game moves from one phase, or landing, to the next.
+  const changed = (prev: BrickBreakerState, next: BrickBreakerState) => {
+    if (next.status === "disposed") return
+    const landed =
+      (prev.status === "enter" || prev.status === "serve") &&
+      !prev.landed &&
+      (next.status === "enter" || next.status === "serve") &&
+      next.landed
+    if (landed) {
+      bump(Math.PI / 2, prev.status === "enter" ? 0.32 : 0.36)
+      if (sound()) PinSound.paddle(b.x, view.w)
+    }
+    if (prev.status === "enter" && next.status === "serve") {
+      pad.target = pad.x
+      panel.style.cursor = "none"
+    }
+    if (prev.status === "serve" && next.status === "play") launch()
+    if (prev.status === "play" && next.status === "miss" && sound())
+      PinSound.sweep({ duration: 0.45, columns: 78, reverse: true })
+    if (prev.status === "miss") {
+      const spares = brickBreakerSpares(next)
+      parts.spares.forEach((el, i) => {
+        el.style.opacity = i < spares ? "1" : "0"
+        el.style.transform = i < spares ? "" : "translateY(4px)"
+      })
+    }
+    if (next.status === "exit") finish(next.kind)
   }
 
   const movePaddle = (dt: number, now: number) => {
-    if (g.phase === "enter" || g.phase === "exit") return
+    if (!movesBrickBreakerPaddle(state)) return
     if (keys.left !== keys.right) pad.target += (keys.right ? 1 : -1) * 1100 * dt
     pad.target = Math.max(view.l + pad.w / 2 + 4, Math.min(view.r - pad.w / 2 - 4, pad.target))
     const prev = pad.x
@@ -163,7 +225,7 @@ function mountGame(
 
   // The composer content fades, then its box springs down and narrows into the paddle while the ball rides on top.
   const enter = (t: number) => {
-    const u = seg(t, 0.1, ENTER)
+    const u = seg(t, 0.1, BRICK_BREAKER_TIMING.enter)
     const e = spring(u)
     const to = paddleBox()
     const box = {
@@ -174,43 +236,27 @@ function mountGame(
       r: lerp(start.from.r, to.r, Math.min(1, u * 1.6)),
     }
     draw({ ...box, x: box.x - box.w / 2 }, 0)
-    const k = easeOut(seg(t, 0, 0.38))
+    const k = easeOut(seg(t, 0, BRICK_BREAKER_TIMING.enterLand))
     const r = ball.radius()
     b.x = lerp(start.ball.x, box.x, k)
     b.y = lerp(start.ball.y, box.y - r, k) - Math.sin(Math.PI * k) * 28
     b.curl = lerp(0.85, 1, k)
-    if (k >= 1 && !b.landed) {
-      b.landed = true
-      bump(Math.PI / 2, 0.32)
-      if (sound()) PinSound.paddle(b.x, view.w)
-    }
     // Once it has shrunk enough to read as a paddle, it takes on the colour of the pins it is about to break.
     if (t >= 0.3) parts.paddle.style.background = "var(--v2-icon-icon-muted)"
     if (t >= 0.5) parts.hud.style.opacity = "1"
-    if (t < ENTER) return
-    pad.target = pad.x
-    setPhase("serve")
-    panel.style.cursor = "none"
   }
 
   // The ball waits on the paddle like Arkanoid's; after a miss it drops back onto it first.
-  const serve = (t: number) => {
+  const serve = (drop: number) => {
     const r = ball.radius()
-    const drop = g.lives < LIVES ? seg(t, 0, 0.42) : 1
     b.x = pad.x
     b.y = pad.y - r - Math.pow(1 - drop, 2) * 110
     b.vx = 0
     b.vy = 0
     b.curl = 1
-    if (drop >= 1 && !b.landed) {
-      b.landed = true
-      bump(Math.PI / 2, 0.36)
-      if (sound()) PinSound.paddle(b.x, view.w)
-    }
   }
 
   const launch = () => {
-    if (g.phase !== "serve" || !b.landed) return
     // Serve away from the side the paddle is moving toward, up and to the right when still.
     const lean = Math.abs(pad.v) > 40 ? Math.sign(pad.v) : 1
     const a = lean * (0.32 + Math.random() * 0.12)
@@ -220,7 +266,6 @@ function mountGame(
     pad.kickAt = performance.now() / 1000
     bump(Math.PI / 2, 0.3)
     if (sound()) PinSound.paddle(b.x, view.w)
-    setPhase("play")
   }
 
   const play = (dt: number, now: number) => {
@@ -269,11 +314,11 @@ function mountGame(
         if (side && b.vx * hit.nx < 0) b.vx = -b.vx
         if (!side && b.vy * hit.ny < 0) b.vy = -b.vy
         rally.combo++
-        g.score += hit.count * 10 * Math.min(8, rally.combo)
+        score += hit.count * 10 * Math.min(8, rally.combo)
         b.squintUntil = now + 0.14
         bump(side ? 0 : Math.PI / 2, 0.26)
         if (sound()) PinSound.brick(b.x, view.w, rally.combo)
-        if (!board.left()) return finish("win")
+        if (!board.left()) return dispatch({ type: "cleared", now })
       }
       // A nearly flat rally never comes back down, so keep at least a quarter of the speed vertical.
       const min = rally.speed * 0.25
@@ -281,31 +326,13 @@ function mountGame(
         b.vy = (b.vy < 0 ? -1 : 1) * min
         b.vx = Math.sign(b.vx || 1) * Math.sqrt(rally.speed * rally.speed - min * min)
       }
-      if (b.y - r > view.h) {
-        setPhase("miss")
-        if (sound()) PinSound.sweep({ duration: 0.45, columns: 78, reverse: true })
-        return
-      }
+      if (b.y - r > view.h) return dispatch({ type: "missed", now })
     }
   }
 
-  const miss = (t: number) => {
-    if (t < 0.55) return
-    g.lives--
-    parts.spares.forEach((el, i) => {
-      el.style.opacity = i < g.lives - 1 ? "1" : "0"
-      el.style.transform = i < g.lives - 1 ? "" : "translateY(4px)"
-    })
-    if (!g.lives) return finish("lose")
-    b.landed = false
-    setPhase("serve")
-  }
-
-  const finish = (kind: "win" | "lose" | "quit") => {
-    if (g.phase === "exit") return
+  const finish = (kind: BrickBreakerExit) => {
     start.composer = composerBox()
     start.from = { ...shape }
-    setPhase("exit")
     panel.style.cursor = ""
     parts.hud.style.opacity = "0"
     parts.paddle.style.background = surface
@@ -328,21 +355,10 @@ function mountGame(
       },
       pad.tilt * (1 - e),
     )
-    if (t >= 0.75) {
-      if (wrap) wrap.style.opacity = ""
-      if (tip) tip.style.opacity = ""
-      parts.paddle.style.opacity = "0"
-    }
-    if (t < EXIT) {
-      g.raf = requestAnimationFrame(frame)
-      return
-    }
-    onDone()
-  }
-
-  const setPhase = (phase: Phase) => {
-    g.phase = phase
-    g.t0 = performance.now() / 1000
+    if (t < 0.75) return
+    if (wrap) wrap.style.opacity = ""
+    if (tip) tip.style.opacity = ""
+    parts.paddle.style.opacity = "0"
   }
 
   const bump = (angle: number, amp: number) => {
@@ -354,7 +370,7 @@ function mountGame(
   const pose = (now: number) => {
     const t = now - b.hitAt
     const jiggle = t < 0.45 ? b.hitAmp * Math.exp(-t * 12) * Math.cos(t * 38) : 0
-    const moving = g.phase === "play" || g.phase === "miss"
+    const moving = isBrickBreakerBallMoving(state)
     const heading = Math.atan2(b.vy, b.vx)
     const squash = Math.abs(jiggle) > 0.015
     ball.place(b.x, b.y, {
@@ -365,7 +381,7 @@ function mountGame(
       squint: now < b.squintUntil ? 0.45 : 1,
       curl: b.curl,
     })
-    const text = `${g.score}`.padStart(5, "0")
+    const text = `${score}`.padStart(5, "0")
     if (text !== written.score) {
       written.score = text
       parts.score.textContent = text
@@ -388,18 +404,18 @@ function mountGame(
     pad.target = event.clientX - view.left
   }
   const onDown = (event: PointerEvent) => {
-    if (event.button !== 0 || g.phase === "exit") return
+    if (event.button !== 0 || !acceptsBrickBreakerInput(state)) return
     event.preventDefault()
     event.stopPropagation()
-    launch()
+    dispatch(LAUNCH)
   }
   const onKey = (event: KeyboardEvent) => {
-    if (g.phase === "exit") return
+    if (!acceptsBrickBreakerInput(state)) return
     const down = event.type === "keydown"
-    if (event.key === "Escape" && down) finish("quit")
+    if (event.key === "Escape" && down) dispatch({ type: "quit", now: performance.now() / 1000 })
     else if (event.key === "ArrowLeft" || event.key === "a") keys.left = down
     else if (event.key === "ArrowRight" || event.key === "d") keys.right = down
-    else if ((event.key === " " || event.key === "ArrowUp") && down) launch()
+    else if ((event.key === " " || event.key === "ArrowUp") && down) dispatch(LAUNCH)
     else return
     event.preventDefault()
     event.stopPropagation()
@@ -439,11 +455,12 @@ function mountGame(
   window.addEventListener("keydown", onKey, { capture: true })
   window.addEventListener("keyup", onKey, { capture: true })
   window.addEventListener("blur", onBlur)
-  g.last = performance.now() / 1000 - 1 / 60
-  g.raf = requestAnimationFrame(frame)
+  last = performance.now() / 1000 - 1 / 60
+  raf = requestAnimationFrame(frame)
 
   return () => {
-    cancelAnimationFrame(g.raf)
+    dispatch(DISPOSE)
+    cancelAnimationFrame(raf)
     resize.disconnect()
     panel.removeEventListener("pointermove", onMove)
     panel.removeEventListener("pointerdown", onDown, { capture: true })

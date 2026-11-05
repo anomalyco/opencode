@@ -1,17 +1,29 @@
-// --- Session commands: /compact and opening /fork ---
+// --- Session commands: /compact and opening the /fork, /open and /mcp dialogs ---
+
+// A dialog's chunk that has not loaded by then is reported as a failed request.
+export const SESSION_DIALOG_LOAD_TIMEOUT_MS = 15_000
+
+/** The lazily loaded dialogs: the /fork picker, the /open file palette and the /mcp list. */
+export type SessionDialogKind = "fork" | "palette" | "mcp"
 
 /**
  * The session commands stay mounted while tabs switch between sessions, so compactions are keyed by the session they
- * run for; the /fork picker loads for the session it was asked from. /export runs through `export-machine.ts`.
+ * run for; a dialog loads for the session it was asked from and does not open over another. /export runs through
+ * `export-machine.ts`.
  */
 export type SessionCommandsState =
   | {
       readonly status: "active"
       readonly issued: number
       readonly compacting: Readonly<Record<string, number>>
-      readonly forkDialog:
+      readonly dialog:
         | { readonly status: "closed" }
-        | { readonly status: "loading"; readonly attempt: number; readonly sessionID: string }
+        | {
+            readonly status: "loading"
+            readonly attempt: number
+            readonly kind: SessionDialogKind
+            readonly sessionKey: string
+          }
     }
   | { readonly status: "disposed" }
 
@@ -19,16 +31,24 @@ export type SessionCommandsEvent =
   | { readonly type: "compact.requested"; readonly sessionID: string }
   | { readonly type: "compact.succeeded"; readonly attempt: number; readonly sessionID: string }
   | { readonly type: "compact.failed"; readonly attempt: number; readonly sessionID: string; readonly cause: unknown }
-  | { readonly type: "fork.requested"; readonly sessionID: string }
-  | { readonly type: "fork.loaded"; readonly attempt: number }
-  | { readonly type: "fork.load-failed"; readonly attempt: number; readonly cause: unknown }
-  | { readonly type: "session.changed"; readonly sessionID: string | undefined }
+  | { readonly type: "dialog.requested"; readonly kind: SessionDialogKind; readonly sessionKey: string }
+  | { readonly type: "dialog.loaded"; readonly attempt: number }
+  | { readonly type: "dialog.load-failed"; readonly attempt: number; readonly cause: unknown }
+  | { readonly type: "dialog.timed-out"; readonly attempt: number }
+  | { readonly type: "session.changed"; readonly sessionKey: string }
   | { readonly type: "disposed" }
 
 export type SessionCommandsEffect =
   | { readonly type: "compact.run"; readonly attempt: number; readonly sessionID: string }
-  | { readonly type: "fork.load"; readonly attempt: number }
-  | { readonly type: "fork.show" }
+  | {
+      readonly type: "dialog.load"
+      readonly attempt: number
+      readonly kind: SessionDialogKind
+      readonly timeoutMs: number
+    }
+  // Stops the load's timer; its result is dropped by attempt.
+  | { readonly type: "dialog.cancel" }
+  | { readonly type: "dialog.show"; readonly kind: SessionDialogKind }
   | { readonly type: "toast.request-failed"; readonly cause: unknown }
 
 export type SessionCommandsTransition = {
@@ -37,7 +57,7 @@ export type SessionCommandsTransition = {
 }
 
 export function createSessionCommandsState(): SessionCommandsState {
-  return { status: "active", issued: 0, compacting: {}, forkDialog: { status: "closed" } }
+  return { status: "active", issued: 0, compacting: {}, dialog: { status: "closed" } }
 }
 
 export function transitionSessionCommands(
@@ -46,7 +66,7 @@ export function transitionSessionCommands(
 ): SessionCommandsTransition {
   if (state.status === "disposed") return unchanged(state)
 
-  if (event.type === "disposed") return { state: { status: "disposed" }, effects: [] }
+  if (event.type === "disposed") return { state: { status: "disposed" }, effects: cancelDialog(state) }
 
   if (event.type === "compact.requested") {
     // A compaction already admitting for this session answers a repeat, which would run with the same request.
@@ -68,32 +88,47 @@ export function transitionSessionCommands(
     return { state: next, effects: [{ type: "toast.request-failed", cause: event.cause }] }
   }
 
-  if (event.type === "fork.requested") {
-    // The picker's chunk is still loading: a repeat would open it twice.
-    if (state.forkDialog.status !== "closed") return unchanged(state)
+  if (event.type === "dialog.requested") {
+    const dialog = state.dialog
+
+    // The dialog's chunk is still loading: a repeat would open it twice.
+    if (dialog.status === "loading" && dialog.kind === event.kind && dialog.sessionKey === event.sessionKey)
+      return unchanged(state)
     const attempt = state.issued + 1
 
+    // Another dialog replaces one still loading, as it would replace it once open.
     return {
-      state: { ...state, issued: attempt, forkDialog: { status: "loading", attempt, sessionID: event.sessionID } },
-      effects: [{ type: "fork.load", attempt }],
+      state: {
+        ...state,
+        issued: attempt,
+        dialog: { status: "loading", attempt, kind: event.kind, sessionKey: event.sessionKey },
+      },
+      effects: [
+        ...cancelDialog(state),
+        { type: "dialog.load", attempt, kind: event.kind, timeoutMs: SESSION_DIALOG_LOAD_TIMEOUT_MS },
+      ],
     }
   }
 
-  if (event.type === "fork.loaded" || event.type === "fork.load-failed") {
-    if (state.forkDialog.status !== "loading" || state.forkDialog.attempt !== event.attempt) return unchanged(state)
-    const next: SessionCommandsState = { ...state, forkDialog: { status: "closed" } }
+  if (state.dialog.status !== "loading") return unchanged(state)
+  const closed: SessionCommandsState = { ...state, dialog: { status: "closed" } }
 
-    if (event.type === "fork.load-failed") {
-      return { state: next, effects: [{ type: "toast.request-failed", cause: event.cause }] }
-    }
+  // The dialogs belong to the session they were asked from, so none opens over another.
+  if (event.type === "session.changed") {
+    if (state.dialog.sessionKey === event.sessionKey) return unchanged(state)
 
-    return { state: next, effects: [{ type: "fork.show" }] }
+    return { state: closed, effects: [{ type: "dialog.cancel" }] }
   }
 
-  // The picker lists one session's prompts, so it does not open over another.
-  if (state.forkDialog.status !== "loading" || state.forkDialog.sessionID === event.sessionID) return unchanged(state)
+  if (event.attempt !== state.dialog.attempt) return unchanged(state)
 
-  return { state: { ...state, forkDialog: { status: "closed" } }, effects: [] }
+  if (event.type === "dialog.loaded")
+    return { state: closed, effects: [{ type: "dialog.cancel" }, { type: "dialog.show", kind: state.dialog.kind }] }
+
+  if (event.type === "dialog.load-failed")
+    return { state: closed, effects: [{ type: "dialog.cancel" }, { type: "toast.request-failed", cause: event.cause }] }
+
+  return { state: closed, effects: [{ type: "toast.request-failed", cause: undefined }] }
 }
 
 // --- ⌘W after the side panel empties ---
@@ -200,6 +235,10 @@ function disarm(state: Exclude<CloseTabGuardState, { status: "disposed" }>): Clo
 
 function settleCancel(state: CloseTabGuardState): CloseTabGuardEffect[] {
   return state.status === "armed" && state.settling ? [{ type: "settle.cancel" }] : []
+}
+
+function cancelDialog(state: Extract<SessionCommandsState, { status: "active" }>): SessionCommandsEffect[] {
+  return state.dialog.status === "loading" ? [{ type: "dialog.cancel" }] : []
 }
 
 function omit(record: Readonly<Record<string, number>>, key: string) {
