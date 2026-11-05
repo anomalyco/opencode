@@ -30,7 +30,7 @@ use opencode_plugin_abi::{
     self as abi, ABI_MAJOR, ABI_MINOR, Bytes, HostApi, HostRequest, Line, Manifest, Owned, PluginApi, PluginApiV1_0,
     Request,
 };
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use opentui::style::Color;
@@ -467,7 +467,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         })
         .collect();
     if !commands.is_empty() {
-        setup.layer(KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() });
+        setup.layer(KeymapLayer::global(commands));
     }
     for language in &manifest.fences {
         let guest = guest.clone();

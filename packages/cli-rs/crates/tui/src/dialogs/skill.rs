@@ -101,7 +101,7 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
             view
         },
         None,
-        DialogOptions { size: DialogSize::Large, key: None },
+        DialogOptions::new(DialogSize::Large),
     );
     alive
 }

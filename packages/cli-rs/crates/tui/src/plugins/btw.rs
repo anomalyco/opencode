@@ -11,7 +11,7 @@ use opencode_plugin::{Definition, Placement, Slotted, slot};
 use opencode_store::Changes;
 use opencode_ui::bind;
 use opencode_ui::dialog::{self, DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps};
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::prompt::{PromptProps, prompt};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -36,22 +36,15 @@ pub fn plugin() -> Definition<Tui> {
             Box::new(Pending::new(tui, shown.clone()))
         });
         let weak = Rc::downgrade(cx.host());
-        cx.layer(KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![
-                TuiCommand::new(
-                    "session.aside",
-                    bind!(weak, |tui, input: Option<&str>, _| aside(&tui, &pending, input)),
-                )
+        cx.layer(KeymapLayer::global(vec![
+            TuiCommand::new("session.aside", bind!(weak, |tui, input: Option<&str>, _| aside(&tui, &pending, input)))
                 .title("Ask a side question")
                 .description("One-shot answer from the session's context without adding to the conversation")
                 .group("Session")
                 .palette()
-                .slash(Slash { name: "btw".to_owned(), aliases: Vec::new(), arguments: true })
+                .slash(Slash::new("btw").arguments())
                 .bind(Bind::Default),
-            ],
-            ..KeymapLayer::default()
-        });
+        ]));
     })
 }
 
@@ -241,37 +234,34 @@ fn answer(tui: &Tui, question: String, text: String) {
                 };
                 let page_rows = f64::from(max);
                 let (top, bottom) = (scroll.clone(), scroll.clone());
-                cx.layer(KeymapLayer {
-                    commands: vec![
-                        // The key's layer lives as long as the dialog and keeps the copy action alive.
-                        TuiCommand::inline("c", move |_, _| {
-                            let run = copy.borrow().clone();
-                            if let Some(run) = run {
-                                run();
-                            }
-                        })
-                        .title("Copy answer")
-                        .group("Dialog"),
-                        TuiCommand::inline("up,k", step(-1.0)).group("Dialog"),
-                        TuiCommand::inline("down,j", step(1.0)).group("Dialog"),
-                        TuiCommand::inline("pageup", step(-page_rows)).group("Dialog"),
-                        TuiCommand::inline("pagedown", step(page_rows)).group("Dialog"),
-                        TuiCommand::inline("home", move |_, _| {
-                            top.scroll_to(0.0, 0.0);
-                        })
-                        .group("Dialog"),
-                        TuiCommand::inline("end", move |_, _| {
-                            bottom.scroll_to(0.0, f64::MAX);
-                        })
-                        .group("Dialog"),
-                    ],
-                    ..KeymapLayer::default()
-                });
+                cx.layer(KeymapLayer::new(vec![
+                    // The key's layer lives as long as the dialog and keeps the copy action alive.
+                    TuiCommand::inline("c", move |_, _| {
+                        let run = copy.borrow().clone();
+                        if let Some(run) = run {
+                            run();
+                        }
+                    })
+                    .title("Copy answer")
+                    .group("Dialog"),
+                    TuiCommand::inline("up,k", step(-1.0)).group("Dialog"),
+                    TuiCommand::inline("down,j", step(1.0)).group("Dialog"),
+                    TuiCommand::inline("pageup", step(-page_rows)).group("Dialog"),
+                    TuiCommand::inline("pagedown", step(page_rows)).group("Dialog"),
+                    TuiCommand::inline("home", move |_, _| {
+                        top.scroll_to(0.0, 0.0);
+                    })
+                    .group("Dialog"),
+                    TuiCommand::inline("end", move |_, _| {
+                        bottom.scroll_to(0.0, f64::MAX);
+                    })
+                    .group("Dialog"),
+                ]));
             }
             layout
         },
         None,
-        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+        DialogOptions::new(DialogSize::Large),
     );
     tui.dialogs.set_centered(true);
 }

@@ -234,7 +234,7 @@ impl Open {
                 view
             },
             None,
-            DialogOptions { size: DialogSize::Large, key: Some(KEY.into()) },
+            DialogOptions::new(DialogSize::Large).key(KEY),
         );
         if let Some(id) = &self.worktree_project() {
             self.load_worktrees(id.clone());
@@ -708,7 +708,7 @@ impl Open {
                     view
                 },
                 None,
-                DialogOptions { size: DialogSize::Large, key: Some(KEY.into()) },
+                DialogOptions::new(DialogSize::Large).key(KEY),
             );
         });
     }

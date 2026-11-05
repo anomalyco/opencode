@@ -68,10 +68,9 @@ pub fn show(tui: &Tui, checks: bool) {
                         }
                     })
                 };
-                cx.layer(KeymapLayer {
-                    commands: vec![TuiCommand::inline("return", enter).title("Confirm update action").group("Dialog")],
-                    ..KeymapLayer::default()
-                });
+                cx.layer(KeymapLayer::new(vec![
+                    TuiCommand::inline("return", enter).title("Confirm update action").group("Dialog"),
+                ]));
                 // The dialog owns the drawing; a check that ends after it closed is dropped.
                 let (weak, owner) = (tui.weak(), draw.clone());
                 cx.on_close(Disposer::new(move || {
@@ -209,7 +208,7 @@ fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) {
     root.clear();
     root.add(&opencode_ui::dialog::layout_view(
         cx,
-        &header(cx, HeaderProps { title: title.to_owned(), ..HeaderProps::default() }),
+        &header(cx, HeaderProps::new(title)),
         &View::new(app).child(&body),
         Some(&footer(cx, FooterProps { primary, ..FooterProps::default() })),
         opencode_ui::dialog::DIALOG_INSET,

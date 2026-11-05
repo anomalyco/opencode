@@ -8,7 +8,7 @@ use opencode_api::generated::{McpServer, McpServerStatus};
 use opencode_store::Catalog;
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, HeaderProps, header, layout};
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
@@ -22,18 +22,15 @@ pub fn install(tui: &Rc<Tui>) {
         .title("View status")
         .group("System")
         .palette()
-        .slash(Slash { name: "status".to_owned(), aliases: Vec::new(), arguments: false });
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-        // `appBindingCommands`: `<leader>s` by default.
-        KeymapLayer { bindings: vec!["opencode.status".to_owned()], ..KeymapLayer::default() },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("status keymap layer: {error}");
-        }
-    }
+        .slash("status");
+    tui.keymap.install(
+        "status",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appBindingCommands`: `<leader>s` by default.
+            KeymapLayer::default().bindings(["opencode.status"]),
+        ],
+    );
 }
 
 /// `DialogStatus`, in place of any open dialog.
@@ -55,7 +52,7 @@ pub fn show(tui: &Tui) {
             let closed = status.clone();
             cx.on_close(Disposer::new(move || closed.open.set(false)));
             status.load(&tui);
-            layout(cx, &header(cx, HeaderProps { title: "Status".to_owned(), ..HeaderProps::default() }), &body, None)
+            layout(cx, &header(cx, HeaderProps::new("Status")), &body, None)
         }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),

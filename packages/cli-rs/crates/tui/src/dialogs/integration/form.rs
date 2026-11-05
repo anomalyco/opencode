@@ -582,28 +582,26 @@ impl Choice {
             let weak = Rc::downgrade(self);
             Condition::when(move || weak.upgrade().is_some_and(|state| state.editing.get()))
         };
-        self.cx.layer(KeymapLayer {
-            enabled: not_editing,
-            commands: vec![
+        self.cx.layer(
+            KeymapLayer::new(vec![
                 command("dialog.select.prev", "Previous answer", |state| state.move_by(state.count - 1)),
                 command("dialog.select.next", "Next answer", |state| state.move_by(1)),
                 command("dialog.select.submit", "Select answer", |state| state.select(state.selected.get())),
-            ],
-            ..KeymapLayer::default()
-        });
+            ])
+            .enabled(not_editing),
+        );
         let back = Rc::downgrade(self);
-        self.cx.layer(KeymapLayer {
-            enabled: editing,
-            target: Some(self.textarea.id()),
-            priority: 1,
-            commands: vec![
+        self.cx.layer(
+            KeymapLayer::new(vec![
                 command("dialog.prompt.submit", "Submit answer", Choice::submit_text),
                 TuiCommand::inline("escape", bind!(back, |state, _, _| state.back()))
                     .title("Back to answers")
                     .group("Form"),
-            ],
-            ..KeymapLayer::default()
-        });
+            ])
+            .enabled(editing)
+            .target(self.textarea.id())
+            .priority(1),
+        );
     }
 
     fn move_by(self: &Rc<Self>, delta: usize) {

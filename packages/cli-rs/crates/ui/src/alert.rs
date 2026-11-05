@@ -26,14 +26,13 @@ pub fn alert(cx: &Rc<DialogCx>, props: AlertProps) -> View {
         })
     };
     let run = confirm.clone();
-    cx.layer(KeymapLayer {
-        commands: vec![TuiCommand::inline("return", move |_, _| run()).title("Confirm alert").group("Dialog")],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        TuiCommand::inline("return", move |_, _| run()).title("Confirm alert").group("Dialog"),
+    ]));
     let run = confirm.clone();
     layout(
         cx,
-        &header(cx, HeaderProps { title: props.title, ..HeaderProps::default() }),
+        &header(cx, HeaderProps::new(props.title)),
         &Text::new(&cx.app, props.message).fg(cx.theme.text.muted),
         Some(FooterProps {
             primary: vec![FooterAction::new("ok").key("enter").on_trigger(move || run())],
