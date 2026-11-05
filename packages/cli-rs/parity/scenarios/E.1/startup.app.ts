@@ -20,7 +20,6 @@ export default defineApp({
     {
       checkpoint: "forked",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript"],
     },
   ],
 })

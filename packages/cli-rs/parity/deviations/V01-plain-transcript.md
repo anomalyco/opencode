@@ -12,4 +12,4 @@ renders that text when it is parsed whole. Reason: the stored text is one paragr
 widget that is no longer streaming gets more text. A reply that streams normally gets its deltas before it
 completes. Rust does not copy the break (Q11). Not investigated further in Core.
 
-The other scenarios that still name this file now equal TS; a step that re-records them can drop the name.
+Only `H.2/session-open` `streamed` names this file; every other checkpoint equals TS without it.
