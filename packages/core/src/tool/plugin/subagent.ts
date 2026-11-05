@@ -161,13 +161,16 @@ export const Plugin = {
                             new ToolFailure({ message: `Subagent session not found: ${input.sessionID}`, error }),
                         ),
                       )
-              if (existing !== undefined && existing.parentID !== context.sessionID)
+              if (existing !== undefined && existing.parentID !== context.sessionID) {
+                // A fork's parent is the original, so a child of the original reports there, not here.
+                const original = parent.fork?.sessionID
                 return yield* new ToolFailure({
                   message:
-                    existing.parentID !== undefined && parent.fork?.sessionID === existing.parentID
+                    original !== undefined && original === existing.parentID
                       ? `Session ${existing.id} belongs to the original session ${existing.parentID}; this session is a fork of it, so that subagent reports there. Start a new subagent here instead.`
                       : `Session ${existing.id} is not a child of the current session`,
                 })
+              }
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
               // where an explicit model wins over the agent's configured model, which wins over the inherited one.

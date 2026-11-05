@@ -381,23 +381,13 @@ const layer = Layer.effect(
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         const forked = yield* result.get(sessionID).pipe(Effect.orDie)
-        // The copy is the only writer before this point and the notice is admitted after it, so the fork's newest
-        // row is the last copied message. A `before` boundary is the first message left behind, and for a running
-        // assistant or shell the boundary row is skipped by the copy's settlement filter, so neither is the copy's
-        // last message. A fork that copied nothing has no row at all, which is what `cutoff` undefined means.
-        const copied = yield* db
-          .select({ time: SessionMessageTable.time_created })
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.session_id, sessionID))
-          .orderBy(desc(SessionMessageTable.seq))
-          .limit(1)
-          .get()
-          .pipe(Effect.orDie)
-        // Append-only: the notice is a new admission after the copied rows, so the
-        // copied prompt-cache prefix stays byte-identical. It waits in the inbox as a
-        // steer and never wakes this fork's runner on creation.
         const children = yield* store.list({ parentID: parent.id }).pipe(Effect.orDie)
-        const subagents = yield* ForkNotice.collect({ db, sessionID, children, jobs, cutoff: copied?.time })
+        // The copy is the only writer before this point, so the scan's last row is the last copied message: a
+        // `before` boundary is the first message left behind, and a running assistant or shell at the boundary is
+        // skipped by the copy's settlement filter. Append-only: the notice is a new admission after the copied rows,
+        // so the copied prompt-cache prefix stays byte-identical. It waits in the inbox as a steer and never wakes
+        // this fork's runner on creation.
+        const { subagents, copiedThrough } = yield* ForkNotice.collect({ db, sessionID, children, jobs })
         yield* result
           .synthetic({
             sessionID,
@@ -405,7 +395,7 @@ const layer = Layer.effect(
             text: ForkNotice.text({
               forkOf: parent.id,
               title: parent.title,
-              copiedThrough: copied?.time,
+              copiedThrough,
               subagents,
             }),
             metadata: { source: "fork", forkOf: parent.id },

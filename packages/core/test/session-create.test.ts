@@ -1064,6 +1064,38 @@ describe("Session.create", () => {
     }),
   )
 
+  durableIt.effect("admits a fork notice when the copy fills a statement", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const sessionID = Session.ID.create()
+      // One collect page, and a merged-parts read that binds exactly the 100 ids its statement holds.
+      const messages = Array.from({ length: 101 }, (_, index) =>
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.create(),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          content: [{ type: "text" as const, text: `step ${index}` }],
+          time: { created: DateTime.makeUnsafe(index), completed: DateTime.makeUnsafe(index) },
+        }),
+      )
+
+      yield* transfer.import({ data: { info: { ...template, id: sessionID }, messages }, location })
+
+      const forked = yield* session.fork({ sessionID })
+      const notice = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
+      const text = notice[0]?.type === "synthetic" ? notice[0].payload.text : ""
+
+      expect(notice).toHaveLength(1)
+      expect(text).toContain(
+        `This session is a fork of ${sessionID} (untitled), copied through its message at ${DateTime.formatIso(DateTime.makeUnsafe(100))}`,
+      )
+      expect(text).not.toContain("Don't wait for these")
+    }),
+  )
+
   it.effect("keeps a fork untitled when its parent is untitled", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
