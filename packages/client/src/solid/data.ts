@@ -321,6 +321,7 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
+  const [activeReady, setActiveReady] = createSignal(false)
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
@@ -706,6 +707,7 @@ export function createData(config: CreateDataInput) {
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
+        setActiveReady(false)
         refresh(() =>
           api()
             .session.active()
@@ -719,6 +721,7 @@ export function createData(config: CreateDataInput) {
               })
               activeUpdates = undefined
               setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
+              setActiveReady(true)
               // Sessions created before this connection (while disconnected, or before the client started)
               // never delivered `session.created`; without their info a running child never joins its root's family.
               snapshot.forEach((status, id) => {
@@ -726,7 +729,9 @@ export function createData(config: CreateDataInput) {
               })
             })
             .catch(() => {
-              if (activeUpdates === updates) activeUpdates = undefined
+              if (activeUpdates !== updates) return
+              activeUpdates = undefined
+              setActiveReady(true)
             }),
         )
         refresh(() =>
@@ -1548,6 +1553,7 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      activeReady,
       active() {
         return Object.entries(store.session.active).flatMap(([sessionID, status]) =>
           status === "running" ? [sessionID] : [],

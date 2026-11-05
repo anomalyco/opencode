@@ -236,7 +236,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })
   })
 
-  // Settled once every reachable server answered the index and every working root's requests loaded. A server that
+  // Settled once every reachable server answered the index and activity snapshot, and requests loaded. A server that
   // never connects or fails its health check does not hold the screen.
   // Once settled it stays settled, so a session starting later never blanks the screen again.
   const settled = createMemo(
@@ -246,7 +246,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
         connections().every((item, index) => {
           if (!canUseServer(global.servers.health[ServerConnection.key(item.conn)])) return true
 
-          return !!queries[index]?.isSuccess || !!queries[index]?.isError
+          return item.ctx.data.session.activeReady() && (!!queries[index]?.isSuccess || !!queries[index]?.isError)
         }) &&
         entries().every(
           (entry) =>

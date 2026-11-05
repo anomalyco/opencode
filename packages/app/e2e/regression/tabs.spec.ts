@@ -3242,15 +3242,19 @@ test("the inbox waits for initial requests and orders attention by waiting age r
   })
 
   const pending = await holdRoute(page, /\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
+  const activity = await holdRoute(page, "**/api/session/active")
 
   await page.goto("/")
-  await pending.arrived
+  const [permission] = await Promise.all([pending.arrived, activity.arrived])
 
   const inbox = page.locator('[data-slot="sidebar-inbox"]')
 
   await expect(inbox).toHaveAttribute("aria-busy", "true")
   await expect(inbox.getByText("Sessions you work on will appear here", { exact: true })).toHaveCount(0)
   pending.release()
+  await (await permission.response())?.finished()
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  activity.release()
 
   const needs = inbox
     .getByRole("group", { name: "Needs attention", exact: true })
@@ -3258,6 +3262,7 @@ test("the inbox waits for initial requests and orders attention by waiting age r
 
   await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session"])
   await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(inbox.getByRole("group", { name: "Working", exact: true })).toContainText("New live question")
   await expect(inbox.getByRole("status")).toBeEmpty()
   workspace.push([
     {
