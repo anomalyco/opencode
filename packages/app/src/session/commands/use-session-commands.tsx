@@ -22,7 +22,7 @@ import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
 
 type SessionCommandSource = {
   identity: SessionModel["identity"]
-  data: Pick<SessionModel["data"], "info" | "revertMessageID">
+  data: Pick<SessionModel["data"], "info">
   history: Pick<SessionModel["history"], "visibleUserMessages">
   layout: SessionModel["layout"]
   ownership: SessionModel["ownership"]
@@ -36,7 +36,7 @@ export type SessionCommandContext = {
     move: () => Promise<void>
   }
   navigateMessageByOffset: (offset: number) => void
-  revert: Pick<SessionRevert, "undo" | "redo">
+  revert: Pick<SessionRevert, "undo" | "redo" | "canUndo" | "canRedo">
   focusInput: () => void
   // The composer's model, which a compaction runs with.
   model: () => { id: string; providerID: string; variant?: string } | undefined
@@ -377,7 +377,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
+      disabled: !actions.revert.canUndo(),
       onSelect: undo,
     }),
     sessionCommand({
@@ -385,7 +385,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !actions.session.identity.params.id || !actions.session.data.revertMessageID(),
+      disabled: !actions.revert.canRedo(),
       onSelect: redo,
     }),
     sessionCommand({
