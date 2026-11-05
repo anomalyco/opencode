@@ -1,8 +1,8 @@
 # P.1: the plugin API
 
 The in-process Rust plugin API (plan 6.10). Built-in feature plugins (E.14, E.18b, E.15a, E.19a) and the
-LaTeX and Mermaid plugins (P.2, P.3) register through it, compiled in. External plugins load later as WASM
-components on `wasmtime` (P.4, decision O-7); `crates/plugin/src/loader` is its stub.
+LaTeX and Mermaid plugins (P.2, P.3) register through it, compiled in. External plugins load as native
+shared libraries (P.4, decision O-42, `docs/P.4.md`) from `crates/plugin/src/loader`.
 
 The API covers what the TS built-ins use (`packages/tui/src/feature-plugins`, `packages/latex`,
 `packages/merman`), nothing more. A count of `context.*` uses in those plugins: slots (14), keymap layers
