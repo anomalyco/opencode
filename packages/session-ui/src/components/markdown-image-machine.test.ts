@@ -6,6 +6,7 @@ import {
   NO_MARKDOWN_IMAGE_EFFECTS,
   selectMarkdownImageUrl,
   transitionMarkdownImages,
+  type MarkdownImagesEffect,
   type MarkdownImagesEvent,
   type MarkdownImagesState,
 } from "./markdown-image-machine"
@@ -14,7 +15,7 @@ const synced = (...paths: string[]): MarkdownImagesEvent => ({ type: "paths.sync
 
 const step = (state: MarkdownImagesState, event: MarkdownImagesEvent) => transitionMarkdownImages(state, event)
 
-const read = (path: string, attempt: number) => ({ type: "read", path, attempt, timeoutMs: IMAGE_READ_TIMEOUT_MS })
+const read = (path: string, attempt: number): MarkdownImagesEffect => ({ type: "read", path, attempt, timeoutMs: IMAGE_READ_TIMEOUT_MS })
 
 test("retries a failed read after a backoff and loads, while streaming updates change nothing", () => {
   const loading = step(INITIAL_MARKDOWN_IMAGES_STATE, synced("chart.png"))
@@ -49,7 +50,7 @@ test("times out a hung read and gives up after the last retry", () => {
     step(state, { type: "read.timed-out", path: "chart.png", attempt })
   const retry = (state: MarkdownImagesState, attempt: number) =>
     step(state, { type: "retry.due", path: "chart.png", attempt }).state
-  const wait = (attempt: number, delayMs: number) => ({ type: "wait", path: "chart.png", attempt, delayMs })
+  const wait = (attempt: number, delayMs: number): MarkdownImagesEffect => ({ type: "wait", path: "chart.png", attempt, delayMs })
 
   const first = timeOut(step(INITIAL_MARKDOWN_IMAGES_STATE, synced("chart.png")).state, 1)
   expect(first.effects).toEqual([{ type: "cancel", attempt: 1 }, wait(2, 1000)])
