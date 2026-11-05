@@ -137,14 +137,16 @@ export function displayInputDirectory(path: string, home: string) {
   return displayed.endsWith(separator) ? displayed : displayed + separator
 }
 
-// `clear()` drops jobs that have not started and resolves their promises with undefined.
+// `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that
+// never settles cannot keep its slot.
 export function createPriorityTaskQueue<T>(concurrency: number) {
   type Job = {
     key: string
     priority: "user" | "background"
     promise: Promise<T | undefined>
+    controller: AbortController
     run: () => void
-    cancel: () => void
+    settle: (outcome: { value: T | undefined } | { error: unknown }) => void
   }
 
   const jobs = new Map<string, Job>()
@@ -162,7 +164,7 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     }
   }
 
-  const schedule = (key: string, priority: Job["priority"], task: () => Promise<T>) => {
+  const schedule = (key: string, priority: Job["priority"], task: (signal: AbortSignal) => Promise<T>) => {
     const existing = jobs.get(key)
 
     if (existing) {
@@ -172,31 +174,34 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     }
 
     const deferred = Promise.withResolvers<T | undefined>()
+    const controller = new AbortController()
+    const state = { running: false, settled: false }
 
     const job: Job = {
       key,
       priority,
       promise: deferred.promise,
-      cancel: () => deferred.resolve(undefined),
+      controller,
       run: () => {
-        const complete = () => {
-          active--
-          jobs.delete(key)
-          drain()
-        }
-
+        state.running = true
         Promise.resolve()
-          .then(task)
+          .then(() => (controller.signal.aborted ? undefined : task(controller.signal)))
           .then(
-            (value) => {
-              complete()
-              deferred.resolve(value)
-            },
-            (error) => {
-              complete()
-              deferred.reject(error)
-            },
+            (value) => job.settle({ value }),
+            (error) => job.settle({ error }),
           )
+      },
+      settle: (outcome) => {
+        if (state.settled) return
+        state.settled = true
+        jobs.delete(key)
+        dequeue(job)
+
+        if (state.running) active--
+
+        if ("error" in outcome) deferred.reject(outcome.error)
+        else deferred.resolve(outcome.value)
+        drain()
       },
     }
 
@@ -205,6 +210,21 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     drain()
 
     return job.promise
+  }
+
+  const dequeue = (job: Job) => {
+    const queue = job.priority === "user" ? user : background
+    const index = queue.indexOf(job)
+
+    if (index !== -1) queue.splice(index, 1)
+  }
+
+  const abort = (key: string) => {
+    const job = jobs.get(key)
+
+    if (!job) return
+    job.controller.abort()
+    job.settle({ value: undefined })
   }
 
   const promote = (key: string) => {
@@ -219,17 +239,12 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     user.push(job)
   }
 
+  // Queued jobs go first, so aborting a running one never starts a job that is about to be dropped.
   const clear = () => {
-    const queued = [...user, ...background]
-    user.length = 0
-    background.length = 0
-    queued.forEach((job) => {
-      jobs.delete(job.key)
-      job.cancel()
-    })
+    ;[...user, ...background, ...jobs.values()].forEach((job) => abort(job.key))
   }
 
-  return { schedule, promote, clear }
+  return { schedule, promote, abort, clear }
 }
 
 export function nextSuggestionIndex(current: number, delta: -1 | 1, count: number) {
@@ -414,8 +429,9 @@ export async function listPickerDirectory(
   sdk: ServerSDK,
   location: { directory: string; workspace?: string },
   directory: string,
+  signal?: AbortSignal,
 ) {
-  const result = await sdk.api.file.list({ location, path: directory })
+  const result = await sdk.api.file.list({ location, path: directory }, { signal })
 
   return result.data.map((entry) => {
     const absolute = pickerAbsolutePath(entry.path, result.location.directory)

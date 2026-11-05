@@ -19,7 +19,7 @@ import {
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
 
-type FileApi = { find?: (input: never) => Promise<object>; list?: (input: never) => Promise<object> }
+type FileApi = { find?: (input: never) => Promise<object>; list?: (input: never, options: never) => Promise<object> }
 
 // SAFETY: the picker only reads `api.file.find` and `api.file.list`, which every fake here provides.
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- a partial fake stands in for the generated SDK client
@@ -447,28 +447,62 @@ test("limits background tasks and prioritizes newly requested work", async () =>
   expect(maximum).toBe(2)
 })
 
-test("clearing the queue drops jobs that have not started and lets running ones finish", async () => {
-  const queue = createPriorityTaskQueue<string>(1)
-  const blocker = Promise.withResolvers<void>()
+test("clearing the queue frees slots held by tasks that never settle", async () => {
+  const queue = createPriorityTaskQueue<string>(3)
+  const signals: AbortSignal[] = []
   const started: string[] = []
 
-  const task = (name: string, wait?: Promise<void>) => async () => {
+  const hang = (name: string) => (signal: AbortSignal) => {
     started.push(name)
-    await wait
+    signals.push(signal)
 
-    return name
+    return new Promise<string>(() => {})
   }
 
-  const running = queue.schedule("running", "user", task("running", blocker.promise))
-  const queued = queue.schedule("queued", "background", task("queued"))
+  const hung = ["a", "b", "c"].map((name) => queue.schedule(name, "background", hang(name)))
+  const queued = queue.schedule("queued", "background", hang("queued"))
   await Promise.resolve()
   queue.clear()
-  expect(await queued).toBeUndefined()
 
-  blocker.resolve()
-  expect(await running).toBe("running")
-  expect(await queue.schedule("next", "user", task("next"))).toBe("next")
-  expect(started).toEqual(["running", "next"])
+  expect(await Promise.all([...hung, queued])).toEqual([undefined, undefined, undefined, undefined])
+  expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true])
+  expect(await queue.schedule("next", "user", async () => "next")).toBe("next")
+  expect(started).toEqual(["a", "b", "c"])
+})
+
+test("aborting one running task frees its slot for the next", async () => {
+  const queue = createPriorityTaskQueue<string>(1)
+  const aborted = Promise.withResolvers<void>()
+
+  const hung = queue.schedule("hung", "user", (signal) => {
+    signal.addEventListener("abort", () => aborted.resolve())
+
+    return new Promise<string>(() => {})
+  })
+
+  const next = queue.schedule("next", "background", async () => "next")
+  await Promise.resolve()
+  queue.abort("hung")
+
+  await aborted.promise
+  expect(await hung).toBeUndefined()
+  expect(await next).toBe("next")
+})
+
+test("listing a folder passes the abort signal to the request", async () => {
+  const controller = new AbortController()
+  const signals: unknown[] = []
+
+  const api = sdk({
+    list: async (_input: never, options: { signal?: AbortSignal }) => {
+      signals.push(options.signal)
+
+      return { location: { directory: "/repo" }, data: [] }
+    },
+  })
+
+  await listPickerDirectory(api, { directory: "/repo" }, "/repo", controller.signal)
+  expect(signals).toEqual([controller.signal])
 })
 
 test("wraps autocomplete keyboard navigation", () => {

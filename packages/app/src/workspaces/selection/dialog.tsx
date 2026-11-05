@@ -232,20 +232,22 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       const failed = { type: "dir.failed" as const, dir: effect.dir, attempt: effect.attempt }
 
       void loads
-        .schedule(String(effect.attempt), effect.priority, () => {
+        .schedule(String(effect.attempt), effect.priority, (signal) => {
           const current = location()
 
           if (!current) return Promise.reject(new Error("The picker has no server location"))
 
-          // The timeout starts when the listing does, so preloads waiting in the queue cannot expire.
-          const timer = setTimeout(
-            () => dispatchTree({ type: "dir.timed-out", dir: effect.dir, attempt: effect.attempt }),
-            effect.timeoutMs,
-          )
+          // The timeout starts when the listing does, so preloads waiting in the queue cannot expire. Aborting the
+          // job cancels the request and frees its queue slot, so hung listings cannot block the next root.
+          const timer = setTimeout(() => {
+            treeTimers.delete(timer)
+            dispatchTree({ type: "dir.timed-out", dir: effect.dir, attempt: effect.attempt })
+            loads.abort(String(effect.attempt))
+          }, effect.timeoutMs)
 
           treeTimers.add(timer)
 
-          return listPickerDirectory(sdk, current, absoluteTreePath(effect.root, effect.dir)).finally(() => {
+          return listPickerDirectory(sdk, current, absoluteTreePath(effect.root, effect.dir), signal).finally(() => {
             clearTimeout(timer)
             treeTimers.delete(timer)
           })
