@@ -38,7 +38,6 @@ url.workspace = true
 uuid.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
-opencode-drive.workspace = true
 opencode-local.workspace = true
 opencode-mini.workspace = true
 opencode-service.workspace = true
