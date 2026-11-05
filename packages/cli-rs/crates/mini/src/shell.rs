@@ -83,6 +83,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         true,
     );
     let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
+    let footers = Footers::new(&app, &prompt, &theme, settings.mono);
     let status = Text::new(&app, "")
         .wrap(WrapMode::None)
         .truncate(true)
@@ -90,6 +91,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         .shrink(0.0);
     app.root()
         .direction(FlexDirection::Column)
+        .child(footers.root())
         .child(prompt.root())
         .child(prompt.menu_root())
         .child(&status);
@@ -99,7 +101,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         footer,
         writer: RefCell::new(writer),
         transcript: RefCell::new(None),
-        footers: RefCell::new(Footers::default()),
+        footers,
         session: RefCell::new(None),
         prompt,
         status,
@@ -199,7 +201,7 @@ struct Mini {
     footer: SplitFooter,
     writer: RefCell<Writer>,
     transcript: RefCell<Option<Transcript>>,
-    footers: RefCell<Footers>,
+    footers: Footers,
     session: RefCell<Option<Session>>,
     prompt: Prompt,
     status: Text,
@@ -272,6 +274,42 @@ impl Mini {
             clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
             // `/settings` opens M.4's settings view.
             settings: None,
+        });
+        let status = weak.clone();
+        let blocker = weak.clone();
+        let summary = weak.clone();
+        let agent = weak.clone();
+        self.footers.set_hooks(crate::footers::Hooks {
+            layout: Some(Box::new(with(|mini| {
+                mini.schedule_height();
+                mini.paint_status();
+            }))),
+            status: Some(Box::new(move |text| {
+                if let Some(mini) = status.upgrade() {
+                    mini.set_notice(text);
+                }
+            })),
+            blocker: Some(Box::new(move |text| {
+                if let Some(mini) = blocker.upgrade() {
+                    mini.patch(|state| state.status = text.to_owned());
+                }
+            })),
+            summary: Some(Box::new(move || {
+                summary
+                    .upgrade()
+                    .map(|mini| mini.summary())
+                    .unwrap_or_default()
+            })),
+            agent: Some(Box::new(move |id| {
+                if let Some(mini) = agent.upgrade() {
+                    mini.select_agent(id);
+                }
+            })),
+            clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
+            exit: Some(Box::new(with(|mini| {
+                let mini = mini.clone();
+                mini.app.clone().defer(move |cx| mini.close(cx));
+            }))),
         });
         drop(weak);
         self.prompt.install();
@@ -362,6 +400,8 @@ impl Mini {
             .set_agent(session.agent.as_deref().unwrap_or_default());
         self.prompt
             .open(&self.client, &session.id, &session.directory, target.resume);
+        self.footers
+            .open(&self.client, &session.id, &session.directory);
         if target.resume {
             self.reset_for_replay(cx);
         }
@@ -487,9 +527,10 @@ impl Mini {
                 .is_some_and(|kind| kind.starts_with("session.inbox."))
             {
                 self.prompt.inbox_event(event);
+                self.footers.queue_changed();
                 self.paint_status();
             }
-            self.footers.borrow_mut().event(event);
+            self.footers.event(event);
         }
         if let Some(title) = &output.title {
             if let Some(session) = self.session.borrow_mut().as_mut() {
@@ -517,6 +558,7 @@ impl Mini {
                 }
             });
             self.prompt.set_running(self.state.borrow().running);
+            self.footers.set_running(self.state.borrow().running);
             if idle && !self.state.borrow().running {
                 self.complete(cx);
             }
@@ -637,6 +679,7 @@ impl Mini {
             state.exit = 0;
         });
         self.prompt.set_running(true);
+        self.footers.set_running(true);
     }
 
     /// `renderPromptError`.
@@ -700,6 +743,7 @@ impl Mini {
         }
         let command = prompt.command.is_some();
         let text = prompt.text.clone();
+        let sent = prompt.clone();
         self.app.spawn(
             {
                 let (session, id) = (session.clone(), id.clone());
@@ -726,6 +770,7 @@ impl Mini {
                     mini.finish(cx);
                 }
                 Ok(()) => {
+                    mini.pending(&id, delivery, &sent);
                     let output = mini
                         .transcript
                         .borrow_mut()
@@ -775,8 +820,7 @@ impl Mini {
                 Ok(()) => {
                     // `session.command` answers without the inbox item; its event adds it.
                     if !command {
-                        mini.prompt.admitted(&id, delivery, &sent);
-                        mini.paint_status();
+                        mini.pending(&id, delivery, &sent);
                     }
                     let output = mini
                         .transcript
@@ -789,6 +833,21 @@ impl Mini {
                 Err(error) => mini.prompt_error(cx, &id, error),
             },
         );
+    }
+
+    /// `mergePending`: an admitted prompt waits in the pending list until the server delivers it.
+    fn pending(&self, id: &str, delivery: Delivery, prompt: &RunPrompt) {
+        let promoted = self
+            .transcript
+            .borrow()
+            .as_ref()
+            .is_some_and(|transcript| transcript.promoted(id));
+        if promoted {
+            return;
+        }
+        self.prompt.admitted(id, delivery, prompt);
+        self.footers.queue_changed();
+        self.paint_status();
     }
 
     /// `/compact`: `session.compact`.
@@ -1172,6 +1231,7 @@ impl Mini {
     fn refresh_theme(&self) {
         let theme = theme::resolve(&self.theme_input);
         self.prompt.set_theme(&theme);
+        self.footers.set_theme(&theme);
         self.writer.borrow_mut().set_theme(theme);
         self.paint_status();
     }
@@ -1180,8 +1240,17 @@ impl Mini {
     /// the autocomplete menu replaces it.
     fn apply_height(&self) {
         let terminal = self.footer.terminal_size();
-        let height = prompt_height(terminal.1, self.prompt.rows(terminal));
-        self.status.visible(!self.prompt.menu_visible());
+        let height = match self.footers.height(terminal) {
+            Some(height) => {
+                self.status.visible(false);
+                height
+            }
+            None => {
+                let height = prompt_height(terminal.1, self.prompt.rows(terminal));
+                self.status.visible(!self.prompt.menu_visible());
+                height
+            }
+        };
         if let Err(error) = self.footer.set_footer_height(height) {
             log::warn!("mini could not set the footer height: {error}");
         }
@@ -1379,6 +1448,47 @@ impl Mini {
                 }),
             spinner: busy.then(|| if self.settings.mono { "*" } else { "▪" }.to_owned()),
         })
+    }
+
+    /// `handleAgentSelect`: the next prompt uses `id`.
+    fn select_agent(self: &Rc<Self>, id: &str) {
+        if self.state.borrow().closed || self.state.borrow().agent == id {
+            return;
+        }
+        if let Some(session) = self.session.borrow_mut().as_mut() {
+            session.agent = Some(id.to_owned());
+        }
+        self.state.borrow_mut().agent = id.to_owned();
+        self.prompt.set_agent(id);
+        self.set_notice(&format!("agent {}", self.agent_label(id)));
+    }
+
+    /// `footerStatus`: what "Show status" puts in the status row.
+    fn summary(&self) -> String {
+        let state = self.state.borrow();
+        let mut details = vec![
+            if state.running { "running" } else { "idle" }.to_owned(),
+            format!("agent {}", self.agent_label(&state.agent)),
+        ];
+        if let Some((model, _, variant)) = &state.model {
+            details.push(match variant {
+                Some(variant) => format!("{model} {variant}"),
+                None => model.clone(),
+            });
+        }
+        if let Some(usage) = state.usage.as_ref() {
+            if usage.tokens > 0 {
+                details.push(status::context_usage(usage.tokens, usage.percent));
+            }
+            if let Some(cost) = usage.cost.filter(|cost| *cost != 0.0) {
+                details.push(status::money(cost));
+            }
+        }
+        let queued = self.prompt.queued().len();
+        if queued > 0 {
+            details.push(format!("{queued} pending"));
+        }
+        details.join(if self.settings.mono { " - " } else { " · " })
     }
 
     /// `currentAgent`: the catalog's name for the agent, else its ID in title case.
