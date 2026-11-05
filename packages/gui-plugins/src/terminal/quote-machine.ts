@@ -270,6 +270,7 @@ export function selectQuoteSourcePlace(
 
   if (!input.bounds.width || !input.bounds.height || !input.origin || !input.metrics) return
   const rows = source.offset - input.offset
+
   const cells = {
     start: { x: source.cells.start.x, y: source.cells.start.y + rows },
     end: { x: source.cells.end.x, y: source.cells.end.y + rows },

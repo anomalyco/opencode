@@ -23,6 +23,13 @@ export type TerminalQuoteTarget = {
   add: (text: string, anchor?: ComposerQuoteAnchor) => void
 }
 
+/** The toolbar element, for hit-testing presses, and the driver's timer and frame. */
+type QuoteHandles = {
+  element?: HTMLElement
+  settleTimer?: ReturnType<typeof setTimeout>
+  placeFrame?: number
+}
+
 /** Offers to quote text selected in a terminal into the composer, like the timeline's Quote button. */
 export function TerminalQuote(props: {
   term: Term
@@ -33,11 +40,7 @@ export function TerminalQuote(props: {
   const plugin = usePlugin()
   const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
   const [quoteState, setQuoteState] = createSignal(createQuoteState())
-  const handles: {
-    element?: HTMLElement
-    settleTimer?: ReturnType<typeof setTimeout>
-    placeFrame?: number
-  } = {}
+  const handles: QuoteHandles = {}
   const released: QuoteEvent = { type: "pointer.released" }
   const selected: QuoteEvent = { type: "selection.changed" }
   const scrolled: QuoteEvent = { type: "layout.changed", resized: false }
@@ -53,6 +56,7 @@ export function TerminalQuote(props: {
 
   const sample = (): QuoteSample | undefined => {
     if (!props.term.hasSelection()) return
+
     return { ...geometry(), cells: props.term.getSelectionPosition() }
   }
 
@@ -62,6 +66,7 @@ export function TerminalQuote(props: {
       handles.settleTimer = setTimeout(() => {
         handles.settleTimer = undefined
         const selection = sample()
+
         dispatch({
           type: "settle.sampled",
           attempt: effect.attempt,
@@ -69,12 +74,14 @@ export function TerminalQuote(props: {
           sample: selection,
         })
       }, effect.delayMs)
+
       return
     }
 
     if (effect.type === "cancel-settle") {
       clearTimeout(handles.settleTimer)
       handles.settleTimer = undefined
+
       return
     }
 
@@ -84,12 +91,14 @@ export function TerminalQuote(props: {
         handles.placeFrame = undefined
         dispatch({ type: "place.sampled", attempt: effect.attempt, sample: sample() })
       })
+
       return
     }
 
     if (effect.type === "cancel-place") {
       if (handles.placeFrame !== undefined) cancelAnimationFrame(handles.placeFrame)
       handles.placeFrame = undefined
+
       return
     }
 
@@ -105,6 +114,7 @@ export function TerminalQuote(props: {
       const current = quoteState()
 
       if (!props.target.available() || !props.container.isConnected) return
+
       return selectQuoteSourcePlace(current, source, size, geometry)
     }
 

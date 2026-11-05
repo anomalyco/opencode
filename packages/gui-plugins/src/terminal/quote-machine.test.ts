@@ -58,21 +58,25 @@ const shownState = (events: readonly QuoteEvent[] = [selected, settled(1)]) => {
   const state = replay(events).state
 
   if (state.status !== "shown") throw new Error(`expected shown, got ${state.status}`)
+
   return state
 }
 
-const measure = (written: number, offset = 0) => () => ({
-  offset,
-  written,
-  bounds: BOUNDS,
-  origin: { top: 0, left: 0 },
-  metrics: { width: 10, height: 20 },
-})
+const measure =
+  (written: number, offset = 0) =>
+  () => ({
+    offset,
+    written,
+    bounds: BOUNDS,
+    origin: { top: 0, left: 0 },
+    metrics: { width: 10, height: 20 },
+  })
 
 const committed = (effects: readonly QuoteEffect[]) => {
   const effect = effects.find((item) => item.type === "commit-quote")
 
   if (effect?.type !== "commit-quote") throw new Error("expected commit-quote")
+
   return effect
 }
 
@@ -91,8 +95,8 @@ describe("terminal quote bug replays", () => {
   test("a right click on a shown selection keeps it, and its release changes nothing", () => {
     const shown = shownState()
 
-    expect(transitionQuote(shown, press(2))).toEqual({ state: shown, effects: [] })
     expect(transitionQuote(shown, press(2)).state).toBe(shown)
+    expect(transitionQuote(shown, press(2)).effects).toEqual([])
     expect(transitionQuote(shown, released).state).toBe(shown)
   })
 
@@ -125,6 +129,7 @@ describe("terminal quote bug replays", () => {
     const shown = shownState()
     const source = committed(transitionQuote(shown, added()).effects).source
     expect(source).toEqual({ cells: SAMPLE.cells, offset: 0, written: 3, resized: 0 })
+
     if (!source) throw new Error("expected a source")
 
     expect(selectQuoteSourcePlace(shown, source, SIZE, measure(3))).toBeDefined()
@@ -134,6 +139,7 @@ describe("terminal quote bug replays", () => {
     // The grid resized while the toolbar was open, then Quote was clicked.
     const after = transitionQuote(transitionQuote(shown, resized).state, added())
     const stale = committed(after.effects).source
+
     if (!stale) throw new Error("expected a source")
     expect(stale.resized).toBe(0)
     expect(selectQuoteSourcePlace(after.state, stale, SIZE, measure(3))).toBeUndefined()
@@ -208,8 +214,9 @@ describe("terminal quote transitions", () => {
   test("copy shortcuts and modifier keys keep the toolbar; other keys close it", () => {
     const shown = shownState()
     const settling = replay([selected]).state
+    const kept = [key("c", true), key("Shift"), key("Control"), key("Alt"), key("Meta")]
 
-    ;[key("c", true), key("Shift"), key("Control"), key("Alt"), key("Meta")].forEach((event) => {
+    kept.forEach((event) => {
       expect(transitionQuote(shown, event).state).toBe(shown)
       expect(transitionQuote(settling, event).state).toBe(settling)
     })
@@ -244,9 +251,10 @@ describe("terminal quote transitions", () => {
   test("the anchor follows scrolling", () => {
     const shown = shownState()
     const source = committed(transitionQuote(shown, added()).effects).source
+
     if (!source) throw new Error("expected a source")
 
-    // Two rows scrolled back: the selection is two rows lower.
+    // The viewport moved two rows: the selection is two rows lower.
     expect(selectQuoteSourcePlace(shown, source, SIZE, measure(3, -2))).toEqual(
       quotePosition(SIZE, BOUNDS, { top: 100, bottom: 120, start: 20, end: 100, single: true }),
     )
@@ -264,7 +272,10 @@ describe("terminal quote transitions", () => {
 
     expect(disposed).toEqual({ state: { status: "disposed" }, effects })
     expect(selectQuoteSourcePlace(disposed.state, source, SIZE, measure(3))).toBeUndefined()
-    ;[press(), released, selected, settled(1), scrolled, added()].forEach((event) => {
+
+    const later = [press(), released, selected, settled(1), scrolled, added()]
+
+    later.forEach((event) => {
       expect(transitionQuote(disposed.state, event).state).toBe(disposed.state)
     })
   })
@@ -275,6 +286,7 @@ describe("terminal quote dispatch", () => {
     const written: QuoteState["status"][] = []
     const effects: QuoteEffect["type"][] = []
     let current = createQuoteState()
+
     const dispatch: (event: QuoteEvent) => void = createQuoteDispatch({
       read: () => current,
       write: (state) => {
@@ -283,6 +295,7 @@ describe("terminal quote dispatch", () => {
       },
       run: (effect) => {
         effects.push(effect.type)
+
         // ghostty-web may announce the cleared selection synchronously.
         if (effect.type === "clear-selection") dispatch(selected)
       },
