@@ -2,10 +2,10 @@ import { Effect, Schema, Stream } from "effect"
 import {
   ai,
   type Finish,
-  type LanguageModel,
-  type LanguageModelProviderOptions,
+  type ModelProviderOptions,
   type LLMClientService,
   type ProviderOptions,
+  Model,
 } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols.js"
@@ -87,11 +87,11 @@ type LoopObjectValue = Assert<
   >
 >
 
-declare const generic: LanguageModel
+declare const generic: Model<"chat">
 ai.request({ model: generic, prompt: "Hello", providerOptions: { arbitrary: { option: true } } })
 
-const options: LanguageModelProviderOptions<typeof model> = { mode: "fast" }
-void (options satisfies LanguageModelProviderOptions<typeof model>)
+const options: ModelProviderOptions<typeof model> = { mode: "fast" }
+void (options satisfies ModelProviderOptions<typeof model>)
 void (true satisfies GenerateRequirements)
 void (true satisfies StreamClientRequirements)
 void (true satisfies InputGenerateRequirements)

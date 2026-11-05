@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
+import { ai, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -23,6 +23,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Exit, Layer } from "effect"
 import { testEffect } from "./lib/effect"
+import { Route } from "@opencode/ai/route"
 
 const it = testEffect(
   Layer.merge(
@@ -68,20 +69,17 @@ for (const fixture of [
         .insert(SessionTable)
         .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
         .run()
-      const model = SessionRunnerModel.resolved(
-        LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
-        {
-          capabilities: { tools: true, input: ["text"], output: ["text"] },
-          limit: { context: 100_000, output: 1_000 },
-          cost: [
-            {
-              input: Money.USDPerMillionTokens.make(1),
-              output: Money.USDPerMillionTokens.make(2),
-              cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
-            },
-          ],
-        },
-      )
+      const model = SessionRunnerModel.resolved(Route.model(OpenAIChat.route, { id: "test-model", provider: "test" }), {
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 100_000, output: 1_000 },
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.make(1),
+            output: Money.USDPerMillionTokens.make(2),
+            cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
+          },
+        ],
+      })
       yield* llm.push(
         TestLLM.complete(
           {
@@ -181,20 +179,17 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       .insert(SessionTable)
       .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
       .run()
-    const model = SessionRunnerModel.resolved(
-      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
-      {
-        capabilities: { tools: true, input: ["text"], output: ["text"] },
-        limit: { context: 100_000, output: 1_000 },
-        cost: [
-          {
-            input: Money.USDPerMillionTokens.make(1),
-            output: Money.USDPerMillionTokens.make(2),
-            cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
-          },
-        ],
-      },
-    )
+    const model = SessionRunnerModel.resolved(Route.model(OpenAIChat.route, { id: "test-model", provider: "test" }), {
+      capabilities: { tools: true, input: ["text"], output: ["text"] },
+      limit: { context: 100_000, output: 1_000 },
+      cost: [
+        {
+          input: Money.USDPerMillionTokens.make(1),
+          output: Money.USDPerMillionTokens.make(2),
+          cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+        },
+      ],
+    })
     yield* llm.push(
       TestLLM.complete({
         reason: { normalized: "stop" },

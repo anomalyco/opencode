@@ -1,11 +1,7 @@
 import type { Stream } from "effect"
 import { Media } from "../src/effect.js"
-import {
-  Transcription,
-  TranscriptionModel,
-  type TranscriptionEvent,
-  type TranscriptionOptions,
-} from "../src/experimental.js"
+import { Transcription, type TranscriptionEvent, type TranscriptionOptions } from "../src/experimental.js"
+import { Model } from "../src/effect.js"
 import { AssemblyAI, Deepgram, OpenAI } from "../src/providers.js"
 
 type StreamItem<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? A : never
@@ -15,8 +11,8 @@ type Assert<T extends true> = T
 const audio = Media.url("https://example.com/call.mp3")
 const deepgram = Deepgram.configure({ apiKey: "test" }).transcription("nova-3")
 const widenTranscription = <Options extends TranscriptionOptions>(
-  model: TranscriptionModel<Options>,
-): TranscriptionModel => model
+  model: Model<"transcription", Options>,
+): Model<"transcription"> => model
 void widenTranscription
 
 Transcription.generate({

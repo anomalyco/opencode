@@ -17,6 +17,7 @@ const Options = Schema.Struct({
 export type OptionsInput = typeof Options.Type & Pick<AnthropicMessages.OptionsInput, "outputConfig">
 export const protocol = Protocol.make({
   id: "alibaba-messages",
+  api: "messages",
   body: {
     schema: Schema.Struct({
       ...AnthropicMessages.AnthropicMessagesBody.fields,

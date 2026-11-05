@@ -1,7 +1,8 @@
 import { expect } from "bun:test"
 import path from "path"
-import { LanguageModel, LLMClient } from "@opencode/ai/effect"
+import { LLMClient } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Route } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode/core/environment/index"
@@ -15,14 +16,11 @@ import { AbsolutePath, Agent, Location, OpenCode } from "../src/effect"
 
 const it = testEffect(Layer.empty)
 const metadata = Schema.decodeUnknownSync(Schema.Struct({ threadID: Schema.String }))
-const model = SessionRunnerModel.resolved(
-  LanguageModel.make({ id: "instance-model", provider: "test", route: OpenAIChat.route }),
-  {
-    capabilities: { tools: true, input: ["text"], output: ["text"] },
-    cost: [],
-    limit: { context: 200_000, output: 8_192 },
-  },
-)
+const model = SessionRunnerModel.resolved(Route.model(OpenAIChat.route, { id: "instance-model", provider: "test" }), {
+  capabilities: { tools: true, input: ["text"], output: ["text"] },
+  cost: [],
+  limit: { context: 200_000, output: 8_192 },
+})
 
 it.live(
   "reconstructs configured instances before automatic recovery executes tools",

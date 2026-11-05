@@ -8,6 +8,7 @@ import { Endpoint } from "../../src/route/endpoint.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
+import { Route } from "../../src/route.js"
 
 const tool = ToolDefinition.make({
   name: "lookup",
@@ -36,11 +37,11 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
         const model = provider[api]("qwen-plus-us")
         const request = ai.request({ model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
-        expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
+        expect(Endpoint.render(Route.of(model)?.endpoint, { request, body: compiled.body }).toString()).toBe(
           `https://llm-fixture.${region}.maas.aliyuncs.com${paths[api]}`,
         )
         expect(model.provider).toBe("alibaba")
-        expect(model.route.id).toBe(`alibaba-${api}`)
+        expect(Route.of(model)?.id).toBe(`alibaba-${api}`)
         expect(compiled.body.model).toBe("qwen-plus-us")
         for (const field of [
           "thinking",
@@ -66,7 +67,7 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
       for (const api of ["chat", "messages", "responses"] as const) {
         const request = ai.request({ model: provider[api]("qwen3.8-max"), prompt: "Hello" })
         const compiled = yield* compileRequest(request)
-        expect(Endpoint.render(request.model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
+        expect(Endpoint.render(Route.of(request.model)?.endpoint, { request, body: compiled.body }).toString()).toBe(
           `https://${host}${paths[api]}`,
         )
       }
@@ -89,11 +90,11 @@ test("Alibaba requires explicit placement and supports complete base URL overrid
   ]) {
     const provider = Alibaba.configure(config)
     for (const api of ["chat", "messages", "responses"] as const)
-      expect(provider[api]("unchanged-id").route.endpoint.baseURL).toBe(config.baseURL)
+      expect(provider[api]("unchanged-id").baseURL).toBe(config.baseURL)
   }
-  expect(
-    Alibaba.configure({ region: "future-region", workspaceID: "llm-fixture" }).chat("new-model").route.endpoint.baseURL,
-  ).toBe("https://llm-fixture.future-region.maas.aliyuncs.com/compatible-mode/v1")
+  expect(Alibaba.configure({ region: "future-region", workspaceID: "llm-fixture" }).chat("new-model").baseURL).toBe(
+    "https://llm-fixture.future-region.maas.aliyuncs.com/compatible-mode/v1",
+  )
 })
 
 it.effect("Alibaba resolves explicit auth, API keys, and regional environment credentials", () =>
@@ -119,7 +120,7 @@ it.effect("Alibaba resolves explicit auth, API keys, and regional environment cr
       const provider = Alibaba.configure({ region: "ap-southeast-1", ...item.config })
       for (const api of ["chat", "messages", "responses"] as const) {
         const request = ai.request({ model: provider[api]("qwen3.8-max"), prompt: "Hello" })
-        const headers = yield* request.model.route.auth
+        const headers = yield* request.model.auth
           .apply({ request, method: "POST", url: "https://fixture", body: "{}", headers: Headers.empty })
           .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: item.env }))))
         expect(headers).toEqual(expect.objectContaining(item.headers))
@@ -262,7 +263,7 @@ it.effect("Alibaba validates malformed options before execution", () =>
       ["messages", { thinking: { type: "enabled", budgetTokens: "512" } }],
       ["responses", { enableThinking: "false" }],
     ] as const) {
-      const model = provider[api]("qwen3.8-max").route.with({ providerOptions }).model({ id: "qwen3.8-max" })
+      const model = Route.of(provider[api]("qwen3.8-max"))?.with({ providerOptions }).model({ id: "qwen3.8-max" })
       const error = yield* compileRequest(ai.request({ model, prompt: "Hello" })).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }

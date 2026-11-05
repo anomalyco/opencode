@@ -1,6 +1,7 @@
 // Changing the top-level reasoning effort invalidates the provider prompt cache. Protocols with a native
 // per-message update keep it frozen and lower `Message.effort(...)` markers instead; other routes strip them.
 import { type LLMRequest, type EffortPart, type Message } from "./schema/messages.js"
+import { routeOf } from "./schema/model.js"
 
 export const effortUpdate = (message: Message): EffortPart | undefined => {
   if (message.role !== "system" || message.content.length !== 1) return undefined
@@ -14,7 +15,7 @@ export const stripEffortUpdates = (request: LLMRequest) => {
 }
 
 export const applyEffortUpdates = (request: LLMRequest): LLMRequest =>
-  request.model.route.supportsEffortUpdates?.(request) ? request : stripEffortUpdates(request)
+  routeOf(request.model).supportsEffortUpdates?.(request) ? request : stripEffortUpdates(request)
 
 // Reverted or forked history can leave the last marker disagreeing with the requested effort.
 export const resolveEffortUpdates = (request: LLMRequest, current: string | undefined) => {

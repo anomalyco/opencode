@@ -131,7 +131,7 @@ for (const model of [
             name: item.type,
             result: { type: "json", value: item },
             providerExecuted: true,
-            providerMetadata: { [model.route.providerMetadataKey ?? model.provider]: { itemId: item.id } },
+            providerMetadata: { [Route.of(model)?.providerMetadataKey ?? model.provider]: { itemId: item.id } },
           }),
         ],
       })
@@ -230,7 +230,7 @@ for (const model of [
         })
       }),
     ),
-  ).effect(`${model.route.id} retains messages, reasoning, and media through typed conversation parts`, () =>
+  ).effect(`${Route.of(model)?.id} retains messages, reasoning, and media through typed conversation parts`, () =>
     Effect.gen(function* () {
       const request = ai.request({
         model,
@@ -468,7 +468,7 @@ for (const model of [
   OpenAICompatibleResponses.configure({ apiKey: "test", baseURL: "https://compatible.example/v1" }).model("model"),
 ]) {
   testEffect(fixedResponse("must not execute")).effect(
-    `${model.route.id} does not inherit an unsupported compact endpoint`,
+    `${Route.of(model)?.id} does not inherit an unsupported compact endpoint`,
     () =>
       Effect.gen(function* () {
         // @ts-expect-error Untyped callers must still receive the runtime capability error.

@@ -9,11 +9,12 @@ import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
+import { Route } from "../../src/route.js"
 
 it.effect("Meta selects Messages and lowers native search alongside ordinary functions", () =>
   Effect.gen(function* () {
     const model = Meta.messagesModel("muse-spark-1.3", { apiKey: "fixture", baseURL: "https://gateway.example/v1" })
-    expect(model.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/v1", path: "/messages" })
+    expect(Route.of(model)?.endpoint).toMatchObject({ baseURL: "https://gateway.example/v1", path: "/messages" })
     expect(MetaMessages.protocol.stream).toBe(AnthropicMessages.protocol.stream)
     const compiled = yield* compileRequest(
       ai.request({
@@ -42,7 +43,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
       ],
     })
     const entrypoint = yield* Effect.promise(() => import("@opencode/ai/providers/meta/messages"))
-    expect(entrypoint.model("muse-spark-1.3", {}).route.id).toBe("meta-messages")
+    expect(Route.of(entrypoint.model("muse-spark-1.3", {}))?.id).toBe("meta-messages")
   }),
 )
 

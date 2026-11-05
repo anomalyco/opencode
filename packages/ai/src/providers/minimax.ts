@@ -64,6 +64,7 @@ const ChatOptions = Schema.Struct({
 
 const chatProtocol = Protocol.make({
   id: "minimax-chat",
+  api: "chat-completions",
   body: {
     schema: Schema.Struct({
       ...OpenAIChat.bodyFields,

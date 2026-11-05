@@ -10,8 +10,8 @@ import { sseEvents } from "../lib/sse.js"
 const cohere = Cohere.configure({ apiKey: "fixture" })
 
 test("Cohere exposes native and compatible endpoints without Core remapping", () => {
-  expect(cohere.model("command-a-03-2025").route.endpoint.baseURL).toBe("https://api.cohere.com/v2")
-  expect(cohere.chat("command-a-03-2025").route.endpoint.baseURL).toBe("https://api.cohere.ai/compatibility/v1")
+  expect(cohere.model("command-a-03-2025").baseURL).toBe("https://api.cohere.com/v2")
+  expect(cohere.chat("command-a-03-2025").baseURL).toBe("https://api.cohere.ai/compatibility/v1")
   expect(
     Cohere.model("command-a-03-2025", { apiKey: "fixture", headers: { "X-Test": "yes" }, body: { temperature: 0 } })
       .options?.http,

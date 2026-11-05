@@ -11,13 +11,13 @@ import {
   type FinishReason,
   type FinishReasonDetails,
   type LLMRequest,
-  type LanguageModel,
   type ProviderMetadata,
   type ProviderOptions,
   type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
+  type Model,
 } from "../schema/index.js"
 import { BedrockEventStream } from "./bedrock-event-stream.js"
 import { classifyProviderFailure } from "../provider-error.js"
@@ -31,6 +31,7 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { MistralToolID } from "./utils/mistral-tool-id.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { concatBytes } from "../utils/bytes.js"
+import { routeOf } from "../schema/model.js"
 
 const ADAPTER = "bedrock-converse"
 
@@ -357,7 +358,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   const documentNames = new Set<string>()
   // Mistral can reject replay IDs even when they satisfy Converse's broader ID syntax.
   const normalizeID = request.model.id.includes("mistral.") ? MistralToolID.normalizer(request) : (id: string) => id
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? request.model.provider
+  const providerMetadataKey = routeOf(request.model).providerMetadataKey ?? request.model.provider
   const hoistImages = !keepToolImagesInline(request.model.id)
   // Bedrock expects parallel tool results before any images hoisted beside them.
   const pendingImages: BedrockMedia.ImageBlock[] = []
@@ -475,7 +476,7 @@ const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArra
 
 // Nova 2 rejects `maxTokens` at high reasoning effort, where its output can exceed the field's maximum. Other models
 // that take `reasoningConfig`, such as Grok on Bedrock, accept it.
-const isNova2 = (model: LanguageModel) => /\bamazon\.nova-2-/.test(model.id)
+const isNova2 = (model: Model<"chat">) => /\bamazon\.nova-2-/.test(model.id)
 const isHighReasoningEffort = Schema.is(
   Schema.Struct({
     additionalModelRequestFields: Schema.Struct({
@@ -485,12 +486,12 @@ const isHighReasoningEffort = Schema.is(
 )
 
 // Claude 4.6+ pairs effort with adaptive thinking; earlier Claude models take effort beside a manual budget.
-const supportsAdaptiveThinking = (model: LanguageModel) => {
+const supportsAdaptiveThinking = (model: Model<"chat">) => {
   const version = claudeVersion(model.id)
   return version !== undefined && (version.major > 4 || (version.major === 4 && version.minor >= 6))
 }
 
-const effortFields = (model: LanguageModel, effort: string) => {
+const effortFields = (model: Model<"chat">, effort: string) => {
   if (model.id.includes("anthropic")) return { output_config: { effort } }
   // gpt-oss takes the flat chat-completions spelling; newer OpenAI and xAI models take the Responses one.
   if (model.id.includes("openai.gpt-oss")) return { reasoning_effort: effort }
@@ -945,6 +946,7 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> => {
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "converse",
   body: {
     schema: BedrockConverseBody,
     from: fromRequest,
@@ -952,7 +954,7 @@ export const protocol = Protocol.make({
   stream: {
     event: BedrockEventStream.Frame.pipe(Schema.decodeTo(BedrockEvent)),
     initial: (request) => ({
-      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      providerMetadataKey: routeOf(request.model).providerMetadataKey ?? request.model.provider,
       tools: ToolStream.empty<number>(),
       finishReason: undefined,
       usage: undefined,

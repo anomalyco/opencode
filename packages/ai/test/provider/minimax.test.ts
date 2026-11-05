@@ -9,13 +9,14 @@ import { Auth } from "../../src/route/auth.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
 import { it } from "../lib/effect.js"
+import { Route } from "../../src/route.js"
 
 describe("MiniMax provider", () => {
   test("composes the baseline Messages and Responses protocols", () => {
     const minimax = MiniMax.configure()
     expect(minimax.model).toBe(minimax.messages)
-    expect(minimax.model("MiniMax-M3").route.body).toBe(AnthropicMessages.protocol.body)
-    expect(minimax.responses("MiniMax-M3").route.body).toBe(OpenResponses.protocol.body)
+    expect(Route.of(minimax.model("MiniMax-M3"))?.body).toBe(AnthropicMessages.protocol.body)
+    expect(Route.of(minimax.responses("MiniMax-M3"))?.body).toBe(OpenResponses.protocol.body)
   })
 
   it.effect("owns API endpoints, provider identity and environment bearer authentication", () =>
@@ -29,10 +30,10 @@ describe("MiniMax provider", () => {
         const request = ai.request({ model: item.model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
         expect(item.model.provider).toBe("minimax")
-        expect(item.model.route.providerMetadataKey).toBe("minimax")
-        const url = Endpoint.render(item.model.route.endpoint, { request, body: compiled.body }).toString()
+        expect(Route.of(item.model)?.providerMetadataKey).toBe("minimax")
+        const url = Endpoint.render(Route.of(item.model)?.endpoint, { request, body: compiled.body }).toString()
         expect(url).toBe(`https://api.minimax.io${item.path}`)
-        const headers = yield* item.model.route.auth.apply({
+        const headers = yield* item.model.auth.apply({
           request,
           method: "POST",
           url,
@@ -53,11 +54,11 @@ describe("MiniMax provider", () => {
       }).model("custom-model")
       const request = ai.request({ model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
-      expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
+      expect(Endpoint.render(Route.of(model)?.endpoint, { request, body: compiled.body }).toString()).toBe(
         "https://gateway.example/anthropic/v1/messages",
       )
-      expect(model.route.headers?.({ request })).toEqual({ "anthropic-version": "2023-06-01" })
-      const headers = yield* model.route.auth.apply({
+      expect(Route.of(model)?.headers?.({ request })).toEqual({ "anthropic-version": "2023-06-01" })
+      const headers = yield* model.auth.apply({
         request,
         method: "POST",
         url: "https://gateway.example/anthropic/v1/messages",

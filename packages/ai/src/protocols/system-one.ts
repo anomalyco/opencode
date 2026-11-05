@@ -3,7 +3,6 @@ import {
   DecisionResponse,
   DecisionUsage,
   type DecisionAnswer,
-  type DecisionModelCompatibility,
   type DecisionPart,
   type DecisionQuestion,
   type DecisionRequest,
@@ -12,16 +11,17 @@ import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
-import { AIError, UnsupportedOperationError, mergeJsonRecords } from "../schema/index.js"
+import { AIError, UnsupportedOperationError, mergeJsonRecords, type Compatibility } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { JsonObject, ProviderShared } from "./shared.js"
+import { routeOf } from "../schema/model.js"
 
 export const DEFAULT_PATH = "/systemone"
 
 export const DEFAULT_BASE_URL = "https://api.typesafe.ai/v1"
 
 /** `state.messages` is Baseten's own placement (parts in a user message inside `state.messages`), set by its provider. */
-type MediaInput = NonNullable<DecisionModelCompatibility["mediaInput"]> | "state.messages"
+type MediaInput = NonNullable<Compatibility["mediaInput"]> | "state.messages"
 
 const Probability = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))
 const Answer = Schema.Union([
@@ -109,7 +109,7 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequest, mediaI
       reason: new UnsupportedOperationError({
         operation: "decision.media",
         provider: request.model.provider,
-        route: request.model.route.id,
+        route: routeOf(request.model).id,
         message: `${NAME} takes ${accepted} here; got ${asset.mediaType}`,
       }),
     })

@@ -1,18 +1,26 @@
 import { Effect, Schema, SchemaGetter, Stream } from "effect"
 import {
   ImageFinishEvent,
-  ImageModel,
   ImageOutputEvent,
   ImagePartialEvent,
   type ImageEvent,
   type ImageRequest,
+  imageModel,
 } from "../image.js"
 import { Media } from "../media.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, mergeJsonRecords, ProviderID, tokenUsage, type MediaUsage, type OpenString } from "../schema/index.js"
+import {
+  AIError,
+  mergeJsonRecords,
+  ProviderID,
+  tokenUsage,
+  type MediaUsage,
+  type OpenString,
+  type Model,
+} from "../schema/index.js"
 import { optionalNull, ProviderShared } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
@@ -41,7 +49,7 @@ export type OpenAIImageOptions = {
   readonly partialImages?: number
 } & Record<string, unknown>
 
-export type Request = ImageRequest<ImageModel<OpenAIImageOptions>>
+export type Request = ImageRequest<Model<"image", OpenAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -425,7 +433,7 @@ export const model = (
     input.sizing === undefined && imageInput === "edits"
       ? protocol
       : makeProtocol({ sizing: input.sizing ?? pixelSize, imageInput })
-  return ImageModel.fromRoute<OpenAIImageOptions, Frame, State>(
+  return imageModel<OpenAIImageOptions, Frame, State>(
     {
       protocol: input.provider === undefined ? base : { ...base, provider: ProviderID.make(input.provider) },
       baseURL: DEFAULT_BASE_URL,

@@ -34,6 +34,7 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
+import { routeOf } from "../schema/model.js"
 
 const ADAPTER = "open-responses"
 const NAME = "Open Responses"
@@ -921,7 +922,7 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
-export const metadataKey = (model: LLMRequest["model"]) => model.route.providerMetadataKey ?? "openresponses"
+export const metadataKey = (model: LLMRequest["model"]) => routeOf(model).providerMetadataKey ?? "openresponses"
 
 export const providerMetadata = (state: ParserState, metadata: Record<string, unknown>): ProviderMetadata => ({
   [state.providerMetadataKey]: metadata,
@@ -1542,6 +1543,7 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
 
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "responses",
   body: {
     schema: OpenResponsesBody,
     from: fromRequest,

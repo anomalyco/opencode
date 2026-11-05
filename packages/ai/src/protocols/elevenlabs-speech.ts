@@ -2,8 +2,8 @@ import { Effect, Schema } from "effect"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
+import { type SpeechEvent, type SpeechRequest, speechModel } from "../speech.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -58,7 +58,7 @@ export type ElevenLabsSpeechOptions = {
   readonly apply_text_normalization?: OpenString<"auto" | "on" | "off">
 } & Record<string, unknown>
 
-export type Request = SpeechRequest<SpeechModel<ElevenLabsSpeechOptions>>
+export type Request = SpeechRequest<Model<"speech", ElevenLabsSpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -196,7 +196,7 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  SpeechModel.fromRoute<ElevenLabsSpeechOptions, string | Uint8Array, State>(
+  speechModel<ElevenLabsSpeechOptions, string | Uint8Array, State>(
     { protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => path(request) },
     input,
   )

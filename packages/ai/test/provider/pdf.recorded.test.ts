@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, type LanguageModel, LLMResponse, Media, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMResponse, Media, Message, ToolDefinition, Model } from "../../src/effect.js"
 import { AmazonBedrock, Anthropic, Google, OpenAI, XAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
@@ -28,7 +28,7 @@ const targets: ReadonlyArray<{
   readonly requires: string
   readonly filename: string
   readonly maxTokens: number
-  readonly model: LanguageModel
+  readonly model: Model<"chat">
 }> = [
   {
     id: "openai",

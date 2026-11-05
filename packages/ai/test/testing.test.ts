@@ -5,7 +5,6 @@ import {
   CompactionCheckpointResponse,
   CompactionPart,
   CompactionResponse,
-  LanguageModel,
   LLMClient,
   LLMEvent,
   type LLMRequest,
@@ -18,9 +17,10 @@ import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
 import { Effect, Fiber, Latch, Stream } from "effect"
 import { testEffect } from "./lib/effect.js"
+import { Route } from "../src/route.js"
 
 const request = ai.request({
-  model: LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
+  model: Route.model(OpenAIChat.route, { id: "fictional-model", provider: "fixture" }),
   prompt: "Say hello",
 })
 const it = testEffect(TestLLM.testLayer())

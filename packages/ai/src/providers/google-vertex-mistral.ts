@@ -38,6 +38,7 @@ const route = Route.make({
   providerMetadataKey: "vertex",
   protocol: Protocol.make({
     id: MistralChat.protocol.id,
+    api: "chat-completions",
     body: {
       schema: Schema.Struct(Struct.omit(MistralChat.MistralBody.fields, ["prompt_cache_key"])),
       from: (request) =>

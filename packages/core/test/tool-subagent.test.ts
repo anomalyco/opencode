@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
@@ -42,6 +41,7 @@ import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { Route } from "@opencode/ai/route"
 
 const childText = "child final response"
 const completedOutput = (sessionID: Session.ID) =>
@@ -161,14 +161,11 @@ const completionIt = testEffect(
       Layer.succeed(SessionRunnerModel.Service, {
         resolve: () =>
           Effect.succeed(
-            SessionRunnerModel.resolved(
-              LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
-              {
-                capabilities: { tools: true, input: ["text"], output: ["text"] },
-                cost: [],
-                limit: { context: 200_000, output: 32_000 },
-              },
-            ),
+            SessionRunnerModel.resolved(Route.model(OpenAIChat.route, { id: "child", provider: "test" }), {
+              capabilities: { tools: true, input: ["text"], output: ["text"] },
+              cost: [],
+              limit: { context: 200_000, output: 32_000 },
+            }),
           ),
       }),
     ),

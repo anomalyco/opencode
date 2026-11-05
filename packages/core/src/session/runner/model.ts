@@ -1,7 +1,8 @@
 export * as SessionRunnerModel from "./model.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { LanguageModel } from "@opencode/ai/effect"
+// Core has its own `Model` namespace, so the AI package model is imported as `AIModel`.
+import { Model as AIModel } from "@opencode/ai/effect"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -45,7 +46,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
 export const resolved = (
-  model: LanguageModel,
+  model: AIModel<"chat">,
   options: {
     readonly capabilities: Model.Capabilities
     readonly variant?: Model.VariantID

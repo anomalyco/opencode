@@ -44,6 +44,7 @@ const tools = {
 
 export const protocol = Protocol.make({
   id: adapter.id,
+  api: "responses",
   body: {
     schema: Body,
     from: Effect.fn("AlibabaResponses.fromRequest")(function* (req) {

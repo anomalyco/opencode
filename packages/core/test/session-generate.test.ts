@@ -4,7 +4,6 @@ import {
   LLMClient,
   LLMEvent,
   LLMResponse,
-  LanguageModel,
   Message,
   SystemPart,
   ToolDefinition,
@@ -57,13 +56,14 @@ import { asc, eq } from "drizzle-orm"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
+import { Route } from "@opencode/ai/route"
 
 const requests: LLMRequest[] = []
 const options: Array<StreamOptions | undefined> = []
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
-const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
+const model = Route.model(OpenAIChat.route, { id: "generate-model", provider: "test" })
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
   generate: (request, requestOptions) =>

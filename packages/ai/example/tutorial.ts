@@ -178,9 +178,10 @@ const FakeBody = Schema.Struct({
 type FakeBody = Schema.Schema.Type<typeof FakeBody>
 
 const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
-  // Protocol ids are open strings, so external packages can define their own
+  // Protocol ids and API names are open strings, so external packages can define their own
   // protocols without changing this package.
   id: "fake-echo",
+  api: "fake-echo",
   body: {
     schema: FakeBody,
     from: (request) =>

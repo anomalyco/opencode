@@ -1,9 +1,9 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
+import { ImageResponse, type ImageRequest, imageModel } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 
 const route = MediaProtocol.identity({ id: "zai-images", name: "Z.ai Images", provider: "zai" })
@@ -23,7 +23,7 @@ export type ZAIImageOptions = {
   readonly userID?: string
 } & Record<string, unknown>
 
-export type Request = ImageRequest<ImageModel<ZAIImageOptions>>
+export type Request = ImageRequest<Model<"image", ZAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -112,7 +112,7 @@ export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  ImageModel.fromRoute<ZAIImageOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  imageModel<ZAIImageOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const ZAIImages = {
   protocol,

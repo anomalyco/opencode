@@ -7,7 +7,6 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   CacheHint,
-  type LanguageModel,
   LLMEvent,
   Media,
   Message,
@@ -16,8 +15,9 @@ import {
   ToolChoice,
   ToolDefinition,
   ToolRuntime,
+  Model,
 } from "../../src/effect.js"
-import { LLMClient } from "../../src/route.js"
+import { LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -115,7 +115,7 @@ const noAmbientAWS = {
   AWS_EC2_METADATA_DISABLED: "true",
 }
 
-const captureHeaders = (target: LanguageModel) =>
+const captureHeaders = (target: Model<"chat">) =>
   Effect.gen(function* () {
     const seen: Array<Headers> = []
     yield* LLMClient.generate({ ...baseRequest, model: target }).pipe(
@@ -1338,7 +1338,7 @@ describe("Bedrock Converse route", () => {
 
   it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
     Effect.gen(function* () {
-      const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
+      const compatible = Route.of(model)?.with({ provider: "custom-bedrock" }).model({ id: model.id })
       const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
       const response = yield* LLMClient.generate({ ...baseRequest, model: compatible }).pipe(
         Effect.provide(
@@ -1873,12 +1873,12 @@ describe("Bedrock Converse route", () => {
   it.effect("derives the endpoint region from AWS_REGION then AWS_DEFAULT_REGION", () =>
     Effect.gen(function* () {
       const fromRegion = AmazonBedrock.configure({ apiKey: "k" }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
-      expect(fromRegion.route.endpoint.baseURL).toBe("https://bedrock-runtime.eu-central-1.amazonaws.com")
+      expect(fromRegion.baseURL).toBe("https://bedrock-runtime.eu-central-1.amazonaws.com")
 
       const fromDefault = yield* Effect.sync(() =>
         AmazonBedrock.configure({ apiKey: "k" }).model("anthropic.claude-3-5-sonnet-20240620-v1:0"),
       ).pipe(withProcessEnv({ AWS_REGION: undefined }))
-      expect(fromDefault.route.endpoint.baseURL).toBe("https://bedrock-runtime.us-gov-west-1.amazonaws.com")
+      expect(fromDefault.baseURL).toBe("https://bedrock-runtime.us-gov-west-1.amazonaws.com")
     }).pipe(withProcessEnv({ ...noAmbientAWS, AWS_REGION: "eu-central-1", AWS_DEFAULT_REGION: "us-gov-west-1" })),
   )
 

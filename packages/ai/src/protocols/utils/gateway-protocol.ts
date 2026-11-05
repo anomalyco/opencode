@@ -55,6 +55,7 @@ export function gatewayProtocol<Body, Event, State>(
 
   return Protocol.make({
     id: input.id,
+    api: protocol.api,
     body: {
       schema: JsonObject,
       from: Effect.fnUntraced(function* (request: LLMRequest) {

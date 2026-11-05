@@ -1,6 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai/effect"
+import { LLMClient, LLMEvent, type LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
@@ -23,13 +23,10 @@ import { SessionStore } from "@opencode/core/session/store"
 import { Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { Route } from "@opencode/ai/route"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const model = LanguageModel.make({
-  id: "summary-model",
-  provider: "test",
-  route: OpenAIChat.route,
-})
+const model = Route.model(OpenAIChat.route, { id: "summary-model", provider: "test" })
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {

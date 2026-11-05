@@ -7,6 +7,7 @@ import {
   isContextOverflowFailure,
   type ToolCall,
 } from "@opencode/ai/effect"
+import { Route } from "@opencode/ai/route"
 import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
@@ -83,7 +84,7 @@ export const make = Effect.gen(function* () {
       assistantMessageID: input.assistantMessageID,
       agent: input.agent,
       model: input.model.ref,
-      providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
+      providerMetadataKey: Route.of(input.model.model)?.providerMetadataKey ?? input.model.model.provider,
       pendingSnapshot: Fiber.join(pendingStartSnapshot),
       started,
     })

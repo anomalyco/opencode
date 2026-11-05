@@ -6,6 +6,7 @@ import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { detectMediaType } from "../utils/media-type.js"
+import { routeOf } from "../schema/model.js"
 
 const ADAPTER = "meta-responses"
 const NAME = "Meta Responses"
@@ -60,7 +61,7 @@ const adapter = {
 } satisfies OpenResponses.ProviderAdapter
 
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
-  const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const key = routeOf(request.model).providerMetadataKey ?? String(request.model.provider)
   const body = yield* OpenResponses.fromRequestWithAdapter(
     {
       ...request,
@@ -235,6 +236,7 @@ const step = Effect.fnUntraced(function* (state: ParserState, input: OpenRespons
 
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "responses",
   body: { schema: OpenResponses.OpenResponsesBody, from: fromRequest },
   stream: {
     event: OpenResponses.protocol.stream.event,

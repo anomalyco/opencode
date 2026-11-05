@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel, LLMClient, LLMEvent } from "@opencode/ai/effect"
+import { LLMClient, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -23,12 +23,9 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
+import { Route } from "@opencode/ai/route"
 
-const model = LanguageModel.make({
-  id: "test-model",
-  provider: "test-provider",
-  route: OpenAIChat.route,
-})
+const model = Route.model(OpenAIChat.route, { id: "test-model", provider: "test-provider" })
 const limit = { context: 100_000, output: 1_000 }
 const resolved = SessionRunnerModel.resolved(model, {
   capabilities: { tools: true, input: ["text"], output: ["text"] },

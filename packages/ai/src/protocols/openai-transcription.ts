@@ -3,15 +3,15 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, mergeJsonRecords, tokenUsage, type MediaUsage } from "../schema/index.js"
+import { AIError, mergeJsonRecords, tokenUsage, type MediaUsage, type Model } from "../schema/index.js"
 import {
   TranscriptionFinishEvent,
-  TranscriptionModel,
   TranscriptionSegmentEvent,
   TranscriptionTextDeltaEvent,
   type TranscriptionEvent,
   type TranscriptionRequest,
   type TranscriptionSegment,
+  transcriptionModel,
 } from "../transcription.js"
 import { mediaTypeExtension } from "../utils/media-type.js"
 import { ProviderShared } from "./shared.js"
@@ -41,7 +41,7 @@ export type OpenAITranscriptionOptions = {
   readonly temperature?: number
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequest<TranscriptionModel<OpenAITranscriptionOptions>>
+export type Request = TranscriptionRequest<Model<"transcription", OpenAITranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -284,7 +284,7 @@ export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, Frame,
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  TranscriptionModel.fromRoute<OpenAITranscriptionOptions, Frame, State>(
+  transcriptionModel<OpenAITranscriptionOptions, Frame, State>(
     { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
     input,
   )

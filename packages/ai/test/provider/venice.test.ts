@@ -8,6 +8,7 @@ import { Endpoint } from "../../src/route/endpoint.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
+import { Route } from "../../src/route.js"
 
 const model = Venice.configure({ apiKey: "fixture" }).chat("fixture-model")
 const frame = (delta: Record<string, unknown>, finish_reason: string | null = null) => ({
@@ -20,14 +21,14 @@ it.effect("Venice owns its endpoint, environment auth, aliases, and SDK-compatib
     const selected = Venice.chat("qwen3-6-27b")
     const request = ai.request({ model: selected, prompt: "Hello", promptCacheKey: "session-123" })
     const compiled = yield* compileRequest(request)
-    const url = Endpoint.render(selected.route.endpoint, { request, body: compiled.body }).toString()
+    const url = Endpoint.render(Route.of(selected)?.endpoint, { request, body: compiled.body }).toString()
     expect(url).toBe("https://api.venice.ai/api/v1/chat/completions")
     expect(selected.provider).toBe("venice")
     expect(compiled.body.venice_parameters).toEqual({ include_venice_system_prompt: false })
     expect(compiled.body.prompt_cache_key).toBe("session-123")
     expect(compiled.body.store).toBeUndefined()
     expect(compiled.body.stream_options).toEqual({ include_usage: true })
-    const headers = yield* selected.route.auth.apply({
+    const headers = yield* selected.auth.apply({
       request,
       method: "POST",
       url,
@@ -40,7 +41,7 @@ it.effect("Venice owns its endpoint, environment auth, aliases, and SDK-compatib
       queryParams: { deployment: "private" },
       auth: Auth.header("x-key", "fixture"),
     }).chat("qwen3-6-27b")
-    expect(Endpoint.render(custom.route.endpoint, { request, body: compiled.body }).toString()).toBe(
+    expect(Endpoint.render(Route.of(custom)?.endpoint, { request, body: compiled.body }).toString()).toBe(
       "https://gateway.example/v1/chat/completions?deployment=private",
     )
   }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { VENICE_API_KEY: "fixture" } })))),

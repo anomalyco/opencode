@@ -2,11 +2,14 @@ import { type Context, Effect, Layer, Stream } from "effect"
 import { resultEvents, type AwaitOptions, type Generation, type Observation } from "./generation.js"
 import { RequestExecutor } from "./route/executor.js"
 import type { MediaRoute } from "./route/media.js"
-import { AIError, UnsupportedOperationError } from "./schema/index.js"
+import { AIError, implementation, UnsupportedOperationError } from "./schema/index.js"
 
-/** A media request whose model carries the route that executes it. */
+/** A media request whose model may carry the route that executes it; media models get theirs from a provider. */
 export interface RoutedRequest<Self extends MediaRoute.MediaRequest, Event, Response> extends MediaRoute.MediaRequest {
-  readonly model: MediaRoute.MediaRequest["model"] & { readonly route: MediaRoute.AnyRoute<Self, Event, Response> }
+  readonly model: MediaRoute.MediaRequest["model"] & {
+    readonly api: string
+    readonly [implementation]?: MediaRoute.AnyRoute<Self, Event, Response>
+  }
 }
 
 /** `start` and `resume` fail with `UnsupportedOperation` on inline and stream routes. */
@@ -40,31 +43,52 @@ export const make = <Self, Req extends RoutedRequest<Req, Event, Response>, Even
             message: `${route.provider}/${route.id} is not a queued route; use generate or stream`,
           }),
         })
-      const start = (request: Req) => {
-        const route = request.model.route
-        if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
-        return route.start(request, executor.execute)
+      const routeOf = (model: Req["model"]) => {
+        const route = model[implementation]
+        if (route !== undefined) return Effect.succeed(route)
+        return Effect.fail(
+          new AIError({
+            reason: new UnsupportedOperationError({
+              operation: input.modality,
+              provider: model.provider,
+              route: model.api,
+              message: `${model.provider}/${model.id}: media models run on their provider's implementation; build it with a provider`,
+            }),
+          }),
+        )
       }
+      const start = (request: Req) =>
+        Effect.flatMap(routeOf(request.model), (route) => {
+          if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
+          return route.start(request, executor.execute)
+        })
       return service.of({
         start,
-        resume: (model, token) => {
-          if (model.route.kind !== "queued") return Effect.fail(notQueued(model.route, "resume"))
-          return model.route.resume(model, token, executor.execute)
-        },
-        generate: (request, options) => {
-          const route = request.model.route
-          if (route.kind !== "queued") return route.generate(request, executor.execute)
-          return start(request).pipe(Effect.flatMap((generation) => generation.await(options)))
-        },
-        stream: (request, options) => {
-          const route = request.model.route
-          if (route.kind === "stream") return route.stream(request, executor.execute)
-          if (route.kind === "queued")
-            return Stream.unwrap(
-              start(request).pipe(Effect.map((generation) => resultEvents(generation, input.responseEvents, options))),
-            )
-          return Stream.fromIterableEffect(Effect.map(route.generate(request, executor.execute), input.responseEvents))
-        },
+        resume: (model, token) =>
+          Effect.flatMap(routeOf(model), (route) => {
+            if (route.kind !== "queued") return Effect.fail(notQueued(route, "resume"))
+            return route.resume(model, token, executor.execute)
+          }),
+        generate: (request, options) =>
+          Effect.flatMap(routeOf(request.model), (route) => {
+            if (route.kind !== "queued") return route.generate(request, executor.execute)
+            return start(request).pipe(Effect.flatMap((generation) => generation.await(options)))
+          }),
+        stream: (request, options) =>
+          Stream.unwrap(
+            Effect.map(routeOf(request.model), (route) => {
+              if (route.kind === "stream") return route.stream(request, executor.execute)
+              if (route.kind === "queued")
+                return Stream.unwrap(
+                  start(request).pipe(
+                    Effect.map((generation) => resultEvents(generation, input.responseEvents, options)),
+                  ),
+                )
+              return Stream.fromIterableEffect(
+                Effect.map(route.generate(request, executor.execute), input.responseEvents),
+              )
+            }),
+          ),
       })
     }),
   ),

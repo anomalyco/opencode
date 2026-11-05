@@ -4,7 +4,6 @@ import {
   InvalidRequestError,
   LLMClient,
   LLMEvent,
-  LanguageModel,
   Message,
   SystemPart,
   TransportError,
@@ -37,21 +36,14 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
+import { Route } from "@opencode/ai/route"
 
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
 let selectedPrimary: Model.Info | undefined
 let selections: Array<Session.Info["model"]> = []
-const model = LanguageModel.make({
-  id: "title-model",
-  provider: "test",
-  route: OpenAIChat.route,
-})
-const smallModel = LanguageModel.make({
-  id: "title-small",
-  provider: "test",
-  route: OpenAIChat.route,
-})
+const model = Route.model(OpenAIChat.route, { id: "title-model", provider: "test" })
+const smallModel = Route.model(OpenAIChat.route, { id: "title-small", provider: "test" })
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),

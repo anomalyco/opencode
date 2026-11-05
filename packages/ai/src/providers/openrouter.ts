@@ -133,6 +133,7 @@ export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 
 export const protocol = Protocol.make({
   id: "openrouter-chat",
+  api: "chat-completions",
   body: {
     schema: OpenRouterBody,
     from: (request) =>
@@ -218,6 +219,7 @@ type OpenRouterResponsesBody = Schema.Schema.Type<typeof OpenRouterResponsesBody
 
 const responsesProtocol = Protocol.make({
   id: "openrouter-responses",
+  api: "responses",
   body: {
     schema: OpenRouterResponsesBody,
     from: (request) =>

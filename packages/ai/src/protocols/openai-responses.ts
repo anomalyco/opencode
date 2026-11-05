@@ -323,6 +323,7 @@ const HOSTED_TOOLS = {
 
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "responses",
   body: {
     schema: OpenAIResponsesBody,
     from: fromRequest,

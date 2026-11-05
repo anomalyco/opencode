@@ -34,6 +34,7 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
+import { routeOf } from "../schema/model.js"
 
 const ADAPTER = "openai-chat"
 const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
@@ -643,13 +644,13 @@ const lowerMessages = Effect.fnUntraced(function* (
     request.model.compatibility?.requireReasoning ??
     (request.model.compatibility?.reasoningField !== undefined ||
       request.model.provider === "deepseek" ||
-      request.model.route.endpoint.baseURL?.toLowerCase().includes("deepseek.com") ||
+      routeOf(request.model).endpoint.baseURL?.toLowerCase().includes("deepseek.com") ||
       modelID.includes("deepseek"))
   const reasoningField = request.model.compatibility?.reasoningField
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   const lowering = {
     ...options,
-    providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+    providerMetadataKey: routeOf(request.model).providerMetadataKey ?? request.model.provider,
     toolCallID: (id: string) => {
       if (mistral)
         return id
@@ -858,7 +859,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     )
   const flattened = ProviderShared.flattenToolRequest(request)
   const provider = request.model.provider
-  const baseURL = request.model.route.endpoint.baseURL
+  const baseURL = routeOf(request.model).endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
   const maxTokensField = request.model.compatibility?.maxTokensField ?? detectedMaxTokensField
   const supportsStore = request.model.capabilities?.store ?? detectSupportsStore(provider, baseURL)
@@ -1334,6 +1335,7 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "chat-completions",
   body: {
     schema: OpenAIChatBody,
     from: fromRequest,
@@ -1341,7 +1343,7 @@ export const protocol = Protocol.make({
   stream: {
     event: OpenAIChatStreamEvent,
     initial: (request) => ({
-      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      providerMetadataKey: routeOf(request.model).providerMetadataKey ?? request.model.provider,
       tools: ToolStream.empty<number>(),
       custom: OpenAIFreeform.tools(request),
       customCalls: new Set<number>(),

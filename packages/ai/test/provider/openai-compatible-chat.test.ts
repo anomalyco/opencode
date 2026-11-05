@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, LLMEvent, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
-import { Auth, LLMClient } from "../../src/route.js"
+import { Auth, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
 import { it } from "../lib/effect.js"
@@ -94,9 +94,9 @@ describe("OpenAI-compatible Chat route", () => {
       expect(prepared.model).toMatchObject({
         id: "deepseek-chat",
         provider: "deepseek",
-        route: { id: "openai-compatible-chat" },
+        api: "chat-completions",
       })
-      expect(prepared.model.route.endpoint).toMatchObject({
+      expect(Route.of(prepared.model)?.endpoint).toMatchObject({
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })

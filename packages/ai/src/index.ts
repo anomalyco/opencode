@@ -1,8 +1,8 @@
 import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import { AIClient } from "./ai-client.js"
-import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
+import { Decision, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
-import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
+import { Image, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./llm.js"
 import { Media } from "./media.js"
 import {
@@ -16,11 +16,11 @@ import { RequestExecutor } from "./route/executor.js"
 import {
   AIError,
   InvalidRequestError,
-  LanguageModel,
   type CompactionCheckpointResponse,
   type CompactionResponse,
   type LLMEvent,
   type LLMResponse,
+  type Model,
 } from "./schema/index.js"
 import type {
   LoopObjectEvent,
@@ -31,17 +31,12 @@ import type {
   LLMLoopInput,
   LLMRequestInput,
 } from "./llm.js"
-import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
-import {
-  Transcription,
-  type TranscriptionModel,
-  type TranscriptionRequest,
-  type TranscriptionRequestInput,
-} from "./transcription.js"
+import { Speech, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
+import { Transcription, type TranscriptionRequest, type TranscriptionRequestInput } from "./transcription.js"
 import { ToolFailure, build } from "./tool.js"
 import type { NoExecute, ToolExecuteContext, ToolInput, ToolInputType, ToolOptions, ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
-import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
+import { Video, type VideoRequest, type VideoRequestInput } from "./video.js"
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, speech,
@@ -110,36 +105,36 @@ export const make = (options: Options = {}) => {
       ),
     )
 
-  function generate<const Model extends LanguageModel, S extends OutputSchema>(
-    input: LLMRequestInput<Model> & { readonly schema: S },
+  function generate<const SelectedModel extends Model<"chat">, S extends OutputSchema>(
+    input: LLMRequestInput<SelectedModel> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): Promise<ObjectResponse<OutputType<S>>>
-  function generate<const Model extends LanguageModel>(
-    input: LLMRequestInput<Model>,
+  function generate<const SelectedModel extends Model<"chat">>(
+    input: LLMRequestInput<SelectedModel>,
     options?: StreamOptions & RunOptions,
   ): Promise<LLMResponse>
   function generate(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return run(LLM.generate(input, options), options)
   }
 
-  function stream<const Model extends LanguageModel, S extends OutputSchema>(
-    input: LLMRequestInput<Model> & { readonly schema: S },
+  function stream<const SelectedModel extends Model<"chat">, S extends OutputSchema>(
+    input: LLMRequestInput<SelectedModel> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<ObjectEvent<OutputType<S>>>
-  function stream<const Model extends LanguageModel>(
-    input: LLMRequestInput<Model>,
+  function stream<const SelectedModel extends Model<"chat">>(
+    input: LLMRequestInput<SelectedModel>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
   function stream(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return iterate(LLM.stream(input, options), options)
   }
 
-  function loop<const Model extends LanguageModel, S extends OutputSchema>(
-    input: LLMLoopInput<Model> & { readonly schema: S },
+  function loop<const SelectedModel extends Model<"chat">, S extends OutputSchema>(
+    input: LLMLoopInput<SelectedModel> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LoopObjectEvent<OutputType<S>>>
-  function loop<const Model extends LanguageModel>(
-    input: LLMLoopInput<Model>,
+  function loop<const SelectedModel extends Model<"chat">>(
+    input: LLMLoopInput<SelectedModel>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
   function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
@@ -229,23 +224,25 @@ export const make = (options: Options = {}) => {
     canCompact: LLM.canCompact,
     image: {
       request: Image.request,
-      generate: <const Model extends ImageModel>(
-        input: ImageRequestInput<Model> | ImageRequest,
+      generate: <const SelectedModel extends Model<"image">>(
+        input: ImageRequestInput<SelectedModel> | ImageRequest,
         options?: AwaitOptions & RunOptions,
       ) => run(Image.generate(input, options), options),
-      stream: <const Model extends ImageModel>(
-        input: ImageRequestInput<Model> | ImageRequest,
+      stream: <const SelectedModel extends Model<"image">>(
+        input: ImageRequestInput<SelectedModel> | ImageRequest,
         options?: AwaitOptions & RunOptions,
       ) => iterate(Image.stream(input, options), options),
-      start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
-        run(Image.start(input), options).then(handle),
-      resume: (model: ImageModel, token: unknown, options?: RunOptions) =>
+      start: <const SelectedModel extends Model<"image">>(
+        input: ImageRequestInput<SelectedModel> | ImageRequest,
+        options?: RunOptions,
+      ) => run(Image.start(input), options).then(handle),
+      resume: (model: Model<"image">, token: unknown, options?: RunOptions) =>
         run(Image.resume(model, token), options).then(handle),
     },
     decision: {
       request: Decision.request,
-      generate: <const Model extends DecisionModel, const Questions extends DecisionQuestions>(
-        input: DecisionRequestInput<Model, Questions>,
+      generate: <const SelectedModel extends Model<"decision">, const Questions extends DecisionQuestions>(
+        input: DecisionRequestInput<SelectedModel, Questions>,
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
     },
@@ -253,44 +250,46 @@ export const make = (options: Options = {}) => {
     experimental: {
       speech: {
         request: Speech.request,
-        generate: <const Model extends SpeechModel>(
-          input: SpeechRequestInput<Model> | SpeechRequest,
+        generate: <const SelectedModel extends Model<"speech">>(
+          input: SpeechRequestInput<SelectedModel> | SpeechRequest,
           options?: RunOptions,
         ) => run(Speech.generate(input), options),
-        stream: <const Model extends SpeechModel>(
-          input: SpeechRequestInput<Model> | SpeechRequest,
+        stream: <const SelectedModel extends Model<"speech">>(
+          input: SpeechRequestInput<SelectedModel> | SpeechRequest,
           options?: RunOptions,
         ) => iterate(Speech.stream(input), options),
       },
       transcription: {
         request: Transcription.request,
-        generate: <const Model extends TranscriptionModel>(
-          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+        generate: <const SelectedModel extends Model<"transcription">>(
+          input: TranscriptionRequestInput<SelectedModel> | TranscriptionRequest,
           options?: AwaitOptions & RunOptions,
         ) => run(Transcription.generate(input, { poll: options?.poll }), options),
-        stream: <const Model extends TranscriptionModel>(
-          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+        stream: <const SelectedModel extends Model<"transcription">>(
+          input: TranscriptionRequestInput<SelectedModel> | TranscriptionRequest,
           options?: AwaitOptions & RunOptions,
         ) => iterate(Transcription.stream(input, { poll: options?.poll }), options),
-        start: <const Model extends TranscriptionModel>(
-          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+        start: <const SelectedModel extends Model<"transcription">>(
+          input: TranscriptionRequestInput<SelectedModel> | TranscriptionRequest,
           options?: RunOptions,
         ) => run(Transcription.start(input), options).then(handle),
-        resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
+        resume: (model: Model<"transcription">, token: unknown, options?: RunOptions) =>
           run(Transcription.resume(model, token), options).then(handle),
       },
       video: {
         request: Video.request,
-        start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
-          run(Video.start(input), options).then(handle),
-        generate: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
+        start: <const SelectedModel extends Model<"video">>(
+          input: VideoRequestInput<SelectedModel> | VideoRequest,
+          options?: RunOptions,
+        ) => run(Video.start(input), options).then(handle),
+        generate: <const SelectedModel extends Model<"video">>(
+          input: VideoRequestInput<SelectedModel> | VideoRequest,
           options?: AwaitOptions & RunOptions,
         ) => run(Video.generate(input, { poll: options?.poll }), options),
-        resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
+        resume: (model: Model<"video">, token: unknown, options?: RunOptions) =>
           run(Video.resume(model, token), options).then(handle),
-        stream: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
+        stream: <const SelectedModel extends Model<"video">>(
+          input: VideoRequestInput<SelectedModel> | VideoRequest,
           options?: AwaitOptions & RunOptions,
         ) => iterate(Video.stream(input, { poll: options?.poll }), options),
       },

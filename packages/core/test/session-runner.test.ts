@@ -7,8 +7,8 @@ import {
   LLMEvent,
   type LLMRequest,
   Message,
+  ModelID,
   SystemPart,
-  LanguageModel,
   ToolFailure,
   TransportError,
   InvalidProviderOutputError,
@@ -19,7 +19,7 @@ import {
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
 import { TestLLM, compileRequest } from "@opencode/ai/testing"
-import { RequestExecutor } from "@opencode/ai/route"
+import { RequestExecutor, Route } from "@opencode/ai/route"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -122,7 +122,7 @@ const defaultModelLimit = { context: 200_000, output: 32_000 }
 const modelLimits = new Map<string, ModelLimit>()
 const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
   modelLimits.set(id, limit)
-  return LanguageModel.make({ id, provider: "fake", route: OpenAIChat.route })
+  return Route.model(OpenAIChat.route, { id, provider: "fake" })
 }
 const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
@@ -1780,7 +1780,7 @@ describe("SessionRunnerLLM", () => {
       ).toMatchObject({ native })
 
       const original = s.currentModel
-      s.currentModel = LanguageModel.update(original, { id: "different-deployment" })
+      s.currentModel = { ...original, id: ModelID.make("different-deployment") }
       yield* s.session.prompt({ sessionID: forked.id, text: "Switched fork", resume: false })
       yield* s.session.resume(forked.id)
       expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
@@ -1988,7 +1988,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+    s.currentModel = Route.model(OpenAIChat.route, { id: "gpt-5", provider: "openai" })
     yield* s.admit("First")
 
     yield* s.llm.push(TestLLM.text("Done", "text-provider-prompt"))
@@ -2002,7 +2002,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("uses the selected model family prompt when the agent system override is empty", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+    s.currentModel = Route.model(OpenAIChat.route, { id: "gpt-5", provider: "openai" })
     const agent = yield* Agent.Service
     yield* agent.transform((editor) =>
       editor.update(Agent.ID.make("build"), (agent) => {
@@ -2316,7 +2316,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("records a same-model effort switch as a cache-preserving effort update", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "claude-opus-5", provider: "anthropic", route: AnthropicMessages.route })
+    s.currentModel = Route.model(AnthropicMessages.route, { id: "claude-opus-5", provider: "anthropic" })
     const model = { id: ID.make("claude-opus-5"), providerID: Provider.ID.make("anthropic") }
     yield* s.bus.publish(SessionEvent.ModelSelected, {
       sessionID,
@@ -2328,7 +2328,7 @@ describe("SessionRunnerLLM", () => {
       sessionID,
       model: { ...model, variant: Model.VariantID.make("low") },
     })
-    s.currentModel = LanguageModel.update(s.currentModel, { options: { providerOptions: { effort: "low" } } })
+    s.currentModel = { ...s.currentModel, options: { providerOptions: { effort: "low" } } }
     yield* s.llm.push(TestLLM.text("Later answer", "text-effort-low"))
     yield* s.runPrompt("Second")
 
@@ -2756,10 +2756,9 @@ describe("SessionRunnerLLM", () => {
         const hooks = yield* PluginHooks.Service
         const agentID = Agent.ID.make("reviewer")
         const variant = Model.VariantID.make("test-variant")
-        s.currentModel = LanguageModel.make({
+        s.currentModel = Route.model(route, {
           id: route === AnthropicMessages.route ? "claude-sonnet-4-6" : "gpt-5",
           provider: route === AnthropicMessages.route ? "anthropic" : "openai",
-          route,
         })
         yield* agents.transform((editor) =>
           editor.update(agentID, (agent) => {
@@ -3514,7 +3513,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.currentModel = Route.model(OpenAIResponses.route, { id: "native", provider: "openai" })
     modelLimits.set("native", { context: 11_000, output: 1_000 })
     s.compaction = { type: "native" }
     const agents = yield* Agent.Service
@@ -3566,7 +3565,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("recovers an overflowing native window with another native compaction", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.currentModel = Route.model(OpenAIResponses.route, { id: "native", provider: "openai" })
     modelLimits.set("native", { context: 11_000, output: 1_000 })
     s.compaction = { type: "native" }
     const checkpoint = (encrypted: string) =>

@@ -4,8 +4,8 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequest } from "../transcription.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
+import { TranscriptionResponse, type TranscriptionRequest, transcriptionModel } from "../transcription.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -34,7 +34,7 @@ export type AssemblyAITranscriptionOptions = {
   readonly speech_models?: ReadonlyArray<OpenString<"universal-3-5-pro" | "universal-2">>
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequest<TranscriptionModel<AssemblyAITranscriptionOptions>>
+export type Request = TranscriptionRequest<Model<"transcription", AssemblyAITranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -198,10 +198,7 @@ export const protocol = MediaProtocol.queued<Request, TranscriptionResponse, Tok
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  TranscriptionModel.fromRoute<AssemblyAITranscriptionOptions, Token>(
-    { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
-    input,
-  )
+  transcriptionModel<AssemblyAITranscriptionOptions, Token>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const AssemblyAITranscription = {
   protocol,

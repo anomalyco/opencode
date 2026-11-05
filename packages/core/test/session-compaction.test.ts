@@ -4,7 +4,6 @@ import {
   InvalidRequestError,
   LLMClient,
   LLMEvent,
-  LanguageModel,
   Message,
   ToolDefinition,
   type LLMRequest,
@@ -47,16 +46,13 @@ import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect
 import { TestClock } from "effect/testing"
 import { asc, eq, inArray, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { Route } from "@opencode/ai/route"
 
 let requests: LLMRequest[] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
 let beforeResponse: Effect.Effect<void> = Effect.void
 let reject: ((request: LLMRequest) => boolean) | undefined
-const model = LanguageModel.make({
-  id: "summary-model",
-  provider: "test",
-  route: OpenAIChat.route,
-})
+const model = Route.model(OpenAIChat.route, { id: "summary-model", provider: "test" })
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),

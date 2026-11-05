@@ -7,13 +7,14 @@ import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
+import { Route } from "../../src/route.js"
 
 for (const model of [
   OpenAI.configure({ apiKey: "test-key" }).responses("example-model"),
   configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
 ]) {
-  describe(`${model.route.protocol} message replay`, () => {
-    const key = model.route.providerMetadataKey ?? "openresponses"
+  describe(`${Route.of(model)?.protocol} message replay`, () => {
+    const key = Route.of(model)?.providerMetadataKey ?? "openresponses"
 
     it.effect("marks assistant text completed regardless of stored status", () =>
       Effect.gen(function* () {

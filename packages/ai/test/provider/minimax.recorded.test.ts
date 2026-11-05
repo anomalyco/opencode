@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, type LanguageModel, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition, Model } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -23,7 +23,7 @@ const textCases: ReadonlyArray<{
   name: string
   api: string
   protocol: string
-  model: LanguageModel
+  model: Model<"chat">
   reasoning: boolean
   body: Record<string, unknown>
 }> = [
@@ -134,7 +134,7 @@ describe("MiniMax recorded", () => {
     60_000,
   )
 
-  const loops: ReadonlyArray<{ api: string; protocol: string; mode: string; model: LanguageModel }> = [
+  const loops: ReadonlyArray<{ api: string; protocol: string; mode: string; model: Model<"chat"> }> = [
     {
       api: "messages",
       protocol: "anthropic-messages",

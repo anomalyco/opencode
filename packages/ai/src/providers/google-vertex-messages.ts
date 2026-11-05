@@ -40,6 +40,7 @@ const route = Route.make({
   providerMetadataKey: "vertex",
   protocol: Protocol.make({
     id: AnthropicMessages.protocol.id,
+    api: "messages",
     body: {
       schema: Schema.Struct({
         ...Struct.omit(AnthropicMessages.AnthropicMessagesBody.fields, ["model"]),

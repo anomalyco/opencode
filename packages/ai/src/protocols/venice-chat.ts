@@ -1,12 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import {
-  AIError,
-  LLMEvent,
-  type LanguageModelCompatibility,
-  type LLMRequest,
-  type Capabilities,
-} from "../schema/index.js"
+import { AIError, LLMEvent, type Compatibility, type LLMRequest, type Capabilities } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -331,12 +325,13 @@ const onHalt = Effect.fn("VeniceChat.onHalt")(function* (state: State) {
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-} satisfies LanguageModelCompatibility
+} satisfies Compatibility
 
 export const capabilities = { promptCacheKey: true } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "venice-chat",
+  api: "chat-completions",
   body: { schema: Body, from: fromRequest },
   stream: {
     event: Schema.Union([Schema.Literal("[DONE]"), Protocol.jsonEvent(Event)]),
