@@ -95,20 +95,18 @@ describe("transitionDraftRetention", () => {
   })
 
   test("a remove that a later save overtook does not unpin the save's image", () => {
-    const removing = run([
-      { type: "store.registered" },
-      materialize("img"),
-      { type: "remove.started", ...doc },
-    ]).state
+    const removing = run([{ type: "store.registered" }, materialize("img"), { type: "remove.started", ...doc }]).state
     const removal = selectLatestMutation(removing, 1, "draft")
-    const saved = run(
-      [{ type: "save.started", ...doc, ids: new Set(["img"]), graceMs }],
-      removing,
-    )
+    const saved = run([{ type: "save.started", ...doc, ids: new Set(["img"]), graceMs }], removing)
     const attempt = selectLatestMutation(saved.state, 1, "draft")
     const committed = run([{ type: "save.committed", ...doc, attempt, ids: new Set(["img"]), graceMs }], saved.state)
 
-    const late = transitionDraftRetention(committed.state, { type: "remove.committed", ...doc, attempt: removal, graceMs })
+    const late = transitionDraftRetention(committed.state, {
+      type: "remove.committed",
+      ...doc,
+      attempt: removal,
+      graceMs,
+    })
     expect(late.state).toBe(committed.state)
     expect(status(late.state, "img")).toBe("pinned")
   })
@@ -145,7 +143,13 @@ describe("transitionDraftRetention", () => {
     ]).state
     const committed = run(
       [
-        { type: "save.committed", ...doc, attempt: selectLatestMutation(first, 1, "draft"), ids: new Set(["kept"]), graceMs },
+        {
+          type: "save.committed",
+          ...doc,
+          attempt: selectLatestMutation(first, 1, "draft"),
+          ids: new Set(["kept"]),
+          graceMs,
+        },
         { type: "save.started", ...doc, ids: new Set(["kept", "new"]), graceMs },
       ],
       first,

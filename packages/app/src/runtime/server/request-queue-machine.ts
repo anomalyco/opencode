@@ -117,7 +117,9 @@ export function transitionRequestQueue(
   if (state.status === "running")
     return {
       state: { status: "disposed" },
-      effects: state.inflight.length ? [{ type: "request.cancel", ids: state.inflight.map((entry) => entry.id) }] : none,
+      effects: state.inflight.length
+        ? [{ type: "request.cancel", ids: state.inflight.map((entry) => entry.id) }]
+        : none,
     }
 
   return {
@@ -186,7 +188,10 @@ function arrived(
   const nextId = entry.id + 1
 
   if (canStart(state.inflight, entry.slow, config))
-    return { state: { ...state, nextId, inflight: [...state.inflight, entry] }, effects: [{ type: "request.start", id: entry.id }] }
+    return {
+      state: { ...state, nextId, inflight: [...state.inflight, entry] },
+      effects: [{ type: "request.start", id: entry.id }],
+    }
 
   if (state.status === "running")
     return {
@@ -273,7 +278,10 @@ function watched(state: OpenState, now: number, config: RequestQueueConfig): Req
   return {
     state,
     effects: [
-      { type: "watcher.start", delayMs: waited >= config.stallMs ? config.stallMs : Math.max(1, config.stallMs - waited) },
+      {
+        type: "watcher.start",
+        delayMs: waited >= config.stallMs ? config.stallMs : Math.max(1, config.stallMs - waited),
+      },
     ],
   }
 }

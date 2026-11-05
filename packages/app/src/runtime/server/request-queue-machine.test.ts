@@ -76,7 +76,10 @@ describe("transitionRequestQueue", () => {
 
   test("fast reads take free slots while a slow request waits for the slow share", () => {
     const options = { limit: 3, slowLimit: 1, stallMs: 2_000 }
-    const result = run([arrive("/api/vcs", 0, 0, true), arrive("/api/worktree", 0, 0, true), arrive("/fast", 0)], options)
+    const result = run(
+      [arrive("/api/vcs", 0, 0, true), arrive("/api/worktree", 0, 0, true), arrive("/fast", 0)],
+      options,
+    )
     expect(result.effects).toEqual([
       { type: "request.start", id: 1 },
       { type: "watcher.start", delayMs: 2_000 },
@@ -107,7 +110,11 @@ describe("transitionRequestQueue", () => {
     expect(disposed.effects).toEqual([{ type: "watcher.stop" }, { type: "request.cancel", ids: [2, 3, 1] }])
     expect(selectInflightCount(disposed.state)).toBe(0)
 
-    for (const event of [arrive("/late", 1), { type: "request.settled", id: 1, now: 1 } as const, { type: "disposed" } as const])
+    for (const event of [
+      arrive("/late", 1),
+      { type: "request.settled", id: 1, now: 1 } as const,
+      { type: "disposed" } as const,
+    ])
       expect(transitionRequestQueue(disposed.state, event, config)).toEqual({ state: disposed.state, effects: [] })
 
     const running = run([arrive("/busy", 0)]).state
