@@ -417,7 +417,6 @@ describe("built-ins as data", () => {
       "Array sort",
       "PromiseReactionJob",
       "JSON.parse reviver",
-      "Set method",
       "search",
     ]) {
       expect(seenKinds).toContain(name)

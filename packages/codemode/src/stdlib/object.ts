@@ -27,7 +27,6 @@ import { containsOpaqueReference, describeValue, rejectCircularInsertion } from 
 import { invokeMethod } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { ToolReference } from "../tool-runtime.js"
-import { groupBy } from "./collections.js"
 
 // ToObject for enumeration.
 export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: Value, node?: AstNode): Obj => {
@@ -208,7 +207,6 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
   ])
-  define(object, "groupBy", groupBy(ctx, "Object"), hidden)
   methods(builtins, builtins.Object, [
     [
       "hasOwnProperty",
