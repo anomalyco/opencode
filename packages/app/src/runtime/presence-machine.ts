@@ -167,7 +167,6 @@ export type AnimatedPresenceState<T> =
       readonly value: T | undefined
       readonly animate: boolean
     }
-  | { readonly status: "disposed" }
 
 export type AnimatedPresenceEvent<T> =
   | {
@@ -179,11 +178,6 @@ export type AnimatedPresenceEvent<T> =
       readonly now: number
     }
   | { readonly type: "linger.elapsed"; readonly attempt: number }
-  | { readonly type: "disposed" }
-
-export const DISPOSED_ANIMATED_EVENT: AnimatedPresenceEvent<never> = Object.freeze({ type: "disposed" })
-
-export const DISPOSED_ANIMATED_STATE: AnimatedPresenceState<never> = Object.freeze({ status: "disposed" })
 
 export function createAnimatedPresenceState<T>(
   value: T | undefined,
@@ -199,10 +193,6 @@ export function transitionAnimatedPresence<T>(
   state: AnimatedPresenceState<T>,
   event: AnimatedPresenceEvent<T>,
 ): AnimatedPresenceState<T> {
-  if (state.status === "disposed") return state
-
-  if (event.type === "disposed") return DISPOSED_ANIMATED_STATE
-
   if (event.type === "linger.elapsed") {
     if (state.status !== "lingering" || event.attempt !== state.attempt) return state
 
@@ -268,11 +258,11 @@ export function selectAnimatedShow<T>(state: AnimatedPresenceState<T>): boolean 
 }
 
 export function selectAnimatedAnimate<T>(state: AnimatedPresenceState<T>): boolean {
-  return state.status !== "disposed" && state.animate
+  return state.animate
 }
 
 export function selectAnimatedValue<T>(state: AnimatedPresenceState<T>): T | undefined {
-  return state.status === "disposed" ? undefined : state.value
+  return state.value
 }
 
 /** Whether a comma-separated CSS list (`animation-name`) holds `token` exactly. Allocates nothing. */

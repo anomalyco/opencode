@@ -3,7 +3,6 @@ import {
   countNewAnimations,
   createAnimatedPresenceState,
   createPresenceState,
-  DISPOSED_ANIMATED_EVENT,
   DISPOSED_PRESENCE_EVENT,
   ELEMENT_CHANGED_EVENT,
   hasCssToken,
@@ -231,20 +230,6 @@ describe("transitionAnimatedPresence", () => {
     expect(view(hidden)).toEqual({ show: false, animate: true, value: "steer" })
     expect(transitionAnimatedPresence(hidden, sync(undefined, 2))).toBe(hidden)
     expect(view(transitionAnimatedPresence(hidden, sync("queue", 2)))).toEqual({ show: true, animate: true, value: "queue" })
-  })
-
-  test("stays disposed", () => {
-    const states = [
-      createAnimatedPresenceState("hint", "a", 0),
-      createAnimatedPresenceState<string>(undefined, "a", 0),
-      transitionAnimatedPresence(createAnimatedPresenceState("hint", "a", 0), sync(undefined, 1, { identity: "a", minimumDuration: 100 })),
-    ]
-
-    states.forEach((state) => {
-      const disposed = transitionAnimatedPresence(state, DISPOSED_ANIMATED_EVENT)
-      expect(view(disposed)).toEqual({ show: false, animate: false, value: undefined })
-      expect(transitionAnimatedPresence(disposed, sync("hint", 2, { identity: "a" }))).toBe(disposed)
-    })
   })
 })
 

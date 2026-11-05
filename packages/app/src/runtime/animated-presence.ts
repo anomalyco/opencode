@@ -1,12 +1,11 @@
-import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import {
   createAnimatedPresenceState,
-  DISPOSED_ANIMATED_EVENT,
   selectAnimatedAnimate,
   selectAnimatedShow,
   selectAnimatedValue,
   transitionAnimatedPresence,
-  type AnimatedPresenceEvent,
+  type AnimatedPresenceState,
 } from "./presence-machine"
 import { createPresence } from "./presence"
 
@@ -17,41 +16,39 @@ export function createAnimatedPresence<T>(
   minimumDuration = 0,
 ) {
   const hasIdentity = identity !== undefined
-  let current = createAnimatedPresenceState(untrack(value), untrack(() => identity?.()), Date.now())
-  const [machine, setMachine] = createSignal(current)
+  // The attempt of the last linger whose timer fired; the machine ignores it unless that linger is still running.
+  const [elapsed, setElapsed] = createSignal(-1)
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  const dispatch = (event: AnimatedPresenceEvent<T>) => {
-    const previous = current
-    const next = transitionAnimatedPresence(previous, event)
-
-    if (next === previous) return
-    current = next
-
-    if (previous.status === "lingering") {
-      clearTimeout(timer)
-      timer = undefined
-    }
-
-    if (next.status === "lingering") {
-      const attempt = next.attempt
-      // Rounded up: a timer cut short by a fraction of a millisecond would leave the linger unfinished.
-      timer = setTimeout(() => dispatch({ type: "linger.elapsed", attempt }), Math.ceil(next.delayMs))
-    }
-
-    if (next.status !== "disposed") setMachine(next)
-  }
+  // A memo, not an effect, so a read right after `value` changes already sees the next state. A sync with unchanged
+  // inputs returns the same state, so re-running for a timer applies only the timer.
+  const machine = createMemo<AnimatedPresenceState<T>>(
+    (previous) =>
+      transitionAnimatedPresence(
+        transitionAnimatedPresence(previous, {
+          type: "sync",
+          value: value(),
+          identity: identity?.(),
+          hasIdentity,
+          minimumDuration,
+          now: Date.now(),
+        }),
+        { type: "linger.elapsed", attempt: elapsed() },
+      ),
+    createAnimatedPresenceState(untrack(value), untrack(() => identity?.()), Date.now()),
+  )
 
   createEffect(() => {
-    const nextValue = value()
-    const nextIdentity = identity?.()
+    const state = machine()
+    clearTimeout(timer)
 
-    untrack(() =>
-      dispatch({ type: "sync", value: nextValue, identity: nextIdentity, hasIdentity, minimumDuration, now: Date.now() }),
-    )
+    if (state.status !== "lingering") return
+    const attempt = state.attempt
+    // Rounded up: a timer cut short by a fraction of a millisecond would leave the linger running.
+    timer = setTimeout(() => setElapsed(attempt), Math.ceil(state.delayMs))
   })
 
-  onCleanup(() => dispatch(DISPOSED_ANIMATED_EVENT))
+  onCleanup(() => clearTimeout(timer))
 
   const presence = createPresence({
     show: () => selectAnimatedShow(machine()),
