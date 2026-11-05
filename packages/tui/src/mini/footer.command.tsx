@@ -2,7 +2,7 @@
 import { TextAttributes, type InputRenderable, type KeyEvent } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
-import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, type Accessor } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { Config } from "../config"
 import { OneCellSpinner } from "../component/one-cell-spinner"
@@ -16,6 +16,7 @@ import {
 } from "./footer.menu"
 import { stringWidth } from "../util/string-width"
 import { monoShortcut } from "./mono"
+import { screenReader } from "./screen-reader"
 import type { RunFooterTheme } from "./theme"
 import type {
   FooterQueuedPrompt,
@@ -23,8 +24,11 @@ import type {
   MiniSettingChange,
   MiniSettings,
   RunAgent,
+  RunAction,
   RunCommand,
   RunInput,
+  RunPicker,
+  RunPickerItem,
   RunProvider,
 } from "./types"
 import { matchMiniVerbosity, verbosityChange, verbosityLabel } from "./verbosity"
@@ -45,6 +49,7 @@ type CommandEntry =
   | (PanelEntry & { action: "variant.list" })
   | (PanelEntry & { action: "settings" })
   | (PanelEntry & { action: "slash"; name: string })
+  | (PanelEntry & { action: "custom"; custom: RunAction })
   | (PanelEntry & { action: "clear" })
   | (PanelEntry & { action: "exit" })
 
@@ -336,6 +341,7 @@ function PanelShell(props: {
       >
         <input
           width="100%"
+          showCursor={!screenReader.enabled}
           focusedBackgroundColor={props.background === false ? "transparent" : props.theme().formfieldFocusedBg}
           focusedTextColor={
             props.background === false ? props.theme().formfieldText : props.theme().formfieldFocusedText
@@ -395,6 +401,8 @@ export function RunCommandMenuBody(props: {
   queued: Accessor<FooterQueuedPrompt[]>
   variants: Accessor<string[]>
   variantCycle: string
+  actions?: Accessor<RunAction[]>
+  onAction?: (action: RunAction) => void
   onClose: () => void
   onAgent: () => void
   onModel: () => void
@@ -503,8 +511,16 @@ export function RunCommandMenuBody(props: {
           ]
         : []),
     ]
+    const custom: CommandEntry[] = (props.actions?.() ?? []).map((action) => ({
+      action: "custom" as const,
+      custom: action,
+      category: "Session",
+      display: action.display,
+      keywords: action.keywords,
+    }))
     return [
       ...session,
+      ...custom,
       ...agent,
       {
         action: "clear",
@@ -579,6 +595,11 @@ export function RunCommandMenuBody(props: {
       return
     }
 
+    if (item.action === "custom") {
+      props.onAction?.(item.custom)
+      return
+    }
+
     if (item.name === "new") {
       props.onNew()
       return
@@ -608,6 +629,7 @@ export function RunCommandMenuBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -673,6 +695,7 @@ export function RunAgentSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -681,6 +704,65 @@ export function RunAgentSelectBody(props: {
         limit={controller.menu.limit()}
         compact={controller.layout().compact}
         empty="No agents found"
+        border={false}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
+        grouped={false}
+        background
+        mono={props.mono}
+      />
+    </PanelShell>
+  )
+}
+
+export function RunPickerBody(props: {
+  theme: Accessor<RunFooterTheme>
+  picker: Accessor<RunPicker | undefined>
+  onClose: () => void
+  onSelect: (id: string) => void
+  mono?: boolean
+}) {
+  const [loaded] = createResource(props.picker, (picker) => picker.load())
+  const entries = createMemo<(PanelEntry & RunPickerItem)[]>(() =>
+    (loaded() ?? []).map((item) => ({
+      ...item,
+      category: "",
+      footer: item.current ? "current" : item.footer,
+      footerTone: "selection" as const,
+      keywords: `${item.display} ${item.description ?? ""}`,
+    })),
+  )
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onSelect(item.id),
+    isCurrent: (item) => item.current === true,
+  })
+
+  return (
+    <PanelShell
+      title={props.picker()?.title ?? ""}
+      layout={controller.layout()}
+      query={controller.query()}
+      count={controller.items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
+      mono={props.mono}
+    >
+      <RunFooterMenu
+        cursor
+        theme={props.theme}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
+        empty={loaded.loading ? "Loading..." : loaded.error ? "Could not load" : (props.picker()?.empty ?? "No results")}
         border={false}
         paddingLeft={panelPad(props.mono)}
         paddingRight={panelPad(props.mono)}
@@ -840,6 +922,7 @@ export function RunSettingsBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -924,6 +1007,7 @@ export function RunSubagentSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -1019,6 +1103,7 @@ export function RunQueuedPromptSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -1088,6 +1173,7 @@ export function RunVariantSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -1180,6 +1266,7 @@ export function RunModelSelectBody(props: {
       background={false}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={() =>
           controller.query().trim() ||

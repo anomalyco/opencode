@@ -21,6 +21,9 @@ export function createFooterApiFixture(input: { events?: FooterEvent[]; commits?
       ready()
       return () => prompts.delete(fn)
     },
+    submit(prompt) {
+      for (const fn of [...prompts]) fn(prompt)
+    },
     onClose(fn) {
       if (closed) {
         fn()

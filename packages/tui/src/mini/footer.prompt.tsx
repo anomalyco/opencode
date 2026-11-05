@@ -45,6 +45,7 @@ import {
   isCompactCommand,
   mentionTriggerIndex,
   slashTriggerIndex,
+  isLocalCommand,
   isNewCommand,
   movePromptHistory,
   promptCopy,
@@ -67,6 +68,7 @@ import type {
   RunTuiConfig,
 } from "./types"
 import { EmptyBorder } from "../ui/border"
+import { screenReader } from "./screen-reader"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 
@@ -221,6 +223,8 @@ export function RunPromptBody(props: {
   onContentChange: () => void
   onSizeChange: () => void
   bind: (area?: TextareaRenderable) => void
+  // Lets the open menu own the terminal cursor so screen readers announce its selection.
+  menu: Accessor<boolean>
 }) {
   const renderer = useRenderer()
   let area: TextareaRenderable | undefined
@@ -267,10 +271,10 @@ export function RunPromptBody(props: {
   return (
     <box width="100%" paddingTop={props.layout().padding} paddingBottom={props.layout().padding}>
       <box
-        border={["left"]}
+        border={screenReader.enabled ? [] : ["left"]}
         borderColor={props.rail()}
-        customBorderChars={{ ...EmptyBorder, vertical: props.mono ? "|" : "┃" }}
-        paddingLeft={1}
+        customBorderChars={screenReader.enabled ? undefined : { ...EmptyBorder, vertical: props.mono ? "|" : "┃" }}
+        paddingLeft={screenReader.enabled ? 0 : 1}
         paddingRight={2}
         onSizeChange={props.onSizeChange}
       >
@@ -308,29 +312,37 @@ export function RunPromptBody(props: {
             </Show>
           </box>
         </Show>
-        <textarea
-          width="100%"
-          minHeight={TEXTAREA_MIN_ROWS}
-          maxHeight={props.layout().textarea}
-          wrapMode="word"
-          placeholder={props.placeholder()}
-          placeholderColor={props.theme().muted}
-          textColor={props.theme().text}
-          focusedTextColor={props.theme().text}
-          backgroundColor={props.background()}
-          focusedBackgroundColor={props.background()}
-          cursorColor={props.theme().text}
-          cursorStyle={props.cursorStyle}
-          onSubmit={props.onSubmit}
-          onKeyDown={props.onKeyDown}
-          onPaste={(event) => {
-            void props.onPaste(event).finally(refreshPasteLayout)
-          }}
-          onContentChange={props.onContentChange}
-          ref={(next) => {
-            area = next
-          }}
-        />
+        <box flexDirection="row" width="100%">
+          <Show when={screenReader.enabled}>
+            <text fg={props.theme().muted} flexShrink={0}>
+              ${" "}
+            </text>
+          </Show>
+          <textarea
+            width="100%"
+            minHeight={TEXTAREA_MIN_ROWS}
+            maxHeight={props.layout().textarea}
+            wrapMode="word"
+            placeholder={props.placeholder()}
+            placeholderColor={props.theme().muted}
+            textColor={props.theme().text}
+            focusedTextColor={props.theme().text}
+            backgroundColor={props.background()}
+            focusedBackgroundColor={props.background()}
+            cursorColor={props.theme().text}
+            cursorStyle={props.cursorStyle}
+            showCursor={!(screenReader.enabled && props.menu())}
+            onSubmit={props.onSubmit}
+            onKeyDown={props.onKeyDown}
+            onPaste={(event) => {
+              void props.onPaste(event).finally(refreshPasteLayout)
+            }}
+            onContentChange={props.onContentChange}
+            ref={(next) => {
+              area = next
+            }}
+          />
+        </box>
       </box>
     </box>
   )
@@ -1154,6 +1166,7 @@ export function createPromptState(input: PromptInput): PromptState {
     if (current === "model") return false
     if (current === "variant") return false
     if (current === "settings") return false
+    if (current === "picker") return false
     if (current === "queued-menu") return false
     if (current === "subagent-menu") return false
     return true
@@ -1385,6 +1398,7 @@ export function createPromptState(input: PromptInput): PromptState {
       (next.mode === "shell" ||
         isNewCommand(next.text) ||
         isCompactCommand(next.text) ||
+        isLocalCommand(next.text) ||
         isExitCommand(next.text) ||
         next.text.trim().toLowerCase() === "/settings")
     ) {
@@ -1406,7 +1420,8 @@ export function createPromptState(input: PromptInput): PromptState {
       command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text)
         ? undefined
         : parseSlashCommand(next.text, input.commands())
-    if (parsed?.type === "pending") {
+    // Local commands still run while the list loads; a loaded command with the same name wins.
+    if (parsed?.type === "pending" && !isLocalCommand(next.text)) {
       input.onStatus("loading commands")
       return
     }

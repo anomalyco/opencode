@@ -49,6 +49,10 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
         agent: Option.none(),
         prompt: Option.none(),
         demo: false,
+        screenReader: Option.none(),
+        auto: false,
+        yolo: false,
+        dangerouslySkipPermissions: false,
       }).pipe(
         Effect.provideService(Server, Option.some(server.url.toString())),
         Effect.provide(Config.layer),

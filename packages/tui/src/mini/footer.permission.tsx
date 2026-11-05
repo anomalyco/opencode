@@ -11,7 +11,7 @@
 // The diff view (when available) uses the same diff component as scrollback
 // tool snapshots.
 /** @jsxImportSource @opentui/solid */
-import { TextAttributes, measureEditText, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
+import { TextAttributes, measureEditText, type Renderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import {
@@ -28,6 +28,7 @@ import {
   permissionShift,
   type PermissionOption,
 } from "./permission.shared"
+import { screenReader } from "./screen-reader"
 import { stringWidth } from "../util/string-width"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
@@ -43,6 +44,7 @@ function buttons(
   onSelect: (option: PermissionOption) => void,
   mono: boolean,
 ) {
+  const renderer = useRenderer()
   return (
     <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
       <For each={list}>
@@ -54,6 +56,14 @@ function buttons(
             paddingLeft={1}
             paddingRight={1}
             backgroundColor={option === selected ? theme.actionFocusedBg : transparent}
+            // Screen readers announce the text under the terminal cursor, so park it on the selected button.
+            renderAfter={
+              screenReader.enabled && option === selected
+                ? function (this: Renderable) {
+                    renderer.setCursorPosition(this.x + 1, this.y + 1, true)
+                  }
+                : undefined
+            }
             onMouseMove={() => {
               if (!disabled) onHover(option)
             }}

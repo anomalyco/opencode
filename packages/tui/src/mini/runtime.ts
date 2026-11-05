@@ -22,6 +22,7 @@ import {
   resolveSessionInfo,
 } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
+import { SESSION_ACTIONS, runSessionCommand } from "./session-actions"
 import { cycleVariant, formatModelLabel, resolveVariant } from "./variant.shared"
 import { verbosityPreset } from "./verbosity"
 import type {
@@ -55,6 +56,7 @@ type RunRuntimeInput = {
   boot: () => Promise<BootContext>
   resolveSession: (sdk: RunInput["sdk"], signal: AbortSignal) => Promise<ResolvedSession>
   createSession?: CreateSession
+  openSession?: OpenSession
   reconnect?: Reconnect
   files: RunInput["files"]
   initialInput?: string
@@ -72,6 +74,7 @@ export type RunDeferredInput = {
   directory: string
   target: (sdk: RunInput["sdk"], signal: AbortSignal) => Promise<ResolvedSession>
   createSession?: CreateSession
+  openSession?: OpenSession
   agent: RunInput["agent"]
   model: RunInput["model"]
   variant: RunInput["variant"]
@@ -98,6 +101,8 @@ type StreamState = {
   mod: StreamTransportModule
   handle: Awaited<ReturnType<StreamTransportModule["createSessionTransport"]>>
 }
+
+type OpenSession = (sdk: RunInput["sdk"], sessionID: string, signal: AbortSignal) => Promise<ResolvedSession>
 
 type RunDemo = ReturnType<(typeof import("./demo"))["createRunDemo"]>
 
@@ -244,6 +249,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     sessionID: state.sessionID,
     sessionTitle: state.sessionTitle,
     getSessionID: () => state.sessionID,
+    actions: SESSION_ACTIONS,
     first: session.first,
     history: state.history,
     agent: state.agent,
@@ -449,6 +455,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const currentClient = (attempt: ClientAttempt) =>
     !footer.isClosed && !attempt.signal.aborted && attempt.generation === clientGeneration && attempt.sdk === state.sdk
 
+  // Set by openSession so the next ensureSession resumes that session instead of the launch target.
+  let pendingTarget: ResolvedSession | undefined
+
   const ensureSession = () => {
     if (state.sessionID) {
       return Promise.resolve()
@@ -458,8 +467,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       return state.session
     }
 
-    const task = input
-      .resolveSession(state.sdk, runtimeController.signal)
+    const chosen = pendingTarget
+    pendingTarget = undefined
+    const task = (chosen ? Promise.resolve(chosen) : input.resolveSession(state.sdk, runtimeController.signal))
       .then(async (next) => {
         if (next.sdk) updateClient(next.sdk)
         if (footer.isClosed || runtimeController.signal.aborted) return
@@ -886,6 +896,30 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       await state.demo.start()
     }
 
+    const openSession = async (sessionID: string) => {
+      if (!input.openSession) throw new Error("switching sessions is not available")
+      const target = await input.openSession(state.sdk, sessionID, runtimeController.signal)
+      await state.switching?.catch(() => {})
+      await footer.idle().catch(() => {})
+      await state.stream?.then((item) => item.handle.close()).catch(() => {})
+      state.stream = undefined
+      state.session = undefined
+      state.selectSubagent = undefined
+      state.sessionID = ""
+      state.history = []
+      state.localRows = []
+      state.shown = false
+      includeFiles = true
+      pendingTarget = target
+      footer.event({
+        type: "stream.subagent",
+        state: { tabs: [], details: {}, permissions: [], forms: [] },
+      })
+      footer.event({ type: "stream.view", view: { type: "prompt" } })
+      footer.event({ type: "queued.prompts", prompts: [] })
+      footer.event({ type: "stream.patch", patch: { phase: "idle", usage: undefined, first: true } })
+      await ensureStream()
+    }
     const mod = await import("./runtime.queue")
     const createSession = input.createSession
     await mod.runPromptQueue({
@@ -923,6 +957,21 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         )
       },
       onAdmissionError: renderPromptError,
+      onLocalCommand: (text) =>
+        runSessionCommand(
+          {
+            sdk: () => state.sdk,
+            sessionID: () => state.sessionID,
+            directory: () => state.location.directory,
+            footer,
+            open: openSession,
+            retitle: (title) => {
+              state.sessionTitle = title
+              shell.setTitle(title)
+            },
+          },
+          text,
+        ),
       onCompact: async () => {
         await state.sdk.session.compact({ sessionID: state.sessionID }, formRequestOptions(state.location))
       },
@@ -1110,6 +1159,7 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
       reconnect: input.reconnect,
       resolveSession: input.target,
       createSession: input.createSession,
+      openSession: input.openSession,
       boot: async () => {
         return {
           sdk,

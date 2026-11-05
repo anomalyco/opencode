@@ -30,6 +30,7 @@ import type {
   MiniHost,
   PermissionReply,
   QueuedPromptAction,
+  RunAction,
   RunAgent,
   RunInput,
   RunPrompt,
@@ -62,6 +63,7 @@ export type LifecycleInput = {
   sessionID: string
   sessionTitle?: string
   getSessionID?: () => string | undefined
+  actions?: RunAction[]
   first: boolean
   history: RunPrompt[]
   agent: string | undefined
@@ -246,6 +248,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     onFormCancel: input.onFormCancel,
     onCycleVariant: input.onCycleVariant,
     onAgentSelect: input.onAgentSelect,
+    actions: input.actions,
     onModelSelect: input.onModelSelect,
     onVariantSelect: input.onVariantSelect,
     onInterrupt: input.onInterrupt,
