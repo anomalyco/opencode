@@ -7,7 +7,9 @@ export const MOBILE_VIEW_PENDING_TTL_MS = 5_000
 export const PROJECT_REQUEST_TTL_MS = 30_000
 
 /** Who an open side region belongs to: the panel whose toggle opened it, or the user. */
-export type OpenSideRegion = { readonly status: "open-for-panel"; readonly key: string } | { readonly status: "open-user" }
+export type OpenSideRegion =
+  | { readonly status: "open-for-panel"; readonly key: string }
+  | { readonly status: "open-user" }
 
 export type SideRegionSessionState = { readonly status: "closed" } | OpenSideRegion
 

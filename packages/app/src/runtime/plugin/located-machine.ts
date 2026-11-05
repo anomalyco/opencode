@@ -45,10 +45,7 @@ export function createLocatedWritesState(): LocatedWritesState {
   return { status: "active", nextId: 0, draining: [], queue: [] }
 }
 
-export function transitionLocatedWrites(
-  state: LocatedWritesState,
-  event: LocatedWritesEvent,
-): LocatedWritesTransition {
+export function transitionLocatedWrites(state: LocatedWritesState, event: LocatedWritesEvent): LocatedWritesTransition {
   if (state.status === "disposed") return step(state)
 
   if (event.type === "disposed")

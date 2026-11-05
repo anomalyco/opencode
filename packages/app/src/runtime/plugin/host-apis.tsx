@@ -712,7 +712,9 @@ export function createPluginAttachment(apis: HostApis) {
 
   // The keys a session tab's sessions go by: the session it shows and the one it routes.
   const tabSessions = (tab: Tab) =>
-    tab.type === "session" ? [`${tab.server}\n${tab.sessionId}`, `${tab.server}\n${tab.routeSessionId ?? tab.sessionId}`] : []
+    tab.type === "session"
+      ? [`${tab.server}\n${tab.sessionId}`, `${tab.server}\n${tab.routeSessionId ?? tab.sessionId}`]
+      : []
 
   // Who each open side region belongs to: the panel whose `Layout.toggle` opened it, or the user. Read straight from
   // the shell tabs, so a session missing from `sessions()` (e.g. while its server signs in again) keeps its owner.

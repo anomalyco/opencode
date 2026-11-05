@@ -48,7 +48,15 @@ test("a panel opened into a region a toggle opened makes the region the user's",
   run.dispatch({ ...toggled, wasOpen: false, nowOpen: true })
   expect(selectSideRegionSession(run.machine.state, s)).toEqual({ status: "open-for-panel", key: "context:main" })
 
-  run.dispatch({ type: "panel.opened", session: s, key: "review:review", via: "open", placement: "open", wasOpen: true, nowOpen: true })
+  run.dispatch({
+    type: "panel.opened",
+    session: s,
+    key: "review:review",
+    via: "open",
+    placement: "open",
+    wasOpen: true,
+    nowOpen: true,
+  })
   run.dispatch({ type: "panel.closed", session: s, key: "context:main", empty: true })
 
   expect(selectSideRegionSession(run.machine.state, s)).toEqual({ status: "open-user" })
@@ -79,8 +87,24 @@ test("a quiet append, or reopening the owner panel, keeps the region the panel's
   run.dispatch({ ...toggled, wasOpen: false, nowOpen: true })
   const owned = run.machine.state
 
-  run.dispatch({ type: "panel.opened", session: s, key: "review:review", via: "open", placement: "append", wasOpen: true, nowOpen: true })
-  run.dispatch({ type: "panel.opened", session: s, key: "context:main", via: "open", placement: "open", wasOpen: true, nowOpen: true })
+  run.dispatch({
+    type: "panel.opened",
+    session: s,
+    key: "review:review",
+    via: "open",
+    placement: "append",
+    wasOpen: true,
+    nowOpen: true,
+  })
+  run.dispatch({
+    type: "panel.opened",
+    session: s,
+    key: "context:main",
+    via: "open",
+    placement: "open",
+    wasOpen: true,
+    nowOpen: true,
+  })
   expect(run.machine.state).toBe(owned)
 
   run.dispatch({ ...toggled, wasOpen: true, nowOpen: true })

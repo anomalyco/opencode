@@ -113,7 +113,8 @@ export function transitionLinkCheck(state: LinkCheckState, event: LinkCheckEvent
   if (!entry) return step(state)
   const running = state.running.filter((item) => item !== entry)
 
-  if (event.type === "failed") return step({ ...state, running }, [{ type: "reject", id: entry.id, cause: event.cause }])
+  if (event.type === "failed")
+    return step({ ...state, running }, [{ type: "reject", id: entry.id, cause: event.cause }])
 
   if (event.found || (state.status === "active" && entry.epoch === state.epoch))
     return step({ ...state, running }, [{ type: "resolve", id: entry.id, value: event.found }])

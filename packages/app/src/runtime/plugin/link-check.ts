@@ -31,7 +31,11 @@ export function createLinkCheck(active: Accessor<boolean>, check: (href: string)
     // A microtask after the timeline is selected, so the routed session has settled before the check runs.
     if (effect.type === "schedule.wake") return queueMicrotask(() => dispatch({ type: "wake", epoch: effect.epoch }))
 
-    if (effect.type === "check") return answer(effect.id, Promise.try(() => untrack(() => check(effect.href))))
+    if (effect.type === "check")
+      return answer(
+        effect.id,
+        Promise.try(() => untrack(() => check(effect.href))),
+      )
     const waiter = waiters.get(effect.id)
     waiters.delete(effect.id)
 
