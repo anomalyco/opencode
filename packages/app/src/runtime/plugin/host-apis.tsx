@@ -125,7 +125,8 @@ export function createHostApis() {
   const systemDark = createMediaQuery("(prefers-color-scheme: dark)")
   // A plain signal: the interface holds live functions and SDK clients, which a store would wrap in proxies.
   const [attachState, setAttachState] = createSignal(createHostApiAttachState<Attached>())
-  const attached = () => selectAttached(attachState())
+  // A memo, so readers rerun when the interface mounts or detaches, not on every queued write.
+  const attached = createMemo(() => selectAttached(attachState()))
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, ReturnType<Storage["memory"]>>()
   const current = () => attached()
