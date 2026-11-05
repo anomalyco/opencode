@@ -1,6 +1,12 @@
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Icon } from "@opencode/ui/icon"
-import { frameLoop, observeReducedMotion, prefersReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
+import {
+  frameLoop,
+  observeReducedMotion,
+  prefersReducedMotion,
+  Spring,
+  type DurationOptions,
+} from "@opencode/ui/motion"
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { sourcesExpand, type SiteIconMode } from "./experiment"
 import {
@@ -150,8 +156,7 @@ function SearchStep(props: {
 
   onCleanup(() => dispatch(DISPOSED_SOURCES_EXPAND_EVENT))
 
-  const toggle = () =>
-    dispatch({ type: "toggle", expandable: expandable(), reduced: prefersReducedMotion() })
+  const toggle = () => dispatch({ type: "toggle", expandable: expandable(), reduced: prefersReducedMotion() })
 
   return (
     <div data-slot="sources-step" data-open={open() ? "" : undefined}>

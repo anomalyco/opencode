@@ -84,6 +84,7 @@ describe("transitionSourcesExpand", () => {
       replay([toggle(true)]),
       { status: "open", attempt: 4 } as const,
     ]
+
     const events: SourcesExpandEvent[] = [
       toggle(),
       toggle(true),

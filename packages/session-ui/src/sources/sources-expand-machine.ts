@@ -46,7 +46,8 @@ export function transitionSourcesExpand(state: SourcesExpandState, event: Source
 
   if (event.type === "toggle") return toggle(state, event)
 
-  if (event.type === "collapse") return state.status === "closed" ? state : { status: "closed", attempt: state.attempt + 1 }
+  if (event.type === "collapse")
+    return state.status === "closed" ? state : { status: "closed", attempt: state.attempt + 1 }
 
   if (state.status !== "opening" && state.status !== "closing") return state
 
