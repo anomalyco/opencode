@@ -1,12 +1,12 @@
 function getNodeLength(node: Node): number {
-  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  if (node instanceof Element && node.tagName === "BR") return 1
 
   return textLength(node)
 }
 
 // The node's text without zero-width spaces, like `textContent` but without building the string.
 function textLength(node: Node): number {
-  if (node.nodeType === Node.TEXT_NODE) return countText((node as Text).data, (node as Text).length)
+  if (node instanceof Text) return countText(node.data, node.length)
   let length = 0
 
   for (let child = node.firstChild; child; child = child.nextSibling) length += textLength(child)
@@ -30,7 +30,7 @@ export function getCursorPosition(parent: HTMLElement) {
   for (let node = parent.firstChild; node; node = node.nextSibling) {
     if (anchor === parent && index === offset) return position
 
-    if (node === anchor && node.nodeType === Node.TEXT_NODE) return position + countText((node as Text).data, offset)
+    if (node === anchor && node instanceof Text) return position + countText(node.data, offset)
 
     // Mentions and breaks are atomic: a caret on or inside one sits before or after it.
     if (node.contains(anchor)) return offset === 0 ? position : position + getNodeLength(node)
@@ -56,8 +56,8 @@ export function setCursorPosition(parent: HTMLElement, position: number) {
   while (node) {
     const length = getNodeLength(node)
     const isText = node.nodeType === Node.TEXT_NODE
-    const isPill = node.nodeType === Node.ELEMENT_NODE && !!(node as HTMLElement).dataset.mention
-    const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+    const isPill = node instanceof HTMLElement && !!node.dataset.mention
+    const isBreak = node instanceof Element && node.tagName === "BR"
 
     if (isText && remaining <= length) {
       const range = document.createRange()
