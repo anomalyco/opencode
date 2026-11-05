@@ -113,6 +113,7 @@ export function transitionPluginGui(state: PluginGuiState, event: PluginGuiEvent
 
   if (event.type === "evaluated" && event.attempt === state.attempt) {
     const fresh = toCache(event.loaded)
+
     const plugins = state.target.plugins.flatMap((plugin) => {
       const loaded = fresh.get(plugin.id) ?? state.cache.get(plugin.id)
 

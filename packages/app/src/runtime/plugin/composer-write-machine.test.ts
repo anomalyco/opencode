@@ -3,7 +3,6 @@ import {
   createComposerWriteState,
   transitionComposerWrite,
   type ComposerWriteEvent,
-  type ComposerWriteState,
 } from "./composer-write-machine"
 
 type Draft = { readonly name: string; readonly log: string[] }
@@ -13,7 +12,7 @@ type Draft = { readonly name: string; readonly log: string[] }
  * the effects already running, so a write a queued write makes queues behind the writes already waiting.
  */
 function harness() {
-  const machine: { state: ComposerWriteState<Draft> } = { state: createComposerWriteState() }
+  const machine = { state: createComposerWriteState<Draft>() }
   const queue: ComposerWriteEvent<Draft>[] = []
   const observed: string[] = []
   const logged: unknown[] = []

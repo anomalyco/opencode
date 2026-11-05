@@ -17,8 +17,17 @@ export type DeferredMenuState<T> =
       readonly armed: DeferredMenuIntent | undefined
     }
   | { readonly status: "open"; readonly attempt: number; readonly hover: boolean }
-  /** An item was chosen and runs once focus returns, or after the fallback. `attempt` names its timer. */
-  | { readonly status: "closing"; readonly attempt: number; readonly hover: boolean; readonly choice: T }
+  /**
+   * An item was chosen and runs once focus returns, or after the fallback. `attempt` names its timer; `shown`: the menu
+   * has not reported its own close yet.
+   */
+  | {
+      readonly status: "closing"
+      readonly attempt: number
+      readonly hover: boolean
+      readonly shown: boolean
+      readonly choice: T
+    }
   | { readonly status: "disposed" }
 
 export type DeferredMenuEvent<T> =
@@ -87,6 +96,9 @@ export function transitionDeferredMenu<T>(
 
   if (event.type === "select") return choose(state.attempt, state.hover, event.choice)
 
+  if (event.type === "open.change" && !event.open)
+    return { state: state.shown ? { ...state, shown: false } : state, effects: [] }
+
   if (event.type === "close.autofocus")
     return { state, effects: [{ type: "timer.start", attempt: state.attempt, delay: 0 }] }
 
@@ -103,8 +115,9 @@ export function transitionDeferredMenu<T>(
   return { state, effects: [] }
 }
 
+/** The menu shows: open, or closing until it reports its own close. */
 export function selectDeferredMenuOpen<T>(state: DeferredMenuState<T>) {
-  return state.status === "open"
+  return state.status === "open" || (state.status === "closing" && state.shown)
 }
 
 export function selectDeferredMenuHover<T>(state: DeferredMenuState<T>) {
@@ -133,7 +146,7 @@ function closed<T>(
 
 function choose<T>(attempt: number, hover: boolean, choice: T): DeferredMenuTransition<T> {
   return {
-    state: { status: "closing", attempt: attempt + 1, hover, choice },
+    state: { status: "closing", attempt: attempt + 1, hover, shown: true, choice },
     effects: [{ type: "timer.start", attempt: attempt + 1, delay: DEFERRED_MENU_FALLBACK_MS }],
   }
 }

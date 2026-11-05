@@ -236,6 +236,7 @@ export function NewTabButton(props: {
   const available = () => props.entries.length > 0
   // A chosen entry reopens once the closing menu has returned focus, as the "+" menu does.
   const menu = createDeferredMenu<string>({ onChoose: (key) => props.onReopen(key), onNewTab: () => props.onNewTab() })
+
   const swapped = () =>
     selectDeferredMenuOpen(menu.state()) ||
     (available() && held() && (global || selectDeferredMenuHover(menu.state())))

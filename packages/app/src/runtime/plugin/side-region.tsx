@@ -74,6 +74,7 @@ export function SideRegion(props: {
 
   // Opening the side region with no tabs shows a new tab view, once per opening and session (`new-tab-machine.ts`).
   createRenderEffect(() => props.region.syncSideOpen(tabsOpen() && layout.ready()))
+  onCleanup(() => props.region.syncSideOpen(false))
 
   // The split pane shows while it holds tabs; when the side pane has none, New tabs included, the split pane takes the
   // whole height.
@@ -508,8 +509,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   const menu = createDeferredMenu<SessionPanelMenuEntry>({
     onChoose: (entry) => {
       props.onChoose(entry.key)
-      entry.item.run()
-    },
+      entry.item.run()    },
   })
 
   return (

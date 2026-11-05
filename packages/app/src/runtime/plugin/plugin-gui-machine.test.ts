@@ -59,6 +59,7 @@ describe("plugin GUI machine", () => {
     const pushed = transitionPluginGui(failed.state, { type: "pushed", guis: guis([acme]) })
 
     expect(pushed.state).toMatchObject({ status: "evaluating", settled: true })
+
     const loaded = transitionPluginGui(pushed.state, {
       type: "evaluated",
       attempt: pushed.state.status === "evaluating" ? pushed.state.attempt : 0,
@@ -131,10 +132,12 @@ describe("plugin GUI machine", () => {
   test("an unchanged revision publishes the cached definition without evaluating", () => {
     const acme = gui("acme", "r1")
     const definition = evaluated(acme)
+
     const loaded = run([
       { type: "initial.resolved", attempt: 1, guis: guis([acme]) },
       { type: "evaluated", attempt: 2, loaded: [definition] },
     ])
+
     const again = transitionPluginGui(loaded.state, { type: "pushed", guis: guis([acme], ["x"]) })
 
     expect(again.effects).toEqual([{ type: "publish", plugins: [definition], reserved: ["x"] }])
@@ -152,10 +155,12 @@ describe("plugin GUI machine", () => {
 
   test("a reload that fails keeps the plugins that already run", () => {
     const r1 = gui("acme", "r1")
+
     const loaded = run([
       { type: "initial.resolved", attempt: 1, guis: guis([r1]) },
       { type: "evaluated", attempt: 2, loaded: [evaluated(r1)] },
     ])
+
     const reload = run(
       [
         { type: "pushed", guis: guis([gui("acme", "r2")]) },

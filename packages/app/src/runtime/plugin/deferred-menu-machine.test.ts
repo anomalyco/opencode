@@ -48,6 +48,13 @@ describe("deferred menu machine", () => {
     expect(empty.effects).toEqual([{ type: "open.new-tab" }])
   })
 
+  test("the menu stays shown after a choice until it reports its own close", () => {
+    const chosen = run([{ type: "arm", intent: "menu" }, press, { type: "select", choice: "a" }])
+
+    expect(selectDeferredMenuOpen(chosen.state)).toBe(true)
+    expect(selectDeferredMenuOpen(run([close], chosen.state).state)).toBe(false)
+  })
+
   test("a chosen item runs once focus returns", () => {
     const result = run([{ type: "arm", intent: "menu" }, press, { type: "select", choice: "a" }, close, { type: "close.autofocus" }])
 

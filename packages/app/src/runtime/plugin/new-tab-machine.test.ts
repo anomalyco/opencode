@@ -60,11 +60,13 @@ describe("new tab machine", () => {
       side: { active: "file://README.md", keys: ["review:changes", "file://README.md"] },
       split: { active: "term:1", keys: ["term:1"] },
     }
+
     // Closing the terminal moves the region's selection to the first tab, which the side pane now shows.
     const after: Region = {
       regionActive: "review:changes",
       side: { active: "review:changes", keys: ["review:changes", "file://README.md"] },
     }
+
     const result = run([sync(before), { type: "open", pane: "side" }, sync(after)])
 
     expect(selectPaneNewTabs(result.state, "side")).toEqual(["new:1"])
@@ -160,6 +162,7 @@ describe("new tab machine", () => {
 
   test("closing the shown New tab shows the one after it, else the one before", () => {
     const region: Region = { side: { active: "a", keys: ["a"] }, regionActive: "a" }
+
     const three = run([
       sync(region),
       { type: "open", pane: "side" },
@@ -167,6 +170,7 @@ describe("new tab machine", () => {
       { type: "open", pane: "side" },
       { type: "select.new", pane: "side", id: "new:2" },
     ])
+
     const middle = run([{ type: "dismiss", id: "new:2", empty: false }], three.state)
 
     expect(middle.state.panes.side).toEqual({ ids: ["new:1", "new:3"], chosen: "new:3" })

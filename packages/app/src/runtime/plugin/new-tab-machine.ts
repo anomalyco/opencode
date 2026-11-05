@@ -120,6 +120,7 @@ function sync(state: NewTabsState, snapshot: RegionTabSnapshot): NewTabsState {
 
   const previous = state.snapshot
   const listed = new Set(SESSION_PANES.flatMap((pane) => snapshot.panes[pane].keys))
+
   const syncPane = (pane: SessionPane): PaneNewTabs => {
     const current = state.panes[pane]
     const next = snapshot.panes[pane]
@@ -136,8 +137,10 @@ function sync(state: NewTabsState, snapshot: RegionTabSnapshot): NewTabsState {
 
     return { ids: current.ids.filter((id) => id !== replaced), chosen: undefined }
   }
+
   const panes = { side: syncPane("side"), split: syncPane("split"), bottom: syncPane("bottom") }
   const changed = SESSION_PANES.some((pane) => panes[pane] !== state.panes[pane])
+
   const synced: NewTabsState = {
     ...state,
     panes: changed ? panes : state.panes,
@@ -148,6 +151,7 @@ function sync(state: NewTabsState, snapshot: RegionTabSnapshot): NewTabsState {
   // again rather than being joined by another.
   const want = snapshot.sideOpen && snapshot.empty
   const opened = want && !state.openedEmpty
+
   const result =
     opened && selectShownNewTab(synced, "side", snapshot.panes.side.active) === undefined
       ? open({ ...synced, openedEmpty: true }, "side")
