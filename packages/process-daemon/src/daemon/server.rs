@@ -11,8 +11,8 @@ use base64::Engine;
 use super::control::Control;
 use super::{Registration, platform};
 use crate::ownership::{Ownership, Snapshot};
-use crate::protocol::{Envelope, Request, Response, read_frame, write_frame, write_output_frame};
-use crate::service::{CreateTerminal, StreamEvent, TerminalService};
+use crate::protocol::{Request, Response, read_envelope, write_frame, write_output_frame};
+use crate::service::{CreatePipe, CreatePty, StreamEvent, TerminalService};
 use crate::transport::{Cancellation, Connection, Listener, Readiness, Wake};
 
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(100);
@@ -313,8 +313,8 @@ fn handle_connection(
     registration: &Registration,
     control: &Control,
 ) -> Result<()> {
-    let envelope: Envelope = read_frame(&mut stream)?;
-    if envelope.token != registration.token {
+    let (token, request) = read_envelope(&mut stream)?;
+    if token != registration.token {
         return send_response(
             &mut stream,
             &Response::Error {
@@ -322,10 +322,14 @@ fn handle_connection(
             },
         );
     }
+    let request = match request {
+        Ok(request) => request,
+        Err(message) => return send_response(&mut stream, &Response::Error { message }),
+    };
     if let Request::Own {
         instance_id,
         ticket,
-    } = envelope.request
+    } = request
     {
         let claim = if instance_id != registration.instance_id {
             Err(anyhow!("daemon instance_id mismatch"))
@@ -350,13 +354,16 @@ fn handle_connection(
         control.update_ownership(|ownership| ownership.disconnect(generation, Instant::now()))?;
         return result;
     }
+    if let Request::Wait { id } = request {
+        return wait_for_exit(&mut stream, service, control, id);
+    }
     if let Request::Subscribe {
         id,
         offset,
         attachment_id,
         role,
         takeover,
-    } = envelope.request
+    } = request
     {
         return stream_subscription(
             &mut stream,
@@ -371,9 +378,9 @@ fn handle_connection(
             },
         );
     }
-    let stopping = matches!(envelope.request, Request::Shutdown);
+    let stopping = matches!(request, Request::Shutdown);
     let response =
-        dispatch(envelope.request, service, registration).unwrap_or_else(|error| Response::Error {
+        dispatch(request, service, registration).unwrap_or_else(|error| Response::Error {
             message: format!("{error:#}"),
         });
     let result = send_response(&mut stream, &response);
@@ -391,7 +398,7 @@ fn owner_connection(
 ) -> Result<()> {
     write_frame(&mut *stream, &Response::Owned)?;
     while !control.stopping() {
-        let envelope: Envelope = read_frame(&mut *stream)?;
+        let (token, request) = read_envelope(&mut *stream)?;
         if !control.is_owner(generation)? {
             return send_response(
                 stream,
@@ -400,15 +407,15 @@ fn owner_connection(
                 },
             );
         }
-        let stopping =
-            envelope.token == registration.token && matches!(envelope.request, Request::Shutdown);
-        let response = if envelope.token != registration.token {
+        let stopping = token == registration.token && matches!(request, Ok(Request::Shutdown));
+        let response = if token != registration.token {
             Response::Error {
                 message: "authentication failed".to_string(),
             }
         } else {
-            match envelope.request {
-                Request::PrepareHandoff => {
+            match request {
+                Err(message) => Response::Error { message },
+                Ok(Request::PrepareHandoff) => {
                     let unix_ms = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
                     let handoff = control.update_ownership(|ownership| {
                         ownership.prepare(generation, Instant::now(), unix_ms)
@@ -418,8 +425,8 @@ fn owner_connection(
                         expires_at: handoff.expires_at,
                     }
                 }
-                Request::Shutdown => Response::Ok,
-                _ => Response::Error {
+                Ok(Request::Shutdown) => Response::Ok,
+                Ok(_) => Response::Error {
                     message: "owner connection only accepts prepare_handoff or shutdown"
                         .to_string(),
                 },
@@ -462,7 +469,7 @@ fn stream_subscription(
     write_frame(
         &mut *stream,
         &Response::Attached {
-            terminal: attachment.terminal.clone(),
+            process: attachment.process.clone(),
             role: attachment.role,
             generation: attachment.generation,
             requested_offset: attachment.replay.requested_offset,
@@ -501,17 +508,7 @@ fn stream_subscription(
                 generation,
                 checkpoint_base64: base64::engine::general_purpose::STANDARD.encode(checkpoint),
             },
-            StreamEvent::Exited {
-                exit_code,
-                signal,
-                final_offset,
-                output_error,
-            } => Response::Exited {
-                exit_code,
-                signal,
-                final_offset,
-                output_error,
-            },
+            StreamEvent::Exited(exit) => exit.into(),
             StreamEvent::ControllerChanged {
                 attachment_id,
                 generation,
@@ -529,6 +526,46 @@ fn stream_subscription(
             break Ok(());
         }
     })();
+    monitor.finish();
+    result
+}
+
+/// Answers a `wait` with one `Exited` once the pipe process exits. Errors
+/// that need no waiting (unknown id, a PTY) are answered before monitoring.
+fn wait_for_exit(
+    stream: &mut Connection,
+    service: &TerminalService,
+    control: &Control,
+    id: crate::service::TerminalId,
+) -> Result<()> {
+    let wait = match service.wait(id) {
+        Ok(wait) => wait,
+        Err(error) => {
+            return send_response(
+                stream,
+                &Response::Error {
+                    message: format!("{error:#}"),
+                },
+            );
+        }
+    };
+    let monitor = stream.monitor_disconnect()?;
+    // `Err` when the client is gone (or the daemon is stopping): nobody to tell.
+    let exit = crossbeam_channel::select_biased! {
+        recv(wait.exit) -> exit => Ok(exit.ok()),
+        recv(monitor.disconnected()) -> _ => Err(()),
+        recv(wait.actor_done) -> _ => Ok(wait.exit.try_recv().ok()),
+    };
+    let response = match exit {
+        Err(()) => None,
+        Ok(Some(exit)) => Some(Response::from(exit)),
+        // Terminated before it exited; the daemon stopping is not news.
+        Ok(None) if control.stopping() => None,
+        Ok(None) => Some(Response::Error {
+            message: "terminated".to_string(),
+        }),
+    };
+    let result = response.map_or(Ok(()), |response| write_frame(&mut *stream, &response));
     monitor.finish();
     result
 }
@@ -551,34 +588,60 @@ fn dispatch(
             protocol: registration.protocol,
             features: registration.features.clone(),
         },
-        Request::Create {
+        Request::CreatePty {
             program,
             args,
             cwd,
-            title,
-            group_id,
             env,
+            group_id,
+            title,
             cols,
             rows,
-            mode,
-            output_path,
         } => Response::Created {
-            terminal: service.create(CreateTerminal {
+            process: service.create_pty(CreatePty {
                 program,
                 args,
                 cwd,
-                title,
-                group_id,
                 env,
+                group_id,
+                title,
                 cols,
                 rows,
-                mode,
-                output_path,
             })?,
         },
-        Request::List { mode } => Response::Terminals {
-            terminals: service.list_mode(mode.unwrap_or_default())?,
+        Request::CreatePipe {
+            program,
+            args,
+            cwd,
+            env,
+            group_id,
+            output_path,
+            metadata,
+        } => Response::Created {
+            process: service.create_pipe(CreatePipe {
+                program,
+                args,
+                cwd,
+                env,
+                group_id,
+                output_path,
+                metadata,
+            })?,
         },
+        Request::List { mode } => Response::Processes {
+            processes: service.list(mode)?,
+        },
+        Request::Get { id } => Response::Process {
+            process: service.get(id)?,
+        },
+        Request::Signal { id, signal } => {
+            service.signal(id, signal)?;
+            Response::Ok
+        }
+        Request::SetMetadata { id, metadata } => {
+            service.set_metadata(id, metadata)?;
+            Response::Ok
+        }
         Request::Write {
             id,
             attachment_id,
@@ -624,7 +687,7 @@ fn dispatch(
         Request::Snapshot { id } => {
             let snapshot = service.snapshot(id)?;
             Response::Snapshot {
-                terminal: snapshot.info,
+                process: snapshot.info,
                 text: snapshot.text,
                 checkpoint_base64: base64::engine::general_purpose::STANDARD
                     .encode(snapshot.checkpoint),
@@ -635,7 +698,7 @@ fn dispatch(
         Request::ReadRows { id, rows } => {
             let rows = service.read_rows(id, rows)?;
             Response::Rows {
-                terminal: rows.terminal,
+                process: rows.process,
                 lines: rows.lines,
                 cursor_x: rows.cursor_x,
                 cursor_y: rows.cursor_y,
@@ -655,7 +718,9 @@ fn dispatch(
                 data_base64: base64::engine::general_purpose::STANDARD.encode(replay.bytes),
             }
         }
-        Request::Subscribe { .. } => unreachable!("subscriptions are handled before dispatch"),
+        Request::Subscribe { .. } | Request::Wait { .. } => {
+            unreachable!("streaming requests are handled before dispatch")
+        }
         Request::Terminate { id } => {
             service.terminate(id)?;
             Response::Ok
@@ -678,6 +743,7 @@ mod tests {
     use crossbeam_channel::Receiver;
 
     use super::*;
+    use crate::protocol::{Envelope, read_frame};
 
     const TEST_HANDOFF: Duration = Duration::from_secs(60);
     /// Long enough that only a real wake can make a test pass in time.
@@ -945,6 +1011,201 @@ mod tests {
         ));
         // The peer sees EOF only once the loop drops the handler's `Cancellation`.
         assert_eq!(stream.read(&mut [0_u8; 1]).unwrap(), 0);
+    }
+
+    #[test]
+    fn unknown_requests_get_an_error_reply() {
+        let daemon = TestDaemon::start(Duration::from_secs(60), TEST_HANDOFF, NO_SAFETY_NET);
+        let mut owner = daemon.claim();
+        let mut stream = daemon.connect();
+        write_frame(
+            &mut stream,
+            &serde_json::json!({
+                "token": daemon.registration.token,
+                "request": {"op": "teleport"},
+            }),
+        )
+        .unwrap();
+        assert!(matches!(
+            read_frame(&mut stream).unwrap(),
+            Response::Error { message } if message == "unsupported request: teleport"
+        ));
+        // A bad token is reported before the request is looked at.
+        let mut stream = daemon.connect();
+        write_frame(
+            &mut stream,
+            &serde_json::json!({"token": "wrong", "request": {"op": "teleport"}}),
+        )
+        .unwrap();
+        assert!(matches!(
+            read_frame(&mut stream).unwrap(),
+            Response::Error { message } if message == "authentication failed"
+        ));
+        // The owner connection survives an unknown request too.
+        write_frame(
+            &mut owner,
+            &serde_json::json!({
+                "token": daemon.registration.token,
+                "request": {"op": "teleport"},
+            }),
+        )
+        .unwrap();
+        assert!(matches!(
+            read_frame(&mut owner).unwrap(),
+            Response::Error { message } if message == "unsupported request: teleport"
+        ));
+        assert!(matches!(
+            daemon.send(&mut owner, Request::PrepareHandoff),
+            Response::Handoff { .. }
+        ));
+    }
+
+    fn create_pipe(daemon: &TestDaemon, script: &str) -> crate::service::ProcessInfo {
+        std::fs::create_dir_all(&daemon.root).unwrap();
+        let output_path = daemon
+            .root
+            .join(format!("{:016x}.out", rand::random::<u64>()));
+        match daemon.send(
+            &mut daemon.connect(),
+            Request::CreatePipe {
+                program: "/bin/sh".into(),
+                args: vec!["-c".into(), script.into()],
+                cwd: "/".into(),
+                env: Default::default(),
+                group_id: "test".into(),
+                output_path,
+                metadata: Default::default(),
+            },
+        ) {
+            Response::Created { process } => process,
+            response => panic!("create_pipe: {response:?}"),
+        }
+    }
+
+    fn start_wait(daemon: &TestDaemon, id: u64) -> Connection {
+        let mut stream = daemon.connect();
+        write_frame(
+            &mut stream,
+            &Envelope {
+                token: daemon.registration.token.clone(),
+                request: Request::Wait { id },
+            },
+        )
+        .unwrap();
+        stream
+    }
+
+    #[test]
+    fn wait_replies_once_with_the_exit() {
+        let daemon = TestDaemon::start(Duration::from_secs(60), TEST_HANDOFF, NO_SAFETY_NET);
+        let _owner = daemon.claim();
+        let process = create_pipe(&daemon, "sleep 0.2; echo one; exit 3");
+        let mut waits = [
+            start_wait(&daemon, process.id),
+            start_wait(&daemon, process.id),
+        ];
+        for stream in &mut waits {
+            assert!(matches!(
+                read_frame(&mut *stream).unwrap(),
+                Response::Exited {
+                    exit_code: Some(3),
+                    output_lines: Some(1),
+                    final_offset: 4,
+                    ..
+                }
+            ));
+            // Then the connection closes.
+            assert_eq!(stream.read(&mut [0_u8; 1]).unwrap(), 0);
+        }
+        // Already exited: answered at once.
+        assert!(matches!(
+            read_frame(start_wait(&daemon, process.id)).unwrap(),
+            Response::Exited {
+                exit_code: Some(3),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn wait_errors_for_unknown_ids_and_terminals() {
+        let daemon = TestDaemon::start(Duration::from_secs(60), TEST_HANDOFF, NO_SAFETY_NET);
+        let _owner = daemon.claim();
+        assert!(matches!(
+            read_frame(start_wait(&daemon, 42)).unwrap(),
+            Response::Error { message } if message.contains("not found")
+        ));
+        let Response::Created { process } = daemon.send(
+            &mut daemon.connect(),
+            Request::CreatePty {
+                program: "/bin/sh".into(),
+                args: vec!["-c".into(), "exec cat".into()],
+                cwd: "/".into(),
+                env: Default::default(),
+                group_id: "test".into(),
+                title: "t".into(),
+                cols: 80,
+                rows: 24,
+            },
+        ) else {
+            panic!("create_pty");
+        };
+        assert!(matches!(
+            read_frame(start_wait(&daemon, process.id)).unwrap(),
+            Response::Error { message } if message.contains("not a pipe process")
+        ));
+    }
+
+    #[test]
+    fn terminate_ends_a_wait_with_an_error() {
+        let daemon = TestDaemon::start(Duration::from_secs(60), TEST_HANDOFF, NO_SAFETY_NET);
+        let _owner = daemon.claim();
+        let process = create_pipe(&daemon, "exec sleep 30");
+        let mut wait = start_wait(&daemon, process.id);
+        // Let the wait register before terminating.
+        thread::sleep(Duration::from_millis(100));
+        assert!(matches!(
+            daemon.send(&mut daemon.connect(), Request::Terminate { id: process.id }),
+            Response::Ok
+        ));
+        assert!(matches!(
+            read_frame(&mut wait).unwrap(),
+            Response::Error { message } if message == "terminated"
+        ));
+    }
+
+    #[test]
+    fn a_client_leaving_a_wait_ends_its_handler() {
+        let daemon = TestDaemon::start(Duration::from_secs(60), TEST_HANDOFF, NO_SAFETY_NET);
+        let _owner = daemon.claim();
+        let process = create_pipe(&daemon, "exec sleep 30");
+        thread::sleep(Duration::from_millis(100));
+        let before = daemon.iterations();
+        drop(start_wait(&daemon, process.id));
+        // The handler's `Done` wakes the loop once it returns.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while daemon.iterations() < before + 2 {
+            assert!(Instant::now() < deadline, "wait handler did not return");
+            thread::sleep(Duration::from_millis(10));
+        }
+        // The process is untouched.
+        assert!(matches!(
+            daemon.send(&mut daemon.connect(), Request::Get { id: process.id }),
+            Response::Process { process: info }
+                if info.lifecycle == crate::service::TerminalLifecycle::Running
+        ));
+    }
+
+    #[test]
+    fn daemon_shutdown_closes_a_wait_without_a_reply() {
+        let daemon = TestDaemon::start(Duration::from_secs(60), TEST_HANDOFF, NO_SAFETY_NET);
+        let _owner = daemon.claim();
+        let process = create_pipe(&daemon, "exec sleep 30");
+        let mut wait = start_wait(&daemon, process.id);
+        thread::sleep(Duration::from_millis(100));
+        daemon.control.request_stop();
+        daemon.stopped_within(Duration::from_secs(3));
+        assert!(read_frame::<Response>(&mut wait).is_err());
     }
 
     /// Breaks the wake invariant on purpose and expects the detector to catch it.

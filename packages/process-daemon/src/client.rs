@@ -13,7 +13,10 @@ use crate::protocol::{
     AttachmentRole, Envelope, SubscriptionEvent, read_frame, read_subscription_event, write_frame,
 };
 use crate::protocol::{PROTOCOL_VERSION, Request, Response};
-use crate::service::{CreateTerminal, ProcessMode, TerminalId, TerminalInfo, TerminalRows};
+use crate::service::{
+    CreatePipe, CreatePty, PipeMetadata, ProcessInfo, ProcessMode, ProcessSignal, TerminalId,
+    TerminalRows,
+};
 #[cfg(unix)]
 use crate::transport::Connection;
 
@@ -27,7 +30,7 @@ pub struct TerminalClient {
 
 #[derive(Debug)]
 pub struct RemoteSnapshot {
-    pub terminal: TerminalInfo,
+    pub terminal: ProcessInfo,
     pub text: String,
     pub checkpoint: Vec<u8>,
     pub cursor_x: u16,
@@ -46,7 +49,7 @@ pub struct RemoteReplay {
 #[cfg(unix)]
 pub struct TerminalSubscription {
     stream: Connection,
-    pub terminal: TerminalInfo,
+    pub terminal: ProcessInfo,
     pub role: AttachmentRole,
     pub generation: u64,
     pub replay: RemoteReplay,
@@ -155,29 +158,65 @@ impl TerminalClient {
         }
     }
 
-    pub fn create(&self, request: CreateTerminal) -> Result<TerminalInfo> {
-        match self.request(Request::Create {
+    pub fn create_pty(&self, request: CreatePty) -> Result<ProcessInfo> {
+        match self.request(Request::CreatePty {
             program: request.program,
             args: request.args,
             cwd: request.cwd,
-            title: request.title,
-            group_id: request.group_id,
             env: request.env,
+            group_id: request.group_id,
+            title: request.title,
             cols: request.cols,
             rows: request.rows,
-            mode: request.mode,
-            output_path: request.output_path,
         })? {
-            Response::Created { terminal } => Ok(terminal),
+            Response::Created { process } => Ok(process),
             response => unexpected(response),
         }
     }
 
-    pub fn list(&self) -> Result<Vec<TerminalInfo>> {
-        match self.request(Request::List { mode: None })? {
-            Response::Terminals { terminals } => Ok(terminals),
+    pub fn create_pipe(&self, request: CreatePipe) -> Result<ProcessInfo> {
+        match self.request(Request::CreatePipe {
+            program: request.program,
+            args: request.args,
+            cwd: request.cwd,
+            env: request.env,
+            group_id: request.group_id,
+            output_path: request.output_path,
+            metadata: request.metadata,
+        })? {
+            Response::Created { process } => Ok(process),
             response => unexpected(response),
         }
+    }
+
+    pub fn list(&self, mode: ProcessMode) -> Result<Vec<ProcessInfo>> {
+        match self.request(Request::List { mode })? {
+            Response::Processes { processes } => Ok(processes),
+            response => unexpected(response),
+        }
+    }
+
+    pub fn get(&self, id: TerminalId) -> Result<ProcessInfo> {
+        match self.request(Request::Get { id })? {
+            Response::Process { process } => Ok(process),
+            response => unexpected(response),
+        }
+    }
+
+    /// Blocks until the pipe process exits and returns the `Exited` response.
+    pub fn wait(&self, id: TerminalId) -> Result<Response> {
+        match self.request(Request::Wait { id })? {
+            response @ Response::Exited { .. } => Ok(response),
+            response => unexpected(response),
+        }
+    }
+
+    pub fn signal(&self, id: TerminalId, signal: ProcessSignal) -> Result<()> {
+        self.expect_ok(Request::Signal { id, signal })
+    }
+
+    pub fn set_metadata(&self, id: TerminalId, metadata: PipeMetadata) -> Result<()> {
+        self.expect_ok(Request::SetMetadata { id, metadata })
     }
 
     pub fn write(&self, id: TerminalId, data: Vec<u8>) -> Result<()> {
@@ -251,7 +290,7 @@ impl TerminalClient {
     pub fn snapshot(&self, id: TerminalId) -> Result<RemoteSnapshot> {
         match self.request(Request::Snapshot { id })? {
             Response::Snapshot {
-                terminal,
+                process: terminal,
                 text,
                 checkpoint_base64,
                 cursor_x,
@@ -272,12 +311,12 @@ impl TerminalClient {
     pub fn read_rows(&self, id: TerminalId, rows: Option<u16>) -> Result<TerminalRows> {
         match self.request(Request::ReadRows { id, rows })? {
             Response::Rows {
-                terminal,
+                process,
                 lines,
                 cursor_x,
                 cursor_y,
             } => Ok(TerminalRows {
-                terminal,
+                process,
                 lines,
                 cursor_x,
                 cursor_y,
@@ -336,7 +375,7 @@ impl TerminalClient {
         )?;
         match read_frame(&mut stream)? {
             Response::Attached {
-                terminal,
+                process: terminal,
                 role,
                 generation,
                 requested_offset,
@@ -487,7 +526,7 @@ fn status(directory: &Path) -> Result<()> {
         "opencode-pty running: pid={} instance={} terminals={}",
         client.registration.pid,
         client.registration.instance_id,
-        client.list()?.len()
+        client.list(ProcessMode::Pty)?.len()
     );
     Ok(())
 }
@@ -555,7 +594,10 @@ fn watch(_directory: &Path, _id: TerminalId) -> Result<()> {
 
 fn play(directory: &Path) -> Result<()> {
     let client = TerminalClient::start(directory)?;
-    let mut active = client.list()?.first().map(|terminal| terminal.id);
+    let mut active = client
+        .list(ProcessMode::Pty)?
+        .first()
+        .map(|terminal| terminal.id);
     println!("\n  opencode-pty playground");
     println!(
         "  owning service pid={} · `quit` stops all terminals\n",
@@ -584,9 +626,9 @@ fn play(directory: &Path) -> Result<()> {
             "new" => {
                 let words = shell_words::split(rest)?;
                 let request = if words.is_empty() {
-                    CreateTerminal::shell()?
+                    CreatePty::shell()?
                 } else {
-                    CreateTerminal {
+                    CreatePty {
                         title: words[0].clone(),
                         group_id: format!("playground:{}", env::current_dir()?.display()),
                         env: std::collections::HashMap::new(),
@@ -595,11 +637,9 @@ fn play(directory: &Path) -> Result<()> {
                         cwd: env::current_dir()?,
                         cols: 100,
                         rows: 30,
-                        mode: ProcessMode::Pty,
-                        output_path: None,
                     }
                 };
-                let info = client.create(request)?;
+                let info = client.create_pty(request)?;
                 active = Some(info.id);
                 println!("created terminal {} (pid {:?})", info.id, info.pid);
             }
@@ -659,13 +699,16 @@ fn play(directory: &Path) -> Result<()> {
                 let id = optional_id(rest, active)?;
                 client.terminate(id)?;
                 if active == Some(id) {
-                    active = client.list()?.first().map(|terminal| terminal.id);
+                    active = client
+                        .list(ProcessMode::Pty)?
+                        .first()
+                        .map(|terminal| terminal.id);
                 }
                 println!("terminated terminal {id}");
             }
             "demo" => {
                 let executable = env::current_exe()?;
-                let info = client.create(CreateTerminal {
+                let info = client.create_pty(CreatePty {
                     title: "query-fixture".to_string(),
                     group_id: format!("playground:{}", env::current_dir()?.display()),
                     env: std::collections::HashMap::new(),
@@ -674,8 +717,6 @@ fn play(directory: &Path) -> Result<()> {
                     cwd: env::current_dir()?,
                     cols: 100,
                     rows: 30,
-                    mode: ProcessMode::Pty,
-                    output_path: None,
                 })?;
                 active = Some(info.id);
                 thread::sleep(Duration::from_millis(200));
@@ -757,33 +798,41 @@ fn print_help() {
 }
 
 fn print_terminals(client: &TerminalClient) -> Result<()> {
-    let terminals = client.list()?;
+    let terminals = client.list(ProcessMode::Pty)?;
     if terminals.is_empty() {
         println!("no terminals; try `new`");
         return Ok(());
     }
     for terminal in terminals {
+        let Some(pty) = &terminal.pty else {
+            continue;
+        };
         println!(
             "{}  pid={:?}  {}x{}  {:?}  raw={}..{}  {}",
             terminal.id,
             terminal.pid,
-            terminal.cols,
-            terminal.rows,
+            pty.cols,
+            pty.rows,
             terminal.lifecycle,
             terminal.output_head,
             terminal.output_tail,
-            terminal.title,
+            pty.title,
         );
     }
     Ok(())
 }
 
 fn print_snapshot(snapshot: &RemoteSnapshot) {
+    let (cols, rows) = snapshot
+        .terminal
+        .pty
+        .as_ref()
+        .map_or((0, 0), |pty| (pty.cols, pty.rows));
     println!(
         "\n╭─ terminal {} · {}x{} · cursor {},{} · {:?}",
         snapshot.terminal.id,
-        snapshot.terminal.cols,
-        snapshot.terminal.rows,
+        cols,
+        rows,
         snapshot.cursor_x,
         snapshot.cursor_y,
         snapshot.terminal.lifecycle,

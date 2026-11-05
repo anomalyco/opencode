@@ -11,9 +11,9 @@
 //! - A descendant can keep the pipe open after the child exits (`cmd &`, build
 //!   servers). The reader stops [`DRAIN_AFTER_EXIT`] after the exit instead of
 //!   waiting for an EOF that may never come.
-//! - With `output_path`, the reader appends every byte to that file before
-//!   handing it to the actor, so output survives the 2 MiB replay window,
-//!   arrives before any subscriber, and stays complete across a handoff.
+//! - The reader writes every byte to the output file before handing it to the
+//!   actor, which keeps no replay buffer: the file is the only copy of the
+//!   output. Leftover writers get `SIGPIPE` once the reader stops.
 //! - The reader polls a cancel pipe too, so shutdown never waits on a pipe that
 //!   a descendant which left the process group still holds open.
 
@@ -27,15 +27,15 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use crossbeam_channel::{Sender, bounded};
 use nix::errno::Errno;
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use portable_pty::ChildKiller;
 
 use super::{
-    ActorMaster, ActorMessage, CreateTerminal, ProcessMode, TerminalHandle, TerminalId, new_info,
-    start_actor,
+    ActorMaster, ActorMessage, CreatePipe, PipeInfo, ProcessInfo, ProcessMode, ProcessSignal,
+    TerminalHandle, TerminalId, new_info, start_actor,
 };
 
 /// How long output is still read after the child exits.
@@ -80,12 +80,7 @@ impl Pipes {
 }
 
 impl TerminalHandle {
-    pub(super) fn spawn_pipe(
-        id: TerminalId,
-        order: u64,
-        request: CreateTerminal,
-        replay_capacity: usize,
-    ) -> Result<Self> {
+    pub(super) fn spawn_pipe(id: TerminalId, order: u64, request: CreatePipe) -> Result<Self> {
         let Pipes {
             output,
             output_writer,
@@ -96,24 +91,25 @@ impl TerminalHandle {
             exited_writer,
         } = Pipes::new()?;
         // Before spawning, so a bad path fails the request with nothing to clean up.
-        let sink = request
-            .output_path
-            .as_deref()
-            .map(|path| {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .mode(0o600)
-                    // Never write through a symlink planted at the final component.
-                    .custom_flags(libc::O_NOFOLLOW)
-                    .open(path)
-                    .with_context(|| format!("failed to open output file {}", path.display()))
-            })
-            .transpose()?;
+        // The reader is the file's only writer, so it needs no append mode.
+        let sink = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            // Never write through a symlink planted at the final component.
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(&request.output_path)
+            .with_context(|| {
+                format!(
+                    "failed to open output file {}",
+                    request.output_path.display()
+                )
+            })?;
         let mut command = Command::new(&request.program);
         command
             .args(&request.args)
             .current_dir(&request.cwd)
+            .env_clear()
             .envs(&request.env)
             .stdin(Stdio::null())
             .stdout(output_writer)
@@ -138,7 +134,23 @@ impl TerminalHandle {
         // Dropping `Child` neither waits nor kills; `Process` reaps it.
         drop(child);
 
-        let info = new_info(id, ProcessMode::Pipe, Some(process.pid), &request);
+        let info = Arc::new(RwLock::new(ProcessInfo {
+            pipe: Some(PipeInfo {
+                output_path: request.output_path.clone(),
+                output_lines: 0,
+                output_error: None,
+                metadata: request.metadata,
+            }),
+            ..new_info(
+                id,
+                ProcessMode::Pipe,
+                Some(process.pid),
+                &request.program,
+                &request.args,
+                &request.cwd,
+                &request.group_id,
+            )
+        }));
         // Nothing is ever written to a pipe process; a disconnected queue
         // turns any stray write into an error.
         let (writes, _) = bounded(1);
@@ -148,7 +160,8 @@ impl TerminalHandle {
             ActorMaster { pty: None },
             writes,
             &info,
-            replay_capacity,
+            // The output file is the only buffer.
+            0,
             (0, 0),
         ) {
             Ok(actor) => actor,
@@ -210,6 +223,7 @@ impl TerminalHandle {
             killer: Mutex::new(Box::new(GroupKiller(Arc::clone(&process)))),
             cancel: Mutex::new(Some(Box::new(cancel_writer))),
             reap: Mutex::new(Some(Box::new(move || reap.reap()))),
+            process: Some(process),
             info,
             joins: Mutex::new(Some(joins)),
         })
@@ -245,7 +259,7 @@ fn reset_signals() -> io::Result<()> {
 
 /// A pipe child that stays a zombie after it exits, until `reap`.
 #[derive(Debug)]
-struct Process {
+pub(super) struct Process {
     pid: u32,
     reaped: Mutex<bool>,
 }
@@ -263,6 +277,30 @@ impl Process {
                 libc::kill(pid, libc::SIGKILL);
             }
         }
+    }
+
+    /// Sends `signal` to the process group and the child. Allowed after the
+    /// exit, to reach what is left of the group; refused after `reap`.
+    pub(super) fn signal(&self, signal: ProcessSignal) -> Result<()> {
+        let signal = match signal {
+            ProcessSignal::Term => libc::SIGTERM,
+            ProcessSignal::Int => libc::SIGINT,
+            ProcessSignal::Kill => libc::SIGKILL,
+        };
+        let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
+        if *reaped {
+            bail!("process has been reaped");
+        }
+        let pid = i32::try_from(self.pid).context("invalid pid")?;
+        // SAFETY: the unreaped child keeps its PID and group ID reserved.
+        // Signal the child directly too, in case it moved to another group.
+        for result in unsafe { [libc::killpg(pid, signal), libc::kill(pid, signal)] } {
+            // A zombie group with no live members gives ESRCH on macOS.
+            if result == -1 && Errno::last() != Errno::ESRCH {
+                return Err(io::Error::last_os_error()).context("failed to signal process");
+            }
+        }
+        Ok(())
     }
 
     /// Call only after the waiter has returned: kill the group first, so the
@@ -368,12 +406,14 @@ fn signal_name(signal: i32) -> String {
 /// deadline.
 fn read_output(
     output: PipeReader,
-    mut sink: Option<File>,
+    sink: File,
     cancel: PipeReader,
     exited: PipeReader,
     actor: Sender<ActorMessage>,
 ) {
     let mut output = output;
+    // Dropped after a write error: the rest is forwarded but not counted.
+    let mut sink = Some(sink);
     let mut buffer = [0_u8; 8192];
     let mut deadline = None::<Instant>;
     let mut writers_closed = false;
@@ -415,6 +455,8 @@ fn read_output(
         match poll(&mut fds[..count], timeout) {
             Err(Errno::EINTR) | Ok(0) => continue,
             Err(error) => {
+                // Close the file before anyone can observe the exit.
+                drop(sink);
                 let _ = actor.send(ActorMessage::ReaderFailed(error.to_string()));
                 return;
             }
@@ -453,8 +495,9 @@ fn read_output(
                 Ok(length) => {
                     // The file first, so it always holds at least what
                     // subscribers have seen, even if the actor is backpressured.
+                    let mut newlines = 0;
                     if let Some(file) = &mut sink
-                        && let Err(error) = file.write_all(&buffer[..length])
+                        && let Err(error) = write_counting(file, &buffer[..length], &mut newlines)
                     {
                         // Ordered before this chunk's output, so the error is
                         // visible no later than the bytes the file lacks.
@@ -469,7 +512,10 @@ fn read_output(
                         }
                     }
                     if actor
-                        .send(ActorMessage::Output(buffer[..length].to_vec()))
+                        .send(ActorMessage::Output {
+                            bytes: buffer[..length].to_vec(),
+                            newlines,
+                        })
                         .is_err()
                     {
                         return;
@@ -477,10 +523,32 @@ fn read_output(
                 }
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) => {
+                    drop(sink);
                     let _ = actor.send(ActorMessage::ReaderFailed(error.to_string()));
                     return;
                 }
             }
         }
     }
+}
+
+/// Writes all of `bytes`, adding to `newlines` the `\n` bytes that reached
+/// the file, including those of a partial write before an error.
+fn write_counting(file: &mut File, bytes: &[u8], newlines: &mut u64) -> io::Result<()> {
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        match file.write(rest) {
+            Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+            Ok(written) => {
+                *newlines += rest[..written]
+                    .iter()
+                    .filter(|&&byte| byte == b'\n')
+                    .count() as u64;
+                rest = &rest[written..];
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }

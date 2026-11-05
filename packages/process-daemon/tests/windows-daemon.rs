@@ -18,7 +18,7 @@ use opencode_pty::protocol::{
     AttachmentRole, Envelope, Request, Response, SubscriptionEvent, read_frame,
     read_subscription_event, write_frame,
 };
-use opencode_pty::service::{CreateTerminal, TerminalInfo, TerminalLifecycle};
+use opencode_pty::service::{CreatePty, ProcessInfo, ProcessMode, TerminalLifecycle};
 use terminal_fixture::{Command as FixtureCommand, Deadline, Fixture, TempDir};
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::System::Threading::{
@@ -83,32 +83,28 @@ impl Daemon {
         (stream, response)
     }
 
-    fn create(&self, request: CreateTerminal) -> TerminalInfo {
-        let CreateTerminal {
+    fn create(&self, request: CreatePty) -> ProcessInfo {
+        let CreatePty {
             program,
             args,
             cwd,
-            title,
-            group_id,
             env,
+            group_id,
+            title,
             cols,
             rows,
-            mode,
-            output_path,
         } = request;
-        match self.request(Request::Create {
+        match self.request(Request::CreatePty {
             program,
             args,
             cwd,
-            title,
-            group_id,
             env,
+            group_id,
+            title,
             cols,
             rows,
-            mode,
-            output_path,
         }) {
-            Response::Created { terminal } => terminal,
+            Response::Created { process } => process,
             response => panic!("create: {response:?}"),
         }
     }
@@ -139,14 +135,14 @@ impl Daemon {
         (stream, response)
     }
 
-    fn snapshot(&self, id: u64) -> (TerminalInfo, String) {
+    fn snapshot(&self, id: u64) -> (ProcessInfo, String) {
         match self.request(Request::Snapshot { id }) {
-            Response::Snapshot { terminal, text, .. } => (terminal, text),
+            Response::Snapshot { process, text, .. } => (process, text),
             response => panic!("snapshot: {response:?}"),
         }
     }
 
-    fn wait_text(&self, id: u64, expected: &str) -> (TerminalInfo, String) {
+    fn wait_text(&self, id: u64, expected: &str) -> (ProcessInfo, String) {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             let snapshot = self.snapshot(id);
@@ -200,7 +196,7 @@ fn registration(child: &mut Child, directory: &Path) -> Registration {
         if let Ok(registration) = opencode_pty::daemon::read_registration(directory)
             && registration.pid == child.id()
         {
-            assert_eq!(registration.protocol, 7);
+            assert_eq!(registration.protocol, 8);
             assert_eq!(
                 registration.socket,
                 PathBuf::from(format!(
@@ -519,7 +515,7 @@ fn natural_exit_delivers_contiguous_output_and_retains_final_state() {
     assert_eq!(info.output_tail, offset);
     assert!(text.contains("FINAL_DAEMON_MARKER"), "{text:?}");
     let Response::Rows {
-        terminal: rows_info,
+        process: rows_info,
         lines,
         ..
     } = daemon.request(Request::ReadRows {
@@ -568,7 +564,7 @@ fn natural_exit_delivers_contiguous_output_and_retains_final_state() {
         Response::Ok
     ));
     assert!(
-        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals } if terminals.is_empty())
+        matches!(daemon.request(Request::List { mode: ProcessMode::Pty }), Response::Processes { processes: terminals } if terminals.is_empty())
     );
     assert!(matches!(daemon.request(Request::Shutdown), Response::Ok));
     drop(owner);
@@ -659,10 +655,10 @@ fn observer_disconnect_and_control_input_preserve_independent_terminals() {
     assert!(!first_text.contains("SECOND_ONLY_MARKER"));
     assert!(!second_text.contains("FIRST_ONLY_MARKER"));
     assert!(
-        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals } if terminals.len() == 2)
+        matches!(daemon.request(Request::List { mode: ProcessMode::Pty }), Response::Processes { processes: terminals } if terminals.len() == 2)
     );
     assert!(
-        matches!(daemon.request(Request::Ping), Response::Pong { instance_id, pid, protocol: 7, .. }
+        matches!(daemon.request(Request::Ping), Response::Pong { instance_id, pid, protocol: 8, .. }
         if instance_id == daemon.registration.instance_id && pid == daemon.registration.pid)
     );
     assert!(matches!(daemon.own(None).1, Response::Error { .. }));
@@ -673,7 +669,7 @@ fn observer_disconnect_and_control_input_preserve_independent_terminals() {
     ));
     drop(first_control);
     assert!(
-        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals }
+        matches!(daemon.request(Request::List { mode: ProcessMode::Pty }), Response::Processes { processes: terminals }
         if terminals.len() == 1 && terminals[0].id == second.id)
     );
     let input = b"after-first-exit";

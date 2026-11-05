@@ -5,7 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use nix::sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr};
-use opencode_pty::service::{CreateTerminal, TerminalId, TerminalService};
+use opencode_pty::service::{CreatePty, TerminalId, TerminalService};
 
 const CHILD: &str = "OPENCODE_PTY_RESIZE_TEST_CHILD";
 
@@ -29,7 +29,7 @@ impl ResizeFixture {
         listener.set_nonblocking(true).unwrap();
         let service = TerminalService::default();
         let terminal = service
-            .create(CreateTerminal {
+            .create_pty(CreatePty {
                 program: env::current_exe().unwrap().to_string_lossy().into_owned(),
                 args: vec![
                     "--exact".into(),
@@ -43,8 +43,6 @@ impl ResizeFixture {
                 env: [(CHILD.into(), listener.local_addr().unwrap().to_string())].into(),
                 cols: 80,
                 rows: 24,
-                mode: Default::default(),
-                output_path: None,
             })
             .unwrap();
 

@@ -13,7 +13,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use opencode_pty::service::CreateTerminal;
+use opencode_pty::service::CreatePty;
 use serde::{Deserialize, Serialize};
 
 const ADDRESS: &str = "OPENCODE_PTY_FIXTURE_ADDRESS";
@@ -40,8 +40,8 @@ impl Fixture {
         Self { listener }
     }
 
-    pub fn request(&self) -> CreateTerminal {
-        CreateTerminal {
+    pub fn request(&self) -> CreatePty {
+        CreatePty {
             program: env::current_exe().unwrap().to_str().unwrap().to_owned(),
             args: [
                 "--ignored",
@@ -62,8 +62,6 @@ impl Fixture {
             .into(),
             cols: 80,
             rows: 24,
-            mode: Default::default(),
-            output_path: None,
         }
     }
 
