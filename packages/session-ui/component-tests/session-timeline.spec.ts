@@ -114,10 +114,11 @@ story("offers a retry for a turn diff that failed to load", async ({ mount }) =>
   await expect(summary).toContainText("Diff unavailable")
   await expect(summary.locator('[data-component="diff-changes"]')).toHaveCount(0)
 
-  await summary.getByRole("button", { name: "Retry" }).click()
+  const retry = summary.getByRole("button", { name: "Retry", exact: true })
+  await retry.click()
   await expect(summary.locator('[data-component="diff-changes"]')).toHaveText("+2-1")
   await expect(summary).not.toContainText("Diff unavailable")
-  await expect(summary.getByRole("button", { name: "Retry" })).toHaveCount(0)
+  await expect(retry).toHaveCount(0)
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-file-projection.spec.ts

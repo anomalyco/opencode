@@ -289,8 +289,8 @@ function retryableTurnDiff(document: SessionDocument): TurnDiffSource {
 export const TurnChangeSummaryFailed = {
   render: () => {
     const document = finishedTurnDocument([
-      { file: "src/session/retry.ts", before: "export const retry = false\n", after: "export const retry = true\n" },
-      { file: "src/session/retry.test.ts", before: "", after: "test('retries', () => {})\n" },
+      { file: "src/session/reconnect.ts", before: "export const delay = 1\n", after: "export const delay = 2\n" },
+      { file: "src/session/reconnect.test.ts", before: "", after: "test('reconnects', () => {})\n" },
     ])
 
     // Built once: Solid reads a call written in a prop again on every access.
