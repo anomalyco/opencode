@@ -1232,7 +1232,7 @@ describe("SessionRestart background recovery", () => {
     )
   }
 
-  for (const owner of ["job", "execution"] as const) {
+  for (const owner of ["job", "foreground", "execution"] as const) {
     it.effect(`leaves a held child's report to its live ${owner}`, () =>
       Effect.gen(function* () {
         const database = yield* Database.Service
@@ -1266,11 +1266,11 @@ describe("SessionRestart background recovery", () => {
         const execution = Context.get(context, SessionExecution.Service)
         const restart = Context.get(context, SessionRestart.Service)
         const notificationID = owner === "job" ? SessionMessage.ID.create() : held.notificationID
-        if (owner === "job") {
+        if (owner !== "execution") {
           yield* jobs.start({
             id: child,
             type: "subagent",
-            notificationID,
+            ...(owner === "job" ? { notificationID } : {}),
             recovery: {
               kind: "subagent",
               parentSessionID: parent,
@@ -1281,7 +1281,7 @@ describe("SessionRestart background recovery", () => {
             // A registered job owns the report even before it starts an execution.
             run: Deferred.await(release).pipe(Effect.andThen(execution.resume(child)), Effect.as("Owned answer")),
           })
-          yield* jobs.background(child)
+          if (owner === "job") yield* jobs.background(child)
         }
         if (owner === "execution") {
           yield* execution.wake(child)
@@ -1289,21 +1289,23 @@ describe("SessionRestart background recovery", () => {
         }
         yield* restart.resumeSuspendedSessions
         expect(yield* store.heldReport(child)).toEqual(held)
-        expect(drained).toEqual(owner === "job" ? [] : [child])
+        expect(drained).toEqual(owner === "execution" ? [child] : [])
         expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
         yield* Deferred.succeed(release, undefined)
-        if (owner === "job") yield* jobs.wait({ id: child })
+        if (owner !== "execution") yield* jobs.wait({ id: child })
         yield* execution.awaitIdle(child)
         yield* execution.awaitIdle(parent)
         expect(drained.filter((id) => id === child)).toHaveLength(1)
         expect(yield* store.listHeldChildren()).toEqual([])
-        expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
-          { id: notificationID, payload: { text: expect.stringContaining("Owned answer") } },
-        ])
+        expect(yield* SessionInbox.list(database.db, parent)).toMatchObject(
+          owner === "foreground"
+            ? []
+            : [{ id: notificationID, payload: { text: expect.stringContaining("Owned answer") } }],
+        )
         // Replay the now-finished job's marker with the same ID as settlement.
         yield* restart.resumeSuspendedSessions
         yield* execution.awaitIdle(parent)
-        expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
+        expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(owner === "foreground" ? 0 : 1)
         expect(yield* jobs.pendingBackground).toEqual([])
       }),
     )

@@ -301,7 +301,12 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             yield* store.listHeldChildren(),
             Effect.fnUntraced(function* (held) {
-              if (owned.has(held.sessionID) || (yield* execution.isActive(held.sessionID))) return
+              if (
+                owned.has(held.sessionID) ||
+                (yield* execution.isActive(held.sessionID)) ||
+                (yield* jobs.get(held.sessionID))?.status === "running"
+              )
+                return
               if (exhausted.has(held.sessionID) || reported.has(held.report.notificationID))
                 return yield* store.releaseReport(held.sessionID)
               const child = yield* store.get(held.sessionID)
