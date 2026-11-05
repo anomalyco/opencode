@@ -13,7 +13,6 @@ import { createSessionBackground } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
 import { useData, useServer } from "@/runtime/server/current"
 import { needsUser } from "./auto-approve-machine"
-import { isElicitationSettled } from "./elicitation-controller"
 import {
   INITIAL_PERMISSION_REPLY_STATE,
   isPermissionReplied,
@@ -117,20 +116,17 @@ export function createSessionRequestModel() {
     return form?.metadata?.kind === "question" ? form : undefined
   })
 
-  // An elicitation this client's reply settled stays listed until `form.replied` arrives; it no longer waits on anyone.
   const elicitationRequest = createMemo(() => {
     if (websearch.request() || questionRequest()) return
     const form = formRequest()
 
-    if (form?.metadata?.kind === "mcp-elicitation" && !isElicitationSettled(serverSDK.scope, form.id)) return form
+    if (form?.metadata?.kind === "mcp-elicitation") return form
 
     const ref = location()
 
     if (!ref) return
 
-    return data.session.form
-      .list("global", ref)
-      ?.find((item) => item.metadata?.kind === "mcp-elicitation" && !isElicitationSettled(serverSDK.scope, item.id))
+    return data.session.form.list("global", ref)?.find((item) => item.metadata?.kind === "mcp-elicitation")
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {

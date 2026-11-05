@@ -8,8 +8,8 @@ const fallbackData = {
     get: () => undefined,
     list: () => [],
     form: {
-      invalidate: () => {},
-      sync: async () => {},
+      reply: async () => {},
+      cancel: async () => {},
     },
   },
   location: {

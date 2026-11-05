@@ -1,13 +1,8 @@
 import { createMemo, createSignal, onCleanup, runWithOwner, untrack } from "solid-js"
-import {
-  isFormAlreadySettledError,
-  isFormNotFoundError,
-  type FormInfo,
-  type LocationRef,
-} from "@opencode/client/promise"
+import type { FormInfo, LocationRef } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 import type { ServerSDK } from "@/runtime/server/client"
-import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
+import { ScopedKey } from "@/runtime/server/scope"
 import { showToast } from "@/shell/notifications/toast"
 import {
   ELICITATION_REQUEST_TIMEOUT_MS,
@@ -21,9 +16,7 @@ import {
   type ElicitationDraft,
 } from "./elicitation-machine"
 
-export const ELICITATION_CACHE_LIMIT = 100
-
-const ELICITATION_SETTLED_LIMIT = 256
+const ELICITATION_CACHE_LIMIT = 100
 
 // Drafts of elicitations whose dock unmounted unanswered, newest last. Forms answered or cancelled while their dock is
 // away never come back to read theirs, so the oldest give way past the limit.
@@ -43,18 +36,11 @@ export const elicitationCache = {
   delete: (key: string) => void drafts.delete(key),
 }
 
-// Forms this client saw settle through its own reply. The list keeps them until `form.replied` or a resync drops them,
-// so they are hidden at once rather than showing a dock nothing can answer.
-const [settled, setSettled] = createSignal<ReadonlySet<string>>(new Set())
-
-export function isElicitationSettled(scope: ServerScope, formID: string) {
-  return settled().has(ScopedKey.from(scope, formID))
-}
-
-// The fields, answers and reply of one MCP elicitation dock.
+// The fields, answers and reply of one MCP elicitation dock. The data layer sends the reply: it addresses Location
+// elicitations by directory, counts a form already settled elsewhere as sent, and drops the answered form from the list.
 export function createElicitationDock(input: {
-  sdk: Pick<ServerSDK, "scope" | "api" | "event">
-  forms: Pick<Data["session"]["form"], "invalidate" | "sync">
+  sdk: Pick<ServerSDK, "scope" | "event">
+  forms: Pick<Data["session"]["form"], "reply" | "cancel">
   language: { t: (key: "common.requestFailed") => string }
   request: () => FormInfo & { location?: LocationRef }
   onSubmit: () => void
@@ -67,15 +53,7 @@ export function createElicitationDock(input: {
     createElicitationDockState(untrack(input.request).fields, elicitationCache.get(cacheKey)),
   )
 
-  let controller: AbortController | undefined
   let timeout: ReturnType<typeof setTimeout> | undefined
-
-  const abort = () => {
-    clearTimeout(timeout)
-    controller?.abort()
-    timeout = undefined
-    controller = undefined
-  }
 
   const dispatch = (event: ElicitationDockEvent) => {
     const prev = untrack(dockState)
@@ -91,60 +69,26 @@ export function createElicitationDock(input: {
 
       if (effect.type === "cache.delete") return elicitationCache.delete(cacheKey)
 
-      if (effect.type === "request.abort") return abort()
+      if (effect.type === "timeout.clear") return clearTimeout(timeout)
 
       if (effect.type === "toast.fail")
         return showToast({ title: input.language.t("common.requestFailed"), description: effect.error })
 
       const request = untrack(input.request)
-
-      if (effect.type === "settle.mark") {
-        setSettled((current) => {
-          const next = new Set(current).add(cacheKey)
-          const oldest = next.values().next()
-
-          if (next.size > ELICITATION_SETTLED_LIMIT && !oldest.done) next.delete(oldest.value)
-
-          return next
-        })
-        // The list drops the form when the event stream says so; resync it in case that event never comes.
-        input.forms.invalidate(request.sessionID, request.location)
-        void input.forms.sync(request.sessionID, request.location).catch(() => undefined)
-
-        return
-      }
-
-      abort()
-      const current = new AbortController()
       const attempt = effect.attempt
       const action = effect.action
       const target = { sessionID: request.sessionID, formID: request.id }
-
-      // Location elicitations belong to no Session, so the server finds them by directory.
-      const options = {
-        signal: current.signal,
-        headers:
-          request.sessionID === "global" && request.location
-            ? { "x-opencode-directory": encodeURIComponent(request.location.directory) }
-            : undefined,
-      }
-
-      controller = current
+      clearTimeout(timeout)
       timeout = setTimeout(() => dispatch({ type: "request.timed-out", attempt }), ELICITATION_REQUEST_TIMEOUT_MS)
 
       void Promise.try(() =>
         action.type === "reply"
-          ? serverSDK.api.session.form.reply({ ...target, answer: action.answer }, options)
-          : serverSDK.api.session.form.cancel(target, options),
+          ? input.forms.reply({ ...target, answer: action.answer }, request.location)
+          : input.forms.cancel(target, request.location),
       ).then(
         () => dispatch({ type: "request.succeeded", attempt }),
         (error) =>
-          dispatch(
-            // A form another client, or an earlier attempt whose response was lost, already settled counts as sent.
-            (isFormNotFoundError(error) || isFormAlreadySettledError(error)) && error.id === request.id
-              ? { type: "request.succeeded", attempt }
-              : { type: "request.failed", attempt, error: error instanceof Error ? error.message : String(error) },
-          ),
+          dispatch({ type: "request.failed", attempt, error: error instanceof Error ? error.message : String(error) }),
       )
     })
   }

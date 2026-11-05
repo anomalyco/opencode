@@ -44,10 +44,9 @@ export type ElicitationDockEffect =
   | { readonly type: "notify.submit" }
   | { readonly type: "cache.save"; readonly draft: ElicitationDraft }
   | { readonly type: "cache.delete" }
-  // The server settled the form for this reply, so the dock hides it without waiting for the event stream.
-  | { readonly type: "settle.mark" }
   | { readonly type: "request.send"; readonly attempt: number; readonly action: ElicitationAction }
-  | { readonly type: "request.abort" }
+  // Stops waiting on the request. The request itself runs on; the attempt fences its late result.
+  | { readonly type: "timeout.clear" }
   | { readonly type: "toast.fail"; readonly error?: string }
 
 export type ElicitationDockTransition = {
@@ -117,8 +116,7 @@ export function transitionElicitationDock(
     if (state.status !== "sending" || state.attempt !== event.attempt) return unchanged(state)
 
     return changed({ status: "replied", attempt: state.attempt, draft: state.draft }, [
-      { type: "request.abort" },
-      { type: "settle.mark" },
+      { type: "timeout.clear" },
     ])
   }
 
@@ -126,7 +124,7 @@ export function transitionElicitationDock(
     if (state.status !== "sending" || state.attempt !== event.attempt) return unchanged(state)
 
     return changed({ status: "answering", attempt: state.attempt, draft: state.draft }, [
-      { type: "request.abort" },
+      { type: "timeout.clear" },
       { type: "toast.fail", error: event.type === "request.failed" ? event.error : undefined },
     ])
   }
@@ -136,7 +134,7 @@ export function transitionElicitationDock(
     if (state.status === "replied") return unchanged(state)
 
     return changed({ status: "replied", attempt: state.attempt, draft: state.draft }, [
-      ...(state.status === "sending" ? [{ type: "request.abort" } as const] : []),
+      ...(state.status === "sending" ? [{ type: "timeout.clear" } as const] : []),
       { type: "cache.delete" },
     ])
   }
@@ -222,17 +220,17 @@ function transitionDisposed(
 
   const settled: ElicitationDockState = { status: "disposed", attempt: state.attempt, unsent: undefined }
 
-  if (event.type === "resolved") return changed(settled, [{ type: "request.abort" }])
+  if (event.type === "resolved") return changed(settled, [{ type: "timeout.clear" }])
 
   if (event.type !== "request.succeeded" && event.type !== "request.failed" && event.type !== "request.timed-out")
     return unchanged(state)
 
   if (event.attempt !== state.attempt) return unchanged(state)
 
-  if (event.type === "request.succeeded") return changed(settled, [{ type: "request.abort" }, { type: "settle.mark" }])
+  if (event.type === "request.succeeded") return changed(settled, [{ type: "timeout.clear" }])
 
   return changed(settled, [
-    { type: "request.abort" },
+    { type: "timeout.clear" },
     { type: "toast.fail", error: event.type === "request.failed" ? event.error : undefined },
     { type: "cache.save", draft: state.unsent },
   ])

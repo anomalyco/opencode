@@ -71,7 +71,7 @@ describe("transitionElicitationDock", () => {
     const replied = transitionElicitationDock(sending.state, { type: "request.succeeded", attempt: 1 })
 
     expect(replied.state.status).toBe("replied")
-    expect(replied.effects).toEqual([{ type: "request.abort" }, { type: "settle.mark" }])
+    expect(replied.effects).toEqual([{ type: "timeout.clear" }])
     expect(isElicitationBusy(replied.state)).toBe(true)
     ;[{ type: "send", action: reply } as const, { type: "send", action: { type: "cancel" } } as const].forEach(
       (event) => expect(transitionElicitationDock(replied.state, event).state).toBe(replied.state),
@@ -91,7 +91,7 @@ describe("transitionElicitationDock", () => {
     )
 
     expect(timedOut.state).toEqual({ status: "answering", attempt: 1, draft: selectElicitationDraft(edited) })
-    expect(timedOut.effects).toEqual([{ type: "request.abort" }, { type: "toast.fail", error: undefined }])
+    expect(timedOut.effects).toEqual([{ type: "timeout.clear" }, { type: "toast.fail", error: undefined }])
 
     const late = transitionElicitationDock(timedOut.state, { type: "request.failed", attempt: 1, error: "aborted" })
 
@@ -111,7 +111,7 @@ describe("transitionElicitationDock", () => {
     ])
 
     expect(failed.state.status).toBe("answering")
-    expect(failed.effects).toEqual([{ type: "request.abort" }, { type: "toast.fail", error: "offline" }])
+    expect(failed.effects).toEqual([{ type: "timeout.clear" }, { type: "toast.fail", error: "offline" }])
   })
 
   // Unmounting the dock (a tab switch, a form resync) used to drop every typed answer.
@@ -143,20 +143,20 @@ describe("transitionElicitationDock", () => {
     expect(transitionElicitationDock(disposed.state, { type: "request.failed", attempt: 1, error: "offline" })).toEqual(
       {
         state: settled,
-        effects: [{ type: "request.abort" }, { type: "toast.fail", error: "offline" }, { type: "cache.save", draft }],
+        effects: [{ type: "timeout.clear" }, { type: "toast.fail", error: "offline" }, { type: "cache.save", draft }],
       },
     )
     expect(transitionElicitationDock(disposed.state, { type: "request.timed-out", attempt: 1 })).toEqual({
       state: settled,
-      effects: [{ type: "request.abort" }, { type: "toast.fail", error: undefined }, { type: "cache.save", draft }],
+      effects: [{ type: "timeout.clear" }, { type: "toast.fail", error: undefined }, { type: "cache.save", draft }],
     })
     expect(transitionElicitationDock(disposed.state, { type: "request.succeeded", attempt: 1 })).toEqual({
       state: settled,
-      effects: [{ type: "request.abort" }, { type: "settle.mark" }],
+      effects: [{ type: "timeout.clear" }],
     })
     expect(transitionElicitationDock(disposed.state, { type: "resolved" })).toEqual({
       state: settled,
-      effects: [{ type: "request.abort" }],
+      effects: [{ type: "timeout.clear" }],
     })
     expect(transitionElicitationDock(disposed.state, { type: "request.failed", attempt: 0 }).state).toBe(disposed.state)
   })
@@ -167,7 +167,7 @@ describe("transitionElicitationDock", () => {
       effects: [{ type: "cache.delete" }],
     })
     expect(last([{ type: "send", action: reply }, { type: "resolved" }]).effects).toEqual([
-      { type: "request.abort" },
+      { type: "timeout.clear" },
       { type: "cache.delete" },
     ])
 

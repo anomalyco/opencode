@@ -63,7 +63,7 @@ describe("transitionAutoApprove", () => {
     const steps = replay([approve("r1"), { type: "reply.succeeded", runId: "r1", attempt: 0 }])
 
     expect(steps.map((step) => step.state)).toEqual([replying("r1", 0), { status: "replied" }])
-    expect(steps.map((step) => step.effects)).toEqual([[reply("r1", 0)], [{ type: "abort-reply" }]])
+    expect(steps.map((step) => step.effects)).toEqual([[reply("r1", 0)], [{ type: "clear-reply-timer" }]])
   })
 
   test("surfaces the request in the dock once every retry fails", () => {
@@ -86,11 +86,11 @@ describe("transitionAutoApprove", () => {
     ])
     expect(steps.map((step) => step.effects)).toEqual([
       [reply("r1", 0)],
-      [{ type: "abort-reply" }, { type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
       [reply("r1", 1)],
-      [{ type: "abort-reply" }, { type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
       [reply("r1", 2)],
-      [{ type: "abort-reply" }],
+      [{ type: "clear-reply-timer" }],
     ])
     expect(steps.map((step) => needsUser(step.state, true))).toEqual([false, false, false, false, false, true])
   })
@@ -100,7 +100,7 @@ describe("transitionAutoApprove", () => {
     const steps = replay([
       approve("r1"),
       { type: "reply.timed-out", runId: "r1", attempt: 0 },
-      // The aborted first reply settles late.
+      // The timed-out first reply settles late.
       { type: "reply.failed", runId: "r1", attempt: 0 },
       { type: "retry.due", runId: "r1", attempt: 1 },
       { type: "reply.timed-out", runId: "r1", attempt: 1 },
@@ -120,12 +120,12 @@ describe("transitionAutoApprove", () => {
     expect(steps[2]?.state).toBe(steps[1]?.state)
     expect(steps.map((step) => step.effects)).toEqual([
       [reply("r1", 0)],
-      [{ type: "abort-reply" }, { type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
       [],
       [reply("r1", 1)],
-      [{ type: "abort-reply" }, { type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
       [reply("r1", 2)],
-      [{ type: "abort-reply" }],
+      [{ type: "clear-reply-timer" }],
     ])
     expect(needsUser(steps.at(-2)!.state, true)).toBe(false)
     expect(needsUser(steps.at(-1)!.state, true)).toBe(true)
@@ -180,7 +180,7 @@ describe("transitionAutoApprove", () => {
     expect(transitionAutoApprove(pausing, { type: "retry.due", runId: "r1", attempt: 1 }).state).toBe(pausing)
   })
 
-  // Turning auto-approve off mid-reply used to leave its "once" reply running while the dock offered Deny.
+  // Leaving a reply stops its timeout, so it never reports a timed-out attempt for a cycle that ended.
   test.each<{
     from: AutoApproveState
     cancel: AutoApproveState
@@ -197,7 +197,7 @@ describe("transitionAutoApprove", () => {
       from: replying("r1", 0),
       cancel: INITIAL_AUTO_APPROVE_STATE,
       resolved: { status: "replied" },
-      effects: [{ type: "abort-reply" }],
+      effects: [{ type: "clear-reply-timer" }],
     },
     {
       from: waiting("r1", 1),

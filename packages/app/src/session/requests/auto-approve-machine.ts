@@ -3,7 +3,8 @@ export const AUTO_APPROVE_RETRY_LIMIT = 2
 export const AUTO_APPROVE_RETRY_DELAY_MS = 1000
 
 // A reply hides its request from the dock while it runs, so one that never answers gives up on this attempt instead.
-// Retrying is safe: the server answers a request it already settled with not found, which counts as replied.
+// Retrying is safe: the server answers a request it already settled with not found, which the data layer counts as
+// replied.
 export const AUTO_APPROVE_REPLY_TIMEOUT_MS = 15_000
 
 // One sweep lists active sessions and then every location's requests through the shared request queue, so it gets
@@ -53,8 +54,8 @@ export type AutoApproveEffect =
       readonly attempt: number
       readonly timeoutMs: number
     }
-  // Stops the current reply's request and its timeout.
-  | { readonly type: "abort-reply" }
+  // Stops waiting on the current reply. The request itself runs on; `runId` and `attempt` fence its late result.
+  | { readonly type: "clear-reply-timer" }
   | { readonly type: "schedule-retry"; readonly runId: string; readonly attempt: number; readonly delayMs: number }
   | { readonly type: "cancel-retry" }
 
@@ -73,7 +74,7 @@ export function transitionAutoApprove(state: AutoApproveState, event: AutoApprov
     return changed({ status: "replied" }, stop(state))
   }
 
-  // Turning auto-approve off stops a reply still queued or in flight, so the dock it surfaces is the only answer left.
+  // Turning auto-approve off ends the cycle, so a reply still in flight settles into nothing and schedules no retry.
   if (event.type === "cancel") {
     if (state.status === "pending" || state.status === "replied") return unchanged(state)
 
@@ -94,18 +95,18 @@ export function transitionAutoApprove(state: AutoApproveState, event: AutoApprov
   if (event.type === "reply.succeeded") {
     if (state.status !== "replying" || !current(state, event)) return unchanged(state)
 
-    return changed({ status: "replied" }, [{ type: "abort-reply" }])
+    return changed({ status: "replied" }, [{ type: "clear-reply-timer" }])
   }
 
   if (event.type === "reply.failed" || event.type === "reply.timed-out") {
     if (state.status !== "replying" || !current(state, event)) return unchanged(state)
 
     if (state.attempt >= AUTO_APPROVE_RETRY_LIMIT)
-      return changed({ status: "gave-up", projectID: state.projectID }, [{ type: "abort-reply" }])
+      return changed({ status: "gave-up", projectID: state.projectID }, [{ type: "clear-reply-timer" }])
     const attempt = state.attempt + 1
 
     return changed({ ...state, status: "waiting-retry", attempt }, [
-      { type: "abort-reply" },
+      { type: "clear-reply-timer" },
       { type: "schedule-retry", runId: state.runId, attempt, delayMs: AUTO_APPROVE_RETRY_DELAY_MS * attempt },
     ])
   }
@@ -203,7 +204,7 @@ function reply(sessionID: string, runId: string, attempt: number): AutoApproveEf
 }
 
 function stop(state: AutoApproveState): AutoApproveEffect[] {
-  if (state.status === "replying") return [{ type: "abort-reply" }]
+  if (state.status === "replying") return [{ type: "clear-reply-timer" }]
 
   if (state.status === "waiting-retry") return [{ type: "cancel-retry" }]
 

@@ -1,6 +1,6 @@
 import { createEffect, onCleanup, untrack } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { isPermissionNotFoundError, type PermissionRequest } from "@opencode/client/promise"
+import type { PermissionRequest } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 import { abort } from "@opencode/util/abort"
 import { uuid } from "@opencode/util/uuid"
@@ -31,7 +31,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
 
   // Requests in the initial `pending` state have no entry.
   const [requests, setRequests] = createStore<Record<string, AutoApproveState | undefined>>({})
-  const replies = new Map<string, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  const replyTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retries = new Map<string, ReturnType<typeof setTimeout>>()
   const scope = new AbortController()
   let sweepState = INITIAL_AUTO_APPROVE_SWEEP_STATE
@@ -49,7 +49,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     abort(scope)
     unsubscribe.forEach((stop) => stop())
     dispatchSweep({ type: "sweep.cancel" })
-    // Back to pending, so replies in flight are aborted and no retry is scheduled.
+    // Back to pending, so replies still in flight settle into nothing and no retry is scheduled.
     untrack(() => Object.keys(requests)).forEach((id) => dispatch(id, { type: "cancel" }))
   })
 
@@ -99,34 +99,25 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   }
 
   function execute(requestID: string, effect: AutoApproveEffect) {
-    if (effect.type === "abort-reply") {
-      const run = replies.get(requestID)
-      replies.delete(requestID)
-      clearTimeout(run?.timer)
-      abort(run?.controller)
+    if (effect.type === "clear-reply-timer") {
+      clearTimeout(replyTimers.get(requestID))
+      replyTimers.delete(requestID)
 
       return
     }
 
     if (effect.type === "reply") {
-      const controller = new AbortController()
       const result = { runId: effect.runId, attempt: effect.attempt }
 
-      replies.set(requestID, {
-        controller,
-        timer: setTimeout(() => dispatch(requestID, { type: "reply.timed-out", ...result }), effect.timeoutMs),
-      })
-      void input.sdk.api.permission
-        .reply({ sessionID: effect.sessionID, requestID, decision: "once" }, { signal: controller.signal })
-        .then(
-          () => settle(effect.sessionID, requestID, result),
-          (error) => {
-            // A request another client, or an earlier attempt whose response was lost, already answered counts as
-            // replied.
-            if (isPermissionNotFoundError(error)) return settle(effect.sessionID, requestID, result)
-            dispatch(requestID, { type: "reply.failed", ...result })
-          },
-        )
+      replyTimers.set(
+        requestID,
+        setTimeout(() => dispatch(requestID, { type: "reply.timed-out", ...result }), effect.timeoutMs),
+      )
+      // A request another client, or an earlier attempt whose response was lost, already answered counts as replied.
+      void input.data.session.permission.reply({ sessionID: effect.sessionID, requestID, decision: "once" }).then(
+        () => dispatch(requestID, { type: "reply.succeeded", ...result }),
+        () => dispatch(requestID, { type: "reply.failed", ...result }),
+      )
 
       return
     }
@@ -142,16 +133,6 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
         dispatch(requestID, { type: "retry.due", runId: effect.runId, attempt: effect.attempt })
       }, effect.delayMs),
     )
-  }
-
-  // `permission.replied` drops the request from the list; resync it in case that event never comes.
-  function settle(sessionID: string, requestID: string, result: { runId: string; attempt: number }) {
-    if (input.data.session.permission.list(sessionID)?.some((item) => item.id === requestID)) {
-      input.data.session.permission.invalidate(sessionID)
-      void input.data.session.permission.sync(sessionID).catch(() => undefined)
-    }
-
-    dispatch(requestID, { type: "reply.succeeded", ...result })
   }
 
   function dispatchSweep(event: AutoApproveSweepEvent) {
