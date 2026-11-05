@@ -3,7 +3,6 @@
 import { defineApp, session, user } from "../../lib/app"
 
 const location = { directory: "/tmp/opencode/packages/tui" }
-const deviation = ["V01-plain-transcript"]
 
 export default defineApp({
   args: { sessionID: "ses_b" },
@@ -31,15 +30,15 @@ export default defineApp({
     { path: "/api/fs/find", json: { location, data: [{ path: "src/general.ts", type: "file" }] } },
   ],
   steps: [
-    { checkpoint: "open", until: "Why does the parser fail?", deviation },
+    { checkpoint: "open", until: "Why does the parser fail?" },
     { type: "/rev" },
-    { checkpoint: "slash", until: "Review the working tree", deviation },
+    { checkpoint: "slash", until: "Review the working tree" },
     { keys: ["enter"] },
-    { checkpoint: "command", until: "/review", deviation },
+    { checkpoint: "command", until: "/review" },
     { keys: ["ctrl+c"] },
     { type: "ask @gen" },
-    { checkpoint: "mention", until: "src/general.ts", deviation },
+    { checkpoint: "mention", until: "src/general.ts" },
     { keys: ["enter"] },
-    { checkpoint: "picked", until: "ask @general", deviation },
+    { checkpoint: "picked", until: "ask @general" },
   ],
 })
