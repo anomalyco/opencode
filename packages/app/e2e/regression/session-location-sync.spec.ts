@@ -115,9 +115,25 @@ test("replaces the composer when the location is not found and recovers by movin
   // A typed not-found answer is final; retrying cannot succeed until the folder changes.
   expect(requests).toBe(1)
 
-  await transport.waitForConnection()
+  const connection = await transport.waitForConnection()
   await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
-  await page.getByRole("menuitem", { name: "existing-worktree", exact: true }).click()
+  const worktree = page.getByRole("menuitem", { name: "existing-worktree", exact: true })
+  await expect(worktree).toBeVisible()
+
+  // Reconnecting checks the folder again without remounting the missing view, so the open menu survives.
+  const rechecked = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).searchParams.get("location[directory]") === directory && response.status() === 404,
+  )
+  await transport.close()
+  await transport.waitForConnection({ after: connection.id })
+  await rechecked
+  expect(requests).toBe(2)
+  await expect(worktree).toBeVisible()
+  await expect(status).toBeVisible()
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
+
+  await worktree.click()
   await expect.poll(() => moves).toEqual([{ directory: destination }])
 
   session.directory = destination
