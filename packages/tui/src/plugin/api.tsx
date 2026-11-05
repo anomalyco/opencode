@@ -30,6 +30,7 @@ import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
+import { SessionTabItem } from "../component/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
 import { abbreviateHome } from "../util/path-format"
@@ -283,6 +284,7 @@ export function createPluginContext(input: {
           host.sessionTabs.close(target)
           return true
         },
+        Item: (props) => <SessionTabItem sessionID={props.sessionID} width={props.width} label={props.label} />,
       },
       model: {
         current() {
