@@ -996,7 +996,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into a place the window leaves for plugins.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -1013,6 +1013,7 @@ ctx.add(Slot, {
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
+- `session.message.footer` is a line under each user message and each assistant response in the timeline.
 - `order` sorts the items in one slot.
 
 `session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data
@@ -1035,6 +1036,30 @@ ctx.add(Slot, {
 })
 ```
 
+#### Message footers
+
+`session.message.footer` receives `message`, the user message or assistant response the footer sits under. Use it for
+per-message details such as cost, tokens, the model, or a link:
+
+```tsx
+ctx.add(Slot, {
+  at: "session.message.footer",
+  render: (input) => (
+    <Show when={input.message.role === "assistant" ? input.message : undefined}>
+      {(response) => (
+        <span>{ctx.t("cost", { usd: response().messages.reduce((sum, step) => sum + (step.cost ?? 0), 0) })}</span>
+      )}
+    </Show>
+  ),
+})
+```
+
+- A user message is `{ role: "user", info }`. `info` is the message the server stores.
+- A response is `{ role: "assistant", promptID, messages, completed }`. `messages` holds one assistant message per
+  model step, with its `model`, `tokens`, `cost`, `content` and `time`. `completed` is `false` while it streams.
+- The footer renders only for messages on screen; content that renders nothing takes no room.
+- While a response streams, its footer moves to the newest row and renders again there. Key your state by `promptID`.
+
 #### Reference
 
 ```ts
@@ -1047,6 +1072,24 @@ interface SlotMap {
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
+  "session.message.footer": {
+    screen: SessionScreen
+    session: MountedSession
+    active: boolean
+    message: TimelineUserMessage | TimelineResponse
+  }
+}
+
+interface TimelineUserMessage {
+  role: "user"
+  info: SessionMessageUser
+}
+
+interface TimelineResponse {
+  role: "assistant"
+  promptID: string
+  messages: readonly SessionMessageAssistant[]
+  completed: boolean
 }
 ```
 

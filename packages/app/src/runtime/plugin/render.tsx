@@ -21,6 +21,7 @@ import {
   type MarkdownCodeBlock,
   type MarkdownCodeBlocks,
 } from "@opencode/session-ui/context/markdown"
+import { MessageFootersProvider, type MessageFooters } from "@opencode/session-ui/context/message-footer"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
 import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
 import { useTheme } from "@opencode/ui/theme/context"
@@ -32,6 +33,7 @@ import {
   Theme,
   type CodeBlockProps,
   type MountedSession,
+  type SessionScreen,
 } from "@opencode/plugin/gui"
 import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
@@ -41,7 +43,8 @@ import { createLinkCheck } from "./link-check"
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
  * error and renders nothing, then runs `failed`, and the rest of the window keeps working. Contributions render on
- * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete; the
+ * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete, and as
+ * `session.message.footer` slot content, on the rows the virtualizer mounts, only while a plugin fills that slot; the
  * session header slot is per timeline.
  */
 export function Contribution(props: { plugin: string; failed?: () => void; children: () => JSX.Element }) {
@@ -147,11 +150,11 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 }
 
 /**
- * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, and hands
- * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions. A turn's sources chip opens its turn
- * through the Sources plugin's handler.
+ * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, hands
+ * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions, and renders the `session.message.footer`
+ * slot under the timeline's messages. A turn's sources chip opens its turn through the Sources plugin's handler.
  */
-export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
+export function PluginLinks(props: ParentProps<{ session: MountedSession; screen: SessionScreen; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
 
@@ -174,15 +177,38 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 
   const codeBlocks = createCodeBlocks(() => props.session, Links)
 
+  const footers: MessageFooters = {
+    enabled: createMemo(() => host.items(BuiltinSlot).some((item) => item.value.at === "session.message.footer")),
+    render: (target) => (
+      <PluginSlot
+        at="session.message.footer"
+        input={{
+          get screen() {
+            return props.screen
+          },
+          get session() {
+            return props.session
+          },
+          get active() {
+            return props.active !== false
+          },
+          message: target,
+        }}
+      />
+    ),
+  }
+
   return (
     <Links codeBlocks={codeBlocks}>
-      <SourcesProvider
-        enabled={sourcesExperiment.enabled}
-        icons={sourcesExperiment.icons}
-        onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
-      >
-        {props.children}
-      </SourcesProvider>
+      <MessageFootersProvider value={footers}>
+        <SourcesProvider
+          enabled={sourcesExperiment.enabled}
+          icons={sourcesExperiment.icons}
+          onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
+        >
+          {props.children}
+        </SourcesProvider>
+      </MessageFootersProvider>
     </Links>
   )
 }

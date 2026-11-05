@@ -482,6 +482,23 @@
   }
 }
 
+[data-slot="session-message-footer"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 4px;
+
+  &[data-role="user"] {
+    justify-content: flex-end;
+  }
+
+  &:empty {
+    display: none;
+  }
+}
+
 [data-component="text-part"] {
   width: 100%;
   margin-top: 24px;

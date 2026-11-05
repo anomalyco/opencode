@@ -1,4 +1,7 @@
-import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { PluginInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionDocument } from "@opencode/session-ui/document"
+import { CurrentSessionProviders } from "@opencode/session-ui/storybook"
+import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { DialogProvider, useDialog } from "@opencode/ui/context/dialog"
 import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
@@ -846,13 +849,17 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const session = value as unknown as MountedSession
 
+  // SAFETY: the test's plugins never read the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = {} as unknown as SessionScreen
+
   function Message() {
     const host = usePluginHost()
     hosts.push(host)
 
     return (
       <Show when={host.ready()}>
-        <PluginLinks session={session}>
+        <PluginLinks session={session} screen={screen}>
           <Markdown text={message.text} streaming={message.streaming} />
         </PluginLinks>
       </Show>
@@ -891,6 +898,131 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   return {
     show: (text: string, streaming = false) => setMessage({ text, streaming }),
     define: (next: readonly Entry[]) => setDefinitions(next),
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+const footerModel = { id: "claude-sonnet-4", providerID: "anthropic" }
+
+/** A finished or streaming assistant step answering `parent`, with one text part. */
+function footerStep(id: string, after: number, text: string, completed: boolean): SessionMessageAssistant {
+  return {
+    id,
+    type: "assistant",
+    agent: "build",
+    model: footerModel,
+    content: [{ type: "text", text }],
+    tokens: { input: 1200, output: 340, reasoning: 0, cache: { read: 0, write: 0 } },
+    cost: 0.0123,
+    time: { created: after + 1, completed: completed ? after + 2 : undefined },
+  }
+}
+
+/**
+ * Mounts the real host and the production session timeline inside the session screen's `PluginLinks`, for a session
+ * `ses_footer` of two exchanges: `msg_user_1` answered by a finished response, and `msg_user_2` whose response streams
+ * until `finish()`. `step()` adds a second step to that response. `define` replaces the plugins, as plugin GUIs join
+ * and leave. `footers()` counts the footer elements the rows hold; `screen` is the object the slot input must carry.
+ */
+export function mountMessageFooters(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "message-footers"
+  Object.assign(container.style, { position: "fixed", inset: "0", zIndex: "10", overflow: "auto", background: "white" })
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const captured: Captured = {}
+  const [definitions, setDefinitions] = createSignal(input.definitions)
+
+  const user = (id: string, created: number, text: string): SessionMessageInfo => ({
+    id,
+    type: "user",
+    text,
+    time: { created },
+  })
+
+  const [transcript, setTranscript] = createSignal<SessionDocument>({
+    sessionID: "ses_footer",
+    status: { type: "busy" },
+    diffs: [],
+    messages: [
+      user("msg_user_1", 100, "Summarize the plugin docs."),
+      footerStep("msg_reply_1", 100, "The docs describe slots, panels and commands.", true),
+      user("msg_user_2", 200, "Now list the slots."),
+      footerStep("msg_reply_2", 200, "The slots are", false),
+    ],
+  })
+
+  const value = { key: "fixture\nses_footer", id: "ses_footer", directory: "/repo", visit: {} }
+
+  // SAFETY: PluginLinks passes the session through; the test's plugins read only `id`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = value as unknown as MountedSession
+
+  // SAFETY: the test's plugins only compare the screen's identity.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = { fixture: "screen" } as unknown as SessionScreen
+
+  function Timeline() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <PluginLinks session={session} screen={screen}>
+          <CurrentSessionProviders document={transcript()}>
+            <SessionTimeline document={transcript()} />
+          </CurrentSessionProviders>
+        </PluginLinks>
+      </Show>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <RealHost definitions={definitions()} captured={captured}>
+              <Timeline />
+            </RealHost>
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  const update = (change: (messages: SessionMessageInfo[]) => SessionMessageInfo[], idle = false) =>
+    setTranscript((current) => ({
+      ...current,
+      status: idle ? { type: "idle" } : current.status,
+      messages: change(current.messages),
+    }))
+
+  return {
+    screen,
+    step: () =>
+      update((messages) => [
+        ...messages.map((message) =>
+          message.id === "msg_reply_2" ? footerStep("msg_reply_2", 200, "The slots are listed below.", true) : message,
+        ),
+        footerStep("msg_reply_3", 300, "Then the panels.", false),
+      ]),
+    finish: () =>
+      update(
+        (messages) =>
+          messages.map((message) =>
+            message.id === "msg_reply_3" ? footerStep("msg_reply_3", 300, "Then the panels.", true) : message,
+          ),
+        true,
+      ),
+    define: (next: readonly Entry[]) => setDefinitions(next),
+    footers: () => container.querySelectorAll('[data-slot="session-message-footer"]').length,
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
