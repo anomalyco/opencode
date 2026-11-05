@@ -127,7 +127,7 @@ impl TurnUsage {
             verbose: Cell::new(false),
         });
         let weak = Rc::downgrade(&inner);
-        header.on_click(move |_, _| {
+        header.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.expanded.set(!inner.expanded.get());
                 inner.render();

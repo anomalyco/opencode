@@ -381,7 +381,7 @@ impl Fold {
 
 /// A row that runs `run` on a press (`onMouseDown`) or a release (`onMouseUp`) of the left button.
 pub fn on_click(view: &impl Widget, down: bool, run: impl Fn() + 'static) {
-    view.on_mouse(move |_, event| {
+    view.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         let hit = match event.kind {
             MouseEventKind::Down(MouseButton::Left) => down,
             MouseEventKind::Up(MouseButton::Left) => !down,

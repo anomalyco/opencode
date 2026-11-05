@@ -168,7 +168,7 @@ impl Queued {
             layers: RefCell::default(),
         });
         let weak = Rc::downgrade(&inner);
-        inner.root.on_click(move |_, _| {
+        inner.root.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.open();
             }

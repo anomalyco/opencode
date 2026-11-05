@@ -1170,7 +1170,7 @@ impl Viewer {
         if !show_tree && !compact && help.is_some() {
             let shortcut = Text::new(app, "?").fg(theme.text.base).wrap(WrapMode::None);
             let weak = self.this.clone();
-            shortcut.on_click(move |cx, _| {
+            shortcut.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
                 cx.stop_propagation();
                 if let Some(viewer) = weak.upgrade() {
                     super::help::open(&viewer);
@@ -1208,7 +1208,7 @@ impl Viewer {
             );
         }
         let weak = self.this.clone();
-        switch.on_click(move |cx, _| {
+        switch.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
             cx.stop_propagation();
             if let Some(viewer) = weak.upgrade() {
                 super::sources::open(&viewer);
@@ -1504,7 +1504,7 @@ impl Viewer {
                 .basis(Length::Auto)
                 .min_width(0);
         let weak = self.this.clone();
-        leave.on_click(move |_, _| {
+        leave.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             let Some(viewer) = weak.upgrade() else { return };
             if !viewer.docked() {
                 viewer.run(Action::Close);
@@ -1532,7 +1532,7 @@ impl Viewer {
             .wrap(WrapMode::None)
             .shrink(0.0);
             let weak = self.this.clone();
-            text.on_click(move |cx, _| {
+            text.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
                 cx.stop_propagation();
                 if let Some(viewer) = weak.upgrade() {
                     super::help::open(&viewer);
@@ -1709,9 +1709,9 @@ fn fill_image(tui: &Tui, theme: &Theme, slot: &View, file: &str, height: u16, pr
             .width(Length::percent(100.0))
             .height(Length::percent(100.0)),
     );
-    picture.on_mouse(open.clone());
+    picture.mouse_pointer(MousePointer::POINTER).on_mouse(open.clone());
     let enlarge = Text::new(app, "Click to enlarge").fg(theme.text.action.secondary.base);
-    enlarge.on_mouse(open);
+    enlarge.mouse_pointer(MousePointer::POINTER).on_mouse(open);
     slot.add(&picture);
     slot.add(
         &View::new(app)

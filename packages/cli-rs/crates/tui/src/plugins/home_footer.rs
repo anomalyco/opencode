@@ -95,7 +95,7 @@ impl Inner {
                 mcp.add(&Text::new(app, "/mcps").fg(theme.text.muted));
             }
             let weak = tui.weak();
-            mcp.on_mouse(move |_, event| {
+            mcp.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
                 if matches!(event.kind, MouseEventKind::Up(_))
                     && let Some(tui) = weak.upgrade()
                 {

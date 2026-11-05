@@ -312,7 +312,7 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
         }
     });
     let weak: Weak<Inner> = Rc::downgrade(&toasts.0);
-    surface.on_mouse(move |_cx, event| {
+    surface.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
         if !matches!(event.kind, MouseEventKind::Up(_)) {
             return;
         }

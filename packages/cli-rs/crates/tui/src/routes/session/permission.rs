@@ -541,7 +541,7 @@ impl Inner {
                 }
             });
             let click = Rc::downgrade(self);
-            option.on_click(move |_, _| {
+            option.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
                 if let Some(inner) = click.upgrade() {
                     inner.prompted.borrow_mut().selected = index;
                     inner.select(choice);
@@ -601,14 +601,14 @@ impl Inner {
             .cursor_color(theme.text.base);
         let confirm = hint(app, theme, "enter", "confirm");
         let weak = Rc::downgrade(self);
-        confirm.on_click(move |_, _| {
+        confirm.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.confirm_reject();
             }
         });
         let cancel = hint(app, theme, "esc", "cancel");
         let weak = Rc::downgrade(self);
-        cancel.on_click(move |_, _| {
+        cancel.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.cancel_reject();
             }

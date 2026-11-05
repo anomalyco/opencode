@@ -115,6 +115,7 @@ impl Shell {
         let weak = Rc::downgrade(&inner);
         inner.root.on_hover(move |_, hovered| {
             let Some(inner) = weak.upgrade() else { return };
+            inner.root.mouse_pointer(opencode_ui::click_pointer(inner.expandable.get()));
             inner.hover.set(hovered);
             inner.paint_background();
         });

@@ -257,7 +257,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
                 paint_hover();
             }
         });
-        view.on_mouse(move |_, event| {
+        view.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
             if matches!(event.kind, MouseEventKind::Up(_)) {
                 run(index);
             }
@@ -274,7 +274,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     });
     let close = Text::new(app, "esc").fg(theme.text.muted).bg(text_bg);
     let dialogs = cx.dialogs.clone();
-    close.on_mouse(move |_, event| {
+    close.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         if matches!(event.kind, MouseEventKind::Up(_)) {
             dialogs.clear();
         }

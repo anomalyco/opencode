@@ -927,7 +927,7 @@ impl State {
                 }
             }
             let weak = self.prompt.clone();
-            row.on_mouse(move |_, event| {
+            row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
                 let Some(prompt) = weak.upgrade() else { return };
                 let Some(complete) = prompt.autocomplete.get() else {
                     return;

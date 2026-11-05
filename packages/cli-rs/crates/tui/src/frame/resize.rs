@@ -122,7 +122,8 @@ pub fn handle(app: &App, tui: Weak<Tui>, resize: Rc<PaneResize>, right: bool) ->
         .position(Edge::Top, 0)
         .width(2)
         .height(Length::Percent(100.0))
-        .z_index(10);
+        .z_index(10)
+        .mouse_pointer(MousePointer::EW_RESIZE);
     let weak = handle.clone();
     handle.on_hover(move |_, hovered| weak.update(|handle| handle.hovered = hovered))
 }

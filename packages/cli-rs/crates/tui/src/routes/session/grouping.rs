@@ -585,7 +585,7 @@ impl GroupView {
             animations: cx.animations,
         });
         let weak = Rc::downgrade(&inner);
-        inner.header.on_click(move |cx, _| {
+        inner.header.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
             // A click that ends a text selection does not toggle (`useDisclosure`).
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {

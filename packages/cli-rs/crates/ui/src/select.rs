@@ -1163,7 +1163,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     fn row_mouse(&self, row: &View, value: T) {
         let weak = Rc::downgrade(&self.0);
-        row.on_mouse(move |_cx, event| {
+        row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
             let Some(inner) = weak.upgrade() else { return };
             let select = Select(inner);
             if select.props().locked {

@@ -98,6 +98,7 @@ impl Reasoning {
         let weak = Rc::downgrade(&inner);
         inner.header.on_hover(move |_, hovered| {
             if let Some(inner) = weak.upgrade() {
+                inner.header.mouse_pointer(opencode_ui::click_pointer(inner.state.borrow().hide));
                 inner.hover.set(hovered);
                 inner.layout();
             }
