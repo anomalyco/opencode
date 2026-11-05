@@ -85,12 +85,14 @@ describe("Flag.resolve", () => {
     )
   })
 
-  test("reads all_flags from the same document as the per-flag settings", () => {
-    const flags = Flag.resolve({
-      entries: [document({ all_flags: true }), document({ subagent_depth: 2 })],
-      channel: "latest",
-    })
-    expect(flags).toEqual(every({ enabled: false, source: "default" }))
+  test("a global all_flags survives a project experimental block, and a project all_flags: false stops it", () => {
+    const global = document({ all_flags: true })
+    expect(
+      Flag.resolve({ entries: [global, document({ subagent_depth: 2, todo: false })], channel: "latest" }),
+    ).toEqual({ ...every({ enabled: true, source: "config" }), todo: { enabled: false, source: "config" } })
+    expect(Flag.resolve({ entries: [global, document({ all_flags: false })], channel: "latest" })).toEqual(
+      every({ enabled: false, source: "default" }),
+    )
   })
 })
 
