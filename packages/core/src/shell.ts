@@ -316,7 +316,8 @@ const daemonLayer = Layer.effect(
         if (run.stopping) yield* Fiber.interrupt(run.stopping)
         // Stop waiting first, so forgetting the process is not mistaken for losing it.
         if (run.wait) yield* Fiber.interrupt(run.wait)
-        // Forget the process before deleting its file.
+        // Forget the process before deleting its file. This also kills what is left of its group, even after a
+        // successful exit, which a spawned command would leave running: the daemon cannot forget a process otherwise.
         yield* pty.terminatePipe(run.process).pipe(Effect.ignore)
         yield* Effect.promise(() => unlink(run.info.file).catch(() => {}))
         yield* Deferred.fail(run.done, new NotFoundError({ id }))
@@ -419,6 +420,13 @@ const daemonLayer = Layer.effect(
                   }),
                 ),
               ),
+            ),
+            // Like spawned commands: what a failed command left running in its group is stopped with it, while a
+            // successful one may leave background processes (`cmd &`) behind.
+            Effect.tap((outcome) =>
+              outcome.status === "exited" && outcome.exit !== undefined && outcome.exit !== 0
+                ? pty.signalPipe(run.process, "SIGTERM").pipe(Effect.ignore)
+                : Effect.void,
             ),
             Effect.flatMap((outcome) => finish(run, outcome)),
           ),

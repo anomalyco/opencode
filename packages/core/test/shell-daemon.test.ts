@@ -157,6 +157,24 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
+  test("stops what a failed command left in its group, and leaves a successful one's", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const succeeded = yield* shell.create({ shell: "/bin/sh", command: "serve & exit 0" })
+          const failed = yield* shell.create({ shell: "/bin/sh", command: "serve & exit 3" })
+          yield* until(() => env.daemon.waiters(1) > 0 && env.daemon.waiters(2) > 0)
+          env.daemon.exit(1, 0)
+          env.daemon.exit(2, 3)
+          expect(yield* shell.wait(failed.id)).toMatchObject({ status: "exited", exit: 3 })
+          expect(yield* shell.wait(succeeded.id)).toMatchObject({ status: "exited", exit: 0 })
+          expect(env.signals(2)).toEqual(["SIGTERM"])
+          expect(env.signals(1)).toEqual([])
+        }),
+      )
+    }))
+
   test("fails a command the daemon rejected instead of spawning it", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
