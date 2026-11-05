@@ -263,3 +263,39 @@ describe("heap as data", () => {
     })
   }
 })
+
+describe("prelude", () => {
+  test("a run saved and restored while prelude built-ins run continues in their frames", async () => {
+    const child = Bun.spawn(["bun", `${import.meta.dir}/fixtures/prelude-roundtrip.ts`], {
+      env: { ...process.env, CODEMODE_ROUNDTRIP: "1" },
+      stdout: "pipe",
+      stderr: "inherit",
+    })
+    const output = JSON.parse(await new Response(child.stdout).text())
+    expect(await child.exited).toBe(0)
+    expect(output.result).toMatchObject({
+      ok: true,
+      value: [{ odd: [1, 3, 5], even: [2, 4, 6] }, [1, 2, 3, 7, 8], { a: [10, 20, { b: 30 }] }, 6],
+    })
+    expect(output.saved).toBeGreaterThan(0)
+  })
+
+  test("prelude functions look like built-ins and are named by their path", () => {
+    const names = interpreter().intrinsics
+    const groupBy = names.valueOf("Object.groupBy")!
+    expect(getOwn(groupBy, "name")).toBe("groupBy")
+    expect(getOwn(groupBy, "length")).toBe(2)
+    expect(names.all()).toContain("%Prelude%.fillCollection")
+    expect(names.all()).toContain("%PreludeHelpers%.$Call")
+  })
+  test("programs can't see the helpers or internal functions, and failures inside are located at the call", async () => {
+    const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+    expect(await run("return [typeof $Call, typeof $Throw, typeof fillCollection]")).toMatchObject({
+      value: ["undefined", "undefined", "undefined"],
+    })
+    expect(await run("const x = 1\nreturn Object.groupBy(null, (v) => v)")).toMatchObject({
+      ok: false,
+      error: { location: { line: 2, column: 8 } },
+    })
+  })
+})
