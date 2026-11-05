@@ -21,7 +21,9 @@ const view = (state: TextShimmerState) => ({
 })
 
 const activate = syncTextShimmerEvent(true, false)
+
 const deactivate = syncTextShimmerEvent(false, false)
+
 const deactivateReduced = syncTextShimmerEvent(false, true)
 
 describe("mount", () => {

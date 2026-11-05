@@ -30,6 +30,7 @@ export const Typewriter = <T extends ValidComponent = "p">(props: { text?: strin
 
     if (next.effect.type !== "schedule") return
     const effect = next.effect
+
     const timeout: TypewriterEvent =
       effect.kind === "linger"
         ? { type: "linger.ended", attempt: effect.attempt }
