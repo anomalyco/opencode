@@ -101,18 +101,9 @@ await renderComponent({
     />
   ),
 })
+const question = (key: string) => ({ key, type: "string" as const, title: `The ${key} question that is long` })
 await renderComponent({
   ...base,
   fixture: "E.9b/progress",
-  element: () => (
-    <FormPrompt
-      form={form(
-        ["first", "second", "third", "fourth"].map((key) => ({
-          key,
-          type: "string" as const,
-          title: `The ${key} question that is long`,
-        })),
-      )}
-    />
-  ),
+  element: () => <FormPrompt form={form([question("first"), ...["second", "third", "fourth"].map(question)])} />,
 })
