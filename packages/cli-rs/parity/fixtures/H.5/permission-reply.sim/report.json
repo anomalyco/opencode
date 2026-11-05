@@ -7,6 +7,7 @@
   "home": {
     "equal": false,
     "differences": 87,
+    "colorOnly": 84,
     "deviation": [
       "T17-home-prompt",
       "P15-metadata-gap-fg"
@@ -15,11 +16,13 @@
   "permission": {
     "equal": true,
     "differences": 0,
+    "colorOnly": 0,
     "deviation": []
   },
   "replied": {
     "equal": false,
     "differences": 3,
+    "colorOnly": 0,
     "deviation": [
       "P15-metadata-gap-fg"
     ]

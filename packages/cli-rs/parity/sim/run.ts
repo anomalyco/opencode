@@ -68,7 +68,9 @@ async function runScenario(name: string, scenario: SimScenario) {
   const labels = sides[0] === sides[1] ? [sides[0], `${sides[1]}2`] : sides
   const results = []
   for (const [index, side] of sides.entries()) results.push(await runSide(box, side, labels[index], scenario))
-  const out = path.join(parityRoot, "fixtures", name.replace(/\//g, path.sep))
+  // `.sim` keeps a P-TUI scenario's files apart from the P-APP scenario of the same name, whose recordings live in
+  // `fixtures/<step>/<name>/`.
+  const out = path.join(parityRoot, "fixtures", name.replace(/\//g, path.sep) + ".sim")
   await rm(out, { recursive: true, force: true })
   await mkdir(out, { recursive: true })
   const checkpoints = scenario.steps.filter((step) => "checkpoint" in step)
@@ -92,7 +94,12 @@ async function runScenario(name: string, scenario: SimScenario) {
     lines.push(`  checkpoint ${checkpoint.checkpoint}: ${summary}`)
     if (missing.length) lines.push(`    deviation files missing: ${JSON.stringify(missing)}`)
     if (!pass || process.env.PARITY_VERBOSE) lines.push(indent(comparison.report, 4))
-    report[checkpoint.checkpoint] = { equal: comparison.equal, differences: comparison.differences, deviation }
+    report[checkpoint.checkpoint] = {
+      equal: comparison.equal,
+      differences: comparison.differences,
+      colorOnly: comparison.colorOnly,
+      deviation,
+    }
   }
   const requests = compareRequests(results[0].requests, results[1].requests, box.root)
   const requestsPass = requests.equal || scenario.requests !== undefined
@@ -139,7 +146,12 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
   await Bun.write(
     path.join(box.env.XDG_CONFIG_HOME, "opencode", "cli.json"),
     // The TS CLI from source is the `local` channel, which shows the DevTools bar by default.
-    JSON.stringify({ experimental: { "new-designs": true }, animations: false, debug: { devtools: false } }),
+    JSON.stringify({
+      experimental: { "new-designs": true },
+      animations: false,
+      debug: { devtools: false },
+      ...scenario.config,
+    }),
   )
   const configDir = path.join(box.root, "opencode-config")
   await Bun.write(path.join(configDir, "opencode.jsonc"), JSON.stringify(serverConfig(scenario), null, 2))
@@ -195,9 +207,14 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
       return reply
     })
     stopped.push(backend.close)
+    debug.model = model
+    const sessions = await createSessions(serverUrl, box.cwd, scenario.sessions ?? [])
     const proxy = startProxy(serverUrl)
     stopped.push(proxy.stop)
-    const client = spawn(command(side, ["--server", proxy.url]), box, log("client.stderr"), {
+    const args = (scenario.args ?? []).map((arg) =>
+      arg.startsWith("$session:") ? sessions[Number(arg.slice("$session:".length))] : arg,
+    )
+    const client = spawn(command(side, [...args, "--server", proxy.url]), box, log("client.stderr"), {
       OPENCODE_DRIVE: side,
       DRIVE_REGISTRY_DIR: registry,
       OPENCODE_DRIVE_RENDERER: "headless",
@@ -239,7 +256,7 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     debug.requests = proxy.log
     for (const step of scenario.steps) {
       console.error(`${label} ${JSON.stringify(step)}`)
-      await runStep(step, { result, until, capture, captures })
+      await runStep(step, { result, until, capture, captures, release: backend.release })
     }
     if (backend.failures.length) throw new Error(`${label} backend: ${backend.failures.join("; ")}`)
     return { captures, requests: proxy.log as Logged[], model }
@@ -265,8 +282,11 @@ async function runStep(
     until: (needle: string) => Promise<void>
     capture: () => Promise<Fixture>
     captures: Record<string, Fixture>
+    release: (name: string) => void
   },
 ) {
+  if ("release" in step) return io.release(step.release)
+  if ("sleep" in step) return Bun.sleep(step.sleep)
   if ("type" in step) return io.result("ui.type", { text: step.type })
   if ("press" in step)
     return io.result("ui.press", { key: step.press, ...(step.modifiers ? { modifiers: step.modifiers } : {}) })
@@ -289,6 +309,55 @@ async function runStep(
     last = next
   }
   io.captures[step.checkpoint] = applyMasks(last, [...(step.masks ?? []), SANDBOX_MASK])
+}
+
+// Creates the scenario's sessions straight on the server and runs each prompt to the end, so the client opens
+// a history built by real turns. Returns the session IDs in order.
+async function createSessions(server: string, directory: string, sessions: NonNullable<SimScenario["sessions"]>) {
+  const headers = {
+    authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
+    "content-type": "application/json",
+  }
+  const api = async (method: string, route: string, body?: unknown) => {
+    const response = await fetch(server + route, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+    if (!response.ok) throw new Error(`setup ${method} ${route}: ${response.status} ${await response.text()}`)
+    return response.status === 204 ? undefined : ((await response.json()) as { data: unknown })
+  }
+  const ids: string[] = []
+  for (const session of sessions) {
+    const created = await api("POST", "/api/session", {
+      ...(session.title === undefined ? {} : { title: session.title }),
+      agent: "build",
+      location: { directory },
+      model: { id: "gpt-sim-model", providerID: "simulation" },
+    })
+    const id = (created?.data as { id: string }).id
+    ids.push(id)
+    for (const [index, text] of session.prompts.entries()) {
+      await api("POST", `/api/session/${id}/prompt`, { text })
+      await waitFor(
+        `setup session ${id} prompt ${index} to finish`,
+        async () => {
+          const active = (await api("GET", "/api/session/active"))?.data as Record<string, unknown>
+          if (id in active) return false
+          // Newest first; a finished turn ends with an `idle` message.
+          const messages = (await api("GET", `/api/session/${id}/message`))?.data as { type: string }[]
+          return (
+            messages.filter((message) => message.type === "user").length === index + 1 && messages[0]?.type === "idle"
+          )
+        },
+        WAIT,
+      ).catch(async (error: Error) => {
+        const messages = await api("GET", `/api/session/${id}/message`)
+        throw new Error(`${error.message}; messages: ${JSON.stringify(messages).slice(0, 2000)}`)
+      })
+    }
+  }
+  return ids
 }
 
 // The simulation provider of `opencode-drive`'s default config: an OpenAI-compatible provider at the default
@@ -331,8 +400,7 @@ function toolNames(invocation: Invocation) {
 function spawn(cmd: string[], box: Sandbox, stderr: string, env: Record<string, string>) {
   const child = Bun.spawn(cmd, {
     cwd: box.cwd,
-    // Bun's os.homedir() ignores HOME, so without OPENCODE_TEST_HOME the server watches the user's skill folders.
-    env: { ...box.env, OPENCODE_TEST_HOME: box.env.HOME, ...env },
+    env: { ...box.env, ...env },
     stdin: "ignore",
     stdout: "ignore",
     stderr: Bun.file(stderr),

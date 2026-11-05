@@ -2,7 +2,6 @@
 // in a fresh home with its own XDG roots, so neither reads or writes the user's config, state, or service.
 
 import { mkdir, mkdtemp } from "node:fs/promises"
-import { tmpdir } from "node:os"
 import path from "node:path"
 
 export type Side = "ts" | "rs"
@@ -48,8 +47,14 @@ export type Sandbox = Awaited<ReturnType<typeof sandbox>>
 
 // A temporary root with `home`, the XDG roots, `tmp`, and `work` (the working directory). The
 // environment starts empty, so no OPENCODE_* variable of the calling session leaks in.
+//
+// The root must not lie under the user's home: the TS server discovers `.agents`, `.claude`, and
+// `.opencode` in every ancestor of the working directory and watches them, so a sandbox under
+// `~/.cache/tmp` watched `~/.agents/skills` and `~/.opencode`. PARITY_SANDBOX_DIR moves it.
 export async function sandbox(env: Record<string, string> = {}) {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-parity-"))
+  const parent = process.env.PARITY_SANDBOX_DIR ?? path.join("/tmp", "opencode-parity")
+  await mkdir(parent, { recursive: true })
+  const root = await mkdtemp(path.join(parent, "opencode-parity-"))
   const dirs = {
     home: "home",
     config: "home/.config",
@@ -71,6 +76,8 @@ export async function sandbox(env: Record<string, string> = {}) {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       LANG: "C.UTF-8",
       HOME: paths.home,
+      // The TS home for discovery and the global skill folders (`@opencode/util/global`).
+      OPENCODE_TEST_HOME: paths.home,
       XDG_CONFIG_HOME: paths.config,
       XDG_DATA_HOME: paths.data,
       XDG_STATE_HOME: paths.state,

@@ -76,8 +76,9 @@ One file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with `export def
   and body after the plan 7.5 normalizers (prefixed IDs, the sandbox root, ports). Reads that one side sent and the
   other did not are listed, not failed, as in H.2. Bodies are compared as JSON values (key order does not count),
   and epoch-millisecond times and other server-minted IDs (`sh_…`) are normalized, because the server is live.
-- Files per run: `parity/fixtures/H.5/<name>/<checkpoint>.<side>.json` (cells after masks) and `.txt` (text), and
-  `report.json`. With `--sides ts,ts` the second side is named `ts2`.
+- Files per run: `parity/fixtures/<step>/<name>.sim/<checkpoint>.<side>.json` (cells after masks) and `.txt`
+  (text), and `report.json`. `.sim` keeps them apart from a P-APP scenario of the same name. With `--sides ts,ts`
+  the second side is named `ts2`.
 
 ## Known TS defect
 

@@ -26,5 +26,5 @@
   ┃
   ┃  Build · Simulated Model Simulation
   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-  /home/simon/.cache/tmp/                      /work             shift+tab agents  ctrl+p commands
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
 
