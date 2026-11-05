@@ -1,0 +1,381 @@
+{
+  "home": {
+    "size": [
+      100,
+      30,
+      100,
+      30
+    ],
+    "textCells": 35,
+    "styleCells": 45,
+    "rows": [
+      {
+        "y": 16,
+        "ts": "             ┃  Ask anything… \"Fix a TODO in the codebase\"",
+        "rs": "             ┃"
+      }
+    ],
+    "styles": [
+      {
+        "x": 16,
+        "y": 16,
+        "char": "A",
+        "ts": "[[128,128,128,255],[30,30,30,255],0]",
+        "rs": "[[255,255,255,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 17,
+        "y": 16,
+        "char": "s",
+        "ts": "[[128,128,128,255],[30,30,30,255],0]",
+        "rs": "[[255,255,255,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 18,
+        "y": 16,
+        "char": "k",
+        "ts": "[[128,128,128,255],[30,30,30,255],0]",
+        "rs": "[[255,255,255,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 19,
+        "y": 16,
+        "char": " ",
+        "ts": "[[128,128,128,255],[30,30,30,255],0]",
+        "rs": "[[255,255,255,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 20,
+        "y": 16,
+        "char": "a",
+        "ts": "[[128,128,128,255],[30,30,30,255],0]",
+        "rs": "[[255,255,255,255],[30,30,30,255],0]"
+      }
+    ]
+  },
+  "typed": {
+    "size": [
+      100,
+      30,
+      100,
+      30
+    ],
+    "textCells": 0,
+    "styleCells": 3,
+    "rows": [],
+    "styles": [
+      {
+        "x": 21,
+        "y": 18,
+        "char": " ",
+        "ts": "[[255,255,255,255],[30,30,30,255],0]",
+        "rs": "[[128,128,128,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 23,
+        "y": 18,
+        "char": " ",
+        "ts": "[[255,255,255,255],[30,30,30,255],0]",
+        "rs": "[[128,128,128,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 44,
+        "y": 18,
+        "char": " ",
+        "ts": "[[255,255,255,255],[30,30,30,255],0]",
+        "rs": "[[128,128,128,255],[30,30,30,255],0]"
+      }
+    ]
+  },
+  "submitted": {
+    "size": [
+      100,
+      30,
+      100,
+      30
+    ],
+    "textCells": 0,
+    "styleCells": 0,
+    "rows": [],
+    "styles": []
+  },
+  "edited-resized": {
+    "size": [
+      90,
+      28,
+      90,
+      28
+    ],
+    "textCells": 0,
+    "styleCells": 3,
+    "rows": [],
+    "styles": [
+      {
+        "x": 16,
+        "y": 17,
+        "char": " ",
+        "ts": "[[255,255,255,255],[30,30,30,255],0]",
+        "rs": "[[128,128,128,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 18,
+        "y": 17,
+        "char": " ",
+        "ts": "[[255,255,255,255],[30,30,30,255],0]",
+        "rs": "[[128,128,128,255],[30,30,30,255],0]"
+      },
+      {
+        "x": 39,
+        "y": 17,
+        "char": " ",
+        "ts": "[[255,255,255,255],[30,30,30,255],0]",
+        "rs": "[[128,128,128,255],[30,30,30,255],0]"
+      }
+    ]
+  },
+  "responses": [
+    {
+      "method": "simulation.handshake",
+      "ts": {
+        "capabilities": [
+          "ui.type",
+          "ui.press",
+          "ui.enter",
+          "ui.arrow",
+          "ui.focus",
+          "ui.click",
+          "ui.click.semantic",
+          "ui.mouse",
+          "ui.recording.pointer",
+          "ui.resize",
+          "ui.matches",
+          "ui.state",
+          "ui.snapshot",
+          "ui.capture",
+          "ui.recording.finish"
+        ]
+      },
+      "rs": {
+        "capabilities": [
+          "ui.type",
+          "ui.press",
+          "ui.enter",
+          "ui.arrow",
+          "ui.mouse",
+          "ui.resize",
+          "ui.matches",
+          "ui.capture"
+        ]
+      }
+    },
+    {
+      "method": "ui.matches",
+      "ts": true,
+      "rs": true
+    },
+    {
+      "method": "ui.capture",
+      "ts": {
+        "cols": 100,
+        "rows": 30,
+        "cursor": [
+          0,
+          0
+        ]
+      },
+      "rs": {
+        "cols": 100,
+        "rows": 30,
+        "cursor": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "method": "ui.type",
+      "ts": {
+        "editor": true,
+        "elements": 5
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.matches",
+      "ts": true,
+      "rs": true
+    },
+    {
+      "method": "ui.capture",
+      "ts": {
+        "cols": 100,
+        "rows": 30,
+        "cursor": [
+          0,
+          0
+        ]
+      },
+      "rs": {
+        "cols": 100,
+        "rows": 30,
+        "cursor": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "method": "ui.enter",
+      "ts": {
+        "editor": true,
+        "elements": 5
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.matches",
+      "ts": true,
+      "rs": true
+    },
+    {
+      "method": "ui.capture",
+      "ts": {
+        "cols": 100,
+        "rows": 30,
+        "cursor": [
+          0,
+          0
+        ]
+      },
+      "rs": {
+        "cols": 100,
+        "rows": 30,
+        "cursor": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "method": "ui.press",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.press",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.press",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.arrow",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.mouse",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.mouse",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.mouse",
+      "ts": {
+        "error": "mouse position must be within the terminal viewport"
+      },
+      "rs": {
+        "error": "mouse position must be within the terminal viewport"
+      }
+    },
+    {
+      "method": "ui.resize",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "editor": true,
+        "elements": 0
+      }
+    },
+    {
+      "method": "ui.capture",
+      "ts": {
+        "cols": 90,
+        "rows": 28,
+        "cursor": [
+          0,
+          0
+        ]
+      },
+      "rs": {
+        "cols": 90,
+        "rows": 28,
+        "cursor": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "method": "ui.state",
+      "ts": {
+        "editor": true,
+        "elements": 6
+      },
+      "rs": {
+        "error": "ui.state is not supported by the Rust TUI: it has no renderable numbers; use ui.mouse with coordinates"
+      }
+    }
+  ]
+}
