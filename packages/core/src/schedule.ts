@@ -7,6 +7,7 @@ import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import {
+  Action,
   Condition,
   ConditionInput,
   CreateInput,
@@ -16,7 +17,7 @@ import {
   Info,
   Outcome,
   Request,
-  type RunResult,
+  RunResult,
   type ShellAction,
   Status,
   type StoredCheck,
@@ -44,7 +45,20 @@ import { ScheduleAction } from "./schedule/action.js"
 import { ScheduleCheck } from "./schedule/check.js"
 import { ScheduleTable } from "./schedule/sql.js"
 
-export { ID, Info, CreateInput, Request, Condition, ConditionInput, When, Status, Outcome, toCreateInput }
+export {
+  Action,
+  ID,
+  Info,
+  CreateInput,
+  Request,
+  Condition,
+  ConditionInput,
+  When,
+  Status,
+  Outcome,
+  RunResult,
+  toCreateInput,
+}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Schedule.NotFoundError", {
   scheduleID: ID,

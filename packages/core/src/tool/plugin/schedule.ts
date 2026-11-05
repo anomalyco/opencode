@@ -19,7 +19,7 @@ export const View = Schema.Struct({
   tz: Schema.String,
   if: Schedule.Condition.pipe(optional),
   until: Schedule.Condition.pipe(optional),
-  prompt: Schema.String,
+  action: Schedule.Action,
   status: Schedule.Status,
   nextDueAt: Schema.String.pipe(optional),
   endsAt: Schema.String.pipe(optional),
@@ -28,6 +28,7 @@ export const View = Schema.Struct({
   lastFiredAt: Schema.String.pipe(optional),
   lastOutcome: Schedule.Outcome.pipe(optional),
   lastOutput: Schema.String.pipe(optional),
+  lastRun: Schedule.RunResult.pipe(optional),
 })
 export type View = typeof View.Type
 
@@ -78,7 +79,7 @@ export const Plugin = {
         editor.add({
           name: "schedule_create",
           description:
-            "Schedule a prompt that wakes this session later, or a shell command that runs on its own: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Pass exactly one of `prompt` or `run`. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
+            "Schedule a prompt that wakes this session later, or a shell command that runs on its own: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Pass exactly one of `prompt` or `run`; a command runs with no model call and receives a check's message on stdin and in `OPENCODE_SCHEDULE_MESSAGE`. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
           input: Schedule.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
@@ -95,7 +96,8 @@ export const Plugin = {
         })
         editor.add({
           name: "schedule_list",
-          description: "List this session's schedules with their status and next run, and the current time.",
+          description:
+            "List this session's schedules with their status, next run, command or prompt, last run's exit code, and the current time.",
           input: Schema.Struct({}),
           output: ListOutput,
           options: { namespace: "opencode", codemode: true },
@@ -157,7 +159,7 @@ export const Plugin = {
       if (!enabled()) return
       editor.add({
         name: "schedule",
-        description: "schedule a prompt for later, or list, pause and delete this session's schedules",
+        description: "schedule a prompt or shell command for later, or list, pause and delete this session's schedules",
         execute: (input) =>
           ctx.session
             .prompt({
@@ -186,6 +188,26 @@ function formatCondition(condition: Schedule.Condition): string {
   }
 }
 
+function formatAction(action: Schedule.Action): string {
+  if (action.type === "prompt") return `prompt: ${JSON.stringify(shorten(action.prompt))}`
+  const details = [
+    action.cwd === undefined ? undefined : `cwd ${action.cwd}`,
+    action.timeout === undefined ? undefined : `timeout ${action.timeout}`,
+  ].filter((detail): detail is string => detail !== undefined)
+  const suffix = details.length === 0 ? "" : ` (${details.join(", ")})`
+  return `run: ${JSON.stringify(shorten(action.run))}${suffix}`
+}
+
+/** An absent exit code means the command never finished: a timeout, a spawn error, or a process that died. */
+function formatRun(run: Schedule.RunResult): string {
+  if (run.exitCode !== undefined) return `exit ${run.exitCode}`
+  return shorten(run.error ?? "no exit code yet")
+}
+
+function shorten(text: string): string {
+  return text.length > 80 ? `${text.slice(0, 79)}…` : text
+}
+
 /** One line per schedule, for models that read tool content rather than output (Code Mode off). */
 function summary(view: View) {
   const when = view.when
@@ -203,13 +225,13 @@ function summary(view: View) {
       : view.if !== undefined
         ? `if ${formatCondition(view.if)}`
         : undefined
-  const prompt = view.prompt.length > 80 ? `${view.prompt.slice(0, 79)}…` : view.prompt
   return [
     `${view.id}${view.name ? ` "${view.name}"` : ""}: ${trigger} (${view.tz})`,
     gate,
     view.status,
     view.nextDueAt && `next ${view.nextDueAt}`,
-    `prompt: ${JSON.stringify(prompt)}`,
+    formatAction(view.action),
+    view.lastRun && `last run: ${formatRun(view.lastRun)}`,
     view.lastOutput && `output: ${JSON.stringify(view.lastOutput)}`,
   ]
     .filter(Boolean)
@@ -231,7 +253,7 @@ function toView(info: Schedule.Info): View {
     tz: info.tz,
     if: info.if,
     until: info.until,
-    prompt: info.action.type === "prompt" ? info.action.prompt : `$ ${info.action.run}`,
+    action: info.action,
     status: info.status,
     nextDueAt: local(info.nextDueAt),
     endsAt: local(info.endsAt),
@@ -240,5 +262,6 @@ function toView(info: Schedule.Info): View {
     lastFiredAt: local(info.lastFiredAt),
     lastOutcome: info.lastOutcome,
     lastOutput: info.lastOutput,
+    lastRun: info.lastRun,
   }
 }
