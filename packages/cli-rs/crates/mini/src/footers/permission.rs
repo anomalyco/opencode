@@ -161,6 +161,8 @@ pub struct Info {
     pub lines: Vec<String>,
     pub diff: Option<String>,
     pub patch: Option<String>,
+    /// The file the diff belongs to, for its highlighting.
+    pub file: Option<String>,
 }
 
 /// `permissionInfo`: the presentation, flattened to ASCII lines in mono.
@@ -180,6 +182,7 @@ pub fn info(request: &Request, format_path: &dyn Fn(&str) -> String, mono: bool)
             lines: info.lines,
             diff: info.diff,
             patch: info.patch,
+            file: info.file,
         };
     }
     Info {
@@ -193,6 +196,7 @@ pub fn info(request: &Request, format_path: &dyn Fn(&str) -> String, mono: bool)
             .collect(),
         diff: None,
         patch: None,
+        file: None,
     }
 }
 
@@ -202,6 +206,8 @@ pub struct Body<'a> {
     pub state: &'a State,
     pub info: &'a Info,
     pub theme: &'a FooterTheme,
+    /// The scrollback's colors and highlighting, which diffs draw in.
+    pub run: &'a crate::theme::RunTheme,
     pub mono: bool,
     pub width: u16,
     pub height: u16,
@@ -344,11 +350,43 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                         .width(Length::percent(100.0)),
                 ),
         );
-        // M.4 draws diffs; until then the diff and the patch show as text.
+        // A diff draws as the scrollback draws an edit, a patch as highlighted text; narrow, both stay text.
         if let Some(diff) = &info.diff {
-            content.add(&line(diff.clone(), theme.text));
+            if width >= 40 {
+                let syntax = body.run.syntax.clone().unwrap_or_default();
+                let filetype = info.file.as_deref().and_then(crate::tools::filetype);
+                let look = crate::tools::diff_look(&body.run.block, theme.text);
+                let diff = opencode_ui::diff::view_with(
+                    app,
+                    &look,
+                    &syntax,
+                    diff,
+                    opentui::widget::DiffView::Unified,
+                    filetype,
+                    WrapMode::Word,
+                    0,
+                );
+                content.add(&diff.shrink(0.0));
+            } else {
+                content.add(&line(diff.clone(), theme.text));
+            }
         } else if let Some(patch) = &info.patch {
-            content.add(&line(patch.clone(), theme.muted));
+            match &body.run.syntax {
+                Some(syntax) => {
+                    opencode_ui::grammars::register();
+                    let code = opentui::widget::Code::new(app)
+                        .fg(theme.muted)
+                        .syntax_theme(syntax.clone())
+                        .filetype(Some("diff"))
+                        .set_code(patch.clone())
+                        .wrap(WrapMode::Word)
+                        .focusable(false);
+                    content.add(&code.width(Length::percent(100.0)).shrink(0.0));
+                }
+                None => {
+                    content.add(&line(patch.clone(), theme.muted));
+                }
+            }
         } else if info.lines.is_empty() {
             content.add(&line("No diff provided".to_owned(), theme.muted));
         } else {

@@ -730,6 +730,29 @@ pub fn filetype(path: &str) -> Option<&'static str> {
     }
 }
 
+/// `PatchDiff`'s colors from the block theme, with `text` for the code (the scrollback's and the permission's).
+pub fn diff_look(block: &crate::theme::BlockTheme, text: Color) -> opencode_ui::diff::Look {
+    opencode_ui::diff::Look {
+        colors: DiffColors {
+            line_number: block.diff_line_number,
+            line_number_bg: block.diff_context_bg,
+            added_bg: block.diff_added_bg,
+            removed_bg: block.diff_removed_bg,
+            context_bg: block.diff_context_bg,
+            added_content_bg: None,
+            removed_content_bg: None,
+            context_content_bg: None,
+            added_sign: block.diff_highlight_added,
+            removed_sign: block.diff_highlight_removed,
+            added_line_number_bg: block.diff_added_line_number_bg,
+            removed_line_number_bg: block.diff_removed_line_number_bg,
+        },
+        text,
+        hunk_header: block.diff_line_number,
+        hunk_header_bg: block.diff_context_bg,
+    }
+}
+
 /// The widget of a structured body (`RunEntryContent`'s snapshot cases).
 pub fn structured_widget(app: &App, snapshot: &Snapshot, theme: &RunTheme, mono: bool) -> AnyWidget {
     let block = &theme.block;
@@ -752,25 +775,7 @@ pub fn structured_widget(app: &App, snapshot: &Snapshot, theme: &RunTheme, mono:
             column().gap(1).child(&text(title, block.muted)).child(&body).as_any()
         }
         Snapshot::Diff { items } => {
-            let look = opencode_ui::diff::Look {
-                colors: DiffColors {
-                    line_number: block.diff_line_number,
-                    line_number_bg: block.diff_context_bg,
-                    added_bg: block.diff_added_bg,
-                    removed_bg: block.diff_removed_bg,
-                    context_bg: block.diff_context_bg,
-                    added_content_bg: None,
-                    removed_content_bg: None,
-                    context_content_bg: None,
-                    added_sign: block.diff_highlight_added,
-                    removed_sign: block.diff_highlight_removed,
-                    added_line_number_bg: block.diff_added_line_number_bg,
-                    removed_line_number_bg: block.diff_removed_line_number_bg,
-                },
-                text: block.text,
-                hunk_header: block.diff_line_number,
-                hunk_header_bg: block.diff_context_bg,
-            };
+            let look = diff_look(block, block.text);
             let root = column().gap(1);
             for item in items {
                 let entry = column().gap(1).child(&text(&item.title, block.muted));
