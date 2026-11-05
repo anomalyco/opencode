@@ -172,7 +172,7 @@ describe("ScheduleTools", () => {
         id: "sch_1",
         name: "build",
         when: { type: "in", in: "20 minutes" },
-        prompt: "check the build",
+        action: { type: "prompt", prompt: "check the build" },
         status: "active",
         nextDueAt: "2026-10-27T09:20:00.000-04:00",
       })
@@ -253,6 +253,89 @@ describe("ScheduleTools", () => {
         `sch_2: cron "0 9 * * 1-5" (America/New_York), paused, next 2026-10-27T09:20:00.000-04:00, prompt: "${"x".repeat(79)}…"`,
       ])
       expect(list).toStartWith("Now: ")
+    }),
+  )
+
+  it.effect("creates a command schedule with its directory and timeout", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      const created = yield* run(registry, "schedule_create", {
+        name: "ci",
+        when: { every: "1 hour" },
+        run: "bun test",
+        cwd: "packages/core",
+        timeout: "5 minutes",
+      })
+      expect(created).toMatchObject({
+        id: "sch_1",
+        name: "ci",
+        action: { type: "shell", run: "bun test", cwd: "packages/core", timeout: "5 minutes" },
+      })
+      expect(created).not.toHaveProperty("prompt")
+      expect(rows.get(Schedule.ID.make("sch_1"))).toMatchObject({
+        sessionID,
+        action: { type: "shell", run: "bun test", cwd: "packages/core", timeout: "5 minutes" },
+      })
+    }),
+  )
+
+  it.effect("summarises a command, with its directory and timeout, instead of a prompt", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      expect(
+        yield* direct(registry, "schedule_create", { name: "ci", when: { every: "1 hour" }, run: "bun test" }),
+      ).toBe(
+        'Scheduled: sch_1 "ci": every 1 hour (America/New_York), active, next 2026-10-27T09:20:00.000-04:00, run: "bun test"',
+      )
+      yield* direct(registry, "schedule_create", {
+        when: { every: "1 hour" },
+        run: "x".repeat(100),
+        cwd: "packages/core",
+        timeout: "5 minutes",
+      })
+      const list = yield* direct(registry, "schedule_list", {})
+      expect(list).toStartWith("Now: ")
+      expect(list?.split("\n").slice(1)).toEqual([
+        'sch_1 "ci": every 1 hour (America/New_York), active, next 2026-10-27T09:20:00.000-04:00, run: "bun test"',
+        `sch_2: every 1 hour (America/New_York), active, next 2026-10-27T09:20:00.000-04:00, run: "${"x".repeat(79)}…" (cwd packages/core, timeout 5 minutes)`,
+      ])
+    }),
+  )
+
+  it.effect("shows each command's last run instead of assuming it succeeded", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      yield* run(registry, "schedule_create", { when: { every: "1 hour" }, run: "bun test" })
+      const info = rows.get(Schedule.ID.make("sch_1"))!
+      const lastLine = (list: string | undefined) => list?.split("\n")[1]
+
+      rows.set(info.id, { ...info, lastRun: { exitCode: 7, durationMs: 12, output: "boom" } })
+      expect(yield* run(registry, "schedule_list", {})).toMatchObject({
+        schedules: [
+          { action: { type: "shell", run: "bun test" }, lastRun: { exitCode: 7, durationMs: 12, output: "boom" } },
+        ],
+      })
+      expect(lastLine(yield* direct(registry, "schedule_list", {}))).toContain("last run: exit 7")
+
+      rows.set(info.id, { ...info, lastRun: { durationMs: 600_000, output: "", error: "Timed out after 10 minutes" } })
+      expect(lastLine(yield* direct(registry, "schedule_list", {}))).toContain("last run: Timed out after 10 minutes")
+
+      // A run that never finished leaves the start marker: no exit code, so never read it as success.
+      rows.set(info.id, { ...info, lastRun: { durationMs: 0, output: "" } })
+      expect(lastLine(yield* direct(registry, "schedule_list", {}))).toContain("last run: no exit code yet")
+    }),
+  )
+
+  it.effect("rejects a prompt and a command together, or neither", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      for (const input of [{ when: { in: "5 minutes" }, prompt: "p", run: "true" }, { when: { in: "5 minutes" } }]) {
+        expect(yield* call(registry, "schedule_create", input)).toMatchObject({ metadata: { error: true } })
+      }
+      expect(rows.size).toBe(0)
+      expect(yield* run(registry, "schedule_create", { when: { in: "5 minutes" }, prompt: "p" })).toMatchObject({
+        action: { type: "prompt", prompt: "p" },
+      })
     }),
   )
 
