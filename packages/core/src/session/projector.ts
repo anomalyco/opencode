@@ -4,10 +4,12 @@ import { castDraft, produce, type WritableDraft } from "immer"
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import path from "path"
+import { App } from "../app.js"
 import { Config } from "../config.js"
 import { Database } from "../database/database.js"
 import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
+import { Flag } from "../flag.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
 import { SessionEvent } from "./event.js"
@@ -32,6 +34,7 @@ import { SessionHistory } from "./history.js"
 import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
+type Flags = Effect.Success<typeof Flag.resolver>
 type MessageEvent = Exclude<
   SessionEvent.DurableEvent,
   typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
@@ -313,12 +316,13 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     yield* InstructionState.initialize(db, event.data.sessionID, event.durable.seq, event.data.instructions)
 })
 
-/** Reads `experimental.part_rows` from the Config in scope on every call; without one, it is off. */
-const partRowsEnabled = Effect.gen(function* () {
-  const config = yield* Effect.serviceOption(Config.Service)
-  if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.part_rows === true
-})
+/** Reads the `part_rows` flag from the Config in scope on every call; without one, it is off. */
+const partRowsEnabled = (flags: Flags) =>
+  Effect.gen(function* () {
+    const config = yield* Effect.serviceOption(Config.Service)
+    if (Option.isNone(config)) return false
+    return flags(yield* config.value.entries()).part_rows.enabled
+  })
 
 type MessageRow = typeof SessionMessageTable.$inferSelect
 type PartRow = typeof SessionPartTable.$inferSelect
@@ -334,9 +338,9 @@ type Writes = Pick<
   | "updateCompaction"
 >
 
-function run(db: DatabaseService, event: MessageEvent) {
+function run(db: DatabaseService, flags: Flags, event: MessageEvent) {
   return Effect.gen(function* () {
-    const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+    const writes = (yield* partRowsEnabled(flags)) ? partRowWrites(db, event) : messageWrites(db, event)
     const adapter: SessionMessageUpdater.Adapter = {
       ...writes,
       getAgent() {
@@ -484,7 +488,7 @@ function assistantReads(
 }
 
 /**
- * The write path with `experimental.part_rows` off, unchanged from before part rows were written: every assistant
+ * The write path with the `part_rows` flag off, unchanged from before part rows were written: every assistant
  * event rewrites the whole message. A message whose parts already live in session_part (written with the flag on,
  * or by a newer release) is written into those rows, and its row keeps an empty envelope.
  */
@@ -601,7 +605,7 @@ function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
   }
 }
 
-/** The write path with `experimental.part_rows` on: each assistant part is its own session_part row. */
+/** The write path with the `part_rows` flag on: each assistant part is its own session_part row. */
 function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
   /**
    * The only place a legacy inline assistant row moves to session_part, called right before its parts are written.
@@ -837,13 +841,14 @@ const insertMessage = Effect.fnUntraced(function* (
 
 function projectIdle(
   db: DatabaseService,
+  flags: Flags,
   event:
     | typeof SessionEvent.Execution.Succeeded.Type
     | typeof SessionEvent.Execution.Failed.Type
     | typeof SessionEvent.Execution.Interrupted.Type,
 ) {
   return Effect.gen(function* () {
-    yield* run(db, event)
+    yield* run(db, flags, event)
     if (event.type === SessionEvent.Execution.Interrupted.type && event.data.reason === "shutdown") return
     const time = event.created
     const outcome =
@@ -865,6 +870,9 @@ const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
+    // Projections run in the publisher's fiber, which doesn't carry this server's build channel, so flags are
+    // resolved here, where it is known.
+    const flags = yield* Flag.resolver
     yield* bus.project(SessionEvent.Created, (event) =>
       Effect.gen(function* () {
         const stored = yield* db
@@ -895,7 +903,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* setSession(db, event.data.sessionID, {
           directory: event.data.location.directory,
           path: event.data.subpath,
@@ -968,13 +976,13 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* setSession(db, event.data.sessionID, { agent: event.data.agent, time_updated: event.created })
       }),
     )
     yield* bus.project(SessionEvent.ModelSelected, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* setSession(db, event.data.sessionID, { model: event.data.model, time_updated: event.created })
       }),
     )
@@ -1002,7 +1010,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Unarchived, (event) =>
       setSession(db, event.data.sessionID, { time_archived: null, time_updated: event.created }),
     )
-    yield* bus.project(SessionEvent.MessageContentUpdated, (event) => run(db, event))
+    yield* bus.project(SessionEvent.MessageContentUpdated, (event) => run(db, flags, event))
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
@@ -1065,35 +1073,35 @@ const layer = Layer.effectDiscard(
         time_updated: sql`${SessionTable.time_updated}`,
       }),
     )
-    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => projectIdle(db, event))
-    yield* bus.project(SessionEvent.Execution.Failed, (event) => projectIdle(db, event))
-    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => projectIdle(db, event))
+    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => projectIdle(db, flags, event))
+    yield* bus.project(SessionEvent.Execution.Failed, (event) => projectIdle(db, flags, event))
+    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => projectIdle(db, flags, event))
     yield* bus.project(SessionEvent.InstructionsUpdated, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta)
       }),
     )
-    yield* bus.project(SessionEvent.Synthetic, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Synthetic, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, flags, event))
     yield* bus.project(SessionEvent.Step.Started, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* touch(db, event)
       }),
     )
-    yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, flags, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* applyUsage(db, event.data.sessionID, event.data, event.created)
       }),
     )
     yield* bus.project(SessionEvent.Step.Failed, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         if (event.data.cost !== undefined && event.data.tokens !== undefined)
           yield* applyUsage(
             db,
@@ -1104,24 +1112,24 @@ const layer = Layer.effectDiscard(
         else yield* touch(db, event)
       }),
     )
-    yield* bus.project(SessionEvent.Text.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Text.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Success, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Failed, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.RetryScheduled, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Text.Started, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Text.Ended, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Tool.Input.Started, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Tool.Input.Ended, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Tool.Called, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Tool.Success, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Tool.Failed, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Reasoning.Started, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Reasoning.Ended, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.RetryScheduled, (event) => run(db, flags, event))
+    yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, flags, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* run(db, flags, event)
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
     )
-    yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, flags, event))
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
       setSession(db, event.data.sessionID, { revert: event.data.revert, time_updated: event.created }),
     )
@@ -1175,4 +1183,4 @@ const layer = Layer.effectDiscard(
   }),
 )
 
-export const node = makeGlobalNode({ name: "session-projector", layer, deps: [Bus.node, Database.node] })
+export const node = makeGlobalNode({ name: "session-projector", layer, deps: [App.node, Bus.node, Database.node] })

@@ -19,10 +19,6 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description: `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
-  part_rows: Schema.Boolean.pipe(optional).annotate({
-    description:
-      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
-  }),
   image_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({

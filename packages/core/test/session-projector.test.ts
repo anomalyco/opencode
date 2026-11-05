@@ -5,6 +5,7 @@ import { and, asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
@@ -60,6 +61,13 @@ const durableIt = testEffect(
         Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
       ),
     ],
+  ),
+)
+// A dev build, where feature flags default on.
+const devIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, SessionStore.node]),
+    [Bus.node.replace(Bus.configured({ persist: true })), App.node.replace(App.configured({ channel: "dev" }))],
   ),
 )
 const sessionsLayer = AppNodeBuilder.build(Session.node, [SessionExecution.node.replace(SessionExecution.noopLayer)])
@@ -2599,6 +2607,41 @@ describe("SessionProjector", () => {
         if (row.type === "assistant") expect(row.data).toMatchObject({ content: [] })
     }),
   )
+
+  devIt.effect("writes part rows by default in dev builds, unless experimental.part_rows is false", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const off = Session.ID.make("ses_part_rows_off")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: off,
+          project_id: Project.ID.global,
+          slug: off,
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      // A location's Config is in scope, as in a drain, but the publishing fiber carries no build channel.
+      yield* projectTwoSteps(sessionID, () => false).pipe(Effect.provide(Config.testLayer([])))
+      yield* projectTwoSteps(off, () => false).pipe(Effect.provide(experimental({ part_rows: false })))
+
+      expect((yield* sessionParts(db, sessionID)).map((row) => row.ordinal)).toEqual([0, 1, 2, 0])
+      expect(yield* sessionParts(db, off)).toEqual([])
+    }),
+  )
+
+  it.effect("keeps writing whole messages by default outside local and dev builds", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      yield* projectTwoSteps(sessionID, () => false).pipe(Effect.provide(Config.testLayer([])))
+
+      expect(yield* sessionParts(db, sessionID)).toEqual([])
+    }),
+  )
 })
 
 /** Two assistant steps, the first with reasoning, text and a tool call. Event `index` is projected with part rows on when `partRowsAt(index)`. */
@@ -2709,6 +2752,15 @@ const messageRows = (db: Database.Interface["db"], session: Session.ID) =>
     .from(SessionMessageTable)
     .where(eq(SessionMessageTable.session_id, session))
     .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+
+const sessionParts = (db: Database.Interface["db"], session: Session.ID) =>
+  db
+    .select()
+    .from(SessionPartTable)
+    .where(eq(SessionPartTable.session_id, session))
+    .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
     .all()
     .pipe(Effect.orDie)
 

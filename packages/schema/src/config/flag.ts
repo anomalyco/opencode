@@ -15,5 +15,7 @@ export const registry = {
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
+  part_rows:
+    "Write each assistant part as its own session_part row instead of rewriting the whole message on every event.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
