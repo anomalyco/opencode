@@ -496,25 +496,32 @@ test.describe("mobile tab gestures", () => {
     const bounds = (await scroll.boundingBox())!
     const start = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height - 40 }
     const before = await scroll.evaluate((element) => element.scrollTop)
-    // Leave the finger at rest before release so inertia cannot move the next drag target.
-    const swipeTimestamp = () => (Date.now() - 100) / 1000
     await touch.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [start],
-      timestamp: swipeTimestamp(),
     })
 
     for (const distance of [30, 60, 90, 120, 150]) {
       await touch.send("Input.dispatchTouchEvent", {
         type: "touchMove",
         touchPoints: [{ x: start.x, y: start.y - distance }],
-        timestamp: swipeTimestamp(),
       })
     }
 
-    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [], timestamp: Date.now() / 1000 })
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
     await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(before)
     await expect(titles).toHaveText(order)
+
+    let previous = -1
+    await expect
+      .poll(async () => {
+        const current = await scroll.evaluate((element) => element.scrollTop)
+        const settled = current === previous
+        previous = current
+
+        return settled
+      })
+      .toBe(true)
 
     const source = drawer
       .locator("[data-titlebar-tab]")
