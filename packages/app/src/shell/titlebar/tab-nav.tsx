@@ -42,23 +42,23 @@ export type TabCloseActions = {
 function TabCloseMenuItems(props: TabCloseActions & { orientation?: "horizontal" | "vertical"; label?: string }) {
   const language = useLanguage()
 
-  if (props.label) return <Menu.Item onSelect={props.onClose}>{props.label}</Menu.Item>
-
   return (
     <>
-      <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
-      <Menu.Item disabled={!props.onCloseOthers} onSelect={props.onCloseOthers}>
-        {language.t("common.closeOtherTabs")}
-      </Menu.Item>
-      <Menu.Item disabled={!props.onCloseAfter} onSelect={props.onCloseAfter}>
-        {language.t(
-          props.orientation === "vertical"
-            ? "common.closeTabsBelow"
-            : language.direction() === "rtl"
-              ? "common.closeTabsToLeft"
-              : "common.closeTabsToRight",
-        )}
-      </Menu.Item>
+      <Menu.Item onSelect={props.onClose}>{props.label ?? language.t("common.closeTab")}</Menu.Item>
+      <Show when={props.label === undefined}>
+        <Menu.Item disabled={!props.onCloseOthers} onSelect={props.onCloseOthers}>
+          {language.t("common.closeOtherTabs")}
+        </Menu.Item>
+        <Menu.Item disabled={!props.onCloseAfter} onSelect={props.onCloseAfter}>
+          {language.t(
+            props.orientation === "vertical"
+              ? "common.closeTabsBelow"
+              : language.direction() === "rtl"
+                ? "common.closeTabsToLeft"
+                : "common.closeTabsToRight",
+          )}
+        </Menu.Item>
+      </Show>
     </>
   )
 }
@@ -80,6 +80,7 @@ export function TabNavItem(
     onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
     closable?: boolean
     closeLabel?: string
+    closeMenuLabel?: string
     showSessionDetails?: boolean
     onDelete: () => void
     onNavigate: () => void
@@ -611,7 +612,7 @@ export function TabNavItem(
           <Show when={props.closable !== false}>
             <TabCloseMenuItems
               orientation={props.orientation}
-              label={props.closeLabel}
+              label={props.closeMenuLabel}
               onClose={props.onClose}
               onCloseOthers={props.onCloseOthers}
               onCloseAfter={props.onCloseAfter}

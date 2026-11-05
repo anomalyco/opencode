@@ -69,6 +69,7 @@ function SessionTabSlot(props: {
   onClose: () => void
   onIntent: (hovered: boolean) => void
 }) {
+  const language = useLanguage()
   const sortable = useSortable({
     get id() {
       return props.id
@@ -124,6 +125,7 @@ function SessionTabSlot(props: {
         onClose={props.onClose}
         closable={props.closable}
         closeLabel={props.closeLabel}
+        closeMenuLabel={props.closeLabel ?? language.t("common.close")}
         showSessionDetails
         active={props.active}
         dragging={sortable.isDragSource()}

@@ -93,7 +93,7 @@ test("Side bar keeps project history and running sessions separate from the offi
   for (const mode of ["Side bar", "Side tabs", "Inbox", "Top tabs", "Side bar"]) {
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
-    const interfaces = settings.getByRole("group", { name: "Interface", exact: true })
+    const interfaces = settings.getByRole("group", { name: "Interface layout", exact: true })
     await expect(interfaces.getByRole("radio")).toHaveCount(4)
     await interfaces.getByText(mode, { exact: true }).click()
     await expect(interfaces.getByRole("radio", { name: mode, exact: true })).toBeChecked()
@@ -208,7 +208,7 @@ test("sidebar and Home share projects and history without opening session tabs",
   for (const mode of ["Top tabs", "Side bar"]) {
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
-    await settings.getByRole("group", { name: "Interface", exact: true }).getByText(mode, { exact: true }).click()
+    await settings.getByRole("group", { name: "Interface layout", exact: true }).getByText(mode, { exact: true }).click()
     await expect(settings.getByRole("radio", { name: mode, exact: true })).toBeChecked()
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
     await expect(homeRow(a.title)).toBeVisible()
