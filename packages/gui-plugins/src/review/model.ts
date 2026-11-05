@@ -362,8 +362,7 @@ export function createReviewModel(input: {
         .then((result) => result.data),
   })
 
-  createKeyed(
-    createMemo(
+  const detailsContext = createMemo(
       (): ReviewDiffContext => {
         const project = view().project
 
@@ -388,9 +387,9 @@ export function createReviewModel(input: {
       },
       undefined,
       { equals: sameDiffContext },
-    ),
-    details.sync,
-  )
+    )
+
+  createKeyed(detailsContext, details.sync)
 
   // A finished turn does not change on focus or filesystem events; the machines refresh only Git changes then.
   onCleanup(
