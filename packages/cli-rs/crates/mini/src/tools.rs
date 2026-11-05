@@ -3,6 +3,7 @@
 //! M.1 leaves the signatures the writer and the transcript call. Until M.4, tool parts print nothing, which is
 //! what `mini.tools = "hide"`, the default, shows.
 
+use opencode_api::generated::SessionMessageAssistantTool;
 use opentui::prelude::*;
 use serde_json::Value;
 
@@ -28,7 +29,7 @@ pub struct DiffItem {
 }
 
 /// The commits of one tool part of a listed assistant message (`renderTool`, `toolCommit`).
-pub fn commits(_message_id: &str, _part: &Value) -> Vec<Commit> {
+pub fn commits(_message_id: &str, _part: &SessionMessageAssistantTool) -> Vec<Commit> {
     Vec::new()
 }
 

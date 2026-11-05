@@ -88,13 +88,20 @@ export function server(script: Script = {}): Options {
       method: "POST",
       path: "/api/session/ses_mini/permission/:id/reply",
       status: 204,
-      then: (entry: Logged) => [event("permission.replied", { requestID: entry.path.split("/").at(-2) })],
+      then: (entry: Logged) => [
+        event("permission.replied", {
+          requestID: entry.path.split("/").at(-2),
+          reply: (entry.body as { decision: string }).decision,
+        }),
+      ],
     },
     {
       method: "POST",
       path: "/api/session/ses_mini/form/:id/reply",
       status: 204,
-      then: (entry: Logged) => [event("form.replied", { id: entry.path.split("/").at(-2) })],
+      then: (entry: Logged) => [
+        event("form.replied", { id: entry.path.split("/").at(-2), answer: (entry.body as { answer: unknown }).answer }),
+      ],
     },
     {
       method: "DELETE",

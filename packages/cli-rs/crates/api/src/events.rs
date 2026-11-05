@@ -49,6 +49,22 @@ impl Event for serde_json::Value {
     }
 }
 
+/// One `GET /api/event` stream with each event decoded as `T`, for clients without the reconnecting
+/// [`connect`] loop (mini, ACP). A failure to open the stream is its first item.
+pub fn raw<T: serde::de::DeserializeOwned + Send + 'static>(
+    client: &crate::client::Client,
+) -> BoxStream<'static, Result<T, crate::error::Error>> {
+    let client = client.clone();
+    futures_util::stream::once(async move {
+        client.event_subscribe(&crate::generated::EventSubscribeInput::default()).await
+    })
+    .flat_map(|opened| match opened {
+        Ok(response) => crate::transport::SseResponse::<T>::new(response.response).events(|| {}).boxed(),
+        Err(error) => futures_util::stream::once(async move { Err(error) }).boxed(),
+    })
+    .boxed()
+}
+
 /// Reports transport activity, including keepalive comments that carry no event.
 pub type Activity = Arc<dyn Fn() + Send + Sync>;
 
