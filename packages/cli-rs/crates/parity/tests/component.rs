@@ -45,6 +45,20 @@ fn an_injected_one_cell_change_is_reported() {
 }
 
 #[test]
+fn the_summary_counts_cells_that_differ_in_color_only() {
+    let (expected, _) = load("H.1/alert");
+    let mut actual = expected.clone();
+    actual.cell_mut(8, 6).unwrap().fg = Color::RED;
+    actual.cell_mut(0, 0).unwrap().bg = Color::RED;
+    actual.cell_mut(9, 6).unwrap().symbol = "E".to_owned();
+    let report = compare(&expected, &actual).to_string();
+    assert_eq!(
+        report.lines().next(),
+        Some("3 of 720 cells differ (60x12), 2 in color only")
+    );
+}
+
+#[test]
 fn a_size_change_is_reported() {
     let (expected, _) = load("H.1/box");
     let actual = Fixture {
