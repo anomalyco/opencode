@@ -12,6 +12,10 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Info } from "@opencode/schema/config"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Npm } from "@opencode/util/npm"
+import { AppProcess } from "@opencode/util/process"
+import { make } from "../src/formatter/builtins"
 import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
 import { tempGlobalLayer } from "./fixture/global"
@@ -21,7 +25,16 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SdkPlugins.node,
+      LocationServiceMap.node,
+      Global.node,
+      FSUtil.node,
+      Npm.node,
+      AppProcess.node,
+    ]),
     [Global.node.replace(tempGlobalLayer), offlineModels],
   ),
 )
@@ -373,4 +386,39 @@ describe("Formatter", () => {
       }),
     ),
   )
+})
+
+describe("builtin Pint", () => {
+  for (const dependency of ["require", "require-dev"]) {
+    it.live(`resolves Pint from the ${dependency} manifest instead of the location directory`, () =>
+      withTemp((directory) =>
+        Effect.gen(function* () {
+          const root = path.join(directory, "PHP project")
+          const nested = path.join(root, "app")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(nested, { recursive: true })
+            await fs.writeFile(
+              path.join(root, "composer.json"),
+              JSON.stringify({ [dependency]: { "laravel/pint": "^1" } }),
+            )
+          })
+          const filesystem = yield* FSUtil.Service
+          const npm = yield* Npm.Service
+          const processes = yield* AppProcess.Service
+          for (const location of [root, nested]) {
+            const pint = make({
+              directory: location,
+              worktree: root,
+              fs: filesystem,
+              npm,
+              processes,
+              bin: process.execPath,
+            }).find((formatter) => formatter.name === "pint")
+            if (!pint) throw new Error("Pint formatter is missing")
+            expect(yield* pint.enabled).toEqual([path.join(root, "vendor", "bin", "pint"), "$FILE"])
+          }
+        }),
+      ),
+    )
+  }
 })

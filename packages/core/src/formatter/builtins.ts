@@ -1,3 +1,4 @@
+import path from "path"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/process"
 import { isRecord } from "@opencode/util/record"
@@ -227,7 +228,7 @@ export function make(input: {
       for (const file of yield* findUp("composer.json")) {
         const json = yield* input.fs.readJson(file)
         if (hasRecordKey(json, "require", "laravel/pint") || hasRecordKey(json, "require-dev", "laravel/pint")) {
-          return ["./vendor/bin/pint", "$FILE"]
+          return [path.join(path.dirname(file), "vendor", "bin", "pint"), "$FILE"]
         }
       }
       return disabled
