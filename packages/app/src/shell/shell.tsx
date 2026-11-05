@@ -26,6 +26,7 @@ import {
 import { createPanelMotion, guardClosingFocus, panelOpacity, setPanelResizing } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
+import { paintTrafficLightsNotch, TrafficLightsNotch } from "@/shell/traffic-lights-notch"
 
 type SidebarPose = { closed: number; peek: number | undefined }
 
@@ -109,6 +110,20 @@ export default function Layout(props: ParentProps) {
     if (!peeking) peekHome = undefined
   }
 
+  let trafficLightsNotch: SVGSVGElement | undefined
+
+  // The native traffic lights float over the top-left of the content once the sidebar leaves it. The content starts
+  // after the aside, which sits at the window's right in right-to-left layouts.
+  const paintNotch = () => {
+    const lights =
+      platform.platform === "desktop" && platform.os === "macos" && !platform.windowFullscreen?.() && verticalTabs()
+
+    const rtl = document.documentElement.dir === "rtl"
+    const content = rtl ? 0 : state.tabsWidth * (1 - sidebar.closed)
+
+    paintTrafficLightsNotch(trafficLightsNotch, lights ? content : undefined, platform.webviewZoom?.() ?? 1)
+  }
+
   const sidebarMotion = createPanelMotion({
     open: preferences.appearance.sidebarOpen,
     // The aside's real width moves main's edge with the sidebar's; its contents keep their width, pinned to that edge.
@@ -121,6 +136,7 @@ export default function Layout(props: ParentProps) {
       // Dims the contents, background included, as they leave and brightens them as they arrive.
       paintSidebarContents()
       paintCollapsedSlots(closed)
+      paintNotch()
     },
     measure: () => measureSidebarToggles(state.tabsWidth * sidebarHidden()),
     // A dock from a peek already shows the sidebar, so reduced motion has nothing to fade in.
@@ -314,6 +330,12 @@ export default function Layout(props: ParentProps) {
             <Suspense>{props.children}</Suspense>
           </PluginServerCover>
         </main>
+        <TrafficLightsNotch
+          ref={(element) => {
+            trafficLightsNotch = element
+            paintNotch()
+          }}
+        />
         <CollapsedSidebarToggle />
       </div>
       {/* On touch devices the active composer moves its actions here: the bottom edge, or the top of the keyboard.
