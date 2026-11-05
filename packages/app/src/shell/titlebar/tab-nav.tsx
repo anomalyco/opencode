@@ -14,7 +14,9 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
-import { sessionTabTitle } from "./tab-title"
+import { sessionLastRunLabel, sessionTabTitle } from "./tab-title"
+import { createSessionBranches } from "./session-branches"
+import { pathKey } from "@/workspaces/path-key"
 import { TabPreviewPopover } from "./tab-popover"
 import {
   INITIAL_TAB_RENAME_STATE,
@@ -37,8 +39,10 @@ export type TabCloseActions = {
   onCloseAfter?: () => void
 }
 
-function TabCloseMenuItems(props: TabCloseActions & { orientation?: "horizontal" | "vertical" }) {
+function TabCloseMenuItems(props: TabCloseActions & { orientation?: "horizontal" | "vertical"; label?: string }) {
   const language = useLanguage()
+
+  if (props.label) return <Menu.Item onSelect={props.onClose}>{props.label}</Menu.Item>
 
   return (
     <>
@@ -74,6 +78,9 @@ export function TabNavItem(
     /** Shows a title at once: the optimistic one, or the one to restore when its save fails. */
     onRememberTitle: (sessionID: string, title: string | undefined) => void
     onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
+    closable?: boolean
+    closeLabel?: string
+    showSessionDetails?: boolean
     onDelete: () => void
     onNavigate: () => void
     active?: boolean
@@ -97,6 +104,7 @@ export function TabNavItem(
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
+    if (props.closable === false) return
     props.onClose()
   }
 
@@ -177,6 +185,34 @@ export function TabNavItem(
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
+  const branches = createSessionBranches()
+  const branchEntry = () => {
+    if (!props.showSessionDetails) return
+    const ctx = serverCtx()
+    const session = props.session
+    return ctx && session ? { ctx, session, server: props.server } : undefined
+  }
+  createEffect(() => {
+    if (!popoverOpen()) return
+    const entry = branchEntry()
+    if (entry) branches.load([entry])
+  })
+  const branch = () => {
+    const entry = branchEntry()
+    return entry && branches.branch(entry)
+  }
+  const worktree = createMemo(() => {
+    if (!props.showSessionDetails) return
+    const value = project()
+    const directory = props.session?.location.directory
+    if (!value || !directory || !("sandboxes" in value)) return
+    const key = pathKey(directory)
+    return (
+      value.sandboxes
+        .filter((root) => key === pathKey(root) || key.startsWith(`${pathKey(root)}/`))
+        .toSorted((a, b) => b.length - a.length)[0] ?? value.worktree
+    )
+  })
 
   const previewBlocked = () =>
     !!props.dragging || selectTabPreviewBlocked(renameState()) || !!props.pressed || !props.session
@@ -510,18 +546,20 @@ export function TabNavItem(
           <span data-mark="attention" data-slot="tab-status-dot" />
           <span data-mark="unread" data-slot="tab-status-dot" />
         </span>
-        <IconButton
-          size="small"
-          variant="ghost-muted"
-          class="hover-reveal relative z-10"
-          onPointerDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onClick={closeTab}
-          icon={<Icon name="xmark-small" />}
-          aria-label={language.t("common.closeTab")}
-        />
+        <Show when={props.closable !== false}>
+          <IconButton
+            size="small"
+            variant="ghost-muted"
+            class="hover-reveal relative z-10"
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={closeTab}
+            icon={<Icon name="xmark-small" />}
+            aria-label={props.closeLabel ?? language.t("common.closeTab")}
+          />
+        </Show>
       </div>
     </div>
   )
@@ -548,6 +586,9 @@ export function TabNavItem(
           title: props.session?.title,
           path: previewPath(),
           serverName: serverLabel(),
+          lastRun: props.showSessionDetails ? sessionLastRunLabel(props.session?.time, language) : undefined,
+          branch: branch(),
+          worktree: worktree(),
         }}
       />
       <Menu.Context.Portal>
@@ -567,12 +608,15 @@ export function TabNavItem(
           <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
             {language.t("common.rename")}
           </Menu.Item>
-          <TabCloseMenuItems
-            orientation={props.orientation}
-            onClose={props.onClose}
-            onCloseOthers={props.onCloseOthers}
-            onCloseAfter={props.onCloseAfter}
-          />
+          <Show when={props.closable !== false}>
+            <TabCloseMenuItems
+              orientation={props.orientation}
+              label={props.closeLabel}
+              onClose={props.onClose}
+              onCloseOthers={props.onCloseOthers}
+              onCloseAfter={props.onCloseAfter}
+            />
+          </Show>
           <Menu.Separator />
           <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
             {language.t("session.delete.title")}…

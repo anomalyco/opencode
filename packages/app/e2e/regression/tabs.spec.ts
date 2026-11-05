@@ -29,6 +29,1126 @@ const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
 
+for (const locale of ["en", "ar"] as const) {
+  test(`Side bar keeps opposite-direction titles clear of the close affordance in ${locale}`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "Mixed direction",
+      sessions: [{ ...a, title: locale === "ar" ? "Project task" : "مهمة المشروع" }],
+      seed: { locale, tabs: [a.id], settings: { appearance: { tabLayout: "sidebar" } } },
+    })
+    await page.goto(sessionHref(a.id))
+    const link = page.locator(`[data-slot="vertical-tabs-sidebar"] a[href="${sessionHref(a.id)}"]`)
+    await expect(link).toBeVisible()
+    await link.hover()
+    await expect
+      .poll(() =>
+        link.evaluate((element) => {
+          const title = element.querySelector("[data-titlebar-tab-title]")
+          if (!title) throw new Error("Missing session title")
+          const range = document.createRange()
+          range.selectNodeContents(title)
+          const text = range.getBoundingClientRect()
+          const row = element.getBoundingClientRect()
+          return getComputedStyle(element).direction === "rtl" ? text.left - row.left : row.right - text.right
+        }),
+      )
+      .toBeGreaterThan(40)
+  })
+}
+
+test("Side bar keeps project history and running sessions separate from the official interface modes", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "ModeBoundary",
+    project: { id: "proj_used", name: "Used project" },
+    sessions: [{ ...a, time: { created: T0, updated: T0, idle: T0 } }, b, c],
+    sessionStatus: { [c.id]: { type: "running" } },
+    projects: [
+      project({ id: "proj_used", directory: "C:/OpenCode/ModeBoundary", name: "Used project" }),
+      project({ id: "proj_incidental", directory: "C:/", name: "Automatic directory" }),
+    ],
+    seed: {
+      tabs: [a.id],
+      usedProjects: { local: ["proj_used"] },
+      settings: { appearance: { tabLayout: "vertical", tabGrouping: "project" } },
+    },
+  })
+  await page.goto(sessionHref(a.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const running = page.locator('[data-component="active-sessions"]')
+  const projectRows = page.locator('[data-component="home-project-row"] [data-slot="home-row-label"]')
+  await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveText([a.title])
+  await expect(running).toHaveCount(0)
+  await expect(sidebar.getByRole("heading", { name: "Recent sessions", exact: true })).toHaveCount(0)
+  await expect(sidebar.getByRole("button", { name: "Group sessions By project", exact: true })).toHaveCount(0)
+  await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(a.id)}"]`).hover()
+  const preview = page.locator('[data-component="session-tab-popover"]')
+  await expect(preview).toContainText(a.title)
+  await expect(preview).not.toContainText(/Branch:|Worktree:|Last run/)
+  await sidebar.getByRole("button", { name: "Home", exact: true }).click()
+  await expect(projectRows).toHaveText(["Used project"])
+
+  for (const mode of ["Side bar", "Side tabs", "Inbox", "Top tabs", "Side bar"]) {
+    await page.keyboard.press("Control+,")
+    const settings = page.getByTestId("settings-screen")
+    const interfaces = settings.getByRole("group", { name: "Interface", exact: true })
+    await expect(interfaces.getByRole("radio")).toHaveCount(4)
+    await interfaces.getByText(mode, { exact: true }).click()
+    await expect(interfaces.getByRole("radio", { name: mode, exact: true })).toBeChecked()
+    await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+    await expect(running).toHaveCount(mode === "Side bar" ? 1 : 0)
+    await expect(projectRows).toHaveText(
+      mode === "Side bar" ? ["Used project", "Automatic directory"] : ["Used project"],
+    )
+    if (mode === "Side tabs") await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveText([a.title])
+    if (mode === "Side bar") {
+      await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveCount(3)
+      await expect(running.getByRole("button").filter({ hasText: c.title })).toBeVisible()
+      await expect(sidebar.getByRole("heading", { level: 3 })).toHaveText(["Automatic directory", "Used project"])
+    }
+  }
+  await page.reload()
+  await expect(running).toBeVisible()
+  await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveCount(3)
+  await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()
+  await expectPath(page, sessionHref(b.id))
+  await expectSessionTitle(page, b.title)
+})
+
+test("Running sessions retains known shells after model execution finishes", async ({ page }) => {
+  const status = { [b.id]: { type: "running" } }
+  const shell = {
+    id: "sh_legacy",
+    status: "running",
+    command: "Run checks",
+    cwd: "C:/OpenCode/Legacy activity",
+    shell: "pwsh.exe",
+    file: "C:/OpenCode/Legacy activity/shell.out",
+    metadata: { sessionID: b.id },
+    time: { started: T0 },
+  }
+  let shells = [shell]
+  const workspace = await mockWorkspace(page, {
+    name: "Legacy activity",
+    sessions: [a, b],
+    sessionStatus: () => status,
+    shellCommands: () => shells,
+    seed: { tabs: [a.id], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto(sessionHref(b.id))
+  const running = page.getByRole("region", { name: "Running sessions", exact: true })
+  await expect(running.getByRole("button")).toHaveCount(1)
+  await expect(running.getByRole("button")).toContainText(b.title)
+  await expect(running).not.toContainText("Activity status is unavailable")
+  status[b.id]!.type = "idle"
+  await workspace.push([
+    {
+      id: "evt_legacy_activity_finished",
+      created: T0 + 1,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: b.id, seq: 1, version: 1 },
+      data: { sessionID: b.id },
+    },
+  ])
+  await expect(running.getByRole("button")).toHaveCount(1)
+  await expect(running.getByRole("button")).toContainText("Background work")
+  await expect(running.getByRole("button")).toHaveAttribute("title", /1 background shell/)
+  await expect(page.getByRole("status", { name: "Background work", exact: true })).toBeVisible()
+  await page.reload()
+  await expect(running.getByRole("button")).toContainText("Background work")
+  await expect(page.getByRole("status", { name: "Background work", exact: true })).toBeVisible()
+  shells = []
+  await workspace.push([
+    {
+      type: "shell.exited",
+      id: "evt_legacy_shell_done",
+      created: T0 + 2,
+      location: { directory: workspace.directory },
+      data: { id: shell.id, exit: 0, status: "exited" },
+    },
+  ])
+  await expect(running.getByText("No running sessions", { exact: true })).toBeVisible()
+  await expect(page.getByRole("status", { name: "Background work", exact: true })).toHaveCount(0)
+  await expect(running).not.toContainText("Activity status is unavailable")
+})
+
+test("sidebar and Home share projects and history without opening session tabs", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "SharedHistory",
+    sessions: [a, b],
+    projects: [
+      project({ id: "proj_sharedhistory", directory: "C:/OpenCode/SharedHistory", name: "Shared history" }),
+      project({ id: "proj_empty", directory: "C:/OpenCode/Empty", name: "Empty project" }),
+    ],
+    seed: {
+      tabs: [],
+      usedProjects: { local: [] },
+      settings: { appearance: { tabLayout: "sidebar" } },
+    },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const home = page.locator('[data-slot="home-panel"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  const homeRow = (title: string) => home.locator('[data-component="home-session-row"]').filter({ hasText: title })
+  await expect(homeRow(a.title)).toBeVisible()
+  await expect(homeRow(b.title)).toBeVisible()
+  await expect(titles).toHaveText([a.title, b.title])
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveText(["Empty project", "Shared history"])
+  await expect(sidebar.getByRole("button", { name: "Close tab", exact: true })).toHaveCount(0)
+  await expect(sidebar.getByRole("heading", { name: "Recent sessions", exact: true })).toBeVisible()
+  await expect(sidebar.getByRole("button", { name: "Group sessions By project", exact: true })).toBeVisible()
+  await expect(home.locator('[data-component="home-project-row"] [data-slot="home-row-label"]')).toHaveText([
+    "Shared history",
+    "Empty project",
+  ])
+
+  for (const mode of ["Top tabs", "Side bar"]) {
+    await page.keyboard.press("Control+,")
+    const settings = page.getByTestId("settings-screen")
+    await settings.getByRole("group", { name: "Interface", exact: true }).getByText(mode, { exact: true }).click()
+    await expect(settings.getByRole("radio", { name: mode, exact: true })).toBeChecked()
+    await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+    await expect(homeRow(a.title)).toBeVisible()
+  }
+  await expect(titles).toHaveText([a.title, b.title])
+
+  await homeRow(a.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const rename = home.locator('[data-component="home-session-rename"]')
+  await rename.fill("Shared rename")
+  await rename.press("Enter")
+  await expect(titles).toHaveText(["Shared rename", b.title])
+  await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()
+  await expectPath(page, sessionHref(b.id))
+  await expectSessionTitle(page, b.title)
+  await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Close", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(titles).toHaveText(["Shared rename"])
+  await expect(homeRow(b.title)).toBeVisible()
+  await page.reload()
+  await expect(titles).toHaveText(["Shared rename"])
+  await expect(homeRow(b.title)).toBeVisible()
+  await sidebar.getByRole("button", { name: "Search sessions", exact: true }).click()
+  const search = page.getByRole("dialog")
+  await search.getByRole("combobox").fill(b.title)
+  await expect(search.getByRole("option")).toContainText(b.title)
+  await search.getByRole("option").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(titles).toHaveText(["Shared rename", b.title])
+  await sidebar.getByRole("button", { name: "Home", exact: true }).click()
+
+  await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(a.id)}"]`).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Delete session", exact: true }).click()
+  await expect(titles).toHaveText([b.title])
+  await expect(homeRow("Shared rename")).toHaveCount(0)
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveText(["Empty project", "Shared history"])
+  await expect(sidebar.getByText("1/1", { exact: true })).toBeVisible()
+  await sidebar.getByRole("heading", { name: "Empty project", exact: true }).hover()
+  await sidebar.getByRole("button", { name: "New session in Empty project", exact: true }).click()
+  await expect(page.locator('[data-component="new-session"] [data-action="prompt-project"]')).toContainText(
+    "Empty project",
+  )
+  await expect(sidebar.locator('a[data-titlebar-tab-link][href^="/new-session?draftId="]')).toHaveText("Draft (unsent)")
+  await expect(sidebar.getByText("0/0", { exact: true })).toBeVisible()
+})
+
+test("Side bar sorts project names independently of activity and persists alphabetized pins", async ({ page }) => {
+  const projects = ["Zeta", "Beta", "Alpha"].map((name, index) =>
+    project({
+      id: `proj_order_${name}`,
+      directory: `C:/OpenCode/${name}`,
+      name,
+      time: { created: T0, updated: T0, active: T0 + 3 - index },
+    }),
+  )
+  const workspace = await mockWorkspace(page, {
+    name: "ProjectOrder",
+    projects: [
+      ...projects,
+      project({ id: "proj_projectorder", directory: "C:/OpenCode/ProjectOrder", name: "ProjectOrder" }),
+    ],
+    sessions: [
+      ...projects.map((item) => ({
+        id: `ses_order_${item.name}`,
+        title: `${item.name} task`,
+        directory: item.worktree,
+        projectID: item.id,
+      })),
+      {
+        id: "ses_order_alpha_newer",
+        title: "Alpha newer task",
+        directory: projects[2]!.worktree,
+        projectID: projects[2]!.id,
+        time: { created: T0, updated: T0 + 100 },
+      },
+    ],
+    seed: { tabs: [], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const headings = sidebar.getByRole("heading", { level: 3 })
+  // The workspace's otherwise empty default project is also part of the server catalogue.
+  await expect(headings).toHaveText(["Alpha", "Beta", "ProjectOrder", "Zeta"])
+  await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveText([
+    "Alpha newer task",
+    "Alpha task",
+    "Beta task",
+    "Zeta task",
+  ])
+  await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref("ses_order_Zeta")}"]`).click()
+  await expectSessionTitle(page, "Zeta task")
+  const active = { ...projects[0]!, time: { ...projects[0]!.time, active: T0 + 1000 } }
+  projects[0] = active
+  await workspace.push([{ id: "evt_order_project_active", created: T0 + 1000, type: "project.updated", data: active }])
+  await expect(headings).toHaveText(["Alpha", "Beta", "ProjectOrder", "Zeta"])
+  await sidebar.getByRole("heading", { name: "Zeta", exact: true }).hover()
+  await sidebar.getByRole("button", { name: "Pin project Zeta", exact: true }).click()
+  await expect(headings).toHaveText(["Zeta", "Alpha", "Beta", "ProjectOrder"])
+  await sidebar.getByRole("heading", { name: "Beta", exact: true }).hover()
+  await sidebar.getByRole("button", { name: "Pin project Beta", exact: true }).click()
+  await expect(headings).toHaveText(["Beta", "Zeta", "Alpha", "ProjectOrder"])
+  await sidebar.getByRole("button", { name: "Collapse project Zeta", exact: true }).click()
+  await page.reload()
+  await expect(headings).toHaveText(["Beta", "Zeta", "Alpha", "ProjectOrder"])
+  await expect(sidebar.getByRole("button", { name: "Unpin project Zeta", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
+  await expect(sidebar.getByRole("button", { name: "Expand project Zeta", exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Unpin project Zeta", exact: true }).click()
+  await expect(headings).toHaveText(["Beta", "Alpha", "ProjectOrder", "Zeta"])
+  await sidebar.getByRole("button", { name: "Unpin project Beta", exact: true }).click()
+  await expect(headings).toHaveText(["Alpha", "Beta", "ProjectOrder", "Zeta"])
+})
+
+test("Side bar tracks unread results while project rows are collapsed", async ({ page }) => {
+  const sessionStatus = { ses_unread_background: { type: "running" } }
+  const workspace = await mockWorkspace(page, {
+    name: "UnreadCurrent",
+    projects: [
+      project({ id: "proj_unread_background", directory: "C:/OpenCode/UnreadBackground", name: "Background" }),
+    ],
+    sessions: [
+      { id: "ses_unread_current", title: "Current task", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_unread_background",
+        title: "Background task",
+        directory: "C:/OpenCode/UnreadBackground",
+        projectID: "proj_unread_background",
+        time: { created: T0, updated: T0, idle: T0, viewed: T0 },
+      },
+    ],
+    sessionStatus,
+    seed: { tabs: ["ses_unread_current"], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto(sessionHref("ses_unread_current"))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const running = sidebar.getByRole("region", { name: "Running sessions", exact: true })
+  const group = sidebar.getByRole("heading", { name: "Background", exact: true })
+  const toggle = page.locator('[data-slot="collapsed-sidebar-toggle"]').getByRole("button")
+  await expect(running.getByRole("button").filter({ hasText: "Background task" })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Collapse project Background", exact: true }).click()
+  await sidebar.getByRole("button", { name: "Collapse project UnreadCurrent", exact: true }).click()
+  await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(0)
+  Object.assign(workspace.sessions[1]!.time, { updated: T0 + 2000, idle: T0 + 2000 })
+  sessionStatus.ses_unread_background.type = "idle"
+  await workspace.push([
+    {
+      id: "evt_unread_background_finished",
+      created: T0 + 2000,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "ses_unread_background", seq: 1, version: 1 },
+      data: { sessionID: "ses_unread_background" },
+    },
+  ])
+  await expect(running.locator('[data-slot="active-sessions-empty"]')).toBeVisible()
+  await expect(group.getByRole("img", { name: "Unread sessions", exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Toggle sidebar", exact: true }).click()
+  await expect(toggle).toHaveAttribute("aria-label", "Toggle sidebar, unread sessions")
+  await toggle.click()
+  await page.reload()
+  await expect(sidebar.getByRole("button", { name: "Expand project Background", exact: true })).toBeVisible()
+  await expect(group.getByRole("img", { name: "Unread sessions", exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Toggle sidebar", exact: true }).click()
+  await expect(toggle).toHaveAttribute("aria-label", "Toggle sidebar, unread sessions")
+  Object.assign(workspace.sessions[1]!.time, { viewed: T0 + 2000 })
+  await workspace.push([
+    {
+      id: "evt_unread_background_viewed",
+      created: T0 + 3000,
+      type: "session.viewed",
+      durable: { aggregateID: "ses_unread_background", seq: 2, version: 1 },
+      data: { sessionID: "ses_unread_background", idle: T0 + 2000 },
+    },
+  ])
+  await expect(toggle).toHaveAttribute("aria-label", "Toggle sidebar")
+  await toggle.click()
+  await expect(group.getByRole("img", { name: "Unread sessions", exact: true })).toHaveCount(0)
+})
+
+test("Side bar keeps pinned projects fixed while the regular project list scrolls", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 480 })
+  const projects = Array.from({ length: 12 }, (_, index) =>
+    project({ id: `proj_scroll_${index}`, directory: `C:/OpenCode/Project${index}`, name: `Project ${index}` }),
+  )
+  await mockWorkspace(page, {
+    name: "SidebarScroll",
+    projects: [
+      ...projects,
+      project({ id: "proj_sidebarscroll", directory: "C:/OpenCode/SidebarScroll", name: "SidebarScroll" }),
+    ],
+    sessions: projects.map((item, index) => ({
+      id: `ses_scroll_${index}`,
+      title: `Task ${index}`,
+      directory: item.worktree,
+      projectID: item.id,
+    })),
+    sessionStatus: Object.fromEntries(
+      projects.slice(2, 8).map((_, index) => [`ses_scroll_${index + 2}`, { type: "running" }]),
+    ),
+    seed: { tabs: [], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveCount(13)
+  await expect(sidebar.locator('[data-slot="active-sessions-list"] button')).toHaveCount(6)
+  await expect.poll(() => scroll.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(scroll).not.toHaveCSS("scrollbar-width", "none")
+  await expect
+    .poll(() => scroll.evaluate((element) => getComputedStyle(element, "::-webkit-scrollbar-thumb").backgroundColor))
+    .not.toMatch(/^(transparent|rgba\(0, 0, 0, 0\))$/)
+  await expect(sidebar.getByRole("heading", { name: "Project 0", exact: true })).toBeInViewport()
+  expect(
+    await sidebar
+      .locator(
+        '[data-action="vertical-tabs-home"], [data-action="vertical-tabs-new-session"], [data-action="vertical-tabs-search"]',
+      )
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-action"))),
+  ).toEqual(["vertical-tabs-home", "vertical-tabs-new-session", "vertical-tabs-search"])
+  const heading = sidebar.getByRole("heading", { name: "Project 0", exact: true })
+  const pin = sidebar.getByRole("button", { name: "Pin project Project 0", exact: true, includeHidden: true })
+  const add = sidebar.getByRole("button", { name: "New session in Project 0", exact: true, includeHidden: true })
+  await page.mouse.move(1100, 20)
+  await expect(pin).toBeHidden()
+  await expect(add).toBeHidden()
+  await expect
+    .poll(() => heading.evaluate((element) => element.clientWidth === element.parentElement!.clientWidth))
+    .toBe(true)
+  const width = await heading.evaluate((element) => element.clientWidth)
+  await heading.hover()
+  await expect(pin).toBeVisible()
+  await expect(add).toBeVisible()
+  expect((await add.boundingBox())!.x).toBeLessThan((await pin.boundingBox())!.x)
+  expect(await heading.evaluate((element) => element.clientWidth)).toBe(width)
+  await pin.focus()
+  await page.mouse.move(1100, 20)
+  await expect(pin).toBeVisible()
+  await sidebar.getByRole("button", { name: "Home", exact: true }).focus()
+  await expect(pin).toBeHidden()
+  await sidebar.getByRole("heading", { name: "Project 0", exact: true }).hover()
+  await pin.click()
+  await sidebar.getByRole("heading", { name: "Project 1", exact: true }).hover()
+  await sidebar.getByRole("button", { name: "Pin project Project 1", exact: true }).click()
+  const pinned = sidebar.getByRole("region", { name: "Pinned projects", exact: true })
+  await page.mouse.move(1100, 20)
+  await sidebar.getByRole("button", { name: "Home", exact: true }).focus()
+  await expect(pinned.getByRole("button", { name: "Unpin project Project 0", exact: true })).toBeVisible()
+  await expect(pinned.getByRole("button", { name: "Unpin project Project 0", exact: true })).toBeInViewport({
+    ratio: 1,
+  })
+  await expect(
+    pinned.getByRole("button", { name: "New session in Project 0", exact: true, includeHidden: true }),
+  ).toBeHidden()
+  await expect(sidebar.getByRole("heading", { level: 2 })).toHaveText([
+    "Pinned projects",
+    "Recent sessions",
+    "Running sessions",
+  ])
+  await expect
+    .poll(() =>
+      pinned.evaluate(
+        (element) =>
+          element.getBoundingClientRect().height <=
+          element.closest('[data-slot="vertical-tabs"]')!.clientHeight * 0.4 + 1,
+      ),
+    )
+    .toBe(true)
+  await expect
+    .poll(() =>
+      pinned
+        .locator('[data-slot="sidebar-pinned-scroll"]')
+        .evaluate((element) => element.scrollHeight > element.clientHeight),
+    )
+    .toBe(true)
+  await expect(pinned.getByRole("heading", { level: 3 })).toHaveText(["Project 0", "Project 1"])
+  await expect(pinned.getByRole("heading", { name: "Project 0", exact: true })).toBeInViewport()
+  const position = await pinned.boundingBox()
+  if (!position) throw new Error("Pinned projects have no position")
+  await scroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+  await expect(sidebar.getByRole("heading", { name: "SidebarScroll", exact: true })).toBeInViewport()
+  await expect(sidebar.getByRole("heading", { name: "Project 2", exact: true })).not.toBeInViewport()
+  await expect(pinned.getByRole("heading", { name: "Project 0", exact: true })).toBeInViewport()
+  expect(await pinned.boundingBox()).toEqual(position)
+  await pinned.locator(`a[data-titlebar-tab-link][href="${sessionHref("ses_scroll_0")}"]`).click()
+  await expectPath(page, sessionHref("ses_scroll_0"))
+  await pinned.getByRole("button", { name: "Unpin project Project 0", exact: true }).click()
+  await pinned.getByRole("button", { name: "Unpin project Project 1", exact: true }).click()
+  await expect(pinned).toHaveCount(0)
+})
+
+test("project headers collapse every session independently of the recent preview and preserve the choice", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Collapse project",
+    sessions: Array.from({ length: 7 }, (_, index) => ({ id: `ses_collapse_${index}`, title: `Task ${index}` })),
+    seed: { tabs: [], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  const collapse = sidebar.getByRole("button", { name: "Collapse project Collapse project", exact: true })
+  await expect(titles).toHaveCount(5)
+  await expect(collapse).toHaveAttribute("aria-expanded", "true")
+  await collapse.focus()
+  await page.keyboard.press("Enter")
+  await expect(titles).toHaveCount(0)
+  await expect(sidebar.getByRole("button", { name: /Show 2 more sessions/ })).toHaveCount(0)
+  await expect(sidebar.getByRole("heading", { name: "Collapse project", exact: true })).toBeVisible()
+  await expect(sidebar.getByRole("region", { name: "Running sessions", exact: true })).toBeVisible()
+  await page.reload()
+  await expect(titles).toHaveCount(0)
+  await sidebar.getByRole("button", { name: "Expand project Collapse project", exact: true }).click()
+  await expect(titles).toHaveCount(5)
+  await sidebar.getByRole("button", { name: "Show 2 more sessions in Collapse project", exact: true }).click()
+  await expect(titles).toHaveCount(7)
+  await collapse.click()
+  await expect(titles).toHaveCount(0)
+  await sidebar.getByRole("button", { name: "Group sessions By project", exact: true }).click()
+  await page.getByRole("option", { name: "List", exact: true }).click()
+  await expect(titles).toHaveCount(7)
+  await sidebar.getByRole("button", { name: "Group sessions List", exact: true }).click()
+  await page.getByRole("option", { name: "By project", exact: true }).click()
+  await expect(titles).toHaveCount(0)
+  await sidebar.getByRole("heading", { name: "Collapse project", exact: true }).hover()
+  await sidebar.getByRole("button", { name: "New session in Collapse project", exact: true }).click()
+  await expect(collapse).toHaveAttribute("aria-expanded", "true")
+  await expect(titles).toHaveCount(8)
+  await expect(page.locator('[data-component="new-session"] [data-action="prompt-project"]')).toContainText(
+    "Collapse project",
+  )
+})
+
+test("recent parents stay busy while descendants execute and busy icons resume after idle", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  const child = { id: "ses_busy_descendant", title: "Running child", parentID: a.id }
+  const grandchild = { id: "ses_busy_grandchild", title: "Running grandchild", parentID: child.id }
+  const workspace = await mockWorkspace(page, {
+    name: "Family status",
+    sessions: [
+      a,
+      child,
+      grandchild,
+      ...Array.from({ length: 24 }, (_, index) => ({ id: `ses_scroll_${index}`, title: `Scroll task ${index}` })),
+    ],
+    sessionStatus: { [grandchild.id]: { type: "running" } },
+    seed: { tabs: [], settings: { appearance: { tabLayout: "sidebar", tabGrouping: "none" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const tab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
+  const spinner = tab.locator('[data-component="activity-ring"]')
+  await expect(tab.locator("[data-titlebar-tab]")).toHaveAttribute("data-status", "busy")
+  await expect(spinner).toBeVisible()
+  await spinner.scrollIntoViewIfNeeded()
+  await expect(
+    page
+      .locator('[data-component="home-session-row"]')
+      .filter({ hasText: a.title })
+      .locator('[data-component="activity-ring"]'),
+  ).toBeVisible()
+  const animations = (target = spinner) =>
+    target.evaluate((element) =>
+      element
+        .getAnimations({ subtree: true })
+        .map((animation) => ({ state: animation.playState, time: Number(animation.currentTime) })),
+    )
+  await expect.poll(async () => (await animations()).every((animation) => animation.state === "running")).toBe(true)
+  const childSpinner = sidebar
+    .getByRole("region", { name: "Running sessions", exact: true })
+    .getByRole("button")
+    .filter({ hasText: grandchild.title })
+    .locator('[data-component="activity-ring"]')
+  await expect
+    .poll(async () => {
+      const values = await animations(childSpinner)
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+  await workspace.push([
+    {
+      id: "evt_family_shell_started",
+      created: T0 + 1,
+      type: "shell.created",
+      location: { directory: workspace.directory },
+      data: {
+        info: {
+          id: "sh_family",
+          status: "running",
+          command: "Check in background",
+          cwd: workspace.directory,
+          shell: "pwsh.exe",
+          file: `${workspace.directory}/shell.out`,
+          metadata: { sessionID: grandchild.id },
+          time: { started: T0 + 1 },
+        },
+      },
+    },
+    {
+      id: "evt_family_finish",
+      created: 1700000002000,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: grandchild.id, seq: 1, version: 1 },
+      data: { sessionID: grandchild.id },
+    },
+  ])
+  await expect(tab.locator("[data-titlebar-tab]")).toHaveAttribute("data-status", "busy")
+  await expect(
+    sidebar.getByRole("region", { name: "Running sessions", exact: true }).getByRole("button"),
+  ).toContainText("Background work")
+  await workspace.push([
+    {
+      id: "evt_family_shell_ended",
+      created: T0 + 2,
+      type: "shell.exited",
+      location: { directory: workspace.directory },
+      data: { id: "sh_family", status: "exited", exit: 0 },
+    },
+  ])
+  await expect(tab.locator("[data-titlebar-tab]")).not.toHaveAttribute("data-status", "busy")
+  await workspace.push([
+    {
+      id: "evt_family_restart",
+      created: 1700000003000,
+      type: "session.execution.started",
+      durable: { aggregateID: grandchild.id, seq: 2, version: 1 },
+      data: { sessionID: grandchild.id },
+    },
+  ])
+  await expect(spinner).toBeVisible()
+  await expect
+    .poll(async () => {
+      const values = await animations()
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+  const time = (await animations())[0]!.time
+  await expect.poll(async () => (await animations())[0]!.time).toBeGreaterThan(time)
+  const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+  await scroll.evaluate((element) => {
+    element.scrollTop = 0
+  })
+  await expect(spinner).toHaveAttribute("data-offscreen", "")
+  await spinner.scrollIntoViewIfNeeded()
+  await expect(spinner).not.toHaveAttribute("data-offscreen")
+  await expect.poll(async () => (await animations()).every((animation) => animation.state === "running")).toBe(true)
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduce")
+  await expect.poll(async () => (await animations()).length).toBe(0)
+  await expect.poll(async () => (await animations(childSpinner)).length).toBe(0)
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await expect
+    .poll(async () => {
+      const values = await animations()
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const values = await animations(childSpinner)
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+})
+
+test("recent sessions caps each project at five and can reveal a selected overflow session", async ({ page }) => {
+  const large = Array.from({ length: 10 }, (_, index) => ({
+    id: `ses_limit_${index}`,
+    title: `Large task ${index}`,
+    time: { created: T0, updated: T0, viewed: T0, idle: index === 9 ? T0 + 1 : undefined },
+  }))
+  const small = Array.from({ length: 3 }, (_, index) => ({
+    id: `ses_small_${index}`,
+    title: `Small task ${index}`,
+    directory: "C:/OpenCode/Small",
+    projectID: "proj_small",
+  }))
+  await mockWorkspace(page, {
+    name: "ProjectLimit",
+    sessions: [...large, ...small],
+    projects: [
+      project({ id: "proj_projectlimit", directory: "C:/OpenCode/ProjectLimit", name: "Large project" }),
+      project({ id: "proj_small", directory: "C:/OpenCode/Small", name: "Small project" }),
+    ],
+    seed: {
+      tabs: [],
+      usedProjects: { local: ["proj_projectlimit", "proj_small"] },
+      settings: { appearance: { tabLayout: "sidebar" } },
+    },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  const names = (items: { title: string }[]) => items.map((item) => item.title)
+  const group = sidebar
+    .locator("div[title]")
+    .filter({ has: page.getByRole("heading", { name: "Large project", exact: true }) })
+  await expect(titles).toHaveText(names([...large.slice(0, 5), ...small]))
+  await expect(group.getByRole("img", { name: "Unread sessions", exact: true })).toBeVisible()
+  await expect(group.getByText("10/10", { exact: true })).toBeVisible()
+  await expect(group).toHaveAttribute("title", /5 shown · 10 recent · 10 sessions in project history/)
+  const more = sidebar.getByRole("button", { name: "Show 5 more sessions in Large project", exact: true })
+  await expect(more).toHaveText("More (5)")
+  await expect(more).toHaveAttribute("aria-expanded", "false")
+  await more.click()
+  await expect(titles).toHaveText(names([...large, ...small]))
+  await expect(group).toHaveAttribute("title", /10 shown · 10 recent · 10 sessions in project history/)
+  const less = sidebar.getByRole("button", { name: "Collapse sessions in Large project", exact: true })
+  await expect(less).toHaveAttribute("aria-expanded", "true")
+  await less.click()
+  await expect(titles).toHaveText(names([...large.slice(0, 5), ...small]))
+
+  await sidebar
+    .locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(large[0]!.id)}"])`)
+    .getByRole("button", { name: "Hide from recent sessions", exact: true })
+    .click()
+  await expect(titles).toHaveText(names([...large.slice(1, 6), ...small]))
+  await expect(group.getByText("9/10", { exact: true })).toBeVisible()
+  await expect(
+    sidebar.getByRole("button", { name: "Show 4 more sessions in Large project", exact: true }),
+  ).toBeVisible()
+  const home = page.locator('[data-slot="home-panel"]')
+  await expect(home.locator('[data-component="home-session-row"]').filter({ hasText: large[0]!.title })).toBeVisible()
+  await home.getByRole("textbox", { name: /Search sessions/ }).fill(large[9]!.title)
+  await expect(home.getByRole("option")).toContainText(large[9]!.title)
+  await home.getByRole("option").click()
+  await expectPath(page, sessionHref(large[9]!.id))
+  await expect(sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(large[9]!.id)}"]`)).toBeVisible()
+  await expect(titles).toHaveCount(8)
+  await expect(sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(large[0]!.id)}"]`)).toHaveCount(0)
+})
+
+test("recent sessions follow last activity and preview the previous run completion", async ({ page }) => {
+  const ended = 1700000100000
+  const worktree = "C:/OpenCode/Activity order/task"
+  const loaded: string[] = []
+  const workspace = await mockWorkspace(page, {
+    name: "Activity order",
+    project: { sandboxes: [worktree] },
+    vcs: (directory) => ({ current: directory === worktree ? "task-branch" : "main", default: "main" }),
+    sessions: [
+      { ...a, time: { created: ended - 10000, updated: ended - 3000 } },
+      { ...b, directory: worktree, time: { created: ended - 10000, updated: ended, idle: ended } },
+      { ...c, time: { created: ended - 10000, updated: ended - 2000 } },
+      { id: "ses_child_sidebar", title: "Child task", parentID: a.id },
+    ],
+    onSession: (id) => loaded.push(id),
+    seed: { tabs: [a.id, "ses_child_sidebar"], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveText([b.title, c.title, a.title])
+  const tab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  await tab.hover()
+  const preview = page.locator('[data-component="session-tab-popover"]')
+  await expect(preview).toContainText(b.title)
+  await expect(preview).toContainText("Last run ended:")
+  await expect(preview).toContainText("Branch: task-branch")
+  await expect(preview).toContainText(`Worktree: ${worktree}`)
+  await expect(preview).toContainText(
+    new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "medium" }).format(ended),
+  )
+  await expect.poll(() => loaded.includes(a.id)).toBe(true)
+  await workspace.push([
+    {
+      id: "evt_sidebar_last_activity",
+      created: ended + 5000,
+      type: "session.agent.selected",
+      durable: { aggregateID: a.id, seq: 1, version: 1 },
+      data: { sessionID: a.id, agent: "plan" },
+    },
+  ])
+  await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveText([a.title, b.title, c.title])
+})
+
+test("sidebar loads history before Home mounts and shares live additions and removals", async ({ page }) => {
+  const directory = "C:/OpenCode/SidebarLive"
+  const records = [
+    session({ ...a, directory, projectID: "proj_live" }),
+    session({ ...b, directory, projectID: "proj_live" }),
+  ]
+  const messages: string[] = []
+  const mock = await mockServers(page, {
+    [SERVER]: {
+      directory,
+      project: project({ id: "proj_live", directory, name: "Live project" }),
+      provider: NO_PROVIDER,
+      sessions: records,
+      pageMessages: () => ({ items: [] }),
+      onMessages: (input) => {
+        if (input.phase === "start") messages.push(input.sessionID)
+      },
+    },
+  })
+  await seed(page, {
+    usedProjects: { local: ["proj_live"] },
+    tabs: [a.id],
+    settings: { appearance: { tabLayout: "sidebar" } },
+  })
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  await expect(titles).toHaveText([a.title, b.title])
+  await expect(sidebar.getByRole("button", { name: "Close tab", exact: true })).toHaveCount(1)
+  expect(messages.filter((id) => id !== a.id)).toEqual([])
+  const added = session({ ...c, directory, projectID: "proj_live" })
+  records.push(added)
+  await mock[SERVER]!.transport.burst([
+    {
+      id: "evt_sidebar_created",
+      created: 1700000001000,
+      type: "session.created",
+      durable: { aggregateID: c.id, seq: 0, version: 1 },
+      location: { directory },
+      data: {
+        sessionID: c.id,
+        projectID: "proj_live",
+        location: { directory },
+        slug: added.slug,
+        title: added.title,
+        version: added.version,
+      },
+    },
+  ])
+  await expect(titles).toHaveText([a.title, b.title, c.title])
+  await sidebar.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  const home = page.locator('[data-slot="home-panel"]')
+  await expect(home.locator('[data-component="home-session-row"]').filter({ hasText: c.title })).toBeVisible()
+  records.splice(
+    records.findIndex((item) => item.id === b.id),
+    1,
+  )
+  await mock[SERVER]!.transport.burst([
+    {
+      id: "evt_sidebar_deleted",
+      created: 1700000002000,
+      type: "session.deleted",
+      durable: { aggregateID: b.id, seq: 1, version: 2 },
+      location: { directory },
+      data: { sessionID: b.id },
+    },
+  ])
+  await expect(titles).toHaveText([a.title, c.title])
+  await expect(home.locator('[data-component="home-session-row"]').filter({ hasText: b.title })).toHaveCount(0)
+})
+
+test("the running shelf includes unopened sessions across projects and servers in a bounded scrolling area", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const directory = "C:/OpenCode/Local"
+  const remoteDirectory = "C:/OpenCode/Remote"
+  const sandbox = "C:/OpenCode/Local-feature"
+  const now = 1800000000000
+  await page.clock.install({ time: now })
+
+  const local = Array.from({ length: 5 }, (_, index) =>
+    session({
+      id: `ses_running_local_${index}`,
+      title: `Local task ${index}`,
+      directory,
+      projectID: "proj_local",
+      time: { created: now - 3600000, updated: now, busy: now - 109000, idle: now - 1800000 },
+    }),
+  )
+
+  const child = session({
+    id: "ses_running_child",
+    title: "Local subagent",
+    directory: sandbox,
+    projectID: "proj_local",
+    parentID: local[1]!.id,
+  })
+
+  const remote = Array.from({ length: 6 }, (_, index) =>
+    session({
+      id: `ses_running_remote_${index}`,
+      title: `Remote task ${index}`,
+      directory: remoteDirectory,
+      projectID: "proj_remote",
+    }),
+  )
+
+  const messages: string[] = []
+  await mockServers(page, {
+    [SERVER]: {
+      directory,
+      project: project({ id: "proj_local", directory, name: "Local project", sandboxes: [sandbox] }),
+      vcs: (location) => ({ current: location === sandbox ? "feature/sidebar" : "main", default: "main" }),
+      provider: NO_PROVIDER,
+      sessions: [
+        session({ ...a, directory }),
+        ...local,
+        child,
+        ...Array.from({ length: 205 }, (_, index) =>
+          session({ id: `ses_idle_${index}`, directory, created: 1800000000000 + index }),
+        ),
+      ],
+      sessionStatus: Object.fromEntries([...local, child].map((value) => [value.id, { type: "running" }])),
+      sessionPermissions: {
+        [local[0]!.id]: [
+          {
+            id: "permission-active",
+            sessionID: local[0]!.id,
+            action: "shell",
+            resources: ["git status"],
+            metadata: {},
+            save: [],
+          },
+        ],
+      },
+      pageMessages: () => ({ items: [] }),
+      onMessages: (input) => {
+        if (input.phase === "start") messages.push(input.sessionID)
+      },
+    },
+    [REMOTE_SERVER]: {
+      directory: remoteDirectory,
+      project: project({ id: "proj_remote", directory: remoteDirectory, name: "Remote project" }),
+      provider: NO_PROVIDER,
+      vcs: { current: "dev-my", default: "main" },
+      sessions: remote,
+      sessionStatus: Object.fromEntries(remote.map((value) => [value.id, { type: "running" }])),
+      pageMessages: () => ({ items: [] }),
+      onMessages: (input) => {
+        if (input.phase === "start") messages.push(input.sessionID)
+      },
+    },
+  })
+  await seed(page, {
+    servers: [SERVER, { url: REMOTE_SERVER, name: "Remote server" }],
+    tabs: [a.id],
+    settings: { appearance: { tabLayout: "sidebar" } },
+  })
+  await page.goto(sessionHref(a.id))
+  const shelf = page.getByRole("region", { name: "Running sessions", exact: true })
+  await expect(shelf.getByRole("button")).toHaveCount(12)
+  await expect(shelf.getByLabel("12 running sessions", { exact: true })).toHaveText("12")
+  await expect(shelf.getByText("Local subagent", { exact: true })).toBeVisible()
+  await expect(shelf.getByRole("button").filter({ hasText: "Local task 0" })).toContainText("Approval")
+  const working = shelf.getByRole("button").filter({ hasText: "Local task 1" })
+  await expect(working).toContainText("main")
+  await page.clock.pauseAt(now + 10000)
+  await expect(working.locator('[data-slot="active-session-status"]')).toHaveText("Working1m")
+  await page.clock.runFor(1000)
+  await expect(working.locator('[data-slot="active-session-status"]')).toHaveText("Working2m")
+  await expect(working).toHaveAttribute("title", /Last run ended:/)
+  await expect(shelf.getByRole("button").filter({ hasText: "Local subagent" })).toContainText("feature/sidebar")
+  const scroll = shelf.locator("[data-scrollable]")
+
+  const rows = await scroll.evaluate(
+    (element) => element.clientHeight / element.querySelector("button")!.getBoundingClientRect().height,
+  )
+
+  expect(rows).toBe(5)
+  expect(messages.filter((id) => id !== a.id)).toEqual([])
+  await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  const target = shelf.getByRole("button").filter({ hasText: "Remote task 5" })
+  await expect(target).toBeInViewport()
+  await expect(target).toContainText("Remote project")
+  await expect(target).toContainText("dev-my")
+  await target.click()
+  await expectPath(page, sessionHref(remote[5]!.id, REMOTE_SERVER))
+  await expectSessionTitle(page, remote[5]!.title)
+})
+
+test("the running shelf stays visible when empty and follows live execution independently of tabs and grouping", async ({
+  page,
+}) => {
+  const workspace = await mockWorkspace(page, {
+    name: "RunningShelf",
+    sessions: [a, b],
+    seed: { tabs: [a.id], settings: { appearance: { tabLayout: "sidebar", tabGrouping: "none" } } },
+  })
+
+  await page.goto(sessionHref(a.id))
+  const shelf = page.getByRole("region", { name: "Running sessions", exact: true })
+  await expect(shelf.getByText("No running sessions", { exact: true })).toBeVisible()
+  await expect(shelf.getByRole("button")).toHaveCount(0)
+  await workspace.push([
+    {
+      id: "evt_running_shelf_start",
+      created: 1700000001000,
+      type: "session.execution.started",
+      durable: { aggregateID: b.id, seq: 1, version: 1 },
+      data: { sessionID: b.id },
+    },
+  ])
+  await expect(shelf.getByRole("button").filter({ hasText: b.title })).toBeVisible()
+  await page.getByRole("button", { name: "Group sessions List", exact: true }).click()
+  await page.getByRole("option", { name: "By project", exact: true }).click()
+  await expect(shelf.getByRole("button")).toHaveCount(1)
+  await expect
+    .poll(() =>
+      shelf
+        .locator('[data-slot="active-sessions-list"]')
+        .evaluate((element) => element.clientHeight / element.querySelector("button")!.getBoundingClientRect().height),
+    )
+    .toBe(1)
+  await shelf.getByRole("button").click()
+  await expectPath(page, sessionHref(b.id))
+  await page
+    .locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(shelf.getByRole("button")).toHaveCount(1)
+  await expect(page.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)).toHaveCount(0)
+  await shelf.getByRole("button").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(page.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)).toBeVisible()
+  await workspace.push([
+    {
+      id: "evt_running_shelf_end",
+      created: 1700000002000,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: b.id, seq: 2, version: 1 },
+      data: { sessionID: b.id },
+    },
+  ])
+  await expect(shelf.getByText("No running sessions", { exact: true })).toBeVisible()
+  await expect(shelf).toBeVisible()
+})
+
+test("sidebar grouping keeps servers separate and reorders only the chosen project", async ({ page }) => {
+  const directory = "C:/OpenCode/Tabs"
+  const sessionA = session({ ...a, directory, projectID: "proj_tabs" })
+  const sessionB = session({ ...b, directory, projectID: "proj_tabs" })
+  const sessionC = session({ ...c, directory, projectID: "proj_tabs" })
+  await mockServers(page, {
+    [SERVER]: {
+      directory,
+      project: project({ id: "proj_tabs", directory, name: "Tabs" }),
+      provider: NO_PROVIDER,
+      sessions: [sessionA, sessionC],
+      pageMessages: () => ({ items: [] }),
+    },
+    [REMOTE_SERVER]: {
+      directory,
+      project: project({ id: "proj_tabs", directory, name: "Tabs" }),
+      provider: NO_PROVIDER,
+      sessions: [sessionB],
+      pageMessages: () => ({ items: [] }),
+    },
+  })
+  await seed(page, {
+    servers: [SERVER, { url: REMOTE_SERVER, name: "Remote" }],
+    tabs: [a.id, { session: b.id, server: REMOTE_SERVER }, c.id],
+    settings: { appearance: { tabLayout: "sidebar", tabGrouping: "project" } },
+  })
+  await page.goto(sessionHref(a.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveText(["Tabs", "Tabs"])
+  await expect(sidebar.getByText("Remote", { exact: true })).toBeVisible()
+  await expect(titles).toHaveText([a.title, c.title, b.title])
+  await expectSessionTitle(page, a.title)
+  const source = await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(c.id)}"]`).boundingBox()
+  const target = await sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(a.id)}"]`).boundingBox()
+
+  if (!source || !target) throw new Error("session tab has no bounding box")
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2 - 8, { steps: 2 })
+  await expect(
+    sidebar
+      .getByRole("link")
+      .filter({ has: page.locator(`a[data-titlebar-tab-link][href="${sessionHref(c.id)}"]`) })
+      .locator("[data-titlebar-tab]"),
+  ).toHaveAttribute("data-dragging", "true")
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 })
+  await page.mouse.up()
+  await expect(titles).toHaveText([c.title, a.title, b.title])
+  const headers = sidebar
+    .locator("div[title]")
+    .filter({ has: page.getByRole("heading", { name: "Tabs", exact: true }) })
+  const remote = headers.filter({ hasText: "Remote" })
+  const local = headers.filter({ hasNotText: "Remote" })
+  await remote.hover()
+  await remote.getByRole("button", { name: "Pin project Tabs", exact: true }).click()
+  await expect(titles).toHaveText([b.title, c.title, a.title])
+  await expect(
+    local.getByRole("button", { name: "Pin project Tabs", exact: true, includeHidden: true }),
+  ).toHaveAttribute("aria-pressed", "false")
+  await remote.getByRole("button", { name: "Unpin project Tabs", exact: true }).click()
+  await expect(titles).toHaveText([c.title, a.title, b.title])
+  await sidebar.getByRole("button", { name: "Group sessions By project", exact: true }).click()
+  await page.getByRole("option", { name: "List", exact: true }).click()
+  await expect(titles).toHaveText([c.title, b.title, a.title])
+})
+
+test("sidebar project grouping preserves the flat order and navigates in display order", async ({ page }) => {
+  const directory = "C:/OpenCode/Tabs"
+  const other = "C:/OpenCode/Other"
+  const sandbox = "C:/OpenCode/Tabs-worktree"
+  await mockWorkspace(page, {
+    name: "Tabs",
+    project: { sandboxes: [sandbox] },
+    projects: [
+      project({ id: "proj_tabs", directory, name: "Tabs", sandboxes: [sandbox] }),
+      project({ id: "proj_other", directory: other, name: "Other" }),
+    ],
+    sessions: [a, { ...b, directory: other, projectID: "proj_other" }, { ...c, directory: sandbox }],
+    seed: {
+      settings: { appearance: { tabLayout: "sidebar", tabGrouping: "none" } },
+      tabs: [a.id, b.id, c.id, { draft: "draft_grouped", directory: sandbox }],
+    },
+  })
+  await page.goto(sessionHref(a.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  await expect(titles).toHaveText([a.title, b.title, c.title, "Draft (unsent)"])
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveCount(0)
+  await sidebar.getByRole("button", { name: "Group sessions List", exact: true }).click()
+  await page.getByRole("option", { name: "By project", exact: true }).click()
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveText(["Other", "Tabs"])
+  await expect(titles).toHaveText([b.title, a.title, c.title, "Draft (unsent)"])
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref(c.id))
+  await page.keyboard.press("Control+1")
+  await expectPath(page, sessionHref(b.id))
+  await page.reload()
+  await expect(titles).toHaveText([b.title, a.title, c.title, "Draft (unsent)"])
+  await sidebar.getByRole("button", { name: "Group sessions By project", exact: true }).click()
+  await page.getByRole("option", { name: "List", exact: true }).click()
+  await expect(sidebar.getByRole("heading", { level: 3 })).toHaveCount(0)
+  await expect(titles).toHaveText([a.title, b.title, c.title, "Draft (unsent)"])
+  await sidebar
+    .locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"])`)
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect(titles).toHaveText([a.title, b.title, "Draft (unsent)"])
+})
+
 test("recently closed shows ten sessions and searches older closures in close order", async ({ page }) => {
   const sessions = Array.from({ length: 100 }, (_, index) => ({
     id: `ses_closed_${index}`,
@@ -662,7 +1782,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
     sessions: [a, b],
     seed: {
       settings: {
-        appearance: { tabLayout: "vertical" },
+        appearance: { tabLayout: "vertical", tabGrouping: "none" },
         keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
       },
       tabs: [
@@ -818,7 +1938,7 @@ for (const [screen, href] of [
       name: "Tabs",
       sessions: [a],
       seed: {
-        settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } },
+        settings: { appearance: { tabLayout: "vertical", tabGrouping: "none", sidebarOpen: false } },
         tabs: [a.id, { draft: "draft_collapsed_sidebar", directory: "C:/OpenCode/Tabs" }],
       },
     })
@@ -883,7 +2003,7 @@ test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
     sessions: [a, b, c],
-    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+    seed: { settings: { appearance: { tabLayout: "vertical", tabGrouping: "none" } } },
   })
   await page.goto(sessionHref(a.id))
 
@@ -1138,7 +2258,7 @@ test("switching between busy sessions keeps the busy indicators and the activity
   await expectSessionTitle(page, a.title)
 
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
-  const indicators = sidebar.locator('[data-component="activity-ring"]')
+  const indicators = sidebar.locator('[data-titlebar-tab-slot] [data-component="activity-ring"]')
   const capsule = page.locator('[data-slot="session-activity-chip"]')
   await expect(indicators).toHaveCount(2)
   await expect(capsule).toHaveText("1 subagent")
@@ -1157,7 +2277,7 @@ test("switching between busy sessions keeps the busy indicators and the activity
         record.setAttribute("data-test-capsule-missing", "")
     }).observe(document.body, { childList: true, subtree: true })
     document
-      .querySelectorAll('[data-slot="vertical-tabs-sidebar"] [data-component="activity-ring"]')
+      .querySelectorAll('[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-slot] [data-component="activity-ring"]')
       .forEach((element) => element.setAttribute("data-test-before-switch", ""))
   })
 
@@ -1639,47 +2759,58 @@ async function twoServers(
   })
 }
 
-test("loads a tab's transcript while the pointer rests on it, and not when it passes over", async ({ page }) => {
-  const requested: string[] = []
-  page.on("request", (request) => {
-    const id = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)\/message$/)?.[1]
+for (const layout of ["vertical", "sidebar"] as const) {
+  test(`loads a tab's transcript while the pointer rests on it, and not when it passes over in ${layout}`, async ({
+    page,
+  }) => {
+    const requested: string[] = []
+    const warnings: string[] = []
+    page.on("console", (message) => {
+      if (message.type() === "warning" && message.text().includes("computations created outside"))
+        warnings.push(message.text())
+    })
+    page.on("request", (request) => {
+      const id = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)\/message$/)?.[1]
 
-    if (id && request.method() === "GET") requested.push(id)
-  })
+      if (id && request.method() === "GET") requested.push(id)
+    })
 
-  await mockWorkspace(page, {
-    name: "HoverPrefetch",
-    sessions: [a, b, c],
-    pageMessages: pageMessagesFrom(
-      Object.fromEntries(
-        [a, b, c].map((item): [string, SessionMessageInfo[]] => [
-          item.id,
-          [{ id: `msg_${item.id}`, type: "user", time: { created: 1700000000000 }, text: item.title }],
-        ]),
+    await mockWorkspace(page, {
+      name: "HoverPrefetch",
+      sessions: [a, b, c],
+      pageMessages: pageMessagesFrom(
+        Object.fromEntries(
+          [a, b, c].map((item): [string, SessionMessageInfo[]] => [
+            item.id,
+            [{ id: `msg_${item.id}`, type: "user", time: { created: 1700000000000 }, text: item.title }],
+          ]),
+        ),
       ),
-    ),
-    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+      seed: { settings: { appearance: { tabLayout: layout } } },
+    })
+    await page.goto(sessionHref(a.id))
+    await expectSessionTitle(page, a.title)
+    const tab = (id: string) => page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref(id, SERVER)}"]`)
+    const message = (id: string) => page.locator(`[data-timeline-virtual-content] [data-message-id="msg_${id}"]`)
+    await expect(message(a.id)).toBeVisible()
+
+    // Raw moves keep the pass well under the dwell, which hover() actionability checks can exceed on slow runners.
+    const [passed, rest] = await Promise.all([tab(c.id).boundingBox(), tab(a.id).boundingBox()])
+
+    await page.mouse.move(passed!.x + passed!.width / 2, passed!.y + passed!.height / 2)
+    await page.mouse.move(rest!.x + rest!.width / 2, rest!.y + rest!.height / 2)
+    await tab(b.id).hover()
+    await expect.poll(() => requested.includes(b.id)).toBe(true)
+    // A dwell started by the pass would have fired before the one on the rested tab.
+    expect(requested).not.toContain(c.id)
+
+    await tab(b.id).click()
+    await expect(message(b.id)).toBeVisible()
+    expect(requested.filter((id) => id === b.id)).toHaveLength(1)
+    // Solid's development runtime reports computations created by event handlers without a component owner.
+    expect(warnings).toEqual([])
   })
-  await page.goto(sessionHref(a.id))
-  await expectSessionTitle(page, a.title)
-  const tab = (id: string) => page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref(id, SERVER)}"]`)
-  const message = (id: string) => page.locator(`[data-timeline-virtual-content] [data-message-id="msg_${id}"]`)
-  await expect(message(a.id)).toBeVisible()
-
-  // Raw moves keep the pass well under the dwell, which hover() actionability checks can exceed on slow runners.
-  const [passed, rest] = await Promise.all([tab(c.id).boundingBox(), tab(a.id).boundingBox()])
-
-  await page.mouse.move(passed!.x + passed!.width / 2, passed!.y + passed!.height / 2)
-  await page.mouse.move(rest!.x + rest!.width / 2, rest!.y + rest!.height / 2)
-  await tab(b.id).hover()
-  await expect.poll(() => requested.includes(b.id)).toBe(true)
-  // A dwell started by the pass would have fired before the one on the rested tab.
-  expect(requested).not.toContain(c.id)
-
-  await tab(b.id).click()
-  await expect(message(b.id)).toBeVisible()
-  expect(requested.filter((id) => id === b.id)).toHaveLength(1)
-})
+}
 
 test("⌘W in a focused Context tab closes it, then the panel, and keeps the session tab", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })

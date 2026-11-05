@@ -1624,6 +1624,7 @@ const decodeSession = Schema.decodeUnknownSync(
         updated: lenient(Schema.Number),
         busy: lenient(Schema.Number),
         idle: lenient(Schema.Number),
+        busy: lenient(Schema.Number),
         viewed: lenient(Schema.Number),
         archived: Schema.optionalKey(Schema.Unknown),
       }),

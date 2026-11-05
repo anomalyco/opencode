@@ -42,10 +42,7 @@ export function useSessionTabAvatarState(
 
     if (needsAttention()) return false
 
-    if (root?.())
-      return data.session
-        .list()
-        .some((session) => data.session.root(session.id) === sessionId() && sessionBusy(data, session.id))
+    if (root?.()) return [sessionId(), ...data.session.family(sessionId())].some((id) => sessionBusy(data, id))
 
     return sessionBusy(data, sessionId())
   })
@@ -80,6 +77,13 @@ export type SessionRequests = ReturnType<typeof sessionRequests>
 export function sessionBusy(data: ServerData, sessionId: string) {
   return (
     data.session.status(sessionId) === "running" ||
+    sessionBackgroundShells(data, sessionId).length > 0 ||
     data.session.pending.list(sessionId).some((item) => item.type !== "synthetic")
   )
+}
+
+export function sessionBackgroundShells(data: ServerData, sessionID: string, family = false) {
+  return (family ? [sessionID, ...data.session.family(sessionID)] : [sessionID])
+    .flatMap((id) => data.shell.listBySession(id))
+    .filter((shell) => shell.status === "running")
 }
