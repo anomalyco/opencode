@@ -124,9 +124,6 @@
     {
       "checkpoint": "open",
       "until": "Tokens",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.6a/transcript/open"
     }
   ],

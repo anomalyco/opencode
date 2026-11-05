@@ -3,7 +3,6 @@
 // line 3, and an `index.*` file shows with its directory.
 import { defineApp, session, user } from "../../lib/app"
 
-const deviation = ["V01-plain-transcript"]
 const contents = "const a = 1\nconst b = 2\nconst c = 3\n"
 
 export default defineApp({
@@ -25,5 +24,5 @@ insert into editor_selections values (7, 1, 18, 29);`,
     { path: "/api/session/ses_b/message", json: { data: [user("msg_1", "Why does the parser fail?")], cursor: {} } },
     { path: "/api/session/ses_b/inbox", json: { data: [] } },
   ],
-  steps: [{ checkpoint: "selected", until: "src/index.ts#2-3", deviation }],
+  steps: [{ checkpoint: "selected", until: "src/index.ts#2-3" }],
 })
