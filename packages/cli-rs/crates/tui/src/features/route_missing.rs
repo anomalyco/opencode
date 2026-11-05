@@ -15,6 +15,7 @@ pub fn mount(tui: &Tui, id: &str, name: &str) -> View {
         .bg(theme.background.action.primary.hovered)
         .padding_x(1)
         .child(&Text::new(app, "go home").fg(theme.text.action.primary.hovered))
+        .mouse_pointer(MousePointer::POINTER)
         .on_click(move |cx, _| {
             let weak = weak.clone();
             // Navigating replaces this view; do it after the click handler returns.

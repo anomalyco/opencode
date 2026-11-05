@@ -432,7 +432,7 @@ impl Bar {
             });
         }
         let weak = Rc::downgrade(self);
-        item.on_mouse(move |cx, event| {
+        item.mouse_pointer(MousePointer::POINTER).on_mouse(move |cx, event| {
             if !matches!(event.kind, MouseEventKind::Up(_)) {
                 return;
             }
@@ -592,7 +592,7 @@ impl Bar {
         }
         let weak = Rc::downgrade(self);
         let run = Rc::new(run);
-        view.on_mouse(move |cx, event| {
+        view.mouse_pointer(opencode_ui::click_pointer(!disabled)).on_mouse(move |cx, event| {
             if !matches!(event.kind, MouseEventKind::Up(_)) {
                 return;
             }

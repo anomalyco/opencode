@@ -220,7 +220,7 @@ pub fn status(tui: &Tui, tracker: &Rc<Tracker>, goal: &Goal) -> View {
         cx.app().request_redraw();
     });
     let weak = Rc::downgrade(tracker);
-    text.on_mouse(move |_, event| {
+    text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         if !matches!(event.kind, MouseEventKind::Up(_)) {
             return;
         }

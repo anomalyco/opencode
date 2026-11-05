@@ -1218,7 +1218,7 @@ impl Inner {
             }
             let link = Text::new(app, field.url.clone()).fg(theme.text.action.primary.base);
             let weak = Rc::downgrade(self);
-            link.on_click(move |_, _| {
+            link.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
                 if let Some(inner) = weak.upgrade() {
                     inner.open_external();
                 }
@@ -1289,7 +1289,7 @@ impl Inner {
             });
             let weak = Rc::downgrade(self);
             let target = (index < fields.len()).then_some(index);
-            item.on_click(move |_, _| {
+            item.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
                 if let Some(inner) = weak.upgrade() {
                     inner.select_tab_from_mouse(target);
                     inner.render_soon();
@@ -1390,7 +1390,7 @@ impl Inner {
             }
         });
         let weak = Rc::downgrade(self);
-        item.on_click(move |_, _| {
+        item.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.draft.borrow_mut().selected = index;
                 inner.select_option();
@@ -1487,7 +1487,7 @@ impl Inner {
         }
         let enter = hint("enter", self.action_label());
         let weak = Rc::downgrade(self);
-        enter.on_click(move |_, _| {
+        enter.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             let Some(inner) = weak.upgrade() else { return };
             if inner.confirm() {
                 inner.submit();
@@ -1501,7 +1501,7 @@ impl Inner {
         if external {
             let copy = hint("c", "copy");
             let weak = Rc::downgrade(self);
-            copy.on_click(move |_, _| {
+            copy.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
                 if let Some(inner) = weak.upgrade() {
                     inner.copy_external();
                     inner.render_soon();
@@ -1511,7 +1511,7 @@ impl Inner {
         }
         let dismiss = hint("esc", if draft.editing && !textual { "close" } else { "dismiss" });
         let weak = Rc::downgrade(self);
-        dismiss.on_click(move |_, _| {
+        dismiss.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
                 inner.cancel();
             }

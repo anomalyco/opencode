@@ -352,6 +352,7 @@ impl InlineTool {
         inner.root.on_hover(move |_, hovered| {
             let Some(inner) = weak.upgrade() else { return };
             let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable || state.failed());
+            inner.root.mouse_pointer(opencode_ui::click_pointer(clickable));
             inner.hover.set(hovered && clickable);
             inner.recolor();
         });
@@ -576,6 +577,7 @@ impl BlockTool {
         inner.root.on_hover(move |_, hovered| {
             let Some(inner) = weak.upgrade() else { return };
             let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable);
+            inner.root.mouse_pointer(opencode_ui::click_pointer(clickable));
             inner.hover.set(hovered && clickable);
             // `decrease` finds the token by reference, so it takes the theme's own field.
             let raised = &inner.theme.background.raised.base;

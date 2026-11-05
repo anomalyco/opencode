@@ -368,7 +368,7 @@ impl Inner {
         }
         let esc = Text::new(app, "esc").fg(theme.text.muted);
         let weak = Rc::downgrade(self);
-        esc.on_mouse(move |_, event| {
+        esc.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
             if !matches!(event.kind, MouseEventKind::Up(_)) {
                 return;
             }
@@ -460,7 +460,7 @@ fn row(
         );
     }
     // `onMouseMove`, not hover: each redraw builds new rows, and a row built under a resting pointer gets a hover enter.
-    view.on_mouse(move |_, event| match event.kind {
+    view.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| match event.kind {
         MouseEventKind::Moved => hover(),
         MouseEventKind::Up(_) => click(),
         _ => {}

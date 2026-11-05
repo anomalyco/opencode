@@ -156,7 +156,7 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
         .child(&hints);
     let weak = tui.weak();
     let (session, directory) = (session.clone(), directory.to_owned());
-    action.on_click(move |_, _| {
+    action.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
         if let Some(tui) = weak.upgrade() {
             choose(&tui, session.clone(), directory.clone());
         }

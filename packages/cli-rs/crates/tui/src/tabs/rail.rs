@@ -38,7 +38,7 @@ pub struct Rail {
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
-    Custom::new(
+    let rail = Custom::new(
         app,
         Rail {
             tui,
@@ -58,7 +58,17 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
     )
     .shrink(0.0)
     .height(Length::Percent(100.0))
-    .visible(false)
+    .visible(false);
+    // Runs before `Rail::mouse`, so it may read the component.
+    let hover = rail.clone();
+    rail.on_mouse(move |_, event| {
+        if event.kind == MouseEventKind::Moved {
+            let rect = hover.element().rect();
+            let y = i32::from(event.y) - rect.screen_y.floor() as i32;
+            let clickable = hover.with(|rail| rail.row_at(y).is_some() || (rail.compact(rect.width as u32) && y == 1));
+            hover.mouse_pointer(opencode_ui::click_pointer(clickable));
+        }
+    })
 }
 
 pub fn leave(rail: &Custom<Rail>) {
