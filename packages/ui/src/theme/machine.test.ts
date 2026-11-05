@@ -285,26 +285,42 @@ test("mode and theme id follow a preview and return on cancel; the saved scheme 
   ])
 })
 
-test.each([
-  { name: "failed", event: { type: "theme.load.failed", id: "tokyonight", attempt: 1 } as const },
-  { name: "timed out", event: { type: "theme.load.timed-out", id: "tokyonight", attempt: 1 } as const },
-])("a bundled theme whose import $name falls back to the default theme and loads again when selected", (input) => {
-  const fallback = run(start({ themeId: "tokyonight" }).state, input.event)
+test("a slow import shows the default theme, keeps the cached colors, and still applies and caches when it arrives", () => {
+  const slow = run(start({ themeId: "tokyonight" }).state, {
+    type: "theme.load.timed-out",
+    id: "tokyonight",
+    attempt: 1,
+  })
 
-  expect(selectThemeId(fallback.state, bundled)).toBe("oc-2")
-  expect(fallback.effects).toEqual([
-    ...(input.event.type === "theme.load.failed" ? [{ type: "cancel-load-timer", attempt: 1 }] : []),
-    { type: "clear-cache" },
+  expect(selectThemeId(slow.state, bundled)).toBe("oc-2")
+  expect(slow.effects).toEqual([expect.objectContaining({ type: "apply-theme", id: "oc-2" })])
+  expect(selectThemesLoading(slow.state)).toBe(false)
+
+  const late = run(slow.state, { type: "theme.loaded", id: "tokyonight", attempt: 1, theme: tokyonight })
+
+  expect(selectThemeId(late.state, bundled)).toBe("tokyonight")
+  expect(late.effects).toEqual([
+    { type: "cancel-load-timer", attempt: 1 },
+    { type: "cache-theme", id: "tokyonight", theme: tokyonight },
+    expect.objectContaining({ type: "apply-theme", id: "tokyonight" }),
+  ])
+})
+
+test("a failed import shows the default theme, keeps the cached colors, and loads again when selected", () => {
+  const failed = run(start({ themeId: "tokyonight" }).state, { type: "theme.load.failed", id: "tokyonight", attempt: 1 })
+
+  expect(selectThemeId(failed.state, bundled)).toBe("oc-2")
+  expect(failed.effects).toEqual([
+    { type: "cancel-load-timer", attempt: 1 },
     expect.objectContaining({ type: "apply-theme", id: "oc-2" }),
   ])
-  expect(selectThemesLoading(fallback.state)).toBe(false)
 
-  const late = run(fallback.state, { type: "theme.loaded", id: "tokyonight", attempt: 1, theme: tokyonight })
+  const late = run(failed.state, { type: "theme.loaded", id: "tokyonight", attempt: 1, theme: tokyonight })
 
-  expect(late.state).toBe(fallback.state)
+  expect(late.state).toBe(failed.state)
   expect(late.effects).toEqual([])
 
-  const retried = run(fallback.state, { type: "theme.selected", id: "tokyonight" })
+  const retried = run(failed.state, { type: "theme.selected", id: "tokyonight" })
 
   expect(retried.effects).toEqual([
     { type: "persist-theme", id: "tokyonight" },
@@ -314,6 +330,56 @@ test.each([
   const loaded = run(retried.state, { type: "theme.loaded", id: "tokyonight", attempt: 2, theme: tokyonight })
 
   expect(applied(loaded.effects)).toEqual([{ id: "tokyonight", mode: "dark", scheme: "dark" }])
+})
+
+test("selecting a slow theme again starts a fresh attempt with its own timeout", () => {
+  const slow = run(start({ themeId: "tokyonight" }).state, {
+    type: "theme.load.timed-out",
+    id: "tokyonight",
+    attempt: 1,
+  })
+
+  const retried = run(slow.state, { type: "theme.selected", id: "tokyonight" })
+
+  expect(retried.effects).toEqual([
+    { type: "persist-theme", id: "tokyonight" },
+    { type: "load-theme", id: "tokyonight", attempt: 2, timeoutMs: THEME_LOAD_TIMEOUT_MS },
+  ])
+  expect(selectThemesLoading(retried.state)).toBe(true)
+
+  const stale = run(retried.state, { type: "theme.loaded", id: "tokyonight", attempt: 1, theme: tokyonight })
+
+  expect(stale.state).toBe(retried.state)
+  expect(
+    applied(run(retried.state, { type: "theme.loaded", id: "tokyonight", attempt: 2, theme: tokyonight }).effects),
+  ).toEqual([{ id: "tokyonight", mode: "dark", scheme: "dark" }])
+})
+
+test("a slow or failed import never clears the cached colors of the selected bundled theme", () => {
+  const cached = run(
+    start({ themeId: "nord" }).state,
+    { type: "theme.loaded", id: "nord", attempt: 1, theme: nord },
+    { type: "theme.selected", id: "tokyonight" },
+  )
+
+  // Another theme's colors go: the next start must not paint them under the new choice.
+  expect(storage(cached.effects).at(-1)).toEqual({ type: "clear-cache" })
+
+  const unknown = start({ themeId: "tokyonight" }).state
+  const outcomes = [
+    run(unknown, { type: "theme.load.timed-out", id: "tokyonight", attempt: 1 }),
+    run(unknown, { type: "theme.load.failed", id: "tokyonight", attempt: 1 }),
+    run(
+      unknown,
+      { type: "theme.load.timed-out", id: "tokyonight", attempt: 1 },
+      { type: "theme.load.failed", id: "tokyonight", attempt: 1 },
+    ),
+  ]
+
+  outcomes.forEach((outcome) => {
+    expect(storage(outcome.effects)).toEqual([])
+    expect(outcome.state.cached).toEqual({ status: "unknown" })
+  })
 })
 
 test("withdrawing a previewed plugin theme ends the preview; a replaced theme ignores the old withdrawal", () => {

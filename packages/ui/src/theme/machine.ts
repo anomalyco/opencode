@@ -6,7 +6,7 @@ export type ResolvedMode = "light" | "dark"
 
 export const DEFAULT_THEME_ID = "oc-2"
 
-/** A bundled theme import that has not settled by then counts as failed, and the window shows the default theme. */
+/** A bundled theme import that has not settled by then shows the default theme until it arrives. */
 export const THEME_LOAD_TIMEOUT_MS = 5_000
 
 export type ThemeSelection = { readonly themeId: string; readonly scheme: ColorScheme }
@@ -38,9 +38,12 @@ type ThemeData = {
   readonly registration: "pending" | "settled"
   /** Loaded bundled themes and registered themes, by id. */
   readonly themes: Readonly<Record<string, DesktopTheme>>
-  /** The attempt of each bundled theme import in flight. */
+  /** The attempt of each bundled theme import in flight, including one that timed out and may still arrive. */
   readonly loads: Readonly<Record<string, number>>
-  /** Bundled themes whose latest import failed or timed out; selecting or previewing one tries again. */
+  /**
+   * Bundled themes the window shows the default theme for: the import failed, or timed out and may still arrive.
+   * Selecting, previewing or preloading one tries again.
+   */
   readonly failed: Readonly<Record<string, true>>
   readonly issued: number
   readonly applied: AppliedTheme | undefined
@@ -143,8 +146,8 @@ export function transitionTheme(
       return reconcile(
         {
           ...withPreview(state, { ...preview(state), themeId: undefined }),
+          ...retry(state, [event.id]),
           committed: { ...state.committed, themeId: event.id },
-          failed: omit(state.failed, [event.id]),
         },
         bundled,
         [{ type: "persist-theme", id: event.id }],
@@ -171,7 +174,7 @@ export function transitionTheme(
       if (preview(state).themeId === event.id && !state.failed[event.id]) return { state, effects: NO_EFFECTS }
 
       return reconcile(
-        { ...withPreview(state, { ...preview(state), themeId: event.id }), failed: omit(state.failed, [event.id]) },
+        { ...withPreview(state, { ...preview(state), themeId: event.id }), ...retry(state, [event.id]) },
         bundled,
         NO_EFFECTS,
       )
@@ -242,12 +245,12 @@ export function transitionTheme(
 
     case "themes.preload": {
       const queued = [...bundled].filter(
-        (id) => id !== DEFAULT_THEME_ID && !state.themes[id] && state.loads[id] === undefined,
+        (id) => id !== DEFAULT_THEME_ID && !state.themes[id] && (state.loads[id] === undefined || state.failed[id]),
       )
 
       if (queued.length === 0) return { state, effects: NO_EFFECTS }
 
-      const requested = request({ ...state, failed: omit(state.failed, queued) }, queued, bundled)
+      const requested = request({ ...state, ...retry(state, queued) }, queued, bundled)
 
       return reconcile(requested.state, bundled, requested.effects)
     }
@@ -267,15 +270,21 @@ export function transitionTheme(
       )
     }
 
-    case "theme.load.failed":
-    case "theme.load.timed-out": {
+    case "theme.load.failed": {
       if (state.loads[event.id] !== event.attempt) return { state, effects: NO_EFFECTS }
 
       return reconcile(
         { ...state, loads: omit(state.loads, [event.id]), failed: { ...state.failed, [event.id]: true } },
         bundled,
-        event.type === "theme.load.failed" ? [{ type: "cancel-load-timer", attempt: event.attempt }] : NO_EFFECTS,
+        [{ type: "cancel-load-timer", attempt: event.attempt }],
       )
+    }
+
+    // The window shows the default theme meanwhile, but the attempt stays current: a late import still applies.
+    case "theme.load.timed-out": {
+      if (state.loads[event.id] !== event.attempt || state.failed[event.id]) return { state, effects: NO_EFFECTS }
+
+      return reconcile({ ...state, failed: { ...state.failed, [event.id]: true } }, bundled, NO_EFFECTS)
     }
 
     case "system.mode.changed": {
@@ -291,8 +300,8 @@ export function transitionTheme(
       return reconcile(
         {
           ...state,
+          ...retry(state, [event.id]),
           committed: { ...state.committed, themeId: event.id },
-          failed: omit(state.failed, [event.id]),
         },
         bundled,
         NO_EFFECTS,
@@ -343,8 +352,9 @@ export function selectMode(state: ThemeMachineState): ResolvedMode {
   return scheme === "system" ? state.systemMode : scheme
 }
 
+/** An import is still within its timeout. */
 export function selectThemesLoading(state: ThemeMachineState) {
-  return Object.keys(state.loads).length > 0
+  return Object.keys(state.loads).some((id) => !state.failed[id])
 }
 
 function reconcile(draft: ActiveState, bundled: ReadonlySet<string>, prefix: readonly ThemeEffect[]): ThemeTransition {
@@ -410,11 +420,11 @@ function reconcileCache(state: ActiveState, bundled: ReadonlySet<string>): Step 
     }
   }
 
-  // Still loading, or a registered theme that may still arrive: the last run's colors stay unless they are another
-  // theme's.
+  // A bundled theme that has not loaded (loading, slow or failed) or a registered theme that may still arrive: the last
+  // run's colors for it stay, unless they are another theme's.
   const waiting =
     id !== DEFAULT_THEME_ID &&
-    (bundled.has(id) ? !state.failed[id] : state.registration === "pending") &&
+    (bundled.has(id) || state.registration === "pending") &&
     !(state.cached.status === "cached" && state.cached.id !== id)
 
   if (waiting || state.cached.status === "cleared") return { state, effects: NO_EFFECTS }
@@ -478,6 +488,17 @@ function withPreview(state: ActiveState, next: ThemePreview): ActiveState {
   if (next.themeId === undefined && next.scheme === undefined) return { ...data, status: "committed" }
 
   return { ...data, status: "previewing", preview: next }
+}
+
+// Clears a failure and drops an import that timed out, so the next request starts a fresh attempt with its own timeout.
+function retry(state: ActiveState, ids: readonly string[]) {
+  return {
+    failed: omit(state.failed, ids),
+    loads: omit(
+      state.loads,
+      ids.filter((id) => state.failed[id]),
+    ),
+  }
 }
 
 function omit<T>(record: Readonly<Record<string, T>>, ids: readonly string[]) {
