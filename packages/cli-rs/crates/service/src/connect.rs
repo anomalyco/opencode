@@ -149,7 +149,14 @@ pub async fn resolve(
     if options.standalone || config.disabled == Some(true) {
         return start_standalone(env).await;
     }
-    let found = match discover::discover(transport.as_ref(), paths, env.channel.as_deref()).await {
+    let found = match discover::discover_with(
+        transport.as_ref(),
+        paths,
+        env.channel.as_deref(),
+        &discover::Owner::new(env.ts()),
+    )
+    .await
+    {
         Ok(found) => found,
         Err(_) if options.standalone_fallback => return start_standalone(env).await,
         Err(missing) => {
@@ -179,7 +186,9 @@ pub async fn resolve(
 /// `packages/cli/src/services/server-connection.ts:66-75`): discovered, waited for, or started
 /// quietly when none is registered.
 pub async fn reconnect(transport: Arc<dyn Transport>, paths: &Paths, env: &Env) -> Result<discover::Found, Error> {
-    match discover::discover(transport.as_ref(), paths, env.channel.as_deref()).await {
+    match discover::discover_with(transport.as_ref(), paths, env.channel.as_deref(), &discover::Owner::new(env.ts()))
+        .await
+    {
         Ok(found) => Ok(found),
         Err(missing) => {
             let channel = Channels::from_vars(|name| match name {
