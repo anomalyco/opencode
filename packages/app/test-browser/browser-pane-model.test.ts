@@ -106,10 +106,11 @@ test("one session's transitions leave another session's attachment as it was", a
     // The user opens a blank tab in Alpha only: a blank tab Beta's agent opens must not take Beta's address focus.
     app.model.open(alpha)
     app.emit("ses_beta", { tabs: [tab("b"), tab("c", "about:blank")], focusedTabID: tab("c").id })
-    expect(app.model.opened(beta)).toBe(false)
+    expect(app.model.opened(beta, tab("c").id)).toBe(false)
 
     app.emit("ses_alpha", { tabs: [tab("a"), tab("d", "about:blank")], focusedTabID: tab("d").id })
-    expect(app.model.opened(alpha)).toBe(true)
+    expect(app.model.opened(alpha, tab("a").id)).toBe(false)
+    expect(app.model.opened(alpha, tab("d").id)).toBe(true)
     expect(app.model.tabs(beta, [tab("b").id, tab("c").id])).toEqual([tab("b").id, tab("c").id])
   } finally {
     app.dispose()

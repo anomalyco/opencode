@@ -12,7 +12,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, on, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
@@ -27,7 +27,16 @@ import { addressParts, connection, loopback, resolveAddress, searches } from "./
 import { commentNote, pageNote } from "./comment"
 import { bare, completes, highlight, suggest, type Visit } from "./history"
 import type { Model } from "./model"
-import type { PaneElement } from "./ipc"
+import {
+  capturesEscape,
+  initialOverlayState,
+  overlayComment,
+  overlayNote,
+  overlayView,
+  transitionOverlay,
+  type OverlayContext,
+  type OverlayEvent,
+} from "./overlay-machine"
 import { PageIcon } from "./page-icon"
 import {
   initialSiteState,
@@ -56,26 +65,7 @@ type PaneState = {
   active: number
   /** Escape closed the suggestions; typing opens them again. */
   dismissed: boolean
-  /** The tab whose element picker is on. */
-  picking: { sessionKey: string; tabID: Browser.TabID } | undefined
-  /** A picked element awaiting its comment. The page stays frozen as a still until it closes. */
-  comment:
-    | {
-        sessionKey: string
-        tabID: Browser.TabID
-        url: string
-        /** The tab's navigation count at the pick; the element's ref dies when it changes. */
-        generation: number
-        element: PaneElement
-        draft: string
-      }
-    | undefined
-  /** A comment on the whole page awaiting its text, frozen like an element comment. */
-  note: { sessionKey: string; tabID: Browser.TabID; url: string; title: string; draft: string } | undefined
   size: { width: number; height: number }
-  editorHeight: number
-  /** Opening measurement, frozen so typing never chooses a different side of the element. */
-  editorInitialHeight: number
 }
 
 /** Suggestions the address field lists, and pages the new tab page lists. */
@@ -116,13 +106,10 @@ export default function SessionBrowserPane(props: {
     typed: false,
     active: -1,
     dismissed: false,
-    picking: undefined,
-    comment: undefined,
-    note: undefined,
     size: { width: 0, height: 0 },
-    editorHeight: 0,
-    editorInitialHeight: 0,
   })
+
+  const [overlay, setOverlay] = createSignal(initialOverlayState)
 
   // Finished loads, counted. A submitted address that lands on the URL the page already had (say "example.com" on
   // https://example.com/) changes no URL, only this.
@@ -183,21 +170,63 @@ export default function SessionBrowserPane(props: {
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
 
-  const error = () => {
-    const value = props.model.error(props.session)
-
-    if (value === "browser.pane.replaced") return plugin.t("replaced")
-
-    if (value === "browser.pane.unsupported") return plugin.t("unsupported")
-
-    return value
-  }
+  const error = () => props.model.error(props.session)
 
   const inspectable = () => !!address() && !failed() && !suspended()
-  const picking = () => store.picking?.sessionKey === props.session.key && store.picking?.tabID === state()?.id
-  // A comment on a picked element freezes the page so its editor can float above it.
-  const commenting = () => store.comment?.sessionKey === props.session.key && store.comment?.tabID === state()?.id
-  const noting = () => store.note?.sessionKey === props.session.key && store.note?.tabID === state()?.id
+  const overlayed = createMemo(() => overlayView(overlay(), props.session.key, state()?.id))
+  const picking = () => overlayed().picking
+  const comment = createMemo(() => overlayComment(overlay(), props.session.key, state()?.id))
+  const note = createMemo(() => overlayNote(overlay(), props.session.key, state()?.id))
+
+  // Where the pane is when an event happens; the overlay machine checks what it owns against it.
+  const context = (): OverlayContext => ({
+    sessionKey: props.session.key,
+    tab: state(),
+    visible: visible(),
+    inspectable: inspectable(),
+  })
+
+  const dispatchOverlay = (event: OverlayEvent) => {
+    const next = transitionOverlay(untrack(overlay), event)
+    setOverlay(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "set-inspect")
+        return props.model.inspect({ key: effect.sessionKey }, effect.tabID, effect.enabled)
+
+      if (effect.type === "clear-highlight") return props.model.highlight({ key: effect.sessionKey }, effect.tabID)
+
+      // The owning screen's composer serves the session the pane shows.
+      if (effect.type === "attach-comment")
+        return props.screen.composer.attach(
+          commentNote({
+            origin: plugin.id,
+            tabID: effect.tabID,
+            url: effect.url,
+            subtitle: plugin.t("comment.annotation"),
+            element: {
+              ref: effect.live ? effect.element.ref : undefined,
+              selector: effect.element.selector,
+              label: effect.element.label,
+              role: effect.element.role,
+              name: effect.element.name,
+              text: effect.element.text,
+            },
+            comment: effect.comment,
+          }),
+        )
+
+      props.screen.composer.attach(
+        pageNote({
+          origin: plugin.id,
+          tabID: effect.tabID,
+          url: effect.url,
+          title: effect.title,
+          label: effect.title || addressParts(effect.url).host || effect.url,
+          comment: effect.comment,
+        }),
+      )
+    })
+  }
 
   // The address field always shows the whole URL; at rest it draws the host emphasized.
   const parts = () => addressParts(field())
@@ -225,30 +254,8 @@ export default function SessionBrowserPane(props: {
     return /^https?:$/.test(parsed.protocol) && (props.session.server.local || !loopback(parsed.hostname))
   }
 
-  const setPicking = (current: NonNullable<PaneState["picking"]>, enabled: boolean) => {
-    props.model.inspect({ key: current.sessionKey }, current.tabID, enabled)
-    setStore("picking", enabled ? current : undefined)
-  }
-
-  const closeComment = () => {
-    const current = store.comment
-
-    if (!current) return
-    props.model.highlight({ key: current.sessionKey }, current.tabID)
-    setStore("comment", undefined)
-  }
-
-  const closeNote = () => setStore("note", undefined)
-
-  const toggleInspect = () => {
-    const tab = state()
-
-    if (!tab || !inspectable()) return
-
-    if (store.comment) closeComment()
-    closeNote()
-    setPicking({ sessionKey: props.session.key, tabID: tab.id }, !picking())
-  }
+  const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
+  const toggleInspect = () => dispatchOverlay({ type: "picker.toggled", context: context() })
 
   const focusAddress = () => {
     input?.focus()
@@ -284,66 +291,8 @@ export default function SessionBrowserPane(props: {
     })
   }
 
-  const submitComment = (value: string) => {
-    const current = store.comment
-
-    if (!current) return
-    const tab = state()
-
-    // The draft outlives a reload or agent navigation, but the ref no longer names anything.
-    const live =
-      props.session.key === current.sessionKey && tab?.id === current.tabID && tab.generation === current.generation
-
-    // The owning screen's composer serves the session the pane shows.
-    props.screen.composer.attach(
-      commentNote({
-        origin: plugin.id,
-        tabID: current.tabID,
-        url: current.url,
-        subtitle: plugin.t("comment.annotation"),
-        element: {
-          ref: live ? current.element.ref : undefined,
-          selector: current.element.selector,
-          label: current.element.label,
-          role: current.element.role,
-          name: current.element.name,
-          text: current.element.text,
-        },
-        comment: value,
-      }),
-    )
-    closeComment()
-  }
-
-  const openNote = () => {
-    const tab = state()
-
-    if (!tab || !address()) return
-
-    // The editor is already open: the button keeps what the user wrote.
-    if (noting()) return
-
-    if (picking() && store.picking) setPicking(store.picking, false)
-    closeComment()
-    setStore("note", { sessionKey: props.session.key, tabID: tab.id, url: tab.url, title: tab.title, draft: "" })
-  }
-
-  const submitNote = (value: string) => {
-    const current = store.note
-
-    if (!current) return
-    props.screen.composer.attach(
-      pageNote({
-        origin: plugin.id,
-        tabID: current.tabID,
-        url: current.url,
-        title: current.title,
-        label: current.title || addressParts(current.url).host || current.url,
-        comment: value,
-      }),
-    )
-    closeNote()
-  }
+  const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
+  const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
 
   const zoomed = () => !!address() && (page()?.zoom ?? 1) !== 1
 
@@ -365,7 +314,7 @@ export default function SessionBrowserPane(props: {
 
   // The picked element in surface pixels, and the editor anchored below it, above it, or over it.
   const spotlight = () => {
-    const rect = store.comment?.element.rect
+    const rect = comment()?.element.rect
 
     if (!rect) return
     const zoom = desktop?.zoom() ?? 1
@@ -382,7 +331,7 @@ export default function SessionBrowserPane(props: {
     // The editor scrolls rather than growing past the surface, so its actions stay reachable.
     const surfaceHeight = Math.max(0, store.size.height - gap * 2)
     // Pick the opening side from its first measurement, then grow upward from that bottom edge.
-    const initialHeight = Math.min(store.editorInitialHeight || 80, surfaceHeight)
+    const initialHeight = Math.min(comment()?.editorInitialHeight || 80, surfaceHeight)
     const left = Math.min(Math.max(gap, rect.x), Math.max(gap, store.size.width - width - gap))
     const below = rect.y + rect.height + gap
     const above = rect.y - gap - initialHeight
@@ -396,7 +345,7 @@ export default function SessionBrowserPane(props: {
 
     const bottom = Math.min(openingTop + initialHeight, store.size.height - gap)
     const maxHeight = Math.max(0, bottom - gap)
-    const height = Math.min(store.editorHeight || initialHeight, maxHeight)
+    const height = Math.min(comment()?.editorHeight || initialHeight, maxHeight)
     const top = Math.max(gap, bottom - height)
 
     return { left, top, width, maxHeight }
@@ -446,95 +395,50 @@ export default function SessionBrowserPane(props: {
     () => props.session.key,
     (sessionKey) =>
       onCleanup(
-        props.model.onInspect({ key: sessionKey }, (event) => {
-          if (event.active) {
-            setStore("picking", { sessionKey, tabID: event.tabID })
-
-            return
-          }
-
-          if (store.picking?.sessionKey === sessionKey && store.picking.tabID === event.tabID)
-            setStore("picking", undefined)
-
-          if (!event.element) return
-          const tab = state()
-
-          if (tab?.id !== event.tabID || !visible()) {
-            props.model.highlight({ key: sessionKey }, event.tabID)
-
-            return
-          }
-
-          setStore({
-            editorHeight: 0,
-            editorInitialHeight: 0,
-            comment: {
-              sessionKey,
-              tabID: tab.id,
-              url: tab.url,
-              generation: tab.generation,
-              element: event.element,
-              draft: "",
-            },
-          })
-        }),
+        props.model.onInspect({ key: sessionKey }, (event) =>
+          dispatchOverlay({
+            type: "inspect.reported",
+            sessionKey,
+            tabID: event.tabID,
+            active: event.active,
+            element: event.element,
+            context: context(),
+          }),
+        ),
       ),
   )
 
   // A tab the user just opened starts in its address field, once its blank page is on screen. Syncs DOM focus.
   createKeyed(
     () => (visible() && empty() ? state()?.id : undefined),
-    () => {
-      if (props.model.opened(props.session)) focusAddress()
+    (tabID) => {
+      if (props.model.opened(props.session, tabID)) focusAddress()
     },
   )
 
-  // A picker or comment belongs to the page on screen: the page's picker stops when its tab is switched away or the
-  // pane hides, and a comment closes with its tab.
-  const endPicker = () => {
-    const current = store.picking
-
-    if (current && (current.sessionKey !== props.session.key || current.tabID !== state()?.id || !visible()))
-      setPicking(current, false)
-  }
-
-  onCleanup(() => {
-    if (store.picking) setPicking(store.picking, false)
-    closeComment()
-  })
-
-  createKeyed(visible, endPicker, { otherwise: endPicker })
+  // Syncs main's native picker and highlight with the page on screen: the overlay machine stops a picker whose tab was
+  // switched away, hidden or made uninspectable, and closes a comment or note whose tab was switched away.
   createKeyed(
-    () => {
-      const tab = state()
-
-      return tab ? { session: props.session.key, tabID: tab.id } : undefined
-    },
-    (current) => {
-      endPicker()
-
-      if (store.comment?.sessionKey !== current.session || store.comment.tabID !== current.tabID) closeComment()
-
-      if (store.note?.sessionKey !== current.session || store.note.tabID !== current.tabID) closeNote()
-    },
+    () => ({ sessionKey: props.session.key, tabID: state()?.id, visible: visible(), inspectable: inspectable() }),
+    () => dispatchOverlay({ type: "context.changed", context: context() }),
     {
-      equals: (previous, next) => previous.session === next.session && previous.tabID === next.tabID,
-      otherwise: () => {
-        endPicker()
-        closeComment()
-        closeNote()
-      },
+      equals: (previous, next) =>
+        previous.sessionKey === next.sessionKey &&
+        previous.tabID === next.tabID &&
+        previous.visible === next.visible &&
+        previous.inspectable === next.inspectable,
     },
   )
+  onCleanup(() => dispatchOverlay({ type: "disposed" }))
   // The page does not have focus while the picker waits for a hover, so Escape reaches the app.
   createEventListener(
     window,
     "keydown",
     (event) => {
-      if (event.key !== "Escape" || !store.picking) return
+      if (event.key !== "Escape" || !capturesEscape(untrack(overlay))) return
       event.preventDefault()
       event.stopPropagation()
-      setPicking(store.picking, false)
+      dispatchOverlay({ type: "escape.pressed" })
     },
     { capture: true },
   )
@@ -832,7 +736,7 @@ export default function SessionBrowserPane(props: {
               data-action="browser-inspect"
               disabled={!inspectable()}
               state={picking() ? "pressed" : undefined}
-              classList={{ "!text-v2-icon-icon-accent": picking() || commenting() }}
+              classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
               aria-pressed={picking()}
               aria-label={plugin.t("inspect")}
               onClick={toggleInspect}
@@ -901,7 +805,7 @@ export default function SessionBrowserPane(props: {
       <embeds.View
         id={embed()}
         visible={shown()}
-        frozen={commenting() || noting()}
+        frozen={overlayed().frozen}
         // A navigation, in-page or not, or a reload starting is another page.
         page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
         radius={10}
@@ -957,14 +861,14 @@ export default function SessionBrowserPane(props: {
             {plugin.t("suspended")}
           </p>
         </Show>
-        <Show when={commenting() && store.comment}>
+        <Show when={comment()}>
           {(current) => (
             <div
               data-component="browser-comment"
               class="absolute inset-0 z-10"
               onPointerDown={(event) => {
                 // A click beside the editor dismisses it unless it would discard a draft.
-                if (event.target === event.currentTarget && !current().draft.trim()) closeComment()
+                if (event.target === event.currentTarget) dispatchOverlay({ type: "backdrop.pressed" })
               }}
             >
               <Show when={spotlight()}>
@@ -986,10 +890,7 @@ export default function SessionBrowserPane(props: {
                   <div
                     ref={(element) =>
                       createResizeObserver(element, (rect) =>
-                        setStore({
-                          editorHeight: Math.ceil(rect.height),
-                          editorInitialHeight: store.editorInitialHeight || Math.ceil(rect.height),
-                        }),
+                        dispatchOverlay({ type: "editor.resized", height: rect.height }),
                       )
                     }
                     data-slot="browser-comment-editor"
@@ -1015,9 +916,9 @@ export default function SessionBrowserPane(props: {
                           "--line-comment-max-height": `${position().maxHeight}px`,
                         }}
                         value={current().draft}
-                        onInput={(value) => setStore("comment", "draft", value)}
-                        onCancel={closeComment}
-                        onSubmit={submitComment}
+                        onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
+                        onCancel={closeOverlay}
+                        onSubmit={submitOverlay}
                         mention={{
                           items: (query) => props.screen.file.search(query, { kind: "any" }),
                         }}
@@ -1060,13 +961,13 @@ export default function SessionBrowserPane(props: {
             </div>
           )}
         </Show>
-        <Show when={noting() && store.note}>
+        <Show when={note()}>
           {(current) => (
             <div
               data-component="browser-comment"
               class="absolute inset-0 z-10"
               onPointerDown={(event) => {
-                if (event.target === event.currentTarget && !current().draft.trim()) closeNote()
+                if (event.target === event.currentTarget) dispatchOverlay({ type: "backdrop.pressed" })
               }}
             >
               {/* Under the page actions at the address field's end, which opened it. */}
@@ -1082,9 +983,9 @@ export default function SessionBrowserPane(props: {
                 <MenuScroll class="min-h-0">
                   <LineCommentEditor
                     value={current().draft}
-                    onInput={(value) => setStore("note", "draft", value)}
-                    onCancel={closeNote}
-                    onSubmit={submitNote}
+                    onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
+                    onCancel={closeOverlay}
+                    onSubmit={submitOverlay}
                     placeholder={plugin.t("page.placeholder")}
                     mention={{
                       items: (query) => props.screen.file.search(query, { kind: "any" }),

@@ -17,6 +17,15 @@ import {
   transitionDocument,
   type DocumentEvent,
 } from "./page-machine"
+import {
+  initialPickerState,
+  isPickerActive,
+  pickerAttempt,
+  PICKER_TIMEOUT_MS,
+  transitionPicker,
+  type PickerEffect,
+  type PickerEvent,
+} from "./picker-machine"
 import { createProfiling, type Recording } from "./profiling"
 import type { BrowserNetwork } from "./network"
 import {
@@ -195,9 +204,9 @@ export function createBrowserPage(
       return
     }
 
-    if (input.key === "Escape" && inspecting) {
+    if (input.key === "Escape" && isPickerActive(pickerState)) {
       event.preventDefault()
-      void toggleInspect(false)
+      void dispatchPicker({ type: "escape.pressed" })
 
       return
     }
@@ -216,7 +225,7 @@ export function createBrowserPage(
     // The same chord as Chromium DevTools' element picker.
     if (input.shift && pageLetter(input) === "c") {
       event.preventDefault()
-      void toggleInspect(!inspecting)
+      void dispatchPicker({ type: "inspect.toggled" })
 
       return
     }
@@ -267,10 +276,8 @@ export function createBrowserPage(
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
   // the element until the document changes.
   const picked = new Map<string, Element>()
-  let inspecting = false
-  // Bumped by every picker toggle and hide, so a pick still being described can tell it was cancelled.
-  let picks = 0
-  let flash: ReturnType<typeof setTimeout> | undefined
+  let pickerState = initialPickerState
+  let pickerTimer: ReturnType<typeof setTimeout> | undefined
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
@@ -309,8 +316,7 @@ export function createBrowserPage(
           documents.clear()
           refs.clear()
           picked.clear()
-
-          if (inspecting) void toggleInspect(false)
+          void dispatchPicker({ type: "document.changed" })
           break
         case "clear-diagnostics":
           diagnostics.clear()
@@ -467,17 +473,14 @@ export function createBrowserPage(
         },
         sessionId,
       ),
-      ...(inspecting ? [arm(sessionId)] : []),
     ]).catch(() => undefined)
+    void dispatchPicker({ type: "frame.attached", sessionID: sessionId })
   })
   // Each out-of-process frame runs its own picker; the frame under the pointer reports the click.
-  cdp.on("Overlay.inspectNodeRequested", ({ backendNodeId }, sessionID) => {
-    if (!inspecting) return
-    void inspected(backendNodeId, sessionID).catch(() => {
-      void hideHighlight()
-      options.inspect?.({ active: false })
-    })
-  })
+  cdp.on(
+    "Overlay.inspectNodeRequested",
+    ({ backendNodeId }, sessionID) => void dispatchPicker({ type: "node.picked", backendID: backendNodeId, sessionID }),
+  )
   cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
     sessions.forEach((id, frameID) => {
       if (id === sessionId) {
@@ -508,9 +511,7 @@ export function createBrowserPage(
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    if (visible || closed()) return
-    picks++
-    void (inspecting ? toggleInspect(false) : hideHighlight())
+    if (!visible) void dispatchPicker({ type: "embed.hidden" })
   })
 
   const load = (url: string) => {
@@ -562,11 +563,11 @@ export function createBrowserPage(
     async inspect(enabled: boolean) {
       if (closed()) return
       await ready
-      await toggleInspect(enabled)
+      await dispatchPicker({ type: "inspect.set", enabled })
     },
     async highlight(ref?: Browser.Ref) {
       if (closed()) return
-      await highlightPicked(ref).catch(() => undefined)
+      await dispatchPicker({ type: "highlight.requested", target: ref ? picked.get(ref.replace(/^@/, "")) : undefined })
     },
     zoom(direction: "in" | "out" | "reset") {
       if (!closed()) zoom(direction)
@@ -612,7 +613,8 @@ export function createBrowserPage(
           "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
         )
 
-      if (inspecting && pointerOperations.includes(command.action.type)) await toggleInspect(false)
+      if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
+        await dispatchPicker({ type: "pointer.command" })
 
       if (dialog && command.action.type !== "dialog")
         throw new Error(
@@ -678,7 +680,8 @@ export function createBrowserPage(
     async dispose() {
       if (closed()) return
       dispatch({ type: "disposed" })
-      clearTimeout(flash)
+      void dispatchPicker({ type: "disposed" })
+      clearTimeout(pickerTimer)
       detachNetwork?.()
       contents.session.off("will-download", download)
       await profiling.dispose()
@@ -1533,90 +1536,123 @@ export function createBrowserPage(
     return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
   }
 
-  async function toggleInspect(enabled: boolean) {
-    picks++
-
-    if (enabled !== inspecting) {
-      inspecting = enabled
-      clearTimeout(flash)
-      await Promise.all(
-        [undefined, ...sessions.values()].map((sessionID) =>
-          (enabled ? arm(sessionID) : cdp.send("Overlay.setInspectMode", inspectOff, sessionID)).catch(() => undefined),
-        ),
-      )
-
-      if (!enabled) await hideHighlight()
-    }
-
-    // A later toggle may have finished first; report where the picker ended up.
-    options.inspect?.({ active: inspecting })
+  /** Moves the picker and runs its effects; resolves once they ran, so input waits for the picker to disarm. */
+  async function dispatchPicker(event: PickerEvent): Promise<void> {
+    const next = transitionPicker(pickerState, event)
+    pickerState = next.state
+    await Promise.all(next.effects.map(runPicker))
   }
 
-  async function arm(sessionID?: string) {
+  async function runPicker(effect: PickerEffect): Promise<void> {
+    switch (effect.type) {
+      case "arm": {
+        const attempt = effect.attempt
+        // Each out-of-process frame arms its own picker; the main target decides whether the picker started.
+        const frames = Array.from(sessions.values(), (id) => arm(attempt, id).catch(() => undefined))
+
+        return Promise.all([arm(attempt), ...frames]).then(
+          () => dispatchPicker({ type: "arm.succeeded", attempt }),
+          () => dispatchPicker({ type: "arm.failed", attempt }),
+        )
+      }
+
+      case "arm-frame":
+        return arm(effect.attempt, effect.sessionID).catch(() => undefined)
+      case "disarm":
+        return disarm()
+      case "describe": {
+        const attempt = effect.attempt
+
+        return describePick(effect.backendID, effect.sessionID).then(
+          (pick) => dispatchPicker({ type: "describe.succeeded", attempt, target: pick.target, element: pick.element }),
+          () => dispatchPicker({ type: "describe.failed", attempt }),
+        )
+      }
+
+      case "pick": {
+        const ref = options.shared.ref()
+        picked.set(ref, effect.target)
+
+        // The pick focused the page; the comment editor opens in the app window. Focus only moves
+        // within a focused window, so synthetic input never raises a background window.
+        if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
+        options.inspect?.({ active: false, element: { ref: Browser.Ref.make(ref), ...effect.element } })
+
+        return
+      }
+
+      case "flash": {
+        const attempt = effect.attempt
+        const target = effect.target
+
+        return cdp
+          .send("DOM.scrollIntoViewIfNeeded", { backendNodeId: target.backendID }, target.sessionID)
+          .then(() =>
+            cdp.send(
+              "Overlay.highlightNode",
+              { backendNodeId: target.backendID, highlightConfig: pickedHighlight },
+              target.sessionID,
+            ),
+          )
+          .then(
+            () => dispatchPicker({ type: "flash.shown", attempt }),
+            () => dispatchPicker({ type: "flash.failed", attempt }),
+          )
+      }
+
+      case "hide-highlight":
+        return hideHighlight()
+      case "report":
+        options.inspect?.({ active: effect.active })
+
+        return
+      case "timer": {
+        const attempt = effect.attempt
+        const phase = effect.phase
+        clearTimeout(pickerTimer)
+        pickerTimer = setTimeout(
+          () => void dispatchPicker({ type: "timeout", phase, attempt }),
+          PICKER_TIMEOUT_MS[phase],
+        )
+      }
+    }
+  }
+
+  async function arm(attempt: number, sessionID?: string) {
     // The main target enables DOM at startup; frame targets only need it for the picker.
     if (sessionID) await cdp.send("DOM.enable", {}, sessionID)
     await cdp.send("Overlay.enable", {}, sessionID)
 
     // The picker may have been turned off while the domains were enabling.
-    if (!inspecting) return
+    if (pickerAttempt(pickerState) !== attempt) return
     await cdp.send("Overlay.setInspectMode", { mode: "searchForNode", highlightConfig: inspectHighlight }, sessionID)
   }
 
-  async function inspected(backendID: number, sessionID?: string) {
-    inspecting = false
-    const pick = ++picks
-    const navigation = documentGeneration(documentState)
+  async function disarm() {
     await Promise.all(
       [undefined, ...sessions.values()].map((id) =>
         cdp.send("Overlay.setInspectMode", inspectOff, id).catch(() => undefined),
       ),
     )
+  }
+
+  async function describePick(backendID: number, sessionID?: string) {
+    await disarm()
     // Keep the box model on the picked element, without the tooltip, while the renderer freezes the page.
     await cdp.send("Overlay.highlightNode", { backendNodeId: backendID, highlightConfig: pickedHighlight }, sessionID)
-    const element = { backendID, frameID: await frameOf(backendID, sessionID), sessionID }
-    const [details, box, accessible] = await Promise.all([describe(element), rect(element), accessibility(element)])
+    const target = { backendID, frameID: await frameOf(backendID, sessionID), sessionID }
+    const [details, box, accessible] = await Promise.all([describe(target), rect(target), accessibility(target)])
     await painted(sessionID)
-
-    // Escape, a toggle, hiding, or navigation while the element was described cancels the pick.
-    if (closed()) return
-
-    if (pick !== picks || navigation !== documentGeneration(documentState)) {
-      if (!inspecting) await hideHighlight()
-      options.inspect?.({ active: inspecting })
-
-      return
-    }
-
-    const ref = options.shared.ref()
-    picked.set(ref, element)
     const zoom = contents.getZoomFactor()
 
-    // The pick focused the page; the comment editor opens in the app window. Focus only moves
-    // within a focused window, so synthetic input never raises a background window.
-    if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
-    options.inspect?.({
-      active: false,
+    return {
+      target,
       element: {
-        ref: Browser.Ref.make(ref),
         ...details,
         ...accessible,
         rect: { x: box.x * zoom, y: box.y * zoom, width: box.width * zoom, height: box.height * zoom },
       },
-    })
-  }
-
-  async function highlightPicked(ref?: Browser.Ref) {
-    clearTimeout(flash)
-    const element = ref ? picked.get(ref.replace(/^@/, "")) : undefined
-
-    if (!element) return hideHighlight()
-    await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
-    await cdp.send(
-      "Overlay.highlightNode",
-      { backendNodeId: element.backendID, highlightConfig: pickedHighlight },
-      element.sessionID,
-    )
-    flash = setTimeout(() => void hideHighlight(), 1_500)
+    }
   }
 
   async function hideHighlight() {

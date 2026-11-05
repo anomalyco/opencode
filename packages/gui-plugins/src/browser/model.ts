@@ -590,11 +590,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (!available(session)) return
       dispatch({ type: "session.command", sessionKey: session.key, action: { type: "tabs.open" }, focusAddress: true })
     },
-    /** Whether the user just opened the blank tab this session shows; true once, for the pane that focuses its address. */
-    opened(session: Session) {
-      const tabID = addressFocusTab(untrack(machine), session.key)
-
-      if (!tabID) return false
+    /** Whether the user just opened this blank tab; true once, for the pane that focuses its address. */
+    opened(session: Session, tabID: Browser.TabID) {
+      if (addressFocusTab(untrack(machine), session.key) !== tabID) return false
       dispatch({ type: "address.focused", sessionKey: session.key, tabID })
 
       return true
