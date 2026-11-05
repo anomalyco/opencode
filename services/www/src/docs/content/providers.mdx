@@ -306,6 +306,10 @@ ID sent to the provider.
 | `limit` | Context, input, and output token limits. |
 | `disabled` | Removes the model from selection when `true`. |
 
+The `"*"` key sets `disabled` for every model of the provider. Entries without their own `disabled` follow it, so
+`"*": { "disabled": true }` with `"coding": { "disabled": false }` keeps only `coding`. Other fields under `"*"` are
+ignored.
+
 See [Models](/models) for selection, defaults, capabilities, limits, costs, and variants.
 
 ## Azure
