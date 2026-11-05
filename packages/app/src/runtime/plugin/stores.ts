@@ -18,6 +18,12 @@ import type { BuiltinStoreFrom } from "@opencode/plugin/gui/builtin"
 import { Persist, type persisted } from "@/runtime/persistence/storage"
 import type { SessionStateKey } from "@/runtime/server/scope"
 import {
+  createSessionStoreState,
+  selectSessionStoreEntry,
+  transitionSessionStore,
+  type SessionStoreEvent,
+} from "./session-store-machine"
+import {
   createDeferredStoreState,
   createStoreLoadState,
   selectStoreReady,
@@ -248,7 +254,8 @@ export function locatedHandle<T>(session: SessionRef, open: () => Persisted<T>) 
 
 /**
  * A declared session store: one handle per session, opened through `locatedHandle`. Call it under an owner: an effect
- * drops the store of a session whose tab closed.
+ * drops the store of a session whose tab closed, and the oldest stores past `SESSION_STORE_MAX_UNLISTED` that no tab
+ * lists.
  */
 export function createSessionStore<T extends object>(input: {
   readonly open: (session: SessionRef) => Persisted<T>
@@ -260,26 +267,25 @@ export function createSessionStore<T extends object>(input: {
    */
   readonly sessions: { list(): readonly SessionRef[]; current(): SessionRef | undefined }
 }) {
-  const entries = new Map<string, { readonly handle: Persisted<T>; readonly dispose: () => void }>()
-  // Keys a tab has listed while their store was open; only these can close.
-  const listed = new Set<string>()
+  type Opened = { readonly handle: Persisted<T>; readonly dispose: () => void }
+
+  // A plain variable: readers hold the handles, and nothing renders the table itself.
+  const machine = { state: createSessionStoreState<Opened>() }
+
+  const dispatch = (event: SessionStoreEvent<Opened>) => {
+    const next = transitionSessionStore(machine.state, event)
+
+    machine.state = next.state
+    next.effects.forEach((effect) => effect.value.dispose())
+  }
 
   // Drops the stores of sessions whose tabs closed. The routed session keeps its store, and so does one no tab has
-  // listed yet: a deep link or a new session routes and preloads before the titlebar adds its tab.
+  // listed yet, up to a bound: a deep link or a new session routes and preloads before the titlebar adds its tab.
   createRenderEffect(() => {
-    const keys = new Set(input.sessions.list().map((session) => session.key))
+    const listed = new Set(input.sessions.list().map((session) => session.key))
     const routed = input.sessions.current()?.key
 
-    untrack(() =>
-      entries.forEach((entry, key) => {
-        if (keys.has(key)) return void listed.add(key)
-
-        if (key === routed || !listed.has(key)) return
-        entry.dispose()
-        entries.delete(key)
-        listed.delete(key)
-      }),
-    )
+    untrack(() => dispatch({ type: "sync", listed, routed }))
   })
 
   const create = (session: SessionRef) => {
@@ -307,22 +313,27 @@ export function createSessionStore<T extends object>(input: {
   }
 
   return {
-    get(session: SessionRef) {
-      const existing = entries.get(session.key)
+    get(session: SessionRef): Persisted<T> {
+      const existing = selectSessionStoreEntry(machine.state, session.key)
 
       if (existing) return existing.handle
-      const created = create(session)
-      entries.set(session.key, created)
 
-      // Listed already, it closes with its tab.
-      if (untrack(input.sessions.list).some((item) => item.key === session.key)) listed.add(session.key)
+      // A plugin's code that runs on after it went away reads nothing and writes nowhere.
+      if (machine.state.status === "disposed")
+        return { value: undefined, ready: () => false, update: () => undefined, set: () => undefined }
+      const created = create(session)
+
+      dispatch({
+        type: "opened",
+        key: session.key,
+        value: created,
+        // Listed already, it closes with its tab.
+        listed: untrack(input.sessions.list).some((item) => item.key === session.key),
+        routed: untrack(input.sessions.current)?.key,
+      })
 
       return created.handle
     },
-    dispose() {
-      entries.forEach((entry) => entry.dispose())
-      entries.clear()
-      listed.clear()
-    },
+    dispose: () => dispatch({ type: "disposed" }),
   }
 }
