@@ -440,7 +440,9 @@ fn the_client_mcp_socket_follows_a_restarted_service() {
         .collect();
     let socket = |port: u16, password: &str| {
         (
-            format!("ws://127.0.0.1:{port}/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui"),
+            format!(
+                "ws://127.0.0.1:{port}/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui"
+            ),
             vec![(
                 "authorization".to_owned(),
                 format!("Basic {}", Auth::password(password).token()),

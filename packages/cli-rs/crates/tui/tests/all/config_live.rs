@@ -101,7 +101,10 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
     let tui = mount(&app, Info::default(), None);
     assert!(Tabs::enabled(&tui));
     settings::update(&tui, set(&["tabs", "mode"], json!("off")));
-    assert!(!Tabs::enabled(&tui), "tabs.mode stayed at its startup value");
+    assert!(
+        !Tabs::enabled(&tui),
+        "tabs.mode stayed at its startup value"
+    );
 
     // `leader.timeout` shortens the next leader. The leader's deadline is in real time, not the test clock, so
     // the expiry is checked at instants past the press.
@@ -110,7 +113,8 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
     let pressed = Instant::now();
     assert!(tui.keymap.leader_active());
     assert!(
-        tui.keymap.expire_leader(pressed + Duration::from_millis(300)),
+        tui.keymap
+            .expire_leader(pressed + Duration::from_millis(300)),
         "the leader waited for the startup timeout"
     );
     assert!(!tui.keymap.leader_active());
@@ -118,9 +122,15 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
     settings::update(&tui, set(&["leader", "timeout"], json!(5000)));
     app.press("ctrl+x");
     let pressed = Instant::now();
-    assert!(!tui.keymap.expire_leader(pressed + Duration::from_millis(2500)));
+    assert!(
+        !tui.keymap
+            .expire_leader(pressed + Duration::from_millis(2500))
+    );
     assert!(tui.keymap.leader_active());
-    assert!(tui.keymap.expire_leader(pressed + Duration::from_millis(5100)));
+    assert!(
+        tui.keymap
+            .expire_leader(pressed + Duration::from_millis(5100))
+    );
     assert!(!tui.keymap.leader_active());
 }
 

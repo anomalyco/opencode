@@ -13,6 +13,8 @@ export type Route = {
   json?: unknown | ((entry: Logged, requests: Logged[]) => unknown)
   // Sent as is, with `headers` (default `text/plain`).
   body?: string
+  // Binary bytes, sent as `application/octet-stream` unless `headers` says otherwise.
+  base64?: string
   headers?: Record<string, string>
   // An event stream: each event is one `data:` frame. The stream stays open until the server stops.
   events?: unknown[]
@@ -142,6 +144,11 @@ function respond(
   if (json !== undefined) return Response.json(json, { status, headers: route.headers })
   if (route.body !== undefined)
     return new Response(route.body, { status, headers: { "content-type": "text/plain", ...route.headers } })
+  if (route.base64 !== undefined)
+    return new Response(Buffer.from(route.base64, "base64"), {
+      status,
+      headers: { "content-type": "application/octet-stream", ...route.headers },
+    })
   return new Response(null, { status: route.status ?? 204, headers: route.headers })
 }
 

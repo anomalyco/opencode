@@ -283,6 +283,11 @@ function respond(route: Route) {
   if (route.json !== undefined) return Response.json(route.json, { status, headers: route.headers })
   if (route.body !== undefined)
     return new Response(route.body, { status, headers: { "content-type": "text/plain", ...route.headers } })
+  if (route.base64 !== undefined)
+    return new Response(Buffer.from(route.base64, "base64"), {
+      status,
+      headers: { "content-type": "application/octet-stream", ...route.headers },
+    })
   return new Response(null, { status: route.status ?? 204, headers: route.headers })
 }
 
