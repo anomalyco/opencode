@@ -71,7 +71,7 @@ export function createVoiceCall(input: {
     const transport = new VoiceTransport({
       api: input.ctx.sdk.api,
       event: (event) => {
-        if (connection?.transport === transport && !transport.abort.signal.aborted) eventReceived(attempt, event)
+        if (connection?.transport === transport) eventReceived(attempt, event)
       },
       levels: (mic, speaker) => {
         if (connection?.transport !== transport) return
@@ -88,11 +88,11 @@ export function createVoiceCall(input: {
 
     if (input.platform.requestMicrophone && !(await input.platform.requestMicrophone()))
       throw new VoiceFailure("microphone")
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     await input.platform.setVoiceCallActive?.(true)
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     await transport.join(viewing, tail.lines)
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     transport.mute(muted)
   }
 
@@ -158,8 +158,7 @@ export function createVoiceCall(input: {
             type: "delegation.timeout",
             id: effect.id,
             attempt: effect.attempt,
-            // The transport aborts as soon as its data channel closes.
-            channelOpen: !!connection && !connection.transport.abort.signal.aborted,
+            channelOpen: !!connection?.transport.canSend,
           }),
         effect.ms,
       )
@@ -174,7 +173,7 @@ export function createVoiceCall(input: {
       if (!transport) return
       const abort = new AbortController()
       handles.set(effect.id, { ...handles.get(effect.id), abort })
-      void runRound(effect, AbortSignal.any([abort.signal, transport.abort.signal]))
+      void runRound(effect, AbortSignal.any([abort.signal, transport.signal]))
 
       return
     }
