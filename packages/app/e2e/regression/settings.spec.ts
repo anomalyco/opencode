@@ -468,6 +468,42 @@ test("several servers share one selected server across per-server pages", async 
   await expect(settings.getByRole("button", { name: "Edit server", exact: true })).toBeVisible()
 })
 
+for (const server of [
+  { name: "Signed-out box", url: REMOTE_SERVER, password: "secret" },
+  // Nothing answers on this server.
+  { name: "Offline box", url: "http://127.0.0.1:4099" },
+]) {
+  test(`a project route on an unavailable server falls back to its Projects page (${server.name})`, async ({
+    page,
+  }) => {
+    const remote = "/remote/settings-demo"
+    await mockWorkspace(page, {
+      name: "Settings demo",
+      directory,
+      provider: NO_PROVIDER,
+      sessions: [],
+      seed: { tabs: [] },
+    })
+
+    if (server.password)
+      await mockRemoteServer(page, { name: server.name, directory: remote, password: server.password })
+
+    if (!server.password) await seed(page, { servers: [{ url: server.url, name: server.name }] })
+    await page.goto(
+      `/settings?server=${encodeURIComponent(server.url)}&project=${encodeURIComponent(remote)}&tab=general`,
+    )
+    const settings = page.getByTestId("settings-screen")
+    await expect(settings.getByRole("status").filter({ hasText: `Can't reach ${server.name}` })).toBeVisible()
+    await expect(settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get("server") === server.url &&
+        url.searchParams.get("tab") === "projects" &&
+        !url.searchParams.has("project"),
+    )
+  })
+}
+
 test("project list menus rename, edit, add, and stay inside the scrollport", async ({ page }) => {
   const projects = ["rebase", "dinocms", "opencode", "Playground"].map((name, index) =>
     project({ id: `project-${index}`, directory: `/projects/${name}`, name }),
