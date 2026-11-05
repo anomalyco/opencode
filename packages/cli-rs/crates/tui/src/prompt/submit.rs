@@ -85,8 +85,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     }
 
     let Some(catalog) = prompt.catalog.borrow().clone() else {
-        return false;
+        // Sent once the catalogs load, as `--prompt` is, unless the text changes first. TS drops it.
+        *prompt.startup.borrow_mut() = Some((prompt.textarea.text(), delivery));
+        return true;
     };
+    prompt.startup.take();
     let session = prompt.session_info(tui);
     let Some(selection) = crate::dialogs::model::prompt_selection(tui, &catalog, session.as_ref()) else {
         return false;
