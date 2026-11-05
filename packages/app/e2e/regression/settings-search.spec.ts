@@ -393,6 +393,32 @@ test("project results keep the query, selection, and scroll position on return",
   await expect.poll(() => view.viewport.evaluate((list) => list.scrollTop)).toBe(scroll)
 })
 
+test("a page reached through an opened result keeps its own way back", async ({ page }) => {
+  const view = await open(page)
+  await view.search.fill("Projects")
+  await view.results.getByRole("option", { name: "Projects, This computer", exact: true }).click()
+  await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+  await view.settings.getByRole("button", { name: "OpenCode", exact: true }).click()
+  await expect(view.settings.getByRole("heading", { name: "OpenCode", exact: true })).toBeVisible()
+  await expect(view.settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+  // Escape leaves the project for its own parent, not for the page the search started on.
+  await page.keyboard.press("Escape")
+  await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+  await expect(view.search).toHaveValue("Projects")
+
+  // A Command Palette jump reveals its setting without a way back to a search.
+  const key = await page.evaluate(() =>
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "Meta+Shift+P" : "Control+Shift+P",
+  )
+  await page.keyboard.press(key)
+  const palette = page.getByRole("dialog")
+  await palette.getByRole("combobox").fill("OpenCode name")
+  await palette.getByRole("option", { name: /^Project name/ }).click()
+  await expect(view.settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("OpenCode")
+  await expect(view.settings.locator('[data-search-target="row"]')).toContainText("Project name")
+  await expect(view.settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+})
+
 test("IME confirmation does not activate a search result", async ({ page }) => {
   const view = await open(page)
   await view.search.fill("font")

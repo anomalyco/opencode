@@ -32,7 +32,6 @@ import { ProjectSettingsExtensions } from "./workspaces/project-extensions"
 import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
 import { pageIcons, pageLabels } from "./pages"
-import { revealSettingsSearch } from "./search-reveal"
 import { PluginSettingsPages } from "@/runtime/plugin/settings-page-view"
 import "@/settings/settings.css"
 
@@ -79,40 +78,24 @@ export function SettingsScreen() {
   const loaded = useSettingsServersLoaded()
   const global = useGlobal()
   let root: HTMLDivElement | undefined
-  let viewType = surface.view().type
-  let activation = 0
 
-  onMount(() => root?.focus({ preventScroll: true }))
-  createEffect(() => {
-    const next = surface.view().type
-
-    if (next === viewType) return
-    viewType = next
-    queueMicrotask(() => {
-      const target =
-        surface.search.state.query.trim() && surface.search.state.expanded
-          ? root?.querySelector<HTMLInputElement>(".settings-search input")
-          : root
-
-      target?.focus({ preventScroll: true })
-    })
+  onMount(() => {
+    root?.focus({ preventScroll: true })
+    onCleanup(surface.search.attach(root!))
   })
-
+  createEffect(() => surface.search.sync(surface.view()))
   createEffect(
     on(
-      () => [surface.view(), surface.search.state.selected] as const,
-      ([view, selected]) => {
-        if (
-          !root ||
-          !selected ||
-          !view.searchActivation ||
-          view.searchActivation !== surface.search.state.activation ||
-          view.searchActivation === activation
-        )
-          return
-        activation = view.searchActivation
-        onCleanup(revealSettingsSearch(root, view))
-      },
+      createMemo(() => surface.view().type),
+      () =>
+        queueMicrotask(() => {
+          const target = surface.search.expanded()
+            ? root?.querySelector<HTMLInputElement>(".settings-search input")
+            : root
+
+          target?.focus({ preventScroll: true })
+        }),
+      { defer: true },
     ),
   )
 
@@ -164,16 +147,7 @@ export function SettingsScreen() {
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || dialog.active) return
         event.preventDefault()
-
-        if (surface.view().type !== "root" && surface.search.back()) return
-
-        if (surface.search.state.query.trim()) {
-          surface.search.clear()
-
-          return
-        }
-
-        surface.back()
+        surface.search.escape()
       }}
     >
       <Switch>
