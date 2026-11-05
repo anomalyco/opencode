@@ -8,7 +8,9 @@ import {
 } from "./machine"
 
 const OPEN: SelectHighlightEvent = { type: "open.changed", open: true }
+
 const CLOSE: SelectHighlightEvent = { type: "open.changed", open: false }
+
 const highlight = (key: string): SelectHighlightEvent => ({ type: "highlight.changed", key, previewable: true })
 
 const select = (key: string | undefined, closing = true): SelectHighlightEvent => ({
@@ -18,10 +20,11 @@ const select = (key: string | undefined, closing = true): SelectHighlightEvent =
 })
 
 function run(state: SelectHighlightState, ...events: SelectHighlightEvent[]) {
-  return events.reduce<SelectHighlightTransition[]>(
-    (steps, event) => [...steps, transitionSelectHighlight(steps.at(-1)?.state ?? state, event)],
-    [],
-  )
+  const steps: SelectHighlightTransition[] = []
+
+  events.forEach((event) => steps.push(transitionSelectHighlight(steps.at(-1)?.state ?? state, event)))
+
+  return steps
 }
 
 const effects = (steps: SelectHighlightTransition[]) => steps.map((step) => step.effects.map((effect) => effect.type))

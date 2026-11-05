@@ -122,7 +122,7 @@ export const STAGE_DRAG_THRESHOLD_PX = 3
 /**
  * The press on a zoomed image. `suppress-click` follows a pan that moved: the click that ends it neither fits nor
  * zooms. It lasts until that click or the next press, since a touch pan produces no click. Pan offsets live in the
- * driver and paint straight to the image, so a pointer move writes no state.
+ * driver and paint straight to the image; once a pan has moved, its pointer moves dispatch nothing at all.
  */
 export type ImageStageGestureState =
   | { readonly status: "idle" }
@@ -139,7 +139,7 @@ export type ImageStageGestureEvent =
       readonly primary: boolean
       readonly zoomed: boolean
     }
-  /** The pan pointer moved past the threshold. */
+  /** The pan pointer moved past the threshold; the driver sends it once per pan. */
   | { readonly type: "pointer.moved"; readonly pointerId: number }
   | { readonly type: "pointer.up"; readonly pointerId: number }
   /** `pointercancel`, `lostpointercapture`, or a mouse move with the primary button already up. */
@@ -247,14 +247,8 @@ function releaseStage(pan: Extract<ImageStageGestureState, { status: "panning" }
   return [{ type: "pointer.release", pointerId: pan.pointerId } as const]
 }
 
-// Every pointer move of a pan dispatches events that change nothing; answering them with the transition already built
-// for that state keeps the hot path allocation-free.
-let lastStage: ImageStageGestureTransition = Object.freeze({ state: STAGE_DISPOSED, effects: NO_STAGE_EFFECTS })
-
-function unchangedStage(state: ImageStageGestureState) {
-  if (lastStage.state !== state) lastStage = Object.freeze({ state, effects: NO_STAGE_EFFECTS })
-
-  return lastStage
+function unchangedStage(state: ImageStageGestureState): ImageStageGestureTransition {
+  return { state, effects: NO_STAGE_EFFECTS }
 }
 
 /** How long playing video keeps its overlay controls after the pointer last moved. */

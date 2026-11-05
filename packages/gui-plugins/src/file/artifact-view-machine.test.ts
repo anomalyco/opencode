@@ -36,6 +36,7 @@ describe("artifact viewer", () => {
   test("a broken SVG keeps its source action and can still show its source", () => {
     // Before: a failed decode turned the kind into binary, which removed "View source" for a text file.
     const content = svg("<svg")
+
     const failed = run(createArtifactViewerState(content), content, {
       type: "decode.failed",
       content,
@@ -58,6 +59,7 @@ describe("artifact viewer", () => {
 
   test("a failure drops reported facts, and facts after a failure change nothing", () => {
     const content = svg("<svg/>")
+
     const reported = run(createArtifactViewerState(content), content, {
       type: "info.reported",
       content,
@@ -182,13 +184,10 @@ describe("image stage gesture", () => {
     expect(run(panning.state, { type: "pointer.up", pointerId: 2 }).state).toBe(panning.state)
   })
 
-  test("pointer moves after the threshold allocate nothing", () => {
+  test("a pan that has moved keeps its state for further moves", () => {
     const moved = run(INITIAL_IMAGE_STAGE_GESTURE_STATE, down(), { type: "pointer.moved", pointerId: 1 })
-    const event: ImageStageGestureEvent = { type: "pointer.moved", pointerId: 1 }
-    const first = transitionImageStageGesture(moved.state, event)
 
-    expect(first.state).toBe(moved.state)
-    expect(transitionImageStageGesture(moved.state, event)).toBe(first)
+    expect(run(moved.state, { type: "pointer.moved", pointerId: 1 }).state).toBe(moved.state)
   })
 
   test("disposal releases a pan and ignores everything after", () => {

@@ -109,6 +109,7 @@ export default function ArtifactView(props: {
 
   const meta = createMemo(() => {
     const parsed = table()
+
     const info: ArtifactInfo = parsed
       ? { rows: parsed.total, columns: parsed.columns }
       : selectArtifactInfo(viewerState(), props.content)
@@ -297,7 +298,6 @@ function ImageStage(props: MediaProps & { src: string }) {
   let panY = 0
   // Where the pan's pointer pressed, then where it was on its last move.
   const origin = { x: 0, y: 0 }
-  const movedEvent = { type: "pointer.moved" as const, pointerId: 0 }
   let stage: HTMLDivElement | undefined
   let image: HTMLImageElement | undefined
 
@@ -449,12 +449,16 @@ function ImageStage(props: MediaProps & { src: string }) {
 
           if (dx === 0 && dy === 0) return
 
-          if (!selectStagePanMoved(current) && Math.hypot(dx, dy) < STAGE_DRAG_THRESHOLD_PX) return
+          // Only the move that crosses the threshold changes the gesture; the rest dispatch and allocate nothing.
+          if (!selectStagePanMoved(current)) {
+            if (Math.hypot(dx, dy) < STAGE_DRAG_THRESHOLD_PX) return
+
+            dispatchGesture({ type: "pointer.moved", pointerId: event.pointerId })
+          }
+
           // Each move pans by its own delta, so reversing at a clamp wall moves the image at once.
           origin.x = event.clientX
           origin.y = event.clientY
-          movedEvent.pointerId = event.pointerId
-          dispatchGesture(movedEvent)
           pan(panX + dx, panY + dy)
         }}
         onPointerUp={(event) => dispatchGesture({ type: "pointer.up", pointerId: event.pointerId })}
@@ -560,10 +564,13 @@ function VideoStage(props: MediaProps & { src: string }) {
   const open = (attempt: number) => {
     const el = video
 
-    if (!el || !frame) return
+    if (!el || !frame) return dispatch({ type: "preview.returned", attempt })
+
     const back = () => {
       if (stage?.contains(el)) dispatch({ type: "preview.returned", attempt })
     }
+
+    // The preview hands the video back into this frame; nothing else in it changes while the preview is open.
     const observer = new MutationObserver(back)
     const id = uuid()
 
