@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Geen plug-ins geconfigureerd",
   skills: "Vaardigheden",
   "skills.empty": "Geen vaardigheden geconfigureerd",
-  lsp: "LSP",
-  "lsp.empty": "Geen LSP-servers geconfigureerd",
   failed: "Mislukt",
   retry: "Opnieuw proberen",
   connecting: "Verbinden…",

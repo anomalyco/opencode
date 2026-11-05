@@ -11,7 +11,6 @@ import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
   CacheTTL,
-  HttpOptions,
   type LLMRequest,
   LLMEvent,
   mergeJsonRecords,
@@ -839,7 +838,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           content.push(yield* lowerMedia(part, request, breakpoints))
           continue
         }
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
       if (content.length > 0) messages.push({ role: "user", content })
       continue
@@ -897,8 +895,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 
     const content: AnthropicToolResultBlock[] = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
         tool_use_id: scrubToolCallID(part.id),
@@ -960,7 +956,6 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const outputConfig = options.output_config ?? options.outputConfig
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
-  const generation = request.generation
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -982,7 +977,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
-  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
+  const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -991,10 +986,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    top_k: generation?.topK,
-    stop_sequences: generation?.stop,
+    temperature: request.temperature,
+    top_p: request.topP,
+    top_k: request.topK,
+    stop_sequences: request.stop,
     thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
@@ -1535,7 +1530,7 @@ export const transport = <
     prepare: (input: Parameters<typeof http.prepare>[0]) => {
       const requiredBetas = requiredBetaHeaders(input.body)
       if (requiredBetas.length === 0) return http.prepare(input)
-      const headers = Headers.fromInput(input.request.http?.headers)
+      const headers = Headers.fromInput(input.request.headers)
       const existingBetas = (headers["anthropic-beta"] ?? "")
         .split(",")
         .map((item) => item.trim())
@@ -1543,13 +1538,7 @@ export const transport = <
       const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
-        request: {
-          ...input.request,
-          http: new HttpOptions({
-            ...input.request.http,
-            headers: { ...headers, "anthropic-beta": [...betas].join(",") },
-          }),
-        },
+        request: { ...input.request, headers: { ...headers, "anthropic-beta": [...betas].join(",") } },
       })
     },
   }

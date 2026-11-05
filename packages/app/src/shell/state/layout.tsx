@@ -129,8 +129,6 @@ const sessionViewSchema = Persistence.struct({
   reviewOpen: Schema.optional(Persistence.array(Schema.String)),
   reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   reviewFile: Schema.optional(Schema.String),
-  pendingMessage: Schema.optional(Schema.String),
-  pendingMessageAt: Schema.optional(Schema.Finite),
 })
 
 export const layoutSchema = Persistence.struct({
@@ -155,6 +153,8 @@ export const layoutSchema = Persistence.struct({
     tab: Schema.Literals(["changes", "all"]),
   }),
   session: Persistence.struct({ width: Schema.Finite }),
+  // The side region's width per panel (`${plugin}:${panel id}`) that sizes itself, app-wide.
+  panelWidths: Schema.optional(Persistence.record(Schema.Finite)),
   mobileSidebar: Persistence.struct({ opened: Schema.Boolean }),
   sessionTabs: Persistence.record(Persistence.fallback(sessionTabsSchema, () => ({ all: [] }))),
   sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
@@ -311,7 +311,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     )
 
     const MAX_SESSION_KEYS = 50
-    const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
 
     const usage: SessionKeyUsage = {
       active: undefined,
@@ -492,6 +491,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("session", "width", width)
         },
       },
+      /** The side region's width while a panel that sizes itself shows, keyed `${plugin}:${panel id}`. */
+      panelWidth: {
+        get: (panel: string) => store.panelWidths?.[panel],
+        set(panel: string, width: number) {
+          // A plugin passes this width; a non-finite one would fail the stored layout's decode.
+          if (!Number.isFinite(width)) return
+
+          if (!store.panelWidths) {
+            setStore("panelWidths", { [panel]: width })
+
+            return
+          }
+
+          setStore("panelWidths", panel, width)
+        },
+      },
       mobileSidebar: {
         opened: createMemo(() => store.mobileSidebar?.opened ?? false),
         hide() {
@@ -499,53 +514,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
-        },
-      },
-      pendingMessage: {
-        set(sessionKey: string, messageID: string) {
-          const at = Date.now()
-          touch(sessionKey)
-          const current = store.sessionView[sessionKey]
-
-          if (!current) {
-            setStore("sessionView", sessionKey, {
-              scroll: {},
-              pendingMessage: messageID,
-              pendingMessageAt: at,
-            })
-            prune(usage.active ?? sessionKey)
-
-            return
-          }
-
-          setStore(
-            "sessionView",
-            sessionKey,
-            produce((draft) => {
-              draft.pendingMessage = messageID
-              draft.pendingMessageAt = at
-            }),
-          )
-        },
-        consume(sessionKey: string) {
-          const current = store.sessionView[sessionKey]
-          const message = current?.pendingMessage
-          const at = current?.pendingMessageAt
-
-          if (!message || !at) return
-
-          setStore(
-            "sessionView",
-            sessionKey,
-            produce((draft) => {
-              delete draft.pendingMessage
-              delete draft.pendingMessageAt
-            }),
-          )
-
-          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
-
-          return message
         },
       },
       /** The side region of a shell tab, and the session panel width beside it. */

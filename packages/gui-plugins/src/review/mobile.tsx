@@ -53,6 +53,12 @@ function SessionReviewTab(props: {
     }
   }
 
+  // Input, not the scroll events a focused file's own scrolling fires, stops scrolling to that file.
+  const handleInput = () => {
+    handleInteraction()
+    review.cancelScroll()
+  }
+
   const doRestore = () => {
     state.restoreFrame = undefined
     const el = state.scroll
@@ -129,11 +135,11 @@ function SessionReviewTab(props: {
       empty={<ReviewEmpty review={review} loadingClass="px-2 py-2 text-text-weak" />}
       scrollRef={(el) => {
         state.scroll = el
-        makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "keydown", handleInteraction, { capture: true })
+        makeEventListener(el, "wheel", handleInput, { passive: true, capture: true })
+        makeEventListener(el, "mousewheel", handleInput, { passive: true, capture: true })
+        makeEventListener(el, "pointerdown", handleInput, { passive: true, capture: true })
+        makeEventListener(el, "touchstart", handleInput, { passive: true, capture: true })
+        makeEventListener(el, "keydown", handleInput, { capture: true })
         review.setScroll(el)
         queueRestore()
       }}

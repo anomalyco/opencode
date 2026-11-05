@@ -147,12 +147,29 @@ for (const surface of ["popover", "dialog"] as const) {
 
 test("the MCP popover shows a failed server and reconnects it from its details", async ({ page }) => {
   const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
+  const again = "Streamable HTTP error: Error POSTing to endpoint: 503 Service Unavailable"
+  const retries = { connecting: false, failing: true }
 
   const view = await open(page, {
     surface: "popover",
     mcp: (target) => [
-      { name: "figma-desktop", status: target !== workspace ? { status: "connected" } : { status: "failed", error } },
+      {
+        name: "figma-desktop",
+        status:
+          target !== workspace
+            ? { status: "connected" }
+            : retries.connecting
+              ? { status: "pending" }
+              : { status: "failed", error },
+      },
     ],
+    // The first retry fails again with another error, reported by the refreshed status; the second connects.
+    onMcpAction: (input) => {
+      if (input.action !== "connect" || !retries.failing) return
+      retries.failing = false
+
+      return { status: "failed", error: again }
+    },
   })
 
   const row = view.panel.locator(".session-mcp-row").filter({ hasText: "figma-desktop" })
@@ -164,14 +181,62 @@ test("the MCP popover shows a failed server and reconnects it from its details",
   const details = page.getByRole("dialog", { name: "figma-desktop", exact: true })
   await expect(details).toHaveAccessibleDescription("Connection failed")
   await expect(details.getByText(error, { exact: true })).toBeVisible()
-  await details.getByRole("button", { name: "Try again", exact: true }).click()
+  const retry = details.getByRole("button", { name: "Try again", exact: true })
+  const connect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, { method: "POST" })
+  await retry.click()
+  await connect.arrived
+  // The server reports that it is connecting; the details stay open while the retry runs, and take no second retry.
+  retries.connecting = true
+
+  const listed = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/mcp" &&
+      url.searchParams.get("location[directory]") === workspace
+    )
+  })
+
+  await view.push([
+    {
+      id: "evt_mcp_connecting",
+      created: 1,
+      type: "mcp.status.changed",
+      location: { directory: workspace },
+      data: { server: "figma-desktop" },
+    },
+  ])
+  await listed
+  await expect(details.getByText(error, { exact: true })).toBeVisible()
+  await expect(retry).toBeDisabled()
+  await expect(details.getByRole("button", { name: "Disable", exact: true })).toBeDisabled()
+  connect.release()
+  // A retry that fails again shows its new error in place.
+  await expect(details.getByText(again, { exact: true })).toBeVisible()
+  await expect(retry).toBeEnabled()
+
+  const reconnect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, {
+    method: "POST",
+  })
+
+  await retry.click()
+  await reconnect.arrived
+  await page.keyboard.press("Escape")
   await expect(details).toBeHidden()
+
+  // The details closed and opened again still show the retry the dialog started, and take no second connect.
+  if (await view.panel.isVisible()) await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await expect(view.panel).toBeHidden()
+  await view.show()
+  await expect(view.toggle).toBeDisabled()
+  reconnect.release()
+  await expect(view.toggle).toHaveAccessibleDescription("Connected")
+  await expect(view.toggle).toBeEnabled()
   expect(view.requests.filter((request) => request.path.endsWith("/connect"))).toEqual([
     { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
+    { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
   ])
-
-  if (!(await view.panel.isVisible())) await view.show()
-  await expect(view.toggle).toHaveAccessibleDescription("Connected")
 })
 
 for (const surface of ["dialog"] as const) {

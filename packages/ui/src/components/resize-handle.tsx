@@ -111,6 +111,12 @@ export function ResizeHandle(props: ResizeHandleProps) {
     document.addEventListener("mouseup", onMouseUp)
   }
 
+  // The handle holds the pointer until the button comes up, so hover stays on it rather than following the pointer
+  // across the panels it resizes, each crossing restyling their contents.
+  const handlePointerDown = (e: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    if (e.pointerType === "mouse" && e.button === 0) e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
   return (
     <div
       {...rest}
@@ -121,6 +127,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
+      onPointerDown={handlePointerDown}
       onMouseDown={handleMouseDown}
     />
   )

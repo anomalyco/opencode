@@ -32,23 +32,22 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const ssh = createSshController({
     items: () => state()?.servers ?? [],
     api: client,
-    // Resolves once main publishes the revision; disabling the plugin resolves it early.
-    refresh: (revision) =>
+    // Resolves once main publishes the revision. Disabling the plugin, the attempt ending, or the main side going away
+    // (a restarted main starts its revisions again) resolves it early.
+    refresh: (revision, signal) =>
       new Promise<void>((resolve) =>
         createRoot((dispose) => {
           const done = () => {
+            ctx.signal.removeEventListener("abort", done)
+            signal.removeEventListener("abort", done)
             dispose()
             resolve()
           }
 
+          if (ctx.signal.aborted || signal.aborted) return done()
           ctx.signal.addEventListener("abort", done, { once: true })
-          createKeyed(
-            () => (state()?.revision ?? 0) >= revision,
-            () => {
-              ctx.signal.removeEventListener("abort", done)
-              done()
-            },
-          )
+          signal.addEventListener("abort", done, { once: true })
+          createKeyed(() => ipc().status !== "active" || (state()?.revision ?? 0) >= revision, done)
         }),
       ),
     error: () => showToast({ variant: "error", title: ctx.t("common.requestFailed") }),
@@ -60,13 +59,16 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const styled = { added: false }
   const byKey = (key: string) => (key.startsWith("ssh:") ? ssh.item(key.slice(4)) : undefined)
 
+  const open = (module: Awaited<ReturnType<typeof loadDialog>>, render: () => JSX.Element) => {
+    if (!styled.added) ctx.add(Style, module.css)
+    styled.added = true
+    dialog.open(render)
+  }
+
   const show = (render: (module: Awaited<ReturnType<typeof loadDialog>>) => JSX.Element) =>
     void loadDialog().then((module) => {
       if (ctx.signal.aborted) return
-
-      if (!styled.added) ctx.add(Style, module.css)
-      styled.added = true
-      dialog.open(() => render(module))
+      open(module, () => render(module))
     })
 
   const add = (openProject: boolean) =>
@@ -175,31 +177,25 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }),
   )
 
-  // Reconnect saved servers in the background once per window. Mark active
-  // connections too, so a later manual disconnect is respected.
-  const restored = new Set<string>()
-
-  createKeyed(
-    () => {
-      const unseen = (state()?.servers ?? []).filter((item) => item.saved && !restored.has(item.config.id))
-
-      return unseen.length > 0 ? unseen : undefined
-    },
-    (unseen) =>
-      unseen.forEach((item) => {
-        restored.add(item.config.id)
-
-        if (item.stage === "disconnected") void ssh.restore(item.config)
-      }),
-  )
-
-  // Challenges of an attempt started without its dialog open one of their own.
+  // Challenges of an attempt started without its dialog open one of their own. The attempt holds the dialog while its
+  // chunk loads, and a chunk that fails to load ends the attempt.
   createKeyed(
     () => (dialog.active() ? undefined : ssh.dialog.next()),
-    (item) => {
-      ssh.dialog.opened(item.config.id)
-      const config = item.config
-      show((module) => <module.DialogSsh ssh={ssh} config={config} promptOnly />)
+    (target) => {
+      const id = target.item.config.id
+      const config = target.item.config
+      ssh.dialog.loading(id, target.attempt)
+      void loadDialog().then(
+        (module) => {
+          if (ctx.signal.aborted || !ssh.dialog.canOpen(id, target.attempt)) return
+          ssh.dialog.opened(id, target.attempt)
+          open(module, () => <module.DialogSsh ssh={ssh} config={config} promptOnly />)
+        },
+        () => ssh.dialog.failed(id, target.attempt),
+      )
+    },
+    {
+      equals: (previous, next) => previous.item.config.id === next.item.config.id && previous.attempt === next.attempt,
     },
   )
 }

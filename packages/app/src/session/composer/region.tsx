@@ -243,7 +243,9 @@ export function createActiveSessionRegion(input: {
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
 
-  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = (target) =>
+    revert.to(target.messageID, target.sessionID)
+
   const fork = useSessionFork()
   const forkMessage: NonNullable<SessionUserActions["fork"]> = (target) => fork(target).then(() => undefined)
 
@@ -332,7 +334,12 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    onResponseSubmit: input.timeline.actions.resume,
+    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
+    onResponseSubmit: () => {
+      const anchor = input.timeline.follow.anchor()
+
+      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
+    },
     openParent,
     focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
