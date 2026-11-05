@@ -108,9 +108,16 @@ describe("inline rename machine", () => {
     expect(transitionInlineRename(started.state, { type: "menu.changed", open: false }).state).toBe(started.state)
   })
 
-  test("disposal stops the timer and pending focus, and ignores the save's answer", () => {
+  test("a field remounted while saving still closes the rename once the save lands", () => {
     const disposed = replay([...saving, { type: "disposed" }])
     expect(disposed.effects).toEqual([{ type: "save.cancel" }, { type: "focus.cancel" }])
-    expect(transitionInlineRename(disposed.state, { type: "save.failed", attempt: 1 }).state).toBe(disposed.state)
+
+    const failed = transitionInlineRename(disposed.state, { type: "save.failed", attempt: 1 })
+    expect(failed.state).toBe(disposed.state)
+    expect(failed.effects).toEqual([])
+
+    const saved = replay([{ type: "save.succeeded", attempt: 1 }], disposed.state)
+    expect(saved.effects).toEqual([{ type: "closed.notify" }])
+    expect(transitionInlineRename(saved.state, { type: "save.succeeded", attempt: 1 }).effects).toEqual([])
   })
 })

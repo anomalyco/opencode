@@ -12,7 +12,8 @@ export type InlineRenameState =
   | { readonly status: "menu"; readonly issued: number }
   | { readonly status: "editing"; readonly issued: number; readonly draft: string }
   | { readonly status: "saving"; readonly issued: number; readonly attempt: number; readonly draft: string }
-  | { readonly status: "disposed" }
+  /** `saving`: a save that was in flight; when it lands the owner still hears the field closed. */
+  | { readonly status: "disposed"; readonly saving: number | undefined }
 
 export type InlineRenameEvent =
   | { readonly type: "menu.changed"; readonly open: boolean }
@@ -45,15 +46,26 @@ export type InlineRenameTransition = {
 
 export const INITIAL_INLINE_RENAME_STATE: InlineRenameState = Object.freeze({ status: "closed", issued: 0 })
 
-const DISPOSED: InlineRenameState = Object.freeze({ status: "disposed" })
+const DISPOSED: InlineRenameState = Object.freeze({ status: "disposed", saving: undefined })
 
 const NONE: readonly InlineRenameEffect[] = Object.freeze([])
 
 export function transitionInlineRename(state: InlineRenameState, event: InlineRenameEvent): InlineRenameTransition {
-  if (state.status === "disposed") return unchanged(state)
+  if (state.status === "disposed") {
+    // The list can remount the field while its save is in flight (a refresh rebuilds rows); the saved name still
+    // closes the rename its owner keeps open.
+    if (event.type === "save.succeeded" && event.attempt === state.saving)
+      return { state: DISPOSED, effects: [{ type: "closed.notify" }] }
 
-  // A save in flight finishes in the background; the list shows its result.
-  if (event.type === "disposed") return { state: DISPOSED, effects: [{ type: "save.cancel" }, { type: "focus.cancel" }] }
+    return unchanged(state)
+  }
+
+  if (event.type === "disposed") {
+    return {
+      state: state.status === "saving" ? { status: "disposed", saving: state.attempt } : DISPOSED,
+      effects: [{ type: "save.cancel" }, { type: "focus.cancel" }],
+    }
+  }
 
   if (event.type === "menu.changed") {
     if (state.status === "closed" && event.open) return { state: { status: "menu", issued: state.issued }, effects: NONE }

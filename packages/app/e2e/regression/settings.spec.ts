@@ -855,8 +855,9 @@ test("typing in the shortcut search while recording filters instead of binding t
   const search = settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
   await search.click()
   await expect(binding).toHaveText(shortcut)
-  await page.keyboard.type("new tab")
-  await expect(search).toHaveValue("new tab")
+  // "t" still lists the row: its shortcut contains T.
+  await page.keyboard.type("t")
+  await expect(search).toHaveValue("t")
   await expect(binding).toHaveText(shortcut)
 })
 
