@@ -249,6 +249,8 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let padding = if width < 44 { 1 } else { 2 };
     let cursor = crate::features::system_commands::cursor(&tui.config());
     let textarea = Textarea::new(app)
+        // Core's textarea sets no pointer shape, so the TS TUI keeps the default pointer everywhere.
+        .mouse_pointer(MousePointer::DEFAULT)
         .set_keymap(Keymap::new())
         .colors(theme.text.base, background)
         .focused_colors(theme.text.base, background)
