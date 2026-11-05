@@ -1,9 +1,17 @@
-import { For, onCleanup, Show, type Accessor } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
 import { Loader } from "@opencode/ui/loader"
 import { createLatest, usePlugin } from "@opencode/plugin/gui"
 import { createOfficeWorker, type WorkerClient } from "./office-worker"
 import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
+import {
+  createWordLayoutState,
+  transitionWordLayout,
+  wordLayoutIncomplete,
+  wordLayoutLoading,
+  wordLayoutPages,
+  type WordLayoutEffect,
+  type WordLayoutEvent,
+} from "./word-layout-machine"
 import {
   layerFont,
   lineHeight,
@@ -12,29 +20,23 @@ import {
   type WordPageSize,
   type WordSpan,
 } from "./word-protocol"
-import { WorkerClosedError } from "./worker-rpc"
 import type { FileViewerProps } from "@opencode/plugin/gui/file"
 
-type Opened = {
-  readonly pages: Accessor<readonly WordPageSize[]>
-  /** The pages shown so far are the document's first; the rest are still being laid out. */
-  readonly loading: Accessor<boolean>
-  readonly paint: PaintPage
-  /** The page's text layer. */
-  readonly text: (index: number, signal: AbortSignal) => Promise<readonly WordSpan[]>
-  /** Where a bookmark sits: its page and the height on it, in page pixels. Waits for the layout when it needs to. */
-  readonly bookmark: (name: string) => Promise<{ readonly index: number; readonly y: number } | undefined>
-  /** Lays the rest of the document out, a step at a time between paints; resolves with its page count. */
-  readonly finish: () => Promise<number>
-}
-
 type Client = WorkerClient<WordMethods>
+
+/** An opened document: its worker, and the first pages it laid out with whether more follow. */
+type Opened = {
+  readonly client: Client
+  readonly first: { readonly pages: readonly WordPageSize[]; readonly loading: boolean }
+}
 
 /** Scrolls the page column; set once the column mounts. */
 type Scroll = { to: ScrollToPage | undefined }
 
-/** A value built on first use. */
-type Lazy<T> = { value: T | undefined }
+/** The layout step the worker runs, with its timeout, until the next step or the end of the layout replaces it. */
+type Step = {
+  current: { readonly controller: AbortController; readonly timer: ReturnType<typeof setTimeout> } | undefined
+}
 
 /**
  * A read-only, paginated Word document. Its engine runs in a worker of its own (`document.worker.ts`), which opens the
@@ -45,11 +47,21 @@ type Lazy<T> = { value: T | undefined }
  * each page makes its text selectable, findable and readable, and its links followable.
  */
 export default function OfficeDocument(props: FileViewerProps) {
+  const ctx = usePlugin()
+
   // A worker that dies after the pages showed takes them with it.
   const viewer = createOfficeWorker<WordMethods, Opened>({
     bytes: () => props.bytes,
     createWorker: () => new Worker(new URL("./document.worker.ts", import.meta.url), { type: "module" }),
-    open: async (client, buffer, signal) => ({ value: await open(client, buffer, signal) }),
+    open: async (client, buffer, signal) => {
+      const first = await client.call("open", { bytes: buffer }, { transfer: [buffer], signal })
+
+      // A longer document reports its page count once the rest is laid out.
+      return {
+        value: { client, first },
+        details: first.loading ? undefined : [ctx.plural("pages", first.pages.length)],
+      }
+    },
     onDetails: (details) => props.onDetails(details),
     onError: () => props.onError(),
   })
@@ -66,47 +78,139 @@ export default function OfficeDocument(props: FileViewerProps) {
         </Show>
       }
     >
-      {(opened) => (
-        <DocumentContent
-          opened={opened.value}
-          onDetails={(details) => props.onDetails(details)}
-          onError={() => props.onError()}
-        />
-      )}
+      {(opened) => <DocumentContent opened={opened.value} onDetails={(details) => props.onDetails(details)} />}
     </Show>
   )
 }
 
-/** One opened document's pages. A reloaded file mounts a new one. */
-function DocumentContent(props: {
-  opened: Opened
-  onDetails: (details: readonly string[]) => void
-  onError: () => void
-}) {
+/**
+ * One opened document's pages. A long document lays out the rest of its pages a step at a time once its first pages
+ * asked for their paints, which the worker then runs first; a bookmark past the pages laid out starts it sooner.
+ */
+function DocumentContent(props: { opened: Opened; onDetails: (details: readonly string[]) => void }) {
   const ctx = usePlugin()
+  const client = props.opened.client
   const scroll: Scroll = { to: undefined }
-  const controller = new AbortController()
+  const [layout, setLayout] = createSignal(createWordLayoutState(props.opened.first))
+  const step: Step = { current: undefined }
+  // Bookmarks that wait for the rest of the layout.
+  const waiters: ((completed: boolean) => void)[] = []
+  // Each page's text layer, kept for its page object: a page that scrolls back into view shows it without asking the
+  // worker. A page the full layout changed gets a new object, and asks again.
+  const texts = new WeakMap<WordPageSize, readonly WordSpan[]>()
+  const pages = createMemo(() => wordLayoutPages(layout()))
+  const loading = createMemo(() => wordLayoutLoading(layout()))
+  // Every paint dispatches it, so it is built once.
+  const queued: WordLayoutEvent = { type: "paint.queued" }
 
-  onCleanup(() => controller.abort())
+  const dispatch = (event: WordLayoutEvent) => {
+    const next = transitionWordLayout(untrack(layout), event)
 
-  // The worker runs calls in order, so the full layout waits until the first pages have asked for their paints: they
-  // do once the column is laid out and its observer reports them, which takes up to two frames.
-  void new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    .then(() => (controller.signal.aborted ? undefined : props.opened.finish()))
-    .then(
-      (count) => {
-        if (count !== undefined && !controller.signal.aborted) props.onDetails([ctx.plural("pages", count)])
-      },
-      (error: Error) => {
-        // A worker that stopped reports itself through the viewer's worker.
-        if (!controller.signal.aborted && !(error instanceof WorkerClosedError)) props.onError()
-      },
+    setLayout(() => next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: WordLayoutEffect) => {
+    if (effect.type === "start-step") return startStep(effect.attempt, effect.defer, effect.timeoutMs)
+
+    if (effect.type === "end-step") return endStep()
+
+    if (effect.type === "report-details") return props.onDetails([ctx.plural("pages", effect.pageCount)])
+
+    waiters.splice(0).forEach((resolve) => resolve(effect.completed))
+  }
+
+  const startStep = (attempt: number, defer: boolean, timeoutMs: number) => {
+    endStep()
+
+    const controller = new AbortController()
+
+    step.current = { controller, timer: setTimeout(() => dispatch({ type: "step.timed-out", attempt }), timeoutMs) }
+
+    const call = () =>
+      void client.call("layout", undefined, { signal: controller.signal }).then(
+        (reply) =>
+          dispatch(
+            reply.done
+              ? { type: "step.completed", attempt, pages: reply.pages, kept: reply.kept }
+              : { type: "step.progressed", attempt },
+          ),
+        () => dispatch({ type: "step.failed", attempt }),
+      )
+
+    if (defer) return queueMicrotask(call)
+
+    call()
+  }
+
+  const endStep = () => {
+    clearTimeout(step.current?.timer)
+    step.current?.controller.abort()
+    step.current = undefined
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  const paint: PaintPage = async (index, canvas, scale, signal) => {
+    const painted = client.call(
+      "paint",
+      { index, scale, ratio: window.devicePixelRatio || 1 },
+      // A newer paint of the page, such as at another scale, replaces this one while it waits, and a page that
+      // scrolled away withdraws it.
+      { key: `paint:${index}`, signal },
     )
+
+    // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
+    // that, and a paint releases the pages far from its own: each built page holds megabytes in the engine.
+    void client.call("build", { index: index + 1 }, { key: "build" }).catch(() => undefined)
+
+    // The worker runs calls in order, so the rest of the layout queues behind the first pages' paints.
+    dispatch(queued)
+
+    // A withdrawn paint rejects here, and the worker closes any bitmap it made for it.
+    const bitmap = await painted
+
+    if (!bitmap) return
+
+    const context = canvas.getContext("bitmaprenderer")
+
+    if (!context) return bitmap.close()
+
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    context.transferFromImageBitmap(bitmap)
+  }
+
+  const text = async (index: number, signal: AbortSignal) => {
+    const page = pages()[index]
+    const cached = page && texts.get(page)
+
+    if (cached) return cached
+
+    const spans = await client.call("text", { index }, { signal })
+
+    if (page) texts.set(page, spans)
+
+    return spans
+  }
+
+  // Where a bookmark sits: its page and the height on it, in page pixels. Waits for the layout when it needs to.
+  const bookmark = async (name: string) => {
+    const found = await client.call("bookmark", { name })
+
+    if (found || !wordLayoutIncomplete(untrack(layout))) return found
+
+    const completed = new Promise<boolean>((resolve) => waiters.push(resolve))
+
+    dispatch({ type: "layout.requested" })
+
+    return (await completed) ? client.call("bookmark", { name }) : undefined
+  }
 
   const follow = (link: WordLink) => {
     if (link.kind === "external") return ctx.system.openExternal(link.url)
 
-    void props.opened.bookmark(link.bookmark).then(
+    void bookmark(link.bookmark).then(
       (target) => {
         if (target) scroll.to?.(target.index, target.y)
       },
@@ -116,20 +220,13 @@ function DocumentContent(props: {
 
   return (
     <OfficePages
-      pages={props.opened.pages()}
-      paint={props.opened.paint}
+      pages={pages()}
+      paint={paint}
       label={(index) => ctx.t("page", { number: index + 1 })}
-      overlay={(input) => (
-        <WordTextLayer
-          index={input.index}
-          page={props.opened.pages()[input.index]}
-          text={props.opened.text}
-          follow={follow}
-        />
-      )}
+      overlay={(input) => <WordTextLayer index={input.index} page={pages()[input.index]} text={text} follow={follow} />}
       text
       footer={(index) => (
-        <Show when={props.opened.loading() && index === props.opened.pages().length - 1}>
+        <Show when={loading() && index === pages().length - 1}>
           <Loader />
         </Show>
       )}
@@ -215,96 +312,4 @@ function place(span: WordSpan) {
     "font-size": `${span.size * 100}cqw`,
     transform: span.transform,
   }
-}
-
-/** Opens the bytes in the worker and returns as soon as the document's first pages can show. */
-async function open(client: Client, buffer: ArrayBuffer, signal: AbortSignal): Promise<Opened> {
-  const first = await client.call("open", { bytes: buffer }, { transfer: [buffer], signal })
-  const [layout, setLayout] = createStore({ pages: first.pages, loading: first.loading })
-
-  const layOut = async (): Promise<number> => {
-    const step = await client.call("layout", undefined)
-
-    if (!step.done) return layOut()
-
-    // A page keeps its object, and so its bitmap and text layer, unless the full layout changed it. A changed page
-    // keeps its row and paints again over its old bitmap.
-    const sizes = step.pages.map((page, index) => {
-      const size = layout.pages[index]
-
-      return size && step.kept[index] && sameSize(size, page) ? size : page
-    })
-
-    // The column mounts the new rows a slice at a time.
-    setLayout({ pages: sizes, loading: false })
-
-    return sizes.length
-  }
-
-  const rest: Lazy<Promise<number>> = { value: undefined }
-  // Each page's text layer, kept for its page object: a page that scrolls back into view shows it without asking the
-  // worker. A page the full layout changed gets a new object, and asks again.
-  const texts = new WeakMap<WordPageSize, readonly WordSpan[]>()
-  const pages = () => layout.pages
-  const loading = () => layout.loading
-
-  const finish = () => (rest.value ??= loading() ? layOut() : Promise.resolve(pages().length))
-
-  return {
-    pages,
-    loading,
-    finish,
-    paint: async (index, canvas, scale, signal) => {
-      const painted = client.call(
-        "paint",
-        { index, scale, ratio: window.devicePixelRatio || 1 },
-        // A newer paint of the page, such as at another scale, replaces this one while it waits, and a page that
-        // scrolled away withdraws it.
-        { key: `paint:${index}`, signal },
-      )
-
-      // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
-      // that, and a paint releases the pages far from its own: each built page holds megabytes in the engine.
-      void client.call("build", { index: index + 1 }, { key: "build" }).catch(() => undefined)
-
-      // A withdrawn paint rejects here, and the worker closes any bitmap it made for it.
-      const bitmap = await painted
-
-      if (!bitmap) return
-
-      const context = canvas.getContext("bitmaprenderer")
-
-      if (!context) return bitmap.close()
-
-      canvas.width = bitmap.width
-      canvas.height = bitmap.height
-      context.transferFromImageBitmap(bitmap)
-    },
-    text: async (index, signal) => {
-      const page = pages()[index]
-      const cached = page && texts.get(page)
-
-      if (cached) return cached
-
-      const spans = await client.call("text", { index }, { signal })
-
-      if (page) texts.set(page, spans)
-
-      return spans
-    },
-    bookmark: async (name) => {
-      const found = await client.call("bookmark", { name })
-
-      // The bookmark may sit past the pages laid out so far.
-      if (found || !loading()) return found
-
-      await finish()
-
-      return client.call("bookmark", { name })
-    },
-  }
-}
-
-function sameSize(size: WordPageSize, page: WordPageSize) {
-  return size.width === page.width && size.height === page.height && size.background === page.background
 }
