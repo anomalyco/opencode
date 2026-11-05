@@ -9,17 +9,21 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SlotMap,
 } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
-import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
+import type { mountCodeBlocks, mountMessageMenus, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
 /** What the code block cases drive from the page. */
 type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the message menu case drives from the page. */
+type MessageMenusHost = ReturnType<typeof mountMessageMenus>
 
 /** What the theme preview case drives from the page. */
 type ThemesHost = ReturnType<typeof mountThemes>
@@ -2186,6 +2190,87 @@ story("code block content replaces complete blocks of its languages, and actions
   await expect(
     blocks.nth(4).locator('[data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'),
   ).toHaveCount(0)
+})
+
+story("message menu items mount only in an open menu, and a reply offers its menu only for them", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountMessageMenus, until } = await import(fixture)
+    const host: MessageMenusHost = mountMessageMenus({ definitions: [] })
+    await until(() => !!document.querySelector('[data-testid="message-menus"] [data-component="user-message"]'))
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("message-menus")
+  const prompt = root.locator('[data-component="user-message"]')
+  const reply = root.locator('[data-slot="text-part-copy-wrapper"]')
+  await expect(reply.getByRole("button", { name: "Copy response" })).toHaveCount(1)
+  await expect(reply.getByRole("button", { name: "More actions" })).toHaveCount(0)
+
+  await host.evaluate(async (host, fixture) => {
+    const { Slot, createComponent } = await import(fixture)
+
+    host.define([
+      {
+        id: "acme",
+        windowEntry: async () => ({
+          default: (ctx: Context) => {
+            ctx.add(Slot, {
+              at: "session.message.menu",
+              render: (input: SlotMap["session.message.menu"]) => {
+                document.body.dataset.menuRenders = `${Number(document.body.dataset.menuRenders ?? 0) + 1}`
+
+                return createComponent(ctx.ui.MenuItem, {
+                  get label() {
+                    return `Quote ${input.message.role} ${input.message.id}`
+                  },
+                  onSelect: () => {
+                    document.body.dataset.picked = `${input.message.text} in ${input.session.directory} ${input.shown}`
+                    input.screen.composer.insert(input.message.text)
+                  },
+                })
+              },
+            })
+            ctx.add(Slot, {
+              at: "session.message.menu",
+              render: () => {
+                throw new Error("menu failed")
+              },
+            })
+          },
+        }),
+      },
+    ])
+  }, fixture)
+
+  await expect.poll(() => host.evaluate((host) => host.status("acme"))).toBe("active")
+  // A reply offers a menu once a plugin fills the slot; no row renders the slot until its menu opens.
+  await expect(reply.getByRole("button", { name: "More actions" })).toHaveCount(1)
+  expect(await page.evaluate(() => document.body.dataset.menuRenders)).toBeUndefined()
+
+  await prompt.hover()
+  await prompt.getByRole("button", { name: "More actions" }).click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitem")).toHaveText(["Fork from here", "Copy message", "Quote user msg_prompt"])
+  await menu.getByRole("menuitem", { name: "Quote user msg_prompt" }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-picked", "Explain the cache in /repo true")
+  await expect(menu).toHaveCount(0)
+
+  // The throwing contribution fails alone; the plugin keeps running.
+  expect(await host.evaluate((host) => ({ failure: host.failure("acme"), status: host.status("acme") }))).toEqual({
+    failure: { phase: "render", error: expect.stringContaining("menu failed") },
+    status: "active",
+  })
+
+  await root.locator('[data-component="text-part"]').hover()
+  await reply.getByRole("button", { name: "More actions" }).click()
+  await expect(menu.getByRole("menuitem")).toHaveText(["Quote assistant msg_reply"])
+  await menu.getByRole("menuitem", { name: "Quote assistant msg_reply" }).click()
+  expect(await host.evaluate((host) => host.inserted)).toEqual(["Explain the cache", "It keeps rows."])
+  expect(await page.evaluate(() => document.body.dataset.menuRenders)).toBe("2")
+
+  await host.evaluate((host) => host.define([]))
+  await expect(reply.getByRole("button", { name: "More actions" })).toHaveCount(0)
 })
 
 story("code block content follows plugins that join and leave after the message rendered", async ({ page }) => {

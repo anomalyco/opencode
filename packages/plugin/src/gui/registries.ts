@@ -890,6 +890,34 @@ export interface SlotMap {
     /** Whether the project menu is open. Subscribe to location data only while true. */
     readonly shown: boolean
   }
+  /**
+   * Items in the More actions menu of each message in the timeline: under a user's prompt after Fork and Copy, and
+   * under the reply that ends a turn, where the host adds the menu beside Copy only while a plugin fills this slot. The
+   * host mounts your content each time a menu opens and removes it when the menu closes, so a timeline of any length
+   * costs nothing until the user opens a menu. Render rows with `Ui.MenuItem`, `Ui.MenuSub`, `Ui.MenuGroup` and
+   * `Ui.MenuSeparator`, so they match the host's; return nothing for a message you have no action for.
+   */
+  readonly "session.message.menu": {
+    /** The timeline's owning session screen; always present. Its composer is the routed session's. */
+    readonly screen: SessionScreen
+    /** The session the message belongs to: the timeline's latest object. */
+    readonly session: MountedSession
+    /** The message whose menu is open. Its fields are getters over the live message. */
+    readonly message: {
+      /** The message's id in `session`, as the server's message list names it. */
+      readonly id: string
+      /**
+       * Who wrote the message.
+       * - `user`: the user's prompt.
+       * - `assistant`: the reply that ends a turn; `id` is the message that holds its last text.
+       */
+      readonly role: "user" | "assistant"
+      /** The text the menu's Copy copies: the prompt as the timeline shows it, or the reply's last text. */
+      readonly text: string
+    }
+    /** Whether the menu is open; false while it animates closed. Subscribe to data only while true. */
+    readonly shown: boolean
+  }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {
     /** The owning session screen; always present. */

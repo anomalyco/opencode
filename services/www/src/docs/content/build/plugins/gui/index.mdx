@@ -996,7 +996,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of the host's slots, listed below.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -1012,6 +1012,7 @@ ctx.add(Slot, {
 - `session.header` is the session timeline's title row. A cached timeline stays mounted while hidden, with `active`
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
+- `session.message.menu` adds items to the More actions menu of each message in the timeline.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
 - `order` sorts the items in one slot.
 
@@ -1035,6 +1036,36 @@ ctx.add(Slot, {
 })
 ```
 
+#### Message menus
+
+`session.message.menu` adds rows to the **More actions** menu under a user's prompt, after **Fork** and **Copy**. A
+reply that ends a turn gets the same menu beside **Copy response** while a plugin fills this slot. `input.message`
+holds the message's `id`, its `role` (`user` or `assistant`), and the `text` that **Copy** copies.
+
+```tsx
+ctx.add(Slot, {
+  at: "session.message.menu",
+  render: (input) => (
+    <ctx.ui.MenuItem
+      label={ctx.t("quote")}
+      onSelect={() =>
+        input.screen.composer.attach({
+          type: "quote",
+          commentID: input.message.id,
+          text: input.message.text,
+          source: { label: ctx.t("message"), icon: "outline-quote", subject: "an earlier message" },
+        })
+      }
+    />
+  ),
+})
+```
+
+- The host mounts your rows each time the user opens a menu, and removes them when it closes. A long timeline costs
+  nothing until then.
+- `shown` is `true` while the menu is open. Subscribe to data only while it is `true`.
+- Return nothing for a message you have no action for, for example `<Show when={input.message.role === "user"}>`.
+
 #### Reference
 
 ```ts
@@ -1046,6 +1077,12 @@ interface SlotMap {
   "window.bottom": Record<string, never>
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.message.menu": {
+    screen: SessionScreen
+    session: MountedSession
+    message: { id: string; role: "user" | "assistant"; text: string }
+    shown: boolean
+  }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
 }
 ```
