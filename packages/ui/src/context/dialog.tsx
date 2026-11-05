@@ -52,6 +52,8 @@ const Context = createContext<ReturnType<typeof init>>()
 // contained layer also says which element holds it, so presses outside that element leave the dialog open.
 const LayerContext = createContext<{
   readonly id: string
+  /** This layer's mount, which a `close()` from inside it targets. */
+  readonly attempt: number
   /** True from the moment this dialog starts closing, through its exit animation. */
   readonly closing: Accessor<boolean>
   setBackdropDismiss: (value: boolean) => void
@@ -207,6 +209,7 @@ function init(container: () => HTMLElement | undefined) {
                 <LayerContext.Provider
                   value={{
                     id: effect.id,
+                    attempt,
                     closing,
                     setBackdropDismiss: (enabled) => dispatch({ type: "layer.backdrop-dismiss", attempt, enabled }),
                     setExitDuration: (exitMs) => dispatch({ type: "layer.exit-duration", attempt, exitMs }),
@@ -336,9 +339,12 @@ export function useDialog() {
 
       return startTransition(() => ctx.open("push", { element, owner: base, onClose }, id, !!signal?.aborted))
     },
-    /** Programmatic close. Without an id it closes the top dialog, one at a time; with an id it never waits. */
+    /**
+     * Programmatic close. With an id it closes that dialog at once. Without one, called inside a dialog, it closes that
+     * dialog; outside every dialog it closes the top one. Either way one at a time, so a double click closes one dialog.
+     */
     close(id?: string) {
-      ctx.dispatch({ type: "close", id })
+      ctx.dispatch({ type: "close", id, layer: layer?.attempt })
     },
     /** Dismisses the top open dialog, as Escape does; with an id, only while that dialog is on top. */
     dismiss(id?: string) {

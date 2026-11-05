@@ -39,10 +39,12 @@ export type DialogStackEvent<F = unknown, R = unknown> =
       readonly request: R
     }
   /**
-   * With `id`, closes the newest open dialog with that id. Without one, closes the newest dialog, one at a time: while
-   * it plays its exit animation, a second close (a double click, a callback closing again) closes nothing below it.
+   * With `id`, closes the newest open dialog with that id. Without one, `layer` is the attempt of the dialog that asked:
+   * that dialog closes itself, even under a dialog that is still exiting. A close from outside every dialog, or from one
+   * a `show` replaced, closes the newest dialog. Both close one at a time: while the target plays its exit animation, a
+   * second close (a double click, a callback closing again) closes nothing below it.
    */
-  | { readonly type: "close"; readonly id?: string }
+  | { readonly type: "close"; readonly id?: string; readonly layer?: number }
   /** Escape, or a dismissal that applies only while `id` is the top open dialog. */
   | { readonly type: "dismiss"; readonly id?: string }
   /** A click on one layer's backdrop. */
@@ -195,9 +197,10 @@ function closeTarget<F>(
       )
     }
 
-    const newest = state.entries.at(-1)
+    const own = state.entries.find((entry) => entry.attempt === event.layer)
+    const target = own ?? state.entries.at(-1)
 
-    return newest?.status === "open" ? newest : undefined
+    return target?.status === "open" ? target : undefined
   }
 
   if (event.type === "dismiss") return event.id === undefined || top?.id === event.id ? top : undefined

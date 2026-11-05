@@ -90,6 +90,7 @@ describe("while the top dialog plays its exit animation", () => {
     ["its backdrop", { type: "backdrop.click", attempt: 2 }],
     ["a dismissal by its id", { type: "dismiss", id: "b" }],
     ["a second un-keyed close", { type: "close" }],
+    ["a second close from inside it", { type: "close", layer: 2 }],
   ])("%s does nothing more", (_, event) => {
     const next = transitionDialogStack(exiting.state, event)
 
@@ -103,6 +104,7 @@ describe("while the top dialog plays its exit animation", () => {
     ["its close button", { type: "layer.dismiss", attempt: 1 }],
     ["its backdrop", { type: "backdrop.click", attempt: 1 }],
     ["a close by its id", { type: "close", id: "a" }],
+    ["its own Cancel (a close from inside it)", { type: "close", layer: 1 }],
   ])("%s closes the dialog below at once", (_, event) => {
     const next = transitionDialogStack(exiting.state, event)
 
@@ -110,10 +112,37 @@ describe("while the top dialog plays its exit animation", () => {
     expect(statuses(next.state)).toEqual(["a:closing", "b:closing"])
   })
 
-  test("an un-keyed close waits for the exit, then closes the dialog below", () => {
+  test("an un-keyed close from outside every dialog waits for the exit, then closes the dialog below", () => {
     const next = run(exiting.state, { type: "exit.completed", attempt: 2 }, { type: "close" })
 
     expect(next.effects).toEqual(closed(1, 100, "before a"))
+  })
+})
+
+describe("a close without an id from inside a dialog", () => {
+  const stacked = run(createDialogStackState(), push("a"), push("b"))
+
+  test("closes that dialog, not the one on top, and leaves focus with the top dialog", () => {
+    const next = transitionDialogStack(stacked.state, { type: "close", layer: 1 })
+
+    expect(next.effects).toEqual(closed(1, 100))
+    expect(statuses(next.state)).toEqual(["a:closing", "b:open"])
+  })
+
+  test("closes only itself on a double click, never the dialog below", () => {
+    const first = transitionDialogStack(stacked.state, { type: "close", layer: 2 })
+    const second = transitionDialogStack(first.state, { type: "close", layer: 2 })
+
+    expect(first.effects).toEqual(closed(2, 100, "before b"))
+    expect(second.state).toBe(first.state)
+    expect(second.effects).toEqual([])
+  })
+
+  test("from a dialog a show replaced, closes the newest dialog as a close from outside does", () => {
+    const replaced = run(stacked.state, show("c"))
+    const next = transitionDialogStack(replaced.state, { type: "close", layer: 1 })
+
+    expect(next.effects).toEqual(closed(3, 100, "before a"))
   })
 })
 

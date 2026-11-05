@@ -203,6 +203,42 @@ story("Escape closes the top dialog while a dialog below it plays its exit anima
   expect(result).toEqual(["below"])
 })
 
+story("a dialog closes itself while the dialog above it exits, and a double close never reaches below", async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPluginHost, until, useDialog } = await import(fixture)
+    const host = mountPluginHost()
+    const shown = () => ["base", "middle", "top"].filter((value) => document.body.textContent?.includes(value))
+    const own = { close: () => {} }
+    host.load((ctx: Context) => {
+      ctx.dialogs.open(() => Object.assign(document.createElement("p"), { textContent: "base" }))
+      // A Cancel button inside the middle dialog: a plain close() from its own layer.
+      ctx.dialogs.open(() => {
+        const dialog = useDialog()
+        own.close = () => dialog.close()
+
+        return Object.assign(document.createElement("p"), { textContent: "middle" })
+      })
+      ctx.dialogs.open(() => Object.assign(document.createElement("p"), { textContent: "top" }))
+    }, 0)
+    await until(() => shown().length === 3)
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    // In the same tick, while the top dialog is still playing its exit animation; twice, as a double click would.
+    own.close()
+    own.close()
+    await until(() => shown().length === 1)
+    // Past every exit animation, so a close that reached the base dialog would have removed it by now.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const outcome = shown()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual(["base"])
+})
+
 story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
   const shown = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
