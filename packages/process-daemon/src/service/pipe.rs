@@ -293,14 +293,10 @@ impl Process {
         }
         let pid = i32::try_from(self.pid).context("invalid pid")?;
         // SAFETY: the unreaped child keeps its PID and group ID reserved.
+        check_signal(unsafe { libc::killpg(pid, signal) })?;
         // Signal the child directly too, in case it moved to another group.
-        for result in unsafe { [libc::killpg(pid, signal), libc::kill(pid, signal)] } {
-            // A zombie group with no live members gives ESRCH on macOS.
-            if result == -1 && Errno::last() != Errno::ESRCH {
-                return Err(io::Error::last_os_error()).context("failed to signal process");
-            }
-        }
-        Ok(())
+        // SAFETY: as above.
+        check_signal(unsafe { libc::kill(pid, signal) })
     }
 
     /// Call only after the waiter has returned: kill the group first, so the
@@ -322,6 +318,18 @@ impl Process {
         }
         *reaped = true;
     }
+}
+
+/// Reads errno right after a `kill`/`killpg` result. A zombie group with no
+/// live members gives ESRCH on macOS, which is not an error here.
+fn check_signal(result: libc::c_int) -> Result<()> {
+    if result == -1 {
+        let errno = Errno::last();
+        if errno != Errno::ESRCH {
+            return Err(io::Error::from(errno)).context("failed to signal process");
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -497,7 +505,8 @@ fn read_output(
                     // subscribers have seen, even if the actor is backpressured.
                     let mut newlines = 0;
                     if let Some(file) = &mut sink
-                        && let Err(error) = write_counting(file, &buffer[..length], &mut newlines)
+                        && let Err(error) =
+                            write_counting(&mut *file, &buffer[..length], &mut newlines)
                     {
                         // Ordered before this chunk's output, so the error is
                         // visible no later than the bytes the file lacks.
@@ -534,7 +543,7 @@ fn read_output(
 
 /// Writes all of `bytes`, adding to `newlines` the `\n` bytes that reached
 /// the file, including those of a partial write before an error.
-fn write_counting(file: &mut File, bytes: &[u8], newlines: &mut u64) -> io::Result<()> {
+fn write_counting(mut file: impl Write, bytes: &[u8], newlines: &mut u64) -> io::Result<()> {
     let mut rest = bytes;
     while !rest.is_empty() {
         match file.write(rest) {
@@ -551,4 +560,52 @@ fn write_counting(file: &mut File, bytes: &[u8], newlines: &mut u64) -> io::Resu
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Accepts `accept` bytes in small writes, then fails.
+    struct FailingWriter {
+        accept: usize,
+        written: Vec<u8>,
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            let room = self.accept - self.written.len();
+            if room == 0 {
+                return Err(io::Error::from_raw_os_error(libc::ENOSPC));
+            }
+            let length = bytes.len().min(room).min(3);
+            self.written.extend_from_slice(&bytes[..length]);
+            Ok(length)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_partial_write_counts_only_the_newlines_written() {
+        let mut writer = FailingWriter {
+            accept: 7,
+            written: Vec::new(),
+        };
+        let mut newlines = 0;
+        let error = write_counting(&mut writer, b"a\nb\nc\nd\ne\n", &mut newlines).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ENOSPC));
+        assert_eq!(writer.written, b"a\nb\nc\nd");
+        assert_eq!(newlines, 3);
+
+        let mut writer = FailingWriter {
+            accept: 100,
+            written: Vec::new(),
+        };
+        let mut newlines = 1;
+        write_counting(&mut writer, b"x\ny\n", &mut newlines).unwrap();
+        assert_eq!(newlines, 3);
+    }
 }
