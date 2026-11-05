@@ -9,7 +9,7 @@
     "build": "bun script/build.ts",
     "deploy:dev": "bun script/build.ts --mode dev && cf deploy --prebuilt --mode dev",
     "deploy:production": "bun script/build.ts --mode production && cf deploy --prebuilt --mode production",
-    "generate": "bun script/generate-openapi.ts && bun --cwd ../../packages/cli script/schema.ts ../../services/www/public/cli.json",
+    "generate": "bun script/generate-openapi.ts && bun ../../packages/schema/script/config-schema.ts site/public/config.json && bun --cwd ../../packages/cli script/schema.ts ../../services/www/public/cli.json",
     "validate": "bun script/validate-links.ts",
     "test": "bun --cwd site test",
     "typecheck": "astro check && bun --cwd site check --no-script",
