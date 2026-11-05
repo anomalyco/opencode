@@ -1,15 +1,9 @@
-import { macVerticalTrafficLights } from "@/shell/sidebar-toggle"
+import { macTrafficLightsPocket } from "@/shell/sidebar-toggle"
 
 // The content panels' corner radius and their offset from the window's top and start edges.
 const panelRadius = 10
 
 const panelInset = 8
-
-// Room between the traffic lights and the pocket the panel bends around them.
-const pocketPadding = 10
-
-// The native buttons' size in points; they keep it at every renderer zoom.
-const trafficLightSize = 14
 
 /**
  * The top-left corner of the content panel once it bends around the traffic lights, in CSS pixels from the window's
@@ -17,15 +11,11 @@ const trafficLightSize = 14
  */
 export function trafficLightsPocket(content: number, zoom: number) {
   const left = content + panelInset
-  const lights = macVerticalTrafficLights(zoom)
-  const right = lights.width / zoom + pocketPadding
-  const bottom = (lights.y + trafficLightSize) / zoom + pocketPadding
+  const { right, bottom, corner } = macTrafficLightsPocket(zoom)
   const width = right - left
 
   if (width <= 0) return
 
-  // The pocket's corner is concentric with the zoom button.
-  const corner = trafficLightSize / 2 / zoom + pocketPadding
   // As the panel's edge reaches the pocket's, its two corners shrink together so the bend flattens into the panel's
   // own rounded corner.
   const scale = Math.min(1, width / (panelRadius + corner))

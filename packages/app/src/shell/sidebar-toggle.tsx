@@ -41,7 +41,25 @@ export function macVerticalTrafficLights(zoom: number) {
   return { x, y, width: x + macTrafficLightsBaseWidth - 14 }
 }
 
-const macTrafficLightsGap = 14
+/**
+ * The window background the content panel bends around to keep clear of the traffic lights, in CSS pixels from the
+ * window's top-left: the buttons, with as much room past them as they have from the window's start edge. Its corner
+ * is concentric with the zoom button.
+ */
+export function macTrafficLightsPocket(zoom: number) {
+  const lights = macVerticalTrafficLights(zoom)
+  const room = lights.x / zoom
+  const size = 14 / zoom
+
+  return {
+    right: lights.width / zoom + room,
+    bottom: lights.y / zoom + size + room,
+    corner: size / 2 + room,
+  }
+}
+
+// The floating toggle's gap from the pocket.
+const macTrafficLightsPocketGap = 4
 
 // The toggle's 28px plus a 4px gap before the header contents.
 const slotWidth = 32
@@ -151,11 +169,11 @@ function useCollapsedSlot() {
   return {
     visible: () => desktop() && !windows() && settings.appearance.tabLayout() !== "horizontal",
     open: settings.appearance.sidebarOpen,
-    // Lays the toggle out as if the traffic lights were the header's first control.
+    // Lays the toggle out just past the traffic lights' pocket.
     width: () =>
       mac()
-        ? macVerticalTrafficLights(platform.webviewZoom?.() ?? 1).width / (platform.webviewZoom?.() ?? 1) +
-          macTrafficLightsGap -
+        ? macTrafficLightsPocket(platform.webviewZoom?.() ?? 1).right +
+          macTrafficLightsPocketGap -
           contentStart +
           slotWidth
         : slotWidth,
