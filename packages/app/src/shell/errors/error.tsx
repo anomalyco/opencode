@@ -265,6 +265,7 @@ function formatError(cause: unknown, t: Translator): string {
 
 interface ErrorPageProps {
   error: unknown
+  onRetry?: () => void
 }
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
@@ -426,8 +427,14 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           hideLabel
         />
         <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
-          <Button size="large" onClick={platform.restart}>
-            {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
+          <Button size="large" onClick={() => (props.onRetry ? props.onRetry() : platform.restart())}>
+            {language.t(
+              props.onRetry
+                ? "common.retry"
+                : platform.platform === "web"
+                  ? "error.page.action.reload"
+                  : "error.page.action.restart",
+            )}
           </Button>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
             <Button

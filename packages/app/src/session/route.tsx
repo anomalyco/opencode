@@ -115,7 +115,7 @@ export function TargetSessionRouteContent() {
               <Match when={failure()} keyed>
                 {(value) => (
                   <SessionStatePanel>
-                    <ErrorPage error={value.error} />
+                    <ErrorPage error={value.error} onRetry={resolution.retry} />
                   </SessionStatePanel>
                 )}
               </Match>
@@ -201,7 +201,12 @@ function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; serv
 
         return (
           <SessionStatePanel>
-            <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+            <SessionErrorFallback
+              error={error}
+              sessionID={props.sessionID}
+              serverKey={props.serverKey}
+              onRetry={reset}
+            />
           </SessionStatePanel>
         )
       }}
