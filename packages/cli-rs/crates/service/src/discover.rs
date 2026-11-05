@@ -7,7 +7,8 @@
 //!
 //! 1. the registration of `OPENCODE_CHANNEL`, when set;
 //! 2. the registration of the client's own channel ([`channel::DEFAULT`]);
-//! 3. every other `service*.json` in the state directory, newest first.
+//! 3. every other `service*.json` in the state directory: the one whose server runs the TypeScript
+//!    binary this client delegates to ([`Owner`], decision O-51), else the newest.
 //!
 //! The first ready, compatible service wins. Discovery only reads: it never migrates, replaces, or
 //! stops a service.
@@ -21,6 +22,7 @@ use opencode_local::paths::Paths;
 use opencode_local::registration;
 
 use crate::probe::{self, Decision, LocalService, REQUEST_TIMEOUT};
+use crate::ts_command::TsCommand;
 
 /// A service discovery found, and where it was registered.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,8 +46,19 @@ pub struct Missing {
     pub pending: Option<PathBuf>,
 }
 
-/// Discovers a ready, compatible service. `env_channel` is `OPENCODE_CHANNEL`.
+/// Discovers a ready, compatible service. `env_channel` is `OPENCODE_CHANNEL`. Among the scanned
+/// registrations it prefers the service of `OPENCODE_TS_BIN`, else `opencode` on `PATH`.
 pub async fn discover(transport: &dyn Transport, paths: &Paths, env_channel: Option<&str>) -> Result<Found, Missing> {
+    discover_with(transport, paths, env_channel, &Owner::new(TsCommand::from_env())).await
+}
+
+/// [`discover`], preferring the service `owner` runs among the scanned registrations.
+pub async fn discover_with(
+    transport: &dyn Transport,
+    paths: &Paths,
+    env_channel: Option<&str>,
+    owner: &Owner,
+) -> Result<Found, Missing> {
     let preferred = preferred(paths, env_channel);
     let mut missing = Missing { reason: None, pending: None };
     for file in &preferred {
@@ -57,13 +70,98 @@ pub async fn discover(transport: &dyn Transport, paths: &Paths, env_channel: Opt
     let scanned = scan(&paths.state, &preferred);
     // Probes run together so that unresponsive registrations cost one timeout, not one each.
     let results = join_all(scanned.iter().map(|file| usable(transport, file))).await;
+    let mut ready = Vec::new();
     for (file, result) in scanned.iter().zip(results) {
         match result {
-            Ok(found) => return Ok(found),
+            Ok(found) => ready.push(found),
             Err(unusable) => missing.add(file, unusable),
         }
     }
-    Err(missing)
+    if ready.len() < 2 {
+        return ready.pop().ok_or(missing);
+    }
+    Ok(owner.pick(ready).await)
+}
+
+/// The TypeScript binary this client delegates to (D.1). When several scanned services answer,
+/// discovery takes the newest that this binary runs, so the Rust client uses the same server as
+/// the user's `opencode` (O-51). The process executable decides (Linux `/proc/<pid>/exe`); when no
+/// service runs it, the version the binary prints does.
+pub struct Owner {
+    command: TsCommand,
+    process_executable: Box<dyn Fn(u32) -> Option<PathBuf> + Send + Sync>,
+}
+
+impl Owner {
+    pub fn new(command: TsCommand) -> Self {
+        Self::with_lookup(command, process_executable)
+    }
+
+    /// `lookup` gives the executable a process runs, as [`process_executable`] does.
+    pub fn with_lookup(command: TsCommand, lookup: impl Fn(u32) -> Option<PathBuf> + Send + Sync + 'static) -> Self {
+        Self { command, process_executable: Box::new(lookup) }
+    }
+
+    // The first of `ready` (newest first, at least two) that this binary runs, else the newest.
+    async fn pick(&self, mut ready: Vec<Found>) -> Found {
+        let index = match self.position_by_executable(&ready) {
+            Some(index) => Some(index),
+            None => self.position_by_version(&ready).await,
+        };
+        if let Some(index) = index {
+            log::info!("service discovery prefers {} run by {:?}", ready[index].file.display(), self.command.program);
+        }
+        ready.swap_remove(index.unwrap_or(0))
+    }
+
+    fn position_by_executable(&self, ready: &[Found]) -> Option<usize> {
+        let executable = resolve(&self.command.program)?;
+        ready.iter().position(|found| {
+            (self.process_executable)(found.service.registration.pid).is_some_and(|path| path == executable)
+        })
+    }
+
+    async fn position_by_version(&self, ready: &[Found]) -> Option<usize> {
+        let version = self.version().await?;
+        ready.iter().position(|found| found.service.version.as_deref() == Some(version.as_str()))
+    }
+
+    // `<binary> --version`, trimmed; `None` when it does not run or print within the probe timeout.
+    async fn version(&self) -> Option<String> {
+        let mut command = tokio::process::Command::new(&self.command.program);
+        command
+            .args(&self.command.args)
+            .arg("--version")
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(REQUEST_TIMEOUT, command.output()).await.ok()?.ok()?;
+        let version = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+        (output.status.success() && !version.is_empty()).then_some(version)
+    }
+}
+
+/// The executable process `pid` runs, with symlinks resolved. A binary replaced since it started
+/// keeps its path. `None` where the platform does not tell (only Linux does here).
+pub fn process_executable(pid: u32) -> Option<PathBuf> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let link = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+    let text = link.to_str()?;
+    Some(PathBuf::from(text.strip_suffix(" (deleted)").unwrap_or(text)))
+}
+
+// `program` as `Command` would find it (a path, else on `PATH`), with symlinks resolved.
+fn resolve(program: &std::ffi::OsStr) -> Option<PathBuf> {
+    let program = Path::new(program);
+    if program.components().count() > 1 {
+        return std::fs::canonicalize(program).ok();
+    }
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(program))
+        .find(|candidate| candidate.is_file())
+        .and_then(|candidate| std::fs::canonicalize(candidate).ok())
 }
 
 impl Missing {
@@ -187,8 +285,66 @@ mod tests {
         replies.into_iter().fold(Server::default(), |server, (url, reply)| server.reply(&url, reply))
     }
 
+    // No TypeScript binary: the newest answering registration wins.
     async fn found(server: &Server, paths: &Paths, env: Option<&str>) -> Result<String, Missing> {
-        discover(server, paths, env).await.map(|found| found.channel)
+        let owner = Owner::new(TsCommand::new("/nonexistent/opencode"));
+        discover_with(server, paths, env, &owner).await.map(|found| found.channel)
+    }
+
+    // Every process runs some other binary.
+    fn fake_proc(_: u32) -> Option<PathBuf> {
+        Some(PathBuf::from("/other/opencode2"))
+    }
+
+    fn versioned(port: u16, version: &'static str) -> (String, Reply) {
+        let body = format!(r#"{{"version":"{version}","pid":{port}}}"#).leak();
+        (format!("http://127.0.0.1:{port}/api/info"), Reply::json(200, body))
+    }
+
+    #[tokio::test]
+    async fn prefers_the_service_the_typescript_binary_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths(dir.path());
+        // The TS binary is reached through a symlink, as `~/.local/bin/opencode` may be.
+        let ts = dir.path().join("ts-real");
+        std::fs::write(&ts, "").unwrap();
+        std::os::unix::fs::symlink(&ts, dir.path().join("opencode")).unwrap();
+        register(&paths, "service-v2.json", 1001, 0);
+        register(&paths, "service-oc-next.json", 2002, 100);
+        register(&paths, "service-oc-old.json", 2003, 200);
+        let live = server([ready(1001), ready(2002), ready(2003)]);
+        let real = std::fs::canonicalize(&ts).unwrap();
+        let lookup = move |pid| (pid >= 2000).then(|| real.clone());
+        let owner = Owner::with_lookup(TsCommand::new(dir.path().join("opencode")), lookup);
+        let found = discover_with(&live, &paths, None, &owner).await.unwrap();
+        assert_eq!(found.channel, "oc-next");
+        // A preferred channel still wins over the TS binary's service.
+        register(&paths, "service.json", 1004, 300);
+        let live = server([ready(1001), ready(2002), ready(1004)]);
+        assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "latest");
+    }
+
+    #[tokio::test]
+    async fn no_match_takes_the_newest_and_a_version_match_decides_without_an_executable() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths(dir.path());
+        register(&paths, "service-v2.json", 1001, 0);
+        register(&paths, "service-oc-next.json", 1002, 100);
+        let live = server([versioned(1001, "0.0.0-v2"), versioned(1002, "1.2.3")]);
+        // A binary that prints `version` for `--version`.
+        let printing = |version: &str| {
+            let mut command = TsCommand::new("sh");
+            command.args = vec!["-c".into(), format!("echo {version}").into(), "sh".into()];
+            command
+        };
+        let owner = Owner::with_lookup(printing("9.9.9"), fake_proc);
+        assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "v2");
+        let owner = Owner::with_lookup(printing("1.2.3"), fake_proc);
+        assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "oc-next");
+        // One answering registration is taken without asking the binary.
+        let owner = Owner::with_lookup(TsCommand::new("sh"), |_| panic!("looked up"));
+        let one = server([versioned(1002, "1.2.3")]);
+        assert_eq!(discover_with(&one, &paths, None, &owner).await.unwrap().channel, "oc-next");
     }
 
     #[tokio::test]
