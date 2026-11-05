@@ -152,8 +152,10 @@ export const layer = (options?: Options) =>
           return
         }
         const result = ConfigNormalize.normalize(input)
+        // Every reload repeats the notes on a config that loads; one it rejects is the user's to fix.
+        const log = result.type === "rejected" ? Effect.logWarning : Effect.logDebug
         yield* Effect.forEach(result.diagnostics, (diagnostic) =>
-          Effect.logDebug("configuration normalization diagnostic", {
+          log("configuration normalization diagnostic", {
             source,
             path: diagnostic.path[0] === "$" ? "$" : `$.${diagnostic.path.join(".")}`,
             kind: diagnostic.kind,

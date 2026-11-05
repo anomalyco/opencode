@@ -211,9 +211,9 @@ export const make = Effect.gen(function* () {
                 ),
               )
             : undefined
-        if (retry?.retry) yield* Effect.annotateCurrentSpan("opencode.retry.attempt", retry.attempt)
         if (llmFailure && llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
+          yield* Effect.annotateCurrentSpan("opencode.retry.attempt", retry.attempt)
           yield* publisher.startAssistant()
           return Outcome.Retry({ error: llmError, decision: retry })
         }
@@ -281,8 +281,10 @@ export const make = Effect.gen(function* () {
           record.outputStarted &&
           tools.declines.length === 0 &&
           !tools.interrupted
-        )
+        ) {
+          yield* Effect.annotateCurrentSpan("opencode.retry.attempt", retry.attempt)
           return Outcome.Continue({ error: llmError, decision: retry })
+        }
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
