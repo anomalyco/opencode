@@ -13,6 +13,7 @@ use crate::keymap::{Bind, KeymapLayer, TuiCommand};
 use crate::theme::Surface;
 use opentui::prelude::*;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
 /// How a long title is cut (`truncateTitle`).
@@ -52,7 +53,7 @@ pub enum Detail {
 /// cycles with ←/→, `opencode ↵` opens a picker. Other rows pad the value to the same width so it does not shift
 /// as the selection moves. The value extends two cells into the row's right padding, so it ends where plain
 /// footers do.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Choice {
     pub value: String,
     /// Enter opens a picker instead of cycling.
@@ -346,9 +347,68 @@ struct Inner<T> {
     body: View,
     scroll: ScrollBox,
     footer_slot: View,
-    rows: RefCell<Vec<View>>,
+    /// One row per option in list order, kept across renders as TS `<For>` keeps them.
+    rows: RefCell<Vec<Row<T>>>,
+    /// The category rows: name, whether first, and the row.
+    headers: RefCell<Vec<(String, bool, View)>>,
+    /// Set when `filtered` changes, so the next render matches rows to it.
+    rows_stale: Cell<bool>,
+    /// The content width the rows' details were cut to.
+    width: Cell<u32>,
+    /// The position of the row drawn as selected.
+    active: Cell<Option<usize>>,
+    /// Whether the body holds the list rather than the empty view.
+    listed: Cell<bool>,
+    /// What follows the list in the body: the `…` and the detail area.
+    tail: RefCell<Vec<AnyWidget>>,
+    /// What the footer shows, to rebuild it only when that changes.
+    footer_key: RefCell<Option<FooterKey>>,
     /// A selection scroll waiting for the list's new height (`scrollAfterLayout`).
     scroll_after_layout: Cell<bool>,
+}
+
+struct Row<T> {
+    option: SelectOption<T>,
+    description: Option<String>,
+    footer: Option<String>,
+    active: bool,
+    /// The option's line, built again when `active` changes.
+    line: View,
+    /// The line and the detail lines, with the mouse handler.
+    view: View,
+}
+
+/// Each footer item's group, title, key, whether disabled, and whether it runs an action.
+type FooterKey = Vec<(Group, String, Option<String>, bool, bool)>;
+
+/// An option as its row draws it: the option, its description, and its footer.
+type Look<'a, T> = (&'a SelectOption<T>, Option<&'a str>, Option<&'a str>);
+
+impl<T: PartialEq> Row<T> {
+    // Whether this row draws `look` as a new row would. Gutters are compared by identity.
+    fn draws(&self, (option, description, footer): Look<'_, T>) -> bool {
+        let row = &self.option;
+        self.description.as_deref() == description
+            && self.footer.as_deref() == footer
+            && row.value == option.value
+            && row.title == option.title
+            && row.title_spans == option.title_spans
+            && row.title_width == option.title_width
+            && row.truncate == option.truncate
+            && row.category == option.category
+            && row.details == option.details
+            && row.fg == option.fg
+            && row.bg == option.bg
+            && row.footer_color == option.footer_color
+            && row.footer_fg == option.footer_fg
+            && row.footer_overhang == option.footer_overhang
+            && row.choice == option.choice
+            && match (&row.gutter, &option.gutter) {
+                (None, None) => true,
+                (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+                _ => false,
+            }
+    }
 }
 
 /// The select's handle (TS `DialogSelectRef`). Cloning is cheap.
@@ -405,6 +465,13 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         scroll,
         footer_slot,
         rows: RefCell::new(Vec::new()),
+        headers: RefCell::new(Vec::new()),
+        rows_stale: Cell::new(true),
+        width: Cell::new(0),
+        active: Cell::new(None),
+        listed: Cell::new(false),
+        tail: RefCell::new(Vec::new()),
+        footer_key: RefCell::new(None),
         scroll_after_layout: Cell::new(false),
     });
     // The dialog owns the select; handlers hold weak references.
@@ -524,6 +591,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     /// Draws the footer again, after the `footer` content was shown or hidden.
     pub fn refresh_footer(&self) {
+        self.0.footer_key.replace(None);
         self.render_footer();
     }
 
@@ -626,6 +694,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         state.flat = grouped.iter().flat_map(|(_, members)| members.clone()).collect();
         state.grouped = grouped;
         state.filtered = filtered;
+        self.0.rows_stale.set(true);
     }
 
     // `focusTarget ?? current` with `focusCurrent`, used at mount and when the filter clears.
@@ -1040,12 +1109,16 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let app = &cx.app;
         let theme = &cx.theme;
         let body = &self.0.body;
-        body.clear();
         let scroll = &self.0.scroll;
-        scroll.clear();
-        let mut rows = Vec::new();
         let state = self.0.state.borrow();
         if state.grouped.is_empty() {
+            body.clear();
+            scroll.clear();
+            self.0.rows.borrow_mut().clear();
+            self.0.headers.borrow_mut().clear();
+            self.0.tail.borrow_mut().clear();
+            self.0.active.set(None);
+            self.0.listed.set(false);
             let no_match = self.props().render_filter && !state.filter.is_empty();
             let (view, text) = if no_match {
                 (&self.props().no_match_view, "No results found")
@@ -1058,83 +1131,197 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     &View::new(app).padding_x(DIALOG_LIST_INSET).child(&Text::new(app, text).fg(theme.text.muted)),
                 ),
             };
-        } else {
-            let selected = state.flat.get(state.selected).copied();
-            let flattened = self.props().search.is_some() || (self.props().flat && !state.filter.is_empty());
-            let width = content_width(cx.dialogs.size().width().min(u32::from(app.size().0)));
-            for (i, (category, members)) in state.grouped.iter().enumerate() {
-                if !category.is_empty() {
-                    scroll.add(&category_row(cx, category, i == 0));
-                }
-                for &index in members {
-                    let option = &state.filtered[index];
-                    let active = !self.props().locked && Some(index) == selected;
-                    let current = self.props().current.as_ref() == Some(&option.value);
-                    let footer = if flattened {
-                        option
-                            .search_footer
-                            .clone()
-                            .or_else(|| option.category.clone())
-                            .or_else(|| option.footer.clone())
-                    } else {
-                        option.footer.clone()
-                    };
-                    let description = option.description.clone().filter(|description| description != category);
-                    let row = View::new(app).column();
-                    row.add(&option_row(cx, option, description, footer, active, current));
-                    for detail in &option.details {
-                        row.add(
-                            &View::new(app).padding_x(DIALOG_LIST_INSET).child(
-                                &Text::new(app, truncate_middle(detail, width.max(1) as usize))
-                                    .fg(theme.text.muted)
-                                    .wrap(WrapMode::None),
-                            ),
-                        );
-                    }
-                    self.row_mouse(&row, option.value.clone());
-                    scroll.add(&row);
-                    rows.push(row);
-                }
-            }
-            // Reserved whenever any option has a detail, so the dialog does not resize as the selection moves.
-            let detail = state
-                .flat
-                .iter()
-                .any(|&index| state.filtered[index].detail.is_some())
-                .then(|| selected.and_then(|index| state.filtered[index].detail.clone()));
             drop(state);
-            self.update_overflow();
-            scroll.height(self.list_height());
-            body.add(scroll);
-            if self.0.state.borrow().ellipsis {
-                body.add(
-                    &View::new(app)
-                        .padding_edge(Edge::Left, DIALOG_LIST_INSET)
-                        .shrink(0.0)
-                        .child(&Text::new(app, "…").fg(theme.text.muted)),
-                );
-            }
-            if let Some(detail) = detail {
-                let area = View::new(app).padding_edge(Edge::Top, 1).padding_x(DIALOG_LIST_INSET).shrink(0.0);
-                match detail {
-                    Some(Detail::View(build)) => area.add(&build(cx)),
-                    text => area.add(
-                        &Text::new(
-                            app,
-                            match text {
-                                Some(Detail::Text(text)) if !text.is_empty() => text,
-                                _ => " ".to_owned(),
-                            },
-                        )
-                        .fg(theme.surface(Surface::DialogFooter).text.muted)
-                        .wrap(WrapMode::Word),
-                    ),
-                };
-                body.add(&area);
+            self.render_footer();
+            return;
+        }
+        let width = content_width(cx.dialogs.size().width().min(u32::from(app.size().0)));
+        if self.0.width.replace(width) != width {
+            // Details are cut to the width, so no row is kept.
+            self.0.rows.borrow_mut().clear();
+            self.0.rows_stale.set(true);
+        }
+        let synced = self.0.rows_stale.replace(false);
+        if synced {
+            self.sync_rows(&state);
+        }
+        // A move restyles the row it leaves and the row it reaches; matching the rows may have moved any.
+        let active = (!self.props().locked && state.selected < state.flat.len()).then_some(state.selected);
+        let previous = self.0.active.replace(active);
+        for (position, row) in self.0.rows.borrow_mut().iter_mut().enumerate() {
+            let want = Some(position) == active;
+            if row.active != want && (synced || Some(position) == previous || Some(position) == active) {
+                let line = self.option_line(&row.option, row.description.as_deref(), row.footer.as_deref(), want);
+                row.line.detach();
+                row.view.insert(0, &line);
+                row.line = line;
+                row.active = want;
             }
         }
-        *self.0.rows.borrow_mut() = rows;
+        let selected = state.flat.get(state.selected).copied();
+        // Reserved whenever any option has a detail, so the dialog does not resize as the selection moves.
+        let detail = state
+            .flat
+            .iter()
+            .any(|&index| state.filtered[index].detail.is_some())
+            .then(|| selected.and_then(|index| state.filtered[index].detail.clone()));
+        drop(state);
+        self.update_overflow();
+        scroll.height(self.list_height());
+        let mut tail = self.0.tail.borrow_mut();
+        if self.0.listed.replace(true) {
+            tail.drain(..).for_each(|widget| widget.detach());
+        } else {
+            body.clear();
+            body.add(scroll);
+        }
+        if self.0.state.borrow().ellipsis {
+            let ellipsis = View::new(app)
+                .padding_edge(Edge::Left, DIALOG_LIST_INSET)
+                .shrink(0.0)
+                .child(&Text::new(app, "…").fg(theme.text.muted));
+            body.add(&ellipsis);
+            tail.push(ellipsis.as_any());
+        }
+        if let Some(detail) = detail {
+            let area = View::new(app).padding_edge(Edge::Top, 1).padding_x(DIALOG_LIST_INSET).shrink(0.0);
+            match detail {
+                Some(Detail::View(build)) => area.add(&build(cx)),
+                text => area.add(
+                    &Text::new(
+                        app,
+                        match text {
+                            Some(Detail::Text(text)) if !text.is_empty() => text,
+                            _ => " ".to_owned(),
+                        },
+                    )
+                    .fg(theme.surface(Surface::DialogFooter).text.muted)
+                    .wrap(WrapMode::Word),
+                ),
+            };
+            body.add(&area);
+            tail.push(area.as_any());
+        }
+        drop(tail);
         self.render_footer();
+    }
+
+    // Matches the rows to `filtered`: a row whose option draws the same stays, and only the other options get new
+    // rows. The list's children are put in order again only when the rows or categories changed.
+    fn sync_rows(&self, state: &State<T>) {
+        let cx = &self.0.cx;
+        let flattened = self.props().search.is_some() || (self.props().flat && !state.filter.is_empty());
+        let wanted: Vec<Look<'_, T>> = state
+            .grouped
+            .iter()
+            .flat_map(|(category, members)| {
+                members.iter().map(move |&index| {
+                    let option = &state.filtered[index];
+                    let footer = if flattened {
+                        option.search_footer.as_deref().or(option.category.as_deref()).or(option.footer.as_deref())
+                    } else {
+                        option.footer.as_deref()
+                    };
+                    (option, option.description.as_deref().filter(|description| description != category), footer)
+                })
+            })
+            .collect();
+        // The positions of each title; options that share a title chain through `next`.
+        let mut first: HashMap<&str, usize> = HashMap::with_capacity(wanted.len());
+        let mut next = vec![usize::MAX; wanted.len()];
+        for (position, (option, ..)) in wanted.iter().enumerate().rev() {
+            if let Some(after) = first.insert(option.title.as_str(), position) {
+                next[position] = after;
+            }
+        }
+        let old = std::mem::take(&mut *self.0.rows.borrow_mut());
+        let mut in_place = old.len() == wanted.len();
+        let mut slots: Vec<Option<Row<T>>> = std::iter::repeat_with(|| None).take(wanted.len()).collect();
+        for (old_position, row) in old.into_iter().enumerate() {
+            let mut position = first.get(row.option.title.as_str()).copied().unwrap_or(usize::MAX);
+            while position != usize::MAX && (slots[position].is_some() || !row.draws(wanted[position])) {
+                position = next[position];
+            }
+            // A row left out stays in the list until the children are put in order below.
+            if position == usize::MAX {
+                in_place = false;
+                continue;
+            }
+            in_place &= position == old_position;
+            slots[position] = Some(row);
+        }
+        let rows: Vec<Row<T>> =
+            slots.into_iter().zip(&wanted).map(|(slot, &look)| slot.unwrap_or_else(|| self.new_row(look))).collect();
+        let named = || {
+            state
+                .grouped
+                .iter()
+                .enumerate()
+                .filter(|(_, (category, _))| !category.is_empty())
+                .map(|(i, (category, _))| (category.as_str(), i == 0))
+        };
+        let same_headers = self.0.headers.borrow().iter().map(|(name, first, _)| (name.as_str(), *first)).eq(named());
+        if !in_place || !same_headers {
+            let scroll = &self.0.scroll;
+            scroll.clear();
+            let old_headers = std::mem::take(&mut *self.0.headers.borrow_mut());
+            let mut headers = Vec::new();
+            let mut list = rows.iter();
+            for (i, (category, members)) in state.grouped.iter().enumerate() {
+                if !category.is_empty() {
+                    let first = i == 0;
+                    let header = old_headers
+                        .iter()
+                        .find(|(name, of, _)| name == category && *of == first)
+                        .map(|(_, _, header)| header.clone())
+                        .unwrap_or_else(|| category_row(cx, category, first));
+                    scroll.add(&header);
+                    headers.push((category.clone(), first, header));
+                }
+                for row in list.by_ref().take(members.len()) {
+                    scroll.add(&row.view);
+                }
+            }
+            *self.0.headers.borrow_mut() = headers;
+        }
+        *self.0.rows.borrow_mut() = rows;
+    }
+
+    fn new_row(&self, (option, description, footer): Look<'_, T>) -> Row<T> {
+        let cx = &self.0.cx;
+        let app = &cx.app;
+        let width = self.0.width.get();
+        let line = self.option_line(option, description, footer, false);
+        let view = View::new(app).column().child(&line);
+        for detail in &option.details {
+            view.add(
+                &View::new(app).padding_x(DIALOG_LIST_INSET).child(
+                    &Text::new(app, truncate_middle(detail, width.max(1) as usize))
+                        .fg(cx.theme.text.muted)
+                        .wrap(WrapMode::None),
+                ),
+            );
+        }
+        self.row_mouse(&view, option.value.clone());
+        Row {
+            option: option.clone(),
+            description: description.map(str::to_owned),
+            footer: footer.map(str::to_owned),
+            active: false,
+            line,
+            view,
+        }
+    }
+
+    fn option_line(
+        &self,
+        option: &SelectOption<T>,
+        description: Option<&str>,
+        footer: Option<&str>,
+        active: bool,
+    ) -> View {
+        let current = self.props().current.as_ref() == Some(&option.value);
+        option_row(&self.0.cx, option, description, footer, active, current)
     }
 
     fn row_mouse(&self, row: &View, value: T) {
@@ -1181,7 +1368,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     fn render_footer(&self) {
         let cx = &self.0.cx;
         let slot = &self.0.footer_slot;
-        slot.clear();
         let props = self.props();
         let selected = self.selected();
         let mut items: Vec<(Group, FooterAction)> = Vec::new();
@@ -1210,6 +1396,17 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 FooterAction::new(hint.title.clone()).key(hint.label.clone()),
             ));
         }
+        let key: Vec<_> = items
+            .iter()
+            .map(|(group, item)| {
+                (*group, item.title.clone(), item.key.clone(), item.disabled, item.on_trigger.is_some())
+            })
+            .collect();
+        if self.0.footer_key.borrow().as_ref() == Some(&key) {
+            return;
+        }
+        self.0.footer_key.replace(Some(key));
+        slot.clear();
         let pick = |group: Group| -> Vec<FooterAction> {
             items.iter().filter(|(of, _)| *of == group).map(|(_, action)| action.clone()).collect()
         };
@@ -1237,8 +1434,8 @@ fn category_row(cx: &DialogCx, title: &str, first: bool) -> View {
 fn option_row<T>(
     cx: &DialogCx,
     option: &SelectOption<T>,
-    description: Option<String>,
-    footer: Option<String>,
+    description: Option<&str>,
+    footer: Option<&str>,
     active: bool,
     current: bool,
 ) -> View {
@@ -1301,7 +1498,7 @@ fn option_row<T>(
                 (None, Some(color)) if !active => color,
                 _ => secondary,
             };
-            (footer, color, option.footer_overhang)
+            (footer.to_owned(), color, option.footer_overhang)
         }),
     };
     if let Some((footer, color, overhang)) = footer {
