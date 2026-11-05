@@ -134,6 +134,10 @@ export function selectQueuedCount(state: RequestQueueState) {
   return state.status === "queued" ? state.waiting.length : 0
 }
 
+export function selectQueueDisposed(state: RequestQueueState) {
+  return state.status === "disposed"
+}
+
 export function isRequestInflight(state: RequestQueueState, id: number) {
   return state.status !== "disposed" && state.inflight.some((entry) => entry.id === id)
 }

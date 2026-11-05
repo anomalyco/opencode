@@ -6,6 +6,7 @@ import {
   REQUEST_QUEUE_SLOW_LIMIT,
   REQUEST_STALL_MS,
   selectInflightCount,
+  selectQueueDisposed,
   selectQueuedCount,
   transitionRequestQueue,
   type RequestQueueEffect,
@@ -125,7 +126,7 @@ export function createRequestQueue(input: {
       if (!isRequestInflight(queue, id)) await waitForSlot(id, request.signal)
 
       // Aborted or disposed between the grant and this continuation.
-      if (request.signal.aborted || queue.status === "disposed") {
+      if (request.signal.aborted || selectQueueDisposed(queue)) {
         dispatch({ type: "request.aborted", id, now: now() })
         throw reason(request.signal)
       }
