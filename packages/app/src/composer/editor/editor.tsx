@@ -50,6 +50,7 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment, promptLength } from "../prompt-parts"
 import { handleComposerKeyDown, type ComposerKeybinds } from "./keybind"
+import { INITIAL_COMPOSITION_STATE, isComposing, transitionComposition } from "./composition-machine"
 import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
 import {
   INITIAL_EDITOR_SYNC_STATE,
@@ -105,7 +106,7 @@ export type ComposerEditorProps = {
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
-  let composing = false
+  let composition = INITIAL_COMPOSITION_STATE
   const i18n = useI18n()
   const markdown = useMarkdown()
   const state = props.controller.state
@@ -381,7 +382,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 handleComposerKeyDown({
                   event,
                   keybinds: props.keybinds,
-                  composing,
+                  composing: isComposing(composition),
                   selectSuggestion: () => {
                     if (!isComposerPopoverOpen(state)) return false
                     props.controller.onKeyDown(event, height)
@@ -402,8 +403,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     ),
                 })
               }}
-              onCompositionStart={() => (composing = true)}
-              onCompositionEnd={() => (composing = false)}
+              onCompositionStart={() =>
+                (composition = transitionComposition(composition, { type: "composition.start" }))
+              }
+              onCompositionEnd={() => (composition = transitionComposition(composition, { type: "composition.end" }))}
               // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
               // paragraph, which would wrap the next line in a <div> the parser joins without a newline; replace it
               // with the line break Shift+Enter inserts. Only beforeinput is cancelled, so iOS still applies its
