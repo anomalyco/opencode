@@ -24,7 +24,6 @@ import {
   type IpcSpec,
   type Log,
   type MainContext,
-  type Messages,
   type OS,
   type Params,
   type PluginOptions,
@@ -68,6 +67,7 @@ import {
   createHostState,
   isCurrentHostWatch,
   sameHostEndpoint,
+  selectCatalogMessages,
   transitionHost,
   type HostCommand,
   type HostEndpoint,
@@ -142,6 +142,8 @@ type HostResources = {
   watchTimer?: ReturnType<typeof setTimeout>
   list?: AbortController
   listTimer?: ReturnType<typeof setTimeout>
+  /** Each plugin instance's catalog load timeout. */
+  readonly catalogTimers: Map<Instance, ReturnType<typeof setTimeout>>
 }
 
 /** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
@@ -170,8 +172,6 @@ type HostApis = {
 type Item = Parameters<MainContext["add"]>[1]
 
 type Contribution = { readonly registry: string; readonly plugin: string; readonly value: Item }
-
-type Translation = { readonly catalog?: BuiltinCatalog; messages: Messages }
 
 const os = Match.value(process.platform).pipe(
   Match.when("darwin", () => "macos" as const),
@@ -228,8 +228,6 @@ export function createHost(input: {
   const skipped = new Map<string, string>()
   const entries = new Map<string, Contribution>()
   const ipcs = new Map<string, Provider>()
-  // Each live instance's catalog and messages, so a locale change reaches them.
-  const translations = new Set<Translation>()
   const closed = new Set<(win: BrowserWindow) => void>()
   let nextEntry = 0
 
@@ -429,12 +427,12 @@ export function createHost(input: {
 
   // Follows the app's own server, as the TUI does: lists its plugins on each connection and each `plugin.updated`.
   // Every connection and reconnect of the server starts a new follow, so a new endpoint is followed at once.
-  let following = createHostState()
-  const resources: HostResources = {}
+  let following = createHostState<Instance>(nativeLocale())
+  const resources: HostResources = { catalogTimers: new Map() }
 
   const quitting = () => isQuitting(input.appState())
 
-  const dispatch = (event: HostEvent<Listing>) => {
+  const dispatch = (event: HostEvent<Listing, Instance>) => {
     const next = transitionHost(following, event)
     following = next.state
     // Each command runs on its own, so one that throws cannot keep the rest from running.
@@ -445,7 +443,7 @@ export function createHost(input: {
     )
   }
 
-  const perform = (command: HostCommand<Listing>) => {
+  const perform = (command: HostCommand<Listing, Instance>) => {
     switch (command.type) {
       case "subscribe-credentials":
         resources.unfollow = SidecarCredentials.onChange(() =>
@@ -496,6 +494,27 @@ export function createHost(input: {
         refreshMenu()
 
         return broadcast(new PluginMenubarItemsChanged({ items: listMenubarItems() }))
+      case "load-catalog": {
+        const owner = command.owner
+        const attempt = command.attempt
+        clearTimeout(resources.catalogTimers.get(owner))
+        resources.catalogTimers.set(
+          owner,
+          setTimeout(() => dispatch({ type: "catalog.timed-out", owner, attempt }), command.timeoutMs),
+        )
+
+        return void Promise.try(command.load).then(
+          (module) => dispatch({ type: "catalog.loaded", owner, attempt, messages: module.default }),
+          () => dispatch({ type: "catalog.failed", owner, attempt }),
+        )
+      }
+      case "cancel-catalog-timer":
+        clearTimeout(resources.catalogTimers.get(command.owner))
+        resources.catalogTimers.delete(command.owner)
+
+        return
+      case "resolve-catalog-ready":
+        return command.replies.forEach((reply) => reply())
     }
   }
 
@@ -672,17 +691,6 @@ export function createHost(input: {
     reserved: inventory.reserved,
   })
 
-  const resolveMessages = async (catalog?: BuiltinCatalog): Promise<Messages> => {
-    const english = catalog?.en ?? {}
-    const locale = nativeLocale()
-    const source = locale === "en" ? undefined : catalog?.[locale]
-
-    if (!source) return english
-    const loaded = Predicate.isFunction(source) ? (await source()).default : source
-
-    return { ...english, ...loaded }
-  }
-
   /** A loaded revision of the plugin's main code; each instance of it gets its own setup context. */
   const prepare =
     (id: string, loaded: Loaded): Revision =>
@@ -695,11 +703,11 @@ export function createHost(input: {
     // Registered first, so it runs last: the instance's embeds go after everything else it contributed. They are
     // owned by the instance, so releasing them never touches a replacement's.
     contribute(() => embeds.releaseOwner(instance))
-    const translation: Translation = { catalog: loaded.i18n, messages: loaded.i18n?.en ?? {} }
-    translations.add(translation)
-    contribute(() => {
-      translations.delete(translation)
-    })
+    // Setup waits for the instance's copy in the app locale; the host keeps it in that locale until the instance goes.
+    const ready = new Promise<void>((reply) =>
+      dispatch({ type: "catalog.registered", owner: instance, catalog: loaded.i18n, reply }),
+    )
+    contribute(() => dispatch({ type: "catalog.unregistered", owner: instance }))
     // The instance's HostApis, each created on first read.
     const created: HostApis = {}
 
@@ -864,13 +872,14 @@ export function createHost(input: {
       list,
       provide,
       t: (key: string, params?: Params) =>
-        formatNativeTemplate(translation.messages[key] ?? nativeMessage(key) ?? key, params),
+        formatNativeTemplate(selectCatalogMessages(following, instance)[key] ?? nativeMessage(key) ?? key, params),
       plural: (key: string, count: number, params?: Params) => {
         const category = nativePluralCategory(count)
+        const messages = selectCatalogMessages(following, instance)
 
         const template =
-          translation.messages[`${key}.${category}`] ??
-          translation.messages[`${key}.other`] ??
+          messages[`${key}.${category}`] ??
+          messages[`${key}.other`] ??
           nativeMessage(`${key}.${category}`) ??
           nativeMessage(`${key}.other`) ??
           key
@@ -880,9 +889,7 @@ export function createHost(input: {
     }
 
     return {
-      ready: resolveMessages(loaded.i18n).then((messages) => {
-        translation.messages = messages
-      }),
+      ready,
       // A returned cleanup is a finalizer, as a server or TUI plugin's returned cleanup runs when it stops.
       setup: () =>
         Promise.resolve(loaded.setup(context)).then((cleanup) => {
@@ -953,16 +960,7 @@ export function createHost(input: {
   getMainWindows().forEach(wire)
   onMainWindow(wire)
 
-  onNativeTranslations(() => {
-    const locale = nativeLocale()
-    void Promise.all(
-      [...translations].map(async (translation) => {
-        const messages = await resolveMessages(translation.catalog).catch(() => translation.catalog?.en ?? {})
-
-        if (nativeLocale() === locale) translation.messages = messages
-      }),
-    ).then(scheduleMenubar)
-  })
+  onNativeTranslations(() => dispatch({ type: "locale.changed", locale: nativeLocale() }))
 
   setMenubarProvider(() =>
     menubarItems().map((entry) => ({
