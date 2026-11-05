@@ -792,6 +792,19 @@ story("shows the page's cookies in the site information and clears them", async 
   await expect(site).toContainText("0 cookies in use")
 })
 
+story("says a failed cookie read failed and reads again on retry", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Fail next site read", exact: true }).click()
+  await root.getByRole("button", { name: "Site information", exact: true }).click()
+  const site = page.getByRole("dialog")
+  await expect(site).toContainText("Request failed")
+  const retry = site.getByRole("button", { name: "Try again", exact: true })
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(site).toContainText("3 cookies in use")
+  await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
+})
+
 story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const options = root.getByRole("button", { name: "Browser options", exact: true })

@@ -103,6 +103,8 @@ type PaneFixtureState = {
   external: string[]
   /** Cookies the page's address can read. */
   cookies: number
+  /** Main fails the next cookie read, as when the pane is suspended. */
+  failSite: boolean
   selection: string
 }
 
@@ -162,6 +164,7 @@ export function mountBrowserPane(input: PaneHost) {
       history: { visits: [] },
       external: [],
       cookies: 3,
+      failSite: false,
       selection: "default",
     })
 
@@ -368,7 +371,14 @@ export function mountBrowserPane(input: PaneHost) {
         setStore("zoom", next)
         emit(store.session, { type: "page", tabID: value.tabID, zoom: next })
       },
-      site: async () => ({ cookies: store.cookies }),
+      site: async () => {
+        if (store.failSite) {
+          setStore("failSite", false)
+          throw new Error("browser.pane.unavailable")
+        }
+
+        return { cookies: store.cookies }
+      },
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
@@ -537,6 +547,7 @@ export function mountBrowserPane(input: PaneHost) {
               <For each={["default", "long", "fallback", "low", "zoomed"]}>{(value) => <option>{value}</option>}</For>
             </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
+            <button onClick={() => setStore("failSite", true)}>Fail next site read</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
               Page icon
             </button>
