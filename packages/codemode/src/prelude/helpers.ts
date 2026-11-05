@@ -9,7 +9,6 @@ import { invalidData, IteratorSymbol, PendingThrow } from "../interpreter/model.
 import { native, receiver } from "../interpreter/native.js"
 import {
   Arr,
-  Bytes,
   coerceToString,
   data,
   define,
@@ -21,13 +20,11 @@ import {
   positionIterator,
   coerceToNumber,
   get,
-  HeadersObj,
   MapObj,
   type NativeResult,
   Obj,
   PromiseObj,
   SetObj,
-  URLSearchParamsObj,
   type Value,
   WeakMapObj,
   WeakSetObj,
@@ -40,16 +37,14 @@ import { Invoke } from "../interpreter/signals.js"
 
 type Helper = readonly [length: number, call: (args: Array<Value>) => NativeResult]
 
-const classes = {
-  Array: Arr,
-  Uint8Array: Bytes,
-  Map: MapObj,
-  Set: SetObj,
-  WeakMap: WeakMapObj,
-  WeakSet: WeakSetObj,
-  Headers: HeadersObj,
-  URLSearchParams: URLSearchParamsObj,
-} as const
+const classes = { Array: Arr, Map: MapObj, Set: SetObj } as const
+
+// Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
+declare global {
+  interface Math {
+    sumPrecise(values: Iterable<number>): number
+  }
+}
 
 export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Value]> => {
   const builtins = ctx.builtins
@@ -124,10 +119,10 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
           : value instanceof IteratorObj
             ? value
             : new IteratorObj(builtins.Iterator, {
-              iterator: requireIteratorObject(value, "An iterator"),
-              next: get(value as Obj, "next"),
-              asynchronous: false,
-            }),
+                iterator: requireIteratorObject(value, "An iterator"),
+                next: get(value as Obj, "next"),
+                asynchronous: false,
+              }),
     ],
     /** What the collection built-ins need from a Map, Set, WeakMap, or WeakSet's table; see `table`. */
     $Table: [4, ([op, target, key, value]) => table(builtins, String(op), target, key, value)],

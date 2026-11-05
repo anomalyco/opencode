@@ -3,13 +3,6 @@ import { Obj, coerceToNumber } from "../interpreter/objects.js"
 import { withPrimitives } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
-// Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
-declare global {
-  interface Math {
-    sumPrecise(values: Iterable<number>): number
-  }
-}
-
 export const mathGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const math = new Obj(builtins.Object)

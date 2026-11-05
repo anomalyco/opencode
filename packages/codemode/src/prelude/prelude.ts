@@ -12,8 +12,9 @@ import { code } from "./source.js"
 // source is parsed once per process. Each runtime makes its top-level functions as `Fn`s over a private scope (the
 // intrinsic globals, the `$` helpers, and the prelude's own functions), so programs can't reach the helpers, and
 // replacing a global can't change what a built-in does. A function named `Array$prototype$map` is installed as
-// `Array.prototype.map`; one without a `$` is internal. Its generators make iterator helpers. Snapshots name prelude nodes by id in the "prelude" source and
-// never copy it; its hash is part of the build id.
+// `Array.prototype.map`; one without a `$` is internal, and a generator makes iterator helpers. Snapshots name prelude
+// nodes by id in the "prelude" source and never copy it; its hash is part of the build id. Natives reach a prelude
+// function with `fn` and hand their work on to it (`new Invoke(...)`).
 
 let parsed: Source | undefined
 
@@ -52,14 +53,12 @@ export class Prelude {
       bind(node.id.name, made)
       define(this.functions, node.id.name, made, hidden)
       if (path.length === 1) continue
-      const target = path
-        .slice(1, -1)
-        .reduce<Value>((owner, key) => get(owner as Obj, key), this.scope.get(path[0]!)?.value ?? builtins[path[0] as never])
-      define(target as Obj, path.at(-1)!, made, hidden)
+      const owner = path.slice(1, -1).reduce((value, key) => get(value as Obj, key), this.scope.get(path[0]!)!.value)
+      define(owner as Obj, path.at(-1)!, made, hidden)
     }
   }
 
-  /** A prelude function, for a native that hands its work on (`new Invoke(...)`). */
+  /** A prelude function, for a native that hands its work on to it. */
   fn(name: string): Fn {
     return get(this.functions, name) as Fn
   }

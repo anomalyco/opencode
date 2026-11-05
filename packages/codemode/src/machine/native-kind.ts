@@ -3,10 +3,12 @@ import type { Value } from "../interpreter/objects.js"
 import { type Frame, kind, type Kind, type Out } from "./frame.js"
 import type { MachineTask } from "./task.js"
 
-// Built-ins that call program code run as frames whose state is plain data: a kind (a module constant, named once)
-// and the frame's phase and slots. A built-in returns `Push(kind, slots)`; the frame runs at the call site, so a
-// failure it raises, or one that unwinds through it, is located there, as a host built-in's would be. This module
-// only defines things, so built-ins can make their kinds while the modules they import are still loading.
+// The few built-ins that call program code and stay native (hot array callbacks and sort, promise jobs, the JSON and
+// tool boundary walks) run as frames whose state is plain data; the rest are the prelude's (src/prelude). Each has a
+// kind (a module constant, named once) and the frame's phase and slots. A built-in returns `Push(kind, slots)`; the
+// frame runs at the call site, so a failure it raises, or one that unwinds through it, is located there, as a host
+// built-in's would be. This module only defines things, so built-ins can make their kinds while the modules they
+// import are still loading.
 
 /** A built-in's frame kind: `step` runs from `frame.phase` with `input`, what the work it started gave back. */
 export const nativeKind = (
