@@ -1,6 +1,5 @@
 import { For, Show, batch, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
 import { IconButton } from "@opencode/ui/icon-button"
 import { RollingNumber } from "@opencode/ui/rolling-number"
@@ -11,17 +10,25 @@ import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
 import { frameLoop, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
-import { showToast } from "@/shell/notifications/toast"
-import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode/client/promise"
+import type { FormInfo } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { useServerSDK } from "@/runtime/server/client"
-import { ScopedKey } from "@/runtime/server/scope"
 import { useCommand } from "@/shell/commands/command"
 import { questionKey, type QuestionKeyZone } from "./question-keys"
 import { questionMotion } from "./question-motion"
-import { questionCache } from "./question-state"
+import { createQuestionDock } from "./question-controller"
+import {
+  FRAME_MOVING_EVENT,
+  FRAME_RESTING_EVENT,
+  IDLE_QUESTION_LOOP,
+  isSwitchSliding,
+  selectSwitchGhost,
+  selectSwitchInto,
+  transitionQuestionLoop,
+  type QuestionLoopEvent,
+  type QuestionLoopState,
+} from "./question-switch-machine"
 
 const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -168,13 +175,23 @@ type Track = { from: Pose; to: number; spring: Spring }
 
 // The question being left: inert copies of its text and its answers, how tall they are, and how far its answers were
 // scrolled.
-type Ghost = Track & { tab: number; els: HTMLElement[]; details: number; list: number; scroll: number }
+type Ghost = Track & { tab: number; els: [HTMLElement, HTMLElement]; details: number; list: number; scroll: number }
 
-type QuestionField = FormStringField | FormMultiselectField
+type LoopEvent = QuestionLoopEvent<Track, Ghost>
 
-function questionField(field: FormInfo["fields"][number]): field is QuestionField {
-  return field.type === "string" || field.type === "multiselect"
-}
+const MEASURE_REQUESTED: LoopEvent = { type: "measure.requested" }
+
+const MEASURE_COMPLETED: LoopEvent = { type: "measure.completed" }
+
+const SWITCH_DROPPED: LoopEvent = { type: "switch.dropped" }
+
+const WAKE_MOVING: LoopEvent = { type: "wake", moving: true }
+
+const WAKE_RESTING: LoopEvent = { type: "wake", moving: false }
+
+const STILL: LoopEvent = { type: "still" }
+
+const DISPOSED: LoopEvent = { type: "disposed" }
 
 // The key that picks an answer is also its mark: round like a radio for one answer, a square like a checkbox for many.
 function Mark(props: { multi: boolean; picked: boolean; shortcut?: string }) {
@@ -253,30 +270,14 @@ function Option(props: {
 }
 
 export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
-  const serverSDK = useServerSDK()
   const language = useLanguage()
   const command = useCommand()
-  const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
-
-  const questions = createMemo(() =>
-    props.request.fields.filter(questionField).map((field) => ({
-      field,
-      header: field.title ?? "",
-      question: field.description ?? field.title ?? "",
-      options: field.type === "string" ? (field.options ?? []) : field.options,
-      multiple: field.type === "multiselect",
-    })),
-  )
+  const form = createQuestionDock({ request: () => props.request, onSubmit: () => props.onSubmit() })
+  const questions = form.questions
 
   const total = createMemo(() => questions().length)
 
-  const cached = questionCache.get(cacheKey)
-
   const [store, setStore] = createStore({
-    tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? [],
-    custom: cached?.custom ?? [],
-    customOn: cached?.customOn ?? [],
     editing: false,
     focus: 0,
     highlight: false,
@@ -296,16 +297,15 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   let highlightRef: HTMLSpanElement | undefined
   let customInput: HTMLInputElement | undefined
   let optsRef: HTMLDivElement[] = []
-  let replied = false
 
-  const question = createMemo(() => questions()[store.tab])
+  const question = createMemo(() => questions()[form.tab()])
   const options = createMemo(() => question()?.options ?? [])
-  const input = createMemo(() => store.custom[store.tab] ?? "")
-  const on = createMemo(() => store.customOn[store.tab] === true)
+  const input = () => form.draft(form.tab()).customText
+  const on = () => form.draft(form.tab()).customSelected
   const multi = createMemo(() => question()?.multiple === true)
   const count = createMemo(() => options().length + 1)
 
-  const current = createMemo(() => Math.min(store.tab + 1, total()))
+  const current = createMemo(() => Math.min(form.tab() + 1, total()))
 
   // "N of M questions", split around N so N can roll while the words around it stay put, wherever a language puts it.
   const summary = createMemo(() => {
@@ -316,16 +316,21 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
   const customLabel = () => language.t("ui.question.custom.answerPlaceholder")
 
-  const last = createMemo(() => store.tab >= total() - 1)
+  const last = createMemo(() => form.tab() >= total() - 1)
   // The question text and the answers box follow their measured heights on springs, so the dock grows and shrinks with
   // each question, and the answers box folds away when the dock is minimized. One frame job steps these springs and the
   // switch between questions, and writes the results straight to the elements. Without the dock's motion (its knob is
   // off by default, and reduced motion turns it off) every spring lands on its target and is painted at once.
   const content = { details: 0, list: 0 }
   const boxes = { details: new Spring(0), list: new Spring(0), folded: new Spring(0) }
-  let ghost: Ghost | undefined
-  let into: Track | undefined
-  let stop: VoidFunction | undefined
+  let loop: QuestionLoopState<Track, Ghost> = IDLE_QUESTION_LOOP
+  let stopFrame: VoidFunction | undefined
+  let measureFrame: number | undefined
+  // Scratch poses and looks for painting, so a frame allocates none.
+  const livePose = pose()
+  const ghostPose = pose()
+  const liveLook: Look = { transform: "", opacity: "", blur: 0 }
+  const ghostLook: Look = { transform: "", opacity: "", blur: 0 }
   // The current question's bar rests on the first dash and slides along the progress row to the current one, by how
   // far that dash is from the first, so it mirrors in RTL.
   const bar = new Spring(0)
@@ -334,7 +339,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   const dash = (tab: number) => (dashes[tab]?.offsetLeft ?? 0) - (dashes[0]?.offsetLeft ?? 0)
   // The footer: how far Back is shown, how far the shared button is Submit rather than Next, and how far Back still
   // sits from its place after the button beside it changed width. Widths are read when a switch starts, never per frame.
-  const foot = { back: new Spring(store.tab > 0 ? 1 : 0), submit: new Spring(last() ? 1 : 0), shift: new Spring(0) }
+  const foot = { back: new Spring(form.tab() > 0 ? 1 : 0), submit: new Spring(last() ? 1 : 0), shift: new Spring(0) }
   let nextFace: HTMLElement | undefined
   let submitFace: HTMLElement | undefined
   let nextLabel: HTMLElement | undefined
@@ -342,31 +347,6 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   const widths = { next: 0, submit: 0 }
   let backBox: HTMLElement | undefined
   let rtl = false
-
-  const customUpdate = (value: string, selected: boolean = on()) => {
-    const prev = input().trim()
-    const next = value.trim()
-
-    setStore("custom", store.tab, value)
-
-    if (!selected) return
-
-    if (multi()) {
-      setStore("answers", store.tab, (current = []) => {
-        const removed = prev ? current.filter((item) => item.trim() !== prev) : current
-
-        if (!next) return removed
-
-        if (removed.some((item) => item.trim() === next)) return removed
-
-        return [...removed, next]
-      })
-
-      return
-    }
-
-    setStore("answers", store.tab, next ? [next] : [])
-  }
 
   // The dock's heights from its last measure: at most, and of everything but the question text and the answers box.
   // The answers box takes what the question text leaves, and opens only to the room it will have at rest, so it never
@@ -426,14 +406,15 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
   const clamp = (i: number) => Math.max(0, Math.min(count() - 1, i))
 
-  const pickFocus = (tab: number = store.tab) => {
+  const pickFocus = (tab: number = form.tab()) => {
     const list = questions()[tab]?.options ?? []
+    const draft = form.draft(tab)
 
-    if (store.customOn[tab] === true) return list.length
+    if (draft.customSelected) return list.length
 
     return Math.max(
       0,
-      list.findIndex((item) => store.answers[tab]?.includes(item.value) ?? false),
+      list.findIndex((item) => draft.selected.includes(item.value)),
     )
   }
 
@@ -463,21 +444,47 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
   // The leaving copy of the answers stays where they were on screen however far the live list scrolls under it.
   const pin = () => {
-    const answers = ghost?.els[1]
+    const ghost = selectSwitchGhost(loop)
 
-    if (ghost && answers) answers.style.top = `${scroll.top - ghost.scroll}px`
+    if (ghost) ghost.els[1].style.top = `${scroll.top - ghost.scroll}px`
   }
 
-  // Measuring reads layout, so it waits while the dock's own springs are moving and runs once they come to rest.
-  let measuring: number | undefined
+  // Runs the loop's phase changes: the queued measure, the frame job, and the leaving copy's elements. Measuring reads
+  // layout, so it waits while the dock's own springs are moving and runs once they come to rest.
+  const applyLoop = (event: LoopEvent) => {
+    const prev = loop
+    const next = transitionQuestionLoop(prev, event)
 
-  const requestMeasure = () => {
-    if (stop || measuring !== undefined) return
-    measuring = requestAnimationFrame(() => {
-      measuring = undefined
-      measure()
-    })
+    if (next === prev) return
+    loop = next
+    const gone = selectSwitchGhost(prev)
+
+    if (gone && gone.els !== selectSwitchGhost(next)?.els) {
+      gone.els[0].remove()
+      gone.els[1].remove()
+    }
+
+    if (prev.phase === "measuring" && measureFrame !== undefined) {
+      cancelAnimationFrame(measureFrame)
+      measureFrame = undefined
+    }
+
+    if (prev.phase === "running" && next.phase !== "running") {
+      stopFrame?.()
+      stopFrame = undefined
+    }
+
+    if (next.phase === "measuring" && prev.phase !== "measuring")
+      measureFrame = requestAnimationFrame(() => {
+        measureFrame = undefined
+        applyLoop(MEASURE_COMPLETED)
+        measure()
+      })
+
+    if (next.phase === "running" && prev.phase !== "running") stopFrame = frameLoop.add(tick)
   }
+
+  const requestMeasure = () => applyLoop(MEASURE_REQUESTED)
 
   onMount(() => {
     measure()
@@ -492,10 +499,6 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
     createResizeObserver([dock, scroller], requestMeasure)
-
-    onCleanup(() => {
-      if (measuring !== undefined) cancelAnimationFrame(measuring)
-    })
 
     focus(pickFocus())
   })
@@ -553,98 +556,18 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     el.style.clipPath = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
   })
 
-  onCleanup(() => {
-    if (replied) return
-    questionCache.set(cacheKey, {
-      tab: store.tab,
-      answers: store.answers.map((a) => (a ? [...a] : [])),
-      custom: store.custom.map((s) => s ?? ""),
-      customOn: store.customOn.map((b) => b ?? false),
-    })
-  })
-
-  const fail = (err: Error) => showToast({ title: language.t("common.requestFailed"), description: err.message })
-
-  const replyMutation = useMutation(() => ({
-    mutationFn: (answer: FormAnswer) =>
-      serverSDK.api.session.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
-    onMutate: () => {
-      props.onSubmit()
-    },
-    onSuccess: () => {
-      replied = true
-      questionCache.delete(cacheKey)
-    },
-    onError: fail,
-  }))
-
-  const rejectMutation = useMutation(() => ({
-    mutationFn: () =>
-      serverSDK.api.session.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
-    onMutate: () => {
-      props.onSubmit()
-    },
-    onSuccess: () => {
-      replied = true
-      questionCache.delete(cacheKey)
-    },
-    onError: fail,
-  }))
-
-  const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
+  const sending = form.busy
   const submitShortcut = () => (IS_MAC ? "⌘⏎" : `${language.t("common.key.ctrl")}+⏎`)
   const backShortcut = () => (IS_MAC ? "⌘[" : `${language.t("common.key.alt")}+←`)
 
-  const reply = (answer: FormAnswer) => {
-    if (sending()) return
-    replyMutation.mutate(answer)
-  }
+  const reject = form.dismiss
 
-  const reject = () => {
-    if (sending()) return
-    rejectMutation.mutate()
-  }
-
-  const submit = () =>
-    reply(
-      Object.fromEntries(
-        questions().flatMap((question, index) => {
-          const answers = store.answers[index] ?? []
-
-          if (answers.length === 0) return []
-
-          return [[question.field.key, question.multiple ? answers : answers[0]]]
-        }),
-      ),
-    )
-
-  const answered = (i: number) => {
-    if ((store.answers[i]?.length ?? 0) > 0) return true
-
-    return store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
-  }
-
-  const picked = (answer: string) => store.answers[store.tab]?.includes(answer) ?? false
-
-  const pick = (answer: string) => {
-    setStore("answers", store.tab, [answer])
-    setStore("customOn", store.tab, false)
-    setStore("editing", false)
-  }
-
-  const toggle = (answer: string) => {
-    setStore("answers", store.tab, (current = []) => {
-      if (current.includes(answer)) return current.filter((item) => item !== answer)
-
-      return [...current, answer]
-    })
-  }
+  const picked = (answer: string) => form.draft(form.tab()).selected.includes(answer)
 
   const startCustom = () => {
     setStore("focus", options().length)
-    setStore("customOn", store.tab, true)
+    form.selectCustom()
     setStore("editing", true)
-    customUpdate(input(), true)
     customInput?.focus()
     customInput?.setSelectionRange(input().length, input().length)
   }
@@ -654,10 +577,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
     if (!multi() || !on()) return startCustom()
 
-    setStore("customOn", store.tab, false)
-    const value = input().trim()
-
-    if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
+    form.deselectCustom()
     setStore("editing", false)
     focus(options().length)
   }
@@ -674,8 +594,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     }
 
     if (!input().trim()) return startCustom()
-    setStore("customOn", store.tab, true)
-    customUpdate(input(), true)
+    form.selectCustom()
     next()
   }
 
@@ -721,7 +640,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
       if (step < 0) return back()
 
-      if (!last()) jump(store.tab + 1)
+      if (!last()) jump(form.tab() + 1)
 
       return
     }
@@ -744,8 +663,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     event.preventDefault()
 
     if (intent.type === "type") {
-      setStore("customOn", store.tab, true)
-      customUpdate(input() + event.key, true)
+      form.input(input() + event.key)
 
       return startCustom()
     }
@@ -769,20 +687,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     const opt = options()[optIndex]
 
     if (!opt) return
-
-    if (multi()) {
-      setStore("editing", false)
-      toggle(opt.value)
-
-      return
-    }
-
-    pick(opt.value)
+    setStore("editing", false)
+    form.pick(opt.value)
   }
 
   const commitCustom = () => {
     setStore("editing", false)
-    customUpdate(input())
     focus(options().length)
   }
 
@@ -791,20 +701,20 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
     if (store.editing) commitCustom()
 
-    if (store.tab >= total() - 1) {
-      submit()
+    if (form.tab() >= total() - 1) {
+      form.reply()
 
       return
     }
 
-    jump(store.tab + 1)
+    jump(form.tab() + 1)
   }
 
   const back = () => {
     if (sending()) return
 
-    if (store.tab <= 0) return
-    jump(store.tab - 1)
+    if (form.tab() <= 0) return
+    jump(form.tab() - 1)
   }
 
   // Switching questions: the question being left is copied into a still, inert ghost over its place, while the live
@@ -819,50 +729,53 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   const depart = (tab: number) => {
     if (!detailsRef || !listRef || !detailsFrame || !optionsTrack) return
     const v = tuning
-    const step = Math.sign(tab - store.tab)
+    const step = Math.sign(tab - form.tab())
     const dir = root?.matches(":dir(rtl)") ? -step : step
     const reach = v.travel()
     const options = v.spring()
-    const live = into ? arriving(into, v) : rest
+    const into = selectSwitchInto(loop)
+    const ghost = selectSwitchGhost(loop)
+    const live = into ? arriving(into, v, pose()) : rest
     const moving = into ? speed(into) : 0
     const back = ghost?.tab === tab ? ghost : undefined
-    const kept = !back && ghost && leaving(ghost, v, into).shown > live.shown ? ghost : undefined
+    const kept = !back && ghost && leavingShown(ghost, v, into) > live.shown ? ghost : undefined
 
-    if (ghost && ghost !== kept) ghost.els.forEach((el) => el.remove())
     // A kept ghost leaves on the new switch's spring from where it is, so it fades no faster than the next question
-    // arrives.
-    ghost = kept
-      ? { ...kept, ...track(leaving(kept, v, into), kept.to, speed(kept), options, v.launch()) }
-      : {
-          ...track(live, -dir * reach, moving, options, v.launch()),
-          tab: store.tab,
-          // The answers box scrolls back to the top for the new question, so the copy keeps its place on screen.
-          els: [copy(detailsRef, detailsFrame, -scroll.details), copy(listRef, optionsTrack, -scroll.top)],
-          details: content.details,
-          list: content.list,
-          scroll: scroll.top,
-        }
-    into = back
-      ? track(leaving(back, v, into), 0, speed(back), options, v.launch())
-      : track({ x: dir * reach, shown: 0, settle: 0 }, 0, 0, options, v.launch())
-  }
-
-  const dropSwitch = () => {
-    ghost?.els.forEach((el) => el.remove())
-    ghost = undefined
-    into = undefined
+    // arrives. Any other leaving copy is removed as the switch starts.
+    applyLoop({
+      type: "switch.started",
+      ghost: kept
+        ? { ...kept, ...track(leaving(kept, v, into, pose()), kept.to, speed(kept), options, v.launch()) }
+        : {
+            ...track(live, -dir * reach, moving, options, v.launch()),
+            tab: form.tab(),
+            // The answers box scrolls back to the top for the new question, so the copy keeps its place on screen.
+            els: [copy(detailsRef, detailsFrame, -scroll.details), copy(listRef, optionsTrack, -scroll.top)],
+            details: content.details,
+            list: content.list,
+            scroll: scroll.top,
+          },
+      into: back
+        ? track(leaving(back, v, into, pose()), 0, speed(back), options, v.launch())
+        : track({ x: dir * reach, shown: 0, settle: 0 }, 0, 0, options, v.launch()),
+    })
   }
 
   const paint = () => {
-    const sliding = !!(into || ghost)
+    const into = selectSwitchInto(loop)
+    const ghost = selectSwitchGhost(loop)
+    const sliding = isSwitchSliding(loop)
 
-    const live = look(into ? arriving(into, tuning) : rest)
+    look(into ? arriving(into, tuning, livePose) : rest, liveLook)
 
-    ;[detailsRef, listRef].forEach((el) => el && place(el, live))
+    if (detailsRef) place(detailsRef, liveLook)
+
+    if (listRef) place(listRef, liveLook)
 
     if (ghost) {
-      const pose = look(leaving(ghost, tuning, into))
-      ghost.els.forEach((el) => place(el, pose))
+      look(leaving(ghost, tuning, into, ghostPose), ghostLook)
+      place(ghost.els[0], ghostLook)
+      place(ghost.els[1], ghostLook)
     }
 
     const folded = Math.max(0, Math.min(1, boxes.folded.value))
@@ -908,7 +821,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     if (!optionsRef) return
     const above = scroll.top
     const shown = scroll.view
-    mask(optionsRef, above, Math.max(content.list, ghost?.list ?? 0) - above - shown, shown, !!(into || ghost))
+    const ghost = selectSwitchGhost(loop)
+    mask(optionsRef, above, Math.max(content.list, ghost?.list ?? 0) - above - shown, shown, isSwitchSliding(loop))
   }
 
   const paintFooter = () => {
@@ -929,7 +843,10 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     const s = unit(foot.submit.value)
 
     if (foot.submit.resting || !widths.next || !widths.submit) {
-      ;[nextFace, submitFace, nextLabel, submitLabel].forEach((el) => el.removeAttribute("style"))
+      nextFace.removeAttribute("style")
+      submitFace.removeAttribute("style")
+      nextLabel.removeAttribute("style")
+      submitLabel.removeAttribute("style")
 
       return
     }
@@ -945,52 +862,52 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     showFace(submitFace, submitLabel, unit(s / by), unit(1 - (1 - s) / by), submitFace === wide ? clip : "")
   }
 
+  const springsMoving = () =>
+    !bar.resting ||
+    !boxes.details.resting ||
+    !boxes.list.resting ||
+    !boxes.folded.resting ||
+    !foot.back.resting ||
+    !foot.submit.resting ||
+    !foot.shift.resting
+
   const tick = (dt: number) => {
+    const into = selectSwitchInto(loop)
+    const ghost = selectSwitchGhost(loop)
     into?.spring.step(dt)
     ghost?.spring.step(dt)
     boxes.details.step(dt)
     boxes.list.step(dt)
     boxes.folded.step(dt)
     bar.step(dt)
-    Object.values(foot).forEach((spring) => spring.step(dt))
+    foot.back.step(dt)
+    foot.submit.step(dt)
+    foot.shift.step(dt)
 
-    if (into?.spring.resting) into = undefined
+    const intoDone = !!into && into.spring.resting
+    const ghostDone = !!ghost && leavingShown(ghost, tuning, intoDone ? undefined : into) <= 0
+    const springs = springsMoving()
 
-    if (ghost && leaving(ghost, tuning, into).shown <= 0) {
-      ghost.els.forEach((el) => el.remove())
-      ghost = undefined
-    }
-
+    applyLoop(
+      intoDone || ghostDone
+        ? { type: "frame", intoDone, ghostDone, moving: springs }
+        : springs
+          ? FRAME_MOVING_EVENT
+          : FRAME_RESTING_EVENT,
+    )
     paint()
 
-    const footing = Object.values(foot).some((spring) => !spring.resting)
-
-    if (
-      into ||
-      ghost ||
-      footing ||
-      !bar.resting ||
-      !boxes.details.resting ||
-      !boxes.list.resting ||
-      !boxes.folded.resting
-    )
-      return true
-    stop = undefined
-    requestMeasure()
-
-    return false
+    return loop.phase === "running"
   }
 
   const wake = () => {
     if (!questionMotion()) return still()
-    stop ??= frameLoop.add(tick)
+    applyLoop(springsMoving() ? WAKE_MOVING : WAKE_RESTING)
   }
 
   // Everything lands where it is going, now: no frame job runs.
   const still = () => {
-    stop?.()
-    stop = undefined
-    dropSwitch()
+    applyLoop(STILL)
     ;[...Object.values(boxes), ...Object.values(foot), bar].forEach((spring) => spring.snap(spring.target))
     paint()
   }
@@ -1001,14 +918,14 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     still()
     root?.getAnimations({ subtree: true }).forEach((animation) => animation.cancel())
   })
-  onCleanup(() => stop?.())
+  onCleanup(() => applyLoop(DISPOSED))
 
   const jump = (tab: number) => {
-    if (sending() || tab === store.tab) return
+    if (sending() || tab === form.tab()) return
     const animate = !store.minimized && questionMotion()
 
     if (animate) depart(tab)
-    else dropSwitch()
+    else applyLoop(SWITCH_DROPPED)
 
     rtl = !!root?.matches(":dir(rtl)")
     widths.next = nextFace?.offsetWidth ?? 0
@@ -1019,7 +936,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     batch(() => {
       setStore("focus", pickFocus(tab))
 
-      setStore("tab", tab)
+      form.selectTab(tab)
       setStore("editing", false)
     })
     optsRef.length = options().length
@@ -1065,7 +982,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
   const cycle = (by: number) => {
     if (total() < 2) return
-    jump((store.tab + by + total()) % total())
+    jump((form.tab() + by + total()) % total())
   }
 
   onCleanup(
@@ -1082,8 +999,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
       keybind: IS_MAC ? "mod+[" : "alt+arrowleft",
       hidden: true,
       // Stay registered while sending so the shortcut does not fall through to history navigation.
-      disabled: store.tab <= 0,
-      when: () => store.tab > 0,
+      disabled: form.tab() <= 0,
+      when: () => form.tab() > 0,
       onSelect: back,
     },
   ])
@@ -1146,7 +1063,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                             onCleanup(() => (pip = undefined))
                             // Dashes have their places once the row is laid out.
                             queueMicrotask(() => {
-                              bar.snap(dash(store.tab))
+                              bar.snap(dash(form.tab()))
                               paint()
                             })
                           }}
@@ -1158,12 +1075,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                         <button
                           type="button"
                           data-slot="question-progress-segment"
-                          data-active={i() === store.tab}
-                          data-answered={answered(i())}
+                          data-active={i() === form.tab()}
+                          data-answered={form.answered(i())}
                           disabled={sending()}
                           onClick={() => jump(i())}
                           aria-label={language.t("ui.tool.questions.numbered", { number: i() + 1 })}
-                          aria-current={i() === store.tab ? "step" : undefined}
+                          aria-current={i() === form.tab() ? "step" : undefined}
                         >
                           <span data-slot="question-progress-bar" aria-hidden="true" ref={(el) => (dashes[i()] = el)} />
                         </button>
@@ -1194,9 +1111,9 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                 mask(
                   detailsFrame,
                   scroll.details,
-                  Math.max(content.details, ghost?.details ?? 0) - scroll.details - shown,
+                  Math.max(content.details, selectSwitchGhost(loop)?.details ?? 0) - scroll.details - shown,
                   shown,
-                  !!(into || ghost),
+                  isSwitchSliding(loop),
                 )
               }}
             >
@@ -1230,8 +1147,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
               {/* Back stays in place while hidden, so it can come and go without moving anything. */}
               <div
                 data-slot="question-footer-back"
-                data-shown={store.tab > 0}
-                inert={store.tab === 0}
+                data-shown={form.tab() > 0}
+                inert={form.tab() === 0}
                 ref={(el) => (backBox = el)}
               >
                 <Tooltip
@@ -1402,10 +1319,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                     setStore("focus", options().length)
                     setStore("editing", true)
                   }}
-                  onClick={() => {
-                    setStore("customOn", store.tab, true)
-                    customUpdate(input(), true)
-                  }}
+                  onClick={() => form.selectCustom()}
                   onBlur={() => setStore("editing", false)}
                   onKeyDown={(e) => {
                     if (e.isComposing || e.keyCode === 229) return
@@ -1425,10 +1339,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
                     if (!e.repeat) next()
                   }}
-                  onInput={(e) => {
-                    setStore("customOn", store.tab, true)
-                    customUpdate(e.currentTarget.value, true)
-                  }}
+                  onInput={(e) => form.input(e.currentTarget.value)}
                 />
               </div>
             </div>
@@ -1439,30 +1350,42 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   )
 }
 
-// Comes into place from where it set off, fully shown by the fade-in point, which is never after the fade-out point, so
-// the two copies together always show at least one whole question. It sharpens and grows over the whole spring.
-function arriving(track: Track, v: Tuning): Pose {
-  const p = unit(track.spring.value)
+function pose(): Pose {
+  return { x: 0, shown: 0, settle: 0 }
+}
 
-  return {
-    x: track.from.x + (track.to - track.from.x) * p,
-    shown: track.from.shown + (1 - track.from.shown) * unit(p / Math.min(v.fadeIn(), v.fadeOut())),
-    settle: track.from.settle + (1 - track.from.settle) * p,
-  }
+// Comes into place from where it set off, fully shown by the fade-in point, which is never after the fade-out point, so
+// the two copies together always show at least one whole question. It sharpens and grows over the whole spring. Writes
+// into `out`, so painting a frame allocates no pose.
+function arriving(track: Track, v: Tuning, out: Pose): Pose {
+  const p = unit(track.spring.value)
+  out.x = track.from.x + (track.to - track.from.x) * p
+  out.shown = arrivingShown(track, v)
+  out.settle = track.from.settle + (1 - track.from.settle) * p
+
+  return out
+}
+
+function arrivingShown(track: Track, v: Tuning) {
+  return track.from.shown + (1 - track.from.shown) * unit(unit(track.spring.value) / Math.min(v.fadeIn(), v.fadeOut()))
 }
 
 // Leaves from where it set off, fully gone by the fade-out point, but never fading faster than `next` arrives, so a
 // copy kept through rapid keys holds the card until the new question has caught up.
-function leaving(track: Track, v: Tuning, next?: Track): Pose {
+function leaving(track: Track, v: Tuning, next: Track | undefined, out: Pose): Pose {
   const p = unit(track.spring.value)
-  const gone = unit(p / v.fadeOut())
-  const arrived = next ? arriving(next, v).shown : 1
+  out.x = track.from.x + (track.to - track.from.x) * p
+  out.shown = leavingShown(track, v, next)
+  out.settle = track.from.settle * (1 - unit(p / v.fadeOut()))
 
-  return {
-    x: track.from.x + (track.to - track.from.x) * p,
-    shown: Math.max(track.from.shown * (1 - gone), Math.min(track.from.shown, 1 - arrived)),
-    settle: track.from.settle * (1 - gone),
-  }
+  return out
+}
+
+function leavingShown(track: Track, v: Tuning, next: Track | undefined) {
+  const gone = unit(unit(track.spring.value) / v.fadeOut())
+  const arrived = next ? arrivingShown(next, v) : 1
+
+  return Math.max(track.from.shown * (1 - gone), Math.min(track.from.shown, 1 - arrived))
 }
 
 function unit(value: number) {
@@ -1489,18 +1412,15 @@ function track(from: Pose, to: number, moving: number, options: DurationOptions,
 
 type Look = { transform: string; opacity: string; blur: number }
 
-// How a copy in `pose` is drawn: it blurs and shrinks toward the top of the card as it goes.
-function look(pose: Pose): Look {
+// How a copy in `pose` is drawn: it blurs and shrinks toward the top of the card as it goes. Writes into `out`.
+function look(pose: Pose, out: Look) {
   const unsettled = 1 - pose.settle
   const scale = 1 - (1 - tuning.scale()) * unsettled
   const blur = tuning.blur() * unsettled
   const moved = Math.abs(pose.x) >= 0.01 || scale < 0.9999
-
-  return {
-    transform: moved ? `translate3d(${pose.x.toFixed(2)}px,0,0) scale(${scale.toFixed(4)})` : "",
-    opacity: pose.shown >= 1 ? "" : pose.shown.toFixed(4),
-    blur: blur < 0.05 ? 0 : blur,
-  }
+  out.transform = moved ? `translate3d(${pose.x.toFixed(2)}px,0,0) scale(${scale.toFixed(4)})` : ""
+  out.opacity = pose.shown >= 1 ? "" : pose.shown.toFixed(4)
+  out.blur = blur < 0.05 ? 0 : blur
 }
 
 function tune(spring: Spring, options: DurationOptions) {
@@ -1531,16 +1451,23 @@ function mask(el: HTMLElement, above: number, below: number, shown: number, slid
   const top = Math.min(feather, above, shown / 3)
   const bottom = Math.min(feather, below, shown / 3)
 
-  const layers = [
-    sliding
-      ? "linear-gradient(to right, transparent, #000 var(--question-gutter), #000 calc(100% - var(--question-gutter)), transparent)"
-      : "",
-    top > 0.5 ? `linear-gradient(to bottom, transparent, #000 ${top.toFixed(2)}px)` : "",
+  const layers = layer(
+    layer(
+      sliding
+        ? "linear-gradient(to right, transparent, #000 var(--question-gutter), #000 calc(100% - var(--question-gutter)), transparent)"
+        : "",
+      top > 0.5 ? `linear-gradient(to bottom, transparent, #000 ${top.toFixed(2)}px)` : "",
+    ),
     bottom > 0.5 ? `linear-gradient(to top, transparent, #000 ${bottom.toFixed(2)}px)` : "",
-  ].filter(Boolean)
+  )
 
-  if (layers.length === 0) return el.style.removeProperty("mask-image")
-  el.style.setProperty("mask-image", layers.join(", "))
+  if (!layers) return el.style.removeProperty("mask-image")
+  el.style.setProperty("mask-image", layers)
+}
+
+// Joins two mask layers without building an array, since masks are painted every frame.
+function layer(a: string, b: string) {
+  return a && b ? `${a}, ${b}` : a || b
 }
 
 // A still copy of `el` laid over it in `host`, after the live content so it never comes first in the DOM, inert and
