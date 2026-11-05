@@ -67,9 +67,9 @@ pub struct Group {
 
 impl Group {
     /// `groupID`: the first leaf's message and part, the kind, and the nesting level.
-    pub fn id(&self, level: usize) -> Option<String> {
+    pub fn id(&self, level: usize) -> Option<GroupId<'_>> {
         let (message, part) = first_ref(&self.children)?;
-        Some(format!("{message}\u{1f}{part}\u{1f}{}\u{1f}{level}", self.kind.name()))
+        Some(GroupId { message, part, kind: self.kind, level })
     }
 
     /// The rows below, depth first (`descendants`).
@@ -89,29 +89,59 @@ fn visit<'a>(nodes: &'a [Node], entries: &mut Vec<&'a Spec>) {
     }
 }
 
-/// `entryRef`: a part row's message and part, or a whole message's `message` part.
-fn entry_ref(spec: &Spec) -> Option<(&str, String)> {
+/// A group's ID, formatted only where a string key is needed: `<message>␟<part>␟<kind>␟<level>`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GroupId<'a> {
+    message: &'a str,
+    /// `None` for a whole message (part `message`).
+    part: Option<&'a Part>,
+    kind: Kind,
+    level: usize,
+}
+
+impl GroupId<'_> {
+    /// Whether `id` is this ID formatted.
+    pub fn matches(&self, id: &str) -> bool {
+        struct Rest<'a>(&'a str);
+        impl std::fmt::Write for Rest<'_> {
+            fn write_str(&mut self, text: &str) -> std::fmt::Result {
+                self.0 = self.0.strip_prefix(text).ok_or(std::fmt::Error)?;
+                Ok(())
+            }
+        }
+        let mut rest = Rest(id);
+        std::fmt::Write::write_fmt(&mut rest, format_args!("{self}")).is_ok() && rest.0.is_empty()
+    }
+}
+
+impl std::fmt::Display for GroupId<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\u{1f}", self.message)?;
+        // The TS part ID: `text:<n>`, `reasoning:<n>`, or the tool call's ID.
+        match self.part {
+            Some(Part::Text(ordinal)) => write!(f, "text:{ordinal}")?,
+            Some(Part::Reasoning(ordinal)) => write!(f, "reasoning:{ordinal}")?,
+            Some(Part::Tool(id)) => f.write_str(id)?,
+            None => f.write_str("message")?,
+        }
+        write!(f, "\u{1f}{}\u{1f}{}", self.kind.name(), self.level)
+    }
+}
+
+/// `entryRef`: a part row's message and part, or a whole message (`None`, part `message`).
+fn entry_ref(spec: &Spec) -> Option<(&str, Option<&Part>)> {
     match spec {
-        Spec::Part { message, part } => Some((message, part_id(part))),
-        Spec::Message(id) => Some((id, "message".to_owned())),
+        Spec::Part { message, part } => Some((message, Some(part))),
+        Spec::Message(id) => Some((id, None)),
         _ => None,
     }
 }
 
-fn first_ref(nodes: &[Node]) -> Option<(&str, String)> {
+fn first_ref(nodes: &[Node]) -> Option<(&str, Option<&Part>)> {
     nodes.iter().find_map(|node| match node {
         Node::Entry(spec) => entry_ref(spec),
         Node::Group(group) => first_ref(&group.children),
     })
-}
-
-/// The TS part ID: `text:<n>`, `reasoning:<n>`, or the tool call's ID.
-pub fn part_id(part: &Part) -> String {
-    match part {
-        Part::Text(ordinal) => format!("text:{ordinal}"),
-        Part::Reasoning(ordinal) => format!("reasoning:{ordinal}"),
-        Part::Tool(id) => id.clone(),
-    }
 }
 
 /// The grouping settings a view reads: `session.grouping`, `session.verbosity`, and which groups the
@@ -153,6 +183,14 @@ impl Settings {
         )
     }
 
+    /// [`Self::expanded`] for a group ID, formatted only when the reader opened or closed some group.
+    pub fn group_expanded(&self, id: &GroupId<'_>) -> bool {
+        if self.expanded.borrow().is_empty() {
+            return self.expanded("", id.kind);
+        }
+        self.expanded(&id.to_string(), id.kind)
+    }
+
     /// `groupedKind`: reasoning groups while thinking is hidden, exploration unless grouping is off.
     pub fn grouped(&self, kind: Kind, hide_thinking: bool) -> bool {
         match kind {
@@ -173,7 +211,7 @@ impl Settings {
             return group.size;
         }
         let Some(id) = group.id(level) else { return 1 };
-        if !self.expanded(&id, group.kind) {
+        if !self.group_expanded(&id) {
             return 1;
         }
         1 + group
@@ -215,7 +253,7 @@ pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verb
     let mut nodes: Vec<(Node, bool)> = Vec::new();
     for spec in rows {
         let (path, closes) = path(&spec, &index, verbosity);
-        append(&mut nodes, spec, &path, closes);
+        append(&mut nodes, spec, path, closes);
     }
     let count = nodes.len();
     let mut out = Vec::with_capacity(count);
@@ -274,41 +312,41 @@ fn append_child(nodes: &mut Vec<Node>, spec: Spec, path: &[Kind]) {
 }
 
 /// A row's grouping path (`partPath`, `messagePath`) and whether it closes the group before it.
-fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verbosity) -> (Vec<Kind>, bool) {
+fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verbosity) -> (&'static [Kind], bool) {
     let low = verbosity == Verbosity::Low;
     match spec {
         Spec::Message(id) => {
             let message = index.get(id.as_str()).copied();
             // A running compaction is pending and leaves the group before it open.
             let running = matches!(message, Some(SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))));
-            let path = if instruction_paths(message).is_empty() {
-                Vec::new()
+            let path: &[Kind] = if instruction_paths(message).is_empty() {
+                &[]
             } else if low {
-                vec![Kind::Activity, Kind::Instructions]
+                &[Kind::Activity, Kind::Instructions]
             } else {
-                vec![Kind::Instructions]
+                &[Kind::Instructions]
             };
             (path, !running)
         }
         Spec::Part { message, part } => {
-            let activity = if low && !matches!(part, Part::Text(_)) { vec![Kind::Activity] } else { Vec::new() };
-            let path = match part {
-                Part::Text(_) => activity,
-                Part::Reasoning(_) => [activity, vec![Kind::Reasoning]].concat(),
-                Part::Tool(_) => {
-                    let name = tool(index, message, part).map(|tool| tool.name.to_lowercase()).unwrap_or_default();
-                    if name == "question" {
-                        Vec::new()
-                    } else if EXPLORATION_TOOLS.contains(&name.as_str()) {
-                        [activity, vec![Kind::Exploration]].concat()
-                    } else {
-                        activity
-                    }
-                }
+            let name = match part {
+                Part::Tool(_) => tool(index, message, part).map_or("", |tool| tool.name.as_str()),
+                _ => "",
+            };
+            let exploration = EXPLORATION_TOOLS.iter().any(|tool| name.eq_ignore_ascii_case(tool));
+            let path: &[Kind] = match part {
+                Part::Text(_) => &[],
+                Part::Tool(_) if name.eq_ignore_ascii_case("question") => &[],
+                Part::Reasoning(_) if low => &[Kind::Activity, Kind::Reasoning],
+                Part::Reasoning(_) => &[Kind::Reasoning],
+                Part::Tool(_) if exploration && low => &[Kind::Activity, Kind::Exploration],
+                Part::Tool(_) if exploration => &[Kind::Exploration],
+                Part::Tool(_) if low => &[Kind::Activity],
+                Part::Tool(_) => &[],
             };
             (path, true)
         }
-        _ => (Vec::new(), true),
+        _ => (&[], true),
     }
 }
 
@@ -551,11 +589,32 @@ enum Painted {
     Spinner(Spinner),
 }
 
-/// A child's identity: an entry's mode, message, and part, or a nested group's ID.
-#[derive(Clone, PartialEq)]
+/// A child's identity: an entry's mode, message, and part (`None` for a whole message), or a nested group's ID.
 enum ChildKey {
-    Entry(Mode, String, String),
+    Entry(Mode, String, Option<Part>),
     Group(String),
+}
+
+impl ChildKey {
+    fn new(node: &Node, mode: Mode, level: usize) -> Option<Self> {
+        match node {
+            Node::Entry(spec) => {
+                entry_ref(spec).map(|(message, part)| Self::Entry(mode, message.to_owned(), part.cloned()))
+            }
+            Node::Group(group) => group.id(level).map(|id| Self::Group(id.to_string())),
+        }
+    }
+
+    /// Whether `node` has this identity, without building its key.
+    fn is(&self, node: &Node, mode: Mode, level: usize) -> bool {
+        match (self, node) {
+            (Self::Entry(own, message, part), Node::Entry(spec)) => {
+                *own == mode && entry_ref(spec) == Some((message.as_str(), part.as_ref()))
+            }
+            (Self::Group(id), Node::Group(group)) => group.id(level).is_some_and(|other| other.matches(id)),
+            _ => false,
+        }
+    }
 }
 
 enum Child {
@@ -616,8 +675,14 @@ impl GroupView {
         let inner = &self.0;
         let id = group.id(inner.level);
         inner.kind.set(Some(group.kind));
-        let expanded = id.as_deref().is_some_and(|id| inner.settings.expanded(id, group.kind));
-        *inner.id.borrow_mut() = id;
+        let expanded = id.as_ref().is_some_and(|id| inner.settings.group_expanded(id));
+        let same = match (inner.id.borrow().as_deref(), &id) {
+            (Some(old), Some(id)) => id.matches(old),
+            (old, id) => old.is_none() && id.is_none(),
+        };
+        if !same {
+            *inner.id.borrow_mut() = id.map(|id| id.to_string());
+        }
         let grouped = inner.settings.grouped(group.kind, cx.hide_thinking);
         let (header, mode) = match group.kind {
             Kind::Reasoning => self.reasoning(cx, group, completed, expanded, grouped),
@@ -885,24 +950,22 @@ impl Inner {
         let mut children = self.children.borrow_mut();
         let mut old = std::mem::take(&mut *children);
         for (index, node) in nodes.iter().enumerate() {
-            let key = match node {
-                Node::Entry(spec) => {
-                    entry_ref(spec).map(|(message, part)| ChildKey::Entry(mode, message.to_owned(), part))
+            let level = self.level + 1;
+            let (key, child) = match old.iter().position(|(other, _)| other.is(node, mode, level)) {
+                Some(position) => old.remove(position),
+                None => {
+                    let Some(key) = ChildKey::new(node, mode, level) else { continue };
+                    let child = match node {
+                        Node::Entry(_) if mode == Mode::Thought => Child::Thought(Thought::new(cx)),
+                        Node::Entry(spec) => {
+                            let row = Row::new(cx, spec);
+                            row.wrapper.margin_edge(Edge::Top, 0);
+                            Child::Row(Box::new(row))
+                        }
+                        Node::Group(_) => Child::Group(GroupView::new(cx, &self.settings, level)),
+                    };
+                    (key, child)
                 }
-                Node::Group(group) => group.id(self.level + 1).map(ChildKey::Group),
-            };
-            let Some(key) = key else { continue };
-            let child = match old.iter().position(|(other, _)| *other == key) {
-                Some(position) => old.remove(position).1,
-                None => match node {
-                    Node::Entry(_) if mode == Mode::Thought => Child::Thought(Thought::new(cx)),
-                    Node::Entry(spec) => {
-                        let row = Row::new(cx, spec);
-                        row.wrapper.margin_edge(Edge::Top, 0);
-                        Child::Row(Box::new(row))
-                    }
-                    Node::Group(_) => Child::Group(GroupView::new(cx, &self.settings, self.level + 1)),
-                },
             };
             match (&child, node) {
                 (Child::Row(row), Node::Entry(spec)) => row.update(cx, spec),
@@ -1045,7 +1108,9 @@ mod tests {
         assert_eq!(kinds, ["row", "Reasoning:2", "Exploration:2", "row", "row"]);
         let Spec::Group(reasoning) = &medium[1] else { unreachable!() };
         assert!(reasoning.completed);
-        assert_eq!(reasoning.id(0).as_deref(), Some("msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0"));
+        let id = reasoning.id(0).unwrap();
+        assert_eq!(id.to_string(), "msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0");
+        assert!(id.matches(&id.to_string()) && !id.matches("msg_2\u{1f}reasoning:0") && !id.matches(&format!("{id}0")));
 
         // Low wraps the whole run of thoughts and tools in one activity group, with nested groups.
         let low = project(rows, &list, Verbosity::Low);
@@ -1070,7 +1135,7 @@ mod tests {
         });
         assert_eq!(settings.weight(&group, true), 1);
         let Spec::Group(inner) = &group else { unreachable!() };
-        settings.expanded.borrow_mut().insert(inner.id(0).unwrap(), true);
+        settings.expanded.borrow_mut().insert(inner.id(0).unwrap().to_string(), true);
         assert_eq!(settings.weight(&group, true), 3);
         settings.grouping.set(false);
         assert_eq!(settings.weight(&group, true), 2);
