@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { afterAll, expect, test } from "bun:test"
-import { onMount, Show } from "solid-js"
+import { createSignal, onMount, Show } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import type { TuiKeybind } from "../../../src/config/keybind"
 import { ClientProvider } from "../../../src/context/client"
@@ -35,8 +35,9 @@ const shells = [shell("sh-a", "bun test"), shell("sh-b", "bun dev"), shell("sh-c
 async function renderComposer(
   defaultTab: "subagents" | "shell",
   keybinds: Partial<TuiKeybind.Keybinds>,
-  focusedTextarea = false,
+  options: { focusedTextarea?: boolean; hideSubagents?: () => boolean } = {},
 ) {
+  const focusedTextarea = options.focusedTextarea ?? false
   const events = createEventStream()
   const interrupted: string[] = []
   const removed: string[] = []
@@ -97,7 +98,13 @@ async function renderComposer(
         {/* Mirrors the app, which keys the session route by sessionID and remounts it on navigation. */}
         <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
           {(sessionID) => (
-            <Composer sessionID={sessionID} open={true} defaultTab={defaultTab} onClose={() => closed++} />
+            <Composer
+              sessionID={sessionID}
+              open={true}
+              defaultTab={defaultTab}
+              onClose={() => closed++}
+              hideSubagents={options.hideSubagents?.()}
+            />
           )}
         </Show>
       </>
@@ -209,6 +216,54 @@ test("the inactive subagent filter only changes with its toggle", async () => {
   }
 })
 
+test("suppressed Subagents unregisters its card without affecting Shell", async () => {
+  const composer = await renderComposer("shell", {}, { hideSubagents: () => true })
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).not.toContain("Subagents")
+    expect(frame).not.toContain("show inactive")
+    expect(frame).toContain("Shell")
+    expect(frame).toContain("bun test")
+    composer.app.mockInput.pressArrow("right")
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).not.toContain("Subagents")
+    expect(composer.app.captureCharFrame()).toContain("bun test")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("live Subagents toggles preserve filter, tab order, and route remounts", async () => {
+  const [hidden, setHidden] = createSignal(false)
+  const composer = await renderComposer("subagents", {}, { hideSubagents: hidden })
+  try {
+    composer.app.mockInput.pressKey("a", { ctrl: true })
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("Third")
+    setHidden(true)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).not.toContain("Subagents")
+    expect(composer.app.captureCharFrame()).not.toContain("show active")
+    setHidden(false)
+    await composer.app.renderOnce()
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("Third")
+    expect(frame.indexOf("Subagents")).toBeLessThan(frame.indexOf("Shell"))
+    composer.app.mockInput.pressArrow("right")
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("bun test")
+    composer.app.mockInput.pressArrow("left")
+    await composer.app.renderOnce()
+    composer.app.mockInput.pressEnter()
+    expect(composer.route()).toMatchObject({ sessionID: "child-c" })
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("Third")
+    expect(composer.app.captureCharFrame()).toContain("show active")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
 test("disabled shell bindings have no component fallbacks", async () => {
   const composer = await renderComposer("shell", {
     "composer.shell.up": "none",
@@ -247,7 +302,7 @@ test("shell list shows one line per command", async () => {
 })
 
 test("configured composer bindings work with a focused textarea", async () => {
-  const composer = await renderComposer("subagents", { "composer.shell.kill": "ctrl+u" }, true)
+  const composer = await renderComposer("subagents", { "composer.shell.kill": "ctrl+u" }, { focusedTextarea: true })
   try {
     composer.app.mockInput.pressArrow("right")
     await composer.app.renderOnce()
@@ -272,7 +327,7 @@ test("ctrl+c closes the active composer", async () => {
 })
 
 test("shell output respects a configured binding with a focused textarea", async () => {
-  const composer = await renderComposer("shell", { "composer.shell.select": "ctrl+o" }, true)
+  const composer = await renderComposer("shell", { "composer.shell.select": "ctrl+o" }, { focusedTextarea: true })
   try {
     composer.app.mockInput.pressEnter()
     await composer.app.renderOnce()
