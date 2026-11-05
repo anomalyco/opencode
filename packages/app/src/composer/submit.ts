@@ -29,9 +29,19 @@ import {
   type SubmitSnapshot,
 } from "./machine"
 import { retryFingerprint } from "./retry"
+import {
+  SERVER_PROMPT_STATUS,
+  transitionPromptStatus,
+  type PromptStatusEvent,
+  type PromptStatusState,
+} from "./prompt-status-machine"
 
 // The model each session was last switched to from this client, by session ID.
 const switched = new Map<string, string>()
+
+// The optimistic busy status of each session, by session ID. Module-wide, because a new session's first prompt and
+// the follow-ups sent from its own composer go through different submit machines. A session left out is `server`.
+const statuses = new Map<string, PromptStatusState>()
 
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
@@ -458,11 +468,11 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
         },
       },
     })
-  const optimisticBusy = !input.adapter.working()
+  const working = input.adapter.working()
 
-  const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
+  const background = value.delivery === "steer" && working ? session.background?.() : undefined
 
-  if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+  updateStatus(session, { type: "dispatched", id: value.id, working })
 
   const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
     () => ({ ok: true as const }),
@@ -470,21 +480,21 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
   )
 
   // Settled here rather than when the composer settles, which an aborted promotion never reaches.
-  if (value.delivery === "steer")
-    void sending.then((result) => {
-      if (result.ok || session.admitted(value.id)) return session.handoff.settle(value.id)
-      session.handoff.clear(value.id)
-    })
+  void sending.then((result) => {
+    const admitted = result.ok || session.admitted(value.id)
+    updateStatus(session, admitted ? { type: "admitted" } : { type: "failed", id: value.id })
+
+    if (value.delivery !== "steer") return
+
+    if (admitted) return session.handoff.settle(value.id)
+    session.handoff.clear(value.id)
+  })
 
   return {
     // The composer settles after clearing its captured draft; a quote settles before removing only its context.
     settled: (restore) =>
       sending.then((result) => {
-        const admitted =
-          result.ok ||
-          failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
-            if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
-          })
+        const admitted = result.ok || failSubmission(input, session, "prompt", result.error, restore, value.id)
 
         if (!admitted) return false
 
@@ -494,6 +504,15 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
         return true
       }),
   }
+}
+
+function updateStatus(session: ComposerSession, event: PromptStatusEvent) {
+  const result = transitionPromptStatus(statuses.get(session.id) ?? SERVER_PROMPT_STATUS, event)
+
+  if (result.state.type === "server") statuses.delete(session.id)
+
+  if (result.state.type === "optimistic") statuses.set(session.id, result.state)
+  result.effects.forEach((effect) => session.data.session.setStatus(session.id, effect.status))
 }
 
 // Puts a failed submission back, unless the composer changed since it cleared: then the edit is the user's.
@@ -733,10 +752,8 @@ function failSubmission(
   error: unknown,
   restore: () => boolean,
   messageID?: string,
-  rollback?: () => void,
 ) {
   if (messageID && session.admitted(messageID)) return true
-  rollback?.()
   restore()
   input.notify.failed(kind, error)
 

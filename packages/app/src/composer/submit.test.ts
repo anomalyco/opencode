@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, jest, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
@@ -10,6 +10,7 @@ import type {
   NewSessionComposerAdapter,
 } from "./adapter"
 import { createMemoryComposerState, type Prompt } from "./state"
+import { composerSubmitView } from "./machine"
 import { createComposerSubmit } from "./submit"
 import { createSteerBackground } from "@/session/requests/steer-background"
 import { setMediaBlobLoader } from "@/runtime/persistence/drafts"
@@ -105,6 +106,8 @@ function submitInput(
   })
 }
 
+const sessions = { count: 0 }
+
 function session(input: {
   calls: string[]
   prompt?: (value: Parameters<ComposerSession["data"]["session"]["prompt"]>[0]) => Promise<void>
@@ -119,7 +122,8 @@ function session(input: {
   background?: ComposerSession["background"]
 }): ComposerSession {
   return {
-    id: "session-1",
+    // Unique per test: what this client knows about a session outlives the test that sent to it.
+    id: `session-${++sessions.count}`,
     background: input.background,
     directory: "C:/repo",
     handoff: input.handoff ?? { set() {}, settle() {}, clear() {} },
@@ -357,6 +361,77 @@ describe("Composer submission", () => {
       { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
     ])
     expect(calls.filter((call) => call === "send")).toHaveLength(2)
+  })
+
+  test("a quote send keeps sending while the composer sends it, and fails only once the composer can retry", async () => {
+    const state = createMemoryComposerState().capture()
+    state.context.add({ type: "quote", text: "Selected passage", commentID: "selected" })
+    const release = Promise.withResolvers<void>()
+    const failed = Promise.withResolvers<void>()
+
+    const submission = submitInput(active(state, session({ calls: [], prompt: () => release.promise })), {
+      missingSelection() {},
+      unqueueable() {},
+      failed: () => failed.resolve(),
+    })
+
+    jest.useFakeTimers()
+    state.quoteComment.set("quote:c=selected")
+    state.quoteComment.send("note", submission.submitQuote)
+    // A silent server holds a prompt for a minute per attempt; the send has not failed until the composer says so.
+    jest.advanceTimersByTime(5 * 60_000)
+    jest.useRealTimers()
+    expect(state.quoteComment.state()).toMatchObject({ status: "sending", draft: "note" })
+    expect(composerSubmitView(submission.state()).canSubmit).toBe(false)
+
+    release.reject(new Error("offline"))
+    await failed.promise
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(state.quoteComment.state()).toMatchObject({ status: "failed", draft: "note" })
+    expect(composerSubmitView(submission.state()).canSubmit).toBe(true)
+  })
+
+  test("a prompt that fails after a newer one went out leaves the Session running", async () => {
+    const state = createMemoryComposerState({ prompt: "first" }).capture()
+    const statuses: ("idle" | "running")[] = []
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const failed = { count: 0, settled: Promise.withResolvers<void>() }
+
+    const target = session({
+      calls: [],
+      statuses,
+      prompt: async (value) => {
+        if (value.text === "first") return first.promise
+        await second.promise
+      },
+    })
+
+    const submission = submitInput(
+      { ...active(state, target), working: () => statuses.at(-1) === "running" },
+      {
+        missingSelection() {},
+        unqueueable() {},
+        failed: () => {
+          failed.count++
+          failed.settled.resolve()
+        },
+      },
+    )
+
+    await submission.submit(new Event("submit"))
+    state.set([{ type: "text", content: "second", start: 0, end: 6 }])
+    await submission.submit(new Event("submit"))
+    first.reject(new Error("offline"))
+    await failed.settled.promise
+    // The second prompt's turn may already run; only the server's events may end it.
+    expect(statuses).toEqual(["running"])
+
+    failed.settled = Promise.withResolvers<void>()
+    second.reject(new Error("offline"))
+    await failed.settled.promise
+    expect(failed.count).toBe(2)
+    expect(statuses).toEqual(["running", "idle"])
   })
 
   test("resends a failed prompt under its ID only while what it sends is unchanged", async () => {
