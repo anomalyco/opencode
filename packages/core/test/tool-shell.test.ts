@@ -1563,6 +1563,42 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("leaves a background job running for the next server, without a notice, on a normal quit", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const detaching = yield* Detaching.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        const notices: unknown[] = []
+        yield* bus.listen((event) =>
+          Effect.sync(() => {
+            if (event.type === SessionEvent.InboxEnqueued.type) notices.push(event)
+          }),
+        )
+        const shellID = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const settled = yield* executeTool(registry, call({ command: "sleep 60", background: true }, "call-quit"))
+          return String(settled.metadata?.shellID)
+        }).pipe(Effect.provide(locations.get(location)))
+        // The server quits without a handoff: shutdown starts, then the Location closes.
+        expect(yield* detaching.begin).toBe(false)
+        yield* locations.invalidate(location)
+        // The job's observers are interrupted, not told it was cancelled.
+        expect(Exit.hasInterrupts(yield* jobs.wait({ id: shellID }).pipe(Effect.exit))).toBe(true)
+        yield* Effect.yieldNow
+        expect((yield* jobs.pendingBackground).map((item) => [item.id, item.status])).toEqual([[shellID, "running"]])
+        expect(notices).toEqual([])
+      }),
+    ),
+  )
+
   it.live("preserves a background command's non-zero exit", () =>
     withTempDir((tmp) => {
       reset()

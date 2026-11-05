@@ -488,44 +488,48 @@ describe("Job", () => {
     }),
   )
 
-  it.live("leaves interrupted work unsettled while detaching, but still cancels on request", () =>
-    Effect.gen(function* () {
-      const detaching = yield* Detaching.make
-      const jobs = yield* Job.make.pipe(Effect.provideService(Detaching.Service, detaching))
-      const recovery = (id: string) => ({
-        kind: "shell" as const,
-        sessionID: SessionSchema.ID.make("ses_detaching"),
-        shellID: id,
-        command: "sleep 60",
-      })
-      const interrupt = yield* Deferred.make<void>()
-      const detached = yield* jobs.start({
-        id: "shell_detached",
-        type: "shell",
-        recovery: recovery("shell_detached"),
-        run: Deferred.await(interrupt).pipe(Effect.andThen(Effect.interrupt)),
-      })
-      const cancelled = yield* jobs.start({
-        id: "shell_cancelled",
-        type: "shell",
-        recovery: recovery("shell_cancelled"),
-        run: Effect.never,
-      })
-      const background = yield* jobs.background(detached.id)
-      const observer = yield* jobs.wait({ id: detached.id }).pipe(Effect.forkChild({ startImmediately: true }))
+  for (const handoff of [true, false])
+    it.live(
+      `leaves interrupted work unsettled on ${handoff ? "a planned restart" : "a normal quit"}, but still cancels on request`,
+      () =>
+        Effect.gen(function* () {
+          const detaching = yield* Detaching.make
+          const jobs = yield* Job.make.pipe(Effect.provideService(Detaching.Service, detaching))
+          const recovery = (id: string) => ({
+            kind: "shell" as const,
+            sessionID: SessionSchema.ID.make("ses_detaching"),
+            shellID: id,
+            command: "sleep 60",
+          })
+          const interrupt = yield* Deferred.make<void>()
+          const detached = yield* jobs.start({
+            id: "shell_detached",
+            type: "shell",
+            recovery: recovery("shell_detached"),
+            run: Deferred.await(interrupt).pipe(Effect.andThen(Effect.interrupt)),
+          })
+          const cancelled = yield* jobs.start({
+            id: "shell_cancelled",
+            type: "shell",
+            recovery: recovery("shell_cancelled"),
+            run: Effect.never,
+          })
+          const background = yield* jobs.background(detached.id)
+          const observer = yield* jobs.wait({ id: detached.id }).pipe(Effect.forkChild({ startImmediately: true }))
 
-      yield* detaching.handoffPrepared
-      expect(yield* detaching.begin).toBe(true)
-      yield* Deferred.succeed(interrupt, undefined)
+          if (handoff) yield* detaching.handoffPrepared
+          expect(yield* detaching.begin).toBe(handoff)
+          expect(detaching.isStopping()).toBe(true)
+          yield* Deferred.succeed(interrupt, undefined)
 
-      const observed = yield* Fiber.await(observer).pipe(Effect.timeout("1 second"))
-      expect(Exit.isFailure(observed) && Cause.hasInterruptsOnly(observed.cause)).toBe(true)
-      expect(yield* jobs.pendingBackground).toMatchObject([{ id: detached.id, status: "running" }])
-      expect(yield* jobs.cancel(cancelled.id)).toMatchObject({ status: "cancelled" })
-      expect((yield* jobs.wait({ id: cancelled.id })).info?.status).toBe("cancelled")
-      if (background?.notificationID) yield* jobs.completeBackground(background.notificationID)
-    }),
-  )
+          const observed = yield* Fiber.await(observer).pipe(Effect.timeout("1 second"))
+          expect(Exit.isFailure(observed) && Cause.hasInterruptsOnly(observed.cause)).toBe(true)
+          expect(yield* jobs.pendingBackground).toMatchObject([{ id: detached.id, status: "running" }])
+          expect(yield* jobs.cancel(cancelled.id)).toMatchObject({ status: "cancelled" })
+          expect((yield* jobs.wait({ id: cancelled.id })).info?.status).toBe("cancelled")
+          if (background?.notificationID) yield* jobs.completeBackground(background.notificationID)
+        }),
+    )
 
   it.live("cancels running session jobs and removes unacknowledged SQLite job rows on cancelSession", () =>
     Effect.gen(function* () {

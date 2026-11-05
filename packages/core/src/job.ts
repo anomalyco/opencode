@@ -266,13 +266,13 @@ export const make = Effect.gen(function* () {
         if (!job) return [{}, jobs]
         if (job.scope !== scope) return [{}, jobs]
         if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
-        // Teardown (this registry closing, or a planned shutdown) is not a terminal outcome: leave the job
+        // Teardown (this registry closing, or any server shutdown) is not a terminal outcome: leave the job
         // and its durable row running for the next server, and interrupt rather than settle its observers.
         // A user cancel has already settled the job as cancelled before interrupting its work.
         if (
           Exit.isFailure(exit) &&
           Cause.hasInterruptsOnly(exit.cause) &&
-          (scope.state._tag === "Closed" || detaching?.isDetaching())
+          (scope.state._tag === "Closed" || detaching?.isStopping())
         )
           return [{ done: job.done, scope: job.scope, interrupted: true }, jobs]
         const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
