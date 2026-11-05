@@ -1,0 +1,12 @@
+[package]
+name = "opencode-plugin-abi"
+description = "The C ABI of native opencode-rs TUI plugins (P.4), and export_plugin! for plugins written in Rust."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# A plugin crate depends on this one alone, so it stays free of the TUI and its native libraries.
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
