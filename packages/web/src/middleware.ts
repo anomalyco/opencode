@@ -78,6 +78,9 @@ function localeFromAcceptLanguage(header: string | null) {
 }
 
 export const onRequest = defineMiddleware((ctx, next) => {
+  // Moved Zen and Go pages redirect from their own routes, even under a locale alias like /docs/zh/go.
+  if (/^\/docs\/(?:[^/]+\/)?(zen|go)\/?$/.test(ctx.url.pathname)) return next()
+
   const alias = docsAlias(ctx.url.pathname)
   if (alias) {
     return redirect(ctx.url, alias.path, alias.locale)

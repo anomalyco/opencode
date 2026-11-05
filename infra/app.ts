@@ -1,4 +1,4 @@
-import { domain } from "./stage"
+import { domain, zoneID } from "./stage"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
@@ -17,7 +17,7 @@ export const api = new sst.cloudflare.Worker("Api", {
   },
 })
 
-new sst.cloudflare.x.Astro("Web", {
+const web = new sst.cloudflare.x.Astro("Web", {
   domain: "docs." + domain,
   path: "packages/web",
   environment: {
@@ -26,3 +26,18 @@ new sst.cloudflare.x.Astro("Web", {
     VITE_API_URL: api.url.apply((url) => url!),
   },
 })
+
+// The site serves itself under /docs, so these routes take /docs on the main host. `sst dev` deploys no Worker.
+const webServer = web.nodes.server
+if (webServer) {
+  for (const [name, pattern] of [
+    ["WebDocsRoute", `${domain}/docs`],
+    ["WebDocsPathRoute", `${domain}/docs/*`],
+  ]) {
+    new cloudflare.WorkersRoute(name, {
+      zoneId: zoneID,
+      pattern,
+      script: webServer.nodes.worker.scriptName,
+    })
+  }
+}
