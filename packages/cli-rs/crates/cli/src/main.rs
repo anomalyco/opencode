@@ -97,13 +97,7 @@ fn main() -> ExitCode {
                 args = args.as_str();
                 "cli starting"
             );
-            let result = commands::run(
-                &commands::Context {
-                    global: global.clone(),
-                    server,
-                },
-                &cli,
-            );
+            let result = commands::run(&commands::Context { server }, &cli);
             if let Some(error) = result
                 .as_ref()
                 .err()
