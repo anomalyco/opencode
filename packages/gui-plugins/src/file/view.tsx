@@ -73,6 +73,9 @@ type ScrollTarget = { element?: HTMLDivElement; frame?: number }
 
 type FindState = { find: FileSearchHandle | null }
 
+/** The session the view shows and the one it showed before a switch, whose unsaved scroll a switch still stores. */
+type ShownSessions = { current: MountedSession; previous?: MountedSession }
+
 function createScrollSync(input: {
   context: () => Omit<FileScrollContext, "scroller">
   get: () => FileScrollPos | undefined
@@ -282,7 +285,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   })
 
   // The sessions the view showed last, so a session switch still stores the offset the user left the previous one at.
-  const shown: { current: MountedSession; previous?: MountedSession } = { current: props.session }
+  const shown: ShownSessions = { current: props.session }
 
   const scrollSync = createScrollSync({
     context: () => {
