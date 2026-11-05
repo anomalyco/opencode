@@ -76,6 +76,7 @@ test("a final write settles when the tunnel closes before it flushes", async () 
     await expect(write).rejects.toThrow()
   } finally {
     tunnel.dispose()
+    void accepted.promise.then((peer) => peer.destroy())
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 }, 15_000)
