@@ -36,6 +36,8 @@ export type Snapshot = {
    * its cancelled caller already owns the result.
    */
   readonly owned: boolean
+  /** The running job's notification ID already admitted before this period began, if any. */
+  readonly spent: SessionMessage.ID | undefined
   /** Where this period began; undefined when `started` never recorded it. */
   readonly start: Start | undefined
 }
@@ -66,16 +68,20 @@ export type Deps = {
 
 /**
  * Reports a settled subagent busy period to its parent, once per busy period, through a local
- * inbox adapter. Observers and restart recovery keep their own delivery: every path admits the
- * same notification ID, so first admission wins and the parent sees one message. Holds are durable
- * on the Session and released only after admission or an explicit no-report decision.
+ * inbox adapter. The first report shares the job's notification ID with its observer and restart
+ * recovery, so their later deliveries dedupe. A later period of that still-running job gets a fresh
+ * ID when the original was already admitted before it began. Holds are durable on the Session and
+ * released only after admission or an explicit no-report decision.
  */
 export const make = (deps: Deps) => {
   // The job generation running when a busy period began, and where that period began. Its watcher
   // records that generation's terminal when it settles within the period, because only a
   // cancellation there owns the period's report: completion or failure is settling an earlier
   // period. Dropped at settlement.
-  const periods = new Map<SessionSchema.ID, { readonly job: Bound | undefined; readonly start: Start }>()
+  const periods = new Map<
+    SessionSchema.ID,
+    { readonly job: Bound | undefined; readonly start: Start; readonly spent: SessionMessage.ID | undefined }
+  >()
 
   /**
    * The newest answer that completed at or after the busy period began. `since` comes from the
@@ -115,14 +121,26 @@ export const make = (deps: Deps) => {
     const answer = child?.parentID ? (yield* lastAssistant(sessionID, undefined))?.id : undefined
     const start: Start = { at, answer }
     const job = yield* deps.jobs.get(sessionID)
+    // Decide reuse at start, not settlement: on failure the observer can admit this same period's
+    // notification before report runs. A hold alone is not admission; reconcile also finds messages
+    // already delivered to the parent. Conflicting IDs are unusable but must not lose the boundary.
+    const spent =
+      child?.parentID && job?.status === "running" && job.notificationID !== undefined
+        ? yield* deps.inbox
+            .reconcile({ id: job.notificationID, sessionID: child.parentID, type: "synthetic", delivery: "steer" })
+            .pipe(
+              Effect.map((existing) => (existing === undefined ? undefined : job.notificationID)),
+              Effect.catchTag("SessionInbox.LifecycleConflict", () => Effect.succeed(job.notificationID)),
+            )
+        : undefined
     // A finished entry from an earlier generation must not make a re-prompt silently reconcile.
-    if (job?.status !== "running") periods.set(sessionID, { job: undefined, start })
+    if (job?.status !== "running") periods.set(sessionID, { job: undefined, start, spent })
     else {
       const bound: Bound = { generation: job.started_at, settled: undefined, fiber: undefined }
       // Record before forking: startImmediately can run the watcher inline when this generation
       // already settled. Every write is guarded by the record, so an old watcher cannot mark a
       // later period.
-      periods.set(sessionID, { job: bound, start })
+      periods.set(sessionID, { job: bound, start, spent })
       bound.fiber = yield* deps.jobs.wait({ id: sessionID }).pipe(
         Effect.flatMap((result) =>
           Effect.sync(() => {
@@ -156,6 +174,7 @@ export const make = (deps: Deps) => {
       job,
       recovery: yield* deps.jobs.recovery(sessionID),
       owned: settled?.status === "cancelled",
+      spent: period?.spent,
       start: period?.start,
     }
   })
@@ -186,6 +205,7 @@ export const make = (deps: Deps) => {
     // A foreground caller receives this result inline through its own blocking registration.
     if (snap.blocked) return yield* drop
     const live = snap.job?.status === "running" ? snap.job : undefined
+    const reusable = live?.notificationID !== snap.spent ? live?.notificationID : undefined
     // A running job without a notification is a foreground spawn whose block has not registered,
     // or one whose block already returned. Either way that job owns the result.
     if (live && !live.notificationID) return yield* drop
@@ -196,11 +216,12 @@ export const make = (deps: Deps) => {
     // The child's own background work will wake it again, and that later settlement reports the
     // final state. Failures and user interrupts report now. Persist the hold before asking, so a
     // silent descendant settling meanwhile sees it and wakes this child. Keep the first ID and
-    // boundary, including an unbounded start, across every period until admission succeeds.
+    // boundary, including an unbounded start, across every period until admission succeeds. Only
+    // a notification already admitted before this period needs a fresh identity.
     const owed =
       outcome.type === "succeeded"
         ? yield* deps.store.holdReport(child.id, {
-            notificationID: live?.notificationID ?? SessionMessage.ID.create(),
+            notificationID: reusable ?? SessionMessage.ID.create(),
             since: snap.start,
           })
         : held
@@ -220,7 +241,7 @@ export const make = (deps: Deps) => {
     if (status === "completed" && assistant === undefined) return yield* release
     const output = status === "completed" ? SubagentCompletion.text(assistant) : undefined
     const error = outcome.type === "failed" ? outcome.error.message : undefined
-    const notificationID = live?.notificationID ?? owed?.notificationID
+    const notificationID = reusable ?? owed?.notificationID
 
     yield* SubagentCompletion.deliver(
       // Mirrors Session.synthetic without Session.Service: admit one steer synthetic, then wake

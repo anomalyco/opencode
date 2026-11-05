@@ -319,13 +319,22 @@ describe("SessionExecution lifecycle", () => {
         yield* jobs.background(child)
         const job = yield* jobs.get(child)
         expect(job?.notificationID).toBeDefined()
-        const reports = SubagentReport.make({ store, inbox, jobs, scope, wake: () => Effect.void, pending: () => Effect.succeed(false) })
+        const reports = SubagentReport.make({
+          store,
+          inbox,
+          jobs,
+          scope,
+          wake: () => Effect.void,
+          pending: () => Effect.succeed(false),
+        })
 
         yield* reports.started(child)
         yield* answer(bus, child, "first")
         yield* reports.report(child, { type: "succeeded" }, yield* reports.snapshot(child))
         const opening = yield* SessionInbox.list(database.db, parent)
-        expect(opening).toMatchObject([{ id: job?.notificationID, payload: { text: expect.stringContaining("first") } }])
+        expect(opening).toMatchObject([
+          { id: job?.notificationID, payload: { text: expect.stringContaining("first") } },
+        ])
         if (delivered) yield* SessionInbox.promote(database.db, bus, parent, "input")
 
         // The original generation has not settled, but its notification has already been spent.
@@ -337,8 +346,9 @@ describe("SessionExecution lifecycle", () => {
         expect(pending).toHaveLength(delivered ? 1 : 2)
         const next = pending.at(-1)
         expect(next?.id).not.toBe(job?.notificationID)
-        expect(next?.payload).toMatchObject({ text: expect.stringContaining("second") })
-        expect(next?.payload).not.toMatchObject({ text: expect.stringContaining("first") })
+        if (next?.type !== "synthetic") throw new Error("Expected a child report")
+        expect(next.payload.text).toContain("second")
+        expect(next.payload.text).not.toContain("first")
         expect(yield* store.heldReport(child)).toBeUndefined()
 
         // The original observer still owns marker cleanup and retries the original admission ID.
@@ -348,11 +358,12 @@ describe("SessionExecution lifecycle", () => {
         if (!settled) throw new Error("Missing settled job")
         yield* SubagentCompletion.deliver(
           {
-            synthetic: (input) => inbox.admit({
-              id: input.id ?? SessionMessage.ID.create(),
-              sessionID: input.sessionID,
-              item: { type: "synthetic", payload: SessionInbox.SyntheticPayload.make(input), delivery: "steer" },
-            }),
+            synthetic: (input) =>
+              inbox.admit({
+                id: input.id ?? SessionMessage.ID.create(),
+                sessionID: input.sessionID,
+                item: { type: "synthetic", payload: SessionInbox.SyntheticPayload.make(input), delivery: "steer" },
+              }),
           },
           jobs,
           { ...settled, recovery },
@@ -360,7 +371,83 @@ describe("SessionExecution lifecycle", () => {
         expect(yield* SessionInbox.list(database.db, parent)).toEqual(pending)
         expect(yield* jobs.pendingBackground).toEqual([])
         yield* SessionInbox.promote(database.db, bus, parent, "input")
-        expect((yield* store.messages({ sessionID: parent })).map((message) => message.id)).toHaveLength(2)
+        expect(yield* store.messages({ sessionID: parent })).toHaveLength(2)
+      }),
+    )
+  }
+
+  for (const admission of ["conflict before start", "failure after start"] as const) {
+    it.effect(`report identity accounts for ${admission}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        const inbox = yield* SessionInbox.make()
+        const jobs = yield* Job.Service
+        const scope = yield* Scope.Scope
+        const parent = Session.ID.make("ses_identity_parent")
+        const child = Session.ID.make("ses_identity_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        yield* jobs.start({
+          id: child,
+          type: "subagent",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: parent,
+            childSessionID: child,
+            agent: "reviewer",
+            description: "Review",
+          },
+          run: Effect.never,
+        })
+        yield* jobs.background(child)
+        const notificationID = (yield* jobs.get(child))?.notificationID
+        if (!notificationID) throw new Error("Missing background notification")
+        const reports = SubagentReport.make({
+          store,
+          inbox,
+          jobs,
+          scope,
+          wake: () => Effect.void,
+          pending: () => Effect.succeed(false),
+        })
+        const admit = inbox.admit({
+          id: notificationID,
+          sessionID: admission === "conflict before start" ? child : parent,
+          item: {
+            type: "synthetic",
+            payload: SessionInbox.SyntheticPayload.make({ text: "observer failure" }),
+            delivery: "steer",
+          },
+        })
+
+        yield* answer(bus, child, "old answer")
+        if (admission === "conflict before start") yield* admit
+        yield* reports.started(child)
+        const snap = yield* reports.snapshot(child)
+        if (admission === "failure after start") {
+          // Execution snapshots before publishing its failure; the observer may then admit first.
+          yield* admit
+          yield* reports.report(child, { type: "failed", error: { message: "observer failure" } }, snap)
+          expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
+            { id: notificationID, payload: { text: "observer failure" } },
+          ])
+          return
+        }
+
+        // A conflicting ID must not abort started and discard the answer boundary.
+        expect(snap.start?.answer).toBeDefined()
+        yield* reports.report(child, { type: "succeeded" }, snap)
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+        yield* reports.started(child)
+        yield* answer(bus, child, "new answer")
+        yield* reports.report(child, { type: "succeeded" }, yield* reports.snapshot(child))
+        const notices = yield* SessionInbox.list(database.db, parent)
+        expect(notices).toHaveLength(1)
+        expect(notices[0]?.id).not.toBe(notificationID)
+        expect(notices[0]?.payload).toMatchObject({ text: expect.stringContaining("new answer") })
+        expect(yield* store.heldReport(child)).toBeUndefined()
       }),
     )
   }

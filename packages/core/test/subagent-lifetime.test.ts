@@ -792,13 +792,18 @@ describe("subagent observer lifetime", () => {
       const reprompt = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
         Stream.filter((event) => event.data.sessionID === f.parent.id),
         Stream.take(1),
-        Stream.runForEach((event) => Effect.gen(function* () {
-          expect(event.data.item).toMatchObject({ type: "synthetic", payload: { text: expect.stringContaining("first") } })
-          const job = yield* jobs.get(f.child.id)
-          expect(job).toMatchObject({ status: "running", notificationID: event.data.inboxID })
-          yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check them again" })
-          expect(yield* jobs.get(f.child.id)).toMatchObject({ status: "running", started_at: job?.started_at })
-        })),
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            expect(event.data.item.type).toBe("synthetic")
+            if (event.data.item.type !== "synthetic") throw new Error("Expected a child report")
+            // Nested asymmetric Bun matchers mutate their input; keep the live event payload intact.
+            expect(event.data.item.payload.text).toContain("first")
+            const job = yield* jobs.get(f.child.id)
+            expect(job).toMatchObject({ status: "running", notificationID: event.data.inboxID })
+            yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check them again" })
+            expect(yield* jobs.get(f.child.id)).toMatchObject({ status: "running", started_at: job?.started_at })
+          }),
+        ),
         Effect.forkScoped({ startImmediately: true }),
       )
       expect((yield* f.spawn).status).toBe("completed")
@@ -812,7 +817,7 @@ describe("subagent observer lifetime", () => {
 
       const notices = yield* reports(f.parent.id)
       expect(notices).toHaveLength(2)
-      expect(notices[0]?.id).toBe(job?.notificationID)
+      expect(notices[0]).toMatchObject({ id: job?.notificationID })
       expect(notices[0]?.text).toContain("first")
       expect(notices[1]?.id).not.toBe(notices[0]?.id)
       expect(notices[1]?.text).toContain("second")
