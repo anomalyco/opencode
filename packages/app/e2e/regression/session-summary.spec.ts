@@ -558,9 +558,11 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
 
   // A refresh that fails keeps the list it had, with its footer and its row's count.
   state.fail = true
+
   const failed = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/plugin" && response.status() === 500,
   )
+
   await page.keyboard.press("Escape")
   await expect(menu("Skills")).toBeHidden()
   await open("Plugins")

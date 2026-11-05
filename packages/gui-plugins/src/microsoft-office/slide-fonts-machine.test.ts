@@ -17,8 +17,11 @@ import {
 import type { FontStyle } from "./slide-text"
 
 const regular = { bold: false, italic: false }
+
 const bold = { bold: true, italic: false }
+
 const italic = { bold: false, italic: true }
+
 const boldItalic = { bold: true, italic: true }
 
 // Impact ships its regular face alone, so every style resolves to it; other families ship every style.
@@ -28,6 +31,7 @@ const resolve: SlideFontResolver<string> = (want, style) =>
     : { want, style, source: `${want.family ?? want.script}-${style.bold}-${style.italic}` }
 
 const calibri = (style: FontStyle = regular): SlideFontRequest => ({ want: { family: "Calibri" }, style })
+
 const courier: SlideFontRequest = { want: { family: "Courier" }, style: regular }
 
 // Folds the events in order and returns the last transition.
@@ -86,15 +90,37 @@ describe("transitionSlideFonts", () => {
     })
 
     expect(requested.effects).toEqual([
-      { type: "load-face", attempt: 2, key: "family:calibri|false|false", style: regular, css: "slide-0", timeoutMs: SLIDE_FONT_LOAD_TIMEOUT_MS },
-      { type: "load-face", attempt: 3, key: "family:courier|false|false", style: regular, css: "slide-1", timeoutMs: SLIDE_FONT_LOAD_TIMEOUT_MS },
+      {
+        type: "load-face",
+        attempt: 2,
+        key: "family:calibri|false|false",
+        style: regular,
+        css: "slide-0",
+        timeoutMs: SLIDE_FONT_LOAD_TIMEOUT_MS,
+      },
+      {
+        type: "load-face",
+        attempt: 3,
+        key: "family:courier|false|false",
+        style: regular,
+        css: "slide-1",
+        timeoutMs: SLIDE_FONT_LOAD_TIMEOUT_MS,
+      },
     ])
 
-    const second = transitionSlideFonts(requested.state, { type: "face.loaded", attempt: 3, key: "family:courier|false|false" })
+    const second = transitionSlideFonts(requested.state, {
+      type: "face.loaded",
+      attempt: 3,
+      key: "family:courier|false|false",
+    })
 
     expect(second.effects).toEqual([{ type: "clear-load", attempt: 3 }])
 
-    const first = transitionSlideFonts(second.state, { type: "face.loaded", attempt: 2, key: "family:calibri|false|false" })
+    const first = transitionSlideFonts(second.state, {
+      type: "face.loaded",
+      attempt: 2,
+      key: "family:calibri|false|false",
+    })
 
     expect(first.effects.map((effect) => (effect.type === "register-face" ? effect.key : effect.type))).toEqual([
       "clear-load",
@@ -140,6 +166,7 @@ describe("transitionSlideFonts", () => {
       type: "batch.requested",
       requests: [{ want: { family: "Arial" }, style: regular }],
     })
+
     const load = failing.effects[0]
 
     if (load?.type !== "load-face") throw new Error("No load")
@@ -157,6 +184,7 @@ describe("transitionSlideFonts", () => {
       type: "batch.requested",
       requests: [calibri(bold)],
     })
+
     const failed = transitionSlideFonts(requested.state, {
       type: "face.failed",
       attempt: 4,
@@ -171,6 +199,7 @@ describe("transitionSlideFonts", () => {
       type: "batch.requested",
       requests: [calibri(bold)],
     })
+
     const second = transitionSlideFonts(first.state, { type: "batch.requested", requests: [calibri(bold)] })
 
     expect(second.effects).toEqual([])
@@ -215,14 +244,35 @@ describe("transitionSlideFonts", () => {
       height: 1,
       primitives: [
         textBox([run(4, regular)]),
-        { kind: "table", objectId: 2, x: 0, y: 0, w: 1, h: 1, name: "t", label: "t", primitives: [textBox([run(4, regular)])] },
-        { kind: "chart", objectId: 3, x: 0, y: 0, w: 1, h: 1, name: "c", label: "c", primitives: [textBox([run(9, regular)])] },
+        {
+          kind: "table",
+          objectId: 2,
+          x: 0,
+          y: 0,
+          w: 1,
+          h: 1,
+          name: "t",
+          label: "t",
+          primitives: [textBox([run(4, regular)])],
+        },
+        {
+          kind: "chart",
+          objectId: 3,
+          x: 0,
+          y: 0,
+          w: 1,
+          h: 1,
+          name: "c",
+          label: "c",
+          primitives: [textBox([run(9, regular)])],
+        },
       ],
     }
 
     const families = (primitives: readonly SlidePrimitive[]): string[] =>
       primitives.flatMap((primitive) => {
-        if (primitive.kind === "textBox") return primitive.lines.flatMap((line) => line.runs.map((item) => item.fontFamily))
+        if (primitive.kind === "textBox")
+          return primitive.lines.flatMap((line) => line.runs.map((item) => item.fontFamily))
 
         if (primitive.kind === "table" || primitive.kind === "chart") return families(primitive.primitives)
 

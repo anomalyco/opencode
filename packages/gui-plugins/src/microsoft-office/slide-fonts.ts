@@ -52,6 +52,7 @@ export function slideFonts(deck: PresentationHandle, fonts: FontFaceSet) {
       void Promise.try(async () => {
         if (!source) throw new Error(`No source for ${key}`)
         const buffer = await loadFace(source)
+
         const browser = await new FontFace(effect.css, buffer, {
           weight: effect.style.bold ? "700" : "400",
           style: effect.style.italic ? "italic" : "normal",
@@ -86,12 +87,17 @@ export function slideFonts(deck: PresentationHandle, fonts: FontFaceSet) {
       fonts.add(face.browser)
 
       const want = effect.want
-      const bytes = { family: want.script ? effect.css : want.family, ...effect.style, bytes: new Uint8Array(face.buffer) }
+
+      const registration = {
+        family: want.script ? effect.css : want.family,
+        ...effect.style,
+        bytes: new Uint8Array(face.buffer),
+      }
 
       dispatch({
         type: "face.registered",
         key: effect.key,
-        fontId: want.script ? deck.registerFallbackFont(bytes) : deck.registerFont(bytes),
+        fontId: want.script ? deck.registerFallbackFont(registration) : deck.registerFont(registration),
       })
 
       return

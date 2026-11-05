@@ -142,7 +142,9 @@ function DetailsPopover(props: DetailsProps) {
           state={open() ? "pressed" : undefined}
           aria-label={ctx.t("title")}
           aria-expanded={open()}
-          onClick={(event: MouseEvent) => (clickVia = event.detail === 0 ? "keyboard" : "pointer")}
+          onClick={(event: MouseEvent) => {
+            clickVia = event.detail === 0 ? "keyboard" : "pointer"
+          }}
         />
       </Tooltip>
       <Popover.Portal>
@@ -161,7 +163,12 @@ function DetailsPopover(props: DetailsProps) {
           }}
         >
           <Suspense>
-            <Panel session={props.session} shown={open()} mcp={props.mcp} onClose={() => dispatch({ type: "closed" })} />
+            <Panel
+              session={props.session}
+              shown={open()}
+              mcp={props.mcp}
+              onClose={() => dispatch({ type: "closed" })}
+            />
           </Suspense>
         </Popover.Content>
       </Popover.Portal>

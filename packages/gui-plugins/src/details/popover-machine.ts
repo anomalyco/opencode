@@ -54,7 +54,10 @@ export function transitionDetailsPopover(
   if (state.status === "disposed") return { state, effects: NONE }
 
   if (event.type === "disposed")
-    return { state: { status: "disposed" }, effects: state.status === "open" && state.focusPending ? CANCEL_FOCUS : NONE }
+    return {
+      state: { status: "disposed" },
+      effects: state.status === "open" && state.focusPending ? CANCEL_FOCUS : NONE,
+    }
 
   if (state.status === "closed") {
     if (event.type !== "opened" && event.type !== "toggled") return { state, effects: NONE }

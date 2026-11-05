@@ -4,18 +4,21 @@ import {
   SERVICE_LOAD_TIMEOUT_MS,
   serviceLoadView,
   transitionServiceLoad,
+  type ServiceLoadEffect,
   type ServiceLoadEvent,
   type ServiceLoadState,
   type ServiceLoadTransition,
+  type ServiceStore,
 } from "./service-load-machine"
 
 type List = readonly string[]
 
 // The server's data store, which a restarted server replaces.
-const store = {}
-const restarted = {}
+const store: ServiceStore = {}
 
-const shown = (cached?: List, source: object = store): ServiceLoadEvent<List> => ({
+const restarted: ServiceStore = {}
+
+const shown = (cached?: List, source: ServiceStore = store): ServiceLoadEvent<List> => ({
   type: "context.changed",
   shown: true,
   source,
@@ -23,7 +26,7 @@ const shown = (cached?: List, source: object = store): ServiceLoadEvent<List> =>
   retain: true,
 })
 
-const hidden = (cached?: List, source: object = store): ServiceLoadEvent<List> => ({
+const hidden = (cached?: List, source: ServiceStore = store): ServiceLoadEvent<List> => ({
   type: "context.changed",
   shown: false,
   source,
@@ -31,19 +34,19 @@ const hidden = (cached?: List, source: object = store): ServiceLoadEvent<List> =
   retain: true,
 })
 
-const run = (attempt: number) => ({ type: "run", attempt, timeoutMs: SERVICE_LOAD_TIMEOUT_MS })
+const run = (attempt: number): ServiceLoadEffect => ({ type: "run", attempt, timeoutMs: SERVICE_LOAD_TIMEOUT_MS })
 
 // Folds the events in order and returns the last transition.
-const replay = (
-  events: readonly ServiceLoadEvent<List>[],
-  state: ServiceLoadState<List> = initialServiceLoadState(),
-) =>
+const replay = (events: readonly ServiceLoadEvent<List>[], state: ServiceLoadState<List> = initialServiceLoadState()) =>
   events.reduce<ServiceLoadTransition<List>>((last, event) => transitionServiceLoad(last.state, event), {
     state,
     effects: [],
   })
 
-const loaded = [shown(), { type: "load.succeeded", attempt: 1, value: ["supermemory"] }] satisfies ServiceLoadEvent<List>[]
+const loaded = [
+  shown(),
+  { type: "load.succeeded", attempt: 1, value: ["supermemory"] },
+] satisfies ServiceLoadEvent<List>[]
 
 describe("transitionServiceLoad", () => {
   test("a failed or timed-out refresh keeps the cached list, footer and row badges", () => {

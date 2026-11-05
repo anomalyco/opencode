@@ -16,7 +16,10 @@ export type SlideFontWant =
 export type SlideFontRequest = { readonly want: SlideFontWant; readonly style: FontStyle }
 
 /** Resolves a wanted face and style to the face the app ships, or undefined when it ships none. */
-export type SlideFontResolver<S> = (want: SlideFontWant, style: FontStyle) => (SlideFontRequest & { source: S }) | undefined
+export type SlideFontResolver<S> = (
+  want: SlideFontWant,
+  style: FontStyle,
+) => (SlideFontRequest & { source: S }) | undefined
 
 /** One face's lifecycle, keyed by `faceKey` of the face's own style. `css` is its private browser family. */
 export type SlideFontEntry =
@@ -171,7 +174,9 @@ function flush(state: SlideFontsState): SlideFontsTransition {
     // The engine registers synchronously, so the entry counts as registered from here; its font id follows.
     entries.set(key, { status: "registered", want: entry.want, style: entry.style, css: entry.css })
 
-    return [{ type: "register-face", attempt: entry.attempt, key, want: entry.want, style: entry.style, css: entry.css }]
+    return [
+      { type: "register-face", attempt: entry.attempt, key, want: entry.want, style: entry.style, css: entry.css },
+    ]
   })
 
   const resolves = ready.map(

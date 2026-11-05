@@ -1,6 +1,9 @@
 /** How long one MCP, plugins or skills list load may run before it gives up. */
 export const SERVICE_LOAD_TIMEOUT_MS = 15_000
 
+/** The server's data store a list loads from, compared by identity: a restarted server brings a new one. */
+export type ServiceStore = object
+
 /**
  * One Extensions service list's load (MCP, plugins or skills). Each load takes the next attempt number from `issued`,
  * so a result whose attempt the state no longer holds is stale. `source` is the server's data store the list loads
@@ -8,21 +11,26 @@ export const SERVICE_LOAD_TIMEOUT_MS = 15_000
  */
 export type ServiceLoadState<T> =
   /** Not loaded from `source` yet, and not shown since. */
-  | { readonly status: "idle"; readonly issued: number; readonly shown: boolean; readonly source: object | undefined }
+  | {
+      readonly status: "idle"
+      readonly issued: number
+      readonly shown: boolean
+      readonly source: ServiceStore | undefined
+    }
   /** The first load runs. `queued` runs one more once it settles, for a change announced meanwhile. */
   | {
       readonly status: "loading"
       readonly issued: number
       readonly attempt: number
       readonly shown: boolean
-      readonly source: object
+      readonly source: ServiceStore
       readonly queued: boolean
     }
   | {
       readonly status: "ready"
       readonly issued: number
       readonly shown: boolean
-      readonly source: object
+      readonly source: ServiceStore
       readonly value: T
     }
   /** Loads again while `value` stays on show. */
@@ -31,12 +39,12 @@ export type ServiceLoadState<T> =
       readonly issued: number
       readonly attempt: number
       readonly shown: boolean
-      readonly source: object
+      readonly source: ServiceStore
       readonly value: T
       readonly queued: boolean
     }
   /** The first load failed or timed out, with nothing loaded to fall back to. */
-  | { readonly status: "error"; readonly issued: number; readonly shown: boolean; readonly source: object }
+  | { readonly status: "error"; readonly issued: number; readonly shown: boolean; readonly source: ServiceStore }
   | { readonly status: "disposed" }
 
 export type ServiceLoadEvent<T> =
@@ -48,7 +56,7 @@ export type ServiceLoadEvent<T> =
   | {
       readonly type: "context.changed"
       readonly shown: boolean
-      readonly source: object
+      readonly source: ServiceStore
       readonly cached: T | undefined
       readonly retain: boolean
     }
@@ -110,7 +118,10 @@ export function transitionServiceLoad<T>(
 
     if (state.source === undefined) return { state, effects: NONE }
 
-    return load(state.issued, state.shown, state.source, state.status === "ready" ? state.value : undefined)
+    return load(
+      { issued: state.issued, shown: state.shown, source: state.source },
+      state.status === "ready" ? state.value : undefined,
+    )
   }
 
   if (!running(state) || state.attempt !== event.attempt) return { state, effects: NONE }
@@ -118,7 +129,7 @@ export function transitionServiceLoad<T>(
 
   // A change announced during the load loads again, whatever this load's outcome.
   if (state.queued) {
-    const next = load(state.issued, state.shown, state.source, value)
+    const next = load(state, value)
 
     return { state: next.state, effects: [abort(state.attempt), ...next.effects] }
   }
@@ -156,12 +167,12 @@ function changed<T>(
     const stop = running(state) ? [abort(state.attempt)] : NONE
 
     if (event.shown) {
-      const next = load(state.issued, true, event.source, value)
+      const next = load({ issued: state.issued, shown: true, source: event.source }, value)
 
       return { state: next.state, effects: [...stop, ...next.effects] }
     }
 
-    return { state: settled(state.issued, false, event.source, value), effects: stop }
+    return { state: settled({ issued: state.issued, shown: false, source: event.source }, value), effects: stop }
   }
 
   if (state.source === undefined) return { state, effects: NONE }
@@ -171,11 +182,11 @@ function changed<T>(
   // Hiding the list ends its load; it loads again on the next show.
   if (state.shown && !event.shown)
     return {
-      state: settled(state.issued, false, source, value),
+      state: settled({ issued: state.issued, shown: false, source }, value),
       effects: running(state) ? [abort(state.attempt)] : NONE,
     }
 
-  if (!state.shown && event.shown && !running(state)) return load(state.issued, true, source, value)
+  if (!state.shown && event.shown && !running(state)) return load({ issued: state.issued, shown: true, source }, value)
   // Showing a list whose load already runs, as the drawer's row starts one.
   const current = state.shown === event.shown ? state : { ...state, shown: event.shown }
 
@@ -197,13 +208,19 @@ function changed<T>(
     }
 
   if (current.status === "idle" || current.status === "error")
-    return { state: settled(current.issued, current.shown, source, event.cached), effects: NONE }
+    return { state: settled({ issued: current.issued, shown: current.shown, source }, event.cached), effects: NONE }
 
   return { state: current, effects: NONE }
 }
 
-function load<T>(issued: number, shown: boolean, source: object, value: T | undefined): ServiceLoadTransition<T> {
-  const attempt = issued + 1
+/** Where a list stands: the attempts issued so far, whether it shows, and its data store. */
+type ServicePlace = { readonly issued: number; readonly shown: boolean; readonly source: ServiceStore }
+
+// Starts the next attempt, keeping `value` on show while it runs.
+function load<T>(place: ServicePlace, value: T | undefined): ServiceLoadTransition<T> {
+  const attempt = place.issued + 1
+  const shown = place.shown
+  const source = place.source
   const effects: readonly ServiceLoadEffect[] = [{ type: "run", attempt, timeoutMs: SERVICE_LOAD_TIMEOUT_MS }]
 
   if (value === undefined)
@@ -212,10 +229,10 @@ function load<T>(issued: number, shown: boolean, source: object, value: T | unde
   return { state: { status: "refreshing", issued: attempt, attempt, shown, source, value, queued: false }, effects }
 }
 
-function settled<T>(issued: number, shown: boolean, source: object, value: T | undefined): ServiceLoadState<T> {
-  if (value === undefined) return { status: "idle", issued, shown, source }
+function settled<T>(place: ServicePlace, value: T | undefined): ServiceLoadState<T> {
+  if (value === undefined) return { status: "idle", issued: place.issued, shown: place.shown, source: place.source }
 
-  return { status: "ready", issued, shown, source, value }
+  return { status: "ready", issued: place.issued, shown: place.shown, source: place.source, value }
 }
 
 function running<T>(
