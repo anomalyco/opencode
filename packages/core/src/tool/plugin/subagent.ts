@@ -27,6 +27,18 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
   ].join("\n"),
 })
 
+// Both wait paths end here: the inline answer a foreground caller returns, or a failure that keeps
+// the sessionID visible so the model can continue the child.
+const inline = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, info: Job.Info | undefined) {
+  if (info?.status === "error")
+    return yield* new ToolFailure({
+      message: `Subagent failed (sessionID: ${sessionID}): ${info.error ?? "unknown error"}`,
+    })
+  if (info?.status === "cancelled")
+    return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${sessionID})` })
+  return { sessionID, status: "completed" as const, output: info?.output ?? SubagentCompletion.NO_TEXT }
+})
+
 export const Input = Schema.Struct({
   agent: Schema.String.annotate({
     description:
@@ -204,7 +216,19 @@ export const Plugin = {
 
               const background = input.background !== false
               const notify = input.notify !== false
+              const recovery = {
+                kind: "subagent" as const,
+                parentSessionID: context.sessionID,
+                childSessionID: child.id,
+                agent: agent.name,
+                description: input.description,
+              }
               yield* context.progress({ sessionID: child.id, status: "running" })
+
+              // A foreground continuation of a backgrounded child waits for that job itself, so it
+              // silences the child before the prompt can settle: neither core settlement nor the
+              // original launch's observer may report the busy period this caller returns inline.
+              const claimed = existing !== undefined && !background ? yield* subagents.claim(recovery) : undefined
 
               // Standard prompt admission outside the job: Job.start joining a running child skips
               // its run effect, and the default wake starts an idle child or steers a running one.
@@ -223,46 +247,35 @@ export const Plugin = {
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
                   ),
+                  // A prompt that never reached the child leaves the original launch owing its report.
+                  Effect.tapError(() => (claimed === undefined ? Effect.void : subagents.release(recovery, claimed))),
                 )
 
-              const recovery = {
-                kind: "subagent" as const,
-                parentSessionID: context.sessionID,
-                childSessionID: child.id,
-                agent: agent.name,
-                description: input.description,
-              }
-              yield* subagents.start({ recovery, notify })
+              const started = yield* subagents.start({ recovery, notify, claimed })
 
               if (background) {
                 yield* subagents.background({ recovery, notify })
                 return backgroundResult(child.id)
               }
 
-              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
-                    discard: true,
-                  }),
-                ),
+              const stopChild = Effect.onInterrupt(() =>
+                Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
+                  discard: true,
+                }),
               )
+              // The joined generation is already backgrounded, so jobs.block would return a running
+              // handle at once; await its done instead. A wait does not consume recovery jobs, and
+              // it resolves on completion, failure and cancellation alike.
+              if (claimed !== undefined && started.started_at === claimed.generation)
+                return yield* inline(child.id, (yield* jobs.wait({ id: child.id }).pipe(stopChild)).info)
+
+              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(stopChild)
               if (result?.type === "backgrounded") {
                 // The observer clears the durable marker even for a silent child.
                 yield* subagents.notify(recovery, result.info.started_at)
                 return backgroundResult(child.id)
               }
-              // Failure surfaces keep the sessionID visible so the model can continue the child.
-              if (result?.info.status === "error")
-                return yield* new ToolFailure({
-                  message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
-                })
-              if (result?.info.status === "cancelled")
-                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return {
-                sessionID: child.id,
-                status: "completed" as const,
-                output: result?.info.output ?? SubagentCompletion.NO_TEXT,
-              }
+              return yield* inline(child.id, result?.info)
             }).pipe(
               Effect.map((output) => ({
                 output,

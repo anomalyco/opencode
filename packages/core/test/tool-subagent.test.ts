@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -752,6 +752,81 @@ describe("SubagentTool", () => {
           yield* Deferred.succeed(gate, undefined)
           yield* Fiber.join(notified).pipe(Effect.timeout("2 seconds"))
           expect((yield* sessions.inbox(parent.id)).filter((item) => item.type === "synthetic")).toHaveLength(1)
+        }),
+      ),
+    ),
+  )
+
+  it.live("a foreground follow-up waits for a running background child and returns its answer inline", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          const child = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const gate = yield* Deferred.make<void>()
+          // Recovery is what lets the launch's backgrounding assign a notificationID; a foreground
+          // generation has none, and no backgrounded generation exists to claim without one.
+          yield* jobs.start({
+            id: child.id,
+            type: SubagentTool.name,
+            recovery: {
+              kind: "subagent",
+              parentSessionID: parent.id,
+              childSessionID: child.id,
+              agent: "reviewer",
+              description: "review",
+            },
+            run: Deferred.await(gate).pipe(Effect.as(childText)),
+          })
+          const followUp = (id: string, input: { background?: boolean }) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id,
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "follow up", prompt: id, sessionID: child.id, ...input },
+              },
+            })
+
+          // No flag: background is the default, so this backgrounds the child's running generation.
+          expect(yield* followUp("call-launch", {})).toMatchObject({
+            metadata: { sessionID: child.id, status: "running" },
+          })
+
+          const fiber = yield* followUp("call-wait", { background: false }).pipe(
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          // The child is still running, so the foreground continuation waits instead of handing back
+          // a running handle the way a block would.
+          expect(Option.isNone(yield* Fiber.join(fiber).pipe(Effect.timeoutOption("250 millis")))).toBe(true)
+          expect((yield* sessions.get(child.id)).metadata?.["subagent.notify"]).toBe(false)
+
+          yield* Deferred.succeed(gate, undefined)
+          const result = yield* Fiber.join(fiber).pipe(Effect.timeout("2 seconds"))
+          expect(result).toMatchObject({ metadata: { sessionID: child.id, status: "completed" } })
+          expect(result.content).toEqual([{ type: "text", text: completedOutput(child.id) }])
+
+          // The foreground caller returns the answer, so neither the job's observer nor core
+          // settlement may report the same busy period to the parent.
+          yield* jobs.pendingBackground.pipe(
+            Effect.repeat({ until: (pending) => pending.length === 0 }),
+            Effect.timeout("2 seconds"),
+          )
+          expect((yield* sessions.inbox(parent.id)).filter((item) => item.type === "synthetic")).toEqual([])
+          expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
         }),
       ),
     ),

@@ -17,9 +17,17 @@ import { SubagentMetadata } from "./subagent-metadata.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
+// A foreground continuation of a backgrounded child claims that child's running generation: it
+// silences the busy period it waits for, then returns the answer itself.
+export type Claim = {
+  readonly generation: number
+  readonly notify: boolean
+}
+
 export type Input = {
   readonly recovery: Recovery
   readonly notify: boolean
+  readonly claimed?: Claim
 }
 
 type Completion = Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
@@ -37,6 +45,8 @@ export interface Interface {
   complete: (input: Completion) => Effect.Effect<void, Session.NotFoundError | Session.SyntheticConflictError>
   background: (input: Input) => Effect.Effect<void>
   notify: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
+  claim: (recovery: Recovery) => Effect.Effect<Claim | undefined>
+  release: (recovery: Recovery, claim: Claim) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
@@ -76,6 +86,25 @@ const make: Effect.Effect<
       if (metadata) yield* sessions.setMetadata({ sessionID: recovery.childSessionID, metadata })
     }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
   })
+
+  // A foreground continuation of a running backgrounded child holds its own answer, so it silences
+  // that busy period before its prompt is admitted: core settlement and the observer forked by the
+  // original launch both read this preference, and either would report a duplicate. Only a
+  // backgrounded generation carries a notificationID; a foreground generation keeps the block path.
+  const claim = Effect.fn("SubagentJob.claim")(function* (recovery: Recovery) {
+    const job = yield* jobs.get(recovery.childSessionID)
+    if (job?.status !== "running" || job.notificationID === undefined) return undefined
+    const session = yield* sessions
+      .get(recovery.childSessionID)
+      .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)))
+    if (session === undefined) return undefined
+    const notify = SubagentMetadata.notify(session.metadata)
+    if (SubagentMetadata.withNotify(session.metadata, false) !== undefined) yield* writeNotify(recovery, false)
+    return { generation: job.started_at, notify }
+  })
+
+  // A prompt that never reached the child leaves the original launch owing its report.
+  const release = (recovery: Recovery, claim: Claim) => writeNotify(recovery, claim.notify)
 
   // Resume once for launch, then wait until the child is idle. A backgrounded job also waits for
   // its background work and input, so its report carries the final answer; a foreground caller
@@ -205,8 +234,10 @@ const make: Effect.Effect<
     complete,
     start: (input: Input) =>
       Effect.gen(function* () {
-        yield* writeNotify(input.recovery, input.notify)
-        return yield* jobs.start({
+        // A claim keeps the child silent until its foreground caller returns the answer. Writing the
+        // caller's own preference here would reopen the duplicate report the claim exists to prevent.
+        yield* writeNotify(input.recovery, input.claimed ? false : input.notify)
+        const info = yield* jobs.start({
           id: input.recovery.childSessionID,
           type: "subagent",
           title: input.recovery.description,
@@ -214,6 +245,11 @@ const make: Effect.Effect<
           recovery: input.recovery,
           run: run(input.recovery.childSessionID, jobs.isBackgrounded(input.recovery.childSessionID)),
         })
+        // The claimed generation settled before the join, so start forked a new foreground
+        // generation: it reports through its own blocker, and this call's preference comes back.
+        if (input.claimed && info.started_at !== input.claimed.generation)
+          yield* writeNotify(input.recovery, input.notify)
+        return info
       }).pipe(Effect.setContext(context)),
     background: Effect.fn("SubagentJob.background")(function* (input: Input) {
       yield* writeNotify(input.recovery, input.notify)
@@ -221,6 +257,8 @@ const make: Effect.Effect<
       if (info) yield* notify(input.recovery, info.started_at)
     }),
     notify,
+    claim,
+    release,
   })
 })
 
