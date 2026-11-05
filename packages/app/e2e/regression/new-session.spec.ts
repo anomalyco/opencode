@@ -699,6 +699,46 @@ test("a pending worktree session shows immediately, keeps its draft, and hands o
   await expect(label).toHaveText("Generated session title")
 })
 
+test("a variant picked on a worktree draft stays with the session it starts, even while another tab is open", async ({
+  page,
+}) => {
+  const mock = await openWorktreeDraft(page, {
+    ...pendingDraft,
+    provider: provider({ id: "pending-model", name: "Pending Model", variants: { balanced: {}, high: {} } }),
+  })
+
+  const composer = page.locator('[data-component="composer"]')
+  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+
+  // The Default variant control shows only while the pointer is over the composer.
+  await composer.hover()
+  await variant.click()
+  await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
+  await expect(variant).toHaveText("high")
+  const pending = await submitPending(page, mock)
+
+  // The session starts while another tab shows, so nothing shows the worktree when its selection is handed over.
+  await tabLink(page, otherID).click()
+  await expectPath(page, sessionHref(otherID))
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+  await expect.poll(() => mock.prompts.map((prompt) => prompt.sessionID)).toEqual([pending.sessionID])
+  expect(mock.creates).toEqual([
+    expect.objectContaining({
+      id: pending.sessionID,
+      location: { directory: workspace },
+      model: expect.objectContaining({ id: "pending-model", variant: "high" }),
+    }),
+  ])
+
+  await tabLink(page, pending.sessionID).click()
+  await expect(page).toHaveURL(pending.url)
+  await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
+  await expect(variant).toHaveText("high")
+  await page.reload()
+  await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Pending Model")
+  await expect(variant).toHaveText("high")
+})
+
 test("a pending worktree session keeps Session as its mobile title until the generated title arrives", async ({
   page,
 }) => {

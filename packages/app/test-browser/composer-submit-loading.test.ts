@@ -22,7 +22,6 @@ const selection = {
   setVisibility() {},
   variant: {
     configured: () => undefined,
-    selected: () => undefined,
     current: () => undefined,
     list: () => [],
     set() {},
