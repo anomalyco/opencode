@@ -1155,6 +1155,8 @@ test("an attachment pasted mid-sentence leaves the text and the caret where they
 
   for (let count = 0; count < "Hello".length; count++) await editor.press("ArrowRight")
 
+  const text = await editor.evaluateHandle((element) => element.firstChild)
+
   await editor.evaluate((element) => {
     const data = new DataTransfer()
     data.items.add(new File(["Attachment fixture"], "notes.txt", { type: "text/plain" }))
@@ -1163,6 +1165,8 @@ test("an attachment pasted mid-sentence leaves the text and the caret where they
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("notes.txt")
   await page.keyboard.type(",")
   await expect(editor).toHaveText("Hello, world")
+  // A rewrite of the editor would replace this node, even when it put the caret back in the same place.
+  expect(await editor.evaluate((element, node) => element.firstChild === node, text)).toBe(true)
 })
 
 test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
