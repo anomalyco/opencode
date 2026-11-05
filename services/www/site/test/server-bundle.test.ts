@@ -9,7 +9,10 @@ import { Glob } from "bun"
 // script/check-server-bundle.ts checks the built output too.
 
 const src = path.resolve(import.meta.dir, "..", "src")
-const files = await Array.fromAsync(new Glob("**/*.{ts,tsx}").scan({ cwd: src }))
+// Forward slashes on every platform, so they compare with import specifiers.
+const files = (await Array.fromAsync(new Glob("**/*.{ts,tsx}").scan({ cwd: src }))).map((file) =>
+  file.replaceAll("\\", "/"),
+)
 const sources = new Map(
   await Promise.all(files.map(async (file) => [file, await Bun.file(path.join(src, file)).text()] as const)),
 )
@@ -33,7 +36,7 @@ const browserOnly = (() => {
 })()
 
 function specifiers(file: string, target: string) {
-  const relative = path.relative(path.dirname(file), target).replace(/\.tsx?$/, "")
+  const relative = path.posix.relative(path.posix.dirname(file), target).replace(/\.tsx?$/, "")
   return [relative.startsWith(".") ? relative : `./${relative}`, `~/${target.replace(/\.tsx?$/, "")}`]
 }
 

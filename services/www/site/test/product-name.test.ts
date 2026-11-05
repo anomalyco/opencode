@@ -52,7 +52,8 @@ function visibleText(file: string, source: string) {
 }
 
 async function scan(pattern: string, read: (file: string, source: string) => string[]) {
-  const files = await Array.fromAsync(new Glob(pattern).scan({ cwd: root }))
+  // Glob returns backslash paths on Windows; the allowlist uses forward slashes.
+  const files = (await Array.fromAsync(new Glob(pattern).scan({ cwd: root }))).map((file) => file.replaceAll("\\", "/"))
   const found = await Promise.all(
     files.map(async (file) => {
       const source = await Bun.file(path.join(root, file)).text()
