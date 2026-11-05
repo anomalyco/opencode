@@ -14,6 +14,7 @@ pub mod markdown;
 pub mod motion;
 pub mod palette;
 pub mod path;
+pub mod permission;
 pub mod prompt;
 pub mod prompt_input;
 pub mod qr;
