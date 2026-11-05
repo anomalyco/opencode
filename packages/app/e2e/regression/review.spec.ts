@@ -1931,6 +1931,63 @@ test("a failed diff request offers a retry instead of a clean working tree", asy
   await expect(failure).toHaveCount(0)
 })
 
+// A large file's full patch that failed to load used to leave its preview blank, with no reason and no way to load it.
+test("a large file whose full diff fails to load says so, and loads on Try again", async ({ page }) => {
+  // The listing leaves the patch out, as the server does for a large file; the bounded request carries it.
+  await openSession(page, {
+    name: "ReviewDetailFailure",
+    vcsDiff: (input) => [fileDiff("big.ts", { loaded: input.context === "3" })],
+  })
+  const full = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?.*context=3/, (route) => {
+    if (!full.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const preview = panel.locator('[data-slot="session-review-v2-diff-scroll"]')
+  const failure = preview.getByRole("alert")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("big.ts")
+  // The request runs three times, a second and then two apart, before the preview gives up.
+  await expect(failure.getByText("Couldn't load changes", { exact: true })).toBeVisible()
+  full.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(preview.locator("diffs-container")).toContainText("export const value = 'after'")
+  await expect(failure).toHaveCount(0)
+})
+
+// A failed search used to read "No matching files", as if the workspace had no such file.
+test("a failed file search offers a retry instead of no matching files", async ({ page }) => {
+  const directory = "C:/OpenCode/ReviewSearchFailure"
+  await openSession(page, {
+    name: "ReviewSearchFailure",
+    fileList: () => [fileNode(directory, "README.md")],
+    findFiles: (input) => (input.query === "nested" ? [fileNode(directory, "src/nested.ts")] : []),
+  })
+  const search = { failing: true }
+  await page.route(/\/api\/fs\/find\?/, (route) => {
+    if (!search.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const filter = panel.getByRole("combobox", { name: "Filter files" })
+  const failure = panel.getByRole("alert")
+
+  await browseFiles(page)
+  await filter.fill("nested")
+  await expect(failure.getByText("Couldn't search files", { exact: true })).toBeVisible()
+  await expect(panel.getByText("No matching files", { exact: true })).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath("file-search-failed.png"), animations: "disabled" })
+  search.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.getByRole("option", { name: /nested\.ts/ })).toBeVisible()
+  await expect(failure).toHaveCount(0)
+})
+
 // An untracked folder whose listing failed used to look empty, and opening it again never asked the server again.
 test("an untracked folder that cannot load says so, and loads once it is opened again", async ({ page }) => {
   const workspace = await openSession(page, {

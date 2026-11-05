@@ -53,6 +53,9 @@ import { REVIEW_DIFF_TIMEOUT_MS, type ReviewDiffView } from "./machine"
 import type { ReviewModel } from "./model"
 import { ReviewFailure, ReviewPanelEmpty, ReviewTitle } from "./parts"
 
+/** A full patch request: its backoff, then its deadline, and its abort controller once it runs. */
+type DetailRequest = { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
+
 type ReviewPanelState = {
   sidebar: PanelSidebar
   filter: () => string
@@ -190,7 +193,7 @@ function ReviewPanel(props: ReviewPanelProps) {
 
   // The previewed file's full patch, when its listed patch has no hunks. The request lives as long as the panel.
   const [detailState, setDetailState] = createSignal<ReviewDetailState>(INITIAL_REVIEW_DETAIL_STATE)
-  const detailRequests = new Map<number, { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }>()
+  const detailRequests = new Map<number, DetailRequest>()
 
   const dispatchDetail = (event: ReviewDetailEvent) => {
     const next = transitionReviewDetail(untrack(detailState), event)
@@ -212,7 +215,7 @@ function ReviewPanel(props: ReviewPanelProps) {
 
     const detail = props.detail
     const attempt = effect.attempt
-    const request: { controller?: AbortController; timer?: ReturnType<typeof setTimeout> } = {}
+    const request: DetailRequest = {}
 
     detailRequests.set(attempt, request)
     // A retry waits out its backoff first; the request's own deadline starts with it.
