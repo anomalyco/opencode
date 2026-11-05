@@ -1,209 +1,190 @@
-import { Effect, Fiber, Schedule } from "effect"
-import { onCleanup, type Accessor } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createRoot, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import { createKeyed, type IpcClient } from "@opencode/plugin/gui"
-import type { Ssh, SshConfig, SshItem } from "./contract"
-import { isSshConnecting } from "./name"
+import type { Ssh, SshConfig, SshHttp, SshItem } from "./contract"
+import {
+  createSshWindowState,
+  selectSshAnswered,
+  selectSshCanOpenDialog,
+  selectSshError,
+  selectSshPending,
+  selectSshPromptTarget,
+  selectSshResolvable,
+  selectSshSubmitting,
+  transitionSshWindow,
+  type SshWindowEffect,
+  type SshWindowEvent,
+} from "./window-machine"
 
 export type SshController = ReturnType<typeof createSshController>
 
+type SshApi = IpcClient<(typeof Ssh)["spec"]>
+
+/** Runs this window's SSH attempts through the machine in `./window-machine`; main owns the connections. */
 export function createSshController(input: {
   items: () => readonly SshItem[]
   /** Undefined while the main side is loading or gone. */
-  api: Accessor<IpcClient<(typeof Ssh)["spec"]> | undefined>
-  /** Resolves once this window's state includes `revision`. */
-  refresh: (revision: number) => Promise<void>
+  api: Accessor<SshApi | undefined>
+  /** Resolves once this window's state includes `revision`, the main side goes away, or `signal` aborts. */
+  refresh: (revision: number, signal: AbortSignal) => Promise<void>
   error: () => void
 }) {
-  const [attempts, setAttempts] = createStore<
-    Record<
-      string,
-      | {
-          active: boolean
-          submitting: boolean
-          prompted: boolean
-          answered?: string
-          error: boolean
-          onConnected?: (ready: boolean) => void
-        }
-      | undefined
-    >
-  >({})
-
-  const tasks = new Map<string, Fiber.Fiber<void>>()
+  // The machine state is immutable; each transition replaces it whole.
+  const [machine, setMachine] = createSignal(createSshWindowState())
+  // Aborts the wait for an admitted attempt's state, per server.
+  const tasks = new Map<string, AbortController>()
+  const lifetime = new AbortController()
   const item = (id: string) => input.items().find((item) => item.config.id === id)
+  const current = (id: string) => untrack(() => item(id))
 
-  const settle = (id: string) => {
-    const attempt = attempts[id]
+  const dispatch = (event: SshWindowEvent) => {
+    const previous = untrack(machine)
+    const next = transitionSshWindow(previous, event)
 
-    if (!attempt?.active) return
-    const onConnected = attempt.onConnected
-    setAttempts(id, { active: false, onConnected: undefined })
-    const ready = item(id)?.stage === "ready"
-
-    if (onConnected) queueMicrotask(() => onConnected(ready))
+    if (next.state !== previous) setMachine(next.state)
+    next.effects.forEach(run)
   }
 
-  const run = (id: string, effect: Effect.Effect<unknown, unknown>) => {
-    setAttempts(id, { submitting: true, error: false })
-    tasks.set(
-      id,
-      Effect.runFork(
-        effect.pipe(
-          Effect.asVoid,
-          Effect.catch(() =>
-            Effect.sync(() => {
-              setAttempts(id, "error", true)
+  const run = (effect: SshWindowEffect) => {
+    if (effect.type === "task.abort") {
+      tasks.get(effect.id)?.abort()
+      tasks.delete(effect.id)
 
-              if (!attempts[id]?.prompted) input.error()
-            }),
-          ),
-          Effect.ensuring(
-            Effect.sync(() => {
-              tasks.delete(id)
-              setAttempts(id, "submitting", false)
-            }),
-          ),
-        ),
-      ),
+      return
+    }
+
+    if (effect.type === "toast.error") return input.error()
+
+    if (effect.type === "waiters.notify")
+      return queueMicrotask(() => effect.waiters.forEach((waiter) => waiter(effect.ready)))
+    const api = untrack(input.api)
+
+    // Restores and cancels answer nobody; a main side that went away has nothing left to restore or cancel.
+    if (effect.type === "rpc.restore") return void api?.start({ ...effect.config, background: true }).catch(() => {})
+
+    if (effect.type === "rpc.cancel")
+      return void api
+        ?.cancel({ id: effect.id })
+        .then(() => (effect.forget ? api.forget({ id: effect.id }) : undefined))
+        .catch(() => {})
+
+    if (effect.type === "rpc.respond") {
+      const attempt = effect.attempt
+
+      if (!api) return dispatch({ type: "respond.failed", id: effect.id, attempt })
+
+      return void api.respond({ id: effect.id, prompt: effect.prompt, value: effect.value }).then(
+        () => dispatch({ type: "respond.succeeded", id: effect.id, attempt, item: current(effect.id) }),
+        () => dispatch({ type: "respond.failed", id: effect.id, attempt }),
+      )
+    }
+
+    const id = effect.id
+    const attempt = effect.attempt
+
+    if (!api) return dispatch({ type: "start.failed", id, attempt })
+    const abort = new AbortController()
+    tasks.set(id, abort)
+
+    void api
+      .start({ ...effect.config, replace: effect.replace })
+      // Observe admission before treating an older disconnected snapshot as the attempt's outcome.
+      .then((revision) => input.refresh(revision, AbortSignal.any([abort.signal, lifetime.signal])))
+      .then(
+        () => dispatch({ type: "start.confirmed", id, attempt, item: current(id) }),
+        () => dispatch({ type: "start.failed", id, attempt }),
+      )
+      .finally(() => {
+        if (tasks.get(id) === abort) tasks.delete(id)
+      })
+  }
+
+  /** Waits until a call to main can answer with the server's endpoint: never while main or the server is paused. */
+  const resolvable = (id: string, seen: readonly SshItem[] | undefined, signal: AbortSignal) =>
+    new Promise<SshApi>((done, fail) =>
+      createRoot((dispose) => {
+        const aborted = () => {
+          dispose()
+          fail(signal.reason)
+        }
+
+        if (signal.aborted) return aborted()
+        signal.addEventListener("abort", aborted, { once: true })
+        createKeyed(
+          () => {
+            const items = input.items()
+            const api = input.api()
+
+            // After a `null`, only a newer state can change the answer.
+            if (items === seen || !api) return undefined
+
+            return selectSshResolvable(
+              true,
+              items.find((item) => item.config.id === id),
+            )
+              ? api
+              : undefined
+          },
+          (api) => {
+            signal.removeEventListener("abort", aborted)
+            dispose()
+            done(api)
+          },
+        )
+      }),
     )
-  }
 
-  // Without the main side nothing can connect or answer: the attempt fails at once, as one main rejects.
-  const unavailable = (id: string, onConnected?: (ready: boolean) => void) => {
-    setAttempts(id, { active: false, submitting: false, error: true, onConnected: undefined })
-    input.error()
+  const resolve = (id: string, signal: AbortSignal, seen?: readonly SshItem[]): Promise<SshHttp> =>
+    resolvable(id, seen, signal).then((api) => {
+      const items = untrack(input.items)
 
-    if (onConnected) queueMicrotask(() => onConnected(false))
-  }
+      return api.resolve({ id }, { signal }).then((http) => http ?? resolve(id, signal, items))
+    })
 
   onCleanup(() => {
-    Effect.runFork(Effect.forEach([...tasks.values()], Fiber.interrupt, { discard: true }))
+    lifetime.abort()
+    dispatch({ type: "disposed" })
   })
-  // Attempts whose server reached an outcome in main's state: they settle and tell whoever waits on them.
+
+  // Follows main's state: attempts it shows an outcome for settle, and saved servers this window has not seen restore.
   createKeyed(
-    () => {
-      const done = input.items().flatMap((item) => {
-        const attempt = attempts[item.config.id]
-
-        if (!attempt?.active || attempt.submitting) return []
-
-        return item.stage === "ready" ||
-          item.stage === "failed" ||
-          item.stage === "disconnected" ||
-          item.authenticatingElsewhere ||
-          (attempt.prompted && item.stage === "authentication" && !item.prompt)
-          ? [item.config.id]
-          : []
-      })
-
-      return done.length > 0 ? done : undefined
-    },
-    (done) => done.forEach(settle),
+    () => ({ ipcActive: !!input.api(), items: input.items() }),
+    (synced) => dispatch({ type: "items.synced", ipcActive: synced.ipcActive, items: synced.items }),
+    { equals: (previous, next) => previous.ipcActive === next.ipcActive && previous.items === next.items },
   )
 
   return {
     item,
-    submitting: (id: string) => !!attempts[id]?.submitting,
-    error: (id: string) => !!attempts[id]?.error,
-    answered: (id: string) =>
-      !!item(id)?.prompt && !attempts[id]?.error && attempts[id]?.answered === item(id)?.prompt?.id,
-    pending: (id: string) =>
-      !!attempts[id]?.submitting ||
-      !!item(id)?.authenticatingElsewhere ||
-      isSshConnecting(item(id)?.stage ?? "disconnected"),
+    submitting: (id: string) => selectSshSubmitting(machine(), id),
+    error: (id: string) => selectSshError(machine(), id),
+    answered: (id: string) => selectSshAnswered(machine(), id, item(id)),
+    pending: (id: string) => selectSshPending(machine(), id, item(id)),
     dialog: {
-      next: () =>
-        input.items().find((item) => {
-          const attempt = attempts[item.config.id]
-
-          return (
-            attempt?.active &&
-            !attempt.submitting &&
-            !attempt.prompted &&
-            !attempt.error &&
-            (item.prompt || item.stage === "incompatible")
-          )
-        }),
-      opened: (id: string) => setAttempts(id, "prompted", true),
+      /** The attempt whose prompt needs a dialog of its own. */
+      next: () => selectSshPromptTarget(machine(), input.items()),
+      loading: (id: string, attempt: number) => dispatch({ type: "dialog.loading", id, attempt }),
+      canOpen: (id: string, attempt: number) => selectSshCanOpenDialog(untrack(machine), id, attempt),
+      opened: (id: string, attempt: number) => dispatch({ type: "dialog.opened", id, attempt }),
+      failed: (id: string, attempt: number) =>
+        dispatch({ type: "dialog.failed", id, attempt, saved: !!current(id)?.saved }),
     },
     /** `onConnected` runs once the attempt settles, with whether the server is ready. */
     connect: (
       config: SshConfig,
       options?: { dialog?: boolean; replace?: boolean; onConnected?: (ready: boolean) => void },
-    ) => {
-      const api = input.api()
-
-      if (!api) return unavailable(config.id, options?.onConnected)
-
-      if (item(config.id)?.authenticatingElsewhere) return
-
-      if (
-        attempts[config.id]?.submitting ||
-        (attempts[config.id]?.active && !attempts[config.id]?.error && !options?.replace)
-      )
-        return
-      setAttempts(config.id, {
-        active: true,
-        submitting: true,
-        prompted: !!options?.dialog,
-        answered: undefined,
-        error: false,
-        onConnected: options?.onConnected ?? (options?.replace ? attempts[config.id]?.onConnected : undefined),
-      })
-      run(
-        config.id,
-        Effect.gen(function* () {
-          const revision = yield* Effect.tryPromise(() => api.start({ ...config, replace: options?.replace }))
-          // Observe admission before treating an older disconnected snapshot as cancellation.
-          yield* Effect.tryPromise(() => input.refresh(revision))
-        }),
-      )
-    },
-    respond: (id: string, prompt: string, value: string) => {
-      const api = input.api()
-
-      if (!api) return unavailable(id)
-
-      if (item(id)?.prompt?.id !== prompt || attempts[id]?.submitting) return
-
-      if (attempts[id]?.answered === prompt && !attempts[id]?.error) return
-      setAttempts(id, "answered", prompt)
-      run(
-        id,
-        Effect.tryPromise(() => api.respond({ id, prompt, value })),
-      )
-    },
-    cancel: (id: string) => {
-      const task = tasks.get(id)
-      const api = input.api()
-      Effect.runFork(
-        Effect.gen(function* () {
-          if (task) yield* Fiber.interrupt(task)
-          setAttempts(id, undefined)
-
-          if (!api) return
-          yield* Effect.tryPromise(() => api.cancel({ id }))
-
-          if (!item(id)?.saved) yield* Effect.tryPromise(() => api.forget({ id }))
-        }).pipe(Effect.ignore),
-      )
-    },
-    restore: (config: SshConfig) => input.api()?.start({ ...config, background: true }),
-    /** Waits for a healthy tunnel, starting one in the background when the last one dropped. */
-    resolve: (id: string, signal: AbortSignal) =>
-      Effect.runPromise(
-        Effect.tryPromise((abort) => {
-          const api = input.api()
-
-          if (!api) return Promise.resolve(null)
-
-          return api.resolve({ id }, { signal: abort })
-        }).pipe(
-          Effect.repeat({ until: (http) => http !== null, schedule: Schedule.spaced(3000) }),
-          Effect.flatMap((http) => (http === null ? Effect.interrupt : Effect.succeed(http))),
-        ),
-        { signal },
-      ),
+    ) =>
+      dispatch({
+        type: "connect.requested",
+        config,
+        ipcActive: !!untrack(input.api),
+        item: current(config.id),
+        dialog: options?.dialog,
+        replace: options?.replace,
+        onConnected: options?.onConnected,
+      }),
+    respond: (id: string, prompt: string, value: string) =>
+      dispatch({ type: "respond.requested", id, prompt, value, ipcActive: !!untrack(input.api), item: current(id) }),
+    cancel: (id: string) => dispatch({ type: "cancel.requested", id, saved: !!current(id)?.saved }),
+    /** Waits for a healthy tunnel; main reconnects a dropped one by itself. */
+    resolve: (id: string, signal: AbortSignal) => resolve(id, AbortSignal.any([signal, lifetime.signal])),
   }
 }
