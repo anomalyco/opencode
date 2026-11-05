@@ -92,7 +92,8 @@ static KEYS: Mutex<Option<Keys>> = Mutex::new(None);
 /// Runs `read` with stdin in raw mode and the keypresses the prompts share, for prompts drawn elsewhere (the
 /// wizard draws Effect CLI's prompts, not Clack's).
 pub fn with_keys<R>(read: impl FnOnce(&mut Keys) -> R) -> R {
-    let _raw = Raw::enable();
+    // The wizard draws on stdout.
+    let _raw = Raw::enable(Output::Stdout);
     let mut keys = KEYS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     read(keys.get_or_insert_with(Keys::new))
 }
@@ -103,7 +104,7 @@ pub fn run(
     output: Output,
     initial_input: Option<&str>,
 ) -> Result<(), Cancelled> {
-    let _raw = Raw::enable();
+    let _raw = Raw::enable(output);
     let mut base = Base {
         state: State::Initial,
         error: String::new(),
