@@ -107,6 +107,14 @@ const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
 const base: Dictionary = { ...en, ...dict }
 
+/**
+ * The English source text of a key: the base dictionary every locale merges over, always resident. Search matches it
+ * beside the localized text, so entries stay findable in English while the interface is in another language.
+ */
+export function sourceText<Key extends Extract<keyof Dictionary, string>>(key: TranslationKey<Key>) {
+  return base[key]
+}
+
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>

@@ -20,6 +20,7 @@ export function useSettingsCommand() {
     {
       ...settingsOpenCommand,
       title: language.t("command.settings.open"),
+      titleKey: "command.settings.open",
       category: language.t("command.category.settings"),
       onSelect: show,
     },

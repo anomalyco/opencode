@@ -197,6 +197,7 @@ function NewSessionLocationDialog(props: {
     {
       id: "project.open",
       title: language.t("command.project.open"),
+      titleKey: "command.project.open",
       category: language.t("command.category.project"),
       keybind: "mod+o",
       onSelect: () => choose({ id: "add", type: "add" }),

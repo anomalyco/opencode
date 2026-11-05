@@ -97,6 +97,9 @@ function signatureFromEvent(event: KeyboardEvent) {
 
 type KeybindConfig = string
 
+/** A typed i18n key, as `language.t` accepts it. */
+type Label = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
+
 export interface Keybind {
   key: string
   ctrl: boolean
@@ -114,7 +117,11 @@ export interface CommandOption {
   /** The GUI plugin that contributes the command. Settings > Shortcuts lists it only while that plugin is installed. */
   plugin?: string
   title: string
+  /** The key `title` translates; the palette also matches its English source in every locale. */
+  titleKey?: Label
   description?: string
+  /** The key `description` translates; matched by the palette in English like `titleKey`. */
+  descriptionKey?: Label
   /** Extra words the command palette matches, separated by spaces. */
   keywords?: string
   category?: string

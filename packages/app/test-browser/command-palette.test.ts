@@ -215,6 +215,26 @@ describe("command palette commands", () => {
     expect(matchesCommandPaletteEntry(entry, "terminal")).toBe(false)
   })
 
+  test("match the English source of a translated title, description and category", () => {
+    const entry = createCommandPaletteCommandEntry(
+      {
+        id: "session.compact",
+        title: "压缩会话",
+        titleKey: "command.session.compact",
+        description: "总结会话以减少上下文大小",
+        descriptionKey: "command.session.compact.description",
+      },
+      "命令",
+      "Commands",
+    )
+
+    expect(matchesCommandPaletteEntry(entry, "压缩")).toBe(true)
+    expect(matchesCommandPaletteEntry(entry, "compact")).toBe(true)
+    expect(matchesCommandPaletteEntry(entry, "summarize")).toBe(true)
+    expect(matchesCommandPaletteEntry(entry, "command")).toBe(true)
+    expect(matchesCommandPaletteEntry(entry, "fork")).toBe(false)
+  })
+
   test("match a session by its title, not by its group name, as the server does", () => {
     const entry = { id: "session:tabs", type: "session" as const, title: "Fix tabs", category: "Session" }
 

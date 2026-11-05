@@ -16,6 +16,7 @@ export function DesktopCommands() {
     commands.push({
       ...exportLogsCommand,
       title: language.t("command.logs.export"),
+      titleKey: "command.logs.export",
       category: language.t("command.category.settings"),
       onSelect: () => void platform.exportDebugLogs?.(),
     })

@@ -8,7 +8,7 @@ import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/c
 import { useFile } from "@/workspaces/files/model"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { useServer } from "@/runtime/server/current"
-import { useLanguage } from "@/runtime/i18n/language"
+import { useLanguage, sourceText } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
@@ -42,6 +42,10 @@ export type CommandPaletteEntry = {
   keywords?: string
   keybind?: string
   category: string
+  /** The English source text of `title`, `description` and `category`; matched beside them so commands stay findable in English in any locale. */
+  sourceTitle?: string
+  sourceDescription?: string
+  sourceCategory?: string
   option?: CommandOption
   path?: string
   directory?: string
@@ -153,7 +157,9 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")
 
-    return allowedCommands().map((option) => createCommandPaletteCommandEntry(option, category))
+    return allowedCommands().map((option) =>
+      createCommandPaletteCommandEntry(option, category, sourceText("palette.group.commands")),
+    )
   })
 
   const preferredCommandEntries = createMemo(() => {
@@ -171,7 +177,9 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     const sorted = picked.length ? [...base].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)) : base
     const category = language.t("palette.group.commands")
 
-    return sorted.map((option) => createCommandPaletteCommandEntry(option, category))
+    return sorted.map((option) =>
+      createCommandPaletteCommandEntry(option, category, sourceText("palette.group.commands")),
+    )
   })
 
   const recentFileEntries = createMemo(() => {
@@ -255,7 +263,11 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   }
 }
 
-export function createCommandPaletteCommandEntry(option: CommandOption, category: string): CommandPaletteEntry {
+export function createCommandPaletteCommandEntry(
+  option: CommandOption,
+  category: string,
+  sourceCategory?: string,
+): CommandPaletteEntry {
   return {
     id: "command:" + option.id,
     type: "command",
@@ -264,6 +276,9 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
     keywords: option.keywords,
     keybind: option.keybind,
     category,
+    sourceTitle: option.titleKey ? sourceText(option.titleKey) : undefined,
+    sourceDescription: option.descriptionKey ? sourceText(option.descriptionKey) : undefined,
+    sourceCategory,
     option,
   }
 }

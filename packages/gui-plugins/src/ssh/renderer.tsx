@@ -179,6 +179,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       id: "add",
       title: ctx.t("add"),
       group: ctx.t("command.category.server"),
+      keywords: "add ssh server remote connect",
       run: () => add(true),
     }),
   )

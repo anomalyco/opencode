@@ -21,6 +21,7 @@ function index(input: Partial<Parameters<typeof settingsSearchIndex>[0]> = {}) {
     browser: false,
     mobile: false,
     translate: (key) => strings.get(key) ?? key,
+    source: (key) => strings.get(key) ?? key,
     ...input,
   })
 }
@@ -86,6 +87,15 @@ describe("settings search index", () => {
     expect(items.some((item) => item.view.target === "settings-project-startup")).toBe(false)
   })
 
+  test("indexes the English source beside the translated label", () => {
+    const translated = index({ translate: (key) => `译 ${strings.get(key) ?? key}` })
+
+    expect(translated.find((item) => item.view.target === "settings-language")).toMatchObject({
+      title: "译 Language",
+      sourceTitle: "Language",
+    })
+  })
+
   test("retains project avatars and excludes color when a custom icon owns its appearance", () => {
     const withIcon = { ...project, icon: { color: "orange", override: "data:image/png;base64,example" } }
     const items = index({ servers: [{ ...servers[0], projects: [withIcon] }] })
@@ -143,5 +153,19 @@ describe("settings search ranking", () => {
     expect(rankSettings("termfont", index())[0].title).toBe("Terminal Font")
     expect(rankSettings("  ", index())).toEqual([])
     expect(rankSettings("zzzzzzzzz", index())).toEqual([])
+  })
+
+  test("matches the English source of a translated title", () => {
+    const item = index().find((entry) => entry.view.target === "settings-language")!
+    const translated = { ...item, title: "语言" }
+
+    expect(rankSettings("language", [translated])).toEqual([translated])
+    expect(rankSettings("语言", [translated])).toEqual([translated])
+  })
+
+  test("keeps a description match below a keyword match, English source included", () => {
+    const titles = rankSettings("system", index()).map((item) => item.title)
+
+    expect(titles.indexOf("Color scheme")).toBeLessThan(titles.indexOf("Agent"))
   })
 })

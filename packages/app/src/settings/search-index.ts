@@ -1,5 +1,5 @@
 import type { SettingsPage } from "@opencode/plugin/gui"
-import type { useLanguage } from "@/runtime/i18n/language"
+import { sourceText, type useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
 import { clientSettings, projectSettings, serverSettings } from "./search-catalog"
@@ -25,6 +25,8 @@ export function settingsSearchIndex(input: {
   browser: boolean
   mobile: boolean
   translate: ReturnType<typeof useLanguage>["t"]
+  /** The English source text of the keys `translate` resolves, so entries match in English in any locale. */
+  source: typeof sourceText
   plugins?: readonly SettingsSearchPlugin[]
 }) {
   const items: SettingsSearchResult[] = []
@@ -54,6 +56,8 @@ export function settingsSearchIndex(input: {
       id: JSON.stringify([server, project, view.tab, view.target, view.subtab, entry.label]),
       title: input.translate(entry.label),
       description: entry.description ? input.translate(entry.description) : "",
+      sourceTitle: input.source(entry.label),
+      sourceDescription: entry.description ? input.source(entry.description) : undefined,
       keywords: entry.keywords ?? "",
       owner,
       page,

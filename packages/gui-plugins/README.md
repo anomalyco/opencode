@@ -739,6 +739,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     id: "open",
     title: ctx.t("command.title"),
     group: ctx.t("command.category.server"),
+    keywords: "pair device qr phone remote",
     run: () => layout.settings("pairing"),
   }))
 }

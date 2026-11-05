@@ -1,6 +1,6 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo } from "solid-js"
-import { useLanguage } from "@/runtime/i18n/language"
+import { useLanguage, sourceText } from "@/runtime/i18n/language"
 import { COMMAND_SEARCH_ID, commandPaletteOptions, useCommand } from "./command"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "./dialog"
 import { createCommandPaletteCommandEntry, createPaletteHighlight, type CommandPaletteEntry } from "./palette"
@@ -17,7 +17,7 @@ export function DialogCommandSearch() {
 
     return commandPaletteOptions(command.options)
       .filter((option) => option.id !== COMMAND_SEARCH_ID)
-      .map((option) => createCommandPaletteCommandEntry(option, category))
+      .map((option) => createCommandPaletteCommandEntry(option, category, sourceText("palette.group.commands")))
   })
 
   const select = (item: CommandPaletteEntry | undefined) => {
