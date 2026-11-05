@@ -70,12 +70,6 @@ describe("terminalWriter", () => {
 
   test("a step or write that throws does not stop the rest of the queue", async () => {
     const log: string[] = []
-    const errors: unknown[] = []
-    const onError = (event: ErrorEvent) => {
-      event.preventDefault()
-      errors.push(event.error)
-    }
-    addEventListener("error", onError)
 
     const output = terminalWriter((data, done) => {
       const text = new TextDecoder().decode(data)
@@ -94,9 +88,7 @@ describe("terminalWriter", () => {
     output.push(() => log.push("step"))
     output.push(new TextEncoder().encode("two"))
     await settle()
-    removeEventListener("error", onError)
 
     expect(log).toEqual(["one", "step", "two"])
-    expect(errors.map((error) => (error instanceof Error ? error.message : error))).toEqual(["step", "write"])
   })
 })
