@@ -1,5 +1,6 @@
 import { EMAILOCTOPUS_API_KEY } from "./app"
-import { domain } from "./stage"
+import { LOCALES } from "../packages/stats/app/src/lib/language"
+import { domain, zoneID } from "./stage"
 
 ////////////////
 // DATABASE
@@ -62,15 +63,41 @@ new sst.x.DevCommand("StatsStudio", {
 // APP
 ////////////////
 
-export const app = new sst.cloudflare.x.SolidStart("Stats", {
+export const publicUrl = `https://${domain}/data`
+
+const app = new sst.cloudflare.x.SolidStart("Stats", {
   path: "packages/stats/app",
   buildCommand: "bun run build",
-  domain: `stats.${domain}`,
   link: [database, EMAILOCTOPUS_API_KEY],
   environment: {
-    PUBLIC_URL: `https://${domain}/data`,
+    PUBLIC_URL: publicUrl,
+  },
+  transform: {
+    server: {
+      url: false,
+    },
   },
 })
+
+// The site serves itself under /data and /<locale>/data, and these routes are its only way in: it has no custom domain
+// or workers.dev URL. Route patterns can't wildcard the middle of a path, hence one pair per locale. `sst dev` deploys
+// no Worker.
+const appServer = app.nodes.server
+if (appServer) {
+  for (const prefix of ["data", ...LOCALES.map((locale) => `${locale}/data`)]) {
+    const name = prefix.replaceAll("/", "")
+    for (const [suffix, pattern] of [
+      ["", `${domain}/${prefix}`],
+      ["Path", `${domain}/${prefix}/*`],
+    ]) {
+      new cloudflare.WorkersRoute(`StatsRoute${name}${suffix}`, {
+        zoneId: zoneID,
+        pattern,
+        script: appServer.nodes.worker.scriptName,
+      })
+    }
+  }
+}
 
 ////////////////
 // SERVICES
