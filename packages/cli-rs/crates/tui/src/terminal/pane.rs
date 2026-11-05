@@ -72,6 +72,7 @@ impl Pane {
         let background = page.background.raised.base;
         let mode = tui.theme.borrow().mode();
         let view = TerminalView::new(app)
+            .mouse_pointer(MousePointer::DEFAULT)
             .absolute()
             .position(Edge::Left, 1)
             .position(Edge::Top, 0)

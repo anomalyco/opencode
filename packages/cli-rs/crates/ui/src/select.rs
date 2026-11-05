@@ -379,6 +379,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
         .unwrap_or("Search");
     let input = props.render_filter.then(|| {
         Input::new(app)
+            .mouse_pointer(MousePointer::DEFAULT)
             .grow(1.0)
             .basis(Length::Auto)
             .placeholder(placeholder)

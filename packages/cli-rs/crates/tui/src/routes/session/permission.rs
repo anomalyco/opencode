@@ -667,6 +667,7 @@ impl Inner {
                 &Text::new(app, "Tell OpenCode what to do differently").fg(theme.text.muted),
             ));
         let field = Textarea::new(app)
+            .mouse_pointer(MousePointer::DEFAULT)
             .grow(1.0)
             .basis(Length::Auto)
             .min_width(1)

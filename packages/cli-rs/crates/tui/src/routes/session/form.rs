@@ -1773,6 +1773,7 @@ impl Inner {
             ),
         };
         let textarea = Textarea::new(app)
+            .mouse_pointer(MousePointer::DEFAULT)
             .min_height(1)
             .max_height(6)
             .placeholder(placeholder)

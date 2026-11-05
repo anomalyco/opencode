@@ -64,6 +64,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     let theme = &cx.theme;
     cx.dialogs.set_size(props.size);
     let field = Textarea::new(app)
+        .mouse_pointer(MousePointer::DEFAULT)
         .height(1)
         .wrap(WrapMode::None)
         .placeholder(props.placeholder.as_deref().unwrap_or("Enter text"))
