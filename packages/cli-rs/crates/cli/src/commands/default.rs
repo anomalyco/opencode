@@ -9,6 +9,7 @@ use opencode_local::channel::Channels;
 use opencode_local::cli_config::{CliConfig, Resolved};
 use opencode_local::paths::{self, Paths};
 use opencode_service::connect::{self, Env, Options, Source};
+use opencode_tui::plugins::host::External;
 use opencode_tui::{Args, Deps, Launch, Route, app::Roots};
 
 use super::Context;
@@ -81,6 +82,10 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         environment: local.then(opencode_store::environment::session_environment),
         ..Args::default()
     };
+    let plugins = External {
+        config_dir: paths.config.clone(),
+        cwd: directory.clone(),
+    };
     // The TUI's tasks run on this runtime: `App::runtime` uses the multi-threaded runtime it starts in.
     let _guard = runtime.enter();
     opencode_tui::run(Launch {
@@ -99,6 +104,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         },
         args: tui_args,
         keep: Box::new(connection),
+        plugins: Some(plugins),
     })?;
     Ok(())
 }
