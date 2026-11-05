@@ -12,21 +12,77 @@ const setup = Effect.gen(function* () {
     app: { version: "test" },
     database: { path: ":memory:" },
     fs: { filewatcher: false },
+    models: { fetch: false },
   })
-  return (path: string, body?: unknown, status = 200) =>
+  return (path: string, body?: unknown, status = 200, method = body === undefined ? "GET" : "POST") =>
     Effect.promise(async () => {
       const response = await handler(
         new Request(`http://opencode.local${path}`, {
-          method: body === undefined ? "GET" : "POST",
+          method,
           headers: { "content-type": "application/json" },
           body: body === undefined ? undefined : JSON.stringify(body),
         }),
       )
-      const json: unknown = await response.json()
       expect(response.status).toBe(status)
+      const json: unknown = response.status === 204 ? undefined : await response.json()
       return json
     })
 })
+
+for (const action of ["commit", "clear"]) {
+  it.live(`preserves imported undo through ${action} without source workspace snapshots`, () =>
+    Effect.gen(function* () {
+      const request = yield* setup
+      const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", {}))
+      const id = Session.ID.create()
+      const imported = Schema.decodeUnknownSync(SessionResponse)(
+        yield* request("/api/experimental/session/import", {
+          info: { ...template.data, id, revert: { messageID: "msg_undone", snapshot: "source-snapshot", files: [] } },
+          messages: [
+            { id: "msg_keep", type: "user", text: "Keep", time: { created: 1 } },
+            { id: "msg_undone", type: "user", text: "Undo", time: { created: 2 } },
+          ],
+        }),
+      )
+      expect(imported.data.revert).toEqual({ messageID: "msg_undone" })
+      expect(Schema.decodeUnknownSync(SessionResponse)(yield* request(`/api/session/${id}`)).data.revert).toEqual({
+        messageID: "msg_undone",
+      })
+      expect(yield* request(`/api/session/${id}/message?order=asc`)).toMatchObject({
+        data: [{ text: "Keep" }, { text: "Undo" }],
+      })
+
+      if (action === "commit") yield* request(`/api/session/${id}/revert/commit`, {}, 204)
+      if (action === "clear") yield* request(`/api/session/${id}/revert`, undefined, 204, "DELETE")
+
+      expect(yield* request(`/api/session/${id}/message?order=asc`)).toMatchObject({
+        data: action === "commit" ? [{ text: "Keep" }] : [{ text: "Keep" }, { text: "Undo" }],
+      })
+      expect(
+        Schema.decodeUnknownSync(SessionResponse)(yield* request(`/api/session/${id}`)).data.revert,
+      ).toBeUndefined()
+    }).pipe(Effect.scoped),
+  )
+}
+
+it.live("rejects an imported undo boundary missing from the transcript", () =>
+  Effect.gen(function* () {
+    const request = yield* setup
+    const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", {}))
+    const id = Session.ID.create()
+    expect(
+      yield* request(
+        "/api/experimental/session/import",
+        {
+          info: { ...template.data, id, revert: { messageID: "msg_missing" } },
+          messages: [],
+        },
+        404,
+      ),
+    ).toMatchObject({ _tag: "MessageNotFoundError", sessionID: id, messageID: "msg_missing" })
+    yield* request(`/api/session/${id}`, undefined, 404)
+  }).pipe(Effect.scoped),
+)
 
 it.live("preserves imported parentID through HTTP import, read, and parent filter", () =>
   Effect.gen(function* () {
