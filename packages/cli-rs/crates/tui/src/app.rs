@@ -470,8 +470,20 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
     };
     options.host.terminal.mouse =
         crate::features::system_commands::mouse_tracking(&launch.deps.config);
-    let app = App::new(options)?;
+    if let Some(manifest) = crate::features::drive::manifest() {
+        return crate::features::drive::run(manifest?, options, launch);
+    }
+    run_on(App::new(options)?, launch, |_| Ok(()))
+}
+
+/// Runs the TUI on `app` until it quits; `started` runs once the TUI is mounted.
+pub fn run_on(
+    app: App,
+    launch: Launch,
+    started: impl FnOnce(&Rc<Tui>) -> opentui::Result<()>,
+) -> opentui::Result<()> {
     let tui = mount_with(&app, launch.deps, launch.args);
+    started(&tui)?;
     // Tests start the editor context with their own source; the real TUI reads the environment.
     crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();
