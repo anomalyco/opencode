@@ -158,14 +158,9 @@ impl Inner {
             return;
         };
         let client = tui.data.client().clone();
-        let weak = self.tui.clone();
-        self.app.spawn(
+        tui.request(
             async move { client.session_revert_clear(&SessionRevertClearInput { session_id: session }).await },
-            move |_, result| {
-                if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                    tui.toasts.error(error.to_string());
-                }
-            },
+            |_, ()| {},
         );
     }
 }

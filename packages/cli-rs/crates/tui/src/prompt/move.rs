@@ -343,7 +343,7 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
                 return Err("Unable to determine current session location".to_owned());
             }
             if data.read(|state| state.location(Some(&location)).and_then(|d| d.info.clone())).is_none() {
-                data.location_sync_info(Some(&location)).await.map_err(|error| worktrees::error_message(&error))?;
+                data.location_sync_info(Some(&location)).await.map_err(|error| error.tui_message())?;
             }
             let project = data
                 .read(|state| {
@@ -351,19 +351,14 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
                 })
                 .ok_or_else(|| "Unable to determine current project".to_owned())?;
             let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
-            let directory = data
-                .client()
-                .worktree_create(&input)
-                .await
-                .map_err(|error| worktrees::error_message(&error))?
-                .directory
-                .0;
+            let directory =
+                data.client().worktree_create(&input).await.map_err(|error| error.tui_message())?.directory.0;
             if directory.is_empty() {
                 return Err("No worktree directory returned".to_owned());
             }
             data.location_sync_info(Some(&Location::new(directory.clone())))
                 .await
-                .map_err(|error| worktrees::error_message(&error))?;
+                .map_err(|error| error.tui_message())?;
             Ok(directory)
         },
         bind!(weak, |prompt, _, result| {
