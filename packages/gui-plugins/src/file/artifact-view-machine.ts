@@ -166,7 +166,7 @@ const STAGE_DISPOSED: ImageStageGestureState = Object.freeze({ status: "disposed
 
 const NO_STAGE_EFFECTS: readonly ImageStageGestureEffect[] = Object.freeze([])
 
-export const INITIAL_IMAGE_STAGE_GESTURE_STATE = STAGE_IDLE
+export const INITIAL_IMAGE_STAGE_GESTURE_STATE: ImageStageGestureState = STAGE_IDLE
 
 export function transitionImageStageGesture(
   state: ImageStageGestureState,
