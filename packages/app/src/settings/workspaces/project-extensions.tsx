@@ -260,7 +260,7 @@ export const ProjectSettingsExtensions: Component<{
         serverSDK.api.plugin
           .list({ location: { directory } }, { signal })
           .then((result) => result.data)
-          .catch((error: unknown) => {
+          .catch((error) => {
             if (isLocationNotFoundError(error)) return []
             throw error
           }),

@@ -171,6 +171,7 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     const entry = entries.get(key)
 
     if (!entry) return
+
     const settle = (outcome: { value: T | undefined } | { error: unknown }) => {
       if (entries.get(key) !== entry) return
       entries.delete(key)
@@ -184,7 +185,7 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
       .then(() => (entry.controller.signal.aborted ? undefined : entry.task(entry.controller.signal)))
       .then(
         (value) => settle({ value }),
-        (error: unknown) => settle({ error }),
+        (error) => settle({ error }),
       )
   }
 

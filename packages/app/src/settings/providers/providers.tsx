@@ -72,9 +72,6 @@ export const SettingsProviders: Component<{
     )
   }
 
-  const failed = (error: unknown) =>
-    showToast({ title: language.t("common.requestFailed"), description: formatServerError(error, language.t) })
-
   // Results that arrive after Settings closes still report through a toast, as the user asked for the change.
   const run = (effect: SettingsProvidersEffect) => {
     if (effect.type === "dialog.open") {
@@ -104,30 +101,16 @@ export const SettingsProviders: Component<{
     }
 
     // The actions toast their own request failures; anything else they throw still settles the menus.
-    if (effect.type === "account.activate.run") {
+    if (effect.type === "account.activate.run" || effect.type === "account.remove.run") {
+      const input = { integrationID: effect.integrationID, provider: effect.providerName, account: effect.account }
       void Promise.try(() =>
-        accountActions.activate({
-          integrationID: effect.integrationID,
-          provider: effect.providerName,
-          account: effect.account,
-        }),
+        effect.type === "account.activate.run"
+          ? accountActions.activate(input)
+          : accountActions.remove({ ...input, final: effect.final }),
       )
-        .catch(failed)
-        .finally(() => dispatch({ type: "account.settled", attempt: effect.attempt }))
-
-      return
-    }
-
-    if (effect.type === "account.remove.run") {
-      void Promise.try(() =>
-        accountActions.remove({
-          integrationID: effect.integrationID,
-          provider: effect.providerName,
-          account: effect.account,
-          final: effect.final,
-        }),
-      )
-        .catch(failed)
+        .catch((error) =>
+          showToast({ title: language.t("common.requestFailed"), description: formatServerError(error, language.t) }),
+        )
         .finally(() => dispatch({ type: "account.settled", attempt: effect.attempt }))
 
       return
