@@ -219,12 +219,16 @@ const object = (value: unknown, what: string): { readonly [key: string]: unknown
 const array = (value: unknown, what: string): ReadonlyArray<unknown> =>
   Array.isArray(value) ? value : fail(`${what} is not a list.`)
 
-const string = (value: unknown, what: string): string => (typeof value === "string" ? value : fail(`${what} is not text.`))
+const string = (value: unknown, what: string): string =>
+  typeof value === "string" ? value : fail(`${what} is not text.`)
 
 const number = (value: unknown, what: string): number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fail(`${what} is not a number.`)
 
 const limit = (value: unknown, what: string): number | null => (value === null ? null : number(value, what))
+
+/** A saved state's header, checked in full, before anything is restored. */
+export const header = (saved: unknown): Header => validate(saved).header
 
 // The header is checked in full; records are checked as they are decoded.
 const validate = (saved: unknown): Snapshot => {
@@ -276,7 +280,8 @@ const astArrays = (source: Source): Map<ReadonlyArray<unknown>, readonly [number
   if (known !== undefined) return known
   const owned = new Map<ReadonlyArray<unknown>, readonly [number, string]>()
   source.nodes.forEach((node: AstNode, index) => {
-    for (const [key, child] of Object.entries(node)) if (key !== "loc" && Array.isArray(child)) owned.set(child, [index, key])
+    for (const [key, child] of Object.entries(node))
+      if (key !== "loc" && Array.isArray(child)) owned.set(child, [index, key])
   })
   arrays.set(source, owned)
   return owned
@@ -318,7 +323,9 @@ const sameObject = (value: Obj, original: Obj, names: Names, pristine: Names): b
 const sameSlot = (slot: Slot, original: Slot, names: Names, pristine: Names): boolean => {
   if (slot.enumerable !== original.enumerable || slot.configurable !== original.configurable) return false
   if (!("value" in slot)) return !("value" in original)
-  return "value" in original && slot.writable === original.writable && sameValue(slot.value, original.value, names, pristine)
+  return (
+    "value" in original && slot.writable === original.writable && sameValue(slot.value, original.value, names, pristine)
+  )
 }
 
 const sameValue = (value: Value | null, original: Value | null, names: Names, pristine: Names): boolean => {

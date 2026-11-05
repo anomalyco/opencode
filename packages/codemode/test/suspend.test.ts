@@ -424,6 +424,130 @@ describe("resume", () => {
     }
   })
 
+  test("every pending durable call needs an outcome, and only those have one", async () => {
+    const { jobs, suspended } = await suspendAt(`return (await tools.job({ value: 1 })).value`)
+    const runtime = CodeMode.make({ tools: { job: jobs.tool } })
+    expect((await refusal(runtime.resume(suspended.state))).message).toBe(
+      "The pending durable call r:0 (tools.job) needs an outcome to resume.",
+    )
+    expect(
+      (
+        await refusal(
+          runtime.resume(suspended.state, {
+            "r:0": { ok: true, value: { value: 1 } },
+            "r:9": { ok: true, value: { value: 2 } },
+          }),
+        )
+      ).message,
+    ).toBe("An outcome was given for r:9, which isn't a pending durable call of this run.")
+  })
+
+  test("an error outcome rejects the call's promise with a tool error the program can catch", async () => {
+    const { jobs, suspended } = await suspendAt(`
+      try {
+        return await tools.job({ value: 1 })
+      } catch (error) {
+        return [error.name, error.message, error instanceof Error]
+      }`)
+    const outcome = await Effect.runPromise(
+      start(
+        CodeMode.make({ tools: { job: jobs.tool } }).resume(suspended.state, {
+          "r:0": { ok: false, error: "job failed" },
+        }),
+      ).result,
+    )
+    expect(outcome).toEqual({ ok: true, value: ["Error", "job failed", true], toolCalls: [{ name: "job" }] })
+  })
+
+  test("an outcome is copied as JSON", async () => {
+    const { jobs, suspended } = await suspendAt(`const r = await tools.job({ value: 1 }); r.list.push(4); return r`)
+    const value = { list: [1, 2, 3] }
+    const outcome = await Effect.runPromise(
+      start(CodeMode.make({ tools: { job: jobs.tool } }).resume(suspended.state, { "r:0": { ok: true, value } }))
+        .result,
+    )
+    expect(outcome).toMatchObject({ ok: true, value: { list: [1, 2, 3, 4] } })
+    expect(value.list).toEqual([1, 2, 3])
+  })
+
+  test("a resumed run keeps the limits it was saved with", async () => {
+    const jobs = durableJobs()
+    const limited = CodeMode.make({ tools: { job: jobs.tool }, limits: { maxToolCalls: 2, maxOutputBytes: 10 } })
+    const run = start(
+      limited.execute(
+        `await tools.job({ value: 1 }); await tools.job({ value: 2 }); await tools.job({ value: 3 }); return "done"`,
+        undefined,
+        { runId: "l" },
+      ),
+    )
+    await jobs.started()
+    await Bun.sleep(1)
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspended.state.header.limits).toEqual({ timeoutMs: null, maxToolCalls: 2, maxOutputBytes: 10 })
+    jobs.reset()
+    // The resuming runtime has no limits of its own; the saved ones apply.
+    const result = Effect.runPromise(
+      start(
+        CodeMode.make({ tools: { job: jobs.tool } }).resume(suspended.state, {
+          "l:0": { ok: true, value: { value: 1 } },
+        }),
+      ).result,
+    )
+    await jobs.started()
+    await Bun.sleep(1)
+    jobs.finish("l:1", 2)
+    expect(await result).toMatchObject({ ok: false, error: { kind: "ToolCallLimitExceeded" } })
+
+    const long = start(
+      CodeMode.make({ tools: { job: jobs.tool }, limits: { maxOutputBytes: 10 } }).execute(
+        `await tools.job({ value: 1 }); return "x".repeat(100)`,
+        undefined,
+        { runId: "o" },
+      ),
+    )
+    jobs.reset()
+    await jobs.started()
+    await Bun.sleep(1)
+    const saved = suspendedOf(await Effect.runPromise(long.suspend))
+    expect(
+      await Effect.runPromise(
+        start(
+          CodeMode.make({ tools: { job: jobs.tool } }).resume(saved.state, {
+            "o:0": { ok: true, value: { value: 1 } },
+          }),
+        ).result,
+      ),
+    ).toMatchObject({ ok: true, truncated: true })
+  })
+
+  test("active time and tool calls count across resumes", async () => {
+    const jobs = durableJobs()
+    const runtime = CodeMode.make({ tools: { job: jobs.tool }, limits: { timeoutMs: 300 } })
+    const run = start(
+      runtime.execute(
+        `
+        const started = Date.now()
+        while (Date.now() - started < 200) {}
+        await tools.job({ value: 1 })
+        const again = Date.now()
+        while (Date.now() - again < 200) {}
+        return "done"`,
+        undefined,
+        { runId: "t" },
+      ),
+    )
+    await jobs.started()
+    await Bun.sleep(1)
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspended.state.header.budget.activeMs).toBeGreaterThanOrEqual(200)
+    expect(suspended.state.header.budget.toolCalls).toBe(1)
+    // 200ms were used before the suspend; the next 200ms of work go past the 300ms limit.
+    const timedOut = await Effect.runPromise(
+      start(runtime.resume(suspended.state, { "t:0": { ok: true, value: { value: 1 } } })).result,
+    )
+    expect(timedOut).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" }, toolCalls: [{ name: "job" }] })
+  })
+
   test("a state is refused by another build, other extensions, or a changed source", async () => {
     const { suspended } = await suspendAt(`await tools.job({ value: 1 }); return 1`)
     const state = suspended.state

@@ -2,7 +2,7 @@ import { parse, type Program } from "acorn"
 import { Cause, Deferred, Effect, Option, Schema, type Scope } from "effect"
 import type { DataValue, Diagnostic, Pending, ResolvedExecutionLimits, Result, Suspended } from "../codemode.js"
 import type { Json } from "../data.js"
-import { capture, fromBytes, restore, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
+import { capture, fromBytes, header, restore, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
 import { toolExpression, ToolRuntime } from "../tool-runtime.js"
 import type { HostCall } from "../machine/scheduler.js"
 import { SuspendError } from "../suspend-error.js"
@@ -82,25 +82,47 @@ export const startProgram = <R>(
   })
 
 /**
- * Resumes a saved run in this runtime, in the current scope, as `startProgram` starts one. `outcomes` completes
- * pending host calls by key. Fails with a `SnapshotError` when the state can't be read or belongs to another build,
- * other host globals, or other sources.
+ * Resumes a saved run in this runtime, in the current scope, as `startProgram` starts one, under the limits it was
+ * saved with. `outcomes` settles its pending durable calls, by key: each one needs an outcome. Fails with a
+ * `SnapshotError` when the state can't be read or belongs to another build, other host globals, or other sources, or
+ * when `outcomes` doesn't match the pending calls.
  */
 export const resumeProgram = <R>(
   setup: Setup<R>,
   saved: Snapshot | Uint8Array | unknown,
   outcomes: Readonly<Record<string, Outcome>> = {},
 ): Effect.Effect<Execution, SnapshotError, R | Scope.Scope> =>
-  Effect.suspend(() => {
-    const fresh = instantiate(setup)
-    const snapshot = Effect.try({
-      try: () => restoreInto(setup, saved instanceof Uint8Array ? fromBytes(saved) : saved, fresh),
-      catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
-    })
-    return Effect.flatMap(snapshot, (restored) =>
-      new Running(setup, restored.header.runId, restored.header.budget.activeMs, () => fresh, outcomes).start(),
-    )
-  })
+  Effect.try({
+    try: () => {
+      const state = saved instanceof Uint8Array ? fromBytes(saved) : saved
+      const limits = header(state).limits
+      const resumed: Setup<R> = {
+        ...setup,
+        limits: {
+          timeoutMs: limits.timeoutMs ?? undefined,
+          maxToolCalls: limits.maxToolCalls ?? undefined,
+          maxOutputBytes: limits.maxOutputBytes ?? undefined,
+        },
+      }
+      const fresh = instantiate(resumed)
+      const snapshot = restoreInto(resumed, state, fresh)
+      const pending = fresh.machine.calls().filter((call) => call.status === "started")
+      for (const call of pending) {
+        if (!Object.hasOwn(outcomes, call.key)) {
+          throw new SnapshotError(
+            `The pending durable call ${call.key} (${callPath(call)}) needs an outcome to resume.`,
+          )
+        }
+      }
+      for (const key of Object.keys(outcomes)) {
+        if (!pending.some((call) => call.key === key)) {
+          throw new SnapshotError(`An outcome was given for ${key}, which isn't a pending durable call of this run.`)
+        }
+      }
+      return new Running(resumed, snapshot.header.runId, snapshot.header.budget.activeMs, () => fresh, outcomes)
+    },
+    catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
+  }).pipe(Effect.flatMap((running) => running.start()))
 
 const ended = (result: Result): Execution => ({ result: Effect.succeed(result), suspend: Effect.succeed(result) })
 
@@ -145,13 +167,15 @@ const bare = () =>
 const noLimits: ResolvedExecutionLimits = { timeoutMs: undefined, maxToolCalls: undefined, maxOutputBytes: undefined }
 
 const pristines = new WeakMap<object, Interpreter<unknown>>()
-// A runtime as fresh as a run's, never run, to tell which built-ins and host globals a run changed.
+// A runtime as fresh as a run's, never run, to tell which built-ins and host globals a run changed. Runs with the
+// same host globals share one, whatever their limits.
 const pristine = <R>(setup: Setup<R>): Interpreter<unknown> => {
-  if (setup.globals === undefined) return bare()
-  const known = pristines.get(setup)
+  const globals = setup.globals
+  if (globals === undefined) return bare()
+  const known = pristines.get(globals)
   if (known !== undefined) return known
   const made = instantiate(setup) as Interpreter<unknown>
-  pristines.set(setup, made)
+  pristines.set(globals, made)
   return made
 }
 

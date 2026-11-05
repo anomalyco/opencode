@@ -126,14 +126,14 @@ export class Driver<R> {
   }
 
   /**
-   * Picks up the host calls a restored machine was waiting on: the host's outcomes complete pending durable calls, by
-   * key, and calls that never started start.
+   * Picks up the host calls a restored machine was waiting on: the host's outcomes, copied as JSON, complete pending
+   * durable calls, by key, and calls that never started start.
    */
   resume(outcomes: Readonly<Record<string, Outcome>>): void {
     for (const call of this.machine.calls()) {
-      const known = outcomes[call.key]
+      const known = Object.hasOwn(outcomes, call.key) ? outcomes[call.key] : undefined
       if (known !== undefined) {
-        this.machine.complete(call.id, known.ok ? normal(known.value) : abrupt(toolError(known.error)))
+        this.machine.complete(call.id, known.ok ? normal(copy(known.value)) : abrupt(toolError(String(known.error))))
         continue
       }
       if (call.status === "queued") this.launch(call)
@@ -216,4 +216,10 @@ export class Driver<R> {
       })
     })
   }
+}
+
+// The same round trip a tool's result takes: exact JSON.stringify semantics.
+const copy = (value: Json): Json | undefined => {
+  const text = JSON.stringify(value)
+  return text === undefined ? undefined : JSON.parse(text)
 }
