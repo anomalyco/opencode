@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   addressSuggestions,
   addressView,
@@ -13,7 +13,7 @@ import {
 } from "./address-machine"
 import type { Visit } from "./history"
 
-const tabID = "tab_alpha" as Browser.TabID
+const tabID = Browser.TabID.make("tab_11111111-1111-1111-1111-111111111111")
 
 const blank: AddressPage = { tabID, url: "", loading: false, generation: 1, error: undefined }
 
@@ -35,6 +35,7 @@ const visits: readonly Visit[] = [
 describe("a submitted address the browser has not reported yet", () => {
   test("stays in the field when the user focuses and leaves the field", () => {
     const epoch = reports(blank)
+
     const submitted = transitionAddress(initialAddressState, {
       type: "navigated",
       url: "https://example.com/",
@@ -100,6 +101,7 @@ test("a submit that lands on the same URL keeps the address until the load finis
 describe("submitting the field", () => {
   test("an empty field blurs without navigating on a page that loaded", () => {
     const epoch = reports({ ...blank, url: "https://alpha.example/" })
+
     const editing = replay([
       { type: "focused", epoch },
       { type: "input.changed", value: "  ", deleting: false, visits: [] },
@@ -112,10 +114,12 @@ describe("submitting the field", () => {
 
   test("an empty field opens a blank page on a failed page", () => {
     const epoch = reports({ ...blank, url: "https://alpha.example/" })
+
     const editing = replay([
       { type: "focused", epoch },
       { type: "input.changed", value: "", deleting: true, visits: [] },
     ])
+
     const submitted = transitionAddress(editing, { type: "submitted", epoch, visits: [], failed: true })
 
     expect(submitted.effects[0]).toEqual({ type: "navigate", tabID, url: "about:blank" })
@@ -124,10 +128,12 @@ describe("submitting the field", () => {
 
   test("Enter opens the completed suggestion", () => {
     const epoch = reports(blank)
+
     const editing = replay([
       { type: "focused", epoch },
       { type: "input.changed", value: "exa", deleting: false, visits },
     ])
+
     expect(view(editing, epoch, visits)).toMatchObject({ listed: true, active: 0, chosen: visits[0] })
 
     expect(transitionAddress(editing, { type: "submitted", epoch, visits, failed: false }).effects[0]).toEqual({
@@ -147,6 +153,7 @@ describe("submitting the field", () => {
 
 describe("editing", () => {
   const epoch = reports(blank)
+
   const typed = (value: string, deleting = false) =>
     replay([
       { type: "focused", epoch },
@@ -160,6 +167,7 @@ describe("editing", () => {
   test("arrows cycle through the suggestions and the typed text", () => {
     const keys = (state: AddressState, ...pressed: ("ArrowDown" | "ArrowUp")[]) =>
       pressed.reduce((current, key) => transitionAddress(current, { type: "key.pressed", key, visits }).state, state)
+
     const start = typed("exa", true)
 
     expect(view(keys(start, "ArrowDown"), epoch, visits).active).toBe(0)

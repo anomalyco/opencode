@@ -44,14 +44,17 @@ const setup: Plugin.MainSetup = (ctx) => {
               })
             })
             .catch((cause: unknown) => dispatch({ type: "load.failed", attempt: effect.attempt, cause }))
+
           return
         case "resolve-load":
           loads.get(effect.attempt)?.resolve(effect.pane)
           loads.delete(effect.attempt)
+
           return
         case "reject-load":
           loads.get(effect.attempt)?.reject(effect.cause)
           loads.delete(effect.attempt)
+
           return
         case "dispose-pane":
           disposing = effect.pane.dispose()

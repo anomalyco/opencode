@@ -70,7 +70,11 @@ describe("cleanup while the pane loads", () => {
   })
 
   test("disposes a pane that still arrives", () => {
-    const late = replay([{ type: "load.requested" }, { type: "disposed" }, { type: "load.succeeded", attempt: 1, pane }])
+    const late = replay([
+      { type: "load.requested" },
+      { type: "disposed" },
+      { type: "load.succeeded", attempt: 1, pane },
+    ])
 
     expect(late.state).toEqual({ status: "disposed" })
     expect(late.effects).toEqual([{ type: "dispose-pane", pane }])
@@ -78,7 +82,11 @@ describe("cleanup while the pane loads", () => {
 })
 
 test("cleanup disposes a loaded pane once", () => {
-  const disposed = replay([{ type: "load.requested" }, { type: "load.succeeded", attempt: 1, pane }, { type: "disposed" }])
+  const disposed = replay([
+    { type: "load.requested" },
+    { type: "load.succeeded", attempt: 1, pane },
+    { type: "disposed" },
+  ])
 
   expect(disposed.effects).toEqual([{ type: "dispose-pane", pane }])
   expect(transitionMainPane(disposed.state, { type: "disposed" }).effects).toEqual([])

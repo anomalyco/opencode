@@ -106,16 +106,19 @@ export function transitionDialogGate(state: DialogGateState, event: DialogGateEv
             : state.runs,
         },
         effects: [
-          ...interrupted.map(([runID, actionType]): DialogGateEffect => ({
-            type: "interrupt-run",
-            runID,
-            reason: "dialog-interrupted",
-            abort: actionType !== "navigate",
-          })),
+          ...interrupted.map(
+            ([runID, actionType]): DialogGateEffect => ({
+              type: "interrupt-run",
+              runID,
+              reason: "dialog-interrupted",
+              abort: actionType !== "navigate",
+            }),
+          ),
           PUBLISH,
         ],
       }
     }
+
     case "dialog.closed":
       if (!state.modal.open) return { state, effects: [] }
 
@@ -137,6 +140,7 @@ export function transitionDialogGate(state: DialogGateState, event: DialogGateEv
         reply: { status: "accepted", runID },
       }
     }
+
     case "run.cancelled":
       if (!state.runs.has(event.runID)) return { state, effects: [] }
 
@@ -151,7 +155,12 @@ export function transitionDialogGate(state: DialogGateState, event: DialogGateEv
     case "disposed":
       return {
         state: { status: "disposed" },
-        effects: [...state.runs.keys()].map((runID) => ({ type: "interrupt-run", runID, reason: "closed", abort: true })),
+        effects: [...state.runs.keys()].map((runID) => ({
+          type: "interrupt-run",
+          runID,
+          reason: "closed",
+          abort: true,
+        })),
       }
   }
 }

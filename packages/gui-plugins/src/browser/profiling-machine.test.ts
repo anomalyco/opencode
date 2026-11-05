@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createProfilingState,
   isTraceStoppingAttempt,
@@ -32,7 +32,7 @@ const traceStart: ProfilingEvent = {
 
 const cpuStart: ProfilingEvent = { type: "cpu.start.requested", key: "cpu-1", resources: ["https://alpha.example/"] }
 
-const file = (id: string) => id as Browser.FileID
+const file = (digit: string) => Browser.FileID.make(`file_${digit.repeat(36)}`)
 
 describe("CPU profile", () => {
   test("a second start while the first still starts is refused, and arms no second timer", () => {
@@ -60,11 +60,12 @@ describe("CPU profile", () => {
     const stopped = transitionProfiling(stopping.state, undefined, {
       type: "cpu.stop.succeeded",
       attempt: 1,
-      value: { id: file("cpu"), durationMs: 12 },
+      value: { id: file("a"), durationMs: 12 },
     })
+
     expect(stopped.effects).toEqual([
       { type: "cancel", timer: "cpu.stop" },
-      { type: "settle-cpu-stop", attempt: 1, outcome: { ok: true, value: { id: file("cpu"), durationMs: 12 } } },
+      { type: "settle-cpu-stop", attempt: 1, outcome: { ok: true, value: { id: file("a"), durationMs: 12 } } },
     ])
     expect(transitionProfiling(stopped.state, undefined, { type: "cpu.stop.requested" }).reply).toEqual({
       status: "pending",
@@ -98,19 +99,22 @@ describe("CPU profile", () => {
 
   test("a stop that hangs fails at its timeout, and the late result is ignored", () => {
     const error = new Error("timeout")
+
     const timedOut = replay([
       cpuStart,
       { type: "cpu.start.succeeded", attempt: 1 },
       { type: "cpu.duration.elapsed", attempt: 1 },
       { type: "cpu.stop.failed", attempt: 1, error },
     ])
+
     expect(timedOut.state.cpu.status).toBe("stopped")
 
     const late = transitionProfiling(timedOut.state, undefined, {
       type: "cpu.stop.succeeded",
       attempt: 1,
-      value: { id: file("late"), durationMs: 1 },
+      value: { id: file("b"), durationMs: 1 },
     })
+
     expect(late.state).toBe(timedOut.state)
     expect(late.effects).toEqual([])
   })
@@ -126,6 +130,7 @@ describe("trace", () => {
       attempt: 1,
       now: 6,
     })
+
     expect(started.shared).toEqual({ owner: "page-a", attempt: 1 })
     expect(started.effects).toEqual([
       { type: "settle-trace-start", attempt: 1, outcome: { ok: true, value: undefined } },
@@ -153,14 +158,18 @@ describe("trace", () => {
         {
           type: "trace.stop.succeeded",
           attempt: 1,
-          value: { id: file("trace"), durationMs: 10_000, incomplete: false },
+          value: { id: file("c"), durationMs: 10_000, incomplete: false },
         },
       ],
       pageA.state,
       pageA.shared,
     )
+
     expect(stopped.shared).toBeUndefined()
-    expect(selectProfilingTarget(stopped.state, "trace")).toEqual({ resources: ["https://alpha.example/"], key: "trace-1" })
+    expect(selectProfilingTarget(stopped.state, "trace")).toEqual({
+      resources: ["https://alpha.example/"],
+      key: "trace-1",
+    })
 
     const started = transitionProfiling(pageB, stopped.shared, traceStart)
     expect(started.shared).toEqual({ owner: "page-b", attempt: 1 })
@@ -172,6 +181,7 @@ describe("trace", () => {
       { type: "trace.start.succeeded", attempt: 1, now: 0 },
       { type: "trace.stop.requested", now: 100 },
     ])
+
     expect(isTraceStoppingAttempt(stopping.state, 1)).toBe(true)
 
     const timedOut = transitionProfiling(stopping.state, stopping.shared, {
@@ -179,6 +189,7 @@ describe("trace", () => {
       attempt: 1,
       error: new Error("timeout"),
     })
+
     expect(isTraceStoppingAttempt(timedOut.state, 1)).toBe(false)
     expect(timedOut.shared).toBeUndefined()
   })
@@ -197,13 +208,22 @@ test("navigations add pages only while a capture records", () => {
     { type: "frame.navigated", url: "https://alpha.example/next" },
     { type: "frame.navigated", url: "https://alpha.example/next" },
   ])
+
   expect(selectProfilingTarget(recording.state, "cpu").resources).toEqual([
     "https://alpha.example/",
     "https://alpha.example/next",
   ])
 
-  const stopping = replay([{ type: "cpu.start.succeeded", attempt: 1 }, { type: "cpu.stop.requested" }], recording.state)
-  const after = transitionProfiling(stopping.state, undefined, { type: "frame.navigated", url: "https://beta.example/" })
+  const stopping = replay(
+    [{ type: "cpu.start.succeeded", attempt: 1 }, { type: "cpu.stop.requested" }],
+    recording.state,
+  )
+
+  const after = transitionProfiling(stopping.state, undefined, {
+    type: "frame.navigated",
+    url: "https://beta.example/",
+  })
+
   expect(after.state).toBe(stopping.state)
 })
 
@@ -224,7 +244,7 @@ describe("heap snapshot", () => {
     expect(timedOut.state.heap).toEqual({ status: "idle" })
     expect(timedOut.effects).toContainEqual({ type: "settle-heap", attempt: 1, outcome: { ok: false, error } })
     expect(
-      transitionProfiling(timedOut.state, undefined, { type: "heap.succeeded", attempt: 1, id: file("late") }).effects,
+      transitionProfiling(timedOut.state, undefined, { type: "heap.succeeded", attempt: 1, id: file("b") }).effects,
     ).toEqual([])
   })
 })
@@ -243,12 +263,14 @@ describe("disposal", () => {
       attempt: 1,
       error: new Error("closed"),
     })
+
     expect(settled.state.lifecycle).toBe("disposed")
     expect(settled.effects).toContainEqual({ type: "settle-dispose" })
   })
 
   test("during a trace start, ends the trace instead of leaving Chromium tracing", () => {
     const disposing = replay([traceStart, { type: "dispose.requested", now: 0 }])
+
     const started = transitionProfiling(disposing.state, disposing.shared, {
       type: "trace.start.succeeded",
       attempt: 1,

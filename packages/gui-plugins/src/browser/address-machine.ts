@@ -67,7 +67,11 @@ export type AddressEvent =
       readonly deleting: boolean
       readonly visits: readonly Visit[]
     }
-  | { readonly type: "key.pressed"; readonly key: "ArrowDown" | "ArrowUp" | "Escape"; readonly visits: readonly Visit[] }
+  | {
+      readonly type: "key.pressed"
+      readonly key: "ArrowDown" | "ArrowUp" | "Escape"
+      readonly visits: readonly Visit[]
+    }
   /** Enter in the field; `failed` is whether the page failed to load, where an empty address opens a blank page. */
   | {
       readonly type: "submitted"
@@ -112,6 +116,7 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
         effects: [SELECT],
       }
     }
+
     // Leaving the field without submitting cancels the edit; a submitted address not reported yet stays.
     case "blurred": {
       if (state.status !== "editing") return unchanged(state)
@@ -119,6 +124,7 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
 
       return { state: hold ? { status: "submitted", hold } : initialAddressState, effects: [] }
     }
+
     case "input.changed": {
       if (state.status !== "editing") return unchanged(state)
       const first = suggest(event.visits, event.value, 1)[0]
@@ -130,6 +136,7 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
         effects: [],
       }
     }
+
     case "key.pressed": {
       if (state.status !== "editing") return unchanged(state)
       const suggestions = addressSuggestions(state, event.visits)
@@ -154,6 +161,7 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
         effects: [PREVENT],
       }
     }
+
     case "submitted": {
       const suggestions = addressSuggestions(state, event.visits)
       const picked = chosen(state, suggestions)
@@ -165,6 +173,7 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
 
       return { state, effects: [BLUR] }
     }
+
     case "navigated":
       return navigate(state, event.url, event.epoch)
   }
@@ -182,7 +191,10 @@ export function nextAddressEpoch(previous: AddressEpoch | undefined, page: Addre
     tab || page.url !== previous.url || settled !== previous.settled ? previous.followed + 1 : previous.followed
 
   const moved =
-    tab || page.generation !== previous.generation || page.loading !== previous.loading || rejected !== previous.rejected
+    tab ||
+    page.generation !== previous.generation ||
+    page.loading !== previous.loading ||
+    rejected !== previous.rejected
       ? previous.moved + 1
       : previous.moved
 

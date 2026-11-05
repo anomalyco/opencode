@@ -165,7 +165,11 @@ export function transitionProfiling(
       if (state.lifecycle !== "open") return refuse(state, shared, "closed")
 
       if (shared || active(state.trace))
-        return refuse(state, shared, !shared || shared.owner === state.owner ? "trace-active-here" : "trace-active-elsewhere")
+        return refuse(
+          state,
+          shared,
+          !shared || shared.owner === state.owner ? "trace-active-here" : "trace-active-elsewhere",
+        )
       const attempt = state.issued + 1
 
       return {
@@ -187,15 +191,24 @@ export function transitionProfiling(
         reply: { status: "pending", attempt },
       }
     }
+
     case "trace.start.succeeded": {
       const trace = state.trace
 
       if (trace.status !== "starting" || trace.attempt !== event.attempt) return unchanged(state, shared)
-      const started = { type: "settle-trace-start", attempt: trace.attempt, outcome: { ok: true, value: undefined } } as const
+
+      const started = {
+        type: "settle-trace-start",
+        attempt: trace.attempt,
+        outcome: { ok: true, value: undefined },
+      } as const
 
       if (trace.stopRequested || state.lifecycle !== "open")
         return {
-          state: { ...state, trace: { status: "stopping", attempt: trace.attempt, key: trace.key, resources: trace.resources } },
+          state: {
+            ...state,
+            trace: { status: "stopping", attempt: trace.attempt, key: trace.key, resources: trace.resources },
+          },
           shared,
           effects: [started, ...endTrace(trace, trace.pid, 0)],
         }
@@ -213,9 +226,13 @@ export function transitionProfiling(
           },
         },
         shared,
-        effects: [started, { type: "schedule", timer: "trace.duration", attempt: trace.attempt, delayMs: trace.durationMs }],
+        effects: [
+          started,
+          { type: "schedule", timer: "trace.duration", attempt: trace.attempt, delayMs: trace.durationMs },
+        ],
       }
     }
+
     case "trace.start.failed": {
       const trace = state.trace
 
@@ -227,10 +244,13 @@ export function transitionProfiling(
         shared: release(state, shared, trace.attempt),
         effects: [
           { type: "settle-trace-start", attempt: trace.attempt, outcome: failed },
-          ...(trace.stopRequested ? [{ type: "settle-trace-stop", attempt: trace.attempt, outcome: failed } as const] : []),
+          ...(trace.stopRequested
+            ? [{ type: "settle-trace-stop", attempt: trace.attempt, outcome: failed } as const]
+            : []),
         ],
       })
     }
+
     case "trace.duration.elapsed":
       if (state.trace.status !== "recording" || state.trace.attempt !== event.attempt) return unchanged(state, shared)
 
@@ -251,11 +271,15 @@ export function transitionProfiling(
           {
             type: "settle-trace-stop",
             attempt: trace.attempt,
-            outcome: event.type === "trace.stop.succeeded" ? { ok: true, value: event.value } : { ok: false, error: event.error },
+            outcome:
+              event.type === "trace.stop.succeeded"
+                ? { ok: true, value: event.value }
+                : { ok: false, error: event.error },
           },
         ],
       })
     }
+
     case "cpu.start.requested": {
       if (state.lifecycle !== "open") return refuse(state, shared, "closed")
 
@@ -273,15 +297,24 @@ export function transitionProfiling(
         reply: { status: "pending", attempt },
       }
     }
+
     case "cpu.start.succeeded": {
       const cpu = state.cpu
 
       if (cpu.status !== "starting" || cpu.attempt !== event.attempt) return unchanged(state, shared)
-      const started = { type: "settle-cpu-start", attempt: cpu.attempt, outcome: { ok: true, value: undefined } } as const
+
+      const started = {
+        type: "settle-cpu-start",
+        attempt: cpu.attempt,
+        outcome: { ok: true, value: undefined },
+      } as const
 
       if (cpu.stopRequested || state.lifecycle !== "open")
         return {
-          state: { ...state, cpu: { status: "stopping", attempt: cpu.attempt, key: cpu.key, resources: cpu.resources } },
+          state: {
+            ...state,
+            cpu: { status: "stopping", attempt: cpu.attempt, key: cpu.key, resources: cpu.resources },
+          },
           shared,
           effects: [started, ...stopCpu(cpu)],
         }
@@ -289,9 +322,13 @@ export function transitionProfiling(
       return {
         state: { ...state, cpu: { status: "recording", attempt: cpu.attempt, key: cpu.key, resources: cpu.resources } },
         shared,
-        effects: [started, { type: "schedule", timer: "cpu.duration", attempt: cpu.attempt, delayMs: CPU_MAX_DURATION_MS }],
+        effects: [
+          started,
+          { type: "schedule", timer: "cpu.duration", attempt: cpu.attempt, delayMs: CPU_MAX_DURATION_MS },
+        ],
       }
     }
+
     case "cpu.start.failed": {
       const cpu = state.cpu
 
@@ -307,6 +344,7 @@ export function transitionProfiling(
         ],
       })
     }
+
     case "cpu.duration.elapsed":
       if (state.cpu.status !== "recording" || state.cpu.attempt !== event.attempt) return unchanged(state, shared)
 
@@ -327,11 +365,15 @@ export function transitionProfiling(
           {
             type: "settle-cpu-stop",
             attempt: cpu.attempt,
-            outcome: event.type === "cpu.stop.succeeded" ? { ok: true, value: event.value } : { ok: false, error: event.error },
+            outcome:
+              event.type === "cpu.stop.succeeded"
+                ? { ok: true, value: event.value }
+                : { ok: false, error: event.error },
           },
         ],
       })
     }
+
     case "heap.requested": {
       if (state.lifecycle !== "open") return refuse(state, shared, "closed")
 
@@ -348,6 +390,7 @@ export function transitionProfiling(
         reply: { status: "pending", attempt },
       }
     }
+
     case "heap.succeeded":
     case "heap.failed":
       if (state.heap.status !== "capturing" || state.heap.attempt !== event.attempt) return unchanged(state, shared)
@@ -360,7 +403,8 @@ export function transitionProfiling(
           {
             type: "settle-heap",
             attempt: event.attempt,
-            outcome: event.type === "heap.succeeded" ? { ok: true, value: event.id } : { ok: false, error: event.error },
+            outcome:
+              event.type === "heap.succeeded" ? { ok: true, value: event.id } : { ok: false, error: event.error },
           },
         ],
       }
@@ -368,7 +412,10 @@ export function transitionProfiling(
       if (state.lifecycle !== "open") return unchanged(state, shared)
       const disposing = { ...state, lifecycle: "disposing" as const }
       const trace = active(state.trace) ? stopTrace(disposing, shared, event.now) : unchanged(disposing, shared)
-      const cpu = active(trace.state.cpu) ? requestCpuStop(trace.state, trace.shared) : unchanged(trace.state, trace.shared)
+
+      const cpu = active(trace.state.cpu)
+        ? requestCpuStop(trace.state, trace.shared)
+        : unchanged(trace.state, trace.shared)
 
       return settleDispose({ state: cpu.state, shared: cpu.shared, effects: [...trace.effects, ...cpu.effects] })
     }
@@ -392,6 +439,7 @@ export function isTraceStoppingAttempt(state: ProfilingState, attempt: number) {
 function navigated(state: ProfilingState, shared: SharedTrace, url: string): ProfilingTransition {
   const trace =
     recordsPages(state.trace) && !state.trace.resources.includes(url) ? withResource(state.trace, url) : state.trace
+
   const cpu = recordsPages(state.cpu) && !state.cpu.resources.includes(url) ? withResource(state.cpu, url) : state.cpu
 
   if (trace === state.trace && cpu === state.cpu) return unchanged(state, shared)
@@ -416,7 +464,10 @@ function stopTrace(state: ProfilingState, shared: SharedTrace, now: number): Pro
   if (trace.status !== "recording") return { state, shared, effects: [], reply }
 
   return {
-    state: { ...state, trace: { status: "stopping", attempt: trace.attempt, key: trace.key, resources: trace.resources } },
+    state: {
+      ...state,
+      trace: { status: "stopping", attempt: trace.attempt, key: trace.key, resources: trace.resources },
+    },
     shared,
     effects: [
       { type: "cancel", timer: "trace.duration" },

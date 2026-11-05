@@ -149,6 +149,9 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
 }
 
+/** Ends a running command's wait when it is interrupted. */
+type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
+
 /** What a command that stopped, or never started, tells the agent. */
 function runStopError(reason: RunStopReason) {
   switch (reason) {
@@ -315,7 +318,7 @@ export function createBrowserPage(
   const contexts = new Map<string, { id: number; sessionID?: string }>()
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
-  const runs = new Map<number, { controller: AbortController; interrupted: ReturnType<typeof Promise.withResolvers<never>> }>()
+  const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, frame.url)

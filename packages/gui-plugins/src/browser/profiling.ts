@@ -105,14 +105,16 @@ export function createProfiling(
           })
           .then(
             () => dispatch({ type: "trace.start.succeeded", attempt: effect.attempt, now: performance.now() }),
-            (error: unknown) => dispatch({ type: "trace.start.failed", attempt: effect.attempt, error }),
+            (error: Error) => dispatch({ type: "trace.start.failed", attempt: effect.attempt, error }),
           )
+
         return
       case "end-trace":
         void exportTrace(effect).then(
           (value) => dispatch({ type: "trace.stop.succeeded", attempt: effect.attempt, value }),
-          (error: unknown) => dispatch({ type: "trace.stop.failed", attempt: effect.attempt, error }),
+          (error: Error) => dispatch({ type: "trace.stop.failed", attempt: effect.attempt, error }),
         )
+
         return
       case "start-cpu":
         void cdp
@@ -120,8 +122,9 @@ export function createProfiling(
           .then(() => cdp.send("Profiler.start"))
           .then(
             () => dispatch({ type: "cpu.start.succeeded", attempt: effect.attempt }),
-            (error: unknown) => dispatch({ type: "cpu.start.failed", attempt: effect.attempt, error }),
+            (error: Error) => dispatch({ type: "cpu.start.failed", attempt: effect.attempt, error }),
           )
+
         return
       case "stop-cpu":
         void cdp
@@ -134,14 +137,16 @@ export function createProfiling(
           }))
           .then(
             (value) => dispatch({ type: "cpu.stop.succeeded", attempt: effect.attempt, value }),
-            (error: unknown) => dispatch({ type: "cpu.stop.failed", attempt: effect.attempt, error }),
+            (error: Error) => dispatch({ type: "cpu.stop.failed", attempt: effect.attempt, error }),
           )
+
         return
       case "capture-heap":
         void captureHeap(effect.resources).then(
           (id) => dispatch({ type: "heap.succeeded", attempt: effect.attempt, id }),
-          (error: unknown) => dispatch({ type: "heap.failed", attempt: effect.attempt, error }),
+          (error: Error) => dispatch({ type: "heap.failed", attempt: effect.attempt, error }),
         )
+
         return
       case "schedule":
         clearTimeout(timers.get(effect.timer))
@@ -149,10 +154,12 @@ export function createProfiling(
           effect.timer,
           setTimeout(() => dispatch(expired(effect.timer, effect.attempt)), effect.delayMs),
         )
+
         return
       case "cancel":
         clearTimeout(timers.get(effect.timer))
         timers.delete(effect.timer)
+
         return
       case "settle-trace-start":
         return settle(traceStarts, effect.attempt, effect.outcome)
