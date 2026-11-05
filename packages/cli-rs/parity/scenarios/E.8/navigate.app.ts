@@ -1,4 +1,4 @@
-// Scrolling and navigation over eight finished turns (V06, V15): a page up shows "Jump to latest",
+// Scrolling and navigation over eight finished turns (V06): a page up shows "Jump to latest",
 // session.first goes to the first message, session.last back to the bottom, and session.messages_last_user
 // aligns the last question with the top. Each reply groups its two reads under "Explored".
 import { defineApp, session } from "../../lib/app"
@@ -44,7 +44,7 @@ export default defineApp({
   steps: [
     { checkpoint: "open", until: "Answer 8 three.", deviation },
     { keys: ["pageup"] },
-    { checkpoint: "page-up", until: "Jump to latest", deviation: [...deviation, "V15-navigation"] },
+    { checkpoint: "page-up", until: "Jump to latest", deviation },
     { keys: ["ctrl+g"] },
     { checkpoint: "first", until: "Question 1", deviation },
     { keys: ["end"] },
