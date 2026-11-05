@@ -92,7 +92,8 @@ export function transitionLocationDialog(
   state: LocationDialogState,
   event: LocationDialogEvent,
 ): LocationDialogTransition {
-  if (event.type === "query.changed") return event.query === state.query ? same(state) : to({ ...state, query: event.query })
+  if (event.type === "query.changed")
+    return event.query === state.query ? same(state) : to({ ...state, query: event.query })
 
   if (event.type === "drilled") {
     if (state.type !== "projects" && state.type !== "others") return same(state)
@@ -121,7 +122,8 @@ function choose(
   if (entry.type === "add" && !event.choosesServer) return to(state, [{ type: "project.add" }])
 
   // Picking a server again from the server step keeps its search and the way back.
-  if (entry.type === "add") return state.type === "servers" ? same(state) : enter(state, event.active, { type: "servers", query: "" })
+  if (entry.type === "add")
+    return state.type === "servers" ? same(state) : enter(state, event.active, { type: "servers", query: "" })
 
   if (entry.type === "other")
     return state.type === "projects" ? enter(state, "other", { type: "others", query: "" }) : same(state)

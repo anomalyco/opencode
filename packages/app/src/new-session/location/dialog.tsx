@@ -89,18 +89,15 @@ function NewSessionLocationDialog(props: {
     return target ? global.serverCtx(ServerConnection.key(target)) : undefined
   }
 
-  const [listed, listedActions] = createResource(
-    drilled,
-    async (project) => ({
-      projectID: project.id,
-      items:
-        (await context(project)
-          ?.sdk.api.worktree.list({ projectID: project.id! })
-          .catch(() => undefined)) ??
-        project.worktrees ??
-        [],
-    }),
-  )
+  const [listed, listedActions] = createResource(drilled, async (project) => ({
+    projectID: project.id,
+    items:
+      (await context(project)
+        ?.sdk.api.worktree.list({ projectID: project.id! })
+        .catch(() => undefined)) ??
+      project.worktrees ??
+      [],
+  }))
 
   // `latest` only skips Suspense once the resource has resolved at least once. Before that it behaves like a plain
   // read, which suspends the dialog and makes it flash on the first drill into a project.

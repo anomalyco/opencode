@@ -71,7 +71,10 @@ describe("pin board", () => {
   })
 
   test("closing a held drag ends it", () => {
-    const state = run([{ type: "pointer.down", x: 0, y: 0 }, { type: "close", now: 1 }])
+    const state = run([
+      { type: "pointer.down", x: 0, y: 0 },
+      { type: "close", now: 1 },
+    ])
     expect(dragKnockDue(state, 100, 100, 7)).toBe(false)
   })
 

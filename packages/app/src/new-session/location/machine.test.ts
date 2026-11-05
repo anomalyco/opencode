@@ -113,7 +113,12 @@ describe("location dialog steps", () => {
 
   test("a typed worktree search keeps Backspace for the input", () => {
     const state = transitionLocationDialog(createLocationDialogState(opencode), query("feat")).state
-    expect(transitionLocationDialog(state, key("Backspace"))).toEqual({ state, effects: [], handled: false, stop: false })
+    expect(transitionLocationDialog(state, key("Backspace"))).toEqual({
+      state,
+      effects: [],
+      handled: false,
+      stop: false,
+    })
   })
 
   test.each([
@@ -153,9 +158,9 @@ describe("location dialog steps", () => {
       }),
     ).toMatchObject({ state, effects: [{ type: "workspace.select", project: opencode, value: "create" }] })
 
-    expect(transitionLocationDialog(createLocationDialogState(), { ...openProject("add"), choosesServer: false })).toMatchObject(
-      { effects: [{ type: "project.add" }] },
-    )
+    expect(
+      transitionLocationDialog(createLocationDialogState(), { ...openProject("add"), choosesServer: false }),
+    ).toMatchObject({ effects: [{ type: "project.add" }] })
   })
 
   test("an unchanged query and a back with nowhere to go keep the state", () => {
