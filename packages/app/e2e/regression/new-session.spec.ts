@@ -790,11 +790,11 @@ test("the title and message stay stable through worktree creation", async ({ pag
   await expect.poll(() => mock.calls).toEqual(["worktree", "session", "prompt"])
 })
 
-test("the created session's composer keeps focus and a caret placed after a line break", async ({ page }) => {
+test("the created session's composer keeps focus and a caret placed mid-draft", async ({ page }) => {
   const mock = await openWorktreeDraft(page, pendingDraft)
   const pending = await submitPending(page, mock)
   await draftFollowUp(page)
-  // The start of the second line, one character past the line break.
+  // The start of the second line: not where focusing the editor alone would put the caret.
   await editor(page).press("ControlOrMeta+End")
   await editor(page).press("Home")
   mock.worktree.resolve({ status: 200, json: { directory: workspace } })

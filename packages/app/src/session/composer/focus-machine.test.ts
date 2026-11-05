@@ -60,7 +60,7 @@ test("a session composer that mounts frames after the pending composer left take
   ])
   expect(needsRealComposerFocus(mounted.state, A)).toBe(true)
 
-  // The stored cursor counts no line breaks; the caret read from the pending editor wins.
+  // The caret read from the pending editor wins over the stored cursor, which can lag behind it.
   const ready = replay([{ type: "real.ready", target: A, cursor: 31 }], mounted.state)
   expect(ready.effects).toEqual([
     { type: "timer.clear" },

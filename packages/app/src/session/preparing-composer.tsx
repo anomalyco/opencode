@@ -37,8 +37,8 @@ export function PreparingComposer(props: { sessionID: string; pending: PendingSe
       if (event.relatedTarget instanceof Element && isTitlebarTabLink(event.relatedTarget)) return
       focus.dispatch({ type: "preparing.blurred", target: props.sessionID })
     })
-    // The editor stores the caret only on input, key up and pointer up. Keep it current through keyboard moves
-    // and line breaks, so the draft moved into the created session carries it.
+    // The editor stores the caret only on input, key up and pointer up. Keep it current while a key is held, so
+    // the draft that moves into the created session carries the caret.
     makeEventListener(document, "selectionchange", () => {
       if (document.activeElement !== el) return
       const cursor = getCursorPosition(el)
