@@ -293,10 +293,10 @@ impl Process {
         }
         let pid = i32::try_from(self.pid).context("invalid pid")?;
         // SAFETY: the unreaped child keeps its PID and group ID reserved.
-        check_signal(unsafe { libc::killpg(pid, signal) })?;
+        check_signal(unsafe { libc::killpg(pid, signal) }, self.pid)?;
         // Signal the child directly too, in case it moved to another group.
         // SAFETY: as above.
-        check_signal(unsafe { libc::kill(pid, signal) })
+        check_signal(unsafe { libc::kill(pid, signal) }, self.pid)
     }
 
     /// Call only after the waiter has returned: kill the group first, so the
@@ -322,10 +322,12 @@ impl Process {
 
 /// Reads errno right after a `kill`/`killpg` result. A zombie group with no
 /// live members gives ESRCH on macOS, which is not an error here.
-fn check_signal(result: libc::c_int) -> Result<()> {
+/// Signalling an exited child whose group is empty fails with `ESRCH`, or
+/// with `EPERM` on macOS (the zombie is still there); neither is an error.
+fn check_signal(result: libc::c_int, pid: u32) -> Result<()> {
     if result == -1 {
         let errno = Errno::last();
-        if errno != Errno::ESRCH {
+        if errno != Errno::ESRCH && !(errno == Errno::EPERM && has_exited(pid)) {
             return Err(io::Error::from(errno)).context("failed to signal process");
         }
     }
@@ -349,6 +351,23 @@ impl ChildKiller for GroupKiller {
 enum Exit {
     Code(u32),
     Signal(String),
+}
+
+/// Whether the child has exited, without reaping it.
+fn has_exited(pid: u32) -> bool {
+    // SAFETY: siginfo_t is plain data, and all-zero is a valid value.
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is a valid out pointer; WNOWAIT leaves the zombie.
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            pid as libc::id_t,
+            &mut info,
+            libc::WEXITED | libc::WNOWAIT | libc::WNOHANG,
+        )
+    };
+    // SAFETY: waitid filled `info`; a zero PID means the child is still running.
+    result == 0 && unsafe { info.si_pid() } != 0
 }
 
 /// Waits for the child to exit without reaping it.
