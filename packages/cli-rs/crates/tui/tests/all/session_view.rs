@@ -274,3 +274,29 @@ fn a_send_returns_to_the_newest_rows_unless_submit_scroll_is_keep() {
     assert!(screen.contains("Jump to latest"), "{screen}");
     assert!(!screen.contains("Answer 30 three."), "{screen}");
 }
+
+#[test]
+fn usage_limits_are_kept_per_location() {
+    let h = mount("ses_a", json!({ "animations": false }));
+    h.wait_for("$5 left");
+    assert_eq!(h.limits(), [Some(DIRECTORY.to_owned())]);
+
+    // The worktree's session reads its own location's limits, not the project's.
+    h.tui.navigate(Route::Session {
+        id: SessionID("ses_wt".into()),
+    });
+    h.wait_for("Worktree work");
+    h.wait_for("$4 left");
+    assert_eq!(
+        h.limits(),
+        [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]
+    );
+
+    // Back in the project, its limits show again without another request.
+    h.tui.navigate(Route::Session {
+        id: SessionID("ses_a".into()),
+    });
+    h.wait_for("$5 left");
+    h.settle();
+    assert_eq!(h.limits().len(), 2);
+}
