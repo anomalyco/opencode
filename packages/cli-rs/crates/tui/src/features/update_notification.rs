@@ -110,33 +110,17 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
             KeymapLayer::default().bindings(["opencode.update"]),
         ],
     );
-    listen(tui, tui.data.signals());
-}
-
-/// `installation.update-available` and `installation.updated` from the server.
-fn listen(tui: &Tui, mut signals: tokio::sync::broadcast::Receiver<V2Event>) {
-    let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            loop {
-                let notice = match signals.recv().await {
-                    Ok(V2Event::InstallationUpdateAvailable(event)) => (Kind::Available, event.data.version),
-                    Ok(V2Event::InstallationUpdated(event)) => (Kind::Installed, event.data.version),
-                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
-                };
-                return Some((notice, signals));
-            }
-        },
-        move |_, next| {
-            let (Some(tui), Some(((kind, version), signals))) = (weak.upgrade(), next) else {
-                return;
-            };
-            let remote = tui.updates.source().is_some_and(|source| source.remote());
-            notify(&tui, Notice { kind, version, server: Some(remote) });
-            listen(&tui, signals);
-        },
-    );
+    // For the TUI's lifetime.
+    crate::features::events::subscribe(tui, |tui, event| {
+        let (kind, version) = match event {
+            V2Event::InstallationUpdateAvailable(event) => (Kind::Available, event.data.version.clone()),
+            V2Event::InstallationUpdated(event) => (Kind::Installed, event.data.version.clone()),
+            _ => return,
+        };
+        let remote = tui.updates.source().is_some_and(|source| source.remote());
+        notify(tui, Notice { kind, version, server: Some(remote) });
+    })
+    .forget();
 }
 
 impl Updates {

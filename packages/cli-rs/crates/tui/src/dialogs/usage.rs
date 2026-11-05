@@ -225,15 +225,16 @@ fn key(model: &ModelInfo) -> String {
 }
 
 fn rows(local: &Local) -> Vec<Row> {
-    let mut rows: Vec<Row> = local
-        .models()
-        .into_iter()
-        .filter_map(|model| {
-            let usage = local.model_usage(&model)?;
-            let level = level(&usage, &model);
-            Some(Row { model, usage, level })
-        })
-        .collect();
+    let mut rows: Vec<Row> = local.models(|models| {
+        models
+            .iter()
+            .filter_map(|model| {
+                let usage = local.model_usage(model)?;
+                let level = level(&usage, model);
+                Some(Row { model: model.clone(), usage, level })
+            })
+            .collect()
+    });
     rows.sort_by(|a, b| locale_compare(&a.model.name, &b.model.name));
     rows
 }

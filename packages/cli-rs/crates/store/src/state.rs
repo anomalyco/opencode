@@ -307,9 +307,19 @@ impl Data {
         }
     }
 
-    /// Reads the state. Keep `f` short: it holds the store lock.
+    /// Reads the state. Keep `f` short: it holds the store lock. A `read` inside `f` on the same thread reuses the
+    /// outer guard, so code that runs under a read (a keymap condition during a row render) may read again.
+    #[allow(unsafe_code)]
     pub fn read<R>(&self, f: impl FnOnce(&State) -> R) -> R {
-        f(&self.lock())
+        let key = self.key();
+        if let Some(state) = held(key) {
+            assert!(!state.is_null(), "store read inside a store write on this thread");
+            // SAFETY: the outer `read` on this thread holds the guard until this call returns, and lends only `&State`.
+            return f(unsafe { &*state });
+        }
+        let guard = lock(&self.inner.state);
+        let _held = Held::enter(key, &*guard);
+        f(&guard)
     }
 
     /// The revision of the last flush.
@@ -341,21 +351,16 @@ impl Data {
         result
     }
 
-    /// The mutex is not reentrant. In debug builds locking it again on the same thread panics instead of
-    /// deadlocking (a keymap condition that reads the store, run under [`Data::read`]).
+    /// Locks the state for a write. Locking it while this thread reads or writes it panics instead of deadlocking.
     pub(crate) fn lock(&self) -> Locked<'_> {
-        #[cfg(debug_assertions)]
-        let key = Arc::as_ptr(&self.inner) as usize;
-        #[cfg(debug_assertions)]
-        assert!(!HELD.with_borrow(|held| held.contains(&key)), "reentrant store lock: this thread already holds it");
+        let key = self.key();
+        assert!(held(key).is_none(), "store write inside a store read or write on this thread");
         let guard = lock(&self.inner.state);
-        #[cfg(debug_assertions)]
-        HELD.with_borrow_mut(|held| held.push(key));
-        Locked {
-            guard,
-            #[cfg(debug_assertions)]
-            key,
-        }
+        Locked { _held: Held::enter(key, std::ptr::null()), guard }
+    }
+
+    fn key(&self) -> usize {
+        Arc::as_ptr(&self.inner) as usize
     }
 
     pub(crate) fn flush(&self, state: &mut State) {
@@ -496,17 +501,40 @@ enum Start<R, B> {
     After(Task<()>, B),
 }
 
-#[cfg(debug_assertions)]
 thread_local! {
-    /// The stores whose state this thread holds locked.
-    static HELD: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The stores whose state this thread holds locked, innermost last: the state a read lends, or null for a write.
+    static HOLDING: std::cell::RefCell<Vec<(usize, *const State)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// What this thread holds of the store `key`.
+fn held(key: usize) -> Option<*const State> {
+    HOLDING.with_borrow(|holding| holding.iter().rev().find(|(held, _)| *held == key).map(|(_, state)| *state))
+}
+
+/// One entry of [`HOLDING`], removed on drop.
+struct Held(usize);
+
+impl Held {
+    fn enter(key: usize, state: *const State) -> Self {
+        HOLDING.with_borrow_mut(|holding| holding.push((key, state)));
+        Held(key)
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        HOLDING.with_borrow_mut(|holding| {
+            if let Some(index) = holding.iter().rposition(|(key, _)| *key == self.0) {
+                holding.remove(index);
+            }
+        });
+    }
 }
 
 /// The locked [`State`].
 pub(crate) struct Locked<'a> {
+    _held: Held,
     guard: MutexGuard<'a, State>,
-    #[cfg(debug_assertions)]
-    key: usize,
 }
 
 impl std::ops::Deref for Locked<'_> {
@@ -520,17 +548,6 @@ impl std::ops::Deref for Locked<'_> {
 impl std::ops::DerefMut for Locked<'_> {
     fn deref_mut(&mut self) -> &mut State {
         &mut self.guard
-    }
-}
-
-#[cfg(debug_assertions)]
-impl Drop for Locked<'_> {
-    fn drop(&mut self) {
-        HELD.with_borrow_mut(|held| {
-            if let Some(index) = held.iter().rposition(|key| *key == self.key) {
-                held.remove(index);
-            }
-        });
     }
 }
 
@@ -558,4 +575,39 @@ pub(crate) fn evict_missing(data: &Data, error: opencode_api::error::Error) -> E
         data.write(|state| state.mark_deleted(&id));
     }
     error
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn data() -> (tokio::runtime::Runtime, Data) {
+        let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let client = Client::new("http://opencode.local").unwrap();
+        let data = Data::with_runtime(client, Options::default(), runtime.handle().clone());
+        (runtime, data)
+    }
+
+    #[test]
+    fn a_nested_read_reuses_the_outer_guard() {
+        let (_runtime, data) = data();
+        let revision = data.read(|outer| data.read(|inner| (std::ptr::eq(outer, inner), inner.revision())));
+        assert_eq!(revision, (true, 0));
+        // The guard is gone after the outer read: a write locks again.
+        data.write(|state| state.batch = 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "store write inside a store read")]
+    fn a_write_inside_a_read_panics() {
+        let (_runtime, data) = data();
+        data.read(|_| data.write(|_| ()));
+    }
+
+    #[test]
+    #[should_panic(expected = "store read inside a store write")]
+    fn a_read_inside_a_write_panics() {
+        let (_runtime, data) = data();
+        data.write(|_| data.read(|_| ()));
+    }
 }
