@@ -1,5 +1,5 @@
 import type { Locale } from "~/lib/language"
-import { desktopAssets } from "~/lib/download"
+import { desktopAssets, updateApi } from "~/lib/download"
 
 // LEGACY REDIRECTS, every one to be removed later. Old URLs that outside links, bookmarks, scripts
 // and older app versions still request, answered here so they keep working. Nothing in this repo may
@@ -24,7 +24,7 @@ export function legacyRedirect(request: Legacy): Response | undefined {
     const channel = download[1] === "stable" ? "latest" : download[1]
     return redirect(
       302,
-      `/update/api/${channel}/desktop/opencode/${desktopAssets[platform as keyof typeof desktopAssets]}`,
+      `${updateApi}/${channel}/desktop/opencode/${desktopAssets[platform as keyof typeof desktopAssets]}`,
     )
   }
 

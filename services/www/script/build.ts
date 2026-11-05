@@ -91,7 +91,11 @@ const entry = await Bun.build({
   external: ["./docs/*", "./site/*"],
 })
 if (!entry.success) throw new AggregateError(entry.logs, "worker.ts build failed")
-await writeWorkerConfig({ root, config: config.worker, manifest: { type: "partial", mainModule: "worker.mjs", modules: {} } })
+await writeWorkerConfig({
+  root,
+  config: config.worker,
+  manifest: { type: "partial", mainModule: "worker.mjs", modules: {} },
+})
 console.log(`www: built ${config.worker.name} (${mode})`)
 
 /** Copies the site's assets over the docs', refusing a path both write with different bytes. */
