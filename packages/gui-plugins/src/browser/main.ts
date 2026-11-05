@@ -13,7 +13,7 @@ import {
 
 const setup: Plugin.MainSetup = (ctx) => {
   let paneState = createMainPaneState<Pane>()
-  const loads = new Map<number, PromiseWithResolvers<Pane>>()
+  const loads = new Map<number, ReturnType<typeof Promise.withResolvers<Pane>>>()
   let disposing: Promise<void> | undefined
   const refs = ctx.storage.store("refs", RefsStore)
 

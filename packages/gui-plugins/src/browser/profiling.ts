@@ -20,6 +20,8 @@ import {
   type TraceCapture,
 } from "./profiling-machine"
 
+type Deferred<T> = ReturnType<typeof Promise.withResolvers<T>>
+
 const refusals: Record<ProfilingRefusal, string> = {
   "trace-active-here":
     "A performance trace is already active in this tab. Use browser.trace.stop({tabID}) to finish it before starting another.",
@@ -56,11 +58,11 @@ export function createProfiling(
 ) {
   let profilingState = createProfilingState(crypto.randomUUID())
   const timers = new Map<ProfilingTimer, ReturnType<typeof setTimeout>>()
-  const traceStarts = new Map<number, PromiseWithResolvers<undefined>>()
-  const traceStops = new Map<number, PromiseWithResolvers<TraceCapture>>()
-  const cpuStarts = new Map<number, PromiseWithResolvers<undefined>>()
-  const cpuStops = new Map<number, PromiseWithResolvers<CpuCapture>>()
-  const heaps = new Map<number, PromiseWithResolvers<Browser.FileID>>()
+  const traceStarts = new Map<number, Deferred<undefined>>()
+  const traceStops = new Map<number, Deferred<TraceCapture>>()
+  const cpuStarts = new Map<number, Deferred<undefined>>()
+  const cpuStops = new Map<number, Deferred<CpuCapture>>()
+  const heaps = new Map<number, Deferred<Browser.FileID>>()
   const disposed = Promise.withResolvers<void>()
 
   const dispatch = (event: ProfilingEvent) => {
@@ -73,7 +75,7 @@ export function createProfiling(
   }
 
   // A request waits for the settle of the attempt it joined, or fails at once.
-  const request = <T>(event: ProfilingEvent, waiters: Map<number, PromiseWithResolvers<T>>) => {
+  const request = <T>(event: ProfilingEvent, waiters: Map<number, Deferred<T>>) => {
     const reply = dispatch(event)
 
     if (reply?.status === "pending") return waiter(waiters, reply.attempt).promise
@@ -359,7 +361,7 @@ export function createProfiling(
 }
 
 /** The attempt's waiter; a new attempt drops the settled waiters of earlier ones. */
-function waiter<T>(waiters: Map<number, PromiseWithResolvers<T>>, attempt: number) {
+function waiter<T>(waiters: Map<number, Deferred<T>>, attempt: number) {
   const existing = waiters.get(attempt)
 
   if (existing) return existing
@@ -372,7 +374,7 @@ function waiter<T>(waiters: Map<number, PromiseWithResolvers<T>>, attempt: numbe
   return created
 }
 
-function settle<T>(waiters: Map<number, PromiseWithResolvers<T>>, attempt: number, outcome: Settled<T>) {
+function settle<T>(waiters: Map<number, Deferred<T>>, attempt: number, outcome: Settled<T>) {
   const target = waiter(waiters, attempt)
 
   if (outcome.ok) return target.resolve(outcome.value)

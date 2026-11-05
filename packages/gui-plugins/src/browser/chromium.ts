@@ -315,7 +315,7 @@ export function createBrowserPage(
   const contexts = new Map<string, { id: number; sessionID?: string }>()
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
-  const runs = new Map<number, { controller: AbortController; interrupted: PromiseWithResolvers<never> }>()
+  const runs = new Map<number, { controller: AbortController; interrupted: ReturnType<typeof Promise.withResolvers<never>> }>()
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, frame.url)
