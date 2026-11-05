@@ -23,6 +23,8 @@ export interface Interface {
    */
   readonly begin: Effect.Effect<boolean>
   readonly isDetaching: () => boolean
+  /** Whether shutdown has started, detaching or not. Interrupts from then on are not the user's. */
+  readonly isStopping: () => boolean
   /** Runs `hook` when this server starts detaching, while every service is still open. Removed with the scope. */
   readonly onDetach: (hook: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope>
 }
@@ -32,12 +34,14 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/De
 export const make = Effect.sync(() => {
   let prepared = false
   let detaching = false
+  let stopping = false
   const hooks = new Set<Effect.Effect<void>>()
   return Service.of({
     handoffPrepared: Effect.sync(() => {
       prepared = true
     }),
     begin: Effect.gen(function* () {
+      stopping = true
       detaching = prepared
       if (!detaching) return false
       yield* Effect.forEach(hooks, (hook) => hook.pipe(Effect.catchCause(() => Effect.void)), {
@@ -47,6 +51,7 @@ export const make = Effect.sync(() => {
       return true
     }),
     isDetaching: () => detaching,
+    isStopping: () => stopping,
     onDetach: (hook) =>
       Effect.acquireRelease(
         Effect.sync(() => {

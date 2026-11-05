@@ -54,6 +54,7 @@ import { Image } from "../image.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Integration } from "../integration.js"
 import { Detaching } from "../detaching.js"
+import { LocationLifecycle } from "../location-lifecycle.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
@@ -211,6 +212,7 @@ export const requirements = LayerNode.group([
   Integration.node,
   Detaching.node,
   Job.node,
+  LocationLifecycle.node,
   KV.node,
   llmClient,
   Location.node,

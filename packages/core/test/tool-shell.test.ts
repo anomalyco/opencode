@@ -18,6 +18,7 @@ import { Global } from "@opencode/util/global"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -1778,29 +1779,57 @@ describe("ShellTool", () => {
       }),
     )
 
-    spawnerIt.live("leaves a spawned command's interrupt unchanged while detaching", () =>
+    it.live("leaves a call interrupted, not cancelled by the user, when its Location closes", () =>
       withTempDir((tmp) => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
             const shell = yield* Shell.Service
-            const detaching = yield* Detaching.Service
-            const { shellID, result } = yield* interruptCall(
+            const lifecycle = yield* LocationLifecycle.Service
+            const { shellID, exit, result } = yield* interruptCall(
               registry,
               "printf ready; sleep 60",
-              "call-detaching-spawned",
-              Effect.gen(function* () {
-                yield* detaching.handoffPrepared
-                yield* detaching.begin
-              }),
+              "call-location-closed",
+              lifecycle.shutdown,
             )
-            expect(shell.detachable(shellID)).toBe(false)
-            expect((yield* shell.get(shellID)).status).toBe("killed")
-            expect(result?.metadata).toMatchObject({ shellID, interrupted: true })
+            expect(Exit.hasInterrupts(exit)).toBe(true)
+            expect(result).toBeUndefined()
+            expect((yield* shell.get(shellID)).status).toBe("running")
+            yield* shell.remove(shellID)
           }),
         )
       }),
     )
+
+    for (const handoff of [true, false])
+      spawnerIt.live(
+        `leaves a spawned command's call interrupted, not cancelled by the user, on ${handoff ? "a planned restart" : "a normal quit"}`,
+        () =>
+          withTempDir((tmp) => {
+            reset()
+            return withSession(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const shell = yield* Shell.Service
+                const detaching = yield* Detaching.Service
+                const { shellID, exit, result } = yield* interruptCall(
+                  registry,
+                  "printf ready; sleep 60",
+                  `call-stopping-spawned-${handoff}`,
+                  Effect.gen(function* () {
+                    if (handoff) yield* detaching.handoffPrepared
+                    yield* detaching.begin
+                  }),
+                )
+                expect(shell.detachable(shellID)).toBe(false)
+                // The step settles it as interrupted; no "interrupted by the user" result, no stop to wait for.
+                expect(Exit.hasInterrupts(exit)).toBe(true)
+                expect(result).toBeUndefined()
+                expect((yield* shell.get(shellID)).status).toBe("running")
+                yield* shell.remove(shellID)
+              }),
+            )
+          }),
+      )
   }
 
   it.live("backgrounds a foreground command when the session is signaled", () =>

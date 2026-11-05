@@ -6,10 +6,11 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Cause, Deferred, Effect, Exit, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Option, Schema, Scope } from "effect"
 import { Detaching } from "../../detaching.js"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
+import { LocationLifecycle } from "../../location-lifecycle.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
@@ -206,8 +207,11 @@ export const reattach = Effect.fnUntraced(function* (input: {
   // The job's existing durable row, if the previous server had backgrounded it.
   readonly notificationID?: SessionMessage.ID
   readonly resume?: () => false | undefined
+  // Whether a planned shutdown leaves the command running; otherwise cancelling the job stops it.
+  readonly leaveRunning: () => boolean
 }) {
   const settled = yield* Deferred.make<Output>()
+  const id = input.info.id
   yield* startJob(input.jobs, {
     sessionID: input.sessionID,
     info: input.info,
@@ -215,17 +219,27 @@ export const reattach = Effect.fnUntraced(function* (input: {
     run: completed(input.shell, input.info).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
       Effect.map((output) => resultMessages(output).join("\n\n")),
+      Effect.onInterrupt(() =>
+        input.leaveRunning() ? Effect.void : input.shell.stop(id, "killed").pipe(Effect.ignore),
+      ),
     ),
   })
-  yield* input.jobs.background(input.info.id)
-  yield* notify(input.sessions, input.jobs, {
+  yield* input.jobs.background(id)
+  const notifying = notify(input.sessions, input.jobs, {
     sessionID: input.sessionID,
-    id: input.info.id,
-    shellID: input.info.id,
+    id,
+    shellID: id,
     command: input.info.command,
     settled,
     resume: input.resume,
-  }).pipe(Effect.forkIn(input.scope, { startImmediately: true }))
+  })
+  // A finished command's result is admitted before recovery moves on, like a recovered subagent's.
+  const current = yield* input.shell.get(id).pipe(Effect.option)
+  if (Option.isSome(current) && current.value.status !== "running")
+    return yield* notifying.pipe(
+      Effect.catch((error) => Effect.logWarning("failed to report a recovered shell command", { id, error })),
+    )
+  yield* notifying.pipe(Effect.forkIn(input.scope, { startImmediately: true }))
 })
 
 export const Plugin = {
@@ -241,9 +255,12 @@ export const Plugin = {
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
     const detaching = yield* Detaching.Service
+    const lifecycle = Option.getOrUndefined(yield* Effect.serviceOption(LocationLifecycle.Service))
 
     // A planned shutdown leaves commands that can outlive this server running for the next one.
-    const leaveRunning = (id: ShellSchema.ID) => detaching.isDetaching() && shell.detachable(id)
+    const leaveRunning = (detachable: boolean) => detaching.isDetaching() && detachable
+    // Shutting down or closing the Location interrupts calls too, but that is not the user cancelling them.
+    const closing = () => detaching.isStopping() || lifecycle?.isClosed() === true
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -291,14 +308,21 @@ export const Plugin = {
       .pipe(Effect.provideService(Scope.Scope, scope))
 
     // Settles an interrupted foreground call. The interrupt only reaches the step through ToolInterrupted.
-    const interrupted = Effect.fnUntraced(function* (info: ShellSchema.Info, jobID: string) {
-      if (leaveRunning(info.id)) {
+    const interrupted = Effect.fnUntraced(function* (
+      info: ShellSchema.Info,
+      jobID: string,
+      detachable: boolean,
+      cause: Cause.Cause<unknown>,
+    ) {
+      if (leaveRunning(detachable)) {
         yield* jobs.background(jobID)
         yield* shell.timeout(info.id, 0).pipe(Effect.ignore)
         const output = backgroundResult(info.id, info.file)
         yield* ToolInterrupted.report(toolResult(output))
         return output
       }
+      // Settled as interrupted by the step, as before; the command ends with the job's scope.
+      if (closing()) return yield* Effect.failCause(cause)
       yield* shell.stop(info.id, "killed").pipe(Effect.ignore)
       const result = yield* shell.result(info)
       // The stopped job settles from the same exit; this only releases it.
@@ -350,6 +374,8 @@ export const Plugin = {
                       finalTimeout = yield* restore(prepare(invocation, context))
                     }),
                 )
+                // Read once: teardown may forget the command before an interrupt is handled.
+                const detachable = shell.detachable(info.id)
                 yield* context.progress({ shellID: info.id })
 
                 const settled = yield* Deferred.make<Output>()
@@ -357,7 +383,7 @@ export const Plugin = {
                   Effect.tap((output) => Deferred.succeed(settled, output)),
                   Effect.map((output) => resultMessages(output).join("\n\n")),
                   Effect.onInterrupt(() =>
-                    leaveRunning(info.id) ? Effect.void : shell.stop(info.id, "killed").pipe(Effect.ignore),
+                    leaveRunning(detachable) ? Effect.void : shell.stop(info.id, "killed").pipe(Effect.ignore),
                   ),
                 )
                 const job = yield* startJob(jobs, { sessionID: context.sessionID, info, run })
@@ -374,7 +400,8 @@ export const Plugin = {
                   Effect.ensuring(Effect.sync(() => foreground.delete(info.id))),
                 )
                 if (Exit.isFailure(blocked)) {
-                  if (Cause.hasInterrupts(blocked.cause)) return yield* interrupted(info, job.id)
+                  if (Cause.hasInterrupts(blocked.cause))
+                    return yield* interrupted(info, job.id, detachable, blocked.cause)
                   return yield* Effect.failCause(blocked.cause)
                 }
                 const result = blocked.value
