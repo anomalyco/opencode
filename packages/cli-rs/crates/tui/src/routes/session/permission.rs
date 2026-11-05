@@ -491,8 +491,9 @@ impl Inner {
         drop(prompted);
         let view = self.question_view(&tui, &theme, &request, &choices, selected, narrow);
         if expanded {
+            // TS sets `top: -height + 1` from the region at the bottom of the screen, which keeps the first row.
             view.absolute()
-                .position(Edge::Top, 0)
+                .position(Edge::Top, 1)
                 .position(Edge::Bottom, 1)
                 .position(Edge::Left, 2)
                 .position(Edge::Right, 2);
@@ -756,13 +757,16 @@ fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
 }
 
 /// `key` in the text color, then `label` muted.
-fn hint(app: &App, theme: &Theme, key: &str, label: &str) -> View {
-    View::new(app)
-        .row()
-        .gap(1)
-        .shrink(0.0)
-        .child(&Text::new(app, key.to_owned()).fg(theme.text.base))
-        .child(&Text::new(app, label.to_owned()).fg(theme.text.muted))
+/// `{key} <span muted>{label}</span>` in one text, so the space takes the key's color.
+fn hint(app: &App, theme: &Theme, key: &str, label: &str) -> Text {
+    Text::new(
+        app,
+        vec![
+            format!("{key} ").fg(theme.text.base),
+            label.to_owned().fg(theme.text.muted),
+        ],
+    )
+    .shrink(0.0)
 }
 
 fn lines_view(app: &App, lines: &[String], color: impl Fn(usize) -> Color) -> View {
@@ -812,15 +816,7 @@ fn presentation_body(
 fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
     let app = &tui.app;
     let syntax = opencode_ui::code::syntax_theme(theme);
-    // A scroll box has no height of its own: start from its row count, shrink under the inline cap, and
-    // grow in full screen.
-    let scroll = |rows: usize| {
-        ScrollBox::new(app)
-            .grow(1.0)
-            .shrink(1.0)
-            .basis(Length::Cells(rows as f32))
-            .min_height(0)
-    };
+    let scroll = || ScrollBox::new(app).height(Length::percent(100.0));
     let column = View::new(app)
         .column()
         .gap(1)
@@ -842,20 +838,14 @@ fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
         };
         let file = current.file.as_deref().unwrap_or_default();
         let filetype = opentui::syntax::filetype_for_path(file);
-        // Every line but the file headers and the first hunk's `@@` line.
-        let rows = diff
-            .lines()
-            .filter(|line| !line.starts_with("---") && !line.starts_with("+++"))
-            .count()
-            .saturating_sub(1);
         let diff =
             opencode_ui::diff::view(app, theme, &syntax, diff, view, filetype, WrapMode::Word, 0);
-        return column.child(&scroll(rows).child(&diff));
+        return column.child(&scroll().child(&diff));
     }
     if let Some(patch) = &current.patch {
         let code =
             opencode_ui::code::view(app, theme, &syntax, Some("diff"), patch).fg(theme.text.muted);
-        return column.child(&scroll(patch.lines().count()).child(&code));
+        return column.child(&scroll().child(&code));
     }
     column.child(
         &View::new(app)
