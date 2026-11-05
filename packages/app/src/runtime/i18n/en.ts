@@ -249,6 +249,7 @@ export const dict = {
   "provider.connect.form.open": "Open link",
   "provider.connect.form.openAgain": "Open link again",
   "provider.connect.form.finished": "I finished",
+  "provider.connect.form.browserFailed": "We couldn't open your browser. Open the link below, then select I finished.",
   "provider.connect.form.selectOne": "Select at least one option",
   "provider.connect.form.minItems": "Select at least {{count}}",
   "provider.connect.form.maxItems": "Select at most {{count}}",
