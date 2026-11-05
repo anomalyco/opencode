@@ -33,15 +33,14 @@ const [machineState, setMachineState] = createSignal(INITIAL_UPLOAD_MACHINE_STAT
 // Rows keep their identity while progress streams, so a cancel button under the pointer is not replaced.
 const [view, setView] = createStore<{ items: Upload[] }>({ items: [] })
 
-const runs = new Map<
-  number,
-  {
-    work: UploadWork
-    result: PromiseWithResolvers<string | undefined>
-    controller: AbortController
-    timer?: ReturnType<typeof setTimeout>
-  }
->()
+type Run = {
+  work: UploadWork
+  result: PromiseWithResolvers<string | undefined>
+  controller: AbortController
+  timer?: ReturnType<typeof setTimeout>
+}
+
+const runs = new Map<number, Run>()
 
 // Handed from `track` to the `upload.run` effect its start causes in the same dispatch.
 let starting: { work: UploadWork; result: PromiseWithResolvers<string | undefined> } | undefined
@@ -74,7 +73,7 @@ function run(effect: UploadMachineEffect) {
 
   if (effect.type === "upload.run") {
     if (!starting) return
-    const current = { ...starting, controller: new AbortController(), timer: stall(attempt, effect.timeoutMs) }
+    const current: Run = { ...starting, controller: new AbortController() }
     starting = undefined
     runs.set(attempt, current)
     void Promise.try(() =>
@@ -92,8 +91,10 @@ function run(effect: UploadMachineEffect) {
   if (!current) return
   clearTimeout(current.timer)
 
+  if (effect.type === "timer.clear") return
+
   if (effect.type === "timer.reset") {
-    current.timer = stall(attempt, effect.timeoutMs)
+    current.timer = setTimeout(() => dispatch({ type: "upload.timed-out", attempt }), effect.timeoutMs)
 
     return
   }
@@ -103,10 +104,6 @@ function run(effect: UploadMachineEffect) {
 
   if (effect.type === "upload.resolve") return current.result.resolve(effect.path)
   current.result.reject(effect.error)
-}
-
-function stall(attempt: number, timeoutMs: number) {
-  return setTimeout(() => dispatch({ type: "upload.timed-out", attempt }), timeoutMs)
 }
 
 export const uploads = {

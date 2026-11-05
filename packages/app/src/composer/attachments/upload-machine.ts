@@ -1,4 +1,4 @@
-// An upload that reports no progress for this long is stuck on a dead connection; it fails instead of blocking sends.
+// An upload whose body stops advancing for this long is stuck on a dead connection; it fails instead of blocking sends.
 export const UPLOAD_STALL_TIMEOUT_MS = 60_000
 
 /** The failure a stalled upload rejects with; it carries no message, so the toast shows the generic one. */
@@ -15,6 +15,11 @@ export type UploadEntry = {
   readonly mime: string
   readonly size: number
   readonly loaded: number
+  /**
+   * Only `sending` arms the stall timer. A `queued` request may wait behind the browser's per-host connection
+   * limit before its first progress event, and a `sent` body waits on the server's answer; neither is a stall.
+   */
+  readonly transfer: "queued" | "sending" | "sent"
 }
 
 /**
@@ -43,8 +48,9 @@ export type UploadMachineEvent =
   | { readonly type: "scope.cancelled"; readonly scope: UploadScope }
 
 export type UploadMachineEffect =
-  | { readonly type: "upload.run"; readonly attempt: number; readonly timeoutMs: number }
+  | { readonly type: "upload.run"; readonly attempt: number }
   | { readonly type: "timer.reset"; readonly attempt: number; readonly timeoutMs: number }
+  | { readonly type: "timer.clear"; readonly attempt: number }
   | { readonly type: "upload.abort"; readonly attempt: number }
   | { readonly type: "upload.resolve"; readonly attempt: number; readonly path: string | undefined }
   | { readonly type: "upload.reject"; readonly attempt: number; readonly error: unknown }
@@ -81,10 +87,11 @@ export function transitionUploads(state: UploadMachineState, event: UploadMachin
             mime: event.mime,
             size: event.size,
             loaded: 0,
+            transfer: "queued",
           },
         ],
       },
-      effects: [{ type: "upload.run", attempt, timeoutMs: UPLOAD_STALL_TIMEOUT_MS }],
+      effects: [{ type: "upload.run", attempt }],
     }
   }
 
@@ -112,12 +119,21 @@ export function transitionUploads(state: UploadMachineState, event: UploadMachin
   switch (event.type) {
     case "upload.progress": {
       const loaded = Math.min(Math.max(event.loaded, entry.loaded), entry.size)
+      const transfer = loaded === entry.size ? "sent" : "sending"
 
-      if (loaded === entry.loaded) return stay(state)
+      if (loaded === entry.loaded && transfer === entry.transfer) return stay(state)
 
       return {
-        state: { ...state, entries: state.entries.map((item) => (item === entry ? { ...entry, loaded } : item)) },
-        effects: [{ type: "timer.reset", attempt: entry.attempt, timeoutMs: UPLOAD_STALL_TIMEOUT_MS }],
+        state: {
+          ...state,
+          entries: state.entries.map((item) => (item === entry ? { ...entry, loaded, transfer } : item)),
+        },
+        effects:
+          transfer === "sending"
+            ? [{ type: "timer.reset", attempt: entry.attempt, timeoutMs: UPLOAD_STALL_TIMEOUT_MS }]
+            : entry.transfer === "sending"
+              ? [{ type: "timer.clear", attempt: entry.attempt }]
+              : NO_EFFECTS,
       }
     }
 
@@ -126,6 +142,8 @@ export function transitionUploads(state: UploadMachineState, event: UploadMachin
     case "upload.failed":
       return finish(state, rest(), [{ type: "upload.reject", attempt: entry.attempt, error: event.error }])
     case "upload.timed-out":
+      if (entry.transfer !== "sending") return stay(state)
+
       return finish(state, rest(), [
         { type: "upload.abort", attempt: entry.attempt },
         { type: "upload.reject", attempt: entry.attempt, error: UPLOAD_TIMED_OUT },

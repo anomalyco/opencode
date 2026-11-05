@@ -30,13 +30,21 @@ afterEach(() => {
 })
 
 describe("transitionUploads", () => {
-  test("a stalled upload times out, and only forward progress resets its stall timer", () => {
-    const started = replay([start("u1", scopeA)])
-    const progressed = replay([{ type: "upload.progress", attempt: 1, loaded: 4096 }], started.state)
+  test("a queued upload has no stall timer until its first progress event, then only forward progress resets it", () => {
+    const queued = replay([start("u1", scopeA)])
 
-    expect(progressed.state).toMatchObject({ entries: [{ id: "u1", loaded: 1024 }] })
+    expect(queued.effects).toEqual([{ type: "upload.run", attempt: 1 }])
+    expect(transitionUploads(queued.state, { type: "upload.timed-out", attempt: 1 }).state).toBe(queued.state)
+
+    const connected = replay([{ type: "upload.progress", attempt: 1, loaded: 0 }], queued.state)
+
+    expect(connected.state).toMatchObject({ entries: [{ id: "u1", loaded: 0, transfer: "sending" }] })
+    expect(connected.effects).toEqual([{ type: "timer.reset", attempt: 1, timeoutMs: UPLOAD_STALL_TIMEOUT_MS }])
+
+    const progressed = replay([{ type: "upload.progress", attempt: 1, loaded: 512 }], connected.state)
+
     expect(progressed.effects).toEqual([{ type: "timer.reset", attempt: 1, timeoutMs: UPLOAD_STALL_TIMEOUT_MS }])
-    expect(transitionUploads(progressed.state, { type: "upload.progress", attempt: 1, loaded: 512 }).state).toBe(
+    expect(transitionUploads(progressed.state, { type: "upload.progress", attempt: 1, loaded: 256 }).state).toBe(
       progressed.state,
     )
 
@@ -46,6 +54,19 @@ describe("transitionUploads", () => {
         { type: "upload.abort", attempt: 1 },
         { type: "upload.reject", attempt: 1, error: UPLOAD_TIMED_OUT },
       ],
+    })
+  })
+
+  test("a fully sent body waits for the server's answer without a stall timer", () => {
+    const sending = replay([start("u1", scopeA), { type: "upload.progress", attempt: 1, loaded: 512 }])
+    const sent = replay([{ type: "upload.progress", attempt: 1, loaded: 4096 }], sending.state)
+
+    expect(sent.state).toMatchObject({ entries: [{ id: "u1", loaded: 1024, transfer: "sent" }] })
+    expect(sent.effects).toEqual([{ type: "timer.clear", attempt: 1 }])
+    expect(transitionUploads(sent.state, { type: "upload.timed-out", attempt: 1 }).state).toBe(sent.state)
+    expect(transitionUploads(sent.state, { type: "upload.succeeded", attempt: 1, path: "/tmp/u1.bin" })).toEqual({
+      state: { status: "idle", issued: 1 },
+      effects: [{ type: "upload.resolve", attempt: 1, path: "/tmp/u1.bin" }],
     })
   })
 
@@ -84,12 +105,16 @@ describe("uploads", () => {
     expect(uploads.items()).toEqual([])
   })
 
-  test("an upload with no progress fails after the stall timeout instead of blocking sends", async () => {
+  test("an upload whose body stops advancing fails after the stall timeout instead of blocking sends", async () => {
     jest.useFakeTimers()
 
     const pending = uploads.track(
       { id: "hung", scope: scopeB, filename: "big.zip", mime: "application/zip", size: 1024 },
-      () => new Promise<string>(() => {}),
+      (report) => {
+        report(100)
+
+        return new Promise<string>(() => {})
+      },
     )
 
     expect(uploads.forScope(scopeB).map((item) => item.id)).toEqual(["hung"])
