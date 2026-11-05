@@ -213,23 +213,35 @@ const Page = lazy(() => import("./page"))
 onCleanup(onIdle(() => void Page.preload()))
 ```
 
-Pairing's shipping page uses a query, not `createLatest`. It passes the query's abort signal directly to the no-input Ipc method; options are the only argument. The generation in the key asks again when main comes back:
+Pairing's shipping page reads through its state machine's driver, not `createLatest`, because a read can retry, time out and race a change of the same setting. Each read or change is an attempt of one generation of main: the driver passes the attempt's abort signal directly to the Ipc method, and every outcome, a timeout included, goes back to the machine, which ignores answers for an attempt it no longer runs. A new generation reads again:
 
-<!-- source: src/pairing/page.tsx#screenActive -->
+<!-- source: src/pairing/page.tsx#runScreen -->
 
 ```tsx
-const screenActive = useQuery(() => ({
-  queryKey: [ctx.id, "screen-active", main()?.generation],
-  queryFn: (input) => {
-    const live = main()
+// Reads or changes the display sleep setting through the generation that asked for it. `screenActive` has no input,
+// so its options are its only argument. The attempt's signal ends either call at its timeout, or when the page or
+// that generation goes away.
+const runScreen = (effect: Extract<PairingEffect, { type: "read-screen" | "set-screen" }>) => {
+  const attempt = effect.attempt
 
-    if (!live) throw new Error("Pairing's main side is not active")
+  const fail = () =>
+    dispatch({ type: effect.type === "read-screen" ? "screen.read.failed" : "screen.change.failed", attempt })
 
-    return live.value.screenActive({ signal: input.signal })
-  },
-  enabled: !!main(),
-  gcTime: 0,
-}))
+  const live = main()
+
+  if (live?.generation !== effect.generation) return fail()
+
+  const signal = start(attempt, effect.timeoutMs, fail)
+
+  if (effect.type === "read-screen")
+    return void live.value
+      .screenActive({ signal })
+      .then((enabled) => dispatch({ type: "screen.read.succeeded", attempt, enabled }), fail)
+
+  void live.value
+    .setScreenActive(effect.enabled, { signal })
+    .then(() => dispatch({ type: "screen.change.succeeded", attempt }), fail)
+}
 ```
 
 ## Catalog
