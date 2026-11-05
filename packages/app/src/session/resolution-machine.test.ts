@@ -279,6 +279,7 @@ test("a session that does not resolve in time shows as unreachable and recovers"
     target: target("ses_a"),
     refresh: true,
   })
+
   expect(reconnected.state).toEqual({ status: "resolving", target: target("ses_a"), attempt: 3 })
   expect(types(reconnected.effects)).toEqual(["sync.transcript", "sync.metadata", "timer.start"])
 
