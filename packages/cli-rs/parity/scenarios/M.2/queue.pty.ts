@@ -1,5 +1,5 @@
 // While a turn runs, Enter steers the next prompt into the inbox and `prompt.queue` (Ctrl+X Enter) queues one;
-// a shell command cannot be queued; Ctrl+L clears the screen.
+// an empty Enter steers the queued one; a shell command cannot be queued; Ctrl+L clears the screen.
 import { definePty } from "../../pty/run"
 import { event, leave, opened, server, statusMask } from "./fixture"
 
@@ -26,6 +26,8 @@ export default definePty({
     { keys: "\r", settle: 600 },
     { keys: "queue this", settle: 200 },
     { keys: "\x18\r", settle: 600, checkpoint: "queued" },
+    // Enter on an empty composer steers the first queued prompt.
+    { keys: "\r", settle: 600 },
     { keys: "!", settle: 100 },
     { keys: "ls", settle: 100 },
     { keys: "\x18\r", settle: 400, checkpoint: "refused" },
