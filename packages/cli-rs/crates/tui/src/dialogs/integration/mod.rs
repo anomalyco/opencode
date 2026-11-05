@@ -1141,7 +1141,7 @@ fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
     // `Link`'s `onMouseUp`. The dialog panel stops a release before the app's link handler sees it.
     if let Some(open) = open {
         let app = cx.app.clone();
-        text.on_mouse(move |_, event| {
+        text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
             let plain = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SHIFT]
                 .into_iter()
                 .all(|modifier| !event.modifiers.contains(modifier));

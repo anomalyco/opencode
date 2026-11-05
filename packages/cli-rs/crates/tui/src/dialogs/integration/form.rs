@@ -701,7 +701,7 @@ impl Choice {
         }
         for (index, row) in rows.iter().enumerate() {
             let weak = Rc::downgrade(self);
-            row.on_mouse(move |_, event| {
+            row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
                 if matches!(event.kind, MouseEventKind::Up(_))
                     && let Some(state) = weak.upgrade()
                 {

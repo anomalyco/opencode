@@ -81,7 +81,7 @@ impl Images {
                 .justify(Justify::Center);
             self.show(&cell, uri);
             let (tui, images) = (self.tui.clone(), uris.iter().map(|uri| (uri.clone(), None)).collect::<Vec<_>>());
-            cell.on_mouse(move |cx, event| {
+            cell.mouse_pointer(MousePointer::POINTER).on_mouse(move |cx, event| {
                 if event.kind != MouseEventKind::Up(MouseButton::Left) {
                     return;
                 }

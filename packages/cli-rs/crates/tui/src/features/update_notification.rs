@@ -418,7 +418,7 @@ fn render(tui: &Tui) {
         tui.app.request_redraw();
     });
     let weak = tui.weak();
-    row.on_mouse(move |_, event| {
+    row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         if !matches!(event.kind, MouseEventKind::Up(MouseButton::Left)) {
             return;
         }
