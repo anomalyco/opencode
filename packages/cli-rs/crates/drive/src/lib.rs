@@ -10,6 +10,7 @@ pub mod protocol;
 
 use opentui::App;
 use opentui::input::{Input, Parser};
+use opentui::widget::Widget;
 use protocol::{Envelope, Request};
 use serde_json::{Value, json};
 use std::cell::RefCell;
@@ -19,14 +20,6 @@ use std::sync::mpsc;
 use tokio_tungstenite::tungstenite::{self, Message};
 
 pub use manifest::Manifest;
-
-/// What the endpoint needs from the app it drives.
-pub struct Options {
-    /// The version the handshake reports, as TS reports `app.version`.
-    pub version: String,
-    /// Whether an editor has focus, for `Frontend.State.focused.editor`. Runs on the UI thread.
-    pub editor: Box<dyn Fn(&App) -> bool>,
-}
 
 /// A started endpoint. Its threads run until the process ends; requests fail once the app has ended.
 #[derive(Debug, Clone)]
@@ -41,22 +34,20 @@ impl Server {
     }
 }
 
-/// Listens on `addr` and answers requests for `app`, which must be [headless](App::headless). Call it on the UI
-/// thread before [`App::run`].
-pub fn start(app: &App, addr: SocketAddr, options: Options) -> std::io::Result<Server> {
+/// Listens on `addr` and answers requests for `app`, which must be [headless](App::headless). The handshake reports
+/// `version`, as TS reports `app.version`. Call it on the UI thread before [`App::run`].
+pub fn start(app: &App, addr: SocketAddr, version: String) -> std::io::Result<Server> {
     let listener = TcpListener::bind(addr)?;
     let addr = listener.local_addr()?;
     let driver = Rc::new(RefCell::new(Driver {
         parser: Parser::new(app.session()),
         mouse: keys::MouseState::default(),
-        editor: options.editor,
     }));
     app.on_message(move |cx, call: &Call| {
         let answer = driver.borrow_mut().answer(cx.app(), &call.request);
         let _ = call.reply.send(answer);
     });
     let proxy = app.proxy();
-    let version = options.version;
     std::thread::Builder::new()
         .name("drive-ui".into())
         .spawn(move || {
@@ -126,7 +117,6 @@ fn ask(proxy: &opentui::app::AppProxy, request: Request) -> Result<Value, String
 struct Driver {
     parser: Parser,
     mouse: keys::MouseState,
-    editor: Box<dyn Fn(&App) -> bool>,
 }
 
 impl Driver {
@@ -174,7 +164,11 @@ impl Driver {
             }
         }
         app.capture().map_err(|error| error.to_string())?;
-        Ok(json!({ "focused": { "editor": (self.editor)(app) }, "elements": [] }))
+        // As Core's `currentFocusedEditor`: any focused input or textarea, the prompt or a dialog's search.
+        let editor = app
+            .focused()
+            .is_some_and(|widget| widget.element().is_editor());
+        Ok(json!({ "focused": { "editor": editor }, "elements": [] }))
     }
 
     /// Parses bytes as if typed and dispatches the events. A partial sequence at the end ends at once, so a lone
@@ -243,18 +237,7 @@ mod tests {
                     .push(format!("{:?} {} {}", mouse.kind, mouse.x, mouse.y))
             }
         });
-        let focused = input.clone();
-        let editor =
-            Box::new(move |app: &App| app.focused().is_some_and(|widget| widget.is(&focused)));
-        let server = start(
-            &app,
-            SocketAddr::from(([127, 0, 0, 1], 0)),
-            Options {
-                version: "1.2.3".into(),
-                editor,
-            },
-        )
-        .unwrap();
+        let server = start(&app, SocketAddr::from(([127, 0, 0, 1], 0)), "1.2.3".into()).unwrap();
 
         let requests = [
             r#"{"jsonrpc":"2.0","id":1,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1],"requiredCapabilities":["ui.capture"],"optionalCapabilities":[]}}"#,
