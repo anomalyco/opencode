@@ -20,7 +20,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["time", "process", "io-util", "rt", "sync"] }
 url.workspace = true
-uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

@@ -159,7 +159,7 @@ fn try_acquire(lock_dir: &Path, options: &Options) -> Result<Option<Lock>, Error
         Err(err) => return Err(err.into()),
     }
 
-    let token = uuid::Uuid::new_v4().to_string();
+    let token = crate::id::v4();
     let body = serde_json::to_string_pretty(&Meta {
         token: token.clone(),
         pid: std::process::id(),
