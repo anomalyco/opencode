@@ -19,6 +19,8 @@ export default definePty({
     { keys: "\r", settle: 800, checkpoint: "sent" },
     { keys: "/compact ", settle: 300 },
     { keys: "\x18\r", settle: 300, checkpoint: "not-queued" },
+    // The first Ctrl+C clears the draft.
+    { keys: "\x03", settle: 200 },
     ...leave,
   ],
   exits: true,

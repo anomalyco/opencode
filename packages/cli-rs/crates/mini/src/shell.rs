@@ -20,14 +20,15 @@ use serde_json::{Value, json};
 
 use crate::footers::Footers;
 use crate::prompt::queue::{Queue, Submitted, Work};
+use crate::prompt::status::{self, mono_shortcut};
 use crate::prompt::{Delivery, Hooks, PROMPT_MAX_ROWS, Prompt, RunPrompt};
 use crate::replay::{self, Envelope, Incoming, Output, Transcript};
 use crate::scrollback::{Commit, Flags, Writer};
 use crate::settings::MiniSettings;
 use crate::signals::{self, Trace};
 use crate::theme::{self, ThemeInput};
-use crate::variants::{ModelSelection, format_model_label};
 use crate::{Input, InputError};
+use unicode_width::UnicodeWidthStr;
 
 /// `FOOTER_HEIGHT`: the footer's rows before the prompt measures itself.
 const FOOTER_HEIGHT: u16 = 4;
@@ -178,7 +179,9 @@ struct State {
     status: String,
     notice: String,
     notice_timer: Option<TimerId>,
-    model: String,
+    /// The model's ID, provider, and variant; M.4 names them from the provider catalog.
+    model: Option<(String, Option<String>, Option<String>)>,
+    usage: Option<replay::Usage>,
     agent: String,
     exit: u8,
     interrupt: u8,
@@ -332,18 +335,17 @@ impl Mini {
             json!({ "sessionID": session.id, "resume": target.resume }),
         );
         self.set_title(session.title.as_deref());
-        let label = target.model.as_ref().map(|model| {
-            format_model_label(
-                &ModelSelection {
-                    provider_id: model.provider_id.0.clone(),
-                    model_id: model.id.clone(),
-                },
-                model.variant.as_deref(),
+        let model = target.model.as_ref().map(|model| {
+            (
+                model.id.clone(),
+                Some(model.provider_id.0.clone()),
+                model.variant.clone(),
             )
         });
         self.patch(|state| {
             state.agent = session.agent.clone().unwrap_or_default();
-            state.model = label.unwrap_or_else(|| "Default model".into());
+            state.model = model;
+            state.usage = None;
         });
         *self.transcript.borrow_mut() = Some(Transcript::new(
             &session.id,
@@ -388,14 +390,7 @@ impl Mini {
                 let Some((provider_id, model_id)) = model else {
                     return;
                 };
-                let label = format_model_label(
-                    &ModelSelection {
-                        provider_id,
-                        model_id,
-                    },
-                    None,
-                );
-                mini.patch(|state| state.model = label);
+                mini.patch(|state| state.model = Some((model_id, Some(provider_id), None)));
             },
         );
     }
@@ -489,6 +484,7 @@ impl Mini {
                 .is_some_and(|kind| kind.starts_with("session.inbox."))
             {
                 self.prompt.inbox_event(event);
+                self.paint_status();
             }
             self.footers.borrow_mut().event(event);
         }
@@ -509,6 +505,9 @@ impl Mini {
                 }
                 if let Some(status) = patch.status {
                     state.status = status;
+                }
+                if let Some(usage) = patch.usage {
+                    state.usage = usage;
                 }
                 if !state.running {
                     state.interrupt = 0;
@@ -771,6 +770,7 @@ impl Mini {
             move |cx, result| match result {
                 Ok(()) => {
                     mini.prompt.admitted(&id, delivery);
+                    mini.paint_status();
                     let output = mini
                         .transcript
                         .borrow_mut()
@@ -911,7 +911,8 @@ impl Mini {
             .borrow()
             .as_ref()
             .and_then(|session| session.model.as_ref()?["id"].as_str().map(str::to_owned))
-            .unwrap_or_else(|| self.state.borrow().model.clone());
+            .or_else(|| Some(self.state.borrow().model.as_ref()?.0.clone()))
+            .unwrap_or_else(|| "Default model".into());
         let summary = crate::scrollback::TurnSummary {
             agent: self.agent_label(&self.state.borrow().agent),
             model,
@@ -1037,6 +1038,7 @@ impl Mini {
         if let Err(error) = self.footer.reset_for_replay(false) {
             log::warn!("mini could not clear the screen: {error}");
         }
+        self.app.request_redraw();
     }
 
     /// `close`: finish the streaming entry, leave split mode, and quit. The newline follows `app.run()`.
@@ -1183,53 +1185,174 @@ impl Mini {
         self.paint_status();
     }
 
-    /// The status row: the two-press hints, else the agent and model, then the status.
+    /// The status row (`statusText` and `statuslineLayout`): the two-press hints or a notice take it over;
+    /// otherwise the status, the agent, the model, and the hints that fit.
     fn paint_status(&self) {
-        let state = self.state.borrow();
-        let theme = self.writer.borrow().theme().clone();
-        let separator = if self.settings.mono { " - " } else { " · " };
-        let content: Vec<Span> = if state.exit > 0 {
-            vec![
-                "Press ctrl+c again to exit"
-                    .to_owned()
-                    .fg(theme.footer.warning),
-            ]
-        } else if state.interrupt > 0 {
-            vec![
-                "Press esc again to interrupt"
-                    .to_owned()
-                    .fg(theme.footer.warning),
-            ]
-        } else if !state.notice.is_empty() {
-            vec![state.notice.clone().fg(theme.footer.text)]
-        } else if self.prompt.shell() && !state.running && state.status.is_empty() {
-            vec![
-                "Shell".fg(theme.footer.muted),
-                separator.fg(theme.footer.muted),
-                "esc".fg(theme.footer.text),
-                " normal".fg(theme.footer.muted),
-            ]
-        } else {
-            let agent = self.agent_label(&state.agent);
-            let mut spans = Vec::new();
-            if !agent.is_empty() {
-                spans.push(agent.fg(self.prompt.agent_color()));
-            }
-            if !state.model.is_empty() {
-                let lead = if spans.is_empty() { "" } else { separator };
-                let model = if self.settings.mono {
-                    state.model.replace(" · ", separator)
-                } else {
-                    state.model.clone()
-                };
-                spans.push(format!("{lead}{model}").fg(theme.footer.muted));
-            }
-            if !state.status.is_empty() {
-                spans.push(format!("{separator}{}", state.status).fg(theme.footer.muted));
-            }
-            spans
+        let groups = {
+            let state = self.state.borrow();
+            self.status_groups(&state)
         };
-        self.status.set_text(content);
+        let theme = self.writer.borrow().theme().clone();
+        let state = self.state.borrow();
+        let status = if state.exit > 0 {
+            theme.footer.error
+        } else if state.interrupt > 0 {
+            theme.footer.warning
+        } else if state.running || !state.notice.is_empty() || !state.status.trim().is_empty() {
+            theme.footer.text
+        } else {
+            theme.footer.muted
+        };
+        let agent = self.prompt.agent_color();
+        let separator = if self.settings.mono { " - " } else { " · " };
+        let mut spans: Vec<Span> = Vec::new();
+        let mut previous = None;
+        for group in &groups {
+            match previous {
+                None => {}
+                Some(status::Id::Spinner) => spans.push(" ".fg(theme.footer.muted)),
+                Some(_) => spans.push(separator.fg(theme.footer.muted)),
+            }
+            for (text, tone) in &group.parts {
+                let color = match (group.id, tone) {
+                    // M.4 animates the spinner; it stands still in the agent's color until then.
+                    (status::Id::Spinner, _) | (_, status::Tone::Agent) => agent,
+                    (_, status::Tone::Text) => theme.footer.text,
+                    (_, status::Tone::Muted) => theme.footer.muted,
+                    (_, status::Tone::Status) => status,
+                };
+                spans.push(text.clone().fg(color));
+            }
+            previous = Some(group.id);
+        }
+        self.status.set_text(spans);
+    }
+
+    fn status_groups(&self, state: &State) -> Vec<status::Group> {
+        let keymap = self.prompt.keymap();
+        let shortcut = |id: &str| {
+            keymap
+                .shortcut(id)
+                .filter(|key| !key.is_empty())
+                .map(|key| mono_shortcut(&key, self.settings.mono))
+        };
+        let interrupt = shortcut("session.interrupt").map(|key| {
+            if key == "escape" {
+                "esc".to_owned()
+            } else {
+                key
+            }
+        });
+        let busy = state.running;
+        let armed = state.interrupt > 0;
+        let exiting = state.exit > 0;
+        let notice = state.notice.trim();
+        let shell = self.prompt.shell();
+        let takeover = exiting || (busy && armed) || !notice.is_empty();
+        let details = self.settings.footer == Visibility::Show && !takeover;
+        let width = usize::from(self.footer.terminal_size().0);
+        let status_width = width.saturating_sub(if busy { 2 } else { 0 }).max(1);
+        let text = if exiting || (busy && armed) {
+            let key = if exiting {
+                shortcut("prompt.clear")
+            } else {
+                interrupt.clone()
+            };
+            let (verb, action) = if exiting {
+                ("exit", "exit")
+            } else {
+                ("interrupt", "stop")
+            };
+            match key {
+                None if exiting => "Exit pending".to_owned(),
+                None => "Stop pending".to_owned(),
+                Some(key) => {
+                    let phrases = [
+                        format!("Press {key} again to {verb}"),
+                        format!("{key} again to {verb}"),
+                        format!("{key} again: {action}"),
+                        format!("{key} {action}"),
+                    ];
+                    phrases
+                        .iter()
+                        .find(|text| text.width() <= status_width)
+                        .unwrap_or(&phrases[3])
+                        .clone()
+                }
+            }
+        } else if !notice.is_empty() {
+            notice.to_owned()
+        } else if !details {
+            if shell { "Shell" } else { "" }.to_owned()
+        } else if busy {
+            if state.status.trim() == "reconnecting" {
+                "reconnecting".to_owned()
+            } else {
+                interrupt
+                    .as_ref()
+                    .map_or_else(|| "Running".to_owned(), |key| format!("{key} stop"))
+            }
+        } else if !state.status.trim().is_empty() {
+            state.status.trim().to_owned()
+        } else {
+            if shell { "Shell" } else { "" }.to_owned()
+        };
+        let model = state
+            .model
+            .clone()
+            .unwrap_or_else(|| ("Default model".into(), None, None));
+        let shown = details && !shell;
+        let queued = self.prompt.queued().len();
+        let work = match shortcut("session.queued_prompts") {
+            Some(key) if shown && queued > 0 => vec![(
+                status::Id::Queued,
+                status::Action {
+                    key,
+                    label: format!("{queued} pending"),
+                    expanded: None,
+                },
+            )],
+            _ => Vec::new(),
+        };
+        let usage = state.usage.as_ref().filter(|_| details);
+        status::policy(&status::Input {
+            width,
+            mono: self.settings.mono,
+            status: Some((
+                text,
+                (details && busy)
+                    .then(|| interrupt.as_ref().map(|key| format!("{key} interrupt")))
+                    .flatten(),
+            )),
+            escape: (shell && !takeover).then(|| status::Action {
+                key: "esc".into(),
+                label: "normal".into(),
+                expanded: None,
+            }),
+            work,
+            model: shown.then(|| (model.0.clone(), model.2.clone())),
+            agent: shown.then(|| self.agent_label(&state.agent)),
+            context: usage.filter(|usage| usage.tokens > 0).map(|usage| {
+                let full = status::context_usage(usage.tokens, usage.percent);
+                let compact = usage
+                    .percent
+                    .map_or_else(|| full.clone(), |percent| format!("{percent}% ctx"));
+                (compact, full)
+            }),
+            cost: usage
+                .and_then(|usage| usage.cost)
+                .filter(|cost| *cost != 0.0)
+                .map(status::money),
+            provider: if shown { model.1.clone() } else { None },
+            menu: shortcut("command.palette.show")
+                .filter(|_| !takeover && !shell)
+                .map(|key| status::Action {
+                    key,
+                    label: "menu".into(),
+                    expanded: None,
+                }),
+            spinner: busy.then(|| if self.settings.mono { "*" } else { "▪" }.to_owned()),
+        })
     }
 
     /// `currentAgent`: the catalog's name for the agent, else its ID in title case.
