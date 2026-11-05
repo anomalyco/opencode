@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
 import {
   createQueueState,
+  movedTarget,
   selectQueueRows,
   transitionQueue,
   viewQueue,
@@ -166,6 +167,55 @@ describe("queue changes run one at a time", () => {
     expect(result.state).toMatchObject({ status: "mutating", pending: [{ type: "steer", id: "inb_1" }] })
     expect(runs(result.effects).map((operation) => operation.type)).toEqual(["edit"])
     expect(restores(result.effects).at(-1)).toEqual({ type: "draft.restore", stash: draft("my draft"), focus: true })
+  })
+})
+
+describe("replaced inbox IDs", () => {
+  const moved = (state: QueueState) => viewQueue(state, { working: true, behavior: "queue" }).moved
+
+  // Edits `id` as a queued prompt; its replacement and the prompts after it take `next`.
+  function edit(state: QueueState, id: string, next: string[]) {
+    const confirmed = replay(state, [
+      { type: "edit.start", id, reverted: false, draft: draft("") },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt(`${id} edited`), ids: next },
+    ])
+
+    return { state: confirmed.state, attempt: runs(confirmed.effects)[0].attempt }
+  }
+
+  test("an edit's replacements chain across later edits until their prompts leave the queue", () => {
+    const first = edit(createQueueState([one]), "inb_1", ["msg_1"])
+    // In flight, the panel already sees the replacement it may swap in.
+    expect(moved(first.state)).toEqual({ inb_1: "msg_1" })
+
+    const settled = replay(first.state, [
+      { type: "inbox.synced", items: [item("msg_1")] },
+      { type: "mutation.succeeded", attempt: first.attempt },
+    ]).state
+
+    expect(settled.status).toBe("idle")
+    expect(moved(settled)).toEqual({ inb_1: "msg_1" })
+
+    const second = edit(settled, "msg_1", ["msg_2"])
+
+    const chained = replay(second.state, [
+      { type: "inbox.synced", items: [item("msg_2")] },
+      { type: "mutation.succeeded", attempt: second.attempt },
+    ]).state
+
+    expect(movedTarget(moved(chained), "inb_1", new Set(["msg_2"]))).toBe("msg_2")
+    expect(movedTarget(moved(chained), "inb_1", new Set(["msg_1", "msg_2"]))).toBe("msg_1")
+
+    // Once the last replacement is delivered, nothing it maps is queued.
+    expect(moved(transitionQueue(chained, { type: "inbox.synced", items: [] }).state)).toEqual({})
+  })
+
+  test("a failed edit leaves no replacement behind", () => {
+    const sent = edit(createQueueState([one, two]), "inb_1", ["msg_1", "msg_2"])
+    expect(moved(sent.state)).toEqual({ inb_1: "msg_1", inb_2: "msg_2" })
+
+    const failed = transitionQueue(sent.state, { type: "mutation.failed", attempt: sent.attempt, hidden: [] })
+    expect(moved(failed.state)).toEqual({})
   })
 })
 

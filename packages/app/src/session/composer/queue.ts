@@ -398,6 +398,7 @@ export function createSessionQueue(input: {
       return edit(first.id)
     },
     rows: () => view().rows,
+    moved: () => view().moved,
     busy: () => view().busy,
     undoing: () => view().undoing,
     working: input.working,
@@ -411,11 +412,12 @@ export function createSessionQueue(input: {
 
 export type SessionQueue = ReturnType<typeof createSessionQueue>
 
-// The slice of the queue the panel renders and drives.
+// The slice of the queue the panel renders and drives. Without `moved`, a replaced row closes and its replacement opens.
 export type SessionQueueView = Pick<
   SessionQueue,
   "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "undo" | "edit" | "reorder"
->
+> &
+  Partial<Pick<SessionQueue, "moved">>
 
 // Pin `media:<hash>` attachments before cancelling: the cancel releases the item's blob refs and sweeps blobs
 // nothing else references, so a pin that fails leaves the item queued.

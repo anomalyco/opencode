@@ -3317,6 +3317,16 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await expect(more).not.toBeFocused()
   expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
   await expect(composer).toHaveCount(1)
+
+  // A press that turns into a native drag of the selection ends with dragend, and no pointerup follows.
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await expect(toolbar).toHaveCount(0)
+  await short.hover()
+  await page.mouse.down()
+  await page.evaluate(() => document.dispatchEvent(new Event("dragend")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
 })
 
 function pauseExitAnimations(locator: Locator) {
