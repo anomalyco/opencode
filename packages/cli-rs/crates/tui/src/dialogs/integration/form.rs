@@ -21,7 +21,7 @@ use opencode_ui::select::{self, SelectOption, SelectProps};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 
-use crate::dialogs::model::Local;
+use crate::local::Local;
 use crate::routes::session::form::{initial_values, label, rows, selected_row, toggle_multiselect, validate};
 
 type Done = Box<dyn FnOnce(Option<FormAnswer>)>;

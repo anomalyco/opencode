@@ -76,7 +76,7 @@ pub struct Tui {
     /// The live config: settings writes and `cli.json` edits replace it (E.18a).
     pub settings: crate::dialogs::settings::Live,
     /// The model and agent state (E.16).
-    pub local: Rc<crate::dialogs::model::Local>,
+    pub local: Rc<crate::local::Local>,
     pub startup: Startup,
     /// The plugins (P.1).
     pub plugins: crate::plugins::host::Plugins,
@@ -333,7 +333,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
-    let local_files = deps.roots.as_ref().map(|roots| crate::dialogs::model::Files {
+    let local_files = deps.roots.as_ref().map(|roots| crate::local::Files {
         state: roots.paths.state.clone(),
         storage: files.as_ref().and_then(|files| files.storage.clone()),
     });
@@ -342,14 +342,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let settings =
         crate::dialogs::settings::Live::new(deps.config, args.auto, files.as_ref().map(|files| files.config.clone()));
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
-        local: crate::dialogs::model::Local::new(
-            app,
-            data.clone(),
-            dialogs.clone(),
-            toasts.clone(),
-            local_files,
-            this.clone(),
-        ),
+        local: crate::local::Local::new(app, data.clone(), dialogs.clone(), toasts.clone(), local_files, this.clone()),
         app: app.clone(),
         data,
         keymap,

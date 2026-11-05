@@ -7,8 +7,8 @@ use opencode_api::generated::ModelInfo;
 use opencode_ui::dialog::{DialogOptions, HeaderProps, header, layout};
 use opentui::prelude::*;
 
-use crate::dialogs::model::Local;
 use crate::dialogs::usage::{Level, format_dollars, format_reset, level, limit_scope};
+use crate::local::Local;
 
 pub fn show(local: &Rc<Local>, model: ModelInfo) {
     let weak = Rc::downgrade(local);

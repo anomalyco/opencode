@@ -7,10 +7,12 @@ use opencode_api::generated::ModelInfoStatus;
 use opencode_local::model_pref::Model;
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
-use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps, fuzzy};
+use opencode_ui::fuzzy;
+use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps};
 use opentui::prelude::*;
 
-use crate::dialogs::model::{self, Local, is_free};
+use crate::dialogs::model::{self, is_free};
+use crate::local::Local;
 
 pub fn show(local: &Rc<Local>) {
     let weak = Rc::downgrade(local);
