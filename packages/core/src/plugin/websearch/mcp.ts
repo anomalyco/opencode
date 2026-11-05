@@ -6,14 +6,14 @@ import { collectBoundedResponseBody } from "../../tool/http-body.js"
 
 export const MAX_RESPONSE_BYTES = 256 * 1024
 
-// Servers may send JSON-RPC requests and notifications, such as logging or progress, before the response.
+// SSE responses may carry JSON-RPC requests and notifications, such as logging or progress, before the response.
 const decodeServerMessage = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ method: Schema.String })))
 
 export const parseResponse = <F extends Schema.Struct.Fields>(body: string, result: Schema.Struct<F>) => {
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ result })))
   const parse = (payload: string) => {
     const trimmed = payload.trim()
-    if (!trimmed.startsWith("{") || Option.isSome(decodeServerMessage(trimmed))) return Effect.undefined
+    if (!trimmed.startsWith("{")) return Effect.undefined
     return decode(trimmed).pipe(Effect.map((response) => response.result))
   }
   return Effect.gen(function* () {
@@ -21,7 +21,7 @@ export const parseResponse = <F extends Schema.Struct.Fields>(body: string, resu
     const direct = trimmed ? yield* parse(trimmed) : undefined
     if (direct) return direct
     for (const line of body.split("\n")) {
-      if (!line.startsWith("data: ")) continue
+      if (!line.startsWith("data: ") || Option.isSome(decodeServerMessage(line.substring(6)))) continue
       const data = yield* parse(line.substring(6))
       if (data) return data
     }
