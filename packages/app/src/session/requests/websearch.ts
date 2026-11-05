@@ -20,7 +20,7 @@ export function createWebSearchRequest(input: {
   connected: () => boolean
   request: () => FormInfo | undefined
   providers: (sessionID: string) => Promise<FormOption[]>
-  reply: (input: SessionFormReplyInput) => Promise<unknown>
+  reply: (input: SessionFormReplyInput) => Promise<void>
   events: Pick<OpenCodeEventStream, "listen">
 }) {
   const [machine, setMachine] = createSignal(createWebSearchState(input.connected()))
@@ -44,10 +44,12 @@ export function createWebSearchRequest(input: {
   const run = (effect: WebSearchEffect) => {
     if (effect.type === "providers.load") {
       clearTimeout(providerTimer)
+
       const timer = setTimeout(
         () => dispatch({ type: "providers.timed-out", attempt: effect.attempt }),
         effect.timeoutMs,
       )
+
       providerTimer = timer
 
       return void Promise.try(() => input.providers(effect.sessionID))
@@ -83,10 +85,10 @@ export function createWebSearchRequest(input: {
         input.reply({ sessionID: effect.sessionID, formID: effect.formID, answer: effect.answer }),
       ).then(
         () => dispatch({ type: "reply.succeeded", ...result }),
-        (error: unknown) =>
+        (cause: unknown) =>
           dispatch(
             // Another client or the server's timeout settled the form first; it no longer waits for this answer.
-            (isFormNotFoundError(error) || isFormAlreadySettledError(error)) && error.id === effect.formID
+            (isFormNotFoundError(cause) || isFormAlreadySettledError(cause)) && cause.id === effect.formID
               ? { type: "reply.already-settled", ...result }
               : { type: "reply.failed", attempt: effect.attempt },
           ),

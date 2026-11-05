@@ -38,12 +38,10 @@ function providerForm(id: string, list = options): FormInfo {
   }
 }
 
+type Played = { state: WebSearchState; effects: readonly WebSearchEffect[]; all: readonly WebSearchEffect[] }
+
 function play(events: WebSearchEvent[], state = createWebSearchState(true)) {
-  const start: { state: WebSearchState; effects: readonly WebSearchEffect[]; all: readonly WebSearchEffect[] } = {
-    state,
-    effects: [],
-    all: [],
-  }
+  const start: Played = { state, effects: [], all: [] }
 
   return events.reduce((result, event) => {
     const next = transitionWebSearch(result.state, event)
@@ -405,6 +403,7 @@ describe("websearch machine handshake", () => {
 
   test("a new consent form starts over with a fresh provider list", () => {
     const next = { ...consent, id: "frm_consent_2" }
+
     const result = play(
       [
         { type: "select", value: "exa" },

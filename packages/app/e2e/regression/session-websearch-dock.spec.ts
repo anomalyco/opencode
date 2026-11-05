@@ -52,6 +52,9 @@ const provider = {
 
 type Reply = { sessionID: string; formID: string; body: unknown }
 
+// The forms the mock server lists now.
+type Listed = { forms: unknown[] }
+
 test("sends one consent reply for a double-click and keeps the answered form closed", async ({ page }) => {
   const replies: Reply[] = []
   // The mock keeps listing the consent form after the reply, so the form sync that follows it lists the answered form.
@@ -81,7 +84,7 @@ test("sends one consent reply for a double-click and keeps the answered form clo
 
 test("answers the provider form a form sync delivers when its form.created event is missed", async ({ page }) => {
   const replies: Reply[] = []
-  const state: { forms: unknown[] } = { forms: [consent] }
+  const state: Listed = { forms: [consent] }
   await mockServer(page, {
     forms: () => state.forms,
     // No form.created event is pushed: the provider form reaches the app only through the form sync after the reply.

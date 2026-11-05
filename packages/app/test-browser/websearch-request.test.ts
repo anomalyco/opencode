@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { FormCreated, FormNotFoundError, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
+import type { FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
 import { createEffect, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createWebSearchRequest } from "@/session/requests/websearch"
@@ -75,9 +75,9 @@ function fixture(form: FormCreated["data"]["form"] | null = consent) {
       reply: async (input) => {
         replies.push(input)
 
-        // The client rejects with the decoded wire error, a plain tagged object.
+        // The client rejects with the decoded 404 body.
         if (state.replyFails === "settled")
-          throw { _tag: "FormNotFoundError", id: input.formID, message: "Form not found" } satisfies FormNotFoundError
+          throw JSON.parse(`{"_tag":"FormNotFoundError","id":"${input.formID}","message":"Form not found"}`)
 
         if (state.replyFails) throw new Error("offline")
         setState("request", undefined)
