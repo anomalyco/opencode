@@ -193,6 +193,8 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "script/oxlint/anti-slop/**"
+    "script/oxlint/anti-slop/**",
+    "packages/console/app/public/arcade3d/basis/**",
+    "packages/console/app/public/arcade3d/draco/**"
   ]
 }

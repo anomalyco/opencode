@@ -22,9 +22,29 @@ app.config.timestamp_*.js
 # Temp
 gitignore
 
-# Generated files
-public/sitemap.xml
-
 # System Files
 .DS_Store
 Thumbs.db
+
+# Built by packages/console/textjs (bun run build)
+/public/textjs
+
+# Written by script/build-stamp.ts (bun run build / dev)
+/src/lib/build-stamp.json
+
+# Written by script/og.ts (bun run build / dev)
+/public/og
+/src/lib/og-images.json
+
+# Heavy media lives in the opencode.ai files bucket, not in git (MEDIA.md, src/lib/media.ts,
+# script/upload-media.ts). Files dev already tracks stay tracked.
+/public/**/*.mp4
+/public/**/*.webm
+/public/**/*.mov
+/public/**/*.mp3
+/public/**/*.wav
+/public/**/*.ogg
+/public/**/*.m4a
+/public/**/*.zip
+/public/**/*.glb
+/public/**/*.gltf

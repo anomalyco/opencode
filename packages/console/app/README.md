@@ -23,6 +23,20 @@ npm run dev
 npm run dev -- --open
 ```
 
+### GitHub API
+
+The site reads the repo's stars, contributors and releases from the GitHub API on the server
+(`src/lib/github-api.ts`). Without a token GitHub allows 60 calls an hour per IP, which a dev
+machine can use up; then the pages show the last good data or the config fallbacks. Start the dev
+server with your GitHub CLI token for 5,000 calls an hour:
+
+```bash
+GITHUB_TOKEN=$(gh auth token) bun run dev
+```
+
+Never commit a token. In dev the last good GitHub data is also kept in
+`$TMPDIR/opencode-site-github/`, so a restart while rate limited still has it.
+
 ## Building
 
 Solid apps are built with _presets_, which optimise your project for deployment to different environments.
