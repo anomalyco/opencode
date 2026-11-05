@@ -30,7 +30,10 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
     const option = settings.getByRole("radio", { name: mode, exact: true })
-    await settings.getByRole("group", { name: "Interface", exact: true }).getByText(mode, { exact: true }).click()
+    await settings
+      .getByRole("group", { name: "Interface layout", exact: true })
+      .getByText(mode, { exact: true })
+      .click()
     await expect(option).toBeChecked()
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
     await expect(page).toHaveURL("/")
@@ -131,6 +134,87 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await dialog.getByRole("button", { name: "Delete session" }).click()
   await removed
   await expect(renamedRow).toBeHidden()
+})
+
+test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({
+  page,
+}) => {
+  const earlier = { id: "ses_home_failed_load", title: "Listed after retry" }
+  await mockWorkspace(page, { name: "HomeLoad", sessions: [earlier], seed: { tabs: [] } })
+  const list = /\/api\/session\?/
+  await page.route(list, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 500,
+          json: { message: "Index unavailable" },
+          headers: { "access-control-allow-origin": "*" },
+        })
+      : route.fallback(),
+  )
+  await page.goto("/")
+
+  const alert = page.getByRole("alert").filter({ hasText: "Couldn't load sessions" })
+  await expect(alert).toBeVisible({ timeout: APP_READY_TIMEOUT })
+  await expect(page.getByText("Nothing here yet")).toHaveCount(0)
+  await expect(page.locator('[data-component="home-session-skeleton"]')).toHaveCount(0)
+
+  await page.unroute(list)
+  await alert.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(row(page, earlier.title)).toBeVisible()
+  await expect(alert).toHaveCount(0)
+})
+
+test("tabbing out of session search closes its results, and tabbing back reopens them", async ({ page }) => {
+  const earlier = { id: "ses_home_search_tab", title: "Finished earlier" }
+  await mockWorkspace(page, { name: "HomeSearch", sessions: [earlier] })
+  await page.goto("/")
+  const search = page.getByRole("textbox", { name: /Search sessions/ })
+  const panel = page.locator('[data-component="home-session-search-panel"]')
+  await expect(row(page, earlier.title)).toBeVisible()
+
+  await search.click()
+  await page.keyboard.type("Finished")
+  await expect(panel.getByRole("option")).toHaveCount(1)
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The clear button is part of the search; the next stop is outside it.
+  await page.keyboard.press("Tab")
+  await expect(search).not.toBeFocused()
+  await expect(panel).toBeVisible()
+  await page.keyboard.press("Tab")
+  await expect(panel).toHaveCount(0)
+  await expect(search).toHaveValue("Finished")
+
+  await page.keyboard.press("Shift+Tab")
+  await page.keyboard.press("Shift+Tab")
+  await expect(search).toBeFocused()
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+})
+
+test("Escape cancels an inline rename whose save does not answer", async ({ page }) => {
+  const target = { id: "ses_home_rename_hang", title: "Rename me" }
+  await mockWorkspace(page, { name: "HomeRename", sessions: [target] })
+  const save = await holdRoute(page, /\/api\/session\/ses_home_rename_hang$/, { method: "PATCH" })
+  await page.goto("/")
+  const session = row(page, target.title)
+  await expect(session).toBeVisible()
+
+  await session.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename" }).click()
+  const title = page.locator('[data-component="home-session-rename"]')
+  await expect(title).toBeFocused()
+  await title.fill("Never saved")
+  await title.press("Enter")
+  await save.arrived
+
+  // The input keeps focus while the save is pending, so Escape reaches it.
+  await expect(title).toBeFocused()
+  await expect(title).toHaveAttribute("aria-busy", "true")
+  await page.keyboard.press("Escape")
+  await expect(title).toHaveCount(0)
+  await expect(session).toBeFocused()
+  await expect(session).toContainText(target.title)
+  save.release()
 })
 
 test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {

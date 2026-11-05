@@ -5,6 +5,11 @@
 # environment the workflow sets (OPENCODE_VERSION, OPENCODE_CHANNEL, OPENCODE_DRY_RUN, ...).
 
 set -euo pipefail
+# Without this, set -e does not apply inside $(...), so a failing command in a function called as
+# files=$(upload_files ...) is ignored. macOS /bin/bash is 3.2, which lacks the option.
+if [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" = 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; then
+  shopt -s inherit_errexit
+fi
 
 # shellcheck disable=SC2034 # used by the scripts that source this file
 release_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -50,10 +55,7 @@ upload_files() {
         r2_credentials
         credentials=true
       fi
-      aws s3 cp "$file" "s3://opencode-production-files/bin/$OPENCODE_VERSION/$name" --only-show-errors \
-        --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" \
-        --content-type "$type" --content-disposition "attachment; filename=\"$name\"" \
-        --cache-control "public, max-age=31536000, immutable" >&2
+      upload_file "$file" "$name" "$type" || die "Upload failed: $name"
     fi
     jq -n --arg name "$name" --arg url "https://opencode.ai/files/bin/$OPENCODE_VERSION/$name" \
       --arg sha256 "$(sha256 "$file" | cut -c1-64)" --argjson size "$(size "$file")" \
@@ -61,15 +63,38 @@ upload_files() {
   done | jq -s 'add'
 }
 
+# Uploads one file to R2 and confirms the stored object has the local size: upload_file <file> <name> <type>.
+# R2 intermittently rejects CompleteMultipartUpload with InvalidPart, so failed uploads are retried.
+upload_file() {
+  local key="bin/$OPENCODE_VERSION/$2" endpoint="https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" attempt
+  for attempt in 1 2 3; do
+    if aws s3 cp "$1" "s3://opencode-production-files/$key" --only-show-errors --endpoint-url "$endpoint" \
+      --content-type "$3" --content-disposition "attachment; filename=\"$2\"" \
+      --cache-control "public, max-age=31536000, immutable" >&2 &&
+      [ "$(aws s3api head-object --bucket opencode-production-files --key "$key" --endpoint-url "$endpoint" \
+        --query ContentLength --output text)" = "$(size "$1")" ]; then
+      return
+    fi
+    echo "::warning::Upload attempt $attempt failed: $2" >&2
+    sleep $((attempt * 5))
+  done
+  return 1
+}
+
 # R2 accepts the API token ID as the access key and SHA-256(token) as the secret.
 r2_credentials() {
   local id
   id=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" | jq -er .result.id)
+    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" | jq -er .result.id) ||
+    die "Could not resolve R2 credentials"
   export AWS_ACCESS_KEY_ID="$id"
   AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256 | cut -c1-64)
   export AWS_SECRET_ACCESS_KEY
   export AWS_DEFAULT_REGION=auto AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+  # Larger parts mean fewer CompleteMultipartUpload parts for the 200-350 MB desktop builds.
+  AWS_CONFIG_FILE=$(mktemp)
+  export AWS_CONFIG_FILE
+  printf '[default]\ns3 =\n  multipart_threshold = 64MB\n  multipart_chunksize = 64MB\n' > "$AWS_CONFIG_FILE"
 }
 
 # Registers one artifact with the update server: publish_update <name> <distribution> <metadata json>.

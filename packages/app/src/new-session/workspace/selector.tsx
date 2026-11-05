@@ -55,7 +55,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
       id: "session.branch.choose",
       title: language.t("command.session.branch.choose"),
       category: language.t("command.category.workspace"),
-      keybind: "mod+alt+.",
+      keybind: "mod+alt+b",
       disabled: !creating() || !props.workspace.bar.branch(),
       onSelect: (source) => {
         changeOpen(source === "palette" || !state.open)
@@ -126,7 +126,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
           when={creating()}
           fallback={
             <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-faint">
-              <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name="branch" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
               <span ref={observe} dir="auto" class="min-w-0 truncate">
                 {label()}
               </span>
@@ -140,7 +140,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
               aria-description={language.t("command.session.branch.choose")}
               class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm px-1.5 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
             >
-              <Icon name="branch-out" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name="branch-out" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
               <span ref={observe} dir="auto" class="min-w-0 truncate">
                 {label()}
               </span>

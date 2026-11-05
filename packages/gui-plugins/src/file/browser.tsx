@@ -35,14 +35,15 @@ export function SessionFileBrowserTab(props: {
   state: PanelSidebar
   onSelect: (path: string) => void
   onSelectPermanent: (path: string) => void
-  filterRef?: (element: HTMLInputElement) => void
+  /** The "Open file" focus request this view's filter input should take, if any. */
+  focusRequest: () => number | undefined
   mobile?: boolean
 }) {
   const ctx = usePlugin()
   const shared = useShared()
   const file = props.screen.file
   const resultsID = `session-file-browser-results-${createUniqueId()}`
-  const [store, setStore] = createStore<{ explicitHighlight?: string }>({})
+  const [store, setStore] = createStore<{ explicitHighlight?: string; input?: HTMLInputElement }>({})
   const filter = () => shared.filter.get(props.session.key)
   const setFilter = (value: string) => shared.filter.set(props.session.key, value)
   const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
@@ -87,6 +88,23 @@ export function SessionFileBrowserTab(props: {
 
   const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
 
+  // Moves keyboard focus to this view's own filter input once "Open file" asks this view for it and the input is
+  // mounted; after the current render, so the input is in the document.
+  createKeyed(
+    () => {
+      const input = store.input
+      const request = props.focusRequest()
+
+      return input && request !== undefined ? { input, request } : undefined
+    },
+    (target) =>
+      queueMicrotask(() => {
+        if (target.input.isConnected) target.input.focus()
+        shared.filter.focused(target.request)
+      }),
+    { equals: (previous, next) => previous.input === next.input && previous.request === next.request },
+  )
+
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (event.key === "Escape" && query()) {
       event.preventDefault()
@@ -127,8 +145,7 @@ export function SessionFileBrowserTab(props: {
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}
-          filterAutofocus={props.placeholder && !props.mobile}
-          filterRef={(element) => props.filterRef?.(element)}
+          filterRef={(element) => setStore("input", element)}
           filterControls={resultsID}
           filterActiveDescendant={highlighted() ? optionID(highlighted()!) : undefined}
           filterExpanded={query().length > 0 && files().length > 0}
@@ -329,13 +346,14 @@ export default function FileBrowser(props: {
       state={panel.sidebar}
       onSelect={(path) => shared.open(props.session, path, { tab: "preview" })}
       onSelectPermanent={(path) => shared.open(props.session, path)}
-      filterRef={(element) => {
-        shared.filter.element = element
-
-        if (!shared.filter.pending) return
-        shared.filter.pending = false
-        queueMicrotask(() => element.focus())
-      }}
+      focusRequest={() =>
+        shared.filter.focusRequest({
+          placement: "side",
+          sessionKey: props.session.key,
+          tabId: id(),
+          visible: panel.visible(),
+        })
+      }
     />
   )
 }

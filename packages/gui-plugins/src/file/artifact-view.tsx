@@ -26,7 +26,15 @@ import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/mark
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
-import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import {
+  blobUrlFromContent,
+  bytesFromContent,
+  contentBytes,
+  parseDelimited,
+  resolveArtifactPath,
+  splitFrontmatter,
+  type FrontmatterProperty,
+} from "./artifact"
 import { FileViewer } from "@opencode/plugin/gui/file"
 import { ArtifactToolbar } from "./artifact-toolbar"
 
@@ -647,6 +655,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
   const resolve = (href: string) => (/^([a-z]:)?\//i.test(href) ? href : (resolveArtifactPath(dir(), href) ?? href))
+  const split = createMemo(() => splitFrontmatter(props.text))
 
   return (
     <MarkdownProvider
@@ -656,10 +665,38 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
     >
       <div data-slot="artifact-markdown-page" data-component="document-surface">
         <div data-slot="artifact-markdown-content">
-          <Markdown text={props.text} cacheKey={props.cacheKey} />
+          <Show when={split().properties}>{(properties) => <ArtifactProperties properties={properties()} />}</Show>
+          <Markdown text={split().body} cacheKey={props.cacheKey} />
         </div>
       </div>
     </MarkdownProvider>
+  )
+}
+
+function ArtifactProperties(props: { properties: FrontmatterProperty[] }) {
+  const ctx = usePlugin()
+  const [expanded, setExpanded] = createSignal(false)
+  // Long frontmatter shows its first entries until the reader asks for the rest.
+  const shown = () => (expanded() || props.properties.length <= 8 ? props.properties : props.properties.slice(0, 6))
+
+  return (
+    <div data-slot="artifact-properties">
+      <dl aria-label={ctx.t("view.properties")}>
+        <For each={shown()}>
+          {(property) => (
+            <>
+              <dt>{property.key}</dt>
+              <dd data-code={property.code ? "" : undefined}>{property.value}</dd>
+            </>
+          )}
+        </For>
+      </dl>
+      <Show when={shown().length < props.properties.length}>
+        <button type="button" data-slot="artifact-properties-more" onClick={() => setExpanded(true)}>
+          {ctx.t("view.properties.showAll", { count: props.properties.length })}
+        </button>
+      </Show>
+    </div>
   )
 }
 

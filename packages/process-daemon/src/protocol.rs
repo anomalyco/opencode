@@ -4,10 +4,14 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::service::{TerminalId, TerminalInfo};
+use crate::service::{ProcessMode, TerminalId, TerminalInfo};
 
 pub const PROTOCOL_VERSION: u32 = 7;
 /// Additive capabilities of this daemon. Breaking changes bump `PROTOCOL_VERSION`.
+/// `pipe` (non-PTY processes) is Unix-only for now.
+#[cfg(unix)]
+pub const FEATURES: &[&str] = &["rename", "pipe"];
+#[cfg(not(unix))]
 pub const FEATURES: &[&str] = &["rename"];
 
 pub fn features() -> Vec<String> {
@@ -38,17 +42,31 @@ pub enum Request {
         ticket: Option<String>,
     },
     PrepareHandoff,
+    /// Old daemons ignore `mode` and would start a PTY, so clients send
+    /// `"pipe"` only to a daemon that lists the `pipe` feature.
     Create {
         program: String,
         args: Vec<String>,
         cwd: PathBuf,
+        #[serde(default)]
         title: String,
         group_id: String,
         env: std::collections::HashMap<String, String>,
+        /// Terminal size; required for `pty`, ignored for `pipe`.
+        #[serde(default)]
         cols: u16,
+        #[serde(default)]
         rows: u16,
+        #[serde(default, skip_serializing_if = "ProcessMode::is_pty")]
+        mode: ProcessMode,
     },
-    List,
+    /// Without `mode`, lists PTYs only, so older servers never see pipe processes.
+    /// `mode` is left out of the JSON when unset: older daemons reject a `list`
+    /// with any extra key.
+    List {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<ProcessMode>,
+    },
     Write {
         id: TerminalId,
         attachment_id: Option<String>,
@@ -161,6 +179,9 @@ pub enum Response {
     },
     Exited {
         exit_code: Option<u32>,
+        /// Signal name such as `SIGTERM` when a pipe process was killed by one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        signal: Option<String>,
         final_offset: u64,
     },
     ControllerChanged {
@@ -333,6 +354,84 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&info).unwrap()["user_title"],
             serde_json::Value::Null
+        );
+    }
+
+    #[test]
+    fn pipe_fields_keep_the_wire_compatible_with_older_peers() {
+        use crate::service::{ProcessMode, TerminalLifecycle};
+
+        // An older daemon rejects `list` with any extra key, and an older
+        // client sends a bare `list` and a `create` with no mode.
+        assert_eq!(
+            serde_json::to_value(Request::List { mode: None }).unwrap(),
+            serde_json::json!({"op": "list"})
+        );
+        assert!(matches!(
+            serde_json::from_str::<Request>(r#"{"op":"list"}"#).unwrap(),
+            Request::List { mode: None }
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Request>(r#"{"op":"list","mode":"pipe"}"#).unwrap(),
+            Request::List {
+                mode: Some(ProcessMode::Pipe)
+            }
+        ));
+        let create = serde_json::json!({
+            "op": "create", "program": "sh", "args": [], "cwd": "/",
+            "title": "t", "group_id": "g", "env": {}, "cols": 80, "rows": 24,
+        });
+        assert!(matches!(
+            serde_json::from_value::<Request>(create.clone()).unwrap(),
+            Request::Create {
+                mode: ProcessMode::Pty,
+                cols: 80,
+                ..
+            }
+        ));
+        // A PTY create serializes exactly as before.
+        assert_eq!(
+            serde_json::to_value(serde_json::from_value::<Request>(create.clone()).unwrap())
+                .unwrap(),
+            create
+        );
+        assert!(matches!(
+            serde_json::from_str::<Request>(
+                r#"{"op":"create","program":"sh","args":[],"cwd":"/","group_id":"g","env":{},"mode":"pipe"}"#
+            )
+            .unwrap(),
+            Request::Create {
+                mode: ProcessMode::Pipe,
+                cols: 0,
+                rows: 0,
+                ..
+            }
+        ));
+        // Exits without a signal look exactly as before.
+        assert_eq!(
+            serde_json::to_value(Response::Exited {
+                exit_code: Some(1),
+                signal: None,
+                final_offset: 2,
+            })
+            .unwrap(),
+            serde_json::json!({"type": "exited", "exit_code": 1, "final_offset": 2})
+        );
+        assert_eq!(
+            serde_json::to_value(TerminalLifecycle::Exited {
+                exit_code: Some(1),
+                signal: None,
+            })
+            .unwrap(),
+            serde_json::json!({"status": "exited", "exit_code": 1})
+        );
+        assert_eq!(
+            serde_json::from_str::<TerminalLifecycle>(r#"{"status":"exited","exit_code":null}"#)
+                .unwrap(),
+            TerminalLifecycle::Exited {
+                exit_code: None,
+                signal: None,
+            }
         );
     }
 }

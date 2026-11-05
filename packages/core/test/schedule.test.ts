@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
+import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { TestClock } from "effect/testing"
@@ -80,17 +80,27 @@ const enabledEntries = [
     }),
   }),
 ]
+const disabledEntries = [
+  new Document({
+    type: "document",
+    info: new Info({
+      experimental: new ConfigExperimental.Info({ schedules: false }),
+    }),
+  }),
+]
 const enabled = Config.testLayer(enabledEntries)
+const disabled = Config.testLayer(disabledEntries)
 /** A location whose flag the test turns on, counting every config read. */
 const toggle = { on: false, reads: 0 }
+const readToggle = () => {
+  toggle.reads++
+  return toggle.on ? enabledEntries : disabledEntries
+}
 const toggled = Layer.succeed(
   Config.Service,
   Config.Service.of({
-    entries: () =>
-      Effect.sync(() => {
-        toggle.reads++
-        return toggle.on ? enabledEntries : []
-      }),
+    entries: () => Effect.sync(() => readToggle()),
+    snapshot: () => readToggle(),
     changes: () => Stream.empty,
   }),
 )
@@ -116,7 +126,7 @@ const testEnvironment = Layer.effect(
     yield* files.mkdir(toggleDirectory).pipe(Effect.orDie)
     const spawner = ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
-        const script = command._tag === "StandardCommand" ? (command.args.at(-1) ?? command.command) : "pipeline"
+        const script = command._tag === "StandardCommand" ? String(command.args.at(-1) ?? command.command) : "pipeline"
         shellState.runs.push(script)
         if (shellState.hangMs > 0) yield* Effect.sleep(shellState.hangMs)
         const outBytes = new TextEncoder().encode(shellState.stdout)
@@ -224,7 +234,7 @@ const locations = makeGlobalNode({
               ? enabled
               : ref.directory === toggleDirectory
                 ? toggled
-                : Layer.empty,
+                : disabled,
             configureAgent.pipe(
               Layer.provideMerge(
                 LayerNode.compile(
@@ -1235,51 +1245,53 @@ describe("Schedule", () => {
       }
     `
 
-    it.effect("seeds initial state at t=0 so replies before the first tick are caught, and counts ends.times by wakes", () =>
-      Effect.gen(function* () {
-        const schedules = yield* setup()
-        slack.replies = 3
-        const schedule = yield* schedules.create({
-          sessionID,
-          name: "thread",
-          when: { type: "every", every: "2 minutes" },
-          if: { type: "code", code: watchThread },
-          ends: { times: 1 },
-          action: { type: "prompt", prompt: "New thread activity." },
-        })
-        // Seeded at creation (t=0): 1 read, baseline state = { replies: 3, runs: 0 }.
-        expect(slack.reads).toBe(1)
+    it.effect(
+      "seeds initial state at t=0 so replies before the first tick are caught, and counts ends.times by wakes",
+      () =>
+        Effect.gen(function* () {
+          const schedules = yield* setup()
+          slack.replies = 3
+          const schedule = yield* schedules.create({
+            sessionID,
+            name: "thread",
+            when: { type: "every", every: "2 minutes" },
+            if: { type: "code", code: watchThread },
+            ends: { times: 1 },
+            action: { type: "prompt", prompt: "New thread activity." },
+          })
+          // Seeded at creation (t=0): 1 read, baseline state = { replies: 3, runs: 0 }.
+          expect(slack.reads).toBe(1)
 
-        // Quiet tick at +2m (still 3 replies): remainingRuns stays 1!
-        yield* TestClock.adjust("2 minutes")
-        yield* schedules.tick
-        expect(yield* pending).toEqual([])
-        expect(yield* schedules.get(schedule.id)).toMatchObject({
-          status: "active",
-          runCount: 0,
-          remainingRuns: 1,
-          lastOutcome: "checked",
-        })
+          // Quiet tick at +2m (still 3 replies): remainingRuns stays 1!
+          yield* TestClock.adjust("2 minutes")
+          yield* schedules.tick
+          expect(yield* pending).toEqual([])
+          expect(yield* schedules.get(schedule.id)).toMatchObject({
+            status: "active",
+            runCount: 0,
+            remainingRuns: 1,
+            lastOutcome: "checked",
+          })
 
-        // Reply arrives -> wakes once and stops because ends.times = 1.
-        slack.replies = 4
-        yield* TestClock.adjust("2 minutes")
-        yield* schedules.tick
-        expect(yield* pending).toEqual([messageID(schedule, 1)])
-        const { db } = yield* Database.Service
-        expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-          payload: {
-            text: "New thread activity.\n\n4 replies",
-            metadata: { schedule: { id: schedule.id, run: 1, check: { message: "4 replies" } } },
-          },
-        })
-        expect(yield* schedules.get(schedule.id)).toMatchObject({
-          status: "done",
-          runCount: 1,
-          remainingRuns: 0,
-          lastOutcome: "fired",
-        })
-      }),
+          // Reply arrives -> wakes once and stops because ends.times = 1.
+          slack.replies = 4
+          yield* TestClock.adjust("2 minutes")
+          yield* schedules.tick
+          expect(yield* pending).toEqual([messageID(schedule, 1)])
+          const { db } = yield* Database.Service
+          expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
+            payload: {
+              text: "New thread activity.\n\n4 replies",
+              metadata: { schedule: { id: schedule.id, run: 1, check: { message: "4 replies" } } },
+            },
+          })
+          expect(yield* schedules.get(schedule.id)).toMatchObject({
+            status: "done",
+            runCount: 1,
+            remainingRuns: 0,
+            lastOutcome: "fired",
+          })
+        }),
     )
 
     it.effect("supports boolean and state-free returns for until checks, including immediate t=0 match", () =>
@@ -1426,43 +1438,91 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("fails schedule_create when a t=0 code run throws, and pauses on strike 1 when a later tick returns an invalid shape", () =>
-      Effect.gen(function* () {
-        const schedules = yield* setup()
-        const thrown = yield* Effect.flip(
-          schedules.create({
+    it.effect(
+      "fails schedule_create when a t=0 code run throws, and pauses on strike 1 when a later tick returns an invalid shape",
+      () =>
+        Effect.gen(function* () {
+          const schedules = yield* setup()
+          const thrown = yield* Effect.flip(
+            schedules.create({
+              sessionID,
+              when: { type: "cron", cron: "0 9 * * *" },
+              if: {
+                type: "code",
+                code: `const t = await tools.slack.read_thread({}); return t.nonexistent.length > 0`,
+              },
+              action: { type: "prompt", prompt: "Morning check." },
+            }),
+          )
+          expect(thrown).toMatchObject({ _tag: "Schedule.InvalidError" })
+
+          // First run (state === null) returns valid { wake: false, state: { ok: true } };
+          // first scheduled tick (state !== null) returns an invalid string, pausing immediately on strike 1.
+          const schedule = yield* schedules.create({
             sessionID,
-            when: { type: "cron", cron: "0 9 * * *" },
+            when: { type: "every", every: "1 minute" },
             if: {
               type: "code",
-              code: `const t = await tools.slack.read_thread({}); return t.nonexistent.length > 0`,
+              code: `if (state === null) return { wake: false, state: { ok: true } }; return "not-a-check-result"`,
             },
-            action: { type: "prompt", prompt: "Morning check." },
-          }),
-        )
-        expect(thrown).toMatchObject({ _tag: "Schedule.InvalidError" })
+            action: { type: "prompt", prompt: "Watch." },
+          })
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+          expect(yield* schedules.get(schedule.id)).toMatchObject({
+            status: "paused",
+            lastOutcome: "failed",
+            runCount: 1,
+          })
+          const { db } = yield* Database.Service
+          expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
+            payload: { text: expect.stringContaining("[Schedule paused after invalid check:") },
+          })
+        }),
+    )
 
-        // First run (state === null) returns valid { wake: false, state: { ok: true } };
-        // first scheduled tick (state !== null) returns an invalid string, pausing immediately on strike 1.
-        const schedule = yield* schedules.create({
-          sessionID,
-          when: { type: "every", every: "1 minute" },
-          if: {
-            type: "code",
-            code: `if (state === null) return { wake: false, state: { ok: true } }; return "not-a-check-result"`,
-          },
-          action: { type: "prompt", prompt: "Watch." },
-        })
-        yield* TestClock.adjust("1 minute")
-        yield* schedules.tick
-        expect(yield* schedules.get(schedule.id)).toMatchObject({
-          status: "paused",
-          lastOutcome: "failed",
-          runCount: 1,
-        })
+    it.effect("picks up a schedule created by another process sharing the DB while idle", () =>
+      Effect.gen(function* () {
+        const primary = yield* setup()
         const { db } = yield* Database.Service
-        expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-          payload: { text: expect.stringContaining("[Schedule paused after invalid check:") },
+        const runner = yield* Effect.forkChild(primary.run)
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+
+        // Insert directly into SQLite (bypassing primary.create so primary's in-memory doorbell is never opened)
+        // to simulate a short-lived `opencode serve` / `--standalone` writing a schedule and exiting.
+        const now = yield* Clock.currentTimeMillis
+        const externalID = Schedule.ID.create()
+        yield* db
+          .insert(ScheduleTable)
+          .values({
+            id: externalID,
+            session_id: sessionID,
+            name: "external",
+            check: null,
+            state: null,
+            checks: 0,
+            action: { type: "prompt", prompt: "Cross-process wake." },
+            when: { type: "in", in: "10 seconds" },
+            tz: "UTC",
+            status: "active",
+            next_due_at: now + 10_000,
+            ends_at: null,
+            remaining_runs: 1,
+            time_created: now,
+            time_updated: now,
+          })
+          .run()
+          .pipe(Effect.orDie)
+
+        // Bounded MAX_SLEEP (30s) wakes the idle loop, claims leadership, and fires the row.
+        yield* TestClock.adjust("30 seconds")
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+        yield* Fiber.interrupt(runner)
+
+        expect(yield* primary.get(externalID)).toMatchObject({
+          status: "done",
+          runCount: 1,
+          lastOutcome: "fired",
         })
       }),
     )

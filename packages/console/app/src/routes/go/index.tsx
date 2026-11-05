@@ -58,6 +58,7 @@ const models = [
   { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Hy4", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
@@ -122,14 +123,14 @@ export default function Home() {
       <SocialMeta title={i18n.t("go.title")} description={description()} path="/go" />
 
       <div data-component="container">
-        <Header go hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="hero">
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.kimiK31Pro")}</span>
+                <span data-slot="text">{i18n.t("go.promo.hy4")}</span>
               </div>
             </div>
             <Show when={searchParams.ref}>

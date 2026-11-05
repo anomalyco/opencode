@@ -1,5 +1,7 @@
-import { batch, createComputed, createEffect, createMemo, on, onCleanup } from "solid-js"
-import { createStore, produce, reconcile } from "solid-js/store"
+import { batch, createComputed, createEffect, createMemo, on, onCleanup, untrack } from "solid-js"
+import { createStore, produce, reconcile, unwrap } from "solid-js/store"
+import type { FileContent } from "@opencode/plugin/gui"
+import { abort } from "@opencode/util/abort"
 import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
@@ -12,15 +14,18 @@ import { createPathHelpers } from "./path"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { usePlatform } from "@/runtime/platform/platform"
 import { fileStreamUrl } from "@/runtime/server/api"
-import { fileContentFromBytes, streamedFileContent, streamedKinds } from "./artifact"
+import { fileContentFromBytes, headStreamedFile, streamedFileContent, streamedKinds } from "./artifact"
+import { approxBytes, createFileContentCache } from "./content-cache"
 import {
-  approxBytes,
-  evictContentLru,
-  hasFileContent,
-  removeFileContentBytes,
-  resetFileContentLru,
-  touchFileContent,
-} from "./content-cache"
+  createFileContentState,
+  selectFileLoading,
+  selectFileMissing,
+  selectFileState,
+  transitionFileContent,
+  type FileContentEffect,
+  type FileContentEvent,
+  type FileContentState,
+} from "./content-machine"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
@@ -48,16 +53,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
 
-    const inflight = new Map<string, { promise: Promise<void>; silent: boolean }>()
+    const cache = createFileContentCache()
+    const [store, setStore] = createStore({ machine: createFileContentState(untrack(scope)) })
 
-    const [store, setStore] = createStore<{
-      file: Record<string, FileState>
-    }>({
-      file: {},
-    })
+    // The edges of the reads the machine started: each path's read in flight, and the callers awaiting each path.
+    const reads = new Map<string, AbortController>()
+
+    const waiters = new Map<string, PromiseWithResolvers<void>>()
 
     const tree = createFileTreeStore({
-      scope,
       normalizeDir: path.normalizeDir,
       list: (dir) =>
         serverSDK.api.file.list({ path: dir, location: { directory: scope() } }).then((x) =>
@@ -77,29 +81,139 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       },
     })
 
-    const evictContent = (keep?: Set<string>) => {
-      evictContentLru(keep, (target) => {
-        if (!store.file[target]) return
-        setStore(
-          "file",
-          target,
-          produce((draft) => {
-            draft.content = undefined
-            draft.loaded = false
-          }),
-        )
+    const fileEntry = (file: string) => (store.machine.status === "active" ? store.machine.files[file] : undefined)
+
+    const dispatch = (event: FileContentEvent) => {
+      const previous = unwrap(store).machine
+      const next = transitionFileContent(previous, event)
+
+      if (next.state !== previous) write(previous, next.state)
+      next.effects.forEach(execute)
+    }
+
+    // Replaces only the entries that changed, so other files' readers stay quiet and no content is deep-merged.
+    const write = (previous: FileContentState, next: FileContentState) => {
+      if (previous.status !== "active" || next.status !== "active" || previous.directory !== next.directory) {
+        setStore("machine", reconcile(next))
+
+        return
+      }
+
+      setStore(
+        "machine",
+        produce((draft) => {
+          if (draft.status !== "active") return
+          draft.issued = next.issued
+          Object.keys(previous.files).forEach((key) => {
+            if (!(key in next.files)) delete draft.files[key]
+          })
+          Object.entries(next.files).forEach(([key, value]) => {
+            if (previous.files[key] !== value) draft.files[key] = value
+          })
+        }),
+      )
+    }
+
+    const execute = (effect: FileContentEffect) => {
+      if (effect.type === "read") return start(effect.directory, effect.path, effect.attempt)
+
+      if (effect.type === "abort.all") {
+        reads.forEach(abort)
+        reads.clear()
+        waiters.forEach((waiter) => waiter.resolve())
+        waiters.clear()
+
+        return
+      }
+
+      if (effect.type === "settle") {
+        waiters.get(effect.path)?.resolve()
+        waiters.delete(effect.path)
+
+        return
+      }
+
+      if (effect.type === "cache.store") {
+        cache.touch(effect.path, approxBytes(effect.content))
+        // The file just read and the visible tab keep their content.
+        const active = attachment.files.active()
+        const evicted = cache.evict(new Set(active ? [effect.path, active] : [effect.path]))
+
+        if (evicted.length > 0) dispatch({ type: "cache.evicted", paths: evicted })
+
+        return
+      }
+
+      if (effect.type === "cache.remove") return cache.remove(effect.path)
+
+      if (effect.type === "cache.reset") return cache.reset()
+
+      showToast({
+        variant: "error",
+        title: language.t("toast.file.loadFailed.title"),
+        description: effect.message,
       })
     }
 
-    // The store holds one directory's files. Drop them as soon as the directory changes, before any effect of the same
-    // update reads the new one: a file tab can load its file before a later watcher runs, and a reset after that load
-    // would discard its reply.
+    const start = (directory: string, file: string, attempt: number) => {
+      const controller = new AbortController()
+      reads.set(file, controller)
+
+      // Files outside the workspace are read from their own directory, like markdown images.
+      // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
+      void Promise.resolve()
+        .then(() =>
+          isVirtualSkill(file)
+            ? readBuiltin(file, directory)
+            : read(
+                file,
+                path.absolute(file)
+                  ? { path: getFilename(file), location: { directory: getDirectory(file) } }
+                  : { path: file, location: { directory } },
+                controller.signal,
+              ),
+        )
+        .then(
+          (content) => {
+            release(file, controller)
+
+            if (content) return dispatch({ type: "load.succeeded", path: file, attempt, content })
+
+            dispatch({ type: "load.missing", path: file, attempt, error: file, opened: opened(file) })
+          },
+          (error) => {
+            release(file, controller)
+
+            // The media HEAD gave up on a server that sent no response.
+            const message =
+              error instanceof DOMException && error.name === "TimeoutError"
+                ? language.t("common.requestFailed")
+                : formatServerError(error, language.t, language.t("error.chain.unknown"))
+
+            if (isFileNotFoundError(error)) {
+              dispatch({ type: "load.missing", path: file, attempt, error: message, opened: opened(file) })
+
+              return
+            }
+
+            dispatch({ type: "load.failed", path: file, attempt, error: message })
+          },
+        )
+    }
+
+    const release = (file: string, controller: AbortController) => {
+      if (reads.get(file) === controller) reads.delete(file)
+    }
+
+    const opened = (file: string) => attachment.files.opened().includes(file)
+
+    // The machine holds one directory's files. Drop them as soon as the directory changes, before any effect of the
+    // same update reads the new one: a file tab can load its file before a later watcher runs, and a reset after that
+    // load would discard its reply.
     createComputed(
-      on(scope, () => {
-        inflight.clear()
-        resetFileContentLru()
+      on(scope, (directory) => {
         batch(() => {
-          setStore("file", reconcile({}))
+          dispatch({ type: "scope.changed", directory })
           tree.reset()
         })
       }),
@@ -108,66 +222,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const viewCache = createFileViewCache(serverSDK.scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
-    const ensure = (file: string) => {
-      if (!file) return
-
-      if (store.file[file]) return
-      setStore("file", file, { path: file, name: getFilename(file) })
-    }
-
-    const setLoading = (file: string) => {
-      setStore(
-        "file",
-        file,
-        produce((draft) => {
-          draft.loading = true
-          draft.error = undefined
-        }),
-      )
-    }
-
-    const setLoaded = (file: string, content: FileState["content"]) => {
-      setStore(
-        "file",
-        file,
-        produce((draft) => {
-          draft.loaded = true
-          draft.loading = false
-          draft.notFound = false
-          draft.content = content
-        }),
-      )
-    }
-
-    const setLoadError = (file: string, message: string, notFound = false, silent = false) => {
-      if (notFound) removeFileContentBytes(file)
-      setStore(
-        "file",
-        file,
-        produce((draft) => {
-          draft.loading = false
-          draft.notFound = notFound
-          draft.error = message
-
-          if (!notFound) return
-          draft.loaded = false
-          draft.content = undefined
-        }),
-      )
-
-      if (silent || (notFound && attachment.files.opened().includes(file))) return
-
-      showToast({
-        variant: "error",
-        title: language.t("toast.file.loadFailed.title"),
-        description: message,
-      })
-    }
-
     // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. A failed HEAD has no
-    // body; the full read that follows reports the server's error.
-    const read = (file: string, request: { path: string; location: { directory: string } }) => {
-      const download = () => serverSDK.api.file.read(request).then((data) => fileContentFromBytes(file, data))
+    // body; the full read that follows reports the server's error. The API's request queue bounds the download's wait
+    // for a response, and its body may take as long as it needs.
+    const read = (file: string, request: { path: string; location: { directory: string } }, signal: AbortSignal) => {
+      const download = () =>
+        serverSDK.api.file.read(request, { signal }).then((data) => fileContentFromBytes(file, data))
 
       const url = streamedKinds.has(artifactKind(file))
         ? fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
@@ -175,12 +235,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       if (!url) return download()
 
-      return (platform.fetch ?? fetch)(url, { method: "HEAD" }).then((response) =>
+      return headStreamedFile(platform.fetch ?? fetch, url, signal).then((response) =>
         response.ok ? streamedFileContent(file, url, response) : download(),
       )
     }
 
-    // Built-in skills register virtual `/builtin/*.md` paths whose content is inline in `/api/skill`.
+    // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths whose content is inline in `/api/skill`.
+    const isVirtualSkill = (file: string) => file.startsWith("skill://") || file.startsWith("/builtin/")
+
     const builtinSkill = async (file: string, directory: string) => {
       if (data.location.skill.list({ directory }) === undefined) {
         await data.location.skill.sync({ directory })
@@ -189,7 +251,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return (data.location.skill.list({ directory }) ?? data.location.skill.list())?.find((item) => item.path === file)
     }
 
-    const readBuiltin = (file: string, directory: string): Promise<FileState["content"]> =>
+    const readBuiltin = (file: string, directory: string): Promise<FileContent | undefined> =>
       builtinSkill(file, directory).then((skill) =>
         skill ? { type: "text", content: skill.content, mimeType: artifactMime(file) } : undefined,
       )
@@ -198,72 +260,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const file = path.normalize(input)
 
       if (!file) return Promise.resolve()
+      dispatch({ type: "load.requested", path: file, force: Boolean(options?.force), silent: Boolean(options?.silent) })
+      const current = unwrap(store).machine
 
-      const directory = scope()
-      const key = `${directory}\n${file}`
-      ensure(file)
+      if (current.status !== "active" || !selectFileLoading(current.files[file])) return Promise.resolve()
+      const waiter = waiters.get(file) ?? Promise.withResolvers<void>()
+      waiters.set(file, waiter)
 
-      const current = store.file[file]
-
-      if (!options?.force && current?.loaded) return Promise.resolve()
-
-      const silent = Boolean(options?.silent)
-      const pending = inflight.get(key)
-
-      if (pending) {
-        if (!silent) pending.silent = false
-
-        return pending.promise
-      }
-
-      setLoading(file)
-
-      const entry = {
-        silent,
-        promise: Promise.resolve(),
-      }
-
-      // Files outside the workspace are read from their own directory, like markdown images.
-      // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
-      const source = file.startsWith("/builtin/")
-        ? readBuiltin(file, directory)
-        : read(
-            file,
-            path.absolute(file)
-              ? { path: getFilename(file), location: { directory: getDirectory(file) } }
-              : { path: file, location: { directory } },
-          )
-
-      entry.promise = source
-        .then((content) => {
-          if (scope() !== directory) return
-
-          if (!content) {
-            setLoadError(file, file, true, entry.silent)
-
-            return
-          }
-
-          setLoaded(file, content)
-          touchFileContent(file, approxBytes(content))
-          evictContent(new Set([file]))
-        })
-        .catch((e) => {
-          if (scope() !== directory) return
-          setLoadError(
-            file,
-            formatServerError(e, language.t, language.t("error.chain.unknown")),
-            isFileNotFoundError(e),
-            entry.silent,
-          )
-        })
-        .finally(() => {
-          inflight.delete(key)
-        })
-
-      inflight.set(key, entry)
-
-      return entry.promise
+      return waiter.promise
     }
 
     // Lists the parent directory instead of reading the file, so checking a path a message names transfers no content.
@@ -272,7 +276,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       if (!file) return Promise.resolve(false)
 
-      if (file.startsWith("/builtin/")) {
+      if (isVirtualSkill(file)) {
         return builtinSkill(file, scope()).then(Boolean, () => false)
       }
 
@@ -308,7 +312,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const stop = sdk().event.on("filesystem.changed", (event) => {
         invalidateFromWatcher(event, {
           normalize: path.normalize,
-          hasFile: (file) => Boolean(store.file[file]),
+          hasFile: (file) => fileEntry(file) !== undefined,
           isOpen: (file) => attachment.files.opened().includes(file),
           loadFile: (file) => {
             void load(file, { force: true, silent: true })
@@ -348,18 +352,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const get = (input: string) => {
       const file = path.normalize(input)
-      const state = store.file[file]
-      const content = state?.content
+      const state = selectFileState(file, fileEntry(file))
 
-      if (!content) return state
-
-      if (hasFileContent(file)) {
-        touchFileContent(file)
-
-        return state
-      }
-
-      touchFileContent(file, approxBytes(content))
+      // A read counts as use, so the files on screen are the last to lose their content.
+      if (state?.content) cache.touch(file)
 
       return state
     }
@@ -378,6 +374,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       withPath(input, (file) => view().setSelectedLines(file, range))
 
     onCleanup(() => {
+      dispatch({ type: "disposed" })
       viewCache.clear()
     })
 
@@ -394,7 +391,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         collapse: tree.collapseDir,
       },
       get,
-      notFound: (input: string) => store.file[path.normalize(input)]?.notFound ?? false,
+      notFound: (input: string) => selectFileMissing(fileEntry(path.normalize(input))),
       load,
       watch,
       unwatch,

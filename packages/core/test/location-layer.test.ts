@@ -5,6 +5,7 @@ import { describe, expect } from "bun:test"
 import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
+  Context,
   DateTime,
   Deferred,
   Duration,
@@ -15,6 +16,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Logger,
   Option,
   RcMap,
   Schema,
@@ -29,6 +31,7 @@ import { Global } from "@opencode/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Config } from "@opencode/core/config"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
 import { Plugin } from "@opencode/core/plugin"
@@ -316,11 +319,41 @@ describe("LocationServiceMap", () => {
     }),
   )
 
+  for (const holder of ["stays", "releases on shutdown"] as const)
+    it.effect(
+      `warns when a borrower ${holder === "stays" ? "still holds" : "lets go of"} an invalidated location`,
+      () => {
+        const warnings: unknown[] = []
+        const logger = Logger.map(Logger.formatStructured, (entry) => {
+          if (entry.level === "WARN") warnings.push(entry.message)
+        })
+        return Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const locations = yield* LocationServiceMap.Service
+          const borrow = yield* Scope.make()
+          const context = yield* locations.contextEffect(ref).pipe(Scope.provide(borrow))
+          if (holder === "releases on shutdown")
+            yield* Context.get(context, LocationLifecycle.Service).awaitShutdown.pipe(
+              Effect.andThen(Scope.close(borrow, Exit.void)),
+              Effect.forkScoped,
+            )
+
+          yield* locations.invalidate(ref)
+          yield* Effect.yieldNow
+          yield* TestClock.adjust("30 seconds")
+          expect(warnings).toEqual(
+            holder === "stays"
+              ? [["location still held after shutdown", { directory: dir.path, workspaceID: undefined, holders: 1 }]]
+              : [],
+          )
+          yield* Scope.close(borrow, Exit.void)
+        }).pipe(Effect.provide(Logger.layer([logger])))
+      },
+    )
+
   it.live("retries a location after its missing directory is recreated", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
@@ -339,10 +372,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("keeps a workspace location admitted when its directory does not exist locally", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
@@ -405,10 +435,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("reuses cached services for constructed and decoded location refs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -429,10 +456,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("normalizes equivalent refs to one cached location graph", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -582,10 +606,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("rejects an unavailable selected model during location model resolution", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -635,10 +656,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("explains replacements for unavailable legacy provider models", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -682,10 +700,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("preserves the selected catalog identity when the package model id differs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })

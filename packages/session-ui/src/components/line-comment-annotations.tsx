@@ -1,11 +1,19 @@
 import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
-import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import { render as renderSolid } from "solid-js/web"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { createHoverCommentUtility } from "../pierre/comment-hover"
 import { cloneSelectedLineRange, formatSelectedLineLabel, lineInSelectedRange } from "../pierre/selection-bridge"
 import { LineComment, LineCommentEditor, type LineCommentEditorProps } from "./line-comment"
+import {
+  IDLE_LINE_COMMENT_MODE,
+  transitionLineComment,
+  viewCommentItem,
+  viewLineComment,
+  type LineCommentEffect,
+  type LineCommentEvent,
+  type LineCommentMode,
+} from "./line-comment-machine"
 
 export type LineCommentAnnotationMeta<T> =
   | { kind: "comment"; key: string; comment: T }
@@ -34,15 +42,10 @@ type HoverCommentLine = {
   side?: "additions" | "deletions"
 }
 
-export type LineCommentStateProps<T> = {
-  opened: Accessor<T | null>
-  setOpened: (id: T | null) => void
-  selected: Accessor<SelectedLineRange | null>
-  setSelected: (range: SelectedLineRange | null) => void
-  commenting: Accessor<SelectedLineRange | null>
-  setCommenting: (range: SelectedLineRange | null) => void
-  syncSelected?: (range: SelectedLineRange | null) => void
-  hoverSelected?: (range: SelectedLineRange) => void
+/** A line-comment mode owned by the caller, such as one file's entry in a multi-file review. Omit it to keep the mode inside the controller. */
+export type LineCommentMachine = {
+  mode: Accessor<LineCommentMode>
+  dispatch: (event: LineCommentEvent) => readonly LineCommentEffect[]
 }
 
 export type SavedLineComment = {
@@ -51,21 +54,22 @@ export type SavedLineComment = {
   comment: string
 }
 
-type LineCommentControllerProps<T extends SavedLineComment> = {
+type LineCommentDriverProps<T extends SavedLineComment> = {
+  machine?: LineCommentMachine
+  onSyncSelected?: (range: SelectedLineRange | null) => void
+  onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
+  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
+  onDelete?: (comment: T) => void
+}
+
+type LineCommentControllerProps<T extends SavedLineComment> = LineCommentDriverProps<T> & {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
   mention?: LineCommentEditorProps["mention"]
-  state: LineCommentStateProps<string>
-  onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
-  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
-  onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
   onDraftPopoverFocusOut?: (event: FocusEvent) => void
-  getHoverSelectedRange?: Accessor<SelectedLineRange | null>
-  cancelDraftOnCommentToggle?: boolean
-  clearSelectionOnSelectionEndNull?: boolean
 }
 
 type LineCommentControllerWithSideProps<T extends SavedLineComment> = LineCommentControllerProps<T> & {
@@ -197,19 +201,21 @@ function lineCommentElement(view: Accessor<CommentProps>) {
         />
       }
     >
-      <LineCommentEditor
-        inline
-        id={view().id}
-        value={view().editor!.value}
-        selection={view().editor!.selection}
-        onInput={view().editor!.onInput}
-        onCancel={view().editor!.onCancel}
-        onSubmit={view().editor!.onSubmit}
-        onPopoverFocusOut={view().editor!.onPopoverFocusOut}
-        cancelLabel={view().editor!.cancelLabel}
-        submitLabel={view().editor!.submitLabel}
-        mention={view().editor!.mention}
-      />
+      {(editor) => (
+        <LineCommentEditor
+          inline
+          id={view().id}
+          value={editor().value}
+          selection={editor().selection}
+          onInput={editor().onInput}
+          onCancel={editor().onCancel}
+          onSubmit={editor().onSubmit}
+          onPopoverFocusOut={editor().onPopoverFocusOut}
+          cancelLabel={editor().cancelLabel}
+          submitLabel={editor().submitLabel}
+          mention={editor().mention}
+        />
+      )}
     </Show>
   )
 }
@@ -229,147 +235,75 @@ function lineCommentDraftElement(view: Accessor<DraftProps>) {
   )
 }
 
-export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
-  const [state, setState] = createStore<{ draft: string; editing: T | null }>({
-    draft: "",
-    editing: null,
-  })
+// Runs a line-comment machine and turns its effects into the controller's callbacks.
+export function createLineCommentDriver<T extends SavedLineComment>(props: LineCommentDriverProps<T>) {
+  const machine = props.machine ?? createLocalLineCommentMachine()
 
-  const draft = () => state.draft
-  const setDraft = (value: string) => setState("draft", value)
-  const editing = () => state.editing
-  // The updater form stores `value` as is, even when it is itself a function.
-  const setEditing = (value: T | null) => setState("editing", () => value)
+  const send = (event: LineCommentEvent, comment?: T) => {
+    for (const effect of machine.dispatch(event)) {
+      if (effect.type === "sync-selected")
+        props.onSyncSelected?.(effect.range ? cloneSelectedLineRange(effect.range) : null)
 
-  const toRange = (range: SelectedLineRange | null) => (range ? cloneSelectedLineRange(range) : null)
+      if (effect.type === "submit-draft") props.onSubmit({ comment: effect.comment, selection: effect.selection })
 
-  const setSelected = (range: SelectedLineRange | null) => {
-    const next = toRange(range)
-    props.setSelected(next)
-    props.syncSelected?.(toRange(next))
+      if (effect.type === "submit-edit")
+        props.onUpdate?.({ id: effect.id, comment: effect.comment, selection: effect.selection })
 
-    return next
-  }
-
-  const setCommenting = (range: SelectedLineRange | null) => {
-    const next = toRange(range)
-    props.setCommenting(next)
-
-    return next
-  }
-
-  const closeComment = () => {
-    props.setOpened(null)
-  }
-
-  const cancelDraft = () => {
-    setDraft("")
-    setEditing(null)
-    setCommenting(null)
-  }
-
-  const reset = () => {
-    setDraft("")
-    setEditing(null)
-    props.setOpened(null)
-    props.setSelected(null)
-    props.setCommenting(null)
-  }
-
-  const openComment = (id: T, range: SelectedLineRange, options?: { cancelDraft?: boolean }) => {
-    if (options?.cancelDraft) cancelDraft()
-    props.setOpened(id)
-    setSelected(range)
-  }
-
-  const toggleComment = (id: T, range: SelectedLineRange, options?: { cancelDraft?: boolean }) => {
-    if (options?.cancelDraft) cancelDraft()
-    const next = props.opened() === id ? null : id
-    props.setOpened(next)
-    setSelected(range)
-  }
-
-  const openDraft = (range: SelectedLineRange) => {
-    const next = toRange(range)
-    setDraft("")
-    setEditing(null)
-    closeComment()
-    setSelected(next)
-    setCommenting(next)
-  }
-
-  const openEditor = (id: T, range: SelectedLineRange, value: string) => {
-    closeComment()
-    setSelected(range)
-    props.setCommenting(null)
-    setEditing(id)
-    setDraft(value)
-  }
-
-  const hoverComment = (range: SelectedLineRange) => {
-    const next = toRange(range)
-
-    if (!next) return
-
-    if (props.hoverSelected) {
-      props.hoverSelected(next)
-
-      return
+      if (effect.type === "delete-comment" && comment) props.onDelete?.(comment)
     }
-
-    setSelected(next)
   }
 
   return {
-    draft,
-    setDraft,
-    editing,
-    opened: props.opened,
-    selected: props.selected,
-    commenting: props.commenting,
-    isOpen: (id: T) => props.opened() === id,
-    isEditing: (id: T) => editing() === id,
-    closeComment,
-    openComment,
-    toggleComment,
-    openDraft,
-    openEditor,
-    hoverComment,
-    cancelDraft,
-    select: setSelected,
-    reset,
+    mode: machine.mode,
+    send,
+    view: () => viewLineComment(machine.mode()),
+    focusComment: (id: string, range: SelectedLineRange) => send({ type: "comment.focused", id, range }),
+    clearPassive: () => send({ type: "passive.cleared" }),
+    reset: () => send({ type: "reset" }),
   }
+}
+
+function createLocalLineCommentMachine(): LineCommentMachine {
+  const [mode, setMode] = createSignal(IDLE_LINE_COMMENT_MODE)
+
+  return {
+    mode,
+    dispatch: (event) => {
+      const step = transitionLineComment(untrack(mode), event)
+      setMode(step.state)
+
+      return step.effects
+    },
+  }
+}
+
+type LineCommentController<T extends SavedLineComment, A> = {
+  mode: Accessor<LineCommentMode>
+  selected: Accessor<SelectedLineRange | null>
+  focusComment: (id: string, range: SelectedLineRange) => void
+  clearPassive: VoidFunction
+  reset: VoidFunction
+  annotations: Accessor<A[]>
+  renderAnnotation: ReturnType<
+    typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>
+  >["renderAnnotation"]
+  renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
+  onLineSelected: (range: SelectedLineRange | null) => void
+  onLineSelectionEnd: (range: SelectedLineRange | null) => void
 }
 
 export function createLineCommentController<T extends SavedLineComment>(
   props: LineCommentControllerWithSideProps<T>,
-): {
-  note: ReturnType<typeof createLineCommentState<string>>
-  annotations: Accessor<DiffLineAnnotation<LineCommentAnnotationMeta<T>>[]>
-  renderAnnotation: ReturnType<
-    typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>
-  >["renderAnnotation"]
-  renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
-  onLineSelected: (range: SelectedLineRange | null) => void
-  onLineSelectionEnd: (range: SelectedLineRange | null) => void
-}
+): LineCommentController<T, DiffLineAnnotation<LineCommentAnnotationMeta<T>>>
 export function createLineCommentController<T extends SavedLineComment>(
   props: LineCommentControllerProps<T>,
-): {
-  note: ReturnType<typeof createLineCommentState<string>>
-  annotations: Accessor<LineCommentAnnotation<T>[]>
-  renderAnnotation: ReturnType<
-    typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>
-  >["renderAnnotation"]
-  renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
-  onLineSelected: (range: SelectedLineRange | null) => void
-  onLineSelectionEnd: (range: SelectedLineRange | null) => void
-}
+): LineCommentController<T, LineCommentAnnotation<T>>
 export function createLineCommentController<T extends SavedLineComment>(
   props: LineCommentControllerProps<T> | LineCommentControllerWithSideProps<T>,
 ) {
   const i18n = useI18n()
-  const note = createLineCommentState<string>(props.state)
+  const driver = createLineCommentDriver(props)
+  const draftRange = () => driver.view().draftRange
 
   const annotations =
     "getSide" in props
@@ -377,7 +311,7 @@ export function createLineCommentController<T extends SavedLineComment>(
           comments: props.comments,
           getCommentId: (comment) => comment.id,
           getCommentSelection: (comment) => comment.selection,
-          draftRange: note.commenting,
+          draftRange,
           draftKey: props.draftKey,
           getSide: props.getSide,
         })
@@ -385,7 +319,7 @@ export function createLineCommentController<T extends SavedLineComment>(
           comments: props.comments,
           getCommentId: (comment) => comment.id,
           getCommentSelection: (comment) => comment.selection,
-          draftRange: note.commenting,
+          draftRange,
           draftKey: props.draftKey,
         })
 
@@ -394,17 +328,17 @@ export function createLineCommentController<T extends SavedLineComment>(
     commentElement: lineCommentElement,
     draftElement: lineCommentDraftElement,
     renderComment: (comment) => {
-      const edit = () => note.openEditor(comment.id, comment.selection, comment.comment)
+      const item = () => viewCommentItem(driver.mode(), comment.id)
 
-      const remove = () => {
-        note.reset()
-        props.onDelete?.(comment)
-      }
+      const edit = () =>
+        driver.send({ type: "edit.opened", id: comment.id, range: comment.selection, text: comment.comment })
+
+      const remove = () => driver.send({ type: "comment.deleted", id: comment.id }, comment)
 
       return {
         id: comment.id,
         get open() {
-          return note.isOpen(comment.id) || note.isEditing(comment.id)
+          return item().open
         },
         comment: comment.comment,
         selection: formatSelectedLineLabel(comment.selection, i18n.t),
@@ -412,92 +346,52 @@ export function createLineCommentController<T extends SavedLineComment>(
           return props.renderCommentActions?.(comment, { edit, remove })
         },
         get editor() {
-          return note.isEditing(comment.id)
+          return item().editing
             ? {
                 get value() {
-                  return note.draft()
+                  return item().editText
                 },
                 selection: formatSelectedLineLabel(comment.selection, i18n.t),
                 mention: props.mention,
-                onInput: note.setDraft,
-                onCancel: note.cancelDraft,
-                onSubmit: (value: string) => {
-                  props.onUpdate?.({
-                    id: comment.id,
-                    comment: value,
-                    selection: cloneSelectedLineRange(comment.selection),
-                  })
-                  note.cancelDraft()
-                },
+                onInput: (text: string) => driver.send({ type: "edit.changed", text }),
+                onCancel: () => driver.send({ type: "edit.cancelled" }),
+                onSubmit: (text: string) => driver.send({ type: "edit.submitted", text }),
                 submitLabel: props.editSubmitLabel,
               }
             : undefined
         },
-        onMouseEnter: () => note.hoverComment(comment.selection),
-        onClick: () => {
-          if (note.isEditing(comment.id)) return
-          note.toggleComment(comment.id, comment.selection, { cancelDraft: props.cancelDraftOnCommentToggle })
-        },
+        onMouseEnter: () => driver.send({ type: "comment.hovered", range: comment.selection }),
+        onClick: () => driver.send({ type: "comment.toggled", id: comment.id, range: comment.selection }),
       }
     },
     renderDraft: (range) => ({
       get value() {
-        return note.draft()
+        return driver.view().draftText
       },
       selection: formatSelectedLineLabel(range, i18n.t),
       mention: props.mention,
-      onInput: note.setDraft,
-      onCancel: () => {
-        note.cancelDraft()
-        note.select(null)
-      },
-      onSubmit: (comment) => {
-        props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
-        note.cancelDraft()
-      },
+      onInput: (text) => driver.send({ type: "draft.changed", text }),
+      onCancel: () => driver.send({ type: "draft.cancelled" }),
+      onSubmit: (text) => driver.send({ type: "draft.submitted", text }),
       onPopoverFocusOut: props.onDraftPopoverFocusOut,
     }),
   })
 
-  const renderGutterUtility = createLineCommentGutterRenderer({
-    label: props.label,
-    getSelectedRange: () => {
-      if (note.opened()) return null
-
-      return props.getHoverSelectedRange?.() ?? note.selected()
-    },
-    onOpenDraft: note.openDraft,
-  })
-
-  const onLineSelected = (range: SelectedLineRange | null) => {
-    if (!range) {
-      note.select(null)
-      note.cancelDraft()
-
-      return
-    }
-
-    note.select(range)
-  }
-
-  const onLineSelectionEnd = (range: SelectedLineRange | null) => {
-    if (!range) {
-      if (props.clearSelectionOnSelectionEndNull) note.select(null)
-      note.cancelDraft()
-
-      return
-    }
-
-    note.openDraft(range)
-  }
-
   return {
-    note,
+    mode: driver.mode,
+    selected: () => driver.view().selected,
+    focusComment: driver.focusComment,
+    clearPassive: driver.clearPassive,
+    reset: driver.reset,
     annotations,
     renderAnnotation,
-    renderGutterUtility,
-    onLineSelected,
-    onLineSelectionEnd,
+    renderGutterUtility: createLineCommentGutterRenderer({
+      label: props.label,
+      getSelectedRange: () => driver.view().gutterSelected,
+      onOpenDraft: (range) => driver.send({ type: "draft.opened", range }),
+    }),
+    onLineSelected: (range: SelectedLineRange | null) => driver.send({ type: "line.selected", range }),
+    onLineSelectionEnd: (range: SelectedLineRange | null) => driver.send({ type: "line.selection-ended", range }),
   }
 }
 

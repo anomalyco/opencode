@@ -50,7 +50,7 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   tools?: Provided & Tools<Services<Provided>>
   /** Host hooks for execution and tool/extension calls; see `Hooks`. */
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
-  /** Host functions exposed as globals; see `Extension.make`. */
+  /** Host functions and objects exposed as globals, also importable by Node module name; see `Extension.make`. */
   extensions?: Extensions
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits

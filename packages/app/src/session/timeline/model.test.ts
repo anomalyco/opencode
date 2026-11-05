@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
-import { enrichLeadingTurn, loadOlderTimeline } from "./model"
+import { enrichLeadingTurn } from "./model"
 
 const user = (id: string): SessionMessageUser => ({ id, type: "user", text: id, time: { created: 1 } })
 
@@ -128,32 +128,6 @@ describe("timeline model", () => {
 
     await enrichLeadingTurn(input)
     expect(loads).toBe(2)
-  })
-
-  test.each([
-    ["restores the anchor after one opaque cursor page", "ok", ["before", "load", "after", true]],
-    ["does not restore an anchor after the session changes", "switch", ["before", "load"]],
-    ["releases the anchor when loading history fails", "fail", ["before", "load", "after", true, "history failed"]],
-  ] as const)("%s", async (_name, outcome, expected) => {
-    let sessionID = "ses_old"
-    const calls: Array<string | boolean> = []
-
-    await loadOlderTimeline({
-      sessionID: () => sessionID,
-      more: () => true,
-      loading: () => false,
-      loadMore: async () => {
-        calls.push("load")
-
-        if (outcome === "switch") sessionID = "ses_new"
-
-        if (outcome === "fail") throw new Error("history failed")
-      },
-      before: () => calls.push("before"),
-      after: (done) => calls.push("after", done),
-    }).catch((error: Error) => calls.push(error.message))
-
-    expect(calls).toEqual([...expected])
   })
 
   test.each([

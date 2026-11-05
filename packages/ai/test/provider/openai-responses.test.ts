@@ -1,16 +1,14 @@
 import { describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer, Logger, Ref, Schema, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Logger, Ref, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import {
-  Media,
-  LLM,
+  ai,
   AIError,
   HttpContext,
-  HttpOptions,
-  LLMEvent,
-  LLMRequest,
-  Message,
   LanguageModel,
+  LLMEvent,
+  Media,
+  Message,
   ToolCallPart,
   ToolDefinition,
   ToolNamespace,
@@ -23,8 +21,8 @@ import {
   LLMClient,
   RequestExecutor,
   WebSocketTransport,
+  type ChannelCreate,
   type ChannelObservation,
-  type WebSocketChannelDriver,
 } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -47,79 +45,65 @@ const model = OpenAIResponses.route
 
 const xaiModel = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.5")
 
-const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
-  create: () => Effect.succeed({ message, mode: "full" }),
-  observe: (_create, frame): Effect.Effect<ChannelObservation, AIError> => {
-    const event = ProviderShared.decodeJson(frame)
-    if (!ProviderShared.isRecord(event)) return Effect.die("Expected event")
-    if (event.type === "response.completed") return Effect.succeed({ type: "completed", frame })
-    if (event.type === "response.incomplete") return Effect.succeed({ type: "incomplete", frame })
-    if (event.type === "error" || event.type === "response.failed")
-      return Effect.succeed({
-        type: "provider-failure",
-        error: new AIError({
-          reason: new TransportError({
-            message: "provider rejected request",
-            body: frame,
-            cause: new Error("provider cause"),
-            http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
-            transport: "websocket",
-            operation: "read",
-            phase: "receive",
-          }),
+const baseChannelObserve = (_create: ChannelCreate, frame: string): Effect.Effect<ChannelObservation, AIError> => {
+  const event = ProviderShared.decodeJson(frame)
+  if (!ProviderShared.isRecord(event)) return Effect.die("Expected event")
+  if (event.type === "response.completed") return Effect.succeed({ type: "completed", frame })
+  if (event.type === "response.incomplete") return Effect.succeed({ type: "incomplete", frame })
+  if (event.type === "error" || event.type === "response.failed")
+    return Effect.succeed({
+      type: "provider-failure",
+      error: new AIError({
+        reason: new TransportError({
+          message: "provider rejected request",
+          body: frame,
+          cause: new Error("provider cause"),
+          http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
+          transport: "websocket",
+          operation: "read",
+          phase: "receive",
         }),
-      })
-    return Effect.succeed({ type: "frame", frame })
-  },
-})
+      }),
+    })
+  return Effect.succeed({ type: "frame", frame })
+}
 
 /** Classifies error frames the way the production channel does, so recovery can read the canonical reason. */
-const classifyingChannelDriver = (message: string): WebSocketChannelDriver => {
-  const base = baseChannelDriver(message)
-  const decodeEvent = Schema.decodeUnknownSync(OpenResponses.protocol.stream.event)
-  return {
-    ...base,
-    observe: (create, frame) =>
-      base.observe(create, frame).pipe(
-        Effect.map((observation) =>
-          observation.type === "provider-failure"
-            ? {
-                ...observation,
-                error: OpenResponses.providerFailure(decodeEvent(frame), "stream error", frame),
-              }
-            : observation,
-        ),
-      ),
-  }
-}
+const classifyingChannelObserve = (create: ChannelCreate, frame: string, event: OpenResponses.Event) =>
+  baseChannelObserve(create, frame).pipe(
+    Effect.map(
+      (observation): ChannelObservation =>
+        observation.type === "provider-failure"
+          ? { ...observation, error: OpenResponses.providerFailure(event, "stream error", frame) }
+          : observation,
+    ),
+  )
 
 const continuationDriver = (
   request: Readonly<Record<string, unknown>>,
-  base = baseChannelDriver,
+  base: OpenResponsesContinuation.DriverInput["base"] = baseChannelObserve,
   continuation?: OpenResponsesContinuation.Shape,
-) => {
-  const message = ProviderShared.encodeJson(request)
-  return OpenResponsesContinuation.driver({
+) =>
+  OpenResponsesContinuation.driver({
     id: "openai-responses",
     name: "OpenAI Responses",
     request,
-    message,
-    base: base(message),
+    base,
     continuation,
   })
-}
 
 const checkpoint = (observation: ChannelObservation) => {
   if (observation.type !== "completed" || !observation.checkpoint) throw new Error("Expected checkpoint")
   return observation.checkpoint
 }
 
-const request = LLM.request({
+const request = ai.request({
   id: "req_1",
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
@@ -158,7 +142,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers the hosted OpenAI image generation tool", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Show me a rooftop garden.",
           tools: [OpenAI.imageGeneration({ action: "generate", quality: "high", size: "1024x1024" })],
@@ -176,7 +160,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers tool namespaces without flattening leaf names", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Find a customer and their orders.",
           tools: [
@@ -221,8 +205,9 @@ describe("OpenAI Responses route", () => {
   it.effect("flattens nested levels within a native tool namespace", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
+          prompt: "Hello",
           tools: [
             {
               type: "namespace",
@@ -263,8 +248,9 @@ describe("OpenAI Responses route", () => {
   it.effect("defaults tool namespace descriptions", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
+          prompt: "Hello",
           tools: [
             {
               type: "namespace",
@@ -284,7 +270,7 @@ describe("OpenAI Responses route", () => {
   it.effect("rejects invalid hosted image generation options locally", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Show me a rooftop garden.",
           tools: [OpenAI.imageGeneration({ outputCompression: -1, partialImages: 4, size: "bogus" })],
@@ -298,7 +284,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers semantic service tier options", () =>
     Effect.gen(function* () {
-      const input = LLMRequest.update(request, { providerOptions: { serviceTier: "priority" } })
+      const input = { ...request, providerOptions: { serviceTier: "priority" } }
       expect(input.providerOptions).toEqual({ serviceTier: "priority" })
       const prepared = yield* compileRequest(input)
 
@@ -309,9 +295,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { reasoningEffort: "experimental" } }),
-      )
+      const prepared = yield* compileRequest({ ...request, providerOptions: { reasoningEffort: "experimental" } })
 
       expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
     }),
@@ -319,11 +303,10 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers reasoning mode and context into the reasoning object", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: { reasoningEffort: "high", reasoningMode: "pro", reasoningContext: "current_turn" },
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        providerOptions: { reasoningEffort: "high", reasoningMode: "pro", reasoningContext: "current_turn" },
+      })
 
       expect(prepared.body.reasoning).toEqual({ effort: "high", mode: "pro", context: "current_turn" })
       expect(prepared.body).not.toHaveProperty("reasoningMode")
@@ -333,9 +316,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("passes through custom OpenAI text verbosity strings", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { textVerbosity: "verbose" } }),
-      )
+      const prepared = yield* compileRequest({ ...request, providerOptions: { textVerbosity: "verbose" } })
 
       expect(prepared.body.text).toEqual({ verbosity: "verbose" })
     }),
@@ -344,7 +325,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes through provider-defined and future service tiers", () =>
     Effect.gen(function* () {
       for (const serviceTier of ["scale", "ultrafast", "future-tier"]) {
-        const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { serviceTier } }))
+        const prepared = yield* compileRequest({ ...request, providerOptions: { serviceTier } })
 
         expect(prepared.body.service_tier).toBe(serviceTier)
       }
@@ -353,35 +334,34 @@ describe("OpenAI Responses route", () => {
 
   it.effect("preserves function schemas", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({
-              name: "read",
-              description: "Read a path or resource.",
-              inputSchema: {
-                type: "object",
-                anyOf: [
-                  {
-                    type: "object",
-                    properties: {
-                      path: { type: "string" },
-                      reference: { anyOf: [{ type: "string" }, { type: "null" }] },
-                      limit: { type: "integer", maximum: 2000 },
-                    },
-                    required: ["path"],
+      const prepared = yield* compileRequest({
+        ...request,
+        tools: [
+          ToolDefinition.make({
+            name: "read",
+            description: "Read a path or resource.",
+            inputSchema: {
+              type: "object",
+              anyOf: [
+                {
+                  type: "object",
+                  properties: {
+                    path: { type: "string" },
+                    reference: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    limit: { type: "integer", maximum: 2000 },
                   },
-                  {
-                    type: "object",
-                    properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
-                    required: ["resource"],
-                  },
-                ],
-              },
-            }),
-          ],
-        }),
-      )
+                  required: ["path"],
+                },
+                {
+                  type: "object",
+                  properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
+                  required: ["resource"],
+                },
+              ],
+            },
+          }),
+        ],
+      })
 
       expect(prepared.body.tools).toEqual([
         {
@@ -415,22 +395,13 @@ describe("OpenAI Responses route", () => {
 
   it.effect("maps the canonical parallel tool setting with provider-option precedence", () =>
     Effect.gen(function* () {
-      const disabled = yield* compileRequest(
-        LLMRequest.update(request, {
-          toolChoice: { type: "auto", disableParallelToolUse: true },
-        }),
-      )
-      const enabled = yield* compileRequest(
-        LLMRequest.update(request, {
-          toolChoice: { type: "auto", disableParallelToolUse: false },
-        }),
-      )
-      const overridden = yield* compileRequest(
-        LLMRequest.update(request, {
-          toolChoice: { type: "auto", disableParallelToolUse: true },
-          providerOptions: { parallelToolCalls: true },
-        }),
-      )
+      const disabled = yield* compileRequest({ ...request, toolChoice: { type: "auto", disableParallelToolUse: true } })
+      const enabled = yield* compileRequest({ ...request, toolChoice: { type: "auto", disableParallelToolUse: false } })
+      const overridden = yield* compileRequest({
+        ...request,
+        toolChoice: { type: "auto", disableParallelToolUse: true },
+        providerOptions: { parallelToolCalls: true },
+      })
 
       expect(disabled.body.parallel_tool_calls).toBe(false)
       expect(enabled.body.parallel_tool_calls).toBe(true)
@@ -441,7 +412,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers chronological system updates to developer messages in order", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
         }),
@@ -457,13 +428,12 @@ describe("OpenAI Responses route", () => {
 
   it.effect("prepares one OpenAI Responses route for either transport", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          model: OpenAIResponses.route
-            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-            .model({ id: "gpt-4.1-mini" }),
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        model: OpenAIResponses.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4.1-mini" }),
+      })
 
       expect(prepared.route).toBe("openai-responses")
       expect(prepared.protocol).toBe("openai-responses")
@@ -519,7 +489,7 @@ describe("OpenAI Responses route", () => {
           }),
       })
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({
             baseURL: "https://api.openai.test/v1/",
             apiKey: "test",
@@ -579,7 +549,7 @@ describe("OpenAI Responses route", () => {
       )
 
       const errors = yield* Effect.forEach(["late", "mismatch"], (prompt) =>
-        LLMClient.generate(LLM.request({ model, prompt }), { webSocket }).pipe(
+        LLMClient.generate(ai.request({ model, prompt }), { webSocket }).pipe(
           Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
           Effect.flip,
         ),
@@ -617,7 +587,7 @@ describe("OpenAI Responses route", () => {
         "gpt-4.1-mini",
       )
 
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "hi" }), { webSocket }).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "hi" }), { webSocket }).pipe(
         Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
       )
       expect(response.finishReason?.normalized).toBe("stop")
@@ -963,7 +933,7 @@ describe("OpenAI Responses route", () => {
         store: false,
         input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "First" }] }],
       }
-      const first = continuationDriver(firstRequest, classifyingChannelDriver)
+      const first = continuationDriver(firstRequest, classifyingChannelObserve)
       const saved = checkpoint(
         yield* first.observe(
           yield* first.create(undefined),
@@ -978,7 +948,7 @@ describe("OpenAI Responses route", () => {
             { type: "message", role: "user", content: [{ type: "input_text", text: "Second" }] },
           ],
         },
-        classifyingChannelDriver,
+        classifyingChannelObserve,
       )
       // Codex reports a stale previous_response_id as a plain invalid_request_error.
       const stale = ProviderShared.encodeJson({
@@ -1041,7 +1011,7 @@ describe("OpenAI Responses route", () => {
 
       const trimmed = yield* continuationDriver(
         secondRequest,
-        baseChannelDriver,
+        baseChannelObserve,
         ({ instructions: _, ...rest }) => rest,
       ).create(saved)
       expect(trimmed.mode).toBe("incremental")
@@ -1054,7 +1024,7 @@ describe("OpenAI Responses route", () => {
       })
 
       // Declining the continuation sends the step in full and never sends a previous_response_id.
-      const declined = yield* continuationDriver(secondRequest, baseChannelDriver, () => undefined).create(saved)
+      const declined = yield* continuationDriver(secondRequest, baseChannelObserve, () => undefined).create(saved)
       expect(declined.mode).toBe("full")
       expect(JSON.parse(declined.message)).toEqual(secondRequest)
     }),
@@ -1066,9 +1036,10 @@ describe("OpenAI Responses route", () => {
       const message = yield* Ref.make("")
       const body = yield* Ref.make("")
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
+          headers: { "x-request": "request" },
           http: {
             body: {
               model: "overlaid-model",
@@ -1076,7 +1047,6 @@ describe("OpenAI Responses route", () => {
               stream_options: { include_usage: true },
               background: true,
             },
-            headers: { "x-request": "request" },
             query: { mode: "test" },
           },
         }),
@@ -1131,7 +1101,7 @@ describe("OpenAI Responses route", () => {
       const message = yield* Ref.make("")
       const body = yield* Ref.make("")
       yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say \uD800hello \u{1F600}.",
           http: { body: { metadata: { source: "overlay\uDC00" } } },
@@ -1177,7 +1147,7 @@ describe("OpenAI Responses route", () => {
         RequestExecutor.Service,
         RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
       )
-      const response = yield* LLMClient.generate(LLM.request({ model: xaiModel, prompt: "Say hello." }), {
+      const response = yield* LLMClient.generate(ai.request({ model: xaiModel, prompt: "Say hello." }), {
         webSocket: {
           execute: (exchange) =>
             Effect.gen(function* () {
@@ -1227,7 +1197,7 @@ describe("OpenAI Responses route", () => {
       ]
 
       yield* Effect.forEach(cases, (item) =>
-        LLMClient.generate(LLM.request({ model: item.model, prompt: "Say hello." }), {
+        LLMClient.generate(ai.request({ model: item.model, prompt: "Say hello." }), {
           webSocket: {
             execute: (exchange) =>
               Effect.gen(function* () {
@@ -1288,7 +1258,7 @@ describe("OpenAI Responses route", () => {
         warnings.push(String(Array.isArray(entry.message) ? entry.message[0] : entry.message))
       })
       yield* Effect.forEach(cases, (item) =>
-        LLMClient.generate(LLM.request({ model: item.model, prompt: "Say hello." }), {
+        LLMClient.generate(ai.request({ model: item.model, prompt: "Say hello." }), {
           webSocket: { execute: () => Effect.die("unexpected WebSocket request") },
         }).pipe(
           Effect.provide(
@@ -1312,9 +1282,7 @@ describe("OpenAI Responses route", () => {
   it.effect("uses exactly one HTTP request when no WebSocket executor is supplied", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      yield* LLMClient.generate(
-        LLMRequest.update(request, { http: new HttpOptions({ body: { input: "raw-http-input" } }) }),
-      ).pipe(
+      yield* LLMClient.generate({ ...request, http: { body: { input: "raw-http-input" } } }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1349,7 +1317,7 @@ describe("OpenAI Responses route", () => {
       })
 
       yield* LLMClient.stream(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
         }),
@@ -1392,7 +1360,7 @@ describe("OpenAI Responses route", () => {
 
       const errors = yield* Effect.forEach(events, (event) =>
         LLMClient.generate(
-          LLM.request({
+          ai.request({
             model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses(
               "gpt-4.1-mini",
             ),
@@ -1465,7 +1433,7 @@ describe("OpenAI Responses route", () => {
       )
 
       const errors = yield* Effect.forEach(["first", "second"], (prompt) =>
-        LLMClient.generate(LLM.request({ model, prompt }), { webSocket }).pipe(
+        LLMClient.generate(ai.request({ model, prompt }), { webSocket }).pipe(
           Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
           Effect.flip,
         ),
@@ -1491,15 +1459,36 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("keeps the system code when a WebSocket fails to connect", () =>
+    Effect.gen(function* () {
+      const socket = Object.assign(new EventTarget(), { readyState: globalThis.WebSocket.CONNECTING, close: () => {} })
+      const failed = Object.assign(new Event("error"), {
+        error: Object.assign(new Error("Failed to connect"), { code: "ENOTFOUND" }),
+      })
+      queueMicrotask(() => socket.dispatchEvent(failed))
+      const error = yield* WebSocketTransport.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- waitOpen only listens for events on this branch.
+        socket as unknown as globalThis.WebSocket,
+        { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
+      ).pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        code: "ENOTFOUND",
+        phase: "connect",
+        delivery: "not-sent",
+      })
+    }),
+  )
+
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
-      yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: LanguageModel.update(model, {
-            route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
-          }),
+      yield* LLMClient.generate({
+        ...request,
+        model: LanguageModel.update(model, {
+          route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
         }),
-      ).pipe(
+      }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1517,15 +1506,14 @@ describe("OpenAI Responses route", () => {
 
   it.effect("uses Azure api-key header for static OpenAI Responses keys", () =>
     Effect.gen(function* () {
-      yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: Azure.configure({
-            baseURL: "https://opencode-test.openai.azure.com/openai/",
-            apiKey: "azure-key",
-            headers: { authorization: "Bearer stale" },
-          }).responses("gpt-4.1-mini"),
-        }),
-      ).pipe(
+      yield* LLMClient.generate({
+        ...request,
+        model: Azure.configure({
+          baseURL: "https://opencode-test.openai.azure.com/openai/",
+          apiKey: "azure-key",
+          headers: { authorization: "Bearer stale" },
+        }).responses("gpt-4.1-mini"),
+      }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1544,11 +1532,10 @@ describe("OpenAI Responses route", () => {
   )
 
   it.effect("loads OpenAI default auth from Effect Config", () =>
-    LLMClient.generate(
-      LLMRequest.update(request, {
-        model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/" }).responses("gpt-4.1-mini"),
-      }),
-    ).pipe(
+    LLMClient.generate({
+      ...request,
+      model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/" }).responses("gpt-4.1-mini"),
+    }).pipe(
       configEnv({ OPENAI_API_KEY: "env-key" }),
       Effect.provide(
         dynamicResponse((input) =>
@@ -1565,14 +1552,13 @@ describe("OpenAI Responses route", () => {
   )
 
   it.effect("lets explicit auth override OpenAI default API key auth", () =>
-    LLMClient.generate(
-      LLMRequest.update(request, {
-        model: OpenAI.configure({
-          baseURL: "https://api.openai.test/v1/",
-          auth: Auth.bearer("oauth-token"),
-        }).responses("gpt-4.1-mini"),
-      }),
-    ).pipe(
+    LLMClient.generate({
+      ...request,
+      model: OpenAI.configure({
+        baseURL: "https://api.openai.test/v1/",
+        auth: Auth.bearer("oauth-token"),
+      }).responses("gpt-4.1-mini"),
+    }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
           Effect.gen(function* () {
@@ -1590,7 +1576,7 @@ describe("OpenAI Responses route", () => {
   it.effect("prepares function call and function output input items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_result",
           model,
           messages: [
@@ -1628,7 +1614,7 @@ describe("OpenAI Responses route", () => {
         structured: {},
       }
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: { command: "sleep 10" } })]),
@@ -1649,7 +1635,7 @@ describe("OpenAI Responses route", () => {
   it.effect("keeps primitive tool errors as plain text", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
@@ -1665,7 +1651,7 @@ describe("OpenAI Responses route", () => {
   it.effect("keeps non-JSON tool errors as plain text", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
@@ -1683,7 +1669,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers image tool-result content as structured input_image items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_result_image",
           model,
           messages: [
@@ -1712,7 +1698,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers single-image tool-result content as structured input_image array", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_result_image_only",
           model,
           messages: [
@@ -1736,7 +1722,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers PDF tool-result content as structured input_file array", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_result_pdf",
           model,
           messages: [
@@ -1773,7 +1759,7 @@ describe("OpenAI Responses route", () => {
       const base64 = "A".repeat(8_125_844)
       const dataUrl = `data:application/pdf;base64,${base64}`
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_result_large_pdf",
           model,
           messages: [
@@ -1797,7 +1783,7 @@ describe("OpenAI Responses route", () => {
   it.effect("uses standard inline file encoding for xAI PDF tool results", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: xaiModel,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
@@ -1831,7 +1817,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes non-image tool-result content through as an input file", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_result_unsupported_media",
           model,
           messages: [
@@ -1855,7 +1841,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers remote tool-result media URLs without base64 wrapping", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
@@ -1901,7 +1887,7 @@ describe("OpenAI Responses route", () => {
         .with({ provider: "custom", endpoint: { baseURL: "https://provider.example/v1" } })
         .model({ id: "video-model" })
       expect(
-        (yield* compileRequest(LLM.request({ model: custom, messages }))).body.input,
+        (yield* compileRequest(ai.request({ model: custom, messages }))).body.input,
         "unknown provider uses input_video for user and tool video",
       ).toMatchObject(
         expectedInput(
@@ -1910,7 +1896,7 @@ describe("OpenAI Responses route", () => {
         ),
       )
       expect(
-        (yield* compileRequest(LLM.request({ model: xaiModel, messages }))).body.input,
+        (yield* compileRequest(ai.request({ model: xaiModel, messages }))).body.input,
         "xAI uses input_file for user and tool video",
       ).toMatchObject(
         expectedInput(
@@ -1920,7 +1906,7 @@ describe("OpenAI Responses route", () => {
       )
 
       const meta = Meta.configure({ apiKey: "test" }).responses("muse-spark-1.3")
-      const metaRequest = LLM.request({
+      const metaRequest = ai.request({
         model: meta,
         messages: [
           Message.assistant([
@@ -1949,14 +1935,15 @@ describe("OpenAI Responses route", () => {
       expect((yield* compileRequest(metaRequest)).body.input, "Meta flushes videos at end of history").toMatchObject(
         metaInput,
       )
-      const continued = yield* compileRequest(
-        LLMRequest.update(metaRequest, { messages: [...metaRequest.messages, Message.user("continue")] }),
-      )
+      const continued = yield* compileRequest({
+        ...metaRequest,
+        messages: [...metaRequest.messages, Message.user("continue")],
+      })
       expect(continued.body.input, "Meta flushes videos before the next user message").toMatchObject([
         ...metaInput,
         { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
       ])
-      const nested = yield* compileRequest(LLMRequest.update(metaRequest, { model: custom }))
+      const nested = yield* compileRequest({ ...metaRequest, model: custom })
       expect(nested.body.input, "the shared protocol keeps tool video nested").toMatchObject([
         { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
         { type: "function_call", call_id: "call_text", name: "read", arguments: "{}" },
@@ -2022,12 +2009,12 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
       const options = yield* compileRequest(
-        LLM.request({ model: model.model("gpt-5.6"), prompt: "hi", cache: { ttl: "30m" } }),
+        ai.request({ model: model.model("gpt-5.6"), prompt: "hi", cache: { ttl: "30m" } }),
       )
       const retention = yield* compileRequest(
-        LLM.request({ model: model.model("gpt-5.5"), prompt: "hi", cache: { ttl: "24h" } }),
+        ai.request({ model: model.model("gpt-5.5"), prompt: "hi", cache: { ttl: "24h" } }),
       )
-      const unset = yield* compileRequest(LLM.request({ model: model.model("gpt-5.6"), prompt: "hi" }))
+      const unset = yield* compileRequest(ai.request({ model: model.model("gpt-5.6"), prompt: "hi" }))
 
       expect(options.body).toMatchObject({ prompt_cache_options: { ttl: "30m" } })
       expect(options.body).not.toHaveProperty("prompt_cache_retention")
@@ -2041,11 +2028,12 @@ describe("OpenAI Responses route", () => {
   it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
           promptCacheKey: "session_123",
-          generation: { presencePenalty: 0.25, frequencyPenalty: -0.25 },
+          presencePenalty: 0.25,
+          frequencyPenalty: -0.25,
           tools: [
             ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
             ToolDefinition.make({ name: "grep", description: "Search files", inputSchema: { type: "object" } }),
@@ -2095,7 +2083,7 @@ describe("OpenAI Responses route", () => {
   it.effect("drops a malformed provider option without discarding its siblings", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "hi",
           providerOptions: {
@@ -2119,7 +2107,7 @@ describe("OpenAI Responses route", () => {
   it.effect("accepts the full ResponseIncludable union", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "hi",
           providerOptions: {
@@ -2139,7 +2127,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes forward-compatible includable values through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "hi",
           providerOptions: { include: ["reasoning.encrypted_content", "bogus.thing"] },
@@ -2152,7 +2140,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("treats an explicit empty include as no include at all", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { include: [] } }))
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "hi", providerOptions: { include: [] } }))
 
       expect(prepared.body.include).toBeUndefined()
     }),
@@ -2161,7 +2149,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes an unknown includable value through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { include: ["bogus.thing"] } }),
+        ai.request({ model, prompt: "hi", providerOptions: { include: ["bogus.thing"] } }),
       )
 
       expect(prepared.body.include).toEqual(["bogus.thing"])
@@ -2170,7 +2158,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("requests encrypted reasoning by default", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { store: false } }))
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "hi", providerOptions: { store: false } }))
 
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
     }),
@@ -2183,7 +2171,7 @@ describe("OpenAI Responses route", () => {
       // turn cannot replay reasoning state, so the facade also opts into
       // `reasoning.encrypted_content` automatically.
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
           prompt: "hi",
         }),
@@ -2198,7 +2186,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lets callers opt out of the GPT-5 default include", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
           prompt: "hi",
           providerOptions: { include: [] },
@@ -2212,7 +2200,7 @@ describe("OpenAI Responses route", () => {
   it.effect("maps the request prompt cache key", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: OpenAI.configure({
             baseURL: "https://api.openai.test/v1/",
             apiKey: "test",
@@ -2229,7 +2217,7 @@ describe("OpenAI Responses route", () => {
   it.effect("omits the prompt cache key when caching is disabled", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Hello",
           promptCacheKey: "request_cache",
@@ -2244,7 +2232,7 @@ describe("OpenAI Responses route", () => {
   it.effect("omits the prompt cache key when compatibility disables it", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "request_cache",
@@ -2254,7 +2242,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body).not.toHaveProperty("prompt_cache_key")
       expect(model.compatibility?.supportsPromptCacheKey).toBeUndefined()
       expect(
-        (yield* compileRequest(LLM.request({ model, prompt: "Hello", promptCacheKey: "request_cache" }))).body,
+        (yield* compileRequest(ai.request({ model, prompt: "Hello", promptCacheKey: "request_cache" }))).body,
       ).toHaveProperty("prompt_cache_key", "request_cache")
     }),
   )
@@ -2415,7 +2403,7 @@ describe("OpenAI Responses route", () => {
         },
       ])
 
-      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const prepared = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
           type: "message",
@@ -2498,7 +2486,7 @@ describe("OpenAI Responses route", () => {
         },
       ])
 
-      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const prepared = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
           type: "message",
@@ -2639,7 +2627,7 @@ describe("OpenAI Responses route", () => {
       ])
 
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             response.message,
@@ -3046,9 +3034,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3120,9 +3106,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("recovers pending function calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3172,9 +3156,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("streams each reasoning summary part as a separate block", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3227,9 +3209,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("concludes reasoning at implicit summary boundaries", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3428,9 +3408,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("reconciles reasoning summaries that arrive only as finals", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3480,7 +3458,7 @@ describe("OpenAI Responses route", () => {
       ])
 
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [response.message],
           providerOptions: { store: false, include: ["reasoning.encrypted_content"] },
@@ -3528,7 +3506,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("preserves final reasoning metadata when storage is enabled", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(LLMRequest.update(request, { providerOptions: { store: true } })).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: true } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3566,7 +3544,7 @@ describe("OpenAI Responses route", () => {
   it.effect("continues a stateless reasoning conversation", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           id: "req_reasoning_continue",
           model,
           messages: [
@@ -3627,7 +3605,7 @@ describe("OpenAI Responses route", () => {
   it.effect("preserves assistant content order around reasoning items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_reasoning_order",
           model,
           messages: [
@@ -3671,7 +3649,7 @@ describe("OpenAI Responses route", () => {
   it.effect("replays complete reasoning items when storage is enabled", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -3701,7 +3679,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const item = { type: "web_search_call", id: "ws_1", status: "completed" }
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -3738,7 +3716,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const item = { type: "web_search_call", id: "ws_1", status: "completed" }
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.user("Search."),
@@ -3781,7 +3759,7 @@ describe("OpenAI Responses route", () => {
         { type: "future_call", id: "future_1", status: "completed" },
       ]
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: items.map((item) =>
             Message.assistant({
@@ -3808,7 +3786,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const item = { type: "web_search_call", id: "ws_1", status: "completed" }
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: xaiModel,
           messages: [
             Message.assistant([
@@ -3848,7 +3826,7 @@ describe("OpenAI Responses route", () => {
   it.effect("does not replay hosted tool items whose result id differs from provider metadata", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -3878,7 +3856,7 @@ describe("OpenAI Responses route", () => {
   it.effect("preserves provider-issued item ids and removes malformed ids without dropping items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -3996,7 +3974,7 @@ describe("OpenAI Responses route", () => {
         ]
       }
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [Message.assistant(hostedResult("ws_1")), Message.assistant(hostedResult("bad ref"))],
           providerOptions: { store: true },
@@ -4018,7 +3996,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const imageTool = OpenAI.imageGeneration({ action: "edit" })
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.user("Generate a black triangle."),
@@ -4059,7 +4037,7 @@ describe("OpenAI Responses route", () => {
   it.effect("preserves foreign hosted images as portable image content when storage is enabled", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: xaiModel,
           messages: [
             Message.assistant([
@@ -4095,7 +4073,7 @@ describe("OpenAI Responses route", () => {
   it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_multi_summary_continuation",
           model,
           messages: [
@@ -4133,7 +4111,7 @@ describe("OpenAI Responses route", () => {
   it.effect("replays stateless reasoning without encrypted state", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_reasoning_without_encrypted_state",
           model,
           messages: [
@@ -4177,7 +4155,7 @@ describe("OpenAI Responses route", () => {
   it.effect("drops empty reasoning items without summary or encrypted content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_reasoning_empty_shell",
           model,
           messages: [
@@ -4235,11 +4213,10 @@ describe("OpenAI Responses route", () => {
         },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(Effect.provide(fixedResponse(body)))
       const usage = new Usage({
         inputTokens: 5,
         outputTokens: 1,
@@ -4301,7 +4278,7 @@ describe("OpenAI Responses route", () => {
         },
       ])
 
-      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const prepared = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(prepared.body.input[0]).toEqual({
         type: "function_call",
         id: "fc_item_1",
@@ -4688,11 +4665,10 @@ describe("OpenAI Responses route", () => {
         },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.toolCalls).toEqual([])
       expect(response.events.find(LLMEvent.is.toolInputError)).toMatchObject({
@@ -4843,7 +4819,7 @@ describe("OpenAI Responses route", () => {
   it.effect("replays assistant media parts as portable user image input", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.user("Draw a cat"),
@@ -4900,7 +4876,7 @@ describe("OpenAI Responses route", () => {
       })
 
       const prepared = yield* Effect.forEach([false, true], (store) =>
-        compileRequest(LLM.request({ model, messages: [response.message], providerOptions: { store } })),
+        compileRequest(ai.request({ model, messages: [response.message], providerOptions: { store } })),
       )
       expect(prepared.map((request) => request.body.input)).toEqual([
         [
@@ -4946,7 +4922,7 @@ describe("OpenAI Responses route", () => {
       })
 
       const prepared = yield* compileRequest(
-        LLM.request({ model, messages: [response.message], providerOptions: { store: true } }),
+        ai.request({ model, messages: [response.message], providerOptions: { store: true } }),
       )
       expect(prepared.body.input).toEqual([
         {
@@ -5020,7 +4996,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers user image and PDF content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_media",
           model,
           messages: [
@@ -5052,7 +5028,7 @@ describe("OpenAI Responses route", () => {
   it.effect("uses standard inline file encoding for xAI user PDFs", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: xaiModel,
           messages: [
             Message.user({
@@ -5083,7 +5059,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes non-image user media through as an input file", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_media",
           model,
           messages: [Message.user({ type: "media", media: Media.base64("AAECAw==", "application/x-tar") })],
@@ -5109,7 +5085,7 @@ describe("OpenAI Responses route", () => {
   it.effect("lowers remote user media URLs without base64 wrapping", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.user([

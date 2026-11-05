@@ -146,13 +146,7 @@ export const Plugin = {
                   action: name,
                   resources: [agent.id],
                   save: [agent.id],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: {
-                    type: "tool",
-                    messageID: context.messageID,
-                    id: context.id,
-                  },
+                  ...Permission.invocation(context),
                 })
                 .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
 

@@ -72,6 +72,14 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         })),
       )
     },
+    // Removes `content` from just before the cursor, when it is there, leaving every other part as it was.
+    removeTextBefore(content: string) {
+      const cursor = store().cursor ?? promptLength(store().prompt)
+      const prompt = removeTextBefore(store().prompt, cursor, content)
+
+      if (!prompt) return
+      batch(() => setStore()({ prompt, cursor: cursor - content.length, retry: undefined }))
+    },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
       clearRetry()
@@ -129,6 +137,18 @@ function insertText(prompt: ComposerPrompt, cursor: number, content: string): Co
   if (!inserted) parts.push({ type: "text", content, start: 0, end: 0 })
 
   return withOffsets(parts)
+}
+
+function removeTextBefore(prompt: ComposerPrompt, cursor: number, content: string): ComposerPrompt | undefined {
+  const parts = withOffsets(prompt)
+  const index = parts.findIndex((item) => item.type === "text" && cursor > item.start && cursor <= item.end)
+  const part = parts[index]
+
+  if (!part || isAttachment(part) || !part.content.slice(0, cursor - part.start).endsWith(content)) return
+  const offset = cursor - part.start
+  const next = { ...part, content: part.content.slice(0, offset - content.length) + part.content.slice(offset) }
+
+  return withOffsets(parts.map((item, position) => (position === index ? next : item)))
 }
 
 function insertMention(

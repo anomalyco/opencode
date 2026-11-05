@@ -366,7 +366,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 }
 ```
 
-OpenCode 設定内のモデル ID は、`provider/model-id` という形式を使用します。たとえば、[OpenCode Zen](https://opencode.ai/v2/docs/console/) を使用している場合、GPT-6.1 Sol には `opencode/gpt-6.1-sol` を使用します。
+OpenCode 設定内のモデル ID は、`provider/model-id` という形式を使用します。たとえば、[OpenCode Models](https://opencode.ai/v2/docs/console/) を使用している場合、GPT-6.1 Sol には `opencode/gpt-6.1-sol` を使用します。
 
 ---
 

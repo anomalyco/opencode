@@ -23,7 +23,7 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
@@ -146,7 +146,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         editor.models.update(providerID, Model.ID.make("chat"), () => {})
         editor.models.update(providerID, Model.ID.make("keyed"), () => {})
       })
-      yield* PromptCacheKeyPlugin.effect(yield* PluginHost.make(plugin))
+      yield* PromptCacheKeyPlugin.effect(yield* PluginHost.make(plugin, "test"))
       expect(required(yield* models.get(providerID, Model.ID.make("chat"))).compatibility).toEqual({
         supportsPromptCacheKey: true,
       })
@@ -308,7 +308,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         const providers = yield* Provider.Service
         const models = yield* Model.Service
         const plugin = yield* Plugin.Service
-        const host = yield* PluginHost.make(plugin)
+        const host = yield* PluginHost.make(plugin, "test")
         const providerID = Provider.ID.make(builtin.id)
         const modelID = Model.ID.make(builtin.model)
         yield* providers.transform((editor) => {

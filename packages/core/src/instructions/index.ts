@@ -46,7 +46,7 @@ export declare namespace Source {
     readonly read: Effect.Effect<A | Unavailable | Removed>
     readonly render: {
       readonly initial: (current: A) => string
-      readonly changed: (previous: A, current: A) => string
+      readonly changed: (previous: A, current: A) => string | undefined
       readonly removed?: (previous: A) => string
     }
   }
@@ -109,7 +109,8 @@ export function make<A>(source: Source.Definition<A>): List {
         const after = decodeValue(current)
         if (after === undefined) return undefined
         if (before === undefined) return initial(after)
-        return requireText(source.key, "changed", source.render.changed(before, after))
+        const text = source.render.changed(before, after)
+        return text === undefined ? undefined : requireText(source.key, "changed", text)
       },
       removed: (previous) => {
         const decoded = decodeValue(previous)
@@ -232,6 +233,36 @@ export function diffByKey<A>(
       const before = previousByKey.get(key(value))
       return before === undefined || !changed(before, value) ? [] : [{ previous: before, current: value }]
     }),
+  }
+}
+
+/**
+ * Renders a keyed list update: added, changed, and removed entries as deltas,
+ * or the full list restated when no entry differs.
+ */
+export function listUpdate<A>(input: {
+  readonly key: (value: A) => string
+  readonly changed: (previous: A, current: A) => boolean
+  readonly entries: (values: ReadonlyArray<A>) => ReadonlyArray<string>
+  readonly render: (values: ReadonlyArray<A>) => string
+  readonly text: {
+    readonly replaced: string
+    readonly added: string
+    readonly changed: string
+    readonly removed: (keys: string) => string
+  }
+}) {
+  return (previous: ReadonlyArray<A>, current: ReadonlyArray<A>) => {
+    const diff = diffByKey(previous, current, input.key, input.changed)
+    if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
+      return [input.text.replaced, input.render(current)].join("\n")
+    return [
+      ...(diff.added.length === 0 ? [] : [input.text.added, ...input.entries(diff.added)]),
+      ...(diff.changed.length === 0
+        ? []
+        : [input.text.changed, ...input.entries(diff.changed.map((change) => change.current))]),
+      ...(diff.removed.length === 0 ? [] : [input.text.removed(diff.removed.map(input.key).join(", "))]),
+    ].join("\n")
   }
 }
 

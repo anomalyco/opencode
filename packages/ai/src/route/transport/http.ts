@@ -10,6 +10,7 @@ import {
   DEFAULT_CHUNK_TIMEOUT_MS,
   DEFAULT_HTTP_TIMEOUT_MS,
   mergeJsonRecords,
+  timeoutConfig,
   TransportError,
   type HttpContext,
   type HttpTimeout,
@@ -57,7 +58,7 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
       body: body.bodyText,
       headers: Headers.fromInput({
         ...input.headers?.({ request: input.request }),
-        ...input.request.http?.headers,
+        ...input.request.headers,
       }),
     })
     return { url, jsonBody: body.jsonBody, bodyText: body.bodyText, headers }
@@ -105,11 +106,12 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
           }),
         })
       const started = yield* Clock.currentTimeMillis
+      const limits = timeoutConfig(request.timeout)
       // Unlike the header and chunk limits, the whole-request budget has no default.
-      const total = request.http?.timeout ? Duration.millis(request.http.timeout) : Duration.infinity
+      const total = limits.total ? Duration.millis(limits.total) : Duration.infinity
       const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
         Effect.timeoutOrElse({
-          duration: Duration.min(timeoutDuration(request.http?.headerTimeout), total),
+          duration: Duration.min(timeoutDuration(limits.headers), total),
           orElse: () => timeout("request", "Timed out waiting for response headers"),
         }),
       )
@@ -119,7 +121,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         frames: prepared.framing.frame(
           RequestExecutor.responseStream(response).pipe(
             Stream.timeoutOrElse({
-              duration: timeoutDuration(request.http?.chunkTimeout, DEFAULT_CHUNK_TIMEOUT_MS),
+              duration: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
               orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
             }),
             Stream.interruptWhen(

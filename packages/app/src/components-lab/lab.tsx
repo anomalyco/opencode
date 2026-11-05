@@ -31,6 +31,7 @@ import { ModelsProvider } from "@/providers/models/models"
 import { Contribution } from "@/runtime/plugin/render"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerHealthy } from "@/runtime/server/health-machine"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionRouteFrame } from "@/session/session-frame"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
@@ -58,12 +59,14 @@ const themeIcon = `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="
 
 const gridIcon = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>`
 
+// Standalone stories mount fixture runtimes that must not access the live app's storage.
 // Vite needs the patterns as literals in each call.
 const modules = import.meta.glob<StoryModule>([
   "../**/*.stories.tsx",
   "../../../ui/src/**/*.stories.tsx",
   "../../../session-ui/src/**/*.stories.tsx",
   "../../../gui-plugins/src/**/*.stories.tsx",
+  "!../**/*.standalone.stories.tsx",
 ])
 
 // Each file's text, for the order its states were written in.
@@ -73,6 +76,7 @@ const sources = import.meta.glob<string>(
     "../../../ui/src/**/*.stories.tsx",
     "../../../session-ui/src/**/*.stories.tsx",
     "../../../gui-plugins/src/**/*.stories.tsx",
+    "!../**/*.standalone.stories.tsx",
   ],
   { query: "?raw", import: "default" },
 )
@@ -230,7 +234,7 @@ export default function ComponentsLab() {
       when={!grid()}
       fallback={
         <Grid
-          entries={entries().filter((entry) => entry.title.startsWith("UI/"))}
+          entries={entries().filter((entry) => entry.title.startsWith("UI/") || isDialogEntry(entry))}
           scheme={untrack(scheme)}
           onOpen={open}
         />
@@ -523,7 +527,7 @@ function Workspace(props: { children: JSX.Element }) {
   const healthy = createMemo((picked?: ServerConnection.Any) =>
     picked && servers.list.some((conn) => ServerConnection.key(conn) === ServerConnection.key(picked))
       ? picked
-      : servers.list.find((conn) => global.servers.health[ServerConnection.key(conn)]?.healthy),
+      : servers.list.find((conn) => isServerHealthy(global.servers.health[ServerConnection.key(conn)])),
   )
 
   return (
@@ -613,21 +617,25 @@ function Grid(props: { entries: LabEntry[]; scheme: "dark" | "light"; onOpen: (f
     const board = canvas(element, {
       theme: props.scheme,
       label: language.t("lab.grid"),
-      // Neighbours share the library's folder: actions, forms, overlays and so on.
+      // Neighbours share the library's folder: actions, forms, overlays, then app dialogs.
       items: props.entries
         .toSorted((a, b) => folderOf(a).localeCompare(folderOf(b)))
-        .map((entry) => ({
-          id: entry.file,
-          title: entry.title.split("/").at(-1),
-          w: 320,
-          h: 240,
-          render: (card: HTMLElement) =>
-            createRoot((dispose) => {
-              insert(card, () => <Tile entry={entry} />)
+        .map((entry) => {
+          const size = tileSize(entry)
 
-              return dispose
-            }, owner ?? undefined),
-        })),
+          return {
+            id: entry.file,
+            title: entry.title.split("/").at(-1),
+            w: size.w,
+            h: size.h,
+            render: (card: HTMLElement) =>
+              createRoot((dispose) => {
+                insert(card, () => <Tile entry={entry} />)
+
+                return dispose
+              }, owner ?? undefined),
+          }
+        }),
     })
 
     // The canvas captures the pointer to pan, so a card never sees its click: a press that ends where it began opens
@@ -667,21 +675,27 @@ function Tile(props: { entry: LabEntry }) {
     <div
       ref={setCanvas}
       data-lab-story={props.entry.file}
-      class="relative flex size-full cursor-pointer items-center justify-center overflow-hidden bg-v2-background-bg-base p-4 [contain:layout]"
+      class="relative flex size-full cursor-pointer overflow-hidden bg-v2-background-bg-base [contain:layout]"
+      classList={{
+        "items-center justify-center p-4": !props.entry.fullscreen,
+        "flex-col": props.entry.fullscreen,
+      }}
     >
       {/* The provider waits for the card, so a story that opens a dialog at once opens it inside. */}
       <Show when={canvas()}>
         {(container) => (
           <div class="pointer-events-none contents">
-            <DialogProvider container={container()}>
-              <ErrorBoundary
-                fallback={(error) => <pre class="font-mono text-[11px] text-v2-state-fg-danger">{String(error)}</pre>}
-              >
-                {render
-                  ? untrack(() => render(stateArgs(props.entry, 0)))
-                  : component && <Dynamic component={component} {...stateArgs(props.entry, 0)} />}
-              </ErrorBoundary>
-            </DialogProvider>
+            <Plugin file={props.entry.file}>
+              <DialogProvider container={container()}>
+                <ErrorBoundary
+                  fallback={(error) => <pre class="font-mono text-[11px] text-v2-state-fg-danger">{String(error)}</pre>}
+                >
+                  {render
+                    ? untrack(() => render(stateArgs(props.entry, 0)))
+                    : component && <Dynamic component={component} {...stateArgs(props.entry, 0)} />}
+                </ErrorBoundary>
+              </DialogProvider>
+            </Plugin>
           </div>
         )}
       </Show>
@@ -689,8 +703,26 @@ function Tile(props: { entry: LabEntry }) {
   )
 }
 
+function isDialogEntry(entry: LabEntry) {
+  return (
+    entry.title.startsWith("App/Dialogs/") ||
+    entry.file.endsWith("/beta-dialog.stories.tsx") ||
+    entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
+  )
+}
+
+function tileSize(entry: LabEntry) {
+  if (entry.fullscreen) return { w: 1120, h: 720 }
+
+  if (isDialogEntry(entry)) return { w: 720, h: 820 }
+
+  return { w: 320, h: 240 }
+}
+
 function folderOf(entry: LabEntry) {
-  return entry.file.match(/ui\/src\/([^/]+)\//)?.[1] ?? ""
+  if (isDialogEntry(entry)) return `1:dialogs:${entry.title}`
+
+  return `0:${entry.file.match(/ui\/src\/([^/]+)\//)?.[1] ?? ""}`
 }
 
 function typing(target: EventTarget | null) {
