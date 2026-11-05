@@ -76,7 +76,7 @@ pub fn slug() -> String {
         "island", "knight", "lagoon", "meadow", "moon", "mountain", "nebula", "orchid", "otter", "panda", "pixel",
         "planet", "river", "rocket", "sailor", "squid", "star", "tiger", "wizard", "wolf",
     ];
-    let random = uuid::Uuid::new_v4().as_u128();
+    let random = rand::random::<u128>();
     format!(
         "{}-{}",
         ADJECTIVES[(random % ADJECTIVES.len() as u128) as usize],
