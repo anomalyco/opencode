@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import en from "../../src/runtime/i18n/en"
 import { clientSettings } from "../../src/settings/search-catalog"
-import { NO_PROVIDER, REMOTE_SERVER, project, type SeedInput } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, holdRoute, project, type SeedInput } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { openSettings } from "../utils/workspace"
 
@@ -418,6 +418,40 @@ test("a page reached through an opened result keeps its own way back", async ({ 
   await expect(view.settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("OpenCode")
   await expect(view.settings.locator('[data-search-target="row"]')).toContainText("Project name")
   await expect(view.settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+})
+
+test("a project edit queued behind a save still reaches its project after jumping to another", async ({ page }) => {
+  const view = await open(page, { count: 2 })
+  await view.search.fill("OpenCode 00 name")
+  await view.results.getByRole("option").click()
+  const name = view.settings.getByRole("textbox", { name: "Project name", exact: true })
+  await expect(name).toHaveValue("OpenCode 00")
+  const hold = await holdRoute(page, /\/api\/project\/proj_search_\d+(\?|$)/, { method: "PATCH" })
+
+  await name.fill("Renamed")
+  await name.blur()
+  await hold.arrived
+  const startup = view.settings.getByRole("textbox", { name: "Worktree startup script", exact: true })
+  await startup.fill("bun dev")
+  await startup.blur()
+
+  const key = await page.evaluate(() =>
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "Meta+Shift+P" : "Control+Shift+P",
+  )
+
+  await page.keyboard.press(key)
+  const palette = page.getByRole("dialog")
+  await palette.getByRole("combobox").fill("OpenCode 01 name")
+  await palette.getByRole("option", { name: /^Project name/ }).click()
+  await expect(name).toHaveValue("OpenCode 01")
+  hold.release()
+
+  await expect
+    .poll(() => hold.requests.map((request) => [new URL(request.url()).pathname, request.postDataJSON()]))
+    .toEqual([
+      ["/api/project/proj_search_0", { name: "Renamed" }],
+      ["/api/project/proj_search_0", { commands: { start: "bun dev" } }],
+    ])
 })
 
 test("IME confirmation does not activate a search result", async ({ page }) => {

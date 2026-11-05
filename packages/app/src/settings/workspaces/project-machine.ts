@@ -90,7 +90,7 @@ export type ProjectSettingsEffect =
       readonly target: ProjectTarget
       readonly patch: ProjectPatch
     }
-  /** The page closed with commits still queued: send them once the save in flight settles. */
+  /** The page closed or moved to another project with commits still queued: send them once the save in flight settles. */
   | { readonly type: "flush"; readonly target: ProjectTarget; readonly patch: ProjectPatch }
   | { readonly type: "read-icon"; readonly attempt: number; readonly file: File }
   | { readonly type: "abort-icon-read" }
@@ -142,21 +142,19 @@ export function transitionProjectSettings(
   const abortRead: readonly ProjectSettingsEffect[] = state.reading === undefined ? NONE : [{ type: "abort-icon-read" }]
 
   switch (event.type) {
-    case "disposed": {
-      const flush: readonly ProjectSettingsEffect[] =
-        state.status === "saving" && state.pending
-          ? [{ type: "flush", target: state.target, patch: patchOf(state.pending) }]
-          : NONE
-
-      return { state: { status: "disposed" }, effects: [...abortRead, ...flush] }
-    }
+    case "disposed":
+      return { state: { status: "disposed" }, effects: [...abortRead, ...flush(state)] }
 
     case "project.synced":
       if (event.project.id === state.target.id && event.project.worktree === state.target.worktree)
         return { state, effects: NONE }
 
-      // Another project: saves already sent finish against the project they were sent for, but their results are stale.
-      return { state: createProjectSettingsState(event.project, state.attempt + 1), effects: abortRead }
+      // Another project: saves already sent finish against the project they were sent for, and commits still queued
+      // are flushed to it, but their results are stale.
+      return {
+        state: createProjectSettingsState(event.project, state.attempt + 1),
+        effects: [...abortRead, ...flush(state)],
+      }
     case "name.edited":
       if (event.value === state.draft.name) return { state, effects: NONE }
 
@@ -280,6 +278,13 @@ export function selectProjectSettingsView(state: ProjectSettingsState): ProjectS
       startup: state.failed.includes("startup"),
     },
   }
+}
+
+/** Commits still queued when the page leaves this project are sent to it after the save in flight settles. */
+function flush(state: Live): readonly ProjectSettingsEffect[] {
+  if (state.status !== "saving" || !state.pending) return NONE
+
+  return [{ type: "flush", target: state.target, patch: patchOf(state.pending) }]
 }
 
 function edited(state: Live, field: ProjectField, draft: ProjectDraft): ProjectSettingsTransition {

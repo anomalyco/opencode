@@ -188,6 +188,29 @@ describe("project settings autosave", () => {
     expect(late.state).toBe(moved.state)
   })
 
+  test("moving to another project still sends the previous project's queued commits to it", () => {
+    const queued = replay(createProjectSettingsState(alpha), [
+      { type: "name.edited", value: "Beta" },
+      { type: "name.committed" },
+      { type: "startup.edited", value: "bun dev" },
+      { type: "startup.committed" },
+    ])
+
+    const moved = transitionProjectSettings(queued.state, {
+      type: "project.synced",
+      project: { ...alpha, id: "project-b", worktree: "/work/bravo" },
+    })
+
+    expect(moved.effects).toEqual([
+      {
+        type: "flush",
+        target: { id: "project-a", worktree: "/work/alpha" },
+        patch: { commands: { start: "bun dev" } },
+      },
+    ])
+    expect(moved.state).toMatchObject({ status: "idle", target: { id: "project-b" } })
+  })
+
   test("the same project syncing again keeps the drafts", () => {
     const edited = transitionProjectSettings(createProjectSettingsState(alpha), { type: "name.edited", value: "Beta" })
 
