@@ -145,7 +145,7 @@ function changeText(
   // Before the first paint nothing is on screen to wipe out, so the new text just replaces the old.
   if (state.status === "measuring") return { state: { ...state, current: text }, effects: [MEASURE] }
 
-  if (state.status === "idle" && typeof state.current === "string" && text?.startsWith(state.current)) {
+  if (state.status === "idle" && state.current !== undefined && text?.startsWith(state.current)) {
     return { state: { ...state, current: text }, effects: [MEASURE] }
   }
 

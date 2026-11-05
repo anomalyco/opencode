@@ -122,6 +122,7 @@ export function transitionAvatarAnimation(
 
       return to(state, "none")
     }
+
     clock.time += step(event.now - clock.last)
     clock.entered = 0
     clock.last = event.now
@@ -154,6 +155,7 @@ export function transitionAvatarAnimation(
 
     return to(STATIC, "paint-static")
   }
+
   clock.time = time
   clock.last = event.now
 

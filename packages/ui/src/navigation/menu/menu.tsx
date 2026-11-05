@@ -79,7 +79,9 @@ const MenuAppearanceContext = createContext<MenuContextValue>(UNTRACKED_MENU)
 // input event dispatches, `gesture` names the input that may open a menu. It clears once that event's task ends, so a
 // later open without input counts as programmatic.
 let trackers = 0
+
 let gesture: MenuInputGesture = "none"
+
 let gestureReset: ReturnType<typeof setTimeout> | undefined
 
 const trackGesture = (event: Event) => {
@@ -362,9 +364,8 @@ export interface MenuProps extends ComponentProps<typeof DropdownMenu> {
 function MenuRoot(props: MenuProps) {
   const [local, rest] = splitProps(props, ["appearance", "children", "onOpenChange"])
   const appearance = () => local.appearance ?? "compact"
-  const [menuState, setMenuState] = createSignal(
-    createMenuState(!!props.open || (props.open === undefined && !!props.defaultOpen)),
-  )
+  const initialOpen = !!props.open || (props.open === undefined && !!props.defaultOpen)
+  const [menuState, setMenuState] = createSignal(createMenuState(initialOpen))
   const dispatch = (event: MenuEvent) => setMenuState((state) => transitionMenu(state, event))
 
   retainGestureTracker()

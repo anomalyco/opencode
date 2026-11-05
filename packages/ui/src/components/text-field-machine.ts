@@ -51,12 +51,8 @@ export function transitionTextFieldCopy(state: TextFieldCopyState, event: TextFi
   if (event.type === "copy.requested") {
     if (!event.enabled || state.status === "copying") return { state, effects: NO_EFFECTS }
     const attempt = (state.status === "idle" ? state.issued : state.attempt) + 1
-    const write: TextFieldCopyEffect = {
-      type: "clipboard.write",
-      attempt,
-      value: event.value,
-      timeoutMs: TEXT_FIELD_COPY_TIMEOUT_MS,
-    }
+    const timeoutMs = TEXT_FIELD_COPY_TIMEOUT_MS
+    const write: TextFieldCopyEffect = { type: "clipboard.write", attempt, value: event.value, timeoutMs }
 
     if (state.status === "copied") {
       return { state: { status: "copying", attempt, keepCopied: true }, effects: [TIMER_CLEAR, write] }

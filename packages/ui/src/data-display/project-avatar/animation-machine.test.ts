@@ -11,6 +11,7 @@ import {
   transitionAvatarAnimation,
   type AvatarAnimationEvent,
   type AvatarAnimationState,
+  type AvatarAnimationTransition,
   type AvatarClock,
 } from "./animation-machine"
 
@@ -21,10 +22,10 @@ const frame = (now: number): AvatarAnimationEvent => ({ type: "frame", now })
 const motion = (reduced: boolean): AvatarAnimationEvent => ({ type: "motion.changed", reduced })
 
 function run(clock: AvatarClock, state: AvatarAnimationState, ...events: AvatarAnimationEvent[]) {
-  return events.reduce((result, event) => transitionAvatarAnimation(result.state, clock, event), {
-    state,
-    effect: "none" as const,
-  } as ReturnType<typeof transitionAvatarAnimation>)
+  return events.reduce<AvatarAnimationTransition>(
+    (result, event) => transitionAvatarAnimation(result.state, clock, event),
+    { state, effect: "none" },
+  )
 }
 
 const animating = (clock: AvatarClock) =>

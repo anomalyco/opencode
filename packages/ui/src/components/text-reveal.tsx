@@ -12,20 +12,12 @@ import {
   type TextRevealEvent,
 } from "./text-reveal-machine"
 
-const px = (value: number | string | undefined, fallback: number) => {
-  if (typeof value === "number") return `${value}px`
+// A number gets the unit; a string is already a CSS value.
+const css = (value: number | string | undefined, fallback: number, unit: "px" | "ms") => {
+  if (value === undefined) return `${fallback}${unit}`
 
-  if (typeof value === "string") return value
-
-  return `${fallback}px`
-}
-
-const ms = (value: number | string | undefined, fallback: number) => {
-  if (typeof value === "number") return `${value}ms`
-
-  if (typeof value === "string") return value
-
-  return `${fallback}ms`
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminates this prop's own `number | string` union
+  return typeof value === "number" ? `${value}${unit}` : value
 }
 
 const pct = (value: number | undefined, fallback: number) => {
@@ -57,6 +49,7 @@ export function TextReveal(props: {
   const win = () => inRef?.scrollWidth ?? 0
   const wout = () => outRef?.scrollWidth ?? 0
   const growOnly = () => props.growOnly ?? true
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global; SSR has no frames
   const animates = typeof requestAnimationFrame === "function"
 
   const dispatch = (event: TextRevealEvent) => {
@@ -152,9 +145,9 @@ export function TextReveal(props: {
       class={props.class}
       aria-label={props.text ?? ""}
       style={{
-        "--text-reveal-duration": ms(props.duration, 450),
+        "--text-reveal-duration": css(props.duration, 450, "ms"),
         "--text-reveal-edge": pct(props.edge, 17),
-        "--text-reveal-travel": px(props.travel, 0),
+        "--text-reveal-travel": css(props.travel, 0, "px"),
         "--text-reveal-spring": props.spring ?? "cubic-bezier(0.34, 1.08, 0.64, 1)",
         "--text-reveal-spring-soft": props.springSoft ?? "cubic-bezier(0.34, 1, 0.64, 1)",
       }}

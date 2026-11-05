@@ -67,6 +67,7 @@ export function attachGeneratedAvatar(canvas: HTMLCanvasElement, icon: () => Gen
 
       return
     }
+
     cancelAnimationFrame(frame)
     frame = 0
     stopMotionObserver?.()
