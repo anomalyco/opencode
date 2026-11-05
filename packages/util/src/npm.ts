@@ -1,8 +1,9 @@
 export * as Npm from "./npm.js"
 
+import os from "os"
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
-import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Clock, Effect, Schema, Context, Layer, Option, FileSystem, Scope } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -21,6 +22,8 @@ export interface Package {
   readonly name: string
   readonly version?: string
   readonly revision?: string
+  /** The generation directory the package was resolved from; the root a consumer imports from for its lifetime. */
+  readonly generation?: string
 }
 
 export interface Interface {
@@ -29,6 +32,11 @@ export interface Interface {
   readonly check: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
   readonly update: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
+  /**
+   * Pin a cache generation for the calling Scope: cleanup skips generations whose holder process is
+   * still alive, so a consumer keeps importing from a directory that exists until the Scope closes.
+   */
+  readonly pin: (generation: string) => Effect.Effect<void, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
@@ -126,6 +134,14 @@ const PackageLock = Schema.Struct({
   packages: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ resolved: Schema.optional(Schema.String) }))),
 })
 
+const UsageMarker = Schema.Struct({
+  generation: Schema.String,
+  pid: Schema.Number,
+  hostname: Schema.String,
+  createdAt: Schema.String,
+})
+const encodeMarker = Schema.encodeSync(UsageMarker)
+
 const retention = 7 * 24 * 60 * 60 * 1_000
 const stagingRetention = 60 * 60 * 1_000
 
@@ -136,6 +152,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
+    const hostname = os.hostname()
     const directory = (pkg: string, target: Target | undefined) => path.join(global.cache, "npm", key(pkg, target))
     const generations = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readDirectory(dir).pipe(
@@ -200,6 +217,7 @@ const layer = Layer.effect(
       return {
         directory: dir,
         name,
+        generation: root,
         ...(version ? { version } : {}),
         ...(revision ? { revision } : {}),
       }
@@ -316,13 +334,42 @@ const layer = Layer.effect(
         ).pipe(Effect.onError(() => remove(staging, dir).pipe(Effect.ignore)))
       }
       yield* rename(staging, generation, dir)
-      return { ...staged.result, directory: path.join(generation, "node_modules", staged.result.name) }
+      return { ...staged.result, directory: path.join(generation, "node_modules", staged.result.name), generation }
+    })
+
+    // A generation a live consumer still imports from must survive cleanup: deleting it turns the
+    // consumer's next lazy import — or its teardown during a reload — into the ENOENT that fails
+    // the whole reload (#62068). Each holder records a lease marker carrying its process identity;
+    // liveness is the process itself, so a suspended server keeps its lease and a crashed one stops
+    // pinning as soon as its pid is gone. No heartbeat timer involved.
+    const usageDirectory = () => path.join(global.state, "npm-usage")
+    const liveGenerations = Effect.fnUntraced(function* () {
+      const entries = yield* fs.readDirectory(usageDirectory()).pipe(Effect.orElseSucceed(() => [] as string[]))
+      const live = new Set<string>()
+      yield* Effect.forEach(
+        entries,
+        (name) =>
+          Effect.gen(function* () {
+            const file = path.join(usageDirectory(), name)
+            const marker = yield* afs
+              .readJson(file)
+              .pipe(Effect.flatMap(Schema.decodeUnknownEffect(UsageMarker)), Effect.option)
+            // The directory holds only lease markers, so an unreadable or dead entry is housekeeping,
+            // not a pin: crashed holder, renamed machine, or garbage.
+            if (Option.isNone(marker) || marker.value.hostname !== hostname || !processAlive(marker.value.pid))
+              return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+            live.add(marker.value.generation)
+          }),
+        { concurrency: "unbounded", discard: true },
+      )
+      return live
     })
 
     const collect = Effect.fnUntraced(function* (dir: string) {
       const now = yield* Clock.currentTimeMillis
       const completed = yield* generations(dir)
       const keep = new Set(completed.slice(-2))
+      const live = yield* liveGenerations()
       const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => [] as string[]))
       yield* Effect.forEach(
         entries,
@@ -332,12 +379,42 @@ const layer = Layer.effect(
             : Number(name.match(/^\.staging-(\d+)-/)?.[1] ?? Number.NaN)
           const maximumAge = name.startsWith(".staging-") ? stagingRetention : retention
           if (!Number.isFinite(timestamp) || keep.has(name) || now - timestamp <= maximumAge) return Effect.void
-          return remove(path.join(dir, name), dir).pipe(
-            Effect.catchCause((cause) => Effect.logWarning("failed to remove stale npm generation", { dir, name, cause })),
-          )
+          return Effect.gen(function* () {
+            const target = path.join(dir, name)
+            // Holders pin the generation by its resolved path, so compare through the same resolution.
+            const real = yield* fs.realPath(target).pipe(Effect.orElseSucceed(() => target))
+            if (live.has(real)) return yield* Effect.logDebug("skipping in-use npm generation", { dir, name })
+            yield* remove(target, dir).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("failed to remove stale npm generation", { dir, name, cause }),
+              ),
+            )
+          })
         },
         { concurrency: "unbounded", discard: true },
       )
+    })
+
+    const pin = Effect.fn("Npm.pin")(function* (generation: string) {
+      const dir = usageDirectory()
+      const file = path.join(dir, randomUUID())
+      const root = yield* fs.realPath(generation).pipe(Effect.orElseSucceed(() => generation))
+      const staged = `${file}.staging`
+      // Write through a unique staging name so a concurrent cleanup never reads a half-written
+      // marker as garbage for a live generation.
+      yield* Effect.gen(function* () {
+        yield* fs.makeDirectory(dir, { recursive: true })
+        yield* fs.writeFileString(
+          staged,
+          JSON.stringify(encodeMarker({ generation: root, pid: process.pid, hostname, createdAt: new Date().toISOString() })),
+        )
+        yield* fs.rename(staged, file)
+      }).pipe(
+        Effect.onError(() => fs.remove(staged, { force: true }).pipe(Effect.ignore)),
+        Effect.tapError((cause) => Effect.logWarning("failed to record npm generation usage", { generation, cause })),
+        Effect.ignore,
+      )
+      yield* Effect.addFinalizer(() => fs.remove(file, { force: true }).pipe(Effect.ignore))
     })
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
@@ -459,6 +536,7 @@ const layer = Layer.effect(
       check,
       update,
       which,
+      pin,
     })
   }),
 )
@@ -471,6 +549,18 @@ export const node = makeGlobalNode({
 
 function gitRevision(resolved: string | undefined) {
   return resolved?.match(/#([a-f0-9]{40}|[a-f0-9]{64})(?=::|$)/i)?.[1]
+}
+
+// Signal 0 probes existence without delivering anything; EPERM means the process exists but is
+// owned by another user, which still counts as alive. Pid reuse only extends retention, never
+// shortens it, so a stale marker can delay a prune but cannot delete a live consumer's generation.
+function processAlive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM"
+  }
 }
 
 function isCommit(value: string | null | undefined) {

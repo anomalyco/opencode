@@ -444,3 +444,36 @@ describe("Npm.check and Npm.update", () => {
     expect(outdated).toBeFalse()
   })
 })
+
+describe("Npm.pin and cache retention", () => {
+  test("cleanup skips a pinned stale generation and reclaims it after the pin is released", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@latest"
+    const root = await registry.configure(cache, spec)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.add(spec)
+      // Two stale generations (timestamps from 2001) outside the keep-newest-2 window: cleanup must
+      // skip the pinned one and reclaim the unpinned one.
+      const stale = [path.join(root, "1000000000000"), path.join(root, "1000000000001")]
+      yield* Effect.promise(() => Promise.all(stale.map((dir) => fs.mkdir(dir, { recursive: true }))))
+      registry.state.latest = "1.1.0"
+      const exists = (dir: string) => Effect.promise(() => fs.stat(dir).then(() => true, () => false))
+      const whilePinned = yield* Effect.gen(function* () {
+        yield* npm.pin(stale[0])
+        yield* npm.update(spec)
+        return [yield* exists(stale[0]), yield* exists(stale[1])] as const
+      }).pipe(Effect.scoped)
+      // The lease is gone once its scope closes, so the next cleanup may reclaim the generation.
+      yield* npm.update(spec)
+      return { whilePinned, released: yield* exists(stale[0]) }
+    }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result.whilePinned[0]).toBeTrue()
+    expect(result.whilePinned[1]).toBeFalse()
+    expect(result.released).toBeFalse()
+  })
+})

@@ -148,6 +148,12 @@ const load = Effect.fn("PluginModule.load")(function* (
         ),
       )
     : {}
+  // Pinning rides the generation's effect so the lease is held on whichever scope runs the setup —
+  // the instance's activation scope — and released exactly when the instance goes away.
+  const generation = installed?.generation
+  const effect: Generation["effect"] = generation
+    ? (host) => Effect.andThen(npm.pin(generation), () => plugin.effect({ ...host, options: operation.options }))
+    : (host) => plugin.effect({ ...host, options: operation.options })
   return {
     id: plugin.id,
     features: {
@@ -161,7 +167,8 @@ const load = Effect.fn("PluginModule.load")(function* (
       : undefined,
     revision,
     source: source(operation.target, installed?.version),
-    effect: (host) => plugin.effect({ ...host, options: operation.options }),
+    ...(generation ? { npmGeneration: generation } : {}),
+    effect,
   } satisfies Generation
 })
 

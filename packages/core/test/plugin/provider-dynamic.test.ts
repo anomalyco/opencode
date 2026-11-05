@@ -25,6 +25,7 @@ function npmPackage(directory = "") {
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory, name }),
     which: () => Effect.undefined,
+    pin: () => Effect.void,
   })
 }
 

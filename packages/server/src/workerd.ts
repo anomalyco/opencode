@@ -116,6 +116,7 @@ const npmLayer = Layer.succeed(
     check: () => Effect.succeed(false),
     update: (pkg) => npmUnavailable("Npm.update", pkg),
     which: () => Effect.undefined,
+    pin: () => Effect.void,
   }),
 )
 
