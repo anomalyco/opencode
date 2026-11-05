@@ -240,15 +240,13 @@ export function Session(props: {
   )
   const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
   // The transcript's media without the reverted and queued messages it hides.
-  const gallery = createSessionGallery(
-    createMemo(() => {
-      if (!richMedia()) return []
-      const boundary = session()?.revert?.messageID
-      const queued = new Set(queuedPrompts().map((item) => item.id))
-      return messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
-    }),
-    () => session()?.location,
-  )
+  const visible = createMemo(() => {
+    if (!richMedia()) return []
+    const boundary = session()?.revert?.messageID
+    const queued = new Set(queuedPrompts().map((item) => item.id))
+    return messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
+  })
+  const gallery = createSessionGallery(visible, () => session()?.location)
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,

@@ -87,10 +87,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
         }),
       ),
     ]
-    const result = unsupportedParts(messages, capabilities(["text", "image"]), {
-      provider: "xai",
-      route: { protocol: "xai-responses" },
-    })
+    const xai = { provider: "xai", route: { protocol: "xai-responses" } }
+    const result = unsupportedParts(messages, capabilities(["text", "image"]), xai)
 
     expect(result[0]?.content).toEqual([
       ...user,
@@ -140,15 +138,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
     })
 
     test("Bedrock Converse keeps the video types it lowers and degrades the rest", async () => {
-      const supported = [
-        "video/mp4",
-        "video/quicktime",
-        "video/webm",
-        "video/x-matroska",
-        "video/3gpp",
-        "video/x-ms-wmv",
-      ]
-      for (const mime of supported) expect(await send(bedrock, mime)).toContain('"video":{')
+      const lowered = ["video/mp4", "video/quicktime", "video/webm", "video/x-matroska", "video/3gpp", "video/x-ms-wmv"]
+      for (const mime of lowered) expect(await send(bedrock, mime)).toContain('"video":{')
       for (const mime of ["video/x-msvideo", "video/ogg", "video/x-m4v"]) {
         const body = await send(bedrock, mime)
         expect(body).not.toContain('"video":{')

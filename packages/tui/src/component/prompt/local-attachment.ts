@@ -45,12 +45,7 @@ export async function resolvePastedAttachments(text: string, platform: string, v
     for (const candidate of filepaths) {
       const next = await readPastedAttachment(candidate, remaining, video)
       if (!next) return undefined
-      remaining -=
-        next.type === "video"
-          ? next.size
-          : typeof next.content === "string"
-            ? Buffer.byteLength(next.content)
-            : next.content.byteLength
+      remaining -= next.type === "video" ? next.size : Buffer.byteLength(next.content)
       attachments.push({ filepath: candidate, attachment: next })
     }
   }
@@ -112,7 +107,9 @@ export async function readKeptAttachments<T extends { uri: string; path?: string
       if (!file.path || !file.uri.startsWith("file:")) return file
       const content = await readFileBounded(file.path, MAX_LOCAL_VIDEO_BYTES).catch(() => undefined)
       if (!content) return path.basename(file.path)
-      return { ...file, uri: `data:${keptVideoMime(file.path)};base64,${content.toString("base64")}` }
+      const extension = path.extname(file.path).toLowerCase()
+      const mime = mimeTypes[extension] ?? `video/${extension.slice(1)}`
+      return { ...file, uri: `data:${mime};base64,${content.toString("base64")}` }
     }),
   )
   return {
@@ -145,18 +142,11 @@ const mimeTypes: Record<string, string> = {
   ".webp": "image/webp",
 }
 
-/** The extension history and the stash name a kept video's file with; `keptVideoMime` reads the type back from it. */
+/** The extension history and the stash name a kept video's file with; `readKeptAttachments` reads the type back. */
 export function keptVideoExtension(mime: string) {
   const type = mime.toLowerCase()
-  return (
-    Object.keys(mimeTypes).find((key) => mimeTypes[key] === type) ??
-    `.${type.slice("video/".length).replace(/[^\w+-]/g, "")}`
-  )
-}
-
-function keptVideoMime(file: string) {
-  const extension = path.extname(file).toLowerCase()
-  return mimeTypes[extension] ?? `video/${extension.slice(1)}`
+  const known = Object.keys(mimeTypes).find((key) => mimeTypes[key] === type)
+  return known ?? `.${type.slice("video/".length).replace(/[^\w+-]/g, "")}`
 }
 
 async function readFileBounded(file: string, maxBytes: number) {

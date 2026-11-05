@@ -1,23 +1,12 @@
-import {
-  CliRenderEvents,
-  resolveImageRenderProtocol,
-  ScrollBoxRenderable,
-  type CliRenderer,
-  type Renderable,
-} from "@opentui/core"
+import { CliRenderEvents, resolveImageRenderProtocol, ScrollBoxRenderable, type Renderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createContext, createEffect, createSignal, on, onCleanup, Show, useContext, type JSX } from "solid-js"
 import { createMediaFiles } from "../component/media/file"
 import type { MediaItem } from "../component/media/model"
 import { useRichMedia } from "../config"
 
-export type MediaPlayback = Readonly<{
-  time?: number
-  playing?: boolean
-  muted?: boolean
-  volume?: number
-  loop?: boolean
-}>
+type MediaSound = Readonly<{ muted?: boolean; volume?: number; loop?: boolean }>
+export type MediaPlayback = Readonly<{ time?: number; playing?: boolean }> & MediaSound
 export type MediaViewerRequest = Readonly<{ items: readonly MediaItem[]; index: number } & MediaPlayback>
 export type MediaPipRequest = Readonly<{ item: MediaItem } & MediaPlayback>
 type MediaViews = Readonly<{
@@ -36,9 +25,11 @@ const POSTER_LIMIT = 4
 
 let views: MediaViews = {}
 
-/** Sets the components `MediaHost` renders. */
+/** Sets the components `MediaHost` renders. Returns a function that restores the previous views. */
 export function registerMediaViews(next: MediaViews) {
-  views = { ...views, ...next }
+  const previous = views
+  views = { ...previous, ...next }
+  return () => (views = previous)
 }
 
 const MediaContext = createContext<ReturnType<typeof init>>()
@@ -94,12 +85,9 @@ function init(directory: string) {
   onCleanup(() => (renderer.kittyImageTransport = transport))
 
   // Scrolling or a layout change moves a tile without an event, so each frame checks where the tracked tiles are.
-  const tracked = new Map<string, () => Renderable | undefined>()
+  const tracked = new Map<string, Renderable>()
   const place = () => {
-    const shown = [...tracked.keys()].filter((key) => {
-      const node = tracked.get(key)!()
-      return node !== undefined && onScreen(node, renderer)
-    })
+    const shown = [...tracked.keys()].filter((key) => onScreen(tracked.get(key)!, renderer))
     // Tiles that stay on screen keep their place; those that came on screen go last.
     const next = [...posters().filter((key) => shown.includes(key)), ...shown.filter((key) => !posters().includes(key))]
     if (next.length !== posters().length || next.some((key, index) => key !== posters()[index])) setPosters(next)
@@ -140,13 +128,12 @@ function init(directory: string) {
     activeTile,
     setActiveTile,
     /** Follows whether an inline video tile is on screen after each frame, until the returned function stops it. */
-    trackPoster(key: string, element: () => Renderable | undefined) {
+    trackPoster(key: string, element: Renderable) {
       if (tracked.size === 0) renderer.on(CliRenderEvents.FRAME, place)
       tracked.set(key, element)
       return () => {
         tracked.delete(key)
         if (tracked.size === 0) renderer.off(CliRenderEvents.FRAME, place)
-        setPosters((keys) => keys.filter((item) => item !== key))
       }
     },
     /** Whether any of the tile is inside the screen and every scroll box around it. */
@@ -170,18 +157,16 @@ export function useMedia() {
   return value
 }
 
-function onScreen(element: Renderable, renderer: CliRenderer) {
-  const clips = [{ x: 0, y: 0, width: renderer.width, height: renderer.height }]
+function onScreen(element: Renderable, screen: { width: number; height: number }) {
+  const clips = [{ x: 0, y: 0, width: screen.width, height: screen.height }]
   for (let node: Renderable | null = element; node; node = node.parent) {
     if (!node.visible) return false
     if (node !== element && node instanceof ScrollBoxRenderable) clips.push(node.viewport)
   }
   return clips.every(
     (clip) =>
-      element.x < clip.x + clip.width &&
-      clip.x < element.x + element.width &&
-      element.y < clip.y + clip.height &&
-      clip.y < element.y + element.height,
+      Math.max(element.x, clip.x) < Math.min(element.x + element.width, clip.x + clip.width) &&
+      Math.max(element.y, clip.y) < Math.min(element.y + element.height, clip.y + clip.height),
   )
 }
 

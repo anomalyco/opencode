@@ -5,12 +5,9 @@ import { useMedia, type MediaPlayback } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { createMediaClick, formatDuration } from "./tile"
 
-type Transport = ReturnType<typeof createTransport>
+export type Transport = ReturnType<typeof createTransport>
 
-/**
- * Playback state and controls for one `<video>`, which spreads `events`. `start` applies each time it opens. Seeks go
- * through one throttle, so keys held down and a dragged seek bar coalesce into one pending target.
- */
+/** Playback state and controls for one `<video>`, which spreads `events`. `start` applies each time it opens. */
 export function createTransport(start: MediaPlayback) {
   const [player, setPlayer] = createSignal<VideoRenderable>()
   const [metadata, setMetadata] = createSignal<VideoMetadata>()
@@ -232,15 +229,13 @@ function SeekPreview(props: {
     player?.seek(time)
     setBehind(false)
   }, PREVIEW_REST_MS)
-  let scrubbed = false
   createEffect(() => {
     if (!ready()) return
     if (props.scrubbing) {
-      scrubbed = true
+      setBehind(true)
       return seek.cancel()
     }
-    if (scrubbed) setBehind(props.time !== seek.last())
-    scrubbed = false
+    if (props.time === seek.last()) setBehind(false)
     seek.push(props.time)
   })
 
@@ -282,7 +277,7 @@ function SeekPreview(props: {
 }
 
 /** Elapsed time as `m:ss`, counting only whole seconds that have passed. */
-function formatTimecode(seconds: number) {
+export function formatTimecode(seconds: number) {
   return formatDuration(Math.floor(Math.max(0, seconds)))
 }
 
@@ -315,7 +310,6 @@ function createSeekThrottle(run: (time: number) => void, rest = 0) {
   return {
     /** The time of the call waiting for its turn. */
     pending,
-    /** The time of the last call. */
     last: () => last,
     push(time: number) {
       setPending(time)

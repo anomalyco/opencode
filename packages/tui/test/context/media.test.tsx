@@ -82,27 +82,24 @@ test("lets the four video tiles that came on screen last keep a poster player, t
   ))
   const media = host.media()
   const keys = ["a", "b", "c", "d", "e"]
-  const untrack = keys.map((key, index) => media.trackPoster(key, () => boxes[index]))
-  await host.app.renderOnce()
-  expect(keys.filter(media.posterShown)).toEqual(keys)
-  expect(keys.filter(media.posterOpen)).toEqual(["b", "c", "d", "e"])
+  const untrack = keys.map((key, index) => media.trackPoster(key, boxes[index]!))
+  // The tiles hidden at each step, and the tiles on screen then that keep a player.
+  const steps: [string[], string][] = [
+    [[], "b,c,d,e"],
+    [["e"], "a,b,c,d"],
+    // Back on screen, a tile is the latest to come on screen, and the tile on screen longest gives up its player.
+    [[], "b,c,d,e"],
+    [["a"], "b,c,d,e"],
+    [[], "a,c,d,e"],
+  ]
+  for (const [hidden, open] of steps) {
+    boxes.forEach((box, index) => (box.visible = !hidden.includes(keys[index]!)))
+    await host.app.renderOnce()
+    expect(keys.filter(media.posterShown)).toEqual(keys.filter((key) => !hidden.includes(key)))
+    expect(keys.filter(media.posterOpen).join()).toBe(open)
+  }
 
   untrack[2]!()
-  expect(keys.filter(media.posterOpen)).toEqual(["a", "b", "d", "e"])
-  // A tile that leaves the screen drops off the list.
-  boxes[4]!.visible = false
   await host.app.renderOnce()
-  expect(keys.filter(media.posterShown)).toEqual(["a", "b", "d"])
-  expect(keys.filter(media.posterOpen)).toEqual(["a", "b", "d"])
-
-  // Back on screen, it is the latest to come on screen, and the tile on screen longest gives up its player.
-  media.trackPoster("c", () => boxes[2])
-  boxes[4]!.visible = true
-  await host.app.renderOnce()
-  expect(keys.filter(media.posterOpen)).toEqual(["b", "c", "d", "e"])
-  boxes[0]!.visible = false
-  await host.app.renderOnce()
-  boxes[0]!.visible = true
-  await host.app.renderOnce()
-  expect(keys.filter(media.posterOpen)).toEqual(["a", "c", "d", "e"])
+  expect(keys.filter(media.posterOpen).join()).toBe("a,b,d,e")
 })
