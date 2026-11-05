@@ -147,9 +147,10 @@ answers `create_pipe` with an error.
 - `output_path` must be absolute. The daemon opens it before spawning,
   truncating an existing file or creating one with mode `0666` minus the
   daemon's umask, and refuses a symlink as the final path component. The
-  request is fully validated (cwd, paths, metadata size) before the file is
-  opened, so a rejected request never creates or truncates it; a path that
-  cannot be opened fails the request without starting the process.
+  request is validated (program, absolute paths, metadata size) before the
+  file is opened, so such a rejected request never creates or truncates it; a
+  path that cannot be opened fails the request without starting the process.
+  A missing program or `cwd` fails at spawn, after the file was opened.
 - The reader writes every output byte to the file before handing it to the
   actor. The file is the only copy of the output: a pipe process has no replay
   buffer, so `replay` and `subscribe` return an empty replay (with correct
@@ -282,6 +283,7 @@ registration, leaving the rest to a later sweep. The sweep checks liveness
 through the registered process object.
 
 OpenCode chooses a fresh UUID runtime directory for each server, independent of
-the database. It starts the daemon only when the first terminal is created.
+the database. It starts the daemon only when the first terminal or pipe
+process is created.
 Only an explicit restart handoff descriptor lets a replacement server reuse
 the previous daemon's runtime directory and claim its ownership.

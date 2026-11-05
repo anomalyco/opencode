@@ -286,7 +286,7 @@ impl Connection {
         Ok(Cancellation(Arc::clone(&self.pipe)))
     }
 
-    /// Protocol 7 has an explicit response/final event, not a pipe half-close.
+    /// The protocol has an explicit response/final event, not a pipe half-close.
     /// Retain the pipe until the client reads that frame and closes its end.
     /// An uncooperative peer is cancelled after a bounded grace period.
     pub(crate) fn finish_response(&mut self) -> io::Result<()> {
