@@ -124,6 +124,7 @@ describe("location dialog steps", () => {
     ["rtl", "ArrowLeft", "ArrowRight"],
   ] as const)("%s arrows drill forward and step back", (direction, forward, backward) => {
     const active: LocationEntry = { id: projectEntryID(sst), type: "project", project: sst }
+
     const drilled = transitionLocationDialog(
       createLocationDialogState(),
       key(forward, { direction, active, drillable: true }),

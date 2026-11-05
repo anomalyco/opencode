@@ -7,6 +7,7 @@ import {
   type ModelChipEffect,
   type ModelChipEvent,
   type ModelChipState,
+  type ModelChipTransition,
 } from "./model-chip-machine"
 
 const click = (detail = 1, loading = true): Extract<ModelChipEvent, { type: "clicked" }> => ({
@@ -20,9 +21,9 @@ const click = (detail = 1, loading = true): Extract<ModelChipEvent, { type: "cli
 const loaded: ModelChipEvent = { type: "loaded", mobile: false, dialogOpen: false }
 
 function run(events: ModelChipEvent[], state: ModelChipState = createModelChipState()) {
-  const initial: { state: ModelChipState; effects: ModelChipEffect[] } = { state, effects: [] }
+  const initial: ModelChipTransition = { state, effects: [] }
 
-  return events.reduce((acc, event) => {
+  return events.reduce((acc, event): ModelChipTransition => {
     const next = transitionModelChip(acc.state, event)
 
     return { state: next.state, effects: [...acc.effects, ...next.effects] }
