@@ -19,6 +19,7 @@ pub mod history;
 pub mod menu;
 pub mod parts;
 pub mod queue;
+pub mod status;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
