@@ -88,11 +88,31 @@ const layer = Layer.effect(
       )
     })
 
+    // Skills already published to the cache by an earlier pull. Staging and backup directories
+    // from an interrupted refresh are skipped.
+    const cached = Effect.fn("SkillDiscovery.cached")(function* (sourceRoot: string) {
+      const names = yield* fs.readDirectory(sourceRoot).pipe(Effect.orElseSucceed(() => [] as string[]))
+      const directories = yield* Effect.forEach(
+        names.filter((name) => isSafeSegment(name) && !/\.(tmp|old)-[0-9a-f-]+$/.test(name)),
+        (name) =>
+          Effect.gen(function* () {
+            const root = path.resolve(sourceRoot, name)
+            if (!(yield* fs.isDir(root))) return []
+            const exists =
+              (yield* fs.existsSafe(path.join(root, "SKILL.md"))) ||
+              (yield* fs.existsSafe(path.join(root, `${name}.md`)))
+            return exists ? [AbsolutePath.make(root)] : []
+          }),
+      )
+      return directories.flat().toSorted()
+    })
+
     return Service.of({
       pull: Effect.fn("SkillDiscovery.pull")(function* (url) {
         const base = url.endsWith("/") ? url : `${url}/`
         const source = new URL(base)
         const index = new URL("index.json", source).href
+        const sourceRoot = path.resolve(global.cache, "skills", Hash.fast(base))
         const data = yield* HttpClientRequest.get(index).pipe(
           HttpClientRequest.acceptJson,
           http.execute,
@@ -101,9 +121,9 @@ const layer = Layer.effect(
             Effect.logError("failed to fetch skill index", { url: index, error }).pipe(Effect.as(undefined)),
           ),
         )
-        if (!data) return []
-
-        const sourceRoot = path.resolve(global.cache, "skills", Hash.fast(base))
+        // Keep serving the last good copy when the catalog is unreachable, so an offline start or
+        // a catalog outage does not remove skills that were already downloaded.
+        if (!data) return yield* cached(sourceRoot)
         return yield* Effect.forEach(
           data.skills.flatMap((skill) => {
             if (!isSafeSegment(skill.name)) {
