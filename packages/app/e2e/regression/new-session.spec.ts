@@ -706,10 +706,11 @@ test("a variant picked on a worktree draft stays with the session it starts, eve
     provider: provider({ id: "pending-model", name: "Pending Model", variants: { balanced: {}, high: {} } }),
   })
 
-  const variant = page
-    .locator('[data-component="composer"]')
-    .getByRole("button", { name: "Choose model variant", exact: true })
+  const composer = page.locator('[data-component="composer"]')
+  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
 
+  // The Default variant control shows only while the pointer is over the composer.
+  await composer.hover()
   await variant.click()
   await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
   await expect(variant).toHaveText("high")
@@ -733,7 +734,7 @@ test("a variant picked on a worktree draft stays with the session it starts, eve
   await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
   await expect(variant).toHaveText("high")
   await page.reload()
-  await expect(page.locator('[data-component="composer"] [data-action="composer-model"]')).toHaveText("Pending Model")
+  await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Pending Model")
   await expect(variant).toHaveText("high")
 })
 
