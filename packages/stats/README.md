@@ -40,6 +40,6 @@ To run one sync pass on your machine against a stage's resources, run `bun sst s
 
 ## Public page caching
 
-Stats HTML, JSON, and Markdown use a one-minute browser cache and a five-minute shared cache. Expired responses must revalidate instead of serving stale snapshots. The console `/data` proxy inherits this policy from the stats app.
+Stats HTML, JSON, and Markdown use a one-minute browser cache and a five-minute shared cache. Expired responses must revalidate instead of serving stale snapshots.
 
-Cloudflare must respect these origin headers. The live `Stats pages: respect short origin cache TTL` cache rule applies to `/data` and `/data/*` on `opencode.ai` and `stats.opencode.ai`: browser TTL respects origin, edge TTL uses cache-control headers and bypasses cache when absent, and serving stale content while updating is disabled. This dashboard-managed rule overrides the zone's four-hour browser-cache minimum; preserve it when changing Cloudflare configuration. Purge both stats URL prefixes after changing the policy to clear existing cached responses.
+The Worker has no custom domain. `infra/stats.ts` routes `/data`, `/data/*`, `/<locale>/data` and `/<locale>/data/*` on the main host straight to it, so its responses skip the Cloudflare cache and reach browsers with these headers unchanged. Static assets are uploaded under `/data`, and the build moves Nitro's `_headers` to the assets root so they stay immutable.
