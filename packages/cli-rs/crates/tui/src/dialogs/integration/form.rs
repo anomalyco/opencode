@@ -623,6 +623,7 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
         list.height(height as u32);
         let focused = theme.text.formfield.focused;
         let textarea = Textarea::new(app)
+            .mouse_pointer(MousePointer::DEFAULT)
             .height(1)
             .wrap(WrapMode::None)
             .grow(1.0)
