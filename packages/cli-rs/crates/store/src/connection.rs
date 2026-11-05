@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::events::{self, Activity, Connection, Source, Status};
 use opencode_api::generated::*;
 use tokio::sync::{mpsc, watch};
@@ -83,7 +83,7 @@ impl Data {
     /// supersede the snapshot; a snapshot of an older connection is ignored.
     fn rehydrate(&self, token: u64) {
         self.refresh(move |data| async move {
-            let result = data.client().session_active(&RequestOptions::default()).await;
+            let result = data.client().session_active().await;
             let active = match result {
                 Ok(active) => active,
                 Err(error) => {
@@ -371,7 +371,7 @@ impl Source<V2Event> for Events {
         let client = self.client.clone();
         futures_util::stream::once(async move {
             client
-                .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
+                .event_subscribe(&EventSubscribeInput::default())
                 .await
                 .map(|response| response.events(move || activity()).boxed())
         })

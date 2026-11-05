@@ -11,11 +11,6 @@
 
 mod form;
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::error::Error;
 use opencode_api::generated::{
     ConnectionCredentialInfo, ConnectionInfo, CredentialActivateInput, CredentialID, CredentialRemoveInput,
@@ -39,6 +34,9 @@ use opencode_ui::select::{self, Gutter, SelectAction, SelectOption, SelectProps}
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use crate::app::Tui;
 use crate::local::Local;
@@ -572,7 +570,7 @@ impl Manage {
         let input = CredentialActivateInput { credential_id: id.clone() };
         let local = Rc::downgrade(&self.flow.local);
         self.flow.spawn(
-            async move { client.credential_activate(&input, &RequestOptions::default()).await },
+            async move { client.credential_activate(&input).await },
             bind!(local, |local, result| {
                 match result {
                     // The active account comes first; the marker follows the reloaded list.
@@ -600,7 +598,7 @@ impl Manage {
                     let input = CredentialUpdateInput { credential_id: id.clone(), label };
                     let (flow, integration, methods) = (flow.clone(), integration.clone(), methods.clone());
                     flow.clone().spawn(
-                        async move { client.credential_update(&input, &RequestOptions::default()).await },
+                        async move { client.credential_update(&input).await },
                         move |result| match result {
                             Ok(()) => {
                                 // The renamed label shows once the catalog is read again.
@@ -641,7 +639,7 @@ impl Manage {
         let local = Rc::downgrade(&self.flow.local);
         let state: Weak<Manage> = Rc::downgrade(self);
         self.flow.spawn(
-            async move { client.credential_remove(&input, &RequestOptions::default()).await },
+            async move { client.credential_remove(&input).await },
             bind!(local, |local, result| {
                 if let Some(state) = state.upgrade()
                     && state.deleting.borrow_mut().take().is_some()
@@ -757,13 +755,12 @@ fn key_prompt(flow: &Flow, integration: IntegrationInfo, title: String, answer: 
                     label: None,
                 };
                 let (flow, integration, set_error) = (flow.clone(), integration.clone(), set_error.clone());
-                flow.clone().spawn(
-                    async move { client.integration_connect_key(&input, &RequestOptions::default()).await },
-                    move |result| match result {
+                flow.clone().spawn(async move { client.integration_connect_key(&input).await }, move |result| {
+                    match result {
                         Ok(()) => connected(&flow, &integration),
                         Err(error) => set_error(error.to_string()),
-                    },
-                );
+                    }
+                });
             });
             prompt(
                 cx,
@@ -826,13 +823,10 @@ fn external_starting(
         label: None,
     };
     let flow = flow.clone();
-    flow.clone().spawn(
-        async move { client.integration_connect_external(&input, &RequestOptions::default()).await },
-        move |result| match result {
-            Ok(()) => connected(&flow, &integration),
-            Err(error) => flow.fail(error.to_string()),
-        },
-    );
+    flow.clone().spawn(async move { client.integration_connect_external(&input).await }, move |result| match result {
+        Ok(()) => connected(&flow, &integration),
+        Err(error) => flow.fail(error.to_string()),
+    });
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -872,34 +866,31 @@ fn oauth_starting(
         label: None,
     };
     let flow = flow.clone();
-    flow.clone().spawn(
-        async move { client.integration_oauth_connect(&input, &RequestOptions::default()).await },
-        move |result| {
-            let attempt = match result {
-                Ok(output) => output.data,
-                Err(_) if closed.get() => return,
-                Err(error) => return flow.fail(error.to_string()),
-            };
-            let oauth = Rc::new(Oauth {
-                flow: flow.clone(),
-                integration,
-                title: method.label,
-                attempt,
-                settled: Cell::new(false),
-                timer: Cell::new(None),
-            });
-            // Closed while starting: the attempt is not wanted.
-            if closed.get() {
-                oauth.cancel();
-                return;
-            }
-            handed_off.set(true);
-            match oauth.attempt.mode {
-                IntegrationAttemptMode::Code => oauth.code(),
-                _ => oauth.auto(),
-            }
-        },
-    );
+    flow.clone().spawn(async move { client.integration_oauth_connect(&input).await }, move |result| {
+        let attempt = match result {
+            Ok(output) => output.data,
+            Err(_) if closed.get() => return,
+            Err(error) => return flow.fail(error.to_string()),
+        };
+        let oauth = Rc::new(Oauth {
+            flow: flow.clone(),
+            integration,
+            title: method.label,
+            attempt,
+            settled: Cell::new(false),
+            timer: Cell::new(None),
+        });
+        // Closed while starting: the attempt is not wanted.
+        if closed.get() {
+            oauth.cancel();
+            return;
+        }
+        handed_off.set(true);
+        match oauth.attempt.mode {
+            IntegrationAttemptMode::Code => oauth.code(),
+            _ => oauth.auto(),
+        }
+    });
 }
 
 struct Oauth {
@@ -962,7 +953,7 @@ impl Oauth {
         let client = self.flow.local.client.clone();
         let input = self.status_input();
         self.flow.local.app.spawn(
-            async move { client.integration_oauth_status(&input, &RequestOptions::default()).await },
+            async move { client.integration_oauth_status(&input).await },
             bind!(self, |me, cx, result| {
                 if me.settled.get() {
                     return;
@@ -1025,7 +1016,7 @@ impl Oauth {
                     };
                     let set_error = set_error.clone();
                     me.flow.clone().spawn(
-                        async move { client.integration_oauth_complete(&input, &RequestOptions::default()).await },
+                        async move { client.integration_oauth_complete(&input).await },
                         move |result| match result {
                             Ok(()) => {
                                 me.settled.set(true);
@@ -1070,8 +1061,7 @@ impl Oauth {
             attempt_id: self.attempt.attempt_id.clone(),
             location: self.flow.location(),
         };
-        self.flow
-            .spawn(async move { client.integration_oauth_cancel(&input, &RequestOptions::default()).await }, |_| {});
+        self.flow.spawn(async move { client.integration_oauth_cancel(&input).await }, |_| {});
     }
 
     fn open(&self) {
@@ -1193,30 +1183,27 @@ fn command_starting(flow: &Flow, integration: IntegrationInfo, method: Integrati
         label: None,
     };
     let flow = flow.clone();
-    flow.clone().spawn(
-        async move { client.integration_command_connect(&input, &RequestOptions::default()).await },
-        move |result| {
-            let attempt = match result {
-                Ok(output) => output.data.attempt_id,
-                Err(_) if closed.get() => return,
-                Err(error) => return flow.fail(error.to_string()),
-            };
-            let command = Rc::new(Command {
-                flow: flow.clone(),
-                integration,
-                attempt,
-                output: RefCell::new(None),
-                settled: Cell::new(false),
-                timer: Cell::new(None),
-            });
-            if closed.get() {
-                command.cancel();
-                return;
-            }
-            handed_off.set(true);
-            command.pending(method.label);
-        },
-    );
+    flow.clone().spawn(async move { client.integration_command_connect(&input).await }, move |result| {
+        let attempt = match result {
+            Ok(output) => output.data.attempt_id,
+            Err(_) if closed.get() => return,
+            Err(error) => return flow.fail(error.to_string()),
+        };
+        let command = Rc::new(Command {
+            flow: flow.clone(),
+            integration,
+            attempt,
+            output: RefCell::new(None),
+            settled: Cell::new(false),
+            timer: Cell::new(None),
+        });
+        if closed.get() {
+            command.cancel();
+            return;
+        }
+        handed_off.set(true);
+        command.pending(method.label);
+    });
 }
 
 struct Command {
@@ -1253,7 +1240,7 @@ impl Command {
             location: self.flow.location(),
         };
         self.flow.local.app.spawn(
-            async move { client.integration_command_status(&input, &RequestOptions::default()).await },
+            async move { client.integration_command_status(&input).await },
             bind!(self, |me, cx, result| {
                 if me.settled.get() {
                     return;
@@ -1313,8 +1300,7 @@ impl Command {
             attempt_id: self.attempt.clone(),
             location: self.flow.location(),
         };
-        self.flow
-            .spawn(async move { client.integration_command_cancel(&input, &RequestOptions::default()).await }, |_| {});
+        self.flow.spawn(async move { client.integration_command_cancel(&input).await }, |_| {});
     }
 }
 

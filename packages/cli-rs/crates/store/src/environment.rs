@@ -2,7 +2,7 @@
 //! terminal's variables (G13). Only clients of a local server upload it.
 
 use indexmap::IndexMap;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{SessionEnvironmentInput, SessionID};
 
 /// Variables that never leave the client: the server password, under both names.
@@ -25,12 +25,7 @@ pub async fn upload(
     session: &SessionID,
     variables: IndexMap<String, String>,
 ) -> Result<(), opencode_api::error::Error> {
-    client
-        .session_environment(
-            &SessionEnvironmentInput { session_id: session.clone(), variables },
-            &RequestOptions::default(),
-        )
-        .await
+    client.session_environment(&SessionEnvironmentInput { session_id: session.clone(), variables }).await
 }
 
 #[cfg(test)]

@@ -5,10 +5,6 @@
 //! reads its session's goal when it starts and after each reconnect, since changes published meanwhile were
 //! missed, and follows the `changed` events.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, RpcCallInput, SessionCommandInput, SessionID, V2Event};
 use opencode_ui::bind;
 use opencode_ui::dialog::{self, DialogOptions, FooterAction, FooterProps, HeaderProps};
@@ -19,6 +15,8 @@ use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use serde::Deserialize;
 use serde_json::json;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
 use crate::app::Tui;
 
@@ -137,7 +135,7 @@ impl Tracker {
         let client = tui.data.client().clone();
         let weak = self.this.clone();
         tui.app.spawn(
-            async move { client.rpc_call(&input, &RequestOptions::default()).await },
+            async move { client.rpc_call(&input).await },
             bind!(weak, |tracker, _, result| {
                 let Some(tui) = tracker.tui.upgrade() else {
                     return;
@@ -294,7 +292,7 @@ fn command(tui: &Tui, session: &SessionID, text: &str) {
         ..SessionCommandInput::default()
     };
     let weak = tui.weak();
-    tui.app.spawn(async move { client.session_command(&input, &RequestOptions::default()).await }, move |_, result| {
+    tui.app.spawn(async move { client.session_command(&input).await }, move |_, result| {
         let (Err(error), Some(tui)) = (result, weak.upgrade()) else {
             return;
         };

@@ -1,12 +1,10 @@
 //! Messages and parts (F.7): transcripts, the streaming event fold, and paged reads.
 
+use opencode_api::generated::*;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
-
-use opencode_api::client::RequestOptions;
-use opencode_api::generated::*;
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::inbox::InboxExt;
@@ -799,11 +797,7 @@ impl Data {
                     order: Some(MessageListInputOrder::Desc),
                     ..Default::default()
                 };
-                let response = data
-                    .client()
-                    .message_list(&input, &RequestOptions::default())
-                    .await
-                    .map_err(|error| evict_missing(&data, error))?;
+                let response = data.client().message_list(&input).await.map_err(|error| evict_missing(&data, error))?;
                 data.write(|state| {
                     if state.deleted_since(&session, started) {
                         return;
@@ -944,8 +938,7 @@ async fn load_pages(
             cursor: Some(cursor),
             ..Default::default()
         };
-        let options = RequestOptions::default();
-        let request = data.client().message_list(&input, &options);
+        let request = data.client().message_list(&input);
         let response = match cancel {
             None => request.await,
             Some(token) => tokio::select! {

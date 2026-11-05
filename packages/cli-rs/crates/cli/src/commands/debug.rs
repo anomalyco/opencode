@@ -1,9 +1,5 @@
 //! `debug`: debugging and troubleshooting tools (`packages/cli/src/commands/handlers/debug/*.ts`).
 
-use std::path::Path;
-use std::sync::{Arc, LazyLock};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::types::DebugHeapDumpInput;
 use opencode_api::transport::{Reqwest, Transport};
@@ -14,6 +10,8 @@ use opencode_service::discover;
 use opencode_service::probe::Endpoint;
 use regex::Regex;
 use serde_json::Value;
+use std::path::Path;
+use std::sync::{Arc, LazyLock};
 
 use super::Context;
 use super::client::{block_on, connect, get_located, locale_compare, pretty};
@@ -110,16 +108,15 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
         Some(value) => Some(normalize(&format!("{}/{value}", std::env::current_dir()?.display()), false)),
         None => None,
     };
-    let snapshot = client
-        .debug_heap_dump(&DebugHeapDumpInput { directory: directory.clone() }, &RequestOptions::default())
-        .await
-        .map_err(|error| match error {
+    let snapshot = client.debug_heap_dump(&DebugHeapDumpInput { directory: directory.clone() }).await.map_err(
+        |error| match error {
             ApiError::UnexpectedStatus { status: 404 } => anyhow::anyhow!(
                 "The server at {} does not support heap dumps. Update and restart it first.",
                 endpoint.url
             ),
             error => error.into(),
-        })?;
+        },
+    )?;
     // Servers released before `directory` existed ignore it and write into their log directory.
     // Join the way the server does, with the path style of its machine.
     if let Some(directory) = directory

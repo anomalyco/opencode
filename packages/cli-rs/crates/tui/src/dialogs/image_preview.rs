@@ -5,11 +5,6 @@
 //! label, or `No preview` when it does not load. A `media:` ref reads its bytes from the server once
 //! (`createMediaSource`).
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{ExperimentalMediaGetInput, MediaHash};
 use opencode_ui::bind;
 use opencode_ui::dialog::{
@@ -19,6 +14,9 @@ use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::native::ImageFit;
 use opentui::prelude::*;
 use opentui::widget::ImageView;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::rc::{Rc, Weak};
 
 use crate::app::Tui;
 use crate::routes::session::messages::images::{data_uri, media_hash};
@@ -150,7 +148,7 @@ impl Viewer {
         let input = ExperimentalMediaGetInput { hash: MediaHash(hash.to_owned()) };
         let (weak, uri) = (Rc::downgrade(self), uri.to_owned());
         tui.app.spawn(
-            async move { client.experimental_media_get(&input, &RequestOptions::default()).await },
+            async move { client.experimental_media_get(&input).await },
             bind!(weak, |viewer, _, result| {
                 viewer.media.borrow_mut().insert(uri, result.ok().map(|bytes| bytes.to_vec()));
                 viewer.draw();

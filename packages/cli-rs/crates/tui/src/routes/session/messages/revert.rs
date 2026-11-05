@@ -2,16 +2,14 @@
 //! transcript ends with how many messages were reverted, the files it changed back, and how to restore them; a click
 //! clears the revert.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     FileDiffInfo, FileDiffInfoStatus, SessionID, SessionMessageInfo, SessionRevertClearInput,
 };
 use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 use unicode_width::UnicodeWidthStr;
 
 use crate::app::Tui;
@@ -162,11 +160,7 @@ impl Inner {
         let client = tui.data.client().clone();
         let weak = self.tui.clone();
         self.app.spawn(
-            async move {
-                client
-                    .session_revert_clear(&SessionRevertClearInput { session_id: session }, &RequestOptions::default())
-                    .await
-            },
+            async move { client.session_revert_clear(&SessionRevertClearInput { session_id: session }).await },
             move |_, result| {
                 if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
                     tui.toasts.error(error.to_string());

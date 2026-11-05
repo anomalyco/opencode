@@ -4,16 +4,14 @@
 //! A V2 shell names its shell in the metadata, and its output comes from `GET /api/shell/{id}/output`:
 //! every second while the store lists the shell as running, once more when it exits, and on expand.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, ShellID, ShellOutputInput};
 use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge};
 use crate::app::Tui;
@@ -246,7 +244,7 @@ impl Inner {
                         cursor: Some(cursor),
                         limit: Some(LIMIT as i64),
                     };
-                    let Ok(response) = client.shell_output(&input, &RequestOptions::default()).await else {
+                    let Ok(response) = client.shell_output(&input).await else {
                         break;
                     };
                     let data = response.data;

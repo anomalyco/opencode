@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_local::service_config::Info;
 use opencode_service::delegate;
 use opencode_service::ts_command::TsCommand;
@@ -53,9 +53,9 @@ async fn pair(local: &Local, args: &PairArgs) -> anyhow::Result<()> {
     let urls = match &args.url {
         _ if args.remote => vec![remote_url(local, &client).await?],
         Some(url) => vec![url.clone()],
-        None => client.server_info(&RequestOptions::default()).await?.urls,
+        None => client.server_info().await?.urls,
     };
-    let pairing = client.server_pair(&RequestOptions::default()).await?;
+    let pairing = client.server_pair().await?;
     print(&links(&urls, &pairing.code, pairing.expires_in))?;
     if args.remote || args.url.is_some() {
         return Ok(());
@@ -174,7 +174,7 @@ async fn remote_url(local: &Local, client: &Client) -> anyhow::Result<String> {
     let attempt = async || -> Option<String> {
         let route = local.config().read().ok()?.remote?.route;
         let hostname = delegate::tunnel_hostname(&local.paths, &route).ok()??;
-        let info = client.server_info(&RequestOptions::default()).await.ok()?;
+        let info = client.server_info().await.ok()?;
         info.urls
             .into_iter()
             .find(|candidate| url::Url::parse(candidate).is_ok_and(|url| url.host_str() == Some(hostname.as_str())))

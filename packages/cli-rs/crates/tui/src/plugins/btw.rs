@@ -2,10 +2,6 @@
 //! the session's context through `session.generate`, without adding to the conversation, and shows the answer
 //! in a large dialog. While answers are pending, a `/btw` spinner shows in `prompt.footer.status`.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionGenerateInput, SessionID};
 use opencode_plugin::{Definition, Placement, Slotted, slot};
 use opencode_store::Changes;
@@ -16,6 +12,8 @@ use opencode_ui::motion::Spinner;
 use opencode_ui::prompt::{PromptProps, prompt};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use crate::app::Tui;
 use crate::routes::Route;
@@ -120,18 +118,15 @@ fn ask(tui: &Tui, pending: &Rc<Cell<u32>>, session: SessionID, question: String)
     let input = SessionGenerateInput { session_id: session, prompt: format!("{INSTRUCTIONS}\n\n{question}") };
     let weak = tui.weak();
     let pending = pending.clone();
-    tui.app.spawn(
-        async move { client.session_generate(&input, &RequestOptions::default()).await },
-        move |_, result| {
-            pending.set(pending.get().saturating_sub(1));
-            let Some(tui) = weak.upgrade() else { return };
-            tui.resync();
-            match result {
-                Ok(output) => answer(&tui, question, output.text.trim().to_owned()),
-                Err(error) => tui.toasts.error(error.to_string()),
-            }
-        },
-    );
+    tui.app.spawn(async move { client.session_generate(&input).await }, move |_, result| {
+        pending.set(pending.get().saturating_sub(1));
+        let Some(tui) = weak.upgrade() else { return };
+        tui.resync();
+        match result {
+            Ok(output) => answer(&tui, question, output.text.trim().to_owned()),
+            Err(error) => tui.toasts.error(error.to_string()),
+        }
+    });
 }
 
 /// `Answer`: the question in the header, the answer as Markdown in a scroll box at most 60% of the screen

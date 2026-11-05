@@ -6,7 +6,7 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures_util::StreamExt;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     AgentID, ExperimentalMcpAddInput, ExperimentalMcpAddInputConfig, LocationQueryInput, ModelRef, SessionID,
     SessionInfo, SessionSwitchAgentInput, SessionSwitchModelInput,
@@ -259,14 +259,11 @@ impl Sessions {
             // A spawned task finishes even when the caller stops waiting (TS: uninterruptible).
             tokio::spawn(async move {
                 let result = client
-                    .experimental_mcp_add(
-                        &ExperimentalMcpAddInput {
-                            server: name.clone(),
-                            location: Some(LocationQueryInput { directory: Some(cwd) }),
-                            config: ExperimentalMcpAddInputConfig::Unknown(config),
-                        },
-                        &RequestOptions::default(),
-                    )
+                    .experimental_mcp_add(&ExperimentalMcpAddInput {
+                        server: name.clone(),
+                        location: Some(LocationQueryInput { directory: Some(cwd) }),
+                        config: ExperimentalMcpAddInputConfig::Unknown(config),
+                    })
                     .await;
                 (name, check(result))
             })
@@ -341,15 +338,12 @@ impl Sessions {
     pub async fn select(&self, attached: &Attached, change: Change) -> Result<(), Failure> {
         attached.update(Some(&change));
         let session_id = SessionID(attached.id.clone());
-        let options = RequestOptions::default();
         check(match change {
             Change::Model(model) => {
-                self.client.session_switch_model(&SessionSwitchModelInput { session_id, model }, &options).await
+                self.client.session_switch_model(&SessionSwitchModelInput { session_id, model }).await
             }
             Change::Mode(agent) => {
-                self.client
-                    .session_switch_agent(&SessionSwitchAgentInput { session_id, agent: AgentID(agent) }, &options)
-                    .await
+                self.client.session_switch_agent(&SessionSwitchAgentInput { session_id, agent: AgentID(agent) }).await
             }
         })
     }

@@ -5,7 +5,7 @@ use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
 use chrono::{Local, TimeZone};
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::types::SessionRemoveInput;
 use serde_json::{Map, Value};
@@ -113,13 +113,7 @@ fn delete(context: &Context, args: &SessionDeleteArgs) -> anyhow::Result<()> {
     block_on(async {
         let server = connect(context).await?;
         anyhow::Ok(
-            server
-                .client
-                .session_remove(
-                    &SessionRemoveInput { session_id: args.session_id.clone().into() },
-                    &RequestOptions::default(),
-                )
-                .await?,
+            server.client.session_remove(&SessionRemoveInput { session_id: args.session_id.clone().into() }).await?,
         )
     })??;
     print(&format!("Session {} deleted\n", args.session_id))
@@ -269,7 +263,7 @@ async fn location(client: &Client, directory: &str) -> Result<Value, ApiError> {
 }
 
 async fn get(client: &Client, call: Call) -> Result<Value, ApiError> {
-    client.json(call, &RequestOptions::default()).await
+    client.json(call).await
 }
 
 fn data(mut response: Value) -> Vec<Value> {

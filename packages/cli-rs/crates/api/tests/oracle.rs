@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use base64::Engine;
-use opencode_api::client::{Auth, Client, RequestOptions};
+use opencode_api::client::{Auth, Client};
 use opencode_api::generated::*;
 use opencode_api::query;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
@@ -32,93 +32,71 @@ async fn requests_match_the_typescript_client() {
     let client = Client::with_transport("http://127.0.0.1:4096/prefix", record.clone())
         .unwrap()
         .auth(Auth::Basic { username: "opencode".to_owned(), password: "secret".to_owned() });
-    let none = RequestOptions::default();
     let location = |directory: &str| Some(LocationQueryInput { directory: Some(directory.to_owned()) });
-    let _ = client.config_get(&ConfigGetInput { location: location("/tmp/a b&c=d") }, &none).await;
+    let _ = client.config_get(&ConfigGetInput { location: location("/tmp/a b&c=d") }).await;
     let _ = client
-        .session_list(
-            &SessionListInput {
-                limit: Some(5),
-                order: Some(SessionListInputOrder::Desc),
-                search: Some("héllo wörld+?".to_owned()),
-                parent_id: Some(None),
-                archived: Some(false),
-                ..Default::default()
-            },
-            &none,
-        )
+        .session_list(&SessionListInput {
+            limit: Some(5),
+            order: Some(SessionListInputOrder::Desc),
+            search: Some("héllo wörld+?".to_owned()),
+            parent_id: Some(None),
+            archived: Some(false),
+            ..Default::default()
+        })
         .await;
     let _ = client
-        .session_get(
-            &SessionGetInput { session_id: "ses_1 /?#%".into() },
-            &RequestOptions::default().header("X-Opencode-Directory", "/override"),
-        )
+        .with_header("X-Opencode-Directory", "/override")
+        .session_get(&SessionGetInput { session_id: "ses_1 /?#%".into() })
         .await;
-    let _ =
-        client.file_read(&FileReadInput { location: location("/w"), path: "dir/a b/c#?.txt".to_owned() }, &none).await;
+    let _ = client.file_read(&FileReadInput { location: location("/w"), path: "dir/a b/c#?.txt".to_owned() }).await;
     let _ = client
-        .session_prompt(
-            &SessionPromptInput {
-                session_id: "ses_1".into(),
-                id: None,
-                text: "hi".to_owned(),
-                files: None,
-                agents: None,
-                skills: None,
-                metadata: Some(indexmap::IndexMap::from([("k".to_owned(), json!(1))])),
-                delivery: None,
-                resume: Some(None),
-            },
-            &none,
-        )
+        .session_prompt(&SessionPromptInput {
+            session_id: "ses_1".into(),
+            id: None,
+            text: "hi".to_owned(),
+            files: None,
+            agents: None,
+            skills: None,
+            metadata: Some(indexmap::IndexMap::from([("k".to_owned(), json!(1))])),
+            delivery: None,
+            resume: Some(None),
+        })
         .await;
     let _ = client
-        .experimental_file_write(
-            &ExperimentalFileWriteInput {
-                location: None,
-                path: "a.txt".to_owned(),
-                payload: bytes::Bytes::from_static(&[1, 2, 255]),
-            },
-            &none,
-        )
+        .experimental_file_write(&ExperimentalFileWriteInput {
+            location: None,
+            path: "a.txt".to_owned(),
+            payload: bytes::Bytes::from_static(&[1, 2, 255]),
+        })
         .await;
     let _ = client
-        .event_subscribe(
-            &EventSubscribeInput { types: Some(vec!["session.created".to_owned(), "rpc.x".to_owned()]) },
-            &none,
-        )
+        .event_subscribe(&EventSubscribeInput { types: Some(vec!["session.created".to_owned(), "rpc.x".to_owned()]) })
         .await;
-    let _ = client.session_remove(&SessionRemoveInput { session_id: "ses_2".into() }, &none).await;
+    let _ = client.session_remove(&SessionRemoveInput { session_id: "ses_2".into() }).await;
     let mention = |start: f64, end: f64, text: &str| PromptMention { start, end, text: text.to_owned() };
     let _ = client
-        .session_prompt(
-            &SessionPromptInput {
-                session_id: "ses_1".into(),
-                text: "@build x".to_owned(),
-                agents: Some(vec![
-                    PromptAgentAttachment { name: "build".to_owned(), mention: Some(mention(0.0, 6.0, "@build")) },
-                    PromptAgentAttachment { name: "plan".to_owned(), mention: Some(mention(1.5, -0.0, "@plan")) },
-                ]),
-                ..Default::default()
-            },
-            &none,
-        )
+        .session_prompt(&SessionPromptInput {
+            session_id: "ses_1".into(),
+            text: "@build x".to_owned(),
+            agents: Some(vec![
+                PromptAgentAttachment { name: "build".to_owned(), mention: Some(mention(0.0, 6.0, "@build")) },
+                PromptAgentAttachment { name: "plan".to_owned(), mention: Some(mention(1.5, -0.0, "@plan")) },
+            ]),
+            ..Default::default()
+        })
         .await;
     let _ = client
-        .session_form_reply(
-            &SessionFormReplyInput {
-                session_id: "ses_1".to_owned(),
-                form_id: "frm_1".into(),
-                answer: indexmap::IndexMap::from([
-                    ("count".to_owned(), FormValue::Number(3.0)),
-                    ("ratio".to_owned(), FormValue::Number(2.5)),
-                    ("big".to_owned(), FormValue::Number(123456789012.0)),
-                    ("tiny".to_owned(), FormValue::Number(0.25)),
-                    ("name".to_owned(), FormValue::String("x".to_owned())),
-                ]),
-            },
-            &none,
-        )
+        .session_form_reply(&SessionFormReplyInput {
+            session_id: "ses_1".to_owned(),
+            form_id: "frm_1".into(),
+            answer: indexmap::IndexMap::from([
+                ("count".to_owned(), FormValue::Number(3.0)),
+                ("ratio".to_owned(), FormValue::Number(2.5)),
+                ("big".to_owned(), FormValue::Number(123456789012.0)),
+                ("tiny".to_owned(), FormValue::Number(0.25)),
+                ("name".to_owned(), FormValue::String("x".to_owned())),
+            ]),
+        })
         .await;
 
     let actual = record.0.lock().unwrap();
