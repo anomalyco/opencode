@@ -20,6 +20,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Store new session media once in a deduplicated blob table instead of inline in every message row. Defaults to false.",
   }),
+  part_rows: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
+  }),
   image_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({

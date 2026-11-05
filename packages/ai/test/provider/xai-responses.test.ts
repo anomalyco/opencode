@@ -79,7 +79,9 @@ describe("xAI Responses route", () => {
         ai.request({
           model,
           prompt: "Hello",
-          generation: { topK: 20, presencePenalty: 0.5, frequencyPenalty: 0.5 },
+          topK: 20,
+          presencePenalty: 0.5,
+          frequencyPenalty: 0.5,
         }),
       )
 

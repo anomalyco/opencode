@@ -979,6 +979,63 @@ story(
   },
 )
 
+story("a throwing effect or state reader fails only its own plugin; later plugins still activate", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPlugins, until, createMemo, createRoot } = await import(fixture)
+    const later = Promise.withResolvers<void>()
+    const thrown = { count: 0 }
+
+    const host = mountPlugins({
+      // Creating the broken plugin's instance throws.
+      plugin: (id: string) => {
+        if (id === "broken") throw new Error("instance broke")
+
+        return undefined
+      },
+      definitions: [
+        { id: "acme", windowEntry: async () => ({ default: () => {} }) },
+        { id: "broken", windowEntry: async () => ({ default: () => {} }) },
+        {
+          id: "later",
+          windowEntry: async () => {
+            await later.promise
+
+            return { default: () => {} }
+          },
+        },
+      ],
+    })
+
+    // A reader with no error boundary: its throw reaches the write that woke it, here acme becoming active.
+    const dispose = createRoot((dispose: () => void) => {
+      createMemo(() => {
+        if (host.status("acme") === "active" && thrown.count++ === 0) throw new Error("reader broke")
+      })
+
+      return dispose
+    })
+
+    await until(() => thrown.count > 0 && host.status("broken") === "failed")
+    later.resolve()
+    await until(() => host.status("later") === "active")
+
+    const outcome = {
+      acme: host.status("acme"),
+      broken: host.failure("broken")?.error.includes("instance broke"),
+      later: host.status("later"),
+      // In the app, an error that reaches the boundary above the host replaces the whole window.
+      escaped: host.escaped(),
+    }
+
+    dispose()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual({ acme: "active", broken: true, later: "active", escaped: [] })
+})
+
 story(
   "a plugin follows another's contract across load, reload and disable, provides only its own, and a failed one stays failed",
   async ({ page }) => {
@@ -1066,6 +1123,7 @@ story(
       const Other = Ipc.define({ id: "other.ipc", methods: {} })
       const [available, setAvailable] = createSignal(false)
       const [awake, setAwake] = createSignal(false)
+      const [failed, setFailed] = createSignal(false)
       const kept: Kept = {}
 
       const client = {
@@ -1076,6 +1134,7 @@ story(
 
       const host = mountPlugins({
         ipc: (token: { readonly id: string }) => (token.id === Awake.id && available() ? client : undefined),
+        ipcFailed: (token: { readonly id: string }) => token.id === Awake.id && failed(),
         definitions: [{ id: "acme", windowEntry: async () => ({ default: (ctx: Context) => void (kept.ctx = ctx) }) }],
       })
 
@@ -1085,6 +1144,16 @@ story(
       if (!ctx) throw new Error("the plugin never set up")
 
       const main = ctx.main(Awake)
+      // A call that waits rejects once main fails to answer the window's subscribe, instead of waiting forever.
+      const stuck = main.get()
+      setFailed(true)
+
+      const unanswered = await stuck.then(
+        () => false,
+        (cause: unknown) => String(cause).includes("unavailable: failed"),
+      )
+
+      setFailed(false)
       const waiting = main.get()
       const before = main.state()
       setAwake(true)
@@ -1111,10 +1180,11 @@ story(
 
       host.unmount()
 
-      return { before, answered, state, foreign, rejected, same: ctx.main(Awake) === main }
+      return { unanswered, before, answered, state, foreign, rejected, same: ctx.main(Awake) === main }
     }, fixture)
 
     expect(result).toEqual({
+      unanswered: true,
       before: undefined,
       answered: true,
       state: { awake: true },
@@ -1211,6 +1281,8 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
       // A bundle main could not read never reaches the window.
       { id: "garbled", builtin: false, enabled: true, error: "SyntaxError: garbled bundle" },
       { id: "flaky", builtin: false, enabled: true },
+      // A plugin whose GUI has no window entry runs only in main, so main's error is its only status.
+      { id: "main-only", builtin: false, enabled: true, error: "Error: main broke" },
     ]
 
     const listed = (id: string, features: PluginInfo["features"]): PluginInfo => ({
@@ -1262,6 +1334,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
         { id: "acme", windowEntry: async () => ({ default: () => {} }) },
         { id: "notes", windowEntry: async () => ({ default: () => {} }) },
         { id: "flaky", windowEntry: fails("flaky broke") },
+        { id: "main-only" },
       ],
     })
 
@@ -1279,6 +1352,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
     "flaky",
     "lint-rules",
     "notes",
+    "main-only",
     "garbled",
     "terminal",
   ])
@@ -1291,17 +1365,20 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
   await expect(plugins.getByText("SyntaxError: garbled bundle", { exact: true })).toBeVisible()
   await expect(plugins.getByText("Error: flaky broke", { exact: true })).toBeVisible()
   await expect(plugins.getByText("Error: terminal broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Error: main broke", { exact: true })).toBeVisible()
   await expect(plugins.getByRole("button", { name: "Show details" })).toHaveCount(2)
   const flaky = plugins.locator(".settings-extension-row").filter({ hasText: "flaky" })
   await flaky.getByRole("button", { name: "Show details" }).press("Enter")
   await expect(flaky.locator("pre")).toHaveText(/^Error: flaky broke\s+at /)
   await expect(flaky.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true")
-  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(2)
+  // Every plugin settled: none still says it loads.
+  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(3)
+  await expect(plugins.getByText("Loading", { exact: true })).toHaveCount(0)
   await expect(plugins.getByText("Built-in", { exact: true })).toHaveCount(1)
   // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
-  await expect(plugins.getByRole("switch")).toHaveCount(3)
+  await expect(plugins.getByRole("switch")).toHaveCount(4)
   await expect(plugins.getByRole("switch", { name: "terminal" })).toHaveCount(0)
-  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(4)
+  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(5)
   await expect(plugins.getByText("Active", { exact: true })).toHaveCount(0)
 
   // The fixture mounts below the story, out of the viewport, so the controls are driven from the keyboard.

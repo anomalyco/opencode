@@ -21,7 +21,8 @@ const cacheRequest = ai.request({
   // Manual hint on the system part is the only marker we want here — skip the
   // auto-policy's latest-user-message breakpoint so the cassette body matches.
   cache: "none",
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const lookup = ToolDefinition.make({
@@ -57,7 +58,8 @@ const longToolTurnRequest = ai.request({
   // The cassette was recorded with a single tail breakpoint, before auto also marked Anthropic's previous tail.
   // Re-record with `RECORD=true` and an Anthropic key to cover the current default instead.
   cache: { tools: true, system: true, messages: { tail: 1 } },
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const recorded = recordedTests({

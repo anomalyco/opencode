@@ -892,6 +892,115 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
     .toBe(0)
 })
 
+test("Enter that confirms an IME candidate never sends, even after Safari's early compositionend", async ({ page }) => {
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+  const view = await openSession(page, { name: "ComposerImeEnter", onPrompt: (input) => void prompts.push(input.body) })
+
+  const enter = (keyCode: number) =>
+    view.editor.evaluate(
+      (element, keyCode) =>
+        element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode, bubbles: true, cancelable: true })),
+      keyCode,
+    )
+
+  await view.editor.fill("にほん")
+  // Safari delivers the confirming Enter after compositionend, so isComposing is false and only keyCode marks it.
+  await enter(229)
+  await expect(view.editor).toHaveText("にほん")
+  await enter(13)
+  await expect.poll(() => prompts.map((body) => body.text)).toEqual(["にほん"])
+})
+
+test.describe("touch keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("Return only adds a line, even over suggestions; the touch bar and Cmd+Return send", async ({ page }) => {
+    const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
+    const view = await openSession(page, {
+      name: "ComposerTouchReturn",
+      onPrompt: (input) => void prompts.push(input.body),
+    })
+
+    const bar = page.locator('[data-slot="composer-touch-bar"]')
+
+    await expect(bar).toBeVisible()
+    await expect(page.locator('[data-action="composer-attach"]')).toHaveCount(0)
+    await expect(view.editor).toHaveAttribute("enterkeyhint", "enter")
+
+    await view.editor.fill("/model")
+    await expect(page.locator('[data-suggestion-id="model.choose"]')).toHaveAttribute("data-active", "")
+    await view.editor.press("Enter")
+    await expect(page.locator('[data-component="composer-suggestions"]')).toBeHidden()
+    await expect.poll(() => view.editor.innerText()).toMatch(/^\/model\n/)
+    await expect(page.getByRole("dialog", { name: "Select model", exact: true })).toBeHidden()
+
+    await view.editor.fill("first line")
+    await view.editor.press("Enter")
+    await view.editor.pressSequentially("second line")
+    await expect.poll(() => view.editor.innerText()).toBe("first line\nsecond line")
+    expect(prompts).toEqual([])
+
+    await bar.getByRole("button", { name: "Send", exact: true }).tap()
+    await expect.poll(() => prompts.map((body) => body.text)).toEqual(["first line\nsecond line"])
+    await expect(view.editor).toBeEmpty()
+
+    // A hardware keyboard, as on an iPad, still sends with Cmd+Return.
+    await view.editor.fill("from the iPad keyboard")
+    await view.editor.press("ControlOrMeta+Enter")
+    await expect
+      .poll(() => prompts.map((body) => body.text))
+      .toEqual(["first line\nsecond line", "from the iPad keyboard"])
+  })
+
+  test("the / and @ keys toggle their lists, and Backspace or typing in the editor closes them", async ({ page }) => {
+    const view = await openSession(page, { name: "ComposerTouchSlash" })
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    const slash = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-commands"]')
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("/")
+    await slash.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toBeEmpty()
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await page.keyboard.press("Backspace")
+    await expect(suggestions).toBeHidden()
+
+    // With a draft, / opens the searchable menu instead. Backspace backs out of it and keeps the draft, from the editor
+    // as well: iOS keeps the keyboard there rather than moving it to the menu's search.
+    await view.editor.fill("keep me")
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await view.editor.press("Backspace")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me")
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    // Focusing the editor programmatically leaves the caret wherever the browser puts it, so move it to the end first.
+    await expect(suggestions.getByRole("textbox", { name: "Commands", exact: true })).toBeFocused()
+    await view.editor.focus()
+    await page.keyboard.press("End")
+    await page.keyboard.type(" now")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now")
+
+    // @ toggles the same way, taking back only the @ it typed.
+    const at = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-context"]')
+    await view.editor.pressSequentially(" ")
+    await at.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("keep me now @")
+    await at.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now ")
+  })
+})
+
 test("a key-up never moves the caret back after later navigation", async ({ page }) => {
   const input = await draft(page)
   await input.pressSequentially("first line")

@@ -8,7 +8,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { showToast } from "@/shell/notifications/toast"
 import { useWorkspaceLocation } from "@/workspaces/location"
 
-export function createDraftMcpControls(input: { draftID: string; worktree: () => string }) {
+export function createDraftMcpControls(input: { draftID: string; worktree: () => string; preparing: () => boolean }) {
   const tabs = useTabs()
   const location = useWorkspaceLocation()
   const server = useServer()
@@ -16,9 +16,8 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
   const language = useLanguage()
 
   const [store, setStore] = createStore<{
-    preparing: boolean
     pending: Record<string, Promise<boolean> | undefined>
-  }>({ preparing: false, pending: {} })
+  }>({ pending: {} })
 
   const key = (worktree: string) => JSON.stringify([server.key, location().directory, worktree])
   const target = createMemo(() => key(input.worktree()))
@@ -46,7 +45,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
       return states()
     },
     get pending() {
-      return store.preparing || (!preview() && store.pending[directory()] !== undefined)
+      return input.preparing() || (!preview() && store.pending[directory()] !== undefined)
     },
     change(name, enabled) {
       if (controls.pending) return
@@ -114,24 +113,20 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     controls,
     directory,
     capture: () => ({ ...states() }),
+    toggling: (directory: string) => store.pending[directory] !== undefined,
     remember(directory: string, states: Readonly<Record<string, boolean>>) {
       tabs.updateDraft(input.draftID, { mcp: { target: key(directory), states: { ...states } } })
     },
-    async prepare(directory: string, states: Readonly<Record<string, boolean>>) {
-      if (!store.pending[directory] && !Object.keys(states).length) return true
-      setStore("preparing", true)
-
-      return apply(directory, states)
-        .catch((error) => {
-          showToast({
-            variant: "error",
-            title: language.t("session.summary.mcp.prepareFailed"),
-            description: error instanceof Error ? error.message : String(error),
-          })
-
-          return false
+    prepare(directory: string, states: Readonly<Record<string, boolean>>) {
+      return apply(directory, states).catch((error) => {
+        showToast({
+          variant: "error",
+          title: language.t("session.summary.mcp.prepareFailed"),
+          description: error instanceof Error ? error.message : String(error),
         })
-        .finally(() => setStore("preparing", false))
+
+        return false
+      })
     },
   }
 }

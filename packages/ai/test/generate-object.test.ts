@@ -217,9 +217,7 @@ describe("schema on ai.stream and ai.loop", () => {
         ),
       )
 
-      const error = yield* ai
-        .generate({ model, prompt: "Pick a city.", schema: City, generation: { maxTokens: 1 } })
-        .pipe(Effect.flip)
+      const error = yield* ai.generate({ model, prompt: "Pick a city.", schema: City, maxTokens: 1 }).pipe(Effect.flip)
 
       expect(error.message).toContain("output hit the token limit")
       expect(error.message).not.toContain("schema decode failed")

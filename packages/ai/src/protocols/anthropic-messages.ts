@@ -956,7 +956,6 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const outputConfig = options.output_config ?? options.outputConfig
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
-  const generation = request.generation
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -988,7 +987,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   )
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
-  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
+  const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -997,10 +996,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    top_k: generation?.topK,
-    stop_sequences: generation?.stop,
+    temperature: request.temperature,
+    top_p: request.topP,
+    top_k: request.topK,
+    stop_sequences: request.stop,
     thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670

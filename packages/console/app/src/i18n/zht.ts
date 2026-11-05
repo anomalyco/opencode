@@ -194,7 +194,7 @@ export const dict = {
     "OpenCode Models 的所有模型均在美國和歐盟託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
   "zen.privacy.exceptionsLink": "以下例外情況",
 
-  "go.promo.kimiK31Pro": "Kimi K3.1 Pro 現已上線 Go。",
+  "go.promo.hy4": "Hy4 現已上線 Go。",
   "go.title": "OpenCode Go | 低成本全民編碼模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",

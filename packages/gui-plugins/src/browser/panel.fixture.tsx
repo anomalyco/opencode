@@ -659,7 +659,7 @@ type RegionHost = {
   PluginHostProvider: Component<
     ParentProps<{
       definitions: Accessor<readonly Entry[]>
-      disabled: Accessor<ReadonlySet<string> | undefined>
+      disabled: Accessor<ReadonlySet<string>>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
       apis: { readonly [api: string]: (plugin: string) => object | undefined }
       /** Runs once the app interface mounts; the fixture's is always mounted. */

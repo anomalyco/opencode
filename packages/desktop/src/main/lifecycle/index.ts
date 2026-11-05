@@ -3,21 +3,34 @@ export * as ApplicationLifecycle from "./index"
 import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
-import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
-import { emitIpcEvent } from "../ipc-events"
+import { DeepLinks } from "../deep-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getWindowByID, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { getLastFocusedWindow, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
+import {
+  createDriver,
+  preventsQuit,
+  quitsWhenAllWindowsClosed,
+  restoresWindows,
+  type Handoff,
+  type State,
+} from "./machine"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
-import { consoleReturnWindow } from "./deep-link"
 
 export interface Interface {
   readonly relaunch: () => void
-  readonly prepareToRestart: Effect.Effect<void>
-  readonly consumeInitialDeepLinks: () => string[]
+  readonly deepLinks: DeepLinks.Interface
+  /** Where the app stands between running and exiting. */
+  readonly state: () => State
+  /**
+   * Stops every plugin but the one whose scope is `keep`, then runs the handoff, or relaunches without one. When the
+   * handoff fails, the stopped plugins start again before the promise rejects.
+   */
+  readonly restart: (keep: Scope, handoff?: Handoff) => Promise<void>
   readonly createWindow: () => BrowserWindow
   readonly restoreWindows: () => BrowserWindow[]
 }
@@ -28,22 +41,49 @@ const runtime = Layer.effect(
   Service,
   Effect.gen(function* () {
     const shutdown = yield* Shutdown.Service
-    const runFork = Effect.runForkWith(yield* Effect.context())
+    const context = yield* Effect.context()
+    const runFork = Effect.runForkWith(context)
+    const runPromise = Effect.runPromiseWith(context)
     const windows = yield* mainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
-    let shutdownReady = false
-    let quitRequested = false
+    const exits = new Set<NodeJS.Immediate>()
 
-    // A hung shutdown step would otherwise leave every quit waiting on it forever.
-    const prepareToRestart = shutdown.run.pipe(
-      Effect.timeoutOrElse({
-        duration: "10 seconds",
-        orElse: () => Effect.logError("shutdown timed out, quitting anyway"),
-      }),
-      Effect.ensuring(Effect.sync(() => (shutdownReady = true))),
-    )
+    // A hung step would otherwise leave every quit, or the app after a failed handoff, waiting on it forever.
+    const driver = createDriver({
+      stop: () =>
+        runPromise(
+          shutdown.stop.pipe(
+            Effect.timeoutOrElse({
+              duration: "10 seconds",
+              orElse: () => Effect.logError("shutdown timed out, continuing anyway"),
+            }),
+          ),
+        ),
+      resume: () =>
+        runPromise(
+          shutdown.resume.pipe(
+            Effect.timeoutOrElse({
+              duration: "10 seconds",
+              orElse: () => Effect.logError("resume timed out, continuing anyway"),
+            }),
+          ),
+        ),
+      // Electron records a cancelled quit only after `before-quit` returns. A stop with nothing to do finishes in a
+      // microtask, so quitting from it would be overwritten and the app would stay alive with no windows. Quit on the
+      // next tick instead.
+      exit: (mode) => {
+        const exit = setImmediate(() => {
+          exits.delete(exit)
+
+          if (mode === "relaunch") app.relaunch()
+          app.quit()
+        })
+
+        exits.add(exit)
+      },
+      quitting: setAppQuitting,
+    })
 
     const focusWindow = (win: BrowserWindow | null) => {
       if (!win) return
@@ -53,44 +93,16 @@ const runtime = Layer.effect(
       win.focus()
     }
 
-    const emitDeepLinks = (urls: string[]) => {
-      if (!urls.length) return
-      pendingDeepLinks.push(...urls)
+    const deepLinks = yield* DeepLinks.make(focusWindow)
 
-      const target = urls.flatMap((url) => {
-        const id = consoleReturnWindow(url)
-        const win = id ? getWindowByID(id) : null
-
-        return win ? [win] : []
-      })[0]
-
-      const win = target ?? getLastFocusedWindow()
-
-      if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
-
-      return win
-    }
-
-    const relaunch = () => {
-      setAppQuitting()
-      runFork(
-        prepareToRestart.pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              app.relaunch()
-              app.quit()
-            }),
-          ),
-        ),
-      )
-    }
+    const relaunch = () => driver.dispatch({ type: "exit.requested", mode: "relaunch" })
 
     const secondInstance = (_event: Event, argv: string[]) => {
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
-        focusWindow(emitDeepLinks(urls) ?? null)
+        deepLinks.receive(urls)
       }
 
       if (!urls.length) focusWindow(getLastFocusedWindow())
@@ -99,25 +111,15 @@ const runtime = Layer.effect(
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
-      focusWindow(emitDeepLinks([url]) ?? null)
+      deepLinks.receive([url])
     }
 
     const beforeQuit = (event: Event) => {
-      quitRequested = true
-      setAppQuitting()
-
-      if (shutdownReady) return
-      event.preventDefault()
-      // Electron records the cancelled quit only after this event returns. A shutdown with nothing to
-      // stop finishes in a microtask, so re-quitting from it would be overwritten and the app would
-      // stay alive with no windows. Re-quit on the next tick instead.
-      runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => setImmediate(() => app.quit())))))
+      if (preventsQuit(driver.state())) event.preventDefault()
+      driver.dispatch({ type: "before.quit" })
     }
 
-    const willQuit = () => {
-      setAppQuitting()
-      runFork(shutdown.run)
-    }
+    const willQuit = () => driver.dispatch({ type: "will.quit" })
 
     const childProcessGone = (_event: Event, details: Electron.Details) => {
       runFork(scoped("utility", Effect.logError("child process gone", { details })))
@@ -133,18 +135,14 @@ const runtime = Layer.effect(
       )
     }
 
-    const signal = () => {
-      setAppQuitting()
-      runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
-    }
+    const signal = () => driver.dispatch({ type: "exit.requested", mode: "quit" })
 
-    // Electron emits this instead of will-quit when it lost track of a quit, so finish the one we asked for.
     const windowAllClosed = () => {
-      if (quitRequested || process.platform !== "darwin") app.quit()
+      if (quitsWhenAllWindowsClosed(driver.state(), process.platform)) app.quit()
     }
 
     const activate = () => {
-      if (quitRequested) return
+      if (!restoresWindows(driver.state())) return
 
       if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
     }
@@ -173,15 +171,21 @@ const runtime = Layer.effect(
         process.off("SIGINT", signal)
         process.off("SIGTERM", signal)
         resetRelaunchHandler()
+        exits.forEach(clearImmediate)
+        exits.clear()
       }),
     )
 
     return Service.of({
       relaunch,
-      prepareToRestart,
-      consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
+      deepLinks,
+      state: driver.state,
+      restart: driver.restart,
       createWindow,
       restoreWindows: () => {
+        // A quit that started while the layers loaded (the user closed the first window) opens no new window.
+        if (!restoresWindows(driver.state())) return []
+
         if (!windowsWired) {
           windowsWired = true
           app.on("window-all-closed", windowAllClosed)

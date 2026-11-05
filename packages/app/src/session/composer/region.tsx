@@ -332,7 +332,12 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    onResponseSubmit: input.timeline.actions.resume,
+    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
+    onResponseSubmit: () => {
+      const anchor = input.timeline.follow.anchor()
+
+      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
+    },
     openParent,
     focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
