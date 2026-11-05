@@ -60,7 +60,14 @@ mock.module("@/runtime/server/client", () => ({ useServerSDK: () => active.sdk }
 
 mock.module("@/runtime/server/runtime", () => ({ useGlobal: () => ({ models: active.preferences }) }))
 
-mock.module("@/workspaces/location", () => ({ useWorkspaceLocation: () => () => ({ directory: active.directory }) }))
+// Like the real provider, every read builds a new location object, and loading its info builds another.
+mock.module("@/workspaces/location", () => ({
+  useWorkspaceLocation: () => {
+    const owner = active
+
+    return () => ({ directory: owner.directory, loaded: owner.state.locationLoads })
+  },
+}))
 
 mock.module("@/settings/model", () => ({
   useSettings: () => ({ visibility: { customAgents: () => active.state.visible } }),
@@ -106,6 +113,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
     visible: true,
     configLoaded: true,
     connection: "connected",
+    locationLoads: 0,
     route: { id: "ses_a" as string | undefined },
     agents: input.agents ?? [agent("build"), agent("plan")],
     config: input.config,
@@ -528,6 +536,19 @@ test("a commit received while its session is inactive does not discard its local
   f.set("sessions", "ses_a", durable("c", "low"))
   f.set("route", "id", "ses_a")
   expect(selection(local)).toEqual({ agent: "build", model: "a", variant: "high" })
+})
+
+test("a commit keeps waiting for its echo when the same folder's location reloads", () => {
+  const f = fixture()
+  const { local } = f.mount()
+  local.model.set(key("a"))
+  local.model.variant.set("high")
+  local.model.trackSessionCommit("ses_a", { agent: "build", model: key("a"), variant: "high" })
+  f.set("locationLoads", 1)
+  f.set("sessions", "ses_a", durable("a", "high"))
+  f.emit("session.model.selected")
+  f.set("sessions", "ses_a", durable("c", "low"))
+  expect(selection(local)).toEqual({ agent: "build", model: "c", variant: "low" })
 })
 
 test("cancelling a failed commit retains the draft and does not cancel a newer commit", () => {

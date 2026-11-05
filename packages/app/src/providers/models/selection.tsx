@@ -337,9 +337,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
+    // The location object is rebuilt whenever its info loads, so key on the folder: reopening the same workspace
+    // would close it and drop a commit still waiting for its echo.
+    const directory = createMemo(() => sdk().directory)
+
     // Follows the routed Session's directory: the Session route keeps this provider while tabs switch workspaces.
     const workspace = createMemo(() => {
-      const opened = acquireWorkspace(serverSDK.scope, sdk().directory, platform)
+      const opened = acquireWorkspace(serverSDK.scope, directory(), platform)
       onCleanup(opened.release)
 
       return opened.workspace
