@@ -283,7 +283,7 @@ function unchanged(state: WslDialogState): WslDialogTransition {
 }
 
 /** Which view the dialog shows. */
-export function selectWslDialogView(state: WslDialogState) {
+export function selectWslDialogView(state: WslDialogState): "main" | "catalog" {
   return state.status === "catalog" || state.status === "catalog-installing" ? "catalog" : "main"
 }
 

@@ -337,7 +337,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
     )
   }
 
-  const call = (action: WslDialogAction, signal: AbortSignal) => {
+  const call = async (action: WslDialogAction, signal: AbortSignal) => {
     const client = api()
 
     if (action.kind === "install-wsl") return client.installWsl({ signal })
@@ -348,7 +348,8 @@ function useWslAddServerController(props: DialogWslServerProps) {
 
     if (action.kind === "install-opencode") return client.installOpencode({ name: action.distro }, { signal })
 
-    return client.addServer({ distro: action.distro }, { signal })
+    // The server shows up in main's state; the dialog needs only to know it was saved.
+    await client.addServer({ distro: action.distro }, { signal })
   }
 
   // WSL's main side going away ends the call the dialog waits for; the dialog then shows WSL as unavailable.
