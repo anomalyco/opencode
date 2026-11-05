@@ -539,9 +539,6 @@
     {
       "checkpoint": "open",
       "until": "Answer 8 three.",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.8/navigate/open"
     },
     {
@@ -552,9 +549,6 @@
     {
       "checkpoint": "page-up",
       "until": "Jump to latest",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.8/navigate/page-up"
     },
     {
@@ -565,9 +559,6 @@
     {
       "checkpoint": "first",
       "until": "Question 1",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.8/navigate/first"
     },
     {
@@ -578,9 +569,6 @@
     {
       "checkpoint": "last",
       "until": "Answer 8 three.",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.8/navigate/last"
     },
     {
@@ -591,9 +579,6 @@
     {
       "checkpoint": "last-user",
       "until": "Jump to latest",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.8/navigate/last-user"
     }
   ],
