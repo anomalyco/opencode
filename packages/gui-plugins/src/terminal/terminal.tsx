@@ -588,7 +588,10 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => dispatch({ type: "mounted" }))
-  onCleanup(() => dispatch({ type: "disposed" }))
+  onCleanup(() => {
+    connection.dispose()
+    dispatch({ type: "disposed" })
+  })
 
   return (
     <>
