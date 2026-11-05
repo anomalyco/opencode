@@ -1,18 +1,17 @@
 //! The transcript (E.6a) over a fixture server: user messages, Markdown text, reasoning, the
 //! footer and token usage, windowing with backfill of older pages, and streamed deltas.
 
+use crate::support::{self, Harness, WAIT, deref_harness};
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::{SessionID, V2Event};
+use opencode_api::generated::V2Event;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Bounded, Debug, Info, Resolved, Scroll, Session, TurnTokens, Visibility};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use opencode_local::cli_config::{Bounded, Debug, Info, Scroll, Session, TurnTokens, Visibility};
+use opencode_tui::Deps;
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 
@@ -50,25 +49,15 @@ impl Transport for Fixture {
                     (200, json!({ "data": page, "cursor": { "next": next } }))
                 }
                 ("GET", [id, "permission"]) if self.sessions.contains_key(*id) => (200, json!({ "data": [] })),
-                _ => (404, json!({})),
+                _ => support::not_found(),
             };
-            let body = serde_json::to_vec(&body).unwrap();
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
+            Ok(support::respond(status, &body))
         })
     }
 }
 
 fn session(id: &str) -> Value {
-    json!({
-        "id": id, "title": "Transcript", "projectID": "project", "cost": 0, "agent": "build",
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
+    support::merge(support::session(id, "Transcript"), json!({ "agent": "build" }))
 }
 
 fn user(id: &str, created: u64, text: &str) -> Value {
@@ -93,43 +82,25 @@ fn assistant(id: &str, created: u64, content: Value, done: Option<u64>) -> Value
     message
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
+struct View {
+    harness: Harness,
     gate: Arc<Semaphore>,
     older: Arc<AtomicUsize>,
 }
 
-fn open(width: u16, height: u16, id: &str, messages: Vec<Value>, info: Info) -> Harness {
+deref_harness!(View);
+
+fn open(width: u16, height: u16, id: &str, messages: Vec<Value>, info: Info) -> View {
     let gate = Arc::new(Semaphore::new(0));
     let older = Arc::new(AtomicUsize::new(0));
     let fixture =
         Fixture { sessions: HashMap::from([(id.to_owned(), messages)]), gate: gate.clone(), older: older.clone() };
-    let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
-    let app = TestApp::new(width, height);
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID(id.into()) },
-            continue_: false,
-            events: false,
-        },
-    );
-    Harness { app, tui, gate, older }
+    let deps =
+        Deps { config: support::config(info), route: support::session_route(id), ..support::deps(Arc::new(fixture)) };
+    View { harness: support::mount(width, height, deps), gate, older }
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
+impl View {
     fn apply(&self, event: Value) {
         let event: V2Event = serde_json::from_value(event).unwrap();
         self.tui.data.apply(&[event]);
@@ -241,7 +212,7 @@ fn config_changes_reach_the_transcript_without_a_restart() {
     assert!(!screen.contains("tok/s"), "{screen}");
 
     h.tui.keymap.dispatch("session.toggle.thinking", None);
-    assert!(h.app.wait_until(Duration::from_secs(5), || !h.app.text().contains("Plan the fix.")), "{}", h.app.text());
+    assert!(h.app.wait_until(WAIT, || !h.app.text().contains("Plan the fix.")), "{}", h.app.text());
     assert_eq!(h.tui.settings.info().session.and_then(|session| session.thinking), Some(Visibility::Hide));
 }
 
@@ -294,7 +265,7 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
 }
 
 /// 50 turns of 6 rows each; the first page (20 messages) is 60 rows, 40 of them mounted.
-fn long_session() -> Harness {
+fn long_session() -> View {
     let messages: Vec<Value> = (1..=50)
         .flat_map(|turn| {
             let created = turn * 10_000;
@@ -322,7 +293,7 @@ fn long_session() -> Harness {
 /// Scrolls up one wheel step at a time until `turn`'s question shows. Every step keeps the
 /// reader's line on screen while older rows mount above it, and each older page shows the
 /// history hint until it lands. Returns the last screen.
-fn scroll_up_to(h: &Harness, turn: u32) -> String {
+fn scroll_up_to(h: &View, turn: u32) -> String {
     let screen = h.wait_for("Answer 50 part 3");
     assert!(!screen.contains("Question 50"), "only the tail is on screen:\n{screen}");
     let target = format!("┃  Question {turn}");
@@ -345,7 +316,7 @@ fn scroll_up_to(h: &Harness, turn: u32) -> String {
                 gated = true;
                 h.gate.add_permits(100);
             }
-            assert!(h.app.wait_until(Duration::from_secs(5), || !h.app.text().contains(hint)), "the page never landed");
+            assert!(h.app.wait_until(WAIT, || !h.app.text().contains(hint)), "the page never landed");
             screen = h.app.text();
         }
         if let Some(line) = unique(&previous) {
