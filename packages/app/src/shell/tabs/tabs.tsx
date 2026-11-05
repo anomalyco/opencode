@@ -34,6 +34,13 @@ import {
   type TabPromotionEffect,
   type TabPromotionEvent,
 } from "./promotion-machine"
+import {
+  createTabsHydrationState,
+  selectRecentTabKey,
+  transitionTabsHydration,
+  type TabsHydrationEffect,
+  type TabsHydrationEvent,
+} from "./hydration-machine"
 
 export type SessionTab = typeof TabStorage.Session.Type
 
@@ -110,35 +117,64 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const memory = createTabMemory(getOwner())
     const currentRoute = useCurrentRoute()
 
-    // Only the newest write made before the persisted value loads applies once it does.
-    let recentWrite = 0
+    const [hydration, setHydration] = createSignal(
+      createTabsHydrationState({ recent: recentReady(), closed: closedReady() }),
+    )
 
-    const recentKey = () => recent.key
-
-    const setRecentKey = (key: string | undefined) => {
-      const write = ++recentWrite
-
-      if (recentReady()) {
-        setRecent("key", key)
-
-        return
-      }
-
-      void recentReady.promise?.then(() => {
-        if (write === recentWrite) setRecent("key", key)
-      })
+    const dispatchHydration = (event: TabsHydrationEvent) => {
+      const result = transitionTabsHydration(untrack(hydration), event)
+      setHydration(result.state)
+      result.effects.forEach(runHydrationEffect)
     }
 
-    const updateClosed = (update: (stack: ClosedTab[]) => ClosedTab[]) => {
-      const apply = () => setClosed((stack) => update(stack))
+    const runHydrationEffect = (effect: TabsHydrationEffect) => {
+      if (effect.type === "recent.commit") return setRecent("key", effect.key)
+      // Each operation runs on its own, so one that throws can't drop the ones queued after it.
+      effect.ops.forEach((op) =>
+        Promise.try(() => {
+          if (op.kind === "update") return setClosed((stack) => op.update(stack))
+          reopenClosedTabNow(op.target, op.options)
+        }).catch((error: unknown) => console.error("[tabs] closed tab operation failed", error)),
+      )
+    }
 
-      if (closedReady()) {
-        apply()
+    // Both run once each store loads, or fails to and runs from its initial value.
+    createEffect(() => {
+      if (recentReady()) untrack(() => dispatchHydration({ type: "recent.hydrated", persistedKey: recent.key }))
+    })
+    createEffect(() => {
+      if (closedReady()) untrack(() => dispatchHydration({ type: "closed.hydrated" }))
+    })
+    onCleanup(() => dispatchHydration({ type: "disposed" }))
 
-        return
-      }
+    const recentKey = () => selectRecentTabKey(hydration(), recent.key)
 
-      void closedReady.promise?.then(apply)
+    const setRecentKey = (key: string | undefined) =>
+      dispatchHydration({ type: "recent.set", key, persistedKey: untrack(() => recent.key) })
+
+    const updateClosed = (update: (stack: ClosedTab[]) => ClosedTab[]) =>
+      dispatchHydration({ type: "closed.op", op: { kind: "update", update } })
+
+    function reopenClosedTabNow(target?: SessionTab, options?: { append?: boolean }) {
+      const result = takeClosedTab(closed, store, target)
+
+      if (result.stack.length === closed.length) return
+      setClosed(() => result.stack)
+      const entry = result.entry
+
+      if (!entry) return
+      const index = options?.append ? store.length : Math.min(entry.index, store.length)
+
+      if (entry.info) setInfo(tabKey(entry.tab), entry.info)
+      void startTransition(() => {
+        setStore(
+          produce((tabs) => {
+            if (tabs.some((item) => tabKey(item) === tabKey(entry.tab))) return
+            tabs.splice(index, 0, entry.tab)
+          }),
+        )
+        navigateTab(entry.tab)
+      })
     }
 
     const removeDraftPersisted = (draftID: string) => {
@@ -463,9 +499,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         return tab
       },
-      async newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string, model?: PromptModel) {
-        const draftID = uuid()
-        const tab = { type: "draft" as const, draftID, ...draft }
+      /** Opens a draft tab; pass `draftID` to know it before the draft opens. */
+      async newDraft(
+        draft: Omit<DraftTab, "type" | "draftID"> & { draftID?: string },
+        prompt?: string,
+        model?: PromptModel,
+      ) {
+        const draftID = draft.draftID ?? uuid()
+        const tab = { ...draft, type: "draft" as const, draftID }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
         await startTransition(() => {
           preview.clear()
@@ -598,31 +639,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         entries.forEach((entry) => disposeTab(entry.tab))
       },
       reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
-        if (!closedReady()) {
-          void closedReady.promise?.then(() => actions.reopenClosedTab(target, options))
-
-          return
-        }
-
-        const result = takeClosedTab(closed, store, target)
-
-        if (result.stack.length === closed.length) return
-        setClosed(() => result.stack)
-        const entry = result.entry
-
-        if (!entry) return
-        const index = options?.append ? store.length : Math.min(entry.index, store.length)
-
-        if (entry.info) setInfo(tabKey(entry.tab), entry.info)
-        void startTransition(() => {
-          setStore(
-            produce((tabs) => {
-              if (tabs.some((item) => tabKey(item) === tabKey(entry.tab))) return
-              tabs.splice(index, 0, entry.tab)
-            }),
-          )
-          navigateTab(entry.tab)
-        })
+        dispatchHydration({ type: "closed.op", op: { kind: "reopen", target, options } })
       },
       removeSessionTab(input: Omit<SessionTab, "type">) {
         const current = preview.current()
@@ -663,7 +680,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const key of removed) removeInfo(key)
 
-        if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
+        if (removed.some((key) => key === recentKey())) setRecentKey(undefined)
 
         for (const draftID of drafts) removeDraftPersisted(draftID)
       },
@@ -725,7 +742,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               }),
             )
 
-            if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
+            if (removed.some((key) => key === recentKey())) setRecentKey(undefined)
           },
         )
 
