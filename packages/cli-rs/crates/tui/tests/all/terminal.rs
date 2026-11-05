@@ -204,3 +204,44 @@ fn a_server_without_terminals_lists_none_and_ignores_the_commands() {
     );
     assert!(harness.remotes.lock().unwrap().is_empty());
 }
+
+/// The wheel over the pane scrolls the terminal's history (R3: the embedded terminal reports its viewport). Output
+/// while scrolled back keeps the view on its rows, steps down return to the live screen exactly, and steps the view
+/// cannot take change nothing.
+#[test]
+fn the_wheel_scrolls_the_terminal_history_across_output() {
+    let harness = mount(true, None);
+    assert!(
+        harness.wait(|harness| { !harness.requests("GET", "/api/experimental/session/ses_a/terminal").is_empty() })
+    );
+    harness.run("terminal.toggle");
+    harness.attach();
+    let deliver = harness.remotes.lock().unwrap()[0].deliver.clone();
+    let output = |lines: std::ops::Range<u32>| {
+        let text: String = lines.map(|line| format!("\r\nline {line}")).collect();
+        deliver.try_send(Incoming::Binary(text.into_bytes())).unwrap();
+    };
+    // The terminal's 24 rows sit under the tab strip, from column 51; its last row is screen row 24.
+    let row = |harness: &Harness, y| harness.app.render().row(y).chars().skip(50).collect::<String>().trim().to_owned();
+    let last = |harness: &Harness| row(harness, 24);
+    output(0..40);
+    assert!(harness.wait(|harness| last(harness) == "line 39"));
+    let wheel = |down: bool| harness.app.scroll(70, 12, down);
+    wheel(false);
+    assert_eq!(last(&harness), "line 36");
+    output(40..42);
+    harness.app.wait_until(Duration::from_millis(100), || false);
+    assert_eq!(last(&harness), "line 36", "output keeps a scrolled-back view on its rows");
+    assert_eq!(row(&harness, 1), "line 13");
+    wheel(true);
+    assert_eq!(last(&harness), "line 39");
+    wheel(true);
+    assert_eq!(last(&harness), "line 41", "back at the live screen");
+    wheel(true);
+    assert_eq!(last(&harness), "line 41");
+    for _ in 0..10 {
+        wheel(false);
+    }
+    assert_eq!(row(&harness, 1), "", "the top of the history: the first, empty row");
+    assert_eq!(last(&harness), "line 22");
+}
