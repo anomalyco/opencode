@@ -79,8 +79,7 @@ export const make = (deps: Deps) => {
   const report = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, outcome: Outcome, snap: Snapshot) {
     // Shutdown keeps the claim, and restart owns the report that resumes it.
     if (outcome.type === "interrupted" && outcome.reason === "shutdown") return
-    // Every settlement decides afresh; a period that holds again re-adds the child below. This
-    // returns true for the period that releases an earlier hold.
+    // Every settlement decides afresh; a period that holds again re-adds the child below.
     held.delete(sessionID)
     const child = yield* deps.store.get(sessionID)
     if (!child?.parentID) return
