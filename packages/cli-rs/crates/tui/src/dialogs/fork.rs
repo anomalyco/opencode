@@ -124,7 +124,7 @@ fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
 
 /// The pending view: the header and a spinner, at the list inset.
 fn pending(tui: &Tui) {
-    let animations = opencode_ui::motion::enabled(tui.config.info.animations);
+    let animations = opencode_ui::motion::enabled(tui.config().info.animations);
     tui.dialogs.replace(
         move |cx| {
             let spinner = Spinner::new(&cx.app)

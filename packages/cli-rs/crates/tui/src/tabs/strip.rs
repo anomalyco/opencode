@@ -239,9 +239,9 @@ impl Component for Strip {
             return;
         };
         let theme = tui.page();
-        let animations = opencode_ui::motion::enabled(tui.config.info.animations);
+        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
         let numbers = matches!(
-            tui.config.tabs.indicators,
+            tui.config().tabs.indicators,
             opencode_local::cli_config::TabsIndicators::Numbers
         );
         let (items, new_tab) = self.items(&tui);
