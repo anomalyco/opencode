@@ -9,7 +9,7 @@
     "dev": "vite dev --host 0.0.0.0",
     "dev:enterprise": "bun --watch script/dev-enterprise.ts",
     "dev:remote": "bun sst shell --stage=dev bun dev",
-    "build": "bun ./script/generate-sitemap.ts && vite build && bun ../../schema/script/config-schema.ts ./.output/public/config.json",
+    "build": "bun ./script/generate-sitemap.ts && vite build",
     "start": "vite start",
     "test": "bun test --only-failures"
   },
