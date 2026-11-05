@@ -389,7 +389,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       prepare: (input) => Effect.succeed(input.body),
       execute: () => Effect.succeed({ frames: Stream.empty }),
     },
-    defaults: {
+    options: {
       headers: info.headers,
       http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,

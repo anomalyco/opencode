@@ -1,9 +1,9 @@
 import { CohereChat } from "../protocols/cohere-chat.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type OpenString } from "../schema/index.js"
+import { ProviderID, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
@@ -11,7 +11,7 @@ export const id = ProviderID.make("cohere")
 const COMPATIBILITY_BASE_URL = "https://api.cohere.ai/compatibility/v1"
 export type ChatOptionsInput = { readonly reasoningEffort?: OpenString<"none" | "high"> }
 export type ProviderOptions = CohereChat.ProviderOptionsInput & ChatOptionsInput
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptions

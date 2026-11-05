@@ -161,9 +161,21 @@ export const mergeGeneration = (...items: ReadonlyArray<GenerationOptionsFields 
     [...GENERATION_KEYS].map((key) => [key, last(items.map((item) => item?.[key as keyof GenerationOptionsFields]))]),
   ) as GenerationOptionsFields
 
-/** Request defaults a selected model applies under each request. */
-export interface LanguageModelDefaults extends TransportOptions, GenerationOptionsFields {
+/** Request options a model applies under each request: the same keys as a request, and the request wins. */
+export interface RequestOptions extends TransportOptions, GenerationOptionsFields {
   readonly providerOptions?: ProviderOptions
+}
+
+/** Merge model options; later items win per key. Empty results are `undefined`. */
+export const mergeRequestOptions = (
+  ...items: ReadonlyArray<RequestOptions | undefined>
+): RequestOptions | undefined => {
+  const merged = Object.entries({
+    ...mergeTransport(...items),
+    ...mergeGeneration(...items),
+    providerOptions: mergeProviderOptions(...items.map((item) => item?.providerOptions)),
+  }).filter(([, value]) => value !== undefined)
+  return merged.length === 0 ? undefined : (Object.fromEntries(merged) as RequestOptions)
 }
 
 /** Provider-defined string enum: known values for autocomplete, any string accepted. */
@@ -280,7 +292,7 @@ export class LanguageModel<
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute<Compact>
-  readonly defaults?: LanguageModelDefaults
+  readonly options?: RequestOptions
   readonly capabilities?: Capabilities
   readonly compatibility?: LanguageModelCompatibility
 
@@ -288,7 +300,7 @@ export class LanguageModel<
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.defaults = input.defaults
+    this.options = input.options
     this.capabilities = input.capabilities
     this.compatibility = input.compatibility
   }
@@ -301,7 +313,8 @@ export class LanguageModel<
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
-      defaults: input.defaults,
+      // The route's options are a preset under the model's own.
+      options: mergeRequestOptions(input.route.options, input.options),
       capabilities: input.capabilities,
       compatibility:
         input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
@@ -315,7 +328,7 @@ export class LanguageModel<
       id: model.id,
       provider: model.provider,
       route: model.route,
-      defaults: model.defaults,
+      options: model.options,
       capabilities: model.capabilities,
       compatibility: model.compatibility,
     }
@@ -348,7 +361,7 @@ export namespace LanguageModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute<Compact>
-    readonly defaults?: LanguageModelDefaults
+    readonly options?: RequestOptions
     readonly capabilities?: Capabilities
     readonly compatibility?: LanguageModelCompatibility
   }
