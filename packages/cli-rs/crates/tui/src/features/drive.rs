@@ -43,13 +43,5 @@ pub fn start(
     addr: SocketAddr,
     version: String,
 ) -> std::io::Result<opencode_drive::Server> {
-    let textarea = tui.textarea.clone();
-    let editor = Box::new(move |app: &App| {
-        let focused = app.focused();
-        textarea
-            .borrow()
-            .as_ref()
-            .is_some_and(|textarea| focused.is_some_and(|widget| widget.is(textarea)))
-    });
-    opencode_drive::start(&tui.app, addr, opencode_drive::Options { version, editor })
+    opencode_drive::start(&tui.app, addr, version)
 }
