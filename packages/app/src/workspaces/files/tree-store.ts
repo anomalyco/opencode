@@ -1,13 +1,20 @@
-import { createStore, produce, reconcile } from "solid-js/store"
+import { getOwner, onCleanup, untrack } from "solid-js"
+import { createStore, reconcile, unwrap } from "solid-js/store"
 import type { FileNode } from "@/runtime/server/types"
-
-type DirectoryState = {
-  expanded: boolean
-  loaded?: boolean
-  loading?: boolean
-  error?: string
-  children?: string[]
-}
+import {
+  canRefreshDirectory,
+  createFileTreeState,
+  isDirectoryBusy,
+  isDirectoryExpanded,
+  isDirectoryLoaded,
+  isDirectoryLoading,
+  selectDirectoryChildren,
+  selectDirectoryError,
+  selectTreeNode,
+  transitionFileTree,
+  type FileTreeEffect,
+  type FileTreeEvent,
+} from "./tree-machine"
 
 type TreeStoreOptions = {
   scope: () => string
@@ -17,159 +24,109 @@ type TreeStoreOptions = {
 }
 
 export function createFileTreeStore(options: TreeStoreOptions) {
-  const [tree, setTree] = createStore<{
-    node: Record<string, FileNode>
-    dir: Record<string, DirectoryState>
-  }>({
-    node: {},
-    dir: { "": { expanded: true } },
-  })
+  const [tree, setTree] = createStore({ current: createFileTreeState() })
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+  const waiters = new Map<string, Array<() => void>>()
 
-  const inflight = new Map<string, Promise<void>>()
+  const dispatch = (event: FileTreeEvent) =>
+    untrack(() => {
+      const previous = unwrap(tree.current)
+      const result = transitionFileTree(previous, event)
 
-  const reset = () => {
-    inflight.clear()
-    setTree("node", reconcile({}))
-    setTree("dir", reconcile({}))
-    setTree("dir", "", { expanded: true })
+      if (result.state !== previous) {
+        // Keyless reconcile writes only the fields that changed, so unchanged nodes and directories notify no reader.
+        setTree("current", reconcile(result.state, { key: null }))
+
+        waiters.forEach((resolve, dir) => {
+          if (isDirectoryBusy(result.state, dir)) return
+          waiters.delete(dir)
+          resolve.forEach((run) => run())
+        })
+      }
+
+      result.effects.forEach(run)
+    })
+
+  const run = (effect: FileTreeEffect) => {
+    if (effect.type === "notify.error") return options.onError(effect.message)
+
+    const settle = (event: Extract<FileTreeEvent, { attempt: number }>) => {
+      clearTimeout(timers.get(event.attempt))
+      timers.delete(event.attempt)
+      dispatch(event)
+    }
+
+    timers.set(
+      effect.attempt,
+      setTimeout(() => settle({ type: "list.timed-out", dir: effect.dir, attempt: effect.attempt }), effect.timeoutMs),
+    )
+    void Promise.try(() => options.list(effect.dir)).then(
+      (nodes) => settle({ type: "list.loaded", dir: effect.dir, attempt: effect.attempt, nodes }),
+      (error) =>
+        settle({
+          type: "list.failed",
+          dir: effect.dir,
+          attempt: effect.attempt,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    )
   }
 
-  const ensureDir = (path: string) => {
-    if (tree.dir[path]) return
-    setTree("dir", path, { expanded: false })
+  if (getOwner()) {
+    onCleanup(() => {
+      dispatch({ type: "disposed" })
+      timers.forEach((timer) => clearTimeout(timer))
+      timers.clear()
+    })
   }
 
+  // Resolves once the directory has no listing in flight, so a forced reload resolves after its follow-up listing.
   const listDir = (input: string, opts?: { force?: boolean }) => {
     const dir = options.normalizeDir(input)
-    ensureDir(dir)
+    dispatch({ type: "list.requested", dir, force: Boolean(opts?.force) })
 
-    const current = tree.dir[dir]
+    if (!isDirectoryBusy(unwrap(tree.current), dir)) return Promise.resolve()
 
-    if (!opts?.force && current?.loaded) return Promise.resolve()
-
-    const pending = inflight.get(dir)
-
-    if (pending) return pending
-
-    setTree(
-      "dir",
-      dir,
-      produce((draft) => {
-        draft.loading = true
-        draft.error = undefined
-      }),
-    )
-
-    const directory = options.scope()
-
-    const promise = options
-      .list(dir)
-      .then((nodes) => {
-        if (options.scope() !== directory) return
-        const prevChildren = tree.dir[dir]?.children ?? []
-        const nextChildren = nodes.map((node) => node.path)
-        const nextSet = new Set(nextChildren)
-
-        setTree(
-          "node",
-          produce((draft) => {
-            const removedDirs: string[] = []
-
-            for (const child of prevChildren) {
-              if (nextSet.has(child)) continue
-              const existing = draft[child]
-
-              if (existing?.type === "directory") removedDirs.push(child)
-              delete draft[child]
-            }
-
-            if (removedDirs.length > 0) {
-              const keys = Object.keys(draft)
-
-              for (const key of keys) {
-                for (const removed of removedDirs) {
-                  if (!key.startsWith(removed + "/")) continue
-                  delete draft[key]
-                  break
-                }
-              }
-            }
-
-            for (const node of nodes) {
-              draft[node.path] = node
-            }
-          }),
-        )
-
-        setTree(
-          "dir",
-          dir,
-          produce((draft) => {
-            draft.loaded = true
-            draft.loading = false
-            draft.children = nextChildren
-          }),
-        )
-      })
-      .catch((e) => {
-        if (options.scope() !== directory) return
-        setTree(
-          "dir",
-          dir,
-          produce((draft) => {
-            draft.loading = false
-            draft.error = e.message
-          }),
-        )
-        options.onError(e.message)
-      })
-      .finally(() => {
-        inflight.delete(dir)
-      })
-
-    inflight.set(dir, promise)
-
-    return promise
+    return new Promise<void>((resolve) => waiters.set(dir, [...(waiters.get(dir) ?? []), resolve]))
   }
 
   // `list: false` marks a directory expanded without fetching its children, for
   // trees whose nodes are synthesized from a filter; listing directories that
   // only exist on a diff's base branch fails and surfaces error toasts.
   const expandDir = (input: string, behavior?: { list?: boolean }) => {
-    const dir = options.normalizeDir(input)
-    ensureDir(dir)
-    setTree("dir", dir, "expanded", true)
-
-    if (behavior?.list === false) return
-    void listDir(dir)
+    dispatch({ type: "dir.expanded", dir: options.normalizeDir(input), list: behavior?.list !== false })
   }
 
   const collapseDir = (input: string) => {
-    const dir = options.normalizeDir(input)
-    ensureDir(dir)
-    setTree("dir", dir, "expanded", false)
+    dispatch({ type: "dir.collapsed", dir: options.normalizeDir(input) })
   }
 
+  // Getters keep each reader subscribed to the one field it reads. Reading `epoch` makes a workspace reset re-run every
+  // reader, so the file tree lists the new root even when the old one never loaded.
   const dirState = (input: string) => {
     const dir = options.normalizeDir(input)
+    const current = tree.current
 
-    return tree.dir[dir]
-  }
+    if (current.status !== "active") return undefined
+    void current.epoch
+    const entry = current.dirs[dir]
 
-  const children = (input: string) => {
-    const dir = options.normalizeDir(input)
-    const ids = tree.dir[dir]?.children
+    if (!entry) return undefined
 
-    if (!ids) return []
-    const out: FileNode[] = []
-
-    for (const id of ids) {
-      const node = tree.node[id]
-
-      if (node) out.push(node)
+    return {
+      get expanded() {
+        return isDirectoryExpanded(entry)
+      },
+      get loaded() {
+        return isDirectoryLoaded(entry)
+      },
+      get loading() {
+        return isDirectoryLoading(entry)
+      },
+      get error() {
+        return selectDirectoryError(entry)
+      },
     }
-
-    return out
   }
 
   return {
@@ -177,9 +134,10 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     expandDir,
     collapseDir,
     dirState,
-    children,
-    node: (path: string) => tree.node[path],
-    isLoaded: (path: string) => Boolean(tree.dir[path]?.loaded),
-    reset,
+    children: (input: string) => selectDirectoryChildren(tree.current, options.normalizeDir(input)),
+    node: (path: string) => selectTreeNode(tree.current, path),
+    // Includes directories still loading, so a change during their first listing queues a reload.
+    isLoaded: (path: string) => canRefreshDirectory(tree.current, options.normalizeDir(path)),
+    reset: () => dispatch({ type: "reset" }),
   }
 }
