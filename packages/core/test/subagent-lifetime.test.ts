@@ -498,4 +498,90 @@ describe("subagent observer lifetime", () => {
       expect(yield* llm.requests()).toHaveLength(requests)
     }),
   )
+
+  it.live("a re-prompted child reports only the answer from that busy period", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      yield* llm.push(
+        TestLLM.text("first", "first"),
+        TestLLM.text("Parent heard the first report", "parent-first"),
+        TestLLM.text("second", "second"),
+        TestLLM.text("Parent heard the second report", "parent-second"),
+      )
+
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check the tests" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      const opening = yield* reports(f.parent.id)
+      expect(opening).toHaveLength(1)
+      expect(opening[0]?.text).toContain("first")
+
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check them again" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(2)
+      expect(notices[1]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "completed" } })
+      expect(notices[1]?.text).toContain("second")
+      expect(notices[1]?.text).not.toContain("first")
+    }),
+  )
+
+  it.live("a reverted and re-prompted child reports its new answer", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      yield* llm.push(
+        TestLLM.text("first", "first"),
+        TestLLM.text("Parent heard the first report", "parent-first"),
+        TestLLM.text("second", "second"),
+        TestLLM.text("Parent heard the second report", "parent-second"),
+      )
+
+      const opening = yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check the tests" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      expect(yield* reports(f.parent.id)).toHaveLength(1)
+
+      // A committed revert deletes this period's anchor row; the next period must still report.
+      yield* f.sessions.revert.stage({ sessionID: f.child.id, messageID: opening.id, files: false })
+      yield* f.sessions.revert.commit(f.child.id)
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check them again" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(2)
+      expect(notices[1]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "completed" } })
+      expect(notices[1]?.text).toContain("second")
+      expect(notices[1]?.text).not.toContain("first")
+    }),
+  )
+
+  it.live("a failed follow-up does not re-send the earlier answer", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      yield* llm.push(
+        TestLLM.text("first", "first"),
+        TestLLM.text("Parent heard the first report", "parent-first"),
+        Stream.die(new Error("follow-up failed")),
+        TestLLM.text("Parent heard the failure", "parent-failure"),
+      )
+
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check the tests" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      expect(yield* reports(f.parent.id)).toHaveLength(1)
+
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check them again" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(2)
+      expect(notices[1]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "error" } })
+      expect(notices[1]?.text).toContain("follow-up failed")
+      expect(notices[1]?.text).not.toContain("first")
+    }),
+  )
 })
