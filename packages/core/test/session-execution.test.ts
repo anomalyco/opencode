@@ -28,6 +28,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
@@ -289,6 +290,77 @@ describe("SessionExecution lifecycle", () => {
                 }),
               ],
         )
+      }),
+    )
+  }
+
+  for (const delivered of [false, true]) {
+    it.effect(`a running job reports a later busy period with a fresh ID (delivered=${delivered})`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        const inbox = yield* SessionInbox.make()
+        const jobs = yield* Job.Service
+        const scope = yield* Scope.Scope
+        const parent = Session.ID.make("ses_period_parent")
+        const child = Session.ID.make("ses_period_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        const recovery = {
+          kind: "subagent" as const,
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "reviewer",
+          description: "Review",
+        }
+        const finish = yield* Deferred.make<string>()
+        yield* jobs.start({ id: child, type: "subagent", recovery, run: Deferred.await(finish) })
+        yield* jobs.background(child)
+        const job = yield* jobs.get(child)
+        expect(job?.notificationID).toBeDefined()
+        const reports = SubagentReport.make({ store, inbox, jobs, scope, wake: () => Effect.void, pending: () => Effect.succeed(false) })
+
+        yield* reports.started(child)
+        yield* answer(bus, child, "first")
+        yield* reports.report(child, { type: "succeeded" }, yield* reports.snapshot(child))
+        const opening = yield* SessionInbox.list(database.db, parent)
+        expect(opening).toMatchObject([{ id: job?.notificationID, payload: { text: expect.stringContaining("first") } }])
+        if (delivered) yield* SessionInbox.promote(database.db, bus, parent, "input")
+
+        // The original generation has not settled, but its notification has already been spent.
+        expect((yield* jobs.get(child))?.status).toBe("running")
+        yield* reports.started(child)
+        yield* answer(bus, child, "second")
+        yield* reports.report(child, { type: "succeeded" }, yield* reports.snapshot(child))
+        const pending = yield* SessionInbox.list(database.db, parent)
+        expect(pending).toHaveLength(delivered ? 1 : 2)
+        const next = pending.at(-1)
+        expect(next?.id).not.toBe(job?.notificationID)
+        expect(next?.payload).toMatchObject({ text: expect.stringContaining("second") })
+        expect(next?.payload).not.toMatchObject({ text: expect.stringContaining("first") })
+        expect(yield* store.heldReport(child)).toBeUndefined()
+
+        // The original observer still owns marker cleanup and retries the original admission ID.
+        expect(yield* jobs.pendingBackground).toHaveLength(1)
+        yield* Deferred.succeed(finish, "second")
+        const settled = (yield* jobs.wait({ id: child })).info
+        if (!settled) throw new Error("Missing settled job")
+        yield* SubagentCompletion.deliver(
+          {
+            synthetic: (input) => inbox.admit({
+              id: input.id ?? SessionMessage.ID.create(),
+              sessionID: input.sessionID,
+              item: { type: "synthetic", payload: SessionInbox.SyntheticPayload.make(input), delivery: "steer" },
+            }),
+          },
+          jobs,
+          { ...settled, recovery },
+        )
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual(pending)
+        expect(yield* jobs.pendingBackground).toEqual([])
+        yield* SessionInbox.promote(database.db, bus, parent, "input")
+        expect((yield* store.messages({ sessionID: parent })).map((message) => message.id)).toHaveLength(2)
       }),
     )
   }

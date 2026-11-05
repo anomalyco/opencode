@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -18,6 +18,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionEvent } from "@opencode/core/session/event"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -771,6 +772,53 @@ describe("subagent observer lifetime", () => {
       expect(notices[1]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "completed" } })
       expect(notices[1]?.text).toContain("second")
       expect(notices[1]?.text).not.toContain("first")
+    }),
+  )
+
+  it.live("a background child re-prompted upon report admission reports a second answer", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLM.Test
+      const bus = yield* Bus.Service
+      const jobs = yield* Job.Service
+      const store = yield* SessionStore.Service
+      const f = yield* family()
+      yield* llm.push(TestLLM.text("first", "first"))
+      yield* llm.serve((request) =>
+        JSON.stringify(request.messages.at(-1)).includes("Check them again")
+          ? TestLLM.text("second", "second")
+          : TestLLM.text("Parent heard the report", "parent"),
+      )
+      const gate = yield* llm.gate()
+      const reprompt = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+        Stream.filter((event) => event.data.sessionID === f.parent.id),
+        Stream.take(1),
+        Stream.runForEach((event) => Effect.gen(function* () {
+          expect(event.data.item).toMatchObject({ type: "synthetic", payload: { text: expect.stringContaining("first") } })
+          const job = yield* jobs.get(f.child.id)
+          expect(job).toMatchObject({ status: "running", notificationID: event.data.inboxID })
+          yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check them again" })
+          expect(yield* jobs.get(f.child.id)).toMatchObject({ status: "running", started_at: job?.started_at })
+        })),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      expect((yield* f.spawn).status).toBe("completed")
+      yield* gate.started
+      const job = yield* jobs.get(f.child.id)
+      yield* gate.release
+      yield* Fiber.join(reprompt)
+      yield* jobs.wait({ id: f.child.id })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(2)
+      expect(notices[0]?.id).toBe(job?.notificationID)
+      expect(notices[0]?.text).toContain("first")
+      expect(notices[1]?.id).not.toBe(notices[0]?.id)
+      expect(notices[1]?.text).toContain("second")
+      expect(notices[1]?.text).not.toContain("first")
+      expect(yield* jobs.pendingBackground).toEqual([])
+      expect(yield* store.heldReport(f.child.id)).toBeUndefined()
     }),
   )
 
