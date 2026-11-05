@@ -828,7 +828,7 @@ pub fn install(tui: &Rc<Tui>) {
         commands: vec![
             command("opencode.settings", "Open settings", "settings", |tui| show(tui, None))
                 .suggested(opentui::keymap::Condition::Always),
-            command("opencode.debug", "View debug info", "debug", |tui| super::debug::show(tui)),
+            command("opencode.debug", "View debug info", "debug", super::debug::show),
         ],
         ..KeymapLayer::default()
     };
