@@ -123,14 +123,18 @@ export const make = Effect.gen(function* () {
             call: event,
             fiber: yield* Effect.uninterruptibleMask((restore) =>
               restore(executeTool(event).pipe(Effect.provideService(ToolInterrupted.Slot, interrupted))).pipe(
-                // A tool can settle its call even when interrupted; the fiber still exits interrupted.
-                Effect.catchCause((cause) =>
-                  interrupted.result && Cause.hasInterruptsOnly(cause)
-                    ? Effect.succeed(interrupted.result)
-                    : Effect.failCause(cause),
-                ),
                 Effect.flatMap(toolOutput.truncate),
                 Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
+                // A tool can settle its call even when interrupted; the fiber still exits interrupted, so the
+                // step ends as interrupted instead of starting another request.
+                Effect.catchCause((cause) => {
+                  const result = interrupted.result
+                  if (!result || !Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+                  return toolOutput.truncate(result).pipe(
+                    Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
+                    Effect.andThen(Effect.failCause(cause)),
+                  )
+                }),
                 Effect.catchTag("Tool.Error", (error) =>
                   publisher.failTool(event.id, toSessionError(error), error.metadata).pipe(Effect.asVoid),
                 ),

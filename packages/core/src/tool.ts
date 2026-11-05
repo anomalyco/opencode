@@ -18,6 +18,7 @@ import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
+import { ToolInterrupted } from "./tool/interrupted.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -272,7 +273,9 @@ const layer = Layer.effect(
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
-                (name, tool, input, context) => run(tool, name, input, context),
+                // A child call cannot settle the outer CodeMode call with its own interrupted result.
+                (name, tool, input, context) =>
+                  run(tool, name, input, context).pipe(Effect.provideService(ToolInterrupted.Slot, undefined)),
                 permission,
               )
             : undefined
