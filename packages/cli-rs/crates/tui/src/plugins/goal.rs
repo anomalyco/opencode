@@ -15,7 +15,7 @@ use opencode_ui::dialog::{self, DialogOptions, FooterAction, FooterProps, Header
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::Condition;
+use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use serde::Deserialize;
 use serde_json::json;
@@ -48,38 +48,18 @@ pub enum Status {
 #[derive(Default)]
 pub struct Goals {
     trackers: RefCell<Vec<Weak<Tracker>>>,
-    handler: Cell<Option<HandlerId>>,
+    subscription: RefCell<Option<Disposer>>,
 }
-
-/// One server event a tracker may follow, posted to the UI thread.
-struct Signal(V2Event);
 
 impl Goals {
     /// Forwards the store's goal events to the trackers until [`Goals::dispose`].
     pub fn install(self: &Rc<Self>, tui: &Tui) {
-        let handler = tui.app.on_message(bind!(self, |goals, _, Signal(event)| goals.event(event)));
-        self.handler.set(Some(handler));
-        let mut signals = tui.data.signals();
-        let proxy = tui.app.proxy();
-        tui.app.runtime().spawn(async move {
-            loop {
-                match signals.recv().await {
-                    Ok(event @ (V2Event::ServerConnected(_) | V2Event::Rpc(_))) => {
-                        if proxy.send(Signal(event)).is_err() {
-                            return;
-                        }
-                    }
-                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
-                }
-            }
-        });
+        let subscription = crate::features::events::subscribe(tui, bind!(self, |goals, _, event| goals.event(event)));
+        self.subscription.replace(Some(subscription));
     }
 
-    pub fn dispose(&self, tui: &Tui) {
-        if let Some(handler) = self.handler.take() {
-            tui.app.remove_handler(handler);
-        }
+    pub fn dispose(&self) {
+        self.subscription.take();
     }
 
     /// Starts following `session`'s goal; `changed` runs after each change of it.

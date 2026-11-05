@@ -23,11 +23,11 @@ use opencode_api::generated::{
     IntegrationCommandAttemptStatus, IntegrationCommandCancelInput, IntegrationCommandConnectInput,
     IntegrationCommandMethod, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
     IntegrationConnectKeyInput, IntegrationExternalMethod, IntegrationID, IntegrationInfo, IntegrationKeyMethod,
-    IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod, IntegrationOauthCancelInput,
-    IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
-    ModelInfoStatus, ModelListInput, ProviderListInput,
+    IntegrationMethod, IntegrationOAuthMethod, IntegrationOauthCancelInput, IntegrationOauthCompleteInput,
+    IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
 };
 use opencode_api::js::locale_compare;
+use opencode_store::Catalog;
 use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
@@ -101,7 +101,7 @@ impl Flow {
 
     /// The integration as the catalog has it now.
     fn latest(&self, id: &IntegrationID) -> Option<IntegrationInfo> {
-        self.local.integrations()?.into_iter().find(|item| item.id == *id)
+        self.local.integration(&id.0)
     }
 
     fn fail(&self, message: String) {
@@ -1344,63 +1344,53 @@ fn command_view(cx: &Rc<DialogCx>, title: &str, message: &str) -> (View, Text) {
 // Connected
 // ---------------------------------------------------------------------------------------------------------------
 
-/// `connected`: reads the integrations, models, and providers again, says so, and goes on to `on_connected`, or
-/// closes the dialog.
+/// `connected`: reads the integrations, models, and providers into the store again, says so, and goes on to
+/// `on_connected`, or closes the dialog.
 fn connected(flow: &Flow, integration: &IntegrationInfo) {
-    let client = flow.local.client.clone();
-    let location = flow.location();
+    let local = &flow.local;
+    let reload = futures_util::future::try_join3(
+        local.reload(Catalog::Integration),
+        local.reload(Catalog::Model),
+        local.reload(Catalog::Provider),
+    );
     let flow = flow.clone();
     let integration = integration.clone();
-    flow.clone().spawn(
-        async move {
-            let options = RequestOptions::default();
-            let integrations = IntegrationListInput { location: location.clone() };
-            let models = ModelListInput { location: location.clone(), types: None };
-            let providers = ProviderListInput { location };
-            let (integrations, models, providers) = futures_util::future::try_join3(
-                client.integration_list(&integrations, &options),
-                client.model_list(&models, &options),
-                client.provider_list(&providers, &options),
-            )
-            .await?;
-            Ok((integrations.data, models.data, providers.data))
-        },
-        move |result| {
-            let local = &flow.local;
-            match result {
-                Ok((integrations, models, providers)) => local.set_catalog(integrations, models, providers),
-                Err(error) => {
-                    log::warn!("integration catalog: {error}");
-                    local.toasts.error(error.to_string());
-                    return;
-                }
-            }
-            local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {}", integration.name)));
-            match &flow.on_connected {
-                Some(on_connected) => on_connected(local, provider_id(local, &integration.id)),
-                None => local.dialogs.clear(),
-            }
-        },
-    );
+    local.app.spawn(reload, move |_, result| {
+        let local = &flow.local;
+        if let Err(error) = result {
+            log::warn!("integration catalog: {error}");
+            local.toasts.error(error.to_string());
+            return;
+        }
+        local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {}", integration.name)));
+        match &flow.on_connected {
+            Some(on_connected) => on_connected(local, provider_id(local, &integration.id)),
+            None => local.dialogs.clear(),
+        }
+    });
 }
 
 /// `providerID`: the integration's provider that has a model in use, else its first.
 fn provider_id(local: &Local, integration: &IntegrationID) -> Option<String> {
-    let models = local.models();
-    let matches: Vec<_> = local
-        .providers()
-        .into_iter()
-        .filter(|provider| provider.integration_id.as_ref() == Some(integration) || provider.id.0 == integration.0)
-        .collect();
-    matches
-        .iter()
-        .find(|provider| {
-            models
+    local.models(|models| {
+        local.providers(|providers| {
+            let matches: Vec<_> = providers
                 .iter()
-                .any(|model| model.provider_id == provider.id && !matches!(model.status, ModelInfoStatus::Deprecated))
+                .filter(|provider| {
+                    provider.integration_id.as_ref() == Some(integration) || provider.id.0 == integration.0
+                })
+                .collect();
+            matches
+                .iter()
+                .find(|provider| {
+                    models.iter().any(|model| {
+                        model.provider_id == provider.id && !matches!(model.status, ModelInfoStatus::Deprecated)
+                    })
+                })
+                .or(matches.first())
+                .map(|provider| provider.id.0.clone())
         })
-        .or(matches.first())
-        .map(|provider| provider.id.0.clone())
+    })
 }
 
 #[cfg(test)]

@@ -13,6 +13,7 @@ use opencode_api::generated::{
     IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
 };
 use opencode_local::model_pref::Model;
+use opencode_store::Catalog;
 use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
@@ -475,7 +476,7 @@ impl Connect {
 
     // The `opencode` integration and its device OAuth method, once the integrations have loaded.
     fn method(&self) -> Option<(String, Vec<Value>)> {
-        let integration = self.local.integrations()?.into_iter().find(|item| item.id.0 == "opencode")?;
+        let integration = self.local.integration("opencode")?;
         integration.methods.into_iter().find_map(|method| match method {
             // The fields as JSON: only `type`, `key`, and `default` matter for the answer.
             IntegrationMethod::Oauth(method) if method.id.0 == "device" => Some((
@@ -488,9 +489,7 @@ impl Connect {
 
     // The first credential connection has no error status.
     fn valid(&self) -> bool {
-        let Some(integration) =
-            self.local.integrations().and_then(|list| list.into_iter().find(|item| item.id.0 == "opencode"))
-        else {
+        let Some(integration) = self.local.integration("opencode") else {
             return false;
         };
         integration
@@ -616,52 +615,32 @@ impl Connect {
         );
     }
 
-    // Reloads the integrations, models, and providers. `done` gets `Some(true)` after finishing, `Some(false)`
-    // when closed or failed, and `None` when the connection is not valid yet.
+    // Reloads the integrations, models, and providers into the store, one after another. `done` gets `Some(true)`
+    // after finishing, `Some(false)` when closed or failed, and `None` when the connection is not valid yet.
     fn sync(self: &Rc<Self>, announce: bool, done: impl FnOnce(Option<bool>) + 'static) {
-        let client = self.local.client.clone();
-        let location = self.location();
+        let local = &self.local;
+        let (integrations, models, providers) =
+            (local.reload(Catalog::Integration), local.reload(Catalog::Model), local.reload(Catalog::Provider));
         self.local.app.spawn(
             async move {
-                let options = RequestOptions::default();
-                let integrations = client
-                    .integration_list(
-                        &opencode_api::generated::IntegrationListInput { location: location.clone() },
-                        &options,
-                    )
-                    .await?;
-                let models = client
-                    .model_list(
-                        &opencode_api::generated::ModelListInput { location: location.clone(), types: None },
-                        &options,
-                    )
-                    .await?;
-                let providers =
-                    client.provider_list(&opencode_api::generated::ProviderListInput { location }, &options).await?;
-                Ok::<_, opencode_api::error::Error>((integrations.data, models.data, providers.data))
+                integrations.await?;
+                models.await?;
+                providers.await
             },
             bind!(self, |state, _, result| {
                 if state.closed.get() || state.local.dialogs.is_empty() {
                     return done(Some(false));
                 }
-                match result {
-                    Ok((integrations, models, providers)) => {
-                        state.local.set_catalog(integrations, models, providers);
-                    }
-                    Err(error) => {
-                        state.fail(error.to_string());
-                        return done(Some(false));
-                    }
+                if let Err(error) = result {
+                    state.fail(error.to_string());
+                    return done(Some(false));
                 }
                 if !state.valid() {
                     return done(None);
                 }
                 if announce {
-                    let name = state
-                        .local
-                        .integrations()
-                        .and_then(|list| list.into_iter().find(|item| item.id.0 == "opencode"))
-                        .map_or("OpenCode Console".to_owned(), |item| item.name);
+                    let name =
+                        state.local.integration("opencode").map_or("OpenCode Console".to_owned(), |item| item.name);
                     state.local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {name}")));
                 }
                 state.finish();
@@ -676,13 +655,15 @@ impl Connect {
             local.dialogs.clear();
             return;
         }
-        let go = local
-            .models()
-            .into_iter()
-            .find(|item| item.provider_id.0 == "opencode-go" && !matches!(item.status, ModelInfoStatus::Deprecated));
+        let go = local.models(|models| {
+            models
+                .iter()
+                .find(|item| item.provider_id.0 == "opencode-go" && !matches!(item.status, ModelInfoStatus::Deprecated))
+                .map(|item| Model::new(&item.provider_id.0, &item.id))
+        });
         match go {
             Some(go) => {
-                local.set(&Model::new(&go.provider_id.0, &go.id), true);
+                local.set(&go, true);
                 local.dialogs.clear();
                 (self.offer.on_subscribe)();
             }

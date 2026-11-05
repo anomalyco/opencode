@@ -7,48 +7,54 @@
 //! - a toast when an MCP server of the default location fails or needs authentication, once per state.
 //!
 //! `session.moved` updates the open dialog's cache, which E.11a replaced with the store's sessions.
-//! `app::mount` calls [`install`] once and `Tui::sync` calls [`sync`].
+//! `app::mount` calls [`install`] once and `Tui::sync` calls [`sync`]. The app's pump posts each store signal once as
+//! a [`Signal`]; [`handle`] sees it first, then every [`subscribe`]r in order.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_api::generated::{McpServerStatus, V2Event};
 use opencode_store::Changes;
 use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
+use opentui::keymap::Disposer;
 
 use crate::app::Tui;
 use crate::routes::Route;
 
-/// The last status each MCP server was alerted for.
+type Subscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&Tui, &V2Event)>)>>>;
+
+/// The last status each MCP server was alerted for, and the signal subscribers.
 #[derive(Default)]
 pub struct Events {
     alerted: RefCell<HashMap<String, &'static str>>,
+    subscribers: Subscribers,
+    next: Cell<u64>,
 }
 
 /// One event the store passed on, posted to the UI thread.
-struct Signal(V2Event);
+pub(crate) struct Signal(pub V2Event);
 
 pub fn install(tui: &Tui) {
-    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| handle(&tui, event)));
-    let mut signals = tui.data.signals();
-    let proxy = tui.app.proxy();
-    tui.app.runtime().spawn(async move {
-        loop {
-            match signals.recv().await {
-                Ok(event) => {
-                    if proxy.send(Signal(event)).is_err() {
-                        return;
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                    log::warn!("the UI skipped {skipped} server events");
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
-            }
+    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
+        handle(&tui, event);
+        let subscribers: Vec<_> =
+            tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
+        for subscriber in subscribers {
+            subscriber(&tui, event);
         }
-    });
+    }));
+}
+
+/// Calls `subscriber` with each store signal, after the TUI's own handling, until the disposer drops.
+pub fn subscribe(tui: &Tui, subscriber: impl Fn(&Tui, &V2Event) + 'static) -> Disposer {
+    let id = tui.events.next.get();
+    tui.events.next.set(id + 1);
+    tui.events.subscribers.borrow_mut().push((id, Rc::new(subscriber)));
+    let subscribers = Rc::downgrade(&tui.events.subscribers);
+    Disposer::new(bind!(subscribers, |subscribers| subscribers.borrow_mut().retain(|(other, _)| *other != id)))
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {

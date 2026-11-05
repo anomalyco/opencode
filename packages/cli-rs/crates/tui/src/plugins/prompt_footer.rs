@@ -23,9 +23,8 @@ pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.prompt.footer", |cx| {
         let goals = Rc::new(Goals::default());
         goals.install(cx.host());
-        let weak = Rc::downgrade(cx.host());
         let dispose = goals.clone();
-        cx.on_dispose(bind!(weak, |tui| dispose.dispose(&tui)));
+        cx.on_dispose(move || dispose.dispose());
         cx.slot(Placement::append(slot::PROMPT_FOOTER), move |tui, input| Box::new(Footer::new(tui, &goals, input)));
     })
 }
