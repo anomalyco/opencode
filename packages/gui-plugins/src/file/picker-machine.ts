@@ -45,9 +45,8 @@ export type PickerEvent =
     }
   | { readonly type: "filter.changed"; readonly sessionKey: string; readonly text: string }
   | { readonly type: "browsing.set"; readonly sessionKey: string; readonly browsing: boolean }
+  /** A file tab opened, or the user selected one on a wide screen: the narrow-screen view shows it, not the browser. */
   | { readonly type: "file.opened"; readonly sessionKey: string }
-  /** The user selected a side tab of this panel. */
-  | { readonly type: "tab.focused"; readonly sessionKey: string; readonly tabId: string; readonly isFile: boolean }
   | { readonly type: "launcher.closed"; readonly sessionKey: string; readonly tabId: string }
   /** The filter input took the focus, or the request timed out. */
   | { readonly type: "focus.ended"; readonly request: number }
@@ -117,23 +116,6 @@ export function transitionPicker(state: PickerState, event: PickerEvent): Picker
       patch(state.filters, event.sessionKey, { browsing: false }),
       ownedBy(state.focus, event.sessionKey) ? NO_FOCUS : state.focus,
     )
-
-  if (event.type === "tab.focused") {
-    // A file tab replaces the browse view everywhere, so the narrow-screen view shows that file too.
-    if (event.isFile)
-      return update(
-        state,
-        patch(state.filters, event.sessionKey, { browsing: false }),
-        ownedBy(state.focus, event.sessionKey) ? NO_FOCUS : state.focus,
-      )
-
-    const cancel =
-      ownedBy(state.focus, event.sessionKey) &&
-      state.focus.target.kind === "launcher" &&
-      state.focus.target.tabId !== event.tabId
-
-    return update(state, state.filters, cancel ? NO_FOCUS : state.focus)
-  }
 
   if (event.type === "launcher.closed") {
     const cancel =
