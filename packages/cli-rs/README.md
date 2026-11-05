@@ -86,3 +86,20 @@ Known gaps:
 
 `script/generate.ts` runs the generators in `script/gen`; `parity/fixtures.ts` regenerates the parity
 fixtures.
+
+## Parity commands
+
+Each command runs the TypeScript client and `opencode-rs` on the same input and compares the results.
+Run them from this directory with `bun run <command>`. Each one builds the debug binary first, unless
+`OPENCODE_RS_BIN` names a binary.
+
+| Command | Compares |
+| --- | --- |
+| `parity:cli [scenario.cli.ts ...]` | Exit code, stdout, stderr, and requests of one command (P-CLI) |
+| `parity:pty [scenario.pty.ts ...]` | Screens and OSC output under a pseudo-terminal (P-PTY) |
+| `parity:sim [scenario.sim.ts ...]` | TUI captures against a simulated server (P-TUI) |
+| `parity:acp [suite ...]` | ACP JSON-RPC transcripts of `packages/cli/test/acp/*.subprocess.test.ts` (P-WIRE) |
+
+`parity:acp` runs each suite twice, once per agent, through `parity/acp/record.sh`. It fails when a test
+fails on either side or when the normalized transcripts differ. The transcripts are kept in
+`$TMPDIR/opencode-parity/acp/<suite>-<side>/`.
