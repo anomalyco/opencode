@@ -2,141 +2,52 @@
 //! from a database in a temporary directory, and the prompt's use of them. No real editor, IDE, or Zed
 //! database is touched: every source is built here.
 
-use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use crate::support::{self, DIRECTORY, Fake, Harness, Log, deref_harness, list};
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
+use std::path::Path;
+use std::sync::Arc;
+
 use opencode_tui::prompt::editor_context::{self, LabelState, Source};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 use crate::support::ide;
 
 use ide::Ide;
 
-type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
-
-struct Fixture {
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
-        let location = json!({ "directory": "/project" });
-        let (status, body) = match (request.method, path.as_str()) {
-            ("GET", "/api/session") => (200, json!({ "data": [session()], "cursor": {} })),
-            ("GET", "/api/session/ses_a") => (200, json!({ "data": session() })),
-            ("GET", "/api/session/ses_a/message") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-                    "request": { "settings": {}, "headers": {}, "body": {} },
-                }] }),
-            ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "m", "modelID": "m", "providerID": "p", "name": "Model M",
-                    "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-                    "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-                    "enabled": true, "limit": { "context": 1000, "output": 100 },
-                }] }),
-            ),
-            ("GET", "/api/location") => (
-                200,
-                json!({ "directory": "/project", "project": { "id": "project", "directory": "/project", "canonical": "/project" } }),
-            ),
-            ("GET", "/api/vcs") => (200, json!({ "location": location, "data": {} })),
-            ("GET", "/api/config") => (200, json!([])),
-            ("GET", _) => (200, json!({ "location": location, "data": [] })),
-            ("POST", path) if path.ends_with("/prompt") => (
-                200,
-                json!({ "data": {
-                    "id": body["id"], "sessionID": "ses_a", "time": { "created": 1 }, "type": "user",
-                    "payload": { "text": body["text"] }, "delivery": "steer",
-                } }),
-            ),
-            ("POST", path) if path.ends_with("/synthetic") => (
-                200,
-                json!({ "data": {
-                    "id": "inb_1", "sessionID": "ses_a", "time": { "created": 1 }, "type": "synthetic",
-                    "payload": { "text": body["text"] }, "delivery": "steer",
-                } }),
-            ),
-            ("POST", _) => (204, Value::Null),
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
-}
-
-fn session() -> Value {
-    json!({
-        "id": "ses_a", "title": "Fix the parser", "projectID": "project", "cost": 0,
-        "agent": "build", "model": { "providerID": "p", "id": "m" },
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
+/// The baseline routes; any other read is an empty list and any other write a 204.
+fn fake() -> Fake {
+    Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/vcs") => (200, list(DIRECTORY, json!({}))),
+        ("POST", path) if path.ends_with("/synthetic") => (
+            200,
+            json!({ "data": {
+                "id": "inb_1", "sessionID": "ses_a", "time": { "created": 1 }, "type": "synthetic",
+                "payload": { "text": seen.body["text"] }, "delivery": "steer",
+            } }),
+        ),
+        _ => match support::base(seen, DIRECTORY) {
+            (404, _) if seen.method == "GET" => (200, list(DIRECTORY, json!([]))),
+            (404, _) if seen.method == "POST" => (204, Value::Null),
+            reply => reply,
+        },
     })
 }
 
 struct Setup {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
 }
+
+deref_harness!(Setup);
 
 impl Setup {
     fn new(source: Source) -> Self {
-        let seen = Seen::default();
-        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
-        let app = TestApp::new(90, 30);
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: "/project".into(),
-                config: Resolved::new(Info::default(), |_| None),
-                roots: None,
-                route: Route::Session { id: SessionID("ses_a".into()) },
-                continue_: false,
-                events: false,
-            },
-        );
-        let setup = Self { app, tui, seen };
+        let fake = fake();
+        let seen = fake.log();
+        let setup = Self { harness: support::mount(90, 30, support::deps(Arc::new(fake))), seen };
         setup.wait_for("Model M");
         editor_context::start(&setup.tui, source);
         setup
-    }
-
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
-    fn wait(&self, what: &str, done: impl Fn() -> bool) {
-        assert!(self.app.wait_until(Duration::from_secs(5), done), "{what}:\n{}", self.app.text());
     }
 
     fn posts(&self) -> Vec<(String, Value)> {
@@ -145,13 +56,9 @@ impl Setup {
             .unwrap()
             .iter()
             // The goal footer's RPC `get` is a read (E.14).
-            .filter(|(method, path, _)| method == "POST" && !path.starts_with("/api/rpc/"))
-            .map(|(_, path, body)| (path.clone(), body.clone()))
+            .filter(|seen| seen.method == "POST" && !seen.path.starts_with("/api/rpc/"))
+            .map(|seen| (seen.path.clone(), seen.body.clone()))
             .collect()
-    }
-
-    fn textarea(&self) -> opentui::prelude::Textarea {
-        self.tui.textarea.borrow().clone().unwrap()
     }
 }
 

@@ -3,7 +3,7 @@
 //! a click and the resize shape over the pane resize handle, a deliberate deviation
 //! (`parity/deviations/W01-hand-pointer.md`). Text, the transcript, and the prompt keep the default pointer.
 
-use crate::support::wait::WAIT;
+use crate::support::WAIT;
 
 use std::sync::Arc;
 
