@@ -51,7 +51,8 @@ pub(super) fn paint_shaded(
     target: Color,
     strength: impl Fn(u32, u32) -> f32,
 ) {
-    painter.text(0, 0, text, Style::new().fg(fg));
+    // A transparent background blends an alpha color into the cell, as a TS `<text>` does.
+    painter.text(0, 0, text, Style::new().fg(fg).bg(Color::TRANSPARENT));
     let end = painter.text_width(text.trim_end());
     let [r, g, b, _] = channels(target).map(|channel| channel as f32);
     let mut matrix = ColorMatrix {
@@ -220,7 +221,12 @@ impl Component for FadeView {
     fn paint(&self, painter: &mut Painter<'_>) {
         let elapsed = self.clock.get();
         if !self.enabled || self.finished.get() {
-            painter.text(0, 0, &self.text, Style::new().fg(self.fg));
+            painter.text(
+                0,
+                0,
+                &self.text,
+                Style::new().fg(self.fg).bg(Color::TRANSPARENT),
+            );
             return;
         }
         self.finished.set(elapsed >= FADE_DURATION);

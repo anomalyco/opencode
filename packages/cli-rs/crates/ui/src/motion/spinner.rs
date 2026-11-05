@@ -229,7 +229,12 @@ impl Component for SpinnerView {
     fn paint(&self, painter: &mut Painter<'_>) {
         let base = self.color.base();
         if !self.animations {
-            painter.text(0, 0, &self.line(), Style::new().fg(base));
+            painter.text(
+                0,
+                0,
+                &self.line(),
+                Style::new().fg(base).bg(Color::TRANSPARENT),
+            );
             return;
         }
         if let Some(shimmer) = self.shimmer {
@@ -260,7 +265,7 @@ impl Component for SpinnerView {
                 frame_width(painter, &self.glyphs) as i32 + 1,
                 0,
                 label,
-                Style::new().fg(base),
+                Style::new().fg(base).bg(Color::TRANSPARENT),
             );
         }
     }
