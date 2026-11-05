@@ -131,6 +131,12 @@ pub fn run(input: Input) -> anyhow::Result<()> {
     mini.paint_status();
     mini.apply_height();
     mini.wire();
+    // The entry header, before the session resolves (`queueSplash("entry")`).
+    if settings.splash == Visibility::Show
+        && let Err(error) = mini.write_entry()
+    {
+        log::warn!("mini could not write the entry splash: {error}");
+    }
     mini.resolve(input.target, input.start);
     mini.prompt.focus();
     let _theme_signal = signals::on_sigusr2(&app);
@@ -646,30 +652,37 @@ impl Mini {
     /// `resetForReplay`: clears the terminal and its scrollback, then writes the entry header the transcript
     /// starts under.
     fn reset_for_replay(&self, cx: &mut Cx<'_>) {
-        let mut writer = self.writer.borrow_mut();
-        let result = writer.complete(false).and_then(|()| {
-            writer.reset(true);
-            self.footer.reset_for_replay(true)?;
-            let width = self.footer.renderer_size().0;
-            let directory = self
-                .session
-                .borrow()
-                .as_ref()
-                .map_or_else(|| self.input.directory.clone(), |session| session.directory.clone());
-            let detail = directory_label(&directory, &self.input.home);
-            let header = crate::splash::entry(
-                writer.app(),
-                u32::from(width),
-                &self.input.version,
-                &detail,
-                &writer.theme().splash,
-                writer.mono(),
-            );
-            writer.write_widget(&header, Flags { start_on_new_line: true, trailing_newline: false })
-        });
-        if let Err(error) = result {
+        let result = {
+            let mut writer = self.writer.borrow_mut();
+            writer.complete(false).and_then(|()| {
+                writer.reset(true);
+                self.footer.reset_for_replay(true)
+            })
+        };
+        if let Err(error) = result.and_then(|()| self.write_entry()) {
             cx.fail(error);
         }
+    }
+
+    /// `entrySplash`: the header the transcript starts under.
+    fn write_entry(&self) -> Result<()> {
+        let writer = self.writer.borrow();
+        let width = self.footer.renderer_size().0;
+        let directory = self
+            .session
+            .borrow()
+            .as_ref()
+            .map_or_else(|| self.input.directory.clone(), |session| session.directory.clone());
+        let detail = directory_label(&directory, &self.input.home);
+        let header = crate::splash::entry(
+            writer.app(),
+            u32::from(width),
+            &self.input.version,
+            &detail,
+            &writer.theme().splash,
+            writer.mono(),
+        );
+        writer.write_widget(&header, Flags { start_on_new_line: true, trailing_newline: false })
     }
 
     fn incoming(self: &Rc<Self>, cx: &mut Cx<'_>, incoming: Incoming) {
@@ -1267,18 +1280,21 @@ impl Mini {
         self.stop();
         let _ = self.writer.borrow_mut().complete(false);
         let session = self.session.borrow().clone();
+        // `showExit`: the session has prompts, earlier or sent now.
         if let Some(session) = session
             && self.settings.get().splash == Visibility::Show
+            && self.prompt.shown()
         {
             let writer = self.writer.borrow();
-            if let Some(banner) = crate::splash::exit(
-                writer.app(),
-                session.title.as_deref(),
-                &session.id,
-                &writer.theme().splash,
-                writer.mono(),
-            ) && writer.write_widget(&banner, Flags { start_on_new_line: true, trailing_newline: true }).is_ok()
-            {
+            let title = match session.title.as_deref().filter(|title| !is_fallback_title(title)) {
+                Some(title) => Some(title.to_owned()),
+                None => self.prompt.first_text().or(session.title.clone()),
+            };
+            let width = u32::from(self.footer.renderer_size().0);
+            let title = crate::splash::title(title.as_deref(), writer.mono());
+            let banner =
+                crate::splash::exit(writer.app(), width, &title, &session.id, &writer.theme().splash, writer.mono());
+            if writer.write_widget(&banner, Flags { start_on_new_line: true, trailing_newline: false }).is_ok() {
                 self.exit_splash.set(true);
             }
         }
