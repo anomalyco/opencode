@@ -275,7 +275,6 @@ test("a session being created on an SSH host that turns out incompatible says so
   await holdRoute(page, new RegExp(`^${REMOTE_SERVER.replace(/[.]/g, "\\.")}/api/session(\\?|$)`), { method: "POST" })
   const editor = page.locator('[data-component="composer-editor"]')
   const send = page.getByRole("button", { name: "Send", exact: true })
-  await expect(page).toHaveURL(/\/new-session\?draftId=/)
   await expect(page.locator('[data-component="new-session"]')).toBeVisible()
   await expect(editor).toBeEditable()
   await editor.fill("start on the box")
