@@ -1,6 +1,6 @@
 import type { SessionDocument } from "../document"
 import { File } from "../components/file"
-import { DataProvider, type ReadMediaUrlFn } from "../context/data"
+import { DataProvider, type ReadMediaUrlFn, type TurnDiffSource } from "../context/data"
 import type { SessionUserActions } from "../message/current-message"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 import { SessionTimeline } from "../timeline/session-timeline"
@@ -13,6 +13,7 @@ export function CurrentSessionProviders(props: {
   document: SessionDocument
   backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
+  turnDiff?: TurnDiffSource
   children: JSX.Element
 }) {
   return (
@@ -69,7 +70,7 @@ export function CurrentSessionProviders(props: {
         },
         session_diff: { [CURRENT_SESSION_ID]: props.document.diffs },
       }}
-      turnDiff={{ get: () => props.document.diffs, load: () => {} }}
+      turnDiff={props.turnDiff ?? { state: () => ({ status: "ready", diffs: props.document.diffs }), load: () => {} }}
     >
       <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
     </DataProvider>
@@ -85,6 +86,7 @@ export function CurrentSessionTimelineStory(props: {
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   turnDiffs?: boolean
+  turnDiff?: TurnDiffSource
   backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
 }) {
@@ -129,6 +131,7 @@ export function CurrentSessionTimelineStory(props: {
                 document={document()}
                 backgroundCompaction={props.backgroundCompaction}
                 readMedia={props.readMedia}
+                turnDiff={props.turnDiff}
               >
                 <SessionTimeline
                   document={document()}

@@ -180,8 +180,8 @@ export function SessionUIProvider(
     const cache = turnDiffCache()
 
     return {
-      get: cache.get,
-      load: (input: TurnDiffInput) => cache.load(input, () => serverSDK.api.session.diff(input)),
+      state: cache.state,
+      load: (input: TurnDiffInput) => cache.load(input, (signal) => serverSDK.api.session.diff(input, { signal })),
     }
   })
 

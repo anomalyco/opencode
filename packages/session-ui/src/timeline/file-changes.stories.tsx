@@ -1,6 +1,7 @@
 import { createTwoFilesPatch } from "diff"
-import { createMemo } from "solid-js"
+import { createMemo, createSignal, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { TurnDiffSource, TurnDiffState } from "../context/data"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   editThenTestDocument,
@@ -267,6 +268,42 @@ export const TurnChangeSummaryOverflow = {
       turnDiffs
     />
   ),
+}
+
+// The first load fails, as a dropped connection or a stalled response would, and a retry loads the diffs.
+function retryableTurnDiff(document: SessionDocument): TurnDiffSource {
+  const [state, setState] = createSignal<TurnDiffState>({ status: "loading" })
+
+  return {
+    state: () => state(),
+    load: () => {
+      const current = untrack(state)
+
+      if (current.status === "loading") return setState({ status: "failed" })
+
+      if (current.status === "failed") setState({ status: "ready", diffs: document.diffs })
+    },
+  }
+}
+
+export const TurnChangeSummaryFailed = {
+  render: () => {
+    const document = finishedTurnDocument([
+      { file: "src/session/retry.ts", before: "export const retry = false\n", after: "export const retry = true\n" },
+      { file: "src/session/retry.test.ts", before: "", after: "test('retries', () => {})\n" },
+    ])
+
+    return (
+      <CurrentSessionTimelineStory
+        title="Turn change summary that failed to load"
+        description="The turn's files stay listed without counts, and Retry loads them again."
+        document={document}
+        width="860px"
+        turnDiffs
+        turnDiff={retryableTurnDiff(document)}
+      />
+    )
+  },
 }
 
 const fileScenarios = {

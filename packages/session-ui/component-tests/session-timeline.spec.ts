@@ -105,6 +105,21 @@ story("preserves a collapsed context group through count and status updates", as
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
 })
 
+// A failed turn diff load used to look like one still loading, with no way to retry until the row remounted.
+story("offers a retry for a turn diff that failed to load", async ({ mount }) => {
+  const timeline = await mount("current-session-file-changes--turn-change-summary-failed")
+  const summary = timeline.locator('[data-slot="session-turn-diffs"]')
+
+  await expect(summary).toContainText("2 Changed files")
+  await expect(summary).toContainText("Diff unavailable")
+  await expect(summary.locator('[data-component="diff-changes"]')).toHaveCount(0)
+
+  await summary.getByRole("button", { name: "Retry" }).click()
+  await expect(summary.locator('[data-component="diff-changes"]')).toHaveText("+2-1")
+  await expect(summary).not.toContainText("Diff unavailable")
+  await expect(summary.getByRole("button", { name: "Retry" })).toHaveCount(0)
+})
+
 // Moved from packages/app/e2e/regression/session-timeline-file-projection.spec.ts
 story("renders a completed write through the production file component", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "write" } })

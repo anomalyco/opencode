@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test"
 import {
+  CONTACT_LOST_EVENT,
   createFollowState,
   createRouteRevealState,
   defersAdjustments,
   isFollowing,
+  isTouchHeld,
   needsEndProbe,
   ROUTE_REVEAL_HISTORY_LIMIT,
   routeRevealTarget,
@@ -172,6 +174,68 @@ test("defers size compensation through detached touch momentum until the scroll 
   expect(defersAdjustments(momentum)).toBe(true)
   expect(defersAdjustments(transitionFollow(momentum, { type: "scroll.settled", atReachableEnd: false }))).toBe(false)
   expect(defersAdjustments(replay([{ type: "touch.start", nested: false }]))).toBe(false)
+})
+
+test("revealing a tool mid-touch lets go of the finger, so the deferred translation flushes", () => {
+  const held = replay([{ type: "touch.start", nested: false }])
+  expect(isTouchHeld(held)).toBe(true)
+
+  const anchored = transitionFollow(held, { type: "anchor", anchor })
+  expect(isTouchHeld(anchored)).toBe(false)
+  expect(defersAdjustments(anchored)).toBe(false)
+})
+
+// A blur, hidden tab or deactivated view never delivers touchend. The blur used to report only a pointer release, so
+// the touch stayed held: the translation never flushed, the end probe never ran and a later pointer press was ignored.
+test("losing contact mid-touch ends the touch", () => {
+  const lost = transitionFollow(
+    replay([
+      { type: "touch.start", nested: false },
+      { type: "touch.drag", overflow: true },
+    ]),
+    CONTACT_LOST_EVENT,
+  )
+
+  expect(lost).toEqual({ type: "detached", endPending: false })
+  expect(isTouchHeld(lost)).toBe(false)
+  expect(defersAdjustments(lost)).toBe(false)
+  expect(transitionFollow(lost, { type: "pointer.down" })).toEqual({
+    type: "detached",
+    gesture: "pointer",
+    endPending: false,
+  })
+})
+
+test("losing contact keeps a pending zoomed end and probes it at once", () => {
+  const held = replay([
+    { type: "touch.start", nested: false },
+    { type: "touch.drag", overflow: true },
+    scroll(997, 900),
+  ])
+  const lost = transitionFollow(held, CONTACT_LOST_EVENT)
+
+  expect(needsEndProbe(held)).toBe(false)
+  expect(needsEndProbe(lost)).toBe(true)
+})
+
+test("losing contact ends touch momentum and a held pointer", () => {
+  const momentum = replay([
+    { type: "touch.start", nested: false },
+    { type: "touch.drag", overflow: true },
+    { type: "touch.end", scrolling: true },
+  ])
+
+  expect(defersAdjustments(transitionFollow(momentum, CONTACT_LOST_EVENT))).toBe(false)
+  expect(transitionFollow(replay([{ type: "pointer.down" }]), CONTACT_LOST_EVENT)).toEqual({ type: "following" })
+})
+
+test.each<{ name: string; state: FollowState }>([
+  { name: "following", state: createFollowState() },
+  { name: "detached", state: replay([{ type: "detach" }]) },
+  { name: "returning", state: replay([{ type: "return.start", attempt: 1 }]) },
+  { name: "anchored", state: replay([{ type: "anchor", anchor }]) },
+])("losing contact without any returns the same $name state", (input) => {
+  expect(transitionFollow(input.state, CONTACT_LOST_EVENT)).toBe(input.state)
 })
 
 test.each<{ name: string; state: FollowState; event: FollowEvent }>([
