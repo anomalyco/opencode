@@ -371,38 +371,17 @@ export class GeneratorObj extends Opaque {
 export type Step = { readonly done: boolean; readonly value: Value }
 
 /**
- * An iterator the interpreter drives, as data: a built-in cursor over a collection (`Position`), an iterator helper
- * (`Helper`), or a program iterator driven by its own `next` method (`CustomIterator`). The machine steps and closes
+ * An iterator the interpreter drives, as data: a built-in cursor over a collection (`Position`), or a program
+ * iterator driven by its own `next` method (`CustomIterator`). The machine steps and closes
  * each kind (see `iteratorStep` in machine/iteration.ts).
  */
-export type Cursor = Position | Helper | CustomIterator
+export type Cursor = Position | CustomIterator
 
 /** A program iterator record: the iterator, its `next` method, and whether its results are awaited. */
 export type CustomIterator = {
   readonly iterator: Obj
   readonly next: Value
   readonly asynchronous: boolean
-}
-
-/** What an iterator helper does with its source's values. */
-export type HelperOp = "map" | "filter" | "take" | "drop" | "flatMap"
-
-/**
- * An iterator helper's state, as data: what it does, its source, its callback, and its counter (the next index it
- * passes the callback, or how many values `take` and `drop` have left). Once it reports done, throws, or is closed, it
- * stays done; a callback that re-enters its own helper is a TypeError, as for a running generator.
- */
-export class Helper {
-  done = false
-  running = false
-  /** `flatMap`'s inner iterator, while it has one. */
-  inner: Cursor | undefined = undefined
-  constructor(
-    readonly op: HelperOp,
-    readonly source: Cursor,
-    readonly callback: Value,
-    public count: number,
-  ) {}
 }
 
 const finished: Step = { done: true, value: undefined }

@@ -200,11 +200,137 @@ function pairsForEach(target, pairs, callback, thisArg) {
     index++
   }
 }
+// Iterator helpers are prelude generators, made with %IteratorHelper% as their prototype. Each is primed to its first
+// yield, so a return() before the first next() still closes the source, from its finally.
 function Iterator$from(value) {
   if ($IsObject(value) && $Inherits(value, Iterator.prototype)) return value
-  if (typeof value !== "string" && !$IsObject(value)) $Throw("TypeError", "Iterator.from expects an iterable or iterator, received " + $Describe(value) + ".")
+  return prime(wrapHelper(value, flattenable(value, true, "Iterator.from")))
+}
+function* wrapHelper(source, iterator) {
+  let started = false
+  try {
+    yield
+    started = true
+    for (const item of iterator) yield item
+  } finally {
+    if (!started) closeIterator(source)
+  }
+}
+
+function Iterator$prototype$map(mapper) {
+  const iterator = $Direct(this, false)
+  $Callback(mapper, "Iterator.prototype.map")
+  return prime(mapHelper(this, iterator, mapper))
+}
+function* mapHelper(source, iterator, mapper) {
+  let started = false
+  try {
+    yield
+    started = true
+    let counter = 0
+    for (const item of iterator) yield mapper(item, counter++)
+  } finally {
+    if (!started) closeIterator(source)
+  }
+}
+
+function Iterator$prototype$filter(predicate) {
+  const iterator = $Direct(this, false)
+  $Callback(predicate, "Iterator.prototype.filter")
+  return prime(filterHelper(this, iterator, predicate))
+}
+function* filterHelper(source, iterator, predicate) {
+  let started = false
+  try {
+    yield
+    started = true
+    let counter = 0
+    for (const item of iterator) if (predicate(item, counter++)) yield item
+  } finally {
+    if (!started) closeIterator(source)
+  }
+}
+
+function Iterator$prototype$take(limit) {
+  const iterator = $Direct(this, false)
+  return prime(takeHelper(this, iterator, count(limit, "take")))
+}
+function* takeHelper(source, iterator, remaining) {
+  let started = false
+  try {
+    yield
+    started = true
+    if (remaining === 0) return closeIterator(source)
+    for (const item of iterator) {
+      remaining--
+      yield item
+      if (remaining === 0) break
+    }
+  } finally {
+    if (!started) closeIterator(source)
+  }
+}
+
+function Iterator$prototype$drop(limit) {
+  const iterator = $Direct(this, false)
+  return prime(dropHelper(this, iterator, count(limit, "drop")))
+}
+function* dropHelper(source, iterator, remaining) {
+  let started = false
+  try {
+    yield
+    started = true
+    for (const item of iterator) {
+      if (remaining > 0) remaining--
+      else yield item
+    }
+  } finally {
+    if (!started) closeIterator(source)
+  }
+}
+
+function Iterator$prototype$flatMap(mapper) {
+  const iterator = $Direct(this, false)
+  $Callback(mapper, "Iterator.prototype.flatMap")
+  return prime(flatMapHelper(this, iterator, mapper))
+}
+function* flatMapHelper(source, iterator, mapper) {
+  let started = false
+  try {
+    yield
+    started = true
+    let counter = 0
+    for (const item of iterator) {
+      for (const inner of flattenable(mapper(item, counter++), false, "Iterator.prototype.flatMap")) yield inner
+    }
+  } finally {
+    if (!started) closeIterator(source)
+  }
+}
+
+function prime(helper) {
+  helper.next()
+  return helper
+}
+
+// A take or drop count: a number that is not NaN or negative.
+function count(limit, name) {
+  const number = +limit
+  const integer = number === Infinity || number === -Infinity ? number : number - (number % 1)
+  if (number !== number || integer < 0) $Throw("RangeError", "Iterator.prototype." + name + " expects a non-negative count, received " + number + ".")
+  return integer
+}
+
+// GetIteratorFlattenable: an iterable by its [Symbol.iterator], otherwise the object itself as an iterator.
+function flattenable(value, strings, name) {
+  if (typeof value === "string" ? !strings : !$IsObject(value)) $Throw("TypeError", name + " expects an iterable or iterator, received " + $Describe(value) + ".")
   const method = value[Symbol.iterator]
-  return $Wrap(method === undefined || method === null ? value : $Call(method, value))
+  return $Direct(method === undefined || method === null ? value : $Call(method, value), false)
+}
+
+function closeIterator(iterator) {
+  const method = iterator.return
+  if (method !== undefined && method !== null && !$IsObject($Call(method, iterator))) $Throw("TypeError", "Iterator return() must return an object.")
 }
 
 function Iterator$prototype$toArray() {

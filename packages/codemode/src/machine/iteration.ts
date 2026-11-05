@@ -4,7 +4,6 @@ import {
   type Cursor,
   type CustomIterator,
   get,
-  Helper,
   IteratorObj,
   Obj,
   Position,
@@ -16,7 +15,6 @@ import { describeValue } from "../interpreter/references.js"
 import { Await } from "../interpreter/signals.js"
 import { type Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev } from "./expressions.js"
-import { HelperClose, HelperNext } from "./helpers.js"
 import type { MachineTask } from "./task.js"
 
 /** An iterator the machine drives: a built-in cursor, a helper, or a program object with its own `next`. */
@@ -75,7 +73,6 @@ export const iterateDirect = (value: Value, node: AstNode | undefined): Iter => 
 /** IteratorStep: the next result, as `for...of` sees it. An async iterator's result is awaited first. */
 export function iteratorStep(task: MachineTask, iterator: Iter, node: AstNode): Out<Step> {
   if (iterator instanceof Position) return iterator.step()
-  if (iterator instanceof Helper) return task.push(HelperNext, undefined, [iterator])
   return stepStep(task, undefined, node, undefined, iterator)
 }
 
@@ -108,7 +105,6 @@ const IteratorStep = kind("IteratorStep", stepStep)
 /** IteratorClose: calls the iterator's `return`, when it has one, and checks what it returned. */
 export function iteratorClose(task: MachineTask, iterator: Iter, node: AstNode): Out<undefined> {
   if (iterator instanceof Position) return undefined
-  if (iterator instanceof Helper) return task.push(HelperClose, undefined, [iterator]) as Pending
   return closeStep(task, undefined, node, undefined, iterator)
 }
 

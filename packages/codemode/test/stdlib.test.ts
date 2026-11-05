@@ -1376,7 +1376,7 @@ describe("Iterator helpers", () => {
         const it = g().map(() => it.next())
         return it.next()
       `),
-    ).toMatchObject({ message: expect.stringContaining("Iterator helper is already running.") })
+    ).toMatchObject({ message: expect.stringContaining("is already running.") })
   })
 })
 

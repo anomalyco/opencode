@@ -408,7 +408,6 @@ describe("built-ins as data", () => {
       "Array callback",
       "Call",
       "Convert",
-      "IteratorHelper.next",
       "JSON.stringify walk",
       "Tool call",
       "Promise combinator",

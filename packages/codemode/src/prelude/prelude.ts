@@ -12,7 +12,7 @@ import { code } from "./source.js"
 // source is parsed once per process. Each runtime makes its top-level functions as `Fn`s over a private scope (the
 // intrinsic globals, the `$` helpers, and the prelude's own functions), so programs can't reach the helpers, and
 // replacing a global can't change what a built-in does. A function named `Array$prototype$map` is installed as
-// `Array.prototype.map`; one without a `$` is internal. Snapshots name prelude nodes by id in the "prelude" source and
+// `Array.prototype.map`; one without a `$` is internal. Its generators make iterator helpers. Snapshots name prelude nodes by id in the "prelude" source and
 // never copy it; its hash is part of the build id.
 
 let parsed: Source | undefined
@@ -47,6 +47,8 @@ export class Prelude {
     for (const node of program.body as Array<FunctionDeclaration>) {
       const path = node.id.name.split("$")
       const made = createFunction(builtins, scopes, node, path.at(-1))
+      // The prelude's generators are iterator helpers.
+      if (node.generator) define(made, "prototype", builtins.IteratorHelper, hidden)
       bind(node.id.name, made)
       define(this.functions, node.id.name, made, hidden)
       if (path.length === 1) continue

@@ -1,6 +1,5 @@
 import { isSupportedCallback, requireCallback } from "../interpreter/callback.js"
 import type { Builtins } from "../interpreter/intrinsics.js"
-import { iterateDirect } from "../machine/iteration.js"
 import { finishBytes } from "../stdlib/bytes.js"
 import { weakKey } from "../stdlib/collections.js"
 import { buildPairs } from "../stdlib/url.js"
@@ -33,7 +32,7 @@ import {
   WeakMapObj,
   WeakSetObj,
 } from "../interpreter/objects.js"
-import { builtinCursor } from "../interpreter/operations.js"
+import { builtinCursor, requireIteratorObject } from "../interpreter/operations.js"
 import { containsOpaqueReference, describeValue, isOpaque } from "../interpreter/references.js"
 import { Invoke } from "../interpreter/signals.js"
 
@@ -86,8 +85,6 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
     ],
     $Describe: [1, ([value]) => describeValue(value)],
     $Inherits: [2, ([value, proto]) => hasPrototype(value, proto as Obj)],
-    /** An iterator wrapped as `Iterator.from` returns it. */
-    $Wrap: [1, ([value]) => new IteratorObj(builtins.IteratorHelper, iterateDirect(value, undefined))],
     /** An object's own enumerable string keys. */
     $Keys: [1, ([value]) => new Arr(builtins.Array, keys(value as Obj))],
     /** Defines an own data property, enumerable or hidden, and returns the object. */
@@ -115,13 +112,22 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
         buildPairs({ kind: kind as "Headers", proto: proto as Obj }, value, String(label)),
     ],
     $IsCallable: [1, ([value]) => isSupportedCallback(value)],
-    /** An iterator object as `for...of` steps it, reading `next` once (GetIteratorDirect); with `arrays`, an array's values. */
+    /**
+     * An iterator object as `for...of` steps it, reading `next` once and calling it only then (GetIteratorDirect);
+     * with `arrays`, an array's values.
+     */
     $Direct: [
       2,
       ([value, arrays]) =>
         arrays === true && value instanceof Arr
           ? positionIterator(builtins, value, "values")
-          : new IteratorObj(builtins.Iterator, iterateDirect(value, undefined)),
+          : value instanceof IteratorObj
+            ? value
+            : new IteratorObj(builtins.Iterator, {
+              iterator: requireIteratorObject(value, "An iterator"),
+              next: get(value as Obj, "next"),
+              asynchronous: false,
+            }),
     ],
     /** What the collection built-ins need from a Map, Set, WeakMap, or WeakSet's table; see `table`. */
     $Table: [4, ([op, target, key, value]) => table(builtins, String(op), target, key, value)],

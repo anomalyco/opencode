@@ -21,7 +21,6 @@ import {
   Fn,
   GeneratorObj,
   HeadersObj,
-  Helper,
   IteratorObj,
   MapObj,
   Native,
@@ -213,7 +212,6 @@ const specs: ReadonlyArray<ClassSpec> = [
     obj: true,
     constants: { tag: "AsyncFromSyncIterator" },
   },
-  { name: "Helper", ctor: Helper, fields: ["done", "running", "inner", "op", "source", "callback", "count"] },
   { name: "Position", ctor: Position, fields: ["index", "done", "source", "kind", "arrays"] },
   {
     name: "OrderedTable",
