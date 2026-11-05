@@ -833,8 +833,8 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     );
     let (third, changes) = data.changes_since(second);
     assert!(!changes.messages(&session), "a delta does not change the list");
-    assert!(changes.message(&session, &SessionMessageID("msg_a".into())));
-    assert!(!changes.message(&session, &SessionMessageID("msg_b".into())));
+    assert!(changes.message(&session, "msg_a"));
+    assert!(!changes.message(&session, "msg_b"));
     assert_eq!(message(&data, SESSION, "msg_a")["content"][0]["text"], "Hi");
 
     // A delta for a message that is not loaded is dropped and changes nothing.
@@ -888,7 +888,7 @@ async fn message_sync_reconciles_a_reload_with_the_same_ids() {
         data.message_sync(&session).await.unwrap();
         let changes = data.changes_since(seen).1;
         assert_eq!(changes.messages(&session), reshaped, "{name}");
-        let mut changed: Vec<_> = changes.message.iter().map(|(_, message)| message.0.as_str()).collect();
+        let mut changed: Vec<_> = changes.message.values().flatten().map(SessionMessageID::as_str).collect();
         changed.sort();
         assert_eq!(changed, edited, "{name}");
         let rows = second["data"].as_array().unwrap();

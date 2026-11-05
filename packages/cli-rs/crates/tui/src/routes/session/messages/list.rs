@@ -15,8 +15,7 @@ use std::time::Duration;
 
 use opencode_api::generated::{
     AgentInfo, ModelInfo, ModelRef, SessionID, SessionInboxInfo, SessionMessageAssistant,
-    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID,
-    SessionMessageInfo,
+    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageInfo,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
@@ -217,7 +216,7 @@ impl Transcript {
             return;
         }
         let force = changes.messages(session) || changes.session(session) || catalogs || pending || permissions;
-        self.0.render(tui, |message| force || changes.message(session, &SessionMessageID(message.to_owned())));
+        self.0.render(tui, |message| force || changes.message(session, message));
     }
 
     /// Mounts older rows, or loads an older page when every row is mounted. Returns whether it did

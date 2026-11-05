@@ -4,7 +4,7 @@
 //! numbers the changes with a revision and keeps the last [`LOG_LIMIT`] flushes. A view remembers
 //! the revision it rendered and asks [`crate::Data::changes_since`] what changed after it.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use opencode_api::generated::{SessionID, SessionMessageID};
 
@@ -27,7 +27,7 @@ pub struct Changes {
     /// Sessions whose message list changed shape: insert, remove, reorder, reload, page.
     pub messages: HashSet<SessionID>,
     /// Messages whose content changed in place (a delta, a tool update).
-    pub message: HashSet<(SessionID, SessionMessageID)>,
+    pub message: HashMap<SessionID, HashSet<SessionMessageID>>,
     /// Sessions whose pending inbox items changed.
     pub pending: HashSet<SessionID>,
     /// Sessions whose pending permissions changed.
@@ -78,12 +78,12 @@ impl Changes {
 
     /// Any message of `id` changed, in place or by shape.
     pub fn any_message(&self, id: &SessionID) -> bool {
-        self.messages(id) || self.message.iter().any(|(session, _)| session == id)
+        self.messages(id) || self.message.contains_key(id)
     }
 
     /// The message changed in place, or its list changed shape.
-    pub fn message(&self, session: &SessionID, message: &SessionMessageID) -> bool {
-        self.messages(session) || self.message.contains(&(session.clone(), message.clone()))
+    pub fn message(&self, session: &SessionID, message: &str) -> bool {
+        self.messages(session) || self.message.get(session).is_some_and(|messages| messages.contains(message))
     }
 
     pub fn pending(&self, id: &SessionID) -> bool {
@@ -112,7 +112,9 @@ impl Changes {
         self.session.extend(other.session.iter().cloned());
         self.status.extend(other.status.iter().cloned());
         self.messages.extend(other.messages.iter().cloned());
-        self.message.extend(other.message.iter().cloned());
+        for (session, messages) in &other.message {
+            self.message.entry(session.clone()).or_default().extend(messages.iter().cloned());
+        }
         self.pending.extend(other.pending.iter().cloned());
         self.permissions.extend(other.permissions.iter().cloned());
         self.forms.extend(other.forms.iter().cloned());
@@ -181,7 +183,13 @@ impl Log {
     }
 
     pub(crate) fn message(&mut self, session: &SessionID, message: &SessionMessageID) {
-        self.current.message.insert((session.clone(), message.clone()));
+        if let Some(messages) = self.current.message.get_mut(session) {
+            if !messages.contains(message) {
+                messages.insert(message.clone());
+            }
+            return;
+        }
+        self.current.message.insert(session.clone(), HashSet::from([message.clone()]));
     }
 
     pub(crate) fn pending(&mut self, id: &SessionID) {
@@ -224,7 +232,7 @@ mod tests {
 
         let all = log.since(0);
         assert!(all.session(&id("ses_a")) && all.sessions());
-        assert!(all.message(&id("ses_b"), &SessionMessageID("msg_1".into())));
+        assert!(all.message(&id("ses_b"), "msg_1"));
         assert!(!all.messages(&id("ses_b")));
         assert!(all.any_message(&id("ses_b")));
 
