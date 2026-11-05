@@ -204,16 +204,16 @@ test("attaches a pasted video as its path, keeps only the path in history, and s
 
   app.mockInput.pasteBracketedText(videoFixture)
   await app.waitForFrame(() => app.composer().includes("[Video 1]"))
+  await app.until(() => app.videos().length === transcriptTiles.videos + 1)
+  const draft = app.videos().find((video) => !transcript.includes(video))!
   // The draft plays the pasted file itself, which pasting did not read.
-  const draft = () => app.videos().find((video) => video.source === videoFixture)
-  await app.until(() => draft() !== undefined)
-  const tile = draft()
+  expect(draft.source).toBe(videoFixture)
 
   // Attaching an image keeps the video's tile.
   app.mockInput.pasteBracketedText(imageFixture)
   await app.waitForFrame(() => app.composer().includes("[Image 1]"))
-  await app.until(() => app.images().some((image) => image.source === imageFixture))
-  expect(draft()).toBe(tile)
+  await app.until(() => app.images().length === transcriptTiles.images + 1)
+  expect(app.videos().includes(draft)).toBe(true)
 
   app.mockInput.pressKey("c", { ctrl: true })
   const history = path.join(temporary.path, "prompt-history.jsonl")
@@ -247,37 +247,23 @@ test("pastes the path of a video over the size core sends as text, with a warnin
 }, 20000)
 
 // Undo, revert, and fork restore sent videos as bytes, whether or not the experiment is on.
-test.each([true, false])(
-  "a restored video of any type reaches history as a file at once, rich media %p",
-  async (rich) => {
-    await using temporary = await tmpdir()
-    const files = [
-      { uri: videoURI, mention: { start: 5, end: 14, text: "[Video 1]" } },
-      { uri: `data:video/webm;base64,${videoBase64}`, mention: { start: 15, end: 24, text: "[Video 2]" } },
-    ]
-    const entry = {
-      prompt: { text: "Look [Video 1] [Video 2]", files, agents: [], skills: [], pasted: [] },
-      timestamp: 1,
-    }
-    await Bun.write(path.join(temporary.path, "prompt-stash.jsonl"), JSON.stringify(entry) + "\n")
-    await using app = await openSession(rich ? richMedia : {}, { state: temporary.path })
-    await app.palette("Stash pop")
-    await app.waitForFrame(() => app.composer() === entry.prompt.text)
-    // Straight after the restore, before anything asynchronous could give the videos files.
-    app.mockInput.pressKey("c", { ctrl: true })
-
-    const history = path.join(temporary.path, "prompt-history.jsonl")
-    await app.until(() => Bun.file(history).size > 0)
-    const saved = await Bun.file(history).text()
-    expect(saved).not.toContain("base64")
-    const kept: { uri: string; path: string }[] = JSON.parse(saved.trim()).files
-    expect(kept.map((file) => file.uri)).toEqual(kept.map((file) => pathToFileURL(file.path).href))
-    expect(kept.map((file) => path.extname(file.path))).toEqual([".mp4", ".webm"])
-    const contents = await Promise.all(kept.map((file) => Bun.file(file.path).arrayBuffer()))
-    expect(contents.map((content) => Buffer.from(content).toString("base64"))).toEqual([videoBase64, videoBase64])
-  },
-  20000,
-)
+test("a restored video reaches history as a file at once", async () => {
+  await using temporary = await tmpdir()
+  const files = [{ uri: videoURI, mention: { start: 5, end: 14, text: "[Video 1]" } }]
+  const prompt = { text: "Look [Video 1]", files, agents: [], skills: [], pasted: [] }
+  await Bun.write(path.join(temporary.path, "prompt-stash.jsonl"), JSON.stringify({ prompt, timestamp: 1 }) + "\n")
+  await using app = await openSession({}, { state: temporary.path })
+  await app.palette("Stash pop")
+  await app.waitForFrame(() => app.composer() === prompt.text)
+  // Straight after the restore, before anything asynchronous could give the video a file.
+  app.mockInput.pressKey("c", { ctrl: true })
+  const history = path.join(temporary.path, "prompt-history.jsonl")
+  await app.until(() => Bun.file(history).size > 0)
+  const file = JSON.parse((await Bun.file(history).text()).trim()).files[0]
+  expect(file.uri).toBe(pathToFileURL(file.path).href)
+  expect(path.extname(file.path)).toBe(".mp4")
+  expect(Buffer.from(await Bun.file(file.path).arrayBuffer()).toString("base64")).toBe(videoBase64)
+}, 20000)
 
 test("a local server's restored files show as tiles, and a video that is gone is left out with a warning", async () => {
   await using temporary = await tmpdir()

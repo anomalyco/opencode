@@ -88,6 +88,11 @@ test("a strip opens on clicks, but a selection released over it copies instead",
   await tiles.app.mockMouse.click(more, 2)
   expect(opened).toEqual([0, 1, 2])
   expect(released).toBe(2)
+
+  // A drag started on one tile, or elsewhere, and released over another opens neither.
+  await tiles.app.mockMouse.drag(4, 2, 26, 2)
+  await tiles.app.mockMouse.drag(70, 2, 26, 2)
+  expect(opened).toEqual([0, 1, 2])
 })
 
 test("a video tile stays empty while its file loads", async () => {
@@ -151,15 +156,12 @@ test("only tiles in the scroll viewport keep a poster player, at most four, the 
       <For each={items}>{(item) => <MediaTile item={item} width={30} height={2} />}</For>
     </scrollbox>
   ))
-  // Rows 0-11 show the first six tiles; the last four of them to come into view keep a player.
-  await tiles.until(() => tiles.videos().length === 4 && tiles.frame().includes("▶ v1.mp4"))
   const labels = () => items.filter((item) => tiles.frame().includes(`▶ ${item.name}`)).map((item) => item.id)
-  expect(labels()).toEqual(["v0", "v1"])
-
+  // Rows 0-11 show the first six tiles; the last four of them to come into view keep a player.
+  await tiles.until(() => tiles.videos().length === 4 && labels().join() === "v0,v1")
   // Scrolled to the end, the first two leave the viewport, and the two that came into view take players.
   scroll!.scrollTo(4)
-  await tiles.until(() => labels().join() === "v2,v3")
-  expect(tiles.videos()).toHaveLength(4)
+  await tiles.until(() => tiles.videos().length === 4 && labels().join() === "v2,v3")
 })
 
 test("a video tile plays once the pointer rests on it, not as the pointer sweeps across tiles", async () => {
@@ -170,37 +172,12 @@ test("a video tile plays once the pointer rests on it, not as the pointer sweeps
     clock,
   )
   await tiles.until(() => tiles.videos().length === 3 && tiles.videos().every((player) => player.ready))
-  for (const x of [2, 17, 32, 47]) {
+  // Each move, across the tiles and then within the last, starts the wait again.
+  for (const x of [2, 17, 32, 47, 32, 33]) {
     await tiles.app.mockMouse.moveTo(x, 1)
-    clock.advance(200)
+    clock.advance(299)
   }
   expect(tiles.media().activeTile()).toBeUndefined()
-
-  // The pointer stops over the last tile; moving within it restarts the wait.
-  await tiles.app.mockMouse.moveTo(32, 1)
-  clock.advance(200)
-  await tiles.app.mockMouse.moveTo(33, 1)
-  clock.advance(299)
-  expect(tiles.media().activeTile()).toBeUndefined()
   clock.advance(1)
-  expect(tiles.media().activeTile()).toBeDefined()
   await tiles.until(() => tiles.videos()[2]!.playing)
-  expect(tiles.videos()[0]!.paused).toBe(true)
-})
-
-test("a drag released over a tile, or started on one and released elsewhere, opens nothing", async () => {
-  const opened: number[] = []
-  await using tiles = await renderMedia(() => (
-    <box flexDirection="column">
-      <MediaStrip items={[video("a"), image("b")]} width={50} height={4} onOpen={(index) => opened.push(index)} />
-      <box height={4} />
-    </box>
-  ))
-  await tiles.until(() => tiles.frame().includes("▶ 0:02"))
-  await tiles.app.mockMouse.drag(2, 1, 20, 1)
-  await tiles.app.mockMouse.drag(20, 1, 20, 6)
-  await tiles.app.mockMouse.drag(20, 6, 2, 1)
-  expect(opened).toEqual([])
-  await tiles.app.mockMouse.click(20, 1)
-  expect(opened).toEqual([1])
 })

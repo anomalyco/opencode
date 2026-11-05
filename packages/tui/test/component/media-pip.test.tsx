@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { TextRenderable } from "@opentui/core"
+import { TextRenderable, type VideoRenderable } from "@opentui/core"
 import { descendants, image, renderMedia, video } from "../fixture/media"
 
 type Host = Awaited<ReturnType<typeof renderMedia>>
@@ -9,15 +9,14 @@ test("the viewer hands a video to picture-in-picture and takes it back at the sa
   await using host = await renderMedia(() => null)
   host.media().openViewer([video("clip")], 0)
   await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
-  await host.press(" ")
-  await host.press("5")
+  for (const key of [" ", "5", "m", "down", "down", "l"]) await host.press(key)
 
   await host.press("p")
   expect(host.media().viewer()).toBeUndefined()
   expect(host.media().pip()).toMatchObject({ item: { id: "clip" }, playing: false })
   const pip = await readyPip(host)
   expect(pip.paused).toBe(true)
-  expect(pip.currentTime).toBeCloseTo(1, 1)
+  expectCarried(pip)
   expect(host.keymap().mode.current()).toBe("base")
 
   const expand = host.find("media-pip-expand")!
@@ -25,7 +24,7 @@ test("the viewer hands a video to picture-in-picture and takes it back at the sa
   await host.until(() => host.videos("media-viewer-stage")[0]?.ready === true)
   expect(host.media().pip()).toBeUndefined()
   expect(host.media().viewer()).toMatchObject({ items: [{ id: "clip" }], index: 0, playing: false })
-  expect(host.videos("media-viewer-stage")[0]!.currentTime).toBeCloseTo(1, 1)
+  expectCarried(host.videos("media-viewer-stage")[0]!)
 })
 
 test("drags by its title and plays from its controls", async () => {
@@ -73,7 +72,7 @@ test("waits for the viewer to close when it becomes ready under it", async () =>
   expect(pip.playing).toBe(true)
 })
 
-test("a selection released on its controls does not click them", async () => {
+test("a selection, seek or move released on its controls does not click them", async () => {
   await using host = await renderMedia(() => <text>selectable words</text>)
   host.media().openPip(video("clip"), { playing: false })
   const pip = await readyPip(host)
@@ -83,6 +82,16 @@ test("a selection released on its controls does not click them", async () => {
     expect(host.app.renderer.getSelection()?.getSelectedText()).toBeTruthy()
     host.app.renderer.clearSelection()
   }
+  const seekBar = () =>
+    descendants(host.find("media-pip")!).find((node) => node instanceof TextRenderable && node.plainText.includes("●"))
+  await host.until(() => seekBar() !== undefined)
+  const bar = seekBar()!
+  for (const control of controls) await host.app.mockMouse.drag(bar.x, bar.y, control.x, control.y)
+  // Dragged down past the screen's edge, it stops at the bottom with the pointer over its controls.
+  const title = host.find("media-pip-title")!
+  await host.app.mockMouse.drag(title.x + 1, title.y, title.x + 1, 29)
+  await host.app.renderOnce()
+  expect(host.find("media-pip")!.y + host.find("media-pip")!.height).toBe(30)
   expect(pip.paused).toBe(true)
   expect(host.media().pip()).toBeDefined()
   expect(host.media().viewer()).toBeUndefined()
@@ -110,26 +119,6 @@ test("a form taking the keys moves a playing video to picture-in-picture and clo
   expect(host.media().pip()).toBeUndefined()
 })
 
-test("mute, volume and loop go along to picture-in-picture and back", async () => {
-  await using host = await renderMedia(() => null)
-  host.media().openViewer([video("clip")], 0)
-  await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
-  for (const key of ["m", "down", "down", "l"]) await host.press(key)
-
-  await host.press("p")
-  const pip = await readyPip(host)
-  expect({ muted: pip.muted, volume: pip.volume, loop: pip.loop }).toEqual({ muted: true, volume: 0.8, loop: true })
-
-  host.keymap().dispatch("media.pip.expand")
-  await host.until(() => host.videos("media-viewer-stage")[0]?.ready === true)
-  const player = host.videos("media-viewer-stage")[0]!
-  expect({ muted: player.muted, volume: player.volume, loop: player.loop }).toEqual({
-    muted: true,
-    volume: 0.8,
-    loop: true,
-  })
-})
-
 test("expanded before it is ready, it opens the viewer at its time and playing", async () => {
   await using host = await renderMedia(() => null)
   host.media().openPip(video("clip"), { time: 0.5 })
@@ -138,29 +127,13 @@ test("expanded before it is ready, it opens the viewer at its time and playing",
   expect(host.media().viewer()).toMatchObject({ items: [{ id: "clip" }], time: 0.5, playing: true })
 })
 
-test("a seek or a move released over its controls does not click them", async () => {
-  await using host = await renderMedia(() => null)
-  host.media().openPip(video("clip"), { playing: false })
-  const pip = await readyPip(host)
-  const seekBar = () =>
-    descendants(host.find("media-pip")!).find(
-      (node): node is TextRenderable => node instanceof TextRenderable && node.plainText.includes("●"),
-    )
-  await host.until(() => seekBar() !== undefined)
-  const bar = seekBar()!
-  for (const id of ["media-pip-close", "media-pip-expand"]) {
-    const control = host.find(id)!
-    await host.app.mockMouse.drag(bar.x, bar.y, control.x, control.y)
-  }
-  // Dragged down past the screen's edge, it stops at the bottom with the pointer over its controls.
-  const title = host.find("media-pip-title")!
-  await host.app.mockMouse.drag(title.x + 1, title.y, title.x + 1, 29)
-  await host.app.renderOnce()
-  expect(host.find("media-pip")!.y + host.find("media-pip")!.height).toBe(30)
-  expect(pip.paused).toBe(true)
-  expect(host.media().pip()).toBeDefined()
-  expect(host.media().viewer()).toBeUndefined()
-})
+/** The time, mute, volume and loop the viewer test sets go along between the viewer and picture-in-picture. */
+function expectCarried(player: VideoRenderable) {
+  expect(player.currentTime).toBeCloseTo(1, 1)
+  expect(player.muted).toBe(true)
+  expect(player.volume).toBeCloseTo(0.8)
+  expect(player.loop).toBe(true)
+}
 
 async function readyPip(host: Host) {
   await host.until(() => host.videos("media-pip")[0]?.ready === true)

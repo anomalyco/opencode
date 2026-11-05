@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import { createSignal, type ComponentProps, type JSX } from "solid-js"
+import { createSignal, type JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { addDefaultParsers, type TextRenderable } from "@opentui/core"
+import { addDefaultParsers, TextRenderable } from "@opentui/core"
 import parsers from "../../../src/parsers-config"
-import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
 import { SessionGroupView } from "../../../src/routes/session/group-view"
@@ -12,6 +12,7 @@ import { createTimelineAnchors, groupID, type AnchorTarget } from "../../../src/
 import { context } from "../../../src/routes/session/render-context"
 import type { SessionEntry, SessionGroup } from "../../../src/routes/session/grouping/session"
 import { emptyThemeSource } from "../../fixture/fixture"
+import { descendants } from "../../fixture/media"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -202,8 +203,9 @@ test("expanded instructions stay adjacent to their summary and each other", asyn
   }
 })
 
+// With rich media, its media strip stays the same strip as its tools change.
 test("a low activity group with nothing finished stays collapsed behind a status", async () => {
-  const config = createTuiResolvedConfig({ animations: false })
+  const config = createTuiResolvedConfig({ animations: false, experimental: { "rich-media": true } })
   const shell = (id: string) => ({
     type: "tool" as const,
     id,
@@ -211,14 +213,14 @@ test("a low activity group with nothing finished stays collapsed behind a status
     time: { created: 0 },
     state: { status: "running" as const, input: {}, metadata: {} },
   })
-  const message: SessionMessageAssistant = {
+  const [message, setMessage] = createSignal<SessionMessageAssistant>({
     id: "a",
     type: "assistant",
     agent: "build",
     model: { providerID: "fixture", id: "fixture" },
     time: { created: 0 },
     content: [shell("one"), shell("two")],
-  }
+  })
   const app = await mount({
     row: {
       type: "group",
@@ -236,14 +238,24 @@ test("a low activity group with nothing finished stays collapsed behind a status
     config,
     expanded: () => false,
     setExpanded: () => {},
-    message: () => message,
+    message: () => message(),
     entry: (entry) => <text>{entry.type === "part" ? `Shell ${entry.ref.partID}` : ""}</text>,
   })
+  const strip = () =>
+    descendants(app.renderer.root).find(
+      (node): node is TextRenderable => node instanceof TextRenderable && node.plainText.startsWith("Image"),
+    )
   try {
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Running command…"))
     expect(app.captureCharFrame()).not.toContain("Shell one")
     expect(app.captureCharFrame()).not.toContain("Shell two")
+    const shown = strip()
+    expect(shown?.plainText).toBe("Image previews a/one,a/two")
+    setMessage((value) => ({ ...value, content: [shell("one")] }))
+    await app.renderOnce()
+    expect(strip()).toBe(shown)
+    expect(shown?.plainText).toBe("Image previews a/one")
   } finally {
     app.renderer.destroy()
   }
@@ -303,70 +315,6 @@ test.each([false, true])("failed low activity has a disclosure icon and expandab
   }
 })
 
-test("a collapsed activity group keeps its media strip while its tools finish", async () => {
-  const config = createTuiResolvedConfig({ animations: false, experimental: { "rich-media": true } })
-  const shell = (id: string, done: boolean): SessionMessageAssistantTool => ({
-    type: "tool",
-    id,
-    name: "shell",
-    time: { created: 0, completed: done ? 2 : undefined },
-    state: done
-      ? { status: "completed", input: {}, content: [{ type: "text", text: id }], metadata: {} }
-      : { status: "running", input: {}, metadata: {} },
-  })
-  const assistant = (done: boolean): SessionMessageAssistant => ({
-    id: "a",
-    type: "assistant",
-    agent: "build",
-    model: { providerID: "fixture", id: "fixture" },
-    time: { created: 0 },
-    content: [shell("one", true), shell("two", done)],
-  })
-  const [message, setMessage] = createSignal(assistant(false))
-  let strips = 0
-  const app = await mount({
-    row: {
-      type: "group",
-      kind: "activity",
-      size: 2,
-      completed: false,
-      pending: [],
-      children: ["one", "two"].map((partID) => ({
-        type: "entry" as const,
-        size: 1,
-        entry: { type: "part" as const, ref: { messageID: "a", partID } },
-      })),
-    },
-    anchors: createTimelineAnchors(),
-    config,
-    expanded: () => false,
-    setExpanded: () => {},
-    message: () => message(),
-    entry: () => <text>shell</text>,
-    images: (tools) => {
-      strips++
-      return (
-        <text>
-          Strip{" "}
-          {tools()
-            .map((tool) => `${tool.part.id}:${tool.part.state.status}`)
-            .join(",")}
-        </text>
-      )
-    },
-  })
-  try {
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Strip one:completed,two:running")
-    setMessage(assistant(true))
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Strip one:completed,two:completed")
-    expect(strips).toBe(1)
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
 function mount(input: {
   row: SessionGroup
   anchors: ReturnType<typeof createTimelineAnchors>
@@ -375,7 +323,6 @@ function mount(input: {
   setExpanded: (id: string, value: boolean) => void
   message: (id: string) => SessionMessageInfo | undefined
   entry: (entry: SessionEntry) => JSX.Element
-  images?: ComponentProps<typeof SessionGroupView>["images"]
 }) {
   return testRender(
     () => (
@@ -406,17 +353,14 @@ function mount(input: {
                 <SessionGroupView
                   row={input.row}
                   message={input.message}
-                  images={
-                    input.images ??
-                    ((tools) => (
-                      <text>
-                        Image previews{" "}
-                        {tools()
-                          .map((tool) => `${tool.messageID}/${tool.part.id}`)
-                          .join(",")}
-                      </text>
-                    ))
-                  }
+                  images={(tools) => (
+                    <text>
+                      Image previews{" "}
+                      {tools()
+                        .map((tool) => `${tool.messageID}/${tool.part.id}`)
+                        .join(",")}
+                    </text>
+                  )}
                   entry={input.entry}
                 />
               </box>

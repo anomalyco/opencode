@@ -81,10 +81,7 @@ export function persistablePrompt(prompt: PromptInfo, state: string): PromptInfo
 // Named for its content, written once. A video that cannot be written keeps its bytes rather than being dropped.
 function writeVideo(directory: string, base64: string, mime: string) {
   const bytes = Buffer.from(base64, "base64")
-  const file = path.join(
-    directory,
-    new Bun.CryptoHasher("sha256").update(bytes).digest("hex") + keptVideoExtension(mime),
-  )
+  const file = path.join(directory, Bun.SHA256.hash(bytes, "hex") + keptVideoExtension(mime))
   try {
     if (existsSync(file)) return file
     mkdirSync(directory, { recursive: true })

@@ -10,10 +10,9 @@ import { createImageSource, createVideoFile } from "./source"
 const HOVER_REST_MS = 300
 
 /**
- * A thumbnail for an image or video. A video on screen shows a poster frame while it is among the few the media
- * context lets keep a player, and its name otherwise. Once the pointer rests on it, it plays silently in a loop as the
- * one active tile; leaving it pauses and returns to the poster. A click calls `onOpen`. A `still` video shows only its
- * name, keeping no decoder open.
+ * A thumbnail for an image or video. A video shows a poster frame while the media context lets it keep a player, and
+ * plays silently in a loop as the one active tile once the pointer rests on it; leaving it pauses and returns to the
+ * poster. A click calls `onOpen`. A `still` video, or one over the limit, shows only its name, keeping no decoder open.
  */
 export function MediaTile(props: {
   item: MediaItem
@@ -32,12 +31,13 @@ export function MediaTile(props: {
   let box: BoxRenderable | undefined
   let hovered = false
   let rest: TimerHandle | undefined
-  const disarm = () => {
+  const release = () => {
     if (rest) renderer.clock.clearTimeout(rest)
     rest = undefined
+    if (active()) media.setActiveTile(undefined)
   }
   const arm = () => {
-    disarm()
+    release()
     rest = renderer.clock.setTimeout(() => {
       rest = undefined
       media.setActiveTile(key)
@@ -45,12 +45,9 @@ export function MediaTile(props: {
   }
 
   createEffect(() => {
-    if (poster()) onCleanup(media.trackPoster(key, () => box))
+    if (poster()) onCleanup(media.trackPoster(key, box!))
   })
-  onCleanup(() => {
-    disarm()
-    if (active()) media.setActiveTile(undefined)
-  })
+  onCleanup(release)
 
   return (
     <box
@@ -68,11 +65,7 @@ export function MediaTile(props: {
       onMouseOut={() => {
         hovered = false
         // Moving between the tile's own children fires out and then over; only leaving the tile releases it.
-        queueMicrotask(() => {
-          if (hovered) return
-          disarm()
-          if (active()) media.setActiveTile(undefined)
-        })
+        queueMicrotask(() => !hovered && release())
       }}
       {...click}
     >
@@ -176,9 +169,7 @@ export function createMediaClick(run: () => void) {
   const renderer = useRenderer()
   let pressed = false
   return {
-    onMouseDown: (event: MouseEvent) => {
-      pressed = event.button === 0
-    },
+    onMouseDown: (event: MouseEvent) => (pressed = event.button === 0),
     onMouseUp: (event: MouseEvent) => {
       const press = pressed
       pressed = false

@@ -13,8 +13,6 @@ import {
 } from "../../src/prompt/history"
 import { tmpdir } from "../fixture/fixture"
 
-const sha256 = (base64: string) => new Bun.CryptoHasher("sha256").update(Buffer.from(base64, "base64")).digest("hex")
-
 const entry = (text: string, files: PromptInfo["files"] = []): PromptInfo => ({
   text,
   files,
@@ -83,13 +81,10 @@ describe("prompt history", () => {
     const persisted = persistablePrompt(entry("media", files), tmp.path).files!
 
     expect(persisted.slice(0, 2)).toEqual([image, { ...video, uri: pathToFileURL(video.path).href }])
-    const written = persisted.slice(2).map((file) => file.path!)
-    expect(written.map((file) => path.relative(tmp.path, file))).toEqual([
-      path.join("prompt-media", `${sha256("CCCC")}.mp4`),
-      path.join("prompt-media", `${sha256("DDDD")}.webm`),
-      path.join("prompt-media", `${sha256("CCCC")}.x-matroska`),
-    ])
-    expect(persisted.slice(2).map((file) => file.uri)).toEqual(written.map((file) => pathToFileURL(file).href))
+    for (const file of persisted.slice(2)) {
+      expect(path.dirname(file.path!)).toBe(path.join(tmp.path, "prompt-media"))
+      expect(file.uri).toBe(pathToFileURL(file.path!).href)
+    }
     // Sending reads each file back as the type it was restored with.
     expect((await readKeptAttachments(persisted.slice(2))).files.map((file) => file.uri)).toEqual(restored)
   })

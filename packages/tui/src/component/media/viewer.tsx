@@ -28,7 +28,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const theme = useTheme()
   const items = props.request.items
   // Sound is off in a remote session, where it would play on the remote machine.
-  const audio = renderer.capabilities?.remote !== true
+  const remote = renderer.capabilities?.remote === true
 
   const [index, setIndex] = createSignal(props.request.index)
   const [image, setImage] = createSignal<Size>()
@@ -201,7 +201,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const size = () => facts() && `${facts()!.width}×${facts()!.height}`
   const duration = () => metadata() && formatDuration(metadata()!.duration)
   const fpsLabel = () => metadata()?.fps && `${+metadata()!.fps.toFixed(2)} fps`
-  const audible = () => !!metadata()?.hasAudio && audio && !muted()
+  const audible = () => !!metadata()?.hasAudio && !remote && !muted()
   const sound = () => (metadata()?.hasAudio ? (audible() ? `♪ ${Math.round(volume() * 100)}%` : "♪ off") : "no audio")
 
   // Most useful first: the footer drops the hints that do not fit.
@@ -280,7 +280,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       <Show when={file().path}>
         {(source) => (
           <video
-            audio={audio}
+            audio={!remote}
             source={source()}
             muted={muted()}
             volume={volume()}
