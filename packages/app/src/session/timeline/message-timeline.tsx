@@ -1,5 +1,4 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { Predicate } from "effect"
 import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
@@ -22,7 +21,7 @@ import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import type { TimelineFollow } from "./follow"
-import { createTimelineVirtualizer } from "./virtualizer"
+import { createTimelineVirtualizer, type TimelineRouteReveal } from "./virtualizer"
 import { createSelectedEffect } from "./selected-effect"
 import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
@@ -97,7 +96,7 @@ type MessageTimelineProps = {
   setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
-  reveal?: { target: () => string | undefined; done: () => void }
+  reveal?: TimelineRouteReveal
   search?: JSX.Element
 }
 
@@ -120,16 +119,14 @@ export function MessageTimeline(props: MessageTimelineProps) {
     }
   }
 
-  return (
-    <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
-  )
+  return <MessageTimelineView {...props} data={controller.data} action={controller.action} title={controller.title} />
 }
 
 function MessageTimelineView(
   props: MessageTimelineProps & {
     data: TimelineController["data"]
     action: TimelineController["action"]
-    pending: TimelineController["pending"]
+    title: TimelineController["title"]
   },
 ) {
   const language = useLanguage()
@@ -140,7 +137,6 @@ function MessageTimelineView(
   const sdk = useWorkspaceLocation()
   const sessionID = props.data.sessionID
   const sessionStatus = props.data.status
-  const titleLabel = props.data.titleLabel
   const parentID = props.data.parentID
   const parentTitle = props.data.parentTitle
   const childTitle = props.data.childTitle
@@ -253,49 +249,7 @@ function MessageTimelineView(
 
   const VirtualizedTimeline = virtualized.View
 
-  const [title, setTitle] = createStore({
-    draft: "",
-    editing: false,
-    menuOpen: false,
-    pendingRename: false,
-  })
-
-  let titleRef: HTMLInputElement | undefined
-
-  createEffect(
-    on(
-      props.data.sessionKey,
-      () =>
-        setTitle({
-          draft: "",
-          editing: false,
-          menuOpen: false,
-          pendingRename: false,
-        }),
-      { defer: true },
-    ),
-  )
-
-  const openTitleEditor = () => {
-    if (!sessionID() || parentID()) return
-    setTitle({ editing: true, draft: titleLabel() ?? "" })
-    requestAnimationFrame(() => {
-      if (!titleRef) return
-      titleRef.focus()
-      titleRef.select()
-    })
-  }
-
-  const closeTitleEditor = () => {
-    if (props.pending.rename()) return
-    setTitle("editing", false)
-  }
-
-  const saveTitleEditor = async () => {
-    if (!title.editing || props.pending.rename()) return
-
-    if (await props.action.rename(title.draft)) setTitle("editing", false)
-  }
+  const title = props.title.view
 
   command.register(() =>
     props.active === false || props.hideHeader
@@ -306,9 +260,9 @@ function MessageTimelineView(
             category: language.t("command.category.session"),
             title: language.t("command.session.rename"),
             keybind: "ctrl+r",
-            disabled: !sessionID() || !!parentID() || title.editing,
+            disabled: !sessionID() || !!parentID() || title().editing,
             skip: (event) => pluginScoped(event.target),
-            onSelect: openTitleEditor,
+            onSelect: props.title.edit,
           },
           {
             id: "session.delete",
@@ -323,11 +277,6 @@ function MessageTimelineView(
           },
         ],
   )
-
-  createEffect(() => {
-    if (props.active !== false) return
-    setTitle({ draft: "", editing: false, menuOpen: false, pendingRename: false })
-  })
 
   const settings = useSettings()
 
@@ -513,14 +462,14 @@ function MessageTimelineView(
         <Show when={!props.hideHeader}>
           <SessionTitleHeader>
             <SessionHeaderLayout
-              title={title.editing ? title.draft : childTitle()}
+              title={title().editing ? title().draft : childTitle()}
               location={
                 <>
                   <SessionLocation
                     project={headerProject()}
                     directory={sessionDirectory()}
                     compact={!!parentID()}
-                    trailing={!!(parentID() || childTitle() || title.editing)}
+                    trailing={!!(parentID() || childTitle() || title().editing)}
                     context={{
                       get session() {
                         return props.view
@@ -536,7 +485,7 @@ function MessageTimelineView(
                         sessionID={sessionID() ?? ""}
                         parentID={id()}
                         parentTitle={parentTitle()}
-                        trailing={!!(childTitle() || title.editing)}
+                        trailing={!!(childTitle() || title().editing)}
                       />
                     )}
                   </Show>
@@ -584,34 +533,32 @@ function MessageTimelineView(
                   </>
                 )}
               </Show>
-              <Show when={!parentID() && (childTitle() || title.editing)}>
+              <Show when={!parentID() && (childTitle() || title().editing)}>
                 <Show
-                  when={title.editing}
+                  when={title().editing}
                   fallback={
                     <h1
                       data-slot="session-title-child"
                       class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-1 py-1.5 hover:bg-v2-overlay-simple-overlay-hover"
                       classList={{ "max-w-[45%] shrink-0": !!parentID() }}
-                      onClick={openTitleEditor}
+                      onClick={props.title.edit}
                     >
                       {childTitle()}
                     </h1>
                   }
                 >
                   <InlineInput
-                    ref={(el) => {
-                      titleRef = el
-                    }}
+                    ref={props.title.setInput}
                     data-slot="session-title-child"
                     dir="auto"
-                    value={title.draft}
-                    disabled={props.pending.rename()}
+                    value={title().draft}
+                    disabled={title().saving}
                     class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1.5"
                     classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                     style={{
                       "text-align": "start",
                     }}
-                    onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                    onInput={(event) => props.title.change(event.currentTarget.value)}
                     onKeyDown={(event) => {
                       event.stopPropagation()
 
@@ -619,17 +566,17 @@ function MessageTimelineView(
 
                       if (event.key === "Enter") {
                         event.preventDefault()
-                        void saveTitleEditor()
+                        props.title.submit()
 
                         return
                       }
 
                       if (event.key === "Escape") {
                         event.preventDefault()
-                        closeTitleEditor()
+                        props.title.cancel()
                       }
                     }}
-                    onBlur={() => void saveTitleEditor()}
+                    onBlur={props.title.submit}
                   />
                 </Show>
               </Show>
@@ -638,8 +585,8 @@ function MessageTimelineView(
                   <Menu
                     gutter={6}
                     placement="bottom-start"
-                    open={title.menuOpen}
-                    onOpenChange={(open) => setTitle("menuOpen", open)}
+                    open={title().menuOpen}
+                    onOpenChange={props.title.toggleMenu}
                   >
                     <Menu.Trigger
                       as={IconButton}
@@ -648,27 +595,19 @@ function MessageTimelineView(
                       size="large"
                       class="shrink-0"
                       aria-label={language.t("common.moreOptions")}
-                      aria-expanded={title.menuOpen}
+                      aria-expanded={title().menuOpen}
                     />
                     <Menu.Portal>
                       <Menu.Content
                         class="session-options-menu w-max"
                         style={{ "min-width": "0" }}
                         onCloseAutoFocus={(event) => {
-                          if (!title.pendingRename) return
+                          if (!title().editOnMenuClose) return
                           event.preventDefault()
-                          setTitle("pendingRename", false)
-                          openTitleEditor()
+                          props.title.menuClosed()
                         }}
                       >
-                        <Menu.Item
-                          onSelect={() => {
-                            setTitle("pendingRename", true)
-                            setTitle("menuOpen", false)
-                          }}
-                        >
-                          {language.t("common.rename")}
-                        </Menu.Item>
+                        <Menu.Item onSelect={props.title.chooseRename}>{language.t("common.rename")}</Menu.Item>
                         <Menu.Item onSelect={() => void props.action.export(id)}>
                           {language.t("common.export")}…
                         </Menu.Item>
@@ -681,7 +620,7 @@ function MessageTimelineView(
                   </Menu>
                 )}
               </Show>
-              <Show when={!title.editing}>
+              <Show when={!title().editing}>
                 <SessionHeaderGap active={props.active !== false} register={props.registerHeaderGap} />
               </Show>
             </SessionHeaderLayout>
