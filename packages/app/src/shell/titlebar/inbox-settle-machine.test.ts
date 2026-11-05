@@ -101,8 +101,8 @@ describe("inbox settle machine", () => {
 
     expect(transitionInboxSettle(settled.state, { type: "requests.settled", key: "x" }).state).toBe(settled.state)
     expect(transitionInboxSettle(settled.state, { type: "reveal.timed-out" }).state).toBe(settled.state)
-    expect(
-      transitionInboxSettle(INITIAL_INBOX_SETTLE_STATE, { type: "reveal.timed-out" }).state,
-    ).toBe(INITIAL_INBOX_SETTLE_STATE)
+    expect(transitionInboxSettle(INITIAL_INBOX_SETTLE_STATE, { type: "reveal.timed-out" }).state).toBe(
+      INITIAL_INBOX_SETTLE_STATE,
+    )
   })
 })

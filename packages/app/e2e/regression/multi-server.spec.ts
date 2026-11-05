@@ -222,9 +222,11 @@ const INBOX_SETTLE_TIMEOUT_MS = 10_000
 test("one server that never answers the inbox index does not hide the other server's sessions", async ({ page }) => {
   await setup(page, { tabs: [] })
   await seed(page, { settings: { appearance: { tabLayout: "inbox" } } })
+
   const index = await holdRoute(page, new RegExp(`^${REMOTE_SERVER}/api/session\\?(.*&)?order=desc`), {
     method: "GET",
   })
+
   await page.clock.install()
   await page.goto("/")
   await index.arrived

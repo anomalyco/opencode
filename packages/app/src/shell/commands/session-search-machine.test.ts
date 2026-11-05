@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
-import type { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection } from "@/runtime/server/registry"
 import {
   INITIAL_SESSION_SEARCH_STATE,
   SESSION_RESTORE_TIMEOUT_MS,
@@ -10,8 +10,9 @@ import {
   type SessionSearchState,
 } from "./session-search-machine"
 
-const server = "http://localhost:4096" as ServerConnection.Key
+const server = ServerConnection.Key.make("http://localhost:4096")
 
+// SAFETY: the machine never reads the session; it only hands it to the remember effect.
 const session = { id: "ses_a", title: "Restored", time: { created: 1, updated: 2 } } as SessionInfo
 
 const select = (sessionID: string, archived = true): SessionSearchEvent => ({
@@ -93,10 +94,12 @@ describe("session search machine", () => {
       { type: "toast.failed", error: undefined },
     ])
 
-    expect(transitionSessionSearch(timedOut.state, { type: "restore.failed", attempt: 1, error: new Error() })).toEqual({
-      state: timedOut.state,
-      effects: [],
-    })
+    expect(transitionSessionSearch(timedOut.state, { type: "restore.failed", attempt: 1, error: new Error() })).toEqual(
+      {
+        state: timedOut.state,
+        effects: [],
+      },
+    )
 
     const retry = transitionSessionSearch(timedOut.state, select("ses_a"))
 

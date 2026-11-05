@@ -100,7 +100,9 @@ export function transitionSessionSearch(state: SessionSearchState, event: Sessio
     if (!event.archived)
       return {
         state: { status: "done", issued: state.issued },
-        effects: [{ type: "session.open", server: event.server, sessionID: event.sessionID, directory: event.directory }],
+        effects: [
+          { type: "session.open", server: event.server, sessionID: event.sessionID, directory: event.directory },
+        ],
       }
     const attempt = state.issued + 1
 

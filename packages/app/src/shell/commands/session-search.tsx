@@ -98,7 +98,8 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       return
     }
 
-    if (effect.type === "session.remember") return global.serverCtx(effect.server)?.data.session.remember(effect.session)
+    if (effect.type === "session.remember")
+      return global.serverCtx(effect.server)?.data.session.remember(effect.session)
 
     if (effect.type === "session.open") {
       // By id: once this dialog is gone, or replaced through `show`, the open closes nothing else.

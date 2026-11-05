@@ -1898,9 +1898,11 @@ test("deleting from the inbox closes its dialog at once and a slow delete leaves
   await page.getByRole("button", { name: "Search sessions", exact: true }).click()
   const search = page.getByRole("dialog")
   await expect(search.getByRole("combobox")).toBeFocused()
+
   const removed = page.waitForResponse(
     (response) => response.request().method() === "DELETE" && response.url().includes("/api/session/ses_delete_target"),
   )
+
   remove.release()
   await removed
   await expect(search.getByRole("combobox")).toBeFocused()

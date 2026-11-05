@@ -100,11 +100,13 @@ export function transitionSessionRenameDialog(
 
     return { state: { ...state, draft: event.value }, effects: NONE }
   }
+
   const title = state.draft.trim()
 
   if (!title) return unchanged(state)
 
-  if (title === state.initial) return { state: { status: "closed", issued: state.issued }, effects: [{ type: "dialog.close" }] }
+  if (title === state.initial)
+    return { state: { status: "closed", issued: state.issued }, effects: [{ type: "dialog.close" }] }
   const attempt = state.issued + 1
 
   return {

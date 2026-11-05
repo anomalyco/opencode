@@ -11,7 +11,11 @@ import {
 const run = (state: SessionRenameDialogState, ...events: SessionRenameDialogEvent[]) =>
   events.reduce((current, event) => transitionSessionRenameDialog(current, event).state, state)
 
-const editing = run(createSessionRenameDialogState("Old"), { type: "input.focused" }, { type: "input.changed", value: " New " })
+const editing = run(
+  createSessionRenameDialogState("Old"),
+  { type: "input.focused" },
+  { type: "input.changed", value: " New " },
+)
 
 const saving = transitionSessionRenameDialog(editing, { type: "submitted" })
 
@@ -92,13 +96,15 @@ describe("session rename dialog machine", () => {
     // Submitting the landed title again closes without another request.
     const resubmitted = run(changed, { type: "input.changed", value: "New" })
 
-    expect(transitionSessionRenameDialog(resubmitted, { type: "submitted" }).effects).toEqual([{ type: "dialog.close" }])
+    expect(transitionSessionRenameDialog(resubmitted, { type: "submitted" }).effects).toEqual([
+      { type: "dialog.close" },
+    ])
   })
 
   test("a failed save restores editing and focus without selecting the title again", () => {
-    expect(transitionSessionRenameDialog(createSessionRenameDialogState("Old"), { type: "input.focused" }).effects).toEqual([
-      { type: "input.select" },
-    ])
+    expect(
+      transitionSessionRenameDialog(createSessionRenameDialogState("Old"), { type: "input.focused" }).effects,
+    ).toEqual([{ type: "input.select" }])
 
     const error = new Error("boom")
     const failed = transitionSessionRenameDialog(saving.state, { type: "save.failed", attempt: 1, error })
@@ -119,7 +125,9 @@ describe("session rename dialog machine", () => {
 
     expect(retry).toMatchObject({ status: "saving", attempt: 2 })
     expect(transitionSessionRenameDialog(retry, { type: "save.succeeded", attempt: 1, title: "New" }).state).toBe(retry)
-    expect(transitionSessionRenameDialog(retry, { type: "save.failed", attempt: 1, error: undefined }).state).toBe(retry)
+    expect(transitionSessionRenameDialog(retry, { type: "save.failed", attempt: 1, error: undefined }).state).toBe(
+      retry,
+    )
   })
 
   test("a blank title does nothing and an unchanged one closes without saving", () => {

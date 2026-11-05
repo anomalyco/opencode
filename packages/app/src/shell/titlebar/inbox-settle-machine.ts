@@ -85,9 +85,11 @@ export function transitionInboxSettle(state: InboxSettleState, event: InboxSettl
 
   const workingKeys = [...new Set(event.workingKeys)]
   const added = workingKeys.filter((key) => !state.checks[key])
+
   const checks: Checks = added.length
     ? { ...state.checks, ...Object.fromEntries(added.map((key) => [key, "checking" as const])) }
     : state.checks
+
   const sync = added.map((key): InboxSettleEffect => ({ type: "requests.sync", key }))
 
   if (state.status === "settled") {

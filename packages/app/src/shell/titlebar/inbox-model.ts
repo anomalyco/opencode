@@ -262,6 +262,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
       return
     }
+
     const entry = byKey().get(effect.key)
 
     void Promise.allSettled(
