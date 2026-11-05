@@ -8,6 +8,15 @@ import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
+import {
+  createDocumentState,
+  documentGeneration,
+  documentIcon,
+  documentTab,
+  isDocumentClosed,
+  transitionDocument,
+  type DocumentEvent,
+} from "./page-machine"
 import { createProfiling, type Recording } from "./profiling"
 import type { BrowserNetwork } from "./network"
 import {
@@ -230,15 +239,15 @@ export function createBrowserPage(
     options.zoomed?.()
   }
 
-  let icon: string | undefined
-  // Bumped by every icon change, so a slow fetch for an earlier icon cannot replace a later one.
-  let iconRequest = 0
+  let documentState = createDocumentState(options.restore)
+  const closed = () => isDocumentClosed(documentState)
   let reported = ""
 
   const detail = () => {
-    if (closed) return
+    if (closed()) return
     // Chromium's factor for the outermost presets can land a rounding error outside them.
     const next: PageDetail = { zoom: Math.min(5, Math.max(0.25, contents.getZoomFactor())) }
+    const icon = documentIcon(documentState)
 
     if (icon) next.icon = icon
     const key = `${next.zoom}:${next.icon ?? ""}`
@@ -248,14 +257,6 @@ export function createBrowserPage(
     options.detail?.(next)
   }
 
-  contents.on("page-favicon-updated", (_event, favicons) => {
-    const request = ++iconRequest
-    void loadIcon(favicons, options.network).then((value) => {
-      if (closed || request !== iconRequest) return
-      icon = value
-      detail()
-    })
-  })
   const cdp = createCdp(contents)
   const documents = new Map<string, string>()
   const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
@@ -277,8 +278,6 @@ export function createBrowserPage(
   let dialog: { type: string; message: string; defaultValue: string } | null = null
   let dialogURL = ""
   let dialogRevision = 0
-  // The first restored navigation consumes the generation reserved in the unloaded inventory.
-  let generation = options.restore ? options.restore.generation - 1 : 0
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, frame.url)
@@ -288,113 +287,84 @@ export function createBrowserPage(
     documents.delete(frameId)
     revision++
   })
-  let closed = false
-  // The committed document's origin; its icon stays while navigations remain on it.
-  let origin = ""
-  // Whether the native surface holds a real document worth showing. Chromium keeps the
-  // previous document painted until the next one renders, so a shown page stays shown
-  // through later navigations; blank and failed documents hide until a real one is ready.
-  let content = false
-  let failure: { url: string; message: string } | undefined
-  // A blank document is never shown, so its load does not count as loading: a new tab shows its new tab page at once.
-  let blank = options.initialize !== false && !options.restore?.url
-  // Chromium names a document after its URL until its <title> parses. A navigation on the same site keeps the shown
-  // title until the new document names itself or stops loading, so a page that reloads or redirects to itself does
-  // not flash its URL in the tab strip.
-  let title = ""
 
-  const state = (): Browser.Tab => {
-    const page = {
+  const state = () =>
+    documentTab(documentState, {
       id: options.id,
-      url: (failure?.url ?? contents.getURL()).slice(0, 16_384),
-      title: title.slice(0, 2_048),
-      loading: contents.isLoading() && !blank,
-    }
-
-    const history = {
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
-      generation,
-    }
+    })
 
-    return failure ? { ...page, loadError: failure.message, ...history } : { ...page, ...history }
+  // Every state report goes through here, so a page that was disposed publishes nothing.
+  const publish = (error?: string) => {
+    if (!closed()) options.publish(error)
   }
 
-  const publish = () => {
-    if (!closed) options.publish()
+  const dispatch = (event: DocumentEvent) => {
+    const next = transitionDocument(documentState, event)
+    documentState = next.state
+    next.effects.forEach((effect) => {
+      switch (effect.type) {
+        case "reset-document":
+          documents.clear()
+          refs.clear()
+          picked.clear()
+
+          if (inspecting) void toggleInspect(false)
+          break
+        case "clear-diagnostics":
+          diagnostics.clear()
+          break
+        case "show":
+          // The renderer's layout requests may lag behind navigation; the page decides
+          // whether there is a document worth exposing over the themed background.
+          embed.show(effect.visible)
+          break
+        case "publish":
+          publish()
+          break
+        case "detail":
+          detail()
+          break
+        case "load-icon":
+          // Never rejects: an icon that does not load is none.
+          void loadIcon(effect.favicons, options.network).then((icon) =>
+            dispatch({ type: "icon.loaded", attempt: effect.attempt, icon }),
+          )
+      }
+    })
   }
 
-  const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
-    if (!event.isMainFrame || event.isSameDocument) return
-    blank = event.url === "about:blank"
-    failure = undefined
-    generation++
-    documents.clear()
-    refs.clear()
-    picked.clear()
-    diagnostics.clear()
-
-    if (inspecting) void toggleInspect(false)
-    publish()
-  }
-
-  const settle = () => {
-    content = contents.getURL() !== "about:blank" && !failure
-    updateVisibility()
-  }
-
-  contents.on("did-start-navigation", reset)
-  contents.on("did-navigate", (_event, url, status, statusText) => {
-    // The server-network proxy answers an unreachable HTTP target with an empty 502. Other
-    // error statuses are real documents from the user's server and stay visible.
-    if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
-
-    // Another site's icon arrives with its document; the same site keeps its icon meanwhile, as tabs do. Files and blank
-    // pages have no shared origin, so each keeps none.
-    const next = destinationOrigin(url) ?? url
-
-    if (next !== origin) {
-      icon = undefined
-      iconRequest++
-      title = contents.getTitle()
-    }
-
-    origin = next
-
-    // A blank or failed document paints at commit; a real one waits for dom-ready.
-    if (url === "about:blank" || failure) settle()
-    publish()
-    // After the state that names the new URL. Chromium keeps a zoom per origin, so a new site may have its own.
-    detail()
-  })
-  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
-    // Cancelled navigation and failed subframes do not replace the current page.
-    if (!isMainFrame || code === -3) return
-    failure = { url, message: description.slice(0, 2_048) }
-    settle()
-    publish()
-  })
-  contents.on("dom-ready", settle)
-
-  const retitle = () => {
-    title = contents.getTitle()
-    publish()
-  }
-
-  contents.on("did-stop-loading", () => {
-    settle()
-    retitle()
-  })
-  contents.on("did-navigate-in-page", retitle)
+  contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
+  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: contents.getTitle() }))
+  contents.on("did-start-navigation", (event) =>
+    dispatch({
+      type: "navigation.started",
+      url: event.url,
+      isMainFrame: event.isMainFrame,
+      isSameDocument: event.isSameDocument,
+    }),
+  )
+  contents.on("did-navigate", (_event, url, status, statusText) =>
+    dispatch({ type: "navigation.committed", url, status, statusText, title: contents.getTitle() }),
+  )
+  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
+    dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
+  )
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) =>
+    dispatch({ type: "navigation.in-page", url, title: contents.getTitle(), isMainFrame }),
+  )
+  contents.on("dom-ready", () => dispatch({ type: "document.ready" }))
+  contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: contents.getTitle() }))
+  contents.on("page-favicon-updated", (_event, favicons) => dispatch({ type: "icon.updated", favicons }))
   contents.on("focus", () => {
-    if (!closed) options.focused?.()
+    if (!closed()) options.focused?.()
   })
-  contents.on("page-title-updated", retitle)
   contents.on("render-process-gone", () => {
-    if (!closed) options.fail()
+    if (!closed()) options.fail()
   })
   contents.debugger.on("detach", () => {
-    if (!closed) options.fail()
+    if (!closed()) options.fail()
   })
   contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   contents.session.setPermissionCheckHandler(() => false)
@@ -412,7 +382,7 @@ export function createBrowserPage(
     if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
-    options.publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
+    publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
   }
 
   contents.on("will-frame-navigate", guard)
@@ -462,7 +432,7 @@ export function createBrowserPage(
       })
     } catch {
       item.cancel()
-      options.publish("download_failed")
+      publish("download_failed")
     }
   }
 
@@ -538,13 +508,10 @@ export function createBrowserPage(
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    if (visible || closed) return
+    if (visible || closed()) return
     picks++
     void (inspecting ? toggleInspect(false) : hideHighlight())
   })
-  // The renderer's layout requests may lag behind navigation; the page decides
-  // whether there is a document worth exposing over the themed background.
-  const updateVisibility = () => embed.show(content)
 
   const load = (url: string) => {
     let committed = false
@@ -571,7 +538,7 @@ export function createBrowserPage(
           load(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
-            options.publish(error.message)
+            publish(error.message)
           }),
         ]),
     diagnostics.enable(),
@@ -593,21 +560,21 @@ export function createBrowserPage(
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
     async inspect(enabled: boolean) {
-      if (closed) return
+      if (closed()) return
       await ready
       await toggleInspect(enabled)
     },
     async highlight(ref?: Browser.Ref) {
-      if (closed) return
+      if (closed()) return
       await highlightPicked(ref).catch(() => undefined)
     },
     zoom(direction: "in" | "out" | "reset") {
-      if (!closed) zoom(direction)
+      if (!closed()) zoom(direction)
     },
     async site() {
       const url = contents.getURL()
 
-      if (closed || !destinationOrigin(url)) return { cookies: 0 }
+      if (closed() || !destinationOrigin(url)) return { cookies: 0 }
 
       return { cookies: (await contents.session.cookies.get({ url })).length }
     },
@@ -619,7 +586,7 @@ export function createBrowserPage(
       const url = contents.getURL()
       const origin = destinationOrigin(url)
 
-      if (closed || !origin) return
+      if (closed() || !origin) return
       const cookies = await contents.session.cookies.get({ url })
       await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
       await contents.session.clearStorageData({
@@ -627,10 +594,12 @@ export function createBrowserPage(
         storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
       })
 
-      if (closed) return
+      if (closed()) return
       contents.reload()
       // A slow page still cleared; the count then reads what it set so far.
-      await waitFor(() => closed || !contents.isLoading(), new AbortController().signal, 30_000).catch(() => undefined)
+      await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
+        () => undefined,
+      )
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,
@@ -638,7 +607,7 @@ export function createBrowserPage(
       await ready
       abortError(signal)
 
-      if (closed)
+      if (closed())
         throw new Error(
           "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
         )
@@ -659,7 +628,7 @@ export function createBrowserPage(
 
       if (
         command.generation !== undefined &&
-        command.generation !== generation &&
+        command.generation !== documentGeneration(documentState) &&
         !retainedOperations.includes(command.action.type)
       )
         throw new Error(
@@ -707,8 +676,8 @@ export function createBrowserPage(
       }
     },
     async dispose() {
-      if (closed) return
-      closed = true
+      if (closed()) return
+      dispatch({ type: "disposed" })
       clearTimeout(flash)
       detachNetwork?.()
       contents.session.off("will-download", download)
@@ -1136,7 +1105,7 @@ export function createBrowserPage(
     if (action.type === "dialog")
       return {
         resources: [dialog ? dialogURL : contents.getURL()],
-        key: `${generation}:${dialogRevision}:${Boolean(dialog)}`,
+        key: `${documentGeneration(documentState)}:${dialogRevision}:${Boolean(dialog)}`,
       }
 
     const fileIDs =
@@ -1194,7 +1163,7 @@ export function createBrowserPage(
                 : [contents.getURL()],
         ),
       ].sort(),
-      key: JSON.stringify([generation, revision, selected]),
+      key: JSON.stringify([documentGeneration(documentState), revision, selected]),
     }
   }
 
@@ -1596,7 +1565,7 @@ export function createBrowserPage(
   async function inspected(backendID: number, sessionID?: string) {
     inspecting = false
     const pick = ++picks
-    const navigation = generation
+    const navigation = documentGeneration(documentState)
     await Promise.all(
       [undefined, ...sessions.values()].map((id) =>
         cdp.send("Overlay.setInspectMode", inspectOff, id).catch(() => undefined),
@@ -1609,9 +1578,9 @@ export function createBrowserPage(
     await painted(sessionID)
 
     // Escape, a toggle, hiding, or navigation while the element was described cancels the pick.
-    if (closed) return
+    if (closed()) return
 
-    if (pick !== picks || navigation !== generation) {
+    if (pick !== picks || navigation !== documentGeneration(documentState)) {
       if (!inspecting) await hideHighlight()
       options.inspect?.({ active: inspecting })
 
