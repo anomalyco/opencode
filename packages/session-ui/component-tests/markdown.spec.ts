@@ -586,6 +586,24 @@ story("shares in-flight Markdown rendering without overwriting a reclaimed cache
   expect(result.html).toContain("<strong>Shared result</strong>")
 })
 
+story("keeps an in-flight parse shared after a readiness check reads the cached entry", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { getCachedMarkdown, getReadyMarkdown, renderCachedMarkdown, touchCachedMarkdown } = await import(fixture)
+    const previous = "**Previous answer**"
+    touchCachedMarkdown("ready-check", { raw: previous, src: previous, hash: "previous", html: "<p>previous</p>" })
+    const raw = "```typescript\nconst next = true\n```"
+    const first = renderCachedMarkdown({ raw, src: raw }, "ready-check")
+    // The timeline asks whether the cached answer is ready while the new one still parses.
+    const ready = getReadyMarkdown({ raw: previous, src: previous }, "ready-check")
+    const second = renderCachedMarkdown({ raw, src: raw }, "ready-check")
+    const [left, right] = await Promise.all([first, second])
+
+    return { ready: ready?.html, shared: left === right, cached: getCachedMarkdown("ready-check") === left }
+  }, fixture)
+
+  expect(result).toEqual({ ready: "<p>previous</p>", shared: true, cached: true })
+})
+
 story("settles an abandoned parse and permits immediate cache-key reuse", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
