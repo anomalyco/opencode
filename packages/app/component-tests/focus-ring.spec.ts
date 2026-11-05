@@ -24,10 +24,14 @@ story("keeps the ring on a menu trigger after a keyboard open", async ({ mount, 
   await expect(trigger).toHaveCSS("outline-style", "solid")
 })
 
-story("keeps the ring on a menu trigger opened from code after an earlier click", async ({ mount, page }) => {
+story("keeps the ring on a menu trigger opened from code after a pointer open", async ({ mount, page }) => {
   await mount("ui-menu--programmatic-and-non-modal")
   const trigger = page.getByRole("button", { name: "Controlled" })
 
+  await trigger.click()
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toHaveCount(0)
   await page.getByRole("button", { name: "Open from code" }).click()
   await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
   await page.keyboard.press("Escape")
