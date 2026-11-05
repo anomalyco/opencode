@@ -275,7 +275,12 @@ export default bench({
         await page.scroll(paletteList, { by: 3000, speed: 3000 })
         await page.scroll(paletteList, { by: -3000, speed: 3000 })
       },
-      reset: ({ page }) => page.idle(),
+      // Opens the palette again each run, so a run starts at the top even if something closed it.
+      async reset({ page }) {
+        await page.press("Escape")
+        await page.press("ControlOrMeta+Shift+P", { until: paletteList })
+        await page.idle()
+      },
     },
   },
 })
