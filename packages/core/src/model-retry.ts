@@ -41,16 +41,8 @@ const schedule = Schedule.max([
 // exponential from 2s capped at 30s per gap, for up to an hour after the first one. A refused connection is left out:
 // something answered, so it is the server's state. Bun's fetch reports a failed getaddrinfo as ENOTFOUND, EAI_AGAIN,
 // EBADRESP (EAI_FAIL), ESERVFAIL (EAI_SYSTEM) or, on glibc, ETIMEOUT.
-export const UNREACHABLE_CODES = new Set([
-  "ENOTFOUND",
-  "EAI_AGAIN",
-  "EBADRESP",
-  "ESERVFAIL",
-  "ETIMEOUT",
-  "ENETUNREACH",
-  "EHOSTUNREACH",
-  "ENETDOWN",
-])
+const LOOKUP_CODES = ["ENOTFOUND", "EAI_AGAIN", "EBADRESP", "ESERVFAIL", "ETIMEOUT"]
+export const UNREACHABLE_CODES = new Set([...LOOKUP_CODES, "ENETUNREACH", "EHOSTUNREACH", "ENETDOWN"])
 export const UNREACHABLE_WINDOW = Duration.hours(1)
 const UNREACHABLE_GAP_MAX = 30_000
 
@@ -115,7 +107,7 @@ export const retry = <A, R>(effect: Effect.Effect<A, AIError, R>) =>
 // the provider never ran, a few times, with the same backoff and retry-after handling.
 const ONE_SHOT_RETRIES = 3
 // Only codes that fail before a connection exists: a dropped interface or route can also fail a response already being read.
-const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EBADRESP", "ESERVFAIL", "ETIMEOUT"])
+const NOT_SENT_CODES = new Set(["ECONNREFUSED", ...LOOKUP_CODES])
 
 const notRun = (error: AIError) => {
   const override = error.reason.http?.headers["x-should-retry"]

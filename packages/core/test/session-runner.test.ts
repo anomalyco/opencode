@@ -643,10 +643,10 @@ const providerUnavailable = () =>
 const hostNotFound = () =>
   new AIError({
     reason: new TransportError({
-      message: "getaddrinfo ENOTFOUND provider.test",
+      message: "getaddrinfo EBADRESP provider.test",
       transport: "http",
       operation: "request",
-      code: "ENOTFOUND",
+      code: "EBADRESP",
       url: "https://provider.test/v1/responses",
     }),
   })

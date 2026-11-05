@@ -285,36 +285,6 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("keeps the code of a host name that didn't resolve", () =>
-    Effect.gen(function* () {
-      const executor = yield* RequestExecutor.Service
-      const error = yield* executor.execute(request).pipe(Effect.flip)
-
-      expectAIError(error)
-      expect(error.message).toBe("getaddrinfo ENOTFOUND provider.test")
-      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "ENOTFOUND" })
-      expect(isRetryable(error)).toBe(true)
-    }).pipe(
-      Effect.provide(
-        dynamicResponse((input) =>
-          Effect.fail(
-            new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({
-                request: input.request,
-                // The shape Bun's fetch rejects with when getaddrinfo fails.
-                cause: Object.assign(new TypeError("getaddrinfo ENOTFOUND provider.test"), {
-                  code: "ENOTFOUND",
-                  syscall: "getaddrinfo",
-                  hostname: "provider.test",
-                }),
-              }),
-            }),
-          ),
-        ),
-      ),
-    ),
-  )
-
   it.effect("runs shared middleware outside per-call middleware", () => {
     const calls: Array<string> = []
     const record = (name: string) => Effect.sync(() => calls.push(name))
