@@ -5,6 +5,7 @@
 //! raised, focusable box that the plugin fills through the builder it registered with [`Panels::register`]
 //! (P.1 connects the `session.panel` slot to it; E.15a's diff viewer is the first user).
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -36,8 +37,8 @@ pub struct Input<'a> {
     pub focused: bool,
 }
 
-/// Builds a panel's content into the host's root.
-pub type Builder = Rc<dyn Fn(&Tui, &View, &Input<'_>)>;
+/// Builds a panel's content into the host's root, and returns what the host keeps alive while it shows the panel.
+pub type Builder = Rc<dyn Fn(&Tui, &View, &Input<'_>) -> Box<dyn Any>>;
 
 #[derive(Default)]
 pub struct Panels {
@@ -128,6 +129,7 @@ impl Panels {
 pub struct Host {
     pub root: View,
     target: Target,
+    _content: Option<Box<dyn Any>>,
 }
 
 impl Host {
@@ -144,7 +146,7 @@ impl Host {
                 Presentation::Panel => theme.background.raised.base,
                 Presentation::Fullscreen => theme.background.base,
             });
-        if let Some(builder) = tui.panels.builder(&target) {
+        let content = tui.panels.builder(&target).map(|builder| {
             builder(
                 tui,
                 &root,
@@ -154,9 +156,13 @@ impl Host {
                     presentation,
                     focused,
                 },
-            );
+            )
+        });
+        Self {
+            root,
+            target,
+            _content: content,
         }
-        Self { root, target }
     }
 
     pub fn target(&self) -> &Target {
