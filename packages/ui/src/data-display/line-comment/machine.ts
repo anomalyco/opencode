@@ -176,12 +176,11 @@ export function transitionLineCommentEditor(
   }
 
   if (event.type === "action.clicked") {
-    const alternate = state.alternate && allowsAlternate(event.config)
+    const alternate = event.modified && event.config.alternateSubmit !== null
 
-    // An empty compact editor's action cancels, unless Mod turned it into the alternate submit.
     if (!alternate && !canSubmit(event.config)) return cancel(state, false)
 
-    return submit(state, event.config, alternate || (event.modified && event.config.alternateSubmit !== null))
+    return submit(state, event.config, alternate)
   }
 
   if (event.type === "submit.requested") return submit(state, event.config, false)
