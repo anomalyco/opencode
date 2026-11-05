@@ -11,24 +11,31 @@ use crate::routes::session::sidebar::Section;
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.limit", |cx| {
-        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, _| Box::new(Section::new(tui, view)));
+        // The limits and the selected model live outside the store, so any change reads them again.
+        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, _| {
+            Box::new(Section::new(tui, None, |tui, _| model(tui), view))
+        });
     })
 }
 
-fn view(tui: &Tui) -> Option<View> {
+/// What remains, and whether it is out or reached.
+fn model(tui: &Tui) -> Option<(String, bool)> {
     let local = &tui.local;
     let model = local.model_info(&local.current()?)?;
     let info = local.usage()??;
     let provider = local.provider(&model.provider_id.0);
     let usage = model_usage(&info, &model, provider.as_ref())?;
-    let danger = matches!(level(&usage, &model), Level::Out | Level::Reached);
+    Some((format_dollars(usage.left), matches!(level(&usage, &model), Level::Out | Level::Reached)))
+}
+
+fn view(tui: &Tui, (left, danger): &(String, bool)) -> View {
     let theme = tui.page();
     let app = &tui.app;
-    Some(View::new(app).child(&Text::new(app, "Limit").fg(theme.text.base).bold()).child(
-        &Text::new(app, format!("{} remaining", format_dollars(usage.left))).fg(if danger {
+    View::new(app).child(&Text::new(app, "Limit").fg(theme.text.base).bold()).child(
+        &Text::new(app, format!("{left} remaining")).fg(if *danger {
             theme.text.feedback.error.base
         } else {
             theme.text.muted
         }),
-    ))
+    )
 }

@@ -21,8 +21,19 @@ pub fn plugin() -> Definition<Tui> {
         let fold = Fold::load(cx.host(), cx.storage_key("view"));
         cx.slot(Placement::append(slot::SIDEBAR_CONTENT), move |tui, input| {
             let session = SessionID(input.session_id.clone().unwrap_or_default());
-            let fold = fold.clone();
-            Box::new(Section::new(tui, move |tui| view(tui, &session, &fold)))
+            let (model, render) = (fold.clone(), fold.clone());
+            Box::new(Section::new(
+                tui,
+                Some(session.clone()),
+                move |tui, _| {
+                    let list = tui.data.read(|state| {
+                        let boundary = state.session(&session).and_then(|info| info.revert.as_ref());
+                        todos(state.messages(&session), boundary.map(|revert| revert.message_id.0.as_str()))
+                    });
+                    (!list.is_empty()).then(|| (list, model.open()))
+                },
+                move |tui, (list, _)| view(tui, list, &render),
+            ))
         });
     })
 }
@@ -41,15 +52,7 @@ pub struct Todo {
     pub status: Status,
 }
 
-fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
-    let list = tui.data.read(|state| {
-        let boundary =
-            state.session(session).and_then(|info| info.revert.as_ref().map(|revert| revert.message_id.0.clone()));
-        todos(state.messages(session), boundary.as_deref())
-    });
-    if list.is_empty() {
-        return None;
-    }
+fn view(tui: &Tui, list: &[Todo], fold: &Rc<Fold>) -> View {
     let theme = tui.page();
     let app = &tui.app;
     let foldable = list.len() > 2;
@@ -74,11 +77,11 @@ fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
     });
     let root = View::new(app).child(&header);
     if !foldable || fold.open() {
-        for item in &list {
+        for item in list {
             root.add(&item_view(app, &theme, item));
         }
     }
-    Some(root)
+    root
 }
 
 /// `TodoItem`: the marker and the wrapped content, colored by status.
