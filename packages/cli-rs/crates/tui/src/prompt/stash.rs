@@ -2,72 +2,64 @@
 //! `<state>/prompt-stash.jsonl`, shared by every prompt of the app (`prompt/stash.tsx`,
 //! `component/prompt/index.tsx:882-946`).
 //!
-//! F.5's `jsonl::Stash` owns the format and writes the file. The UI keeps its own copy of the entries, so
-//! commands answer at once, as TS's store does, and the file operations run in order on blocking threads.
+//! F.5's `jsonl` owns the format and writes the file. The UI keeps its own copy of the entries, so
+//! commands answer at once, as TS's store does. The file is touched on one worker thread in order: the
+//! load first, then each change under the file's lock, against what the file holds then, so entries
+//! another TUI stashed meanwhile stay.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
-use std::sync::{Arc, Mutex};
 
 use opencode_local::jsonl::{self, MAX_STASH_ENTRIES};
+use opencode_local::lock;
+use opencode_local::serial::Serial;
 use opencode_ui::dialog::FocusId;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
 use opentui::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
+use tokio::sync::oneshot;
 
 use super::autocomplete::parts;
 use super::editor::Inner;
 use crate::app::Tui;
 
-/// The app's stash: `{prompt, timestamp}` entries, oldest first.
+/// The app's stash: `{prompt, timestamp}` entries, oldest first. Without a state directory it lives in
+/// memory only.
 #[derive(Clone, Default)]
 pub struct Stash {
     entries: Rc<RefCell<Vec<Value>>>,
-    /// `None` until loaded; never loaded without a state directory, which keeps the stash in memory.
-    file: Arc<Mutex<Option<jsonl::Stash>>>,
-    ops: Arc<Mutex<VecDeque<Op>>>,
-    persist: bool,
-}
-
-enum Op {
-    Push(Value, i64),
-    Pop,
-    Remove(usize),
+    file: Option<(PathBuf, Serial)>,
 }
 
 impl Stash {
-    /// Loads `<state>/prompt-stash.jsonl` on a blocking thread; until then the stash is empty.
+    /// Loads `<state>/prompt-stash.jsonl` on the worker; until then the stash holds what was stashed
+    /// meanwhile, which then goes after the file's entries.
     pub fn load(app: &App, state: Option<PathBuf>) -> Self {
-        let stash = Self {
-            persist: state.is_some(),
-            ..Self::default()
-        };
         let Some(state) = state else {
-            return stash;
+            return Self::default();
         };
-        let (file, ops, entries) = (stash.file.clone(), stash.ops.clone(), stash.entries.clone());
-        app.spawn(
-            async move {
-                tokio::task::spawn_blocking(move || {
-                    let mut slot = file.lock().ok()?;
-                    let loaded = slot.insert(jsonl::Stash::load(&state));
-                    // Operations from before the load go after it.
-                    drain(loaded, &ops);
-                    Some(loaded.list().to_vec())
-                })
-                .await
-                .ok()
-                .flatten()
-            },
-            move |_, loaded| {
-                if let Some(loaded) = loaded {
-                    *entries.borrow_mut() = loaded;
-                }
-            },
-        );
+        let writer = Serial::new("prompt-stash.jsonl");
+        let (send, receive) = oneshot::channel();
+        let file = state.clone();
+        writer.run(move || {
+            let _ = send.send(jsonl::Stash::load(&file).list().to_vec());
+        });
+        let stash = Self {
+            entries: Rc::default(),
+            file: Some((state, writer)),
+        };
+        let entries = stash.entries.clone();
+        app.spawn(async move { receive.await.ok() }, move |_, loaded| {
+            let Some(loaded) = loaded else { return };
+            // Their writes are queued after the load, so the file gets them in the same order.
+            let mut entries = entries.borrow_mut();
+            let early = std::mem::replace(&mut *entries, loaded);
+            entries.extend(early);
+            let excess = entries.len().saturating_sub(MAX_STASH_ENTRIES);
+            entries.drain(..excess);
+        });
         stash
     }
 
@@ -80,58 +72,44 @@ impl Stash {
     }
 
     /// `push({prompt})`, stamped now; the oldest entries past the limit go.
-    pub fn push(&self, app: &App, prompt: Value) {
-        let now = jsonl::now_ms();
+    pub fn push(&self, _app: &App, prompt: Value) {
+        let entry = jsonl::stash_entry(prompt, jsonl::now_ms());
         {
             let mut entries = self.entries.borrow_mut();
-            entries.push(json!({ "prompt": prompt, "timestamp": now }));
+            entries.push(entry.clone());
             let excess = entries.len().saturating_sub(MAX_STASH_ENTRIES);
             entries.drain(..excess);
         }
-        self.run(app, Op::Push(prompt, now));
+        self.write(move |state| jsonl::save_stash(state, &entry));
     }
 
     /// `pop()`: the newest entry.
-    pub fn pop(&self, app: &App) -> Option<Value> {
+    pub fn pop(&self, _app: &App) -> Option<Value> {
         let entry = self.entries.borrow_mut().pop()?;
-        self.run(app, Op::Pop);
+        let deleted = entry.clone();
+        self.write(move |state| jsonl::delete_stash(state, &deleted));
         Some(entry)
     }
 
     /// `remove(index)`.
-    pub fn remove(&self, app: &App, index: usize) {
+    pub fn remove(&self, _app: &App, index: usize) {
         if index >= self.entries.borrow().len() {
             return;
         }
-        self.entries.borrow_mut().remove(index);
-        self.run(app, Op::Remove(index));
+        let entry = self.entries.borrow_mut().remove(index);
+        self.write(move |state| jsonl::delete_stash(state, &entry));
     }
 
-    /// Queues `op` for the file. Each task applies every queued operation while it holds the file, so
-    /// they land in order whichever task runs first.
-    fn run(&self, app: &App, op: Op) {
-        if !self.persist {
+    /// Queues a write after the load and every earlier write.
+    fn write(&self, write: impl FnOnce(&Path) -> Result<(), lock::Error> + Send + 'static) {
+        let Some((state, writer)) = self.file.clone() else {
             return;
-        }
-        if let Ok(mut ops) = self.ops.lock() {
-            ops.push_back(op);
-        }
-        let (file, ops) = (self.file.clone(), self.ops.clone());
-        app.runtime().spawn_blocking(move || {
-            if let Some(stash) = file.lock().ok().as_mut().and_then(|slot| slot.as_mut()) {
-                drain(stash, &ops);
+        };
+        writer.run(move || {
+            if let Err(error) = write(&state) {
+                log::warn!("prompt-stash.jsonl: {error}");
             }
         });
-    }
-}
-
-fn drain(stash: &mut jsonl::Stash, ops: &Mutex<VecDeque<Op>>) {
-    while let Some(op) = ops.lock().ok().and_then(|mut ops| ops.pop_front()) {
-        match op {
-            Op::Push(prompt, now) => stash.push(prompt, now),
-            Op::Pop => drop(stash.pop()),
-            Op::Remove(index) => stash.remove(index),
-        }
     }
 }
 
