@@ -12,6 +12,7 @@ import {
   type ModelChoice,
   type ModelSelectionEvent,
   type ModelSelectionState,
+  type ModelSelectionTransition,
 } from "./selection-machine"
 import { DEFAULT_VARIANT, INHERIT_VARIANT } from "./variant"
 
@@ -38,14 +39,14 @@ const picked = (sessionID: string, modelID: string, variant?: string): ModelSele
   edit: { type: "model", agent: "build", choice: choice(modelID, variant) },
 })
 
-function replay(state: ModelSelectionState, events: ModelSelectionEvent[]) {
-  return events.reduce(
+function replay(state: ModelSelectionState, events: ModelSelectionEvent[]): ModelSelectionTransition {
+  return events.reduce<ModelSelectionTransition>(
     (result, event) => {
       const next = transitionModelSelection(result.state, event)
 
       return { state: next.state, effects: [...result.effects, ...next.effects] }
     },
-    { state, effects: [] as ReturnType<typeof transitionModelSelection>["effects"][number][] },
+    { state, effects: [] },
   )
 }
 
@@ -172,6 +173,7 @@ describe("model selection machine", () => {
       sessionID: "ses_a",
       attempt: 2,
     })
+
     expect(selectSession(cancelled.state, "ses_a")).toMatchObject({ phase: "override", choice: choice("b", "low") })
     expect(cancelled.effects).toContainEqual({ type: "ack-timer.clear", sessionID: "ses_a" })
   })
@@ -256,6 +258,7 @@ describe("model selection machine", () => {
       agent: "plan",
       previous: { agent: "build", choice: choice("c", "high") },
     })
+
     const back = editSelection(first, {
       type: "agent",
       agent: "build",
