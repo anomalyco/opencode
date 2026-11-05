@@ -160,14 +160,18 @@ describe("model selection machine", () => {
     ])
 
     expect(selectSession(second.state, "ses_a")).toMatchObject({ phase: "awaiting-ack", attempt: 2 })
-    expect(transitionModelSelection(second.state, { type: "commit.cancelled", sessionID: "ses_a", attempt: 1 })).toEqual(
-      { state: second.state, effects: [] },
-    )
-    expect(transitionModelSelection(second.state, { type: "commit.timed-out", sessionID: "ses_a", attempt: 1 }).state).toBe(
-      second.state,
-    )
+    expect(
+      transitionModelSelection(second.state, { type: "commit.cancelled", sessionID: "ses_a", attempt: 1 }),
+    ).toEqual({ state: second.state, effects: [] })
+    expect(
+      transitionModelSelection(second.state, { type: "commit.timed-out", sessionID: "ses_a", attempt: 1 }).state,
+    ).toBe(second.state)
 
-    const cancelled = transitionModelSelection(second.state, { type: "commit.cancelled", sessionID: "ses_a", attempt: 2 })
+    const cancelled = transitionModelSelection(second.state, {
+      type: "commit.cancelled",
+      sessionID: "ses_a",
+      attempt: 2,
+    })
     expect(selectSession(cancelled.state, "ses_a")).toMatchObject({ phase: "override", choice: choice("b", "low") })
     expect(cancelled.effects).toContainEqual({ type: "ack-timer.clear", sessionID: "ses_a" })
   })
@@ -177,7 +181,11 @@ describe("model selection machine", () => {
     { name: "off screen it keeps the local selection", visible: false, phase: "override" },
   ])("an echoed commit $name", ({ visible, phase }) => {
     const result = replay(ready(), [
-      { type: "edited", sessionID: "ses_a", edit: { type: "agent", agent: "plan", previous: { agent: "build", choice: choice("c") } } },
+      {
+        type: "edited",
+        sessionID: "ses_a",
+        edit: { type: "agent", agent: "plan", previous: { agent: "build", choice: choice("c") } },
+      },
       { type: "edited", sessionID: "ses_a", edit: { type: "model", agent: "plan", choice: choice("a", "high") } },
       {
         type: "commit.tracked",
@@ -204,7 +212,13 @@ describe("model selection machine", () => {
   test("an already committed selection releases a matching override without waiting", () => {
     const result = replay(ready(), [
       picked("ses_a", "a", "high"),
-      { type: "commit.tracked", sessionID: "ses_a", target: target("a", "high"), visible: true, durable: durable("a", "high") },
+      {
+        type: "commit.tracked",
+        sessionID: "ses_a",
+        target: target("a", "high"),
+        visible: true,
+        durable: durable("a", "high"),
+      },
     ])
 
     expect(selectSession(result.state, "ses_a")).toBeUndefined()
@@ -242,7 +256,11 @@ describe("model selection machine", () => {
       agent: "plan",
       previous: { agent: "build", choice: choice("c", "high") },
     })
-    const back = editSelection(first, { type: "agent", agent: "build", previous: { agent: "plan", choice: choice("b") } })
+    const back = editSelection(first, {
+      type: "agent",
+      agent: "build",
+      previous: { agent: "plan", choice: choice("b") },
+    })
 
     expect(back).toEqual({
       agent: "build",

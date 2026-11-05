@@ -267,8 +267,7 @@ export function createComposerModelSelection(input: {
 
         return resolveModelVariant({
           variants: Object.keys(model?.variants ?? {}),
-          selected:
-            same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
+          selected: same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
           configured: this.configured(model),
           preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
         })

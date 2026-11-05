@@ -229,7 +229,7 @@ export function editSelection(current: Selection | undefined, edit: SelectionEdi
 }
 
 /** The local selection a Session shows, or `undefined` when its committed selection shows. */
-export function selectSession(state: ModelSelectionState, sessionID: string): Selection | undefined {
+export function selectSession(state: ModelSelectionState, sessionID: string): SessionSelectionEntry | undefined {
   if (state.status === "disposed") return
 
   return state.sessions[sessionID]
@@ -315,11 +315,7 @@ function hydrate(state: Active, stored: Readonly<Record<string, Selection | unde
 }
 
 /** Replaces one Session's entry, stops a commit wait it ends, and writes the change once stored state has loaded. */
-function settle(
-  state: Active,
-  sessionID: string,
-  next: SessionSelectionEntry | undefined,
-): ModelSelectionTransition {
+function settle(state: Active, sessionID: string, next: SessionSelectionEntry | undefined): ModelSelectionTransition {
   const prev = state.sessions[sessionID]
   const sessions = { ...state.sessions }
 

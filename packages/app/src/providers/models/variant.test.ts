@@ -41,7 +41,12 @@ describe("model variant", () => {
       configured: "xhigh",
       expected: undefined,
     },
-    { name: "an explicit default to the first variant", selected: DEFAULT_VARIANT, configured: "xhigh", expected: "low" },
+    {
+      name: "an explicit default to the first variant",
+      selected: DEFAULT_VARIANT,
+      configured: "xhigh",
+      expected: "low",
+    },
   ])("cycles from $name", ({ selected, configured, expected }) => {
     expect<string | undefined>(cycleModelVariant({ variants, selected, configured })).toBe(expected)
   })

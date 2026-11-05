@@ -114,7 +114,8 @@ export const ModelSelectionSchema = Persistence.migrate(
       decode: SchemaGetter.transform((value) => ({
         session: Object.fromEntries(
           Object.entries(
-            value.session ?? Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
+            value.session ??
+              Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
           ).map(([sessionID, entry]) => [sessionID, entry && migrateSession(entry)]),
         ),
       })),
@@ -294,7 +295,9 @@ function writeStored(selection: Selection): StoredSession {
   return {
     agent: selection.agent,
     choice: selection.choice && copyChoice(selection.choice),
-    choices: Object.fromEntries(Object.entries(selection.choices).map(([agent, choice]) => [agent, copyChoice(choice)])),
+    choices: Object.fromEntries(
+      Object.entries(selection.choices).map(([agent, choice]) => [agent, copyChoice(choice)]),
+    ),
   }
 }
 
@@ -371,7 +374,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return resolveAgent(list(), name)
     }
 
-    const scope = createMemo(() => {
+    const scope = createMemo<Selection | undefined>(() => {
       const session = id()
 
       return session ? selectSession(workspace().state(), session) : draft()

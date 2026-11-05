@@ -308,7 +308,12 @@ test("promoting into a workspace no provider shows writes it there and only ther
   const { local } = draft.mount()
   const choices = { plan: { providerID: "provider", modelID: "c", variant: { type: "named", value: "low" } } } as const
   local.session.promote(worktree.directory, "ses_wt", { agent: "build", model: key("b"), variant: "high", choices })
-  local.session.promote(worktree.directory, "ses_other", { agent: "build", model: key("a"), variant: undefined, choices })
+  local.session.promote(worktree.directory, "ses_other", {
+    agent: "build",
+    model: key("a"),
+    variant: undefined,
+    choices,
+  })
   expect(stored(worktree.directory).session).toEqual({
     ses_wt: {
       agent: "build",
