@@ -8,6 +8,44 @@ const DEFAULT_PORT = 8787;
 const DEFAULT_MAX_BYTES = 1024 * 1024;
 const cooldowns = new Map();
 const failures = new Map();
+const providerStats = new Map();
+
+function statsFor(id) {
+  if (!providerStats.has(id)) providerStats.set(id, {
+    requests: 0, successes: 0, failures: 0, consecutiveFailures: 0,
+    latencyEwmaMs: null, lastStatus: null, lastErrorAt: null, lastSuccessAt: null
+  });
+  return providerStats.get(id);
+}
+
+function recordSuccess(id, latencyMs, status) {
+  const stats = statsFor(id);
+  stats.requests += 1;
+  stats.successes += 1;
+  stats.consecutiveFailures = 0;
+  stats.latencyEwmaMs = stats.latencyEwmaMs === null ? latencyMs : (stats.latencyEwmaMs * 0.7) + (latencyMs * 0.3);
+  stats.lastStatus = status;
+  stats.lastSuccessAt = new Date().toISOString();
+}
+
+function recordFailure(id, latencyMs, status) {
+  const stats = statsFor(id);
+  stats.requests += 1;
+  stats.failures += 1;
+  stats.consecutiveFailures += 1;
+  stats.latencyEwmaMs = stats.latencyEwmaMs === null ? latencyMs : (stats.latencyEwmaMs * 0.7) + (latencyMs * 0.3);
+  stats.lastStatus = status;
+  stats.lastErrorAt = new Date().toISOString();
+}
+
+function providerScore(provider, routing = {}) {
+  const stats = statsFor(provider.id);
+  const latencyWeight = positive(routing.latencyWeight, 1);
+  const failurePenaltyMs = positive(routing.failurePenaltyMs, 5000);
+  return (provider.priority * 1000)
+    + ((stats.latencyEwmaMs ?? 0) * latencyWeight)
+    + (stats.consecutiveFailures * failurePenaltyMs);
+}
 
 function positive(value, fallback) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
@@ -43,6 +81,11 @@ export function loadConfig(file = process.env.OCU_CONFIG || new URL("./config.js
     maxRequestBytes: positive(parsed.maxRequestBytes, DEFAULT_MAX_BYTES),
     cooldownBaseMs: positive(parsed.cooldownBaseMs, 15000),
     cooldownMaxMs: positive(parsed.cooldownMaxMs, 300000),
+    routing: {
+      mode: parsed.routing?.mode === "adaptive" ? "adaptive" : "priority",
+      latencyWeight: positive(parsed.routing?.latencyWeight, 1),
+      failurePenaltyMs: positive(parsed.routing?.failurePenaltyMs, 5000)
+    },
     providers: parsed.providers.map(validateProvider)
   };
 }
@@ -90,7 +133,9 @@ function candidatesFor(config, requestedModel) {
         : provider.models.find((item) => item.alias === requestedModel);
       return mapping ? [{ provider, mapping }] : [];
     })
-    .sort((a, b) => a.provider.priority - b.provider.priority);
+    .sort((a, b) => config.routing?.mode === "adaptive"
+      ? providerScore(a.provider, config.routing) - providerScore(b.provider, config.routing)
+      : a.provider.priority - b.provider.priority);
 }
 
 function cooldownRemaining(id) {
@@ -161,6 +206,7 @@ async function handleChat(req, res, config) {
     if (key) headers.authorization = "Bearer " + key;
 
     try {
+      const startedAt = Date.now();
       const upstream = await fetch(provider.baseURL + "/chat/completions", {
         method: "POST",
         headers,
@@ -171,6 +217,7 @@ async function handleChat(req, res, config) {
       if (!upstream.ok) {
         clearTimeout(timeout);
         const status = upstream.status;
+        recordFailure(provider.id, Date.now() - startedAt, status);
         const retry = retryAfterMs(upstream.headers.get("retry-after"));
         try { await upstream.body?.cancel(); } catch {}
         if (status === 429 || status >= 500) {
@@ -184,6 +231,7 @@ async function handleChat(req, res, config) {
         continue;
       }
 
+      recordSuccess(provider.id, Date.now() - startedAt, upstream.status);
       clearFailure(provider.id);
       res.writeHead(upstream.status, {
         "content-type": upstream.headers.get("content-type") || "application/json",
@@ -209,6 +257,7 @@ async function handleChat(req, res, config) {
       return;
     } catch (error) {
       clearTimeout(timeout);
+      recordFailure(provider.id, config.requestTimeoutMs, 502);
       setCooldown(config, provider, 0);
       lastStatus = 502;
       lastMessage = error.name === "AbortError" ? "Provider request timed out" : "Provider connection failed";
@@ -226,6 +275,17 @@ export function createServer(config) {
     const url = new URL(req.url || "/", "http://localhost");
     if (req.method === "GET" && url.pathname === "/health") {
       return sendJson(res, 200, { status: "ok", providers: config.providers.filter((p) => p.enabled).length });
+    }
+    if (req.method === "GET" && url.pathname === "/ocu/status") {
+      const providers = config.providers.map((provider) => {
+        const stats = statsFor(provider.id);
+        return {
+          id: provider.id, name: provider.name, enabled: provider.enabled,
+          priority: provider.priority, cooldownRemainingMs: cooldownRemaining(provider.id),
+          ...stats
+        };
+      });
+      return sendJson(res, 200, { routingMode: config.routing?.mode || "priority", providers });
     }
     if (req.method === "GET" && url.pathname === "/v1/models") {
       const models = new Map();
