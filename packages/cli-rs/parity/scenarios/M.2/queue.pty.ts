@@ -16,8 +16,12 @@ export default definePty({
         : [],
   }),
   // A still spinner, so the screen settles while the turn runs.
-  setup: (root) =>
-    Bun.write(`${root}/home/.config/opencode/cli.json`, JSON.stringify({ animations: false, mini: { splash: "hide" } })),
+  setup: async (root) => {
+    await Bun.write(
+      `${root}/home/.config/opencode/cli.json`,
+      JSON.stringify({ animations: false, mini: { splash: "hide" } }),
+    )
+  },
   steps: [
     opened,
     { keys: "first", settle: 200 },
