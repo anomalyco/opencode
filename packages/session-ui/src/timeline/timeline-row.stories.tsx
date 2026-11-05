@@ -63,7 +63,7 @@ export const ResponseSpeed = {
   render: (args: { measured: boolean; steered: boolean }) => (
     <CurrentSessionTimelineStory
       title="Response speed"
-      description="Hover the response, then its metadata line to reveal tokens per second across both model steps."
+      description="Hover the response to reveal tokens per second across both model steps."
       width="720px"
       document={{
         sessionID: CURRENT_SESSION_ID,
