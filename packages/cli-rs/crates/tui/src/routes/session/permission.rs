@@ -828,7 +828,13 @@ fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
         .basis(Length::Auto)
         .min_height(0);
     if let Some(diff) = &current.diff {
-        let view = match tui.config().info.diffs.as_ref().and_then(|diffs| diffs.view) {
+        let view = match tui
+            .config()
+            .info
+            .diffs
+            .as_ref()
+            .and_then(|diffs| diffs.view)
+        {
             Some(ConfigDiffView::Unified) => DiffView::Unified,
             Some(ConfigDiffView::Split) => DiffView::Split,
             _ if tui.app.size().0 > 120 => DiffView::Split,
