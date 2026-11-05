@@ -23,6 +23,7 @@ mod models;
 mod more_tools;
 mod navigate;
 mod permission;
+mod plugins;
 mod prompt;
 mod queue;
 mod review_ms1;
