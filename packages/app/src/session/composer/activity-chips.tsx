@@ -1,5 +1,6 @@
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
@@ -117,9 +118,11 @@ export function SessionActivityChips(props: {
       if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return
 
       event.preventDefault()
-      void props.onStop(item)
+      panel.stop(item)
     },
   })
+
+  const rowStopping = (item: SessionActivityItem) => view().stoppingKeys[item.key] !== undefined
 
   // One clock for every row, ticking only while the panel is open and something still runs.
   const [now, setNow] = createSignal(Date.now())
@@ -155,8 +158,10 @@ export function SessionActivityChips(props: {
         variant="ghost-muted"
         tabIndex={-1}
         data-slot="session-activity-stop"
-        icon={<Icon name="outline-xmark" size="small" />}
+        icon={rowStopping(item) ? <Loader /> : <Icon name="outline-xmark" size="small" />}
         aria-label={language.t(item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent")}
+        aria-disabled={rowStopping(item) || undefined}
+        aria-busy={rowStopping(item) || undefined}
         onPointerDown={(event) => {
           event.preventDefault()
           event.stopPropagation()
@@ -164,7 +169,7 @@ export function SessionActivityChips(props: {
         onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()
-          void props.onStop(item)
+          panel.stop(item)
         }}
       />
     </Show>
@@ -271,7 +276,7 @@ export function SessionActivityChips(props: {
                             data-slot="session-activity-shell-stop"
                             closeOnSelect={false}
                             aria-disabled={view().stopDisabled || undefined}
-                            onSelect={panel.stop}
+                            onSelect={() => panel.stop()}
                           >
                             {language.t(
                               view().stopping ? "session.activity.shell.stopping" : "session.activity.shell.stop",
