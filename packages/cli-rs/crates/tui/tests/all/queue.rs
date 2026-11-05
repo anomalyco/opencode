@@ -2,49 +2,29 @@
 //! queued prompts dialog (steer, delete, undo), the pending steer dialog, and the message actions dialog. Writes
 //! answer 204 where the server does; `fail` answers the inbox writes with a 409.
 
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+
+use std::sync::Arc;
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use opencode_tui::Deps;
 use serde_json::{Value, json};
-
-use crate::support::WAIT;
-
-type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 
 const LOCATION: &str = "/project";
 
-struct Fixture {
-    messages: Vec<Value>,
-    inbox: Vec<Value>,
-    fail: bool,
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
-        let location = json!({ "directory": LOCATION });
+fn fake(messages: Vec<Value>, inbox: Vec<Value>, fail: bool) -> Fake {
+    Fake::new(move |seen| {
         let base = "/api/session/ses_a";
-        let inbox = path.starts_with(&format!("{base}/inbox/"));
-        let (status, body) = match (request.method, path.as_str()) {
+        let path = seen.path.as_str();
+        let in_inbox = path.starts_with(&format!("{base}/inbox/"));
+        match (seen.method.as_str(), path) {
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", p) if p == base => (200, json!({ "data": session("ses_a") })),
             ("GET", p) if p == format!("{base}/message") => {
-                let page: Vec<_> = self.messages.iter().rev().cloned().collect();
+                let page: Vec<_> = messages.iter().rev().cloned().collect();
                 (200, json!({ "data": page, "cursor": {} }))
             }
-            ("GET", p) if p == format!("{base}/inbox") => (200, json!({ "data": self.inbox })),
+            ("GET", p) if p == format!("{base}/inbox") => (200, json!({ "data": inbox })),
             ("GET", p) if p.ends_with("/permission") => (200, json!({ "data": [] })),
             ("GET", p) if p.starts_with("/api/session/ses_") => {
                 let other = p.trim_start_matches("/api/session/");
@@ -54,42 +34,18 @@ impl Transport for Fixture {
                     None => (200, json!({ "data": session(other) })),
                 }
             }
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-                    "request": { "settings": {}, "headers": {}, "body": {} },
-                }] }),
-            ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "m", "modelID": "m", "providerID": "p", "name": "Model M",
-                    "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-                    "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-                    "enabled": true, "limit": { "context": 1000, "output": 100 },
-                }] }),
-            ),
-            ("GET", "/api/provider" | "/api/command") => (200, json!({ "location": location, "data": [] })),
-            ("PATCH" | "DELETE", _) if inbox && self.fail => {
+            ("PATCH" | "DELETE", _) if in_inbox && fail => {
                 (409, json!({ "_tag": "SessionInboxConflict", "message": "already delivered" }))
             }
-            ("PATCH" | "DELETE", _) if inbox => (204, Value::Null),
+            ("PATCH" | "DELETE", _) if in_inbox => (204, Value::Null),
             ("POST", p) if p == format!("{base}/revert/stage") => {
-                (200, json!({ "data": { "messageID": body["messageID"] } }))
+                (200, json!({ "data": { "messageID": seen.body["messageID"] } }))
             }
             ("POST", p) if p == format!("{base}/fork") => (200, json!({ "data": session("ses_fork") })),
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+            ("GET", _) => support::base(seen, LOCATION),
+            _ => support::not_found(),
+        }
+    })
 }
 
 fn session(id: &str) -> Value {
@@ -129,10 +85,11 @@ fn queued() -> Vec<Value> {
 }
 
 struct Kit {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
 }
+
+deref_harness!(Kit);
 
 impl Kit {
     fn new(inbox: Vec<Value>) -> Self {
@@ -140,38 +97,13 @@ impl Kit {
     }
 
     fn with(inbox: Vec<Value>, fail: bool) -> Self {
-        let seen = Seen::default();
-        let fixture = Fixture { messages: turns(), inbox, fail, seen: seen.clone() };
-        let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
-        let app = TestApp::new(100, 30);
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: LOCATION.into(),
-                config: Resolved::new(Info { animations: Some(false), ..Info::default() }, |_| None),
-                roots: None,
-                route: Route::Session { id: SessionID("ses_a".into()) },
-                continue_: false,
-                events: false,
-            },
-        );
-        let kit = Self { app, tui, seen };
+        let fake = fake(turns(), inbox, fail);
+        let seen = fake.log();
+        let deps = Deps { config: support::config(support::still()), ..support::deps(Arc::new(fake)) };
+        let kit = Self { harness: support::mount(100, 30, deps), seen };
         kit.wait_for("Fixed it.");
         kit.wait_for("Model M");
         kit
-    }
-
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
-    fn wait_gone(&self, text: &str) {
-        let gone = self.app.wait_until(WAIT, || !self.app.text().contains(text));
-        assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
     /// A single click where `text` starts: the clock moves past the double-click window first, which would
@@ -181,10 +113,7 @@ impl Kit {
         self.app.advance(Duration::from_secs(1));
         let mut at = None;
         let settled = self.app.wait_until(WAIT, || {
-            at = self.app.text().lines().enumerate().find_map(|(y, line)| {
-                let x = line.find(text)?;
-                Some((line[..x].chars().count() as u16, y as u16))
-            });
+            at = support::at(&self.app.text(), text);
             self.app.advance(Duration::ZERO);
             at.is_some() && !self.app.needs_frame()
         });
@@ -199,8 +128,8 @@ impl Kit {
             .unwrap()
             .iter()
             // The goal footer's RPC `get` is a read, as P-REQ counts it.
-            .filter(|(method, path, _)| method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get")))
-            .map(|(method, path, body)| format!("{method} {path} {body}"))
+            .filter(|seen| seen.method != "GET" && !(seen.path.starts_with("/api/rpc/") && seen.path.ends_with("/get")))
+            .map(|seen| format!("{} {} {}", seen.method, seen.path, seen.body))
             .collect()
     }
 

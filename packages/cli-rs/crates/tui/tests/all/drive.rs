@@ -1,12 +1,12 @@
 //! H.4: the real TUI on a headless app, driven over the `OPENCODE_DRIVE` endpoint by a client on another thread.
 
+use crate::support;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use opencode_api::client::Client;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
-use opencode_local::cli_config::{Info, Resolved};
 use opentui::app::HeadlessOptions;
 use opentui::prelude::*;
 use serde_json::{Value, json};
@@ -18,16 +18,8 @@ fn routes() -> Vec<MemoryRoute> {
     let location =
         json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
-    let agent = json!({
-        "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-        "request": { "settings": {}, "headers": {}, "body": {} },
-    });
-    let model = json!({
-        "id": "model", "modelID": "model", "providerID": "demo", "name": "Demo Model",
-        "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-        "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-        "enabled": true, "limit": { "context": 1000, "output": 100 },
-    });
+    let agent = support::agent("build", "primary", false);
+    let model = support::model("demo", "model", "Demo Model");
     vec![
         MemoryRoute::json("GET", "/api/location", 200, &location),
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
@@ -73,16 +65,8 @@ fn rows(frame: &Value) -> Vec<String> {
 fn a_driver_types_into_the_headless_tui_and_captures_it() {
     let options = AppOptions { exit_on_ctrl_c: false, suspend_on_ctrl_z: false, ..AppOptions::default() };
     let app = App::headless(HeadlessOptions { width: 100, height: 30, app: options }).unwrap();
-    let client = Client::with_transport("http://opencode.local", Arc::new(Memory::new(routes()))).unwrap();
-    let deps = opencode_tui::Deps {
-        client,
-        directory: DIRECTORY.into(),
-        config: Resolved::new(Info::default(), |_| None),
-        roots: None,
-        route: opencode_tui::Route::Home,
-        continue_: false,
-        events: false,
-    };
+    let deps =
+        opencode_tui::Deps { route: opencode_tui::Route::Home, ..support::deps(Arc::new(Memory::new(routes()))) };
     let tui = opencode_tui::mount_with(&app, deps, opencode_tui::Args::default());
     let server =
         opencode_tui::features::drive::start(&tui, SocketAddr::from(([127, 0, 0, 1], 0)), "0.0.0-test".into()).unwrap();
