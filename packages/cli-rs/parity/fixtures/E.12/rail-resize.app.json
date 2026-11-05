@@ -157,6 +157,11 @@
   ],
   "steps": [
     {
+      "checkpoint": "first",
+      "until": "The parser drops the last token.",
+      "fixture": "E.12/rail-resize/first"
+    },
+    {
       "event": {
         "id": "evt_1",
         "created": 3,
@@ -272,6 +277,15 @@
         "status": 200,
         "json": {
           "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_a/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
         }
       },
       {
@@ -837,6 +851,24 @@
               "default": "main"
             }
           }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_a"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
         }
       },
       {
