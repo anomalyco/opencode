@@ -5,11 +5,11 @@
 //! tools) live on a surface whose settled rows are committed as they arrive, so the terminal's scrollback grows
 //! with the text and nothing written is ever rewritten.
 
+use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState};
 use opentui::prelude::*;
 use opentui::split::{Scrollback, ScrollbackSurface, SnapshotOptions, SplitFooter, SplitSnapshot};
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{ColumnWidthMode, Markdown, MarkdownColors, MarkdownTableOptions, MarkdownTableStyle};
-use serde_json::Value;
 
 use crate::theme::{RunTheme, mono_snapshot, mono_text};
 use crate::tools;
@@ -70,7 +70,7 @@ pub struct Commit {
     pub tool: Option<String>,
     pub directory: Option<String>,
     /// The tool part as the server sent it.
-    pub part: Option<Value>,
+    pub part: Option<SessionMessageAssistantTool>,
     pub interrupted: bool,
     pub tool_state: Option<ToolState>,
     pub tool_error: Option<String>,
@@ -163,7 +163,16 @@ pub fn entry_body(commit: &Commit, options: BodyOptions) -> Body {
     }
     match commit.kind {
         EntryKind::User => user_body(&raw, mono),
-        EntryKind::Tool => tools::entry_body(commit, &raw, options).unwrap_or(Body::None),
+        EntryKind::Tool => {
+            let body = tools::entry_body(commit, &raw, options).unwrap_or(Body::None);
+            match body {
+                Body::Text(text) if mono && commit.phase != Phase::Progress => {
+                    Body::Text(crate::theme::mono_tool_text(&text, true))
+                }
+                body if mono => tools::mono_body(body),
+                body => body,
+            }
+        }
         EntryKind::Assistant => match commit.phase {
             Phase::Start => Body::None,
             Phase::Final if commit.interrupted => text_body("assistant interrupted".into()),
@@ -356,7 +365,10 @@ pub fn entry_color(commit: &Commit, theme: &RunTheme) -> Color {
 fn failed(commit: &Commit) -> bool {
     commit.kind == EntryKind::Tool
         && (commit.tool_state == Some(ToolState::Error)
-            || commit.part.as_ref().is_some_and(|part| part["state"]["status"] == "error"))
+            || commit
+                .part
+                .as_ref()
+                .is_some_and(|part| matches!(part.state, SessionMessageAssistantToolState::Error(_))))
 }
 
 /// A body that streams on a surface.

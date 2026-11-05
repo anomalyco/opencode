@@ -341,7 +341,8 @@ impl<'a> Frame<'a> {
     }
 }
 
-fn normalize_input(name: &str, value: Option<&Value>) -> Map<String, Value> {
+/// `normalizeInput`: legacy `filePath` and `subagent_type` as `path` and `agent`.
+pub fn normalize_input(name: &str, value: Option<&Value>) -> Map<String, Value> {
     let mut input = dict(value);
     let path = match input.get("path") {
         Some(Value::String(path)) => path.clone(),
@@ -360,7 +361,8 @@ fn normalize_input(name: &str, value: Option<&Value>) -> Map<String, Value> {
     input
 }
 
-fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<String, Value> {
+/// `normalizeMetadata`: the files of edit and patch metadata with legacy field names mapped.
+pub fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<String, Value> {
     if !["edit", "patch"].contains(&name) {
         return metadata;
     }
@@ -599,7 +601,7 @@ fn or_empty(value: Option<&Value>) -> String {
 }
 
 /// `Locale.titlecase`: uppercases every ASCII word character that starts a word.
-fn titlecase(text: &str) -> String {
+pub fn titlecase(text: &str) -> String {
     let word = |char: char| char.is_ascii_alphanumeric() || char == '_';
     let mut previous = None;
     text.chars()
