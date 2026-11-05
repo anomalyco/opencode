@@ -341,7 +341,8 @@ const layer = Layer.effect(
     // consumer's next lazy import — or its teardown during a reload — into the ENOENT that fails
     // the whole reload (#62068). Each holder records a lease marker carrying its process identity;
     // liveness is the process itself, so a suspended server keeps its lease and a crashed one stops
-    // pinning as soon as its pid is gone. No heartbeat timer involved.
+    // pinning as soon as its pid is gone. Another host's marker cannot be probed and reads as live:
+    // cleanup never deletes a lease it cannot check. No heartbeat timer involved.
     const usageDirectory = () => path.join(global.state, "npm-usage")
     const liveGenerations = Effect.fnUntraced(function* () {
       const entries = yield* fs.readDirectory(usageDirectory()).pipe(Effect.orElseSucceed(() => [] as string[]))
@@ -350,14 +351,19 @@ const layer = Layer.effect(
         entries,
         (name) =>
           Effect.gen(function* () {
+            // A `pin` mid-write has its marker under a staging name; removing it would break the
+            // writer's rename and silently drop the lease. Its `onError` cleans up its own staging.
+            if (name.endsWith(".staging")) return
             const file = path.join(usageDirectory(), name)
             const marker = yield* afs
               .readJson(file)
               .pipe(Effect.flatMap(Schema.decodeUnknownEffect(UsageMarker)), Effect.option)
-            // The directory holds only lease markers, so an unreadable or dead entry is housekeeping,
-            // not a pin: crashed holder, renamed machine, or garbage.
-            if (Option.isNone(marker) || marker.value.hostname !== hostname || !processAlive(marker.value.pid))
-              return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+            // An unreadable entry is housekeeping, not a pin: garbage, or a staging leftover.
+            if (Option.isNone(marker)) return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+            // A marker from another host cannot be probed from here, and a state directory shared
+            // between machines or containers makes its lease just as real, so it counts as live.
+            if (marker.value.hostname !== hostname) return live.add(marker.value.generation)
+            if (!processAlive(marker.value.pid)) return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
             live.add(marker.value.generation)
           }),
         { concurrency: "unbounded", discard: true },

@@ -30,11 +30,6 @@ export type Generation = PluginDefinition & {
    * restarting the server entry.
    */
   readonly gui?: { readonly file: string; readonly revision: string; readonly options: Plugin.GuiBundle["options"] }
-  /**
-   * The npm cache generation this instance was loaded from. The registry pins it for the instance's
-   * lifetime so cache cleanup cannot delete files the instance still imports from.
-   */
-  readonly npmGeneration?: string
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}

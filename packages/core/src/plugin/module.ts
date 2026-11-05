@@ -167,7 +167,6 @@ const load = Effect.fn("PluginModule.load")(function* (
       : undefined,
     revision,
     source: source(operation.target, installed?.version),
-    ...(generation ? { npmGeneration: generation } : {}),
     effect,
   } satisfies Generation
 })

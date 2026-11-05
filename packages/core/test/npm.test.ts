@@ -476,4 +476,38 @@ describe("Npm.pin and cache retention", () => {
     expect(result.whilePinned[1]).toBeFalse()
     expect(result.released).toBeFalse()
   })
+
+  test("cleanup keeps a marker mid-write and a marker from another host", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@latest"
+    await registry.configure(cache, spec)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.add(spec)
+      const usage = path.join(cache, "state", "npm-usage")
+      yield* Effect.promise(() => fs.mkdir(usage, { recursive: true }))
+      // A staging marker is a `pin` mid-write: removing it would break the writer's rename and
+      // silently drop the lease it is recording.
+      const staging = path.join(usage, "in-flight.staging")
+      yield* Effect.promise(() => fs.writeFile(staging, "{ broken"))
+      // Another host's process cannot be probed from here, and a state directory shared between
+      // machines makes its lease just as real, so cleanup must leave it alone.
+      const otherHost = path.join(usage, "other-host-marker")
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          otherHost,
+          JSON.stringify({ generation: "unused", pid: 999_999, hostname: "other-host", createdAt: new Date().toISOString() }),
+        ),
+      )
+      const exists = (file: string) => Effect.promise(() => fs.stat(file).then(() => true, () => false))
+      yield* npm.update(spec)
+      return { staging: yield* exists(staging), otherHost: yield* exists(otherHost) }
+    }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result.staging).toBeTrue()
+    expect(result.otherHost).toBeTrue()
+  })
 })
