@@ -92,6 +92,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             // With `--session` too, TS opens that session, then the continued one replaces it.
             continue_: args.continue_,
             events: true,
+            builtins: vec![opencode_mermaid::plugin(), opencode_latex::plugin()],
         },
         args: tui_args,
         keep: Box::new(connection),

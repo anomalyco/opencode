@@ -80,9 +80,10 @@ impl opencode_plugin::Host for Tui {
     }
 }
 
-/// The built-ins in TS order (`plugin/builtins.ts`). The storybook (F14) is excepted (Q17).
-pub fn builtins() -> Vec<Definition<Tui>> {
-    vec![
+/// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
+/// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17).
+pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
+    let mut builtins = vec![
         super::home_footer::plugin(),
         super::prompt_footer::plugin(),
         super::btw::plugin(),
@@ -94,19 +95,19 @@ pub fn builtins() -> Vec<Definition<Tui>> {
         crate::plugins::notifications::plugin(),
         crate::dialogs::plugins::plugin(),
         super::stats::plugin(),
-        opencode_mermaid::plugin(),
-        opencode_latex::plugin(),
-        super::diffs::viewer::plugin(),
-    ]
+    ];
+    builtins.extend(external);
+    builtins.push(super::diffs::viewer::plugin());
+    builtins
 }
 
 /// The registry of the built-ins and the `plugins` config, not yet active.
-pub fn registry(info: &opencode_local::cli_config::Info) -> Plugins {
+pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Definition<Tui>>) -> Plugins {
     let targets = info.plugins.iter().flatten().map(|plugin| match plugin {
         opencode_local::cli_config::Plugin::Name(name) => name.as_str(),
         opencode_local::cli_config::Plugin::Package { package, .. } => package.as_str(),
     });
-    Registry::new(builtins(), targets)
+    Registry::new(builtins(external), targets)
 }
 
 /// Activates the plugins once the TUI is built, and logs the configured plugins it skipped.
