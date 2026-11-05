@@ -1502,6 +1502,33 @@ for (const row of [
   })
 }
 
+test("a sent shell command returns the composer to prompt mode, and ! enters shell mode again", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ShellSend",
+    sessions: [{ id: "ses_shell_send", title: "Shell send" }],
+  })
+
+  const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+  await editor.pressSequentially("git status")
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/ses_shell_send/shell"),
+  )
+
+  await editor.press("Enter")
+  expect((await sent).postDataJSON()).toMatchObject({ command: "git status" })
+  await expect(editor).toBeEmpty()
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await expect(page.getByRole("button", { name: /^Exit/ })).toHaveCount(0)
+
+  // The editor reads the draft's mode, so it agrees with the draft the send reset.
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+})
+
 test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
   const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
 

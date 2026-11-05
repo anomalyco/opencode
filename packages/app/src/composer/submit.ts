@@ -25,8 +25,10 @@ import {
   type ComposerSubmitEffect,
   type ComposerSubmitEvent,
   type PromptSend,
+  type SubmissionKind,
   type SubmitSnapshot,
 } from "./machine"
+import { retryFingerprint } from "./retry"
 
 // The model each session was last switched to from this client, by session ID.
 const switched = new Map<string, string>()
@@ -40,7 +42,6 @@ type ComposerSubmitInput = {
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
   removeFromHistory: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
   resetHistory: () => void
-  setMode: (mode: "normal" | "shell") => void
   closePopover: () => void
   delivery?: (alternate: boolean) => ComposerDelivery
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
@@ -344,8 +345,9 @@ function clearSubmission(
 
   if (!following) target.reset()
   const cleared = target.current()
+  // The ID went with this send; a failure arms it again for this payload when it restores the draft.
+  target.retry.clear()
   target.mode.set("normal")
-  input.setMode("normal")
   input.closePopover()
 
   if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
@@ -370,7 +372,6 @@ function clearSubmission(
 function clearClientCommand(input: ComposerSubmitInput, prompt: Prompt) {
   input.adapter.state.set([{ type: "text", content: "", start: 0, end: 0 }, ...prompt.filter(isAttachment)], 0)
   input.adapter.state.mode.set("normal")
-  input.setMode("normal")
   input.closePopover()
 }
 
@@ -498,7 +499,12 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
 // Puts a failed submission back, unless the composer changed since it cleared: then the edit is the user's.
 function restoreSubmission(
   input: ComposerSubmitInput,
-  submission: { draft: CapturedDraft; value: ComposerSubmission; comments: PromptHistoryComment[] },
+  submission: {
+    draft: CapturedDraft
+    value: ComposerSubmission
+    kind: SubmissionKind
+    comments: PromptHistoryComment[]
+  },
   cleared: Prompt,
   following: Prompt | undefined,
 ) {
@@ -560,21 +566,13 @@ function restoreSubmission(
       })
   })
 
-  // A recovered follow-up changes the payload, so it must use a new admission ID.
-  if (value.mode === "normal" && !following) {
-    target.retry.set({
-      id: value.id,
-      agent: value.selection.agent,
-      providerID: value.selection.model.providerID,
-      modelID: value.selection.model.modelID,
-      variant: value.selection.variant,
-    })
-  }
+  // Only a prompt was admitted under its ID. A recovered follow-up changes the payload, so it needs a new one.
+  if (submission.kind.type === "prompt" && !following)
+    target.retry.set({ id: value.id, fingerprint: retryFingerprint(value) })
 
   if (target !== input.adapter.state) return true
 
   input.comments.restore(submission.comments)
-  input.setMode(value.mode)
   input.closePopover()
   requestAnimationFrame(() => {
     const editor = input.editor()
