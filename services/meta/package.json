@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/meta",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun ../../packages/schema/script/config-schema.ts public/config.json && vite build",
+    "deploy": "cf deploy --prebuilt",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.9",
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "@typescript/native": "catalog:",
+    "cf": "1.0.0-beta.27",
+    "vite": "catalog:"
+  }
+}
