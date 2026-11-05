@@ -20,6 +20,7 @@ import { defaultTitle, titleNumber } from "./title"
 import {
   initialState,
   serverAvailable,
+  sessionConnection,
   sessionView,
   transition,
   viewItems,
@@ -270,6 +271,8 @@ export function createTerminalModel(input: {
       server: () => session().server,
       /** What the session's terminal panel shows: loading, failed, unsupported or the server's list. */
       view,
+      /** The server connection whose answer the session's list is; a restarted server lists under a newer one. */
+      connection: () => sessionConnection(serverState(initial.server.id), initial.id),
       /** The session's terminals, in the server's order. */
       all,
       get,
