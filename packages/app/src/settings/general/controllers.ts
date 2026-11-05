@@ -76,7 +76,13 @@ export function createAppearanceSettingsController() {
   const platform = usePlatform()
   const language = useLanguage()
   const theme = useTheme()
-  const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
+
+  // Keep the same option objects while themes load, so an open theme list keeps keyboard focus.
+  const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })), undefined, {
+    equals: (prev, next) =>
+      prev.length === next.length &&
+      prev.every((option, index) => option.id === next[index].id && option.name === next[index].name),
+  })
 
   onMount(() => void theme.loadThemes())
 

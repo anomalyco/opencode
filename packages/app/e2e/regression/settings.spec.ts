@@ -96,6 +96,21 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
+test("arrow keys wrap around the theme list", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+  await settings.locator('[data-action="settings-theme"]').click()
+  const options = page.getByRole("listbox").getByRole("option")
+  await expect(page.getByRole("option", { name: "OpenCode", selected: true })).toBeFocused()
+
+  await page.keyboard.press("End")
+  await expect(options.last()).toBeFocused()
+  await page.keyboard.press("ArrowDown")
+  await expect(options.first()).toBeFocused()
+  await page.keyboard.press("ArrowUp")
+  await expect(options.last()).toBeFocused()
+})
+
 test("Questions settings default independently of old Permissions settings and survive reload", async ({ page }) => {
   const { settings } = await open(page, {
     seed: {

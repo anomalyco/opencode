@@ -125,6 +125,7 @@ export const SettingsAppearance: Component = () => {
                 current={appearance.theme.current()}
                 placement="bottom-end"
                 gutter={6}
+                shouldFocusWrap
                 value={(option) => option.id}
                 label={(option) => option.name}
                 onSelect={appearance.theme.select}
