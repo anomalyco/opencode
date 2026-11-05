@@ -129,6 +129,7 @@ export default function Layout(props: ParentProps) {
   })
 
   const peek = createSidebarPeek({
+    enabled: verticalTabs,
     available: () => verticalTabs() && !preferences.appearance.sidebarOpen() && !sidebarMotion.present(),
     open: preferences.appearance.sidebarOpen,
     aside: () => state.tabsAside,

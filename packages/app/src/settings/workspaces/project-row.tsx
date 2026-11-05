@@ -1,5 +1,4 @@
 import { Show, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -10,6 +9,7 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { errorMessage } from "@/shell/layout/helpers"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { showToast } from "@/shell/notifications/toast"
+import { createInlineRename } from "@/settings/rename"
 import { ProjectOptions } from "./project-options"
 
 export function SettingsProjectRow(props: {
@@ -22,13 +22,6 @@ export function SettingsProjectRow(props: {
   const language = useLanguage()
   const context = useServer().ctx
 
-  const [store, setStore] = createStore<{
-    menu: boolean
-    editor?: { draft: string; saving: boolean }
-  }>({
-    menu: false,
-  })
-
   let button: HTMLButtonElement | undefined
   let input: HTMLInputElement | undefined
 
@@ -36,70 +29,50 @@ export function SettingsProjectRow(props: {
     if (button) props.onMount?.(button)
   })
 
-  const openEditor = () => {
-    setStore("editor", { draft: displayName(props.project), saving: false })
-    requestAnimationFrame(() => {
-      input?.focus()
-      input?.select()
-    })
-  }
+  // Clicking away discards the draft, as on Home's session rows.
+  const rename = createInlineRename({
+    blurPolicy: "cancel",
+    current: () => displayName(props.project),
+    input: () => input,
+    trigger: () => button,
+    onSave: async (name) => {
+      const value = name === getFilename(props.project.worktree) ? "" : name
 
-  const closeEditor = () => {
-    if (store.editor?.saving) return
-    setStore("editor", undefined)
-  }
+      return (
+        props.project.id && props.project.id !== "global"
+          ? context.sdk.api.project
+              .update({ projectID: props.project.id, name: value })
+              .then((project) => context.sync.project.update(project))
+          : Promise.resolve(context.sync.project.meta(props.project.worktree, { name: value }))
+      )
+        .then(() => true)
+        .catch((cause: unknown) => {
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+            description: errorMessage(cause, language.t("common.requestFailed")),
+          })
 
-  const saveEditor = async () => {
-    if (!store.editor || store.editor.saving) return
-    const name = store.editor.draft.trim()
-
-    if (!name || name === displayName(props.project)) {
-      closeEditor()
-      requestAnimationFrame(() => button?.focus())
-
-      return
-    }
-
-    setStore("editor", "saving", true)
-    const value = name === getFilename(props.project.worktree) ? "" : name
-
-    const saved = await (props.project.id && props.project.id !== "global"
-      ? context.sdk.api.project
-          .update({ projectID: props.project.id, name: value })
-          .then((project) => context.sync.project.update(project))
-      : Promise.resolve(context.sync.project.meta(props.project.worktree, { name: value }))
-    )
-      .then(() => true)
-      .catch((cause: unknown) => {
-        showToast({
-          variant: "error",
-          title: language.t("common.requestFailed"),
-          description: errorMessage(cause, language.t("common.requestFailed")),
+          return false
         })
-
-        return false
-      })
-
-    const restore = document.activeElement === document.body || document.activeElement === input
-
-    if (saved) setStore("editor", undefined)
-
-    if (!saved) setStore("editor", "saving", false)
-
-    if (!restore) return
-    requestAnimationFrame(() => (saved ? button : input)?.focus())
-  }
+    },
+    onTimeout: () =>
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("home.sessions.load.timeout"),
+      }),
+  })
 
   return (
     <div class="settings-project-row-shell">
       <div
         role="listitem"
         data-component="settings-project-card"
-        data-menu={store.menu ? "true" : undefined}
+        data-menu={rename.menuOpen() ? "true" : undefined}
         class="settings-project-card"
       >
         <Show
-          when={!store.editor}
+          when={!rename.open()}
           fallback={
             <div class="flex h-full min-w-0 flex-1 items-center gap-2">
               <ProjectIcon project={props.project} class="shrink-0" />
@@ -107,29 +80,14 @@ export function SettingsProjectRow(props: {
                 ref={input}
                 aria-label={language.t("common.rename")}
                 dir="auto"
-                value={store.editor?.draft ?? ""}
-                disabled={store.editor?.saving}
+                value={rename.draft()}
+                readOnly={rename.saving()}
+                aria-busy={rename.saving() || undefined}
                 class="w-full text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none"
                 style={{ "--inline-input-shadow": "none", "border-radius": "0", "text-align": "start" }}
-                onInput={(event) => setStore("editor", "draft", event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  event.stopPropagation()
-
-                  if (event.isComposing || event.keyCode === 229) return
-
-                  if (event.key === "Enter") {
-                    event.preventDefault()
-                    void saveEditor()
-
-                    return
-                  }
-
-                  if (event.key !== "Escape") return
-                  event.preventDefault()
-                  closeEditor()
-                  requestAnimationFrame(() => button?.focus())
-                }}
-                onBlur={closeEditor}
+                onInput={(event) => rename.input(event.currentTarget.value)}
+                onKeyDown={rename.keyDown}
+                onBlur={rename.blur}
               />
             </div>
           }
@@ -150,10 +108,10 @@ export function SettingsProjectRow(props: {
           <ProjectOptions
             server={props.server}
             project={props.project}
-            open={store.menu}
-            onOpenChange={(open) => setStore("menu", open)}
+            open={rename.menuOpen()}
+            onOpenChange={rename.setMenu}
             onEdit={() => props.onOpen(props.project)}
-            onRename={openEditor}
+            onRename={() => rename.start(displayName(props.project))}
             onAdd={props.onAdd}
           />
         </Show>

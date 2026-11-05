@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use opencode_pty::client::TerminalClient;
 use opencode_pty::daemon::{REGISTRATION_FILE, Registration};
 use opencode_pty::protocol::{Envelope, Request, Response, read_frame, write_frame};
-use opencode_pty::service::CreateTerminal;
+use opencode_pty::service::CreatePty;
 
 #[test]
 fn daemon_client_read_rows_roundtrip() {
@@ -16,17 +16,23 @@ fn daemon_client_read_rows_roundtrip() {
     if let Some(directory) = std::env::var_os("OPENCODE_PTY_ROWS_TEST_CHILD") {
         let directory = std::path::PathBuf::from(directory);
         let client = TerminalClient::discover(&directory).unwrap();
-        let mut request = CreateTerminal::shell().unwrap();
+        let mut request = CreatePty::shell().unwrap();
         request.program = "/bin/sh".to_string();
         request.args = vec!["-c".to_string(), "printf 'one\ntwo\n\nfour\n'".to_string()];
         request.cols = 10;
         request.rows = 3;
-        let terminal = client.create(request).unwrap();
+        let terminal = client.create_pty(request).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             let rows = client.read_rows(terminal.id, None).unwrap();
             if rows.lines == ["", "four", ""] {
-                assert_eq!((rows.terminal.cols, rows.terminal.rows), (10, 3));
+                assert_eq!(
+                    (
+                        rows.process.pty.as_ref().unwrap().cols,
+                        rows.process.pty.as_ref().unwrap().rows
+                    ),
+                    (10, 3)
+                );
                 assert_eq!((rows.cursor_x, rows.cursor_y), (0, 2));
                 break;
             }
@@ -47,7 +53,7 @@ fn daemon_client_read_rows_roundtrip() {
         );
 
         let registration = opencode_pty::daemon::read_registration(&directory).unwrap();
-        assert_eq!(registration.protocol, 7);
+        assert_eq!(registration.protocol, 8);
         // Exercise omitted rows independently of the Rust client's null encoding.
         let mut stream = std::os::unix::net::UnixStream::connect(registration.socket).unwrap();
         write_frame(
@@ -61,12 +67,18 @@ fn daemon_client_read_rows_roundtrip() {
         let response: serde_json::Value = read_frame(&mut stream).unwrap();
         assert_eq!(response["type"], "rows");
         assert_eq!(response["lines"], serde_json::json!(["", "four", ""]));
-        assert_eq!(response["terminal"]["id"], terminal.id);
+        assert_eq!(response["process"]["id"], terminal.id);
         assert_eq!(response["cursor_y"], 2);
         client.resize(terminal.id, 12, 4).unwrap();
         let rows = client.read_rows(terminal.id, None).unwrap();
         assert_eq!(rows.lines, ["two", "", "four", ""]);
-        assert_eq!((rows.terminal.cols, rows.terminal.rows), (12, 4));
+        assert_eq!(
+            (
+                rows.process.pty.as_ref().unwrap().cols,
+                rows.process.pty.as_ref().unwrap().rows
+            ),
+            (12, 4)
+        );
         client.terminate(terminal.id).unwrap();
         return;
     }

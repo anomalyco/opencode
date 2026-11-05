@@ -56,8 +56,12 @@ export type ComposerQueue = {
 export type ComposerSession = {
   id: string
   directory: string
+  // The timeline's optimistic prompt: shown on `set` (or `hold` while the send waits for the Location's agents and models),
+  // held after `settle` until its admission echo, removed on `clear`.
   handoff: {
     set: (handoff: SessionMessageHandoff) => void
+    hold: (handoff: SessionMessageHandoff) => void
+    settle: (messageID: string) => void
     clear: (messageID: string) => void
   }
   api: {

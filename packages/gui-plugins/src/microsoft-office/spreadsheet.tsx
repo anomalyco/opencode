@@ -1,4 +1,4 @@
-import { createMemo, createSignal, createUniqueId, For, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, createUniqueId, For, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Loader } from "@opencode/ui/loader"
@@ -33,27 +33,59 @@ import {
   rowHeaderWidth,
   shiftGrid,
   trackIndex,
-  type Painted,
 } from "./sheet-paint"
-import type { SheetFrameRequest, SheetLayout, SheetMethods, SheetTab, SheetViewport } from "./sheet-protocol"
-import { createWorkerClient, movableBuffer, SupersededError, WorkerClosedError } from "./worker-rpc"
+import {
+  createSheetFrameState,
+  needsSheetOpen,
+  sheetEnd,
+  sheetFrameNeeded,
+  sheetMoving,
+  sheetPainted,
+  sheetPaintFailed,
+  transitionSheetFrame,
+  type SheetFrameEffect,
+  type SheetFrameEvent,
+} from "./sheet-frame-machine"
+import {
+  createSheetPickState,
+  sheetActiveTab,
+  sheetShown,
+  sheetShownIndex,
+  transitionSheetPick,
+  type SheetPickEffect,
+  type SheetPickEvent,
+} from "./sheet-pick-machine"
+import {
+  IDLE_SHEET_POINTER_STATE,
+  sheetPointerMoveNeeded,
+  transitionSheetPointer,
+  type SheetHit,
+  type SheetPointerEffect,
+  type SheetPointerEvent,
+  type SheetPointerMoved,
+  type SheetPointerState,
+} from "./sheet-pointer-machine"
+import type { SheetFrameRequest, SheetLayout, SheetMethods, SheetTab } from "./sheet-protocol"
+import { createOfficeWorker, type WorkerClient } from "./office-worker"
+import { WorkerClosedError } from "./worker-rpc"
 
 /** The workbook worker's end in the window. */
-type Client = ReturnType<typeof createWorkerClient<SheetMethods>>
+type Client = WorkerClient<SheetMethods>
 
-type Opened = { readonly client: Client; readonly tabs: readonly SheetTab[] }
+/** An opened workbook: its worker, its visible sheets and the layout of the sheet it opened on. */
+type Opened = { readonly client: Client; readonly tabs: readonly SheetTab[]; readonly layout: SheetLayout }
 
-/** The sheet on show, and the cell a link asked for when one opened it. */
-type Shown = { readonly layout: SheetLayout; readonly target: CellAddr | undefined }
+/** One worker call that has not answered yet, and its timeout. */
+type PendingCall = { readonly controller: AbortController; readonly timer: number }
 
-/**
- * The frames a grid asked the worker for: the newest request's key, how many were sent and the order of the newest that
- * arrived, so a late reply never replaces a newer one, and the newest request while its reply is on the way.
- */
-type FrameOrder = { requested: string; sent: number; received: number; pending: SheetFrameRequest | undefined }
+/** The timer that ends a scroll once no scroll event came for the settle delay. */
+type FrameTimers = { settle: number }
 
-/** The newest sheet pick's request: a newer pick withdraws it, whether it waits for the worker or runs there. */
-type Picking = { controller: AbortController | undefined }
+/** The one pointer move event a grid dispatches, written in place so moves allocate nothing. */
+type MoveEvent = { -readonly [K in keyof SheetPointerMoved]: SheetPointerMoved[K] }
+
+/** The pointer's position past the headers, in CSS pixels, written in place by each hit test. */
+type PointerSpot = { x: number; y: number }
 
 /** The most cells one copy reads; a larger selection would hold the workbook worker for seconds. */
 const copyLimit = 200_000
@@ -64,104 +96,118 @@ const copyLimit = 200_000
  */
 const readerBlock = { rows: 10, cols: 5 }
 
-/** How long after the last scroll a frame of the screen alone replaces the frames with a margin, in milliseconds. */
-const settleDelay = 150
-
 /** A read-only Excel workbook with a tab per visible sheet. */
 export default function OfficeSpreadsheet(props: FileViewerProps) {
   const ctx = usePlugin()
-  const panel = createUniqueId()
 
-  // `selecting` is the tab the user picked while its sheet opens in the worker.
-  const [state, setState] = createStore<{
-    opened: Opened | undefined
-    shown: Shown | undefined
-    selecting: number | undefined
-  }>({
-    opened: undefined,
-    shown: undefined,
-    selecting: undefined,
+  const viewer = createOfficeWorker<SheetMethods, Opened>({
+    bytes: () => props.bytes,
+    createWorker: () => new Worker(new URL("./spreadsheet.worker.ts", import.meta.url), { type: "module" }),
+    open: async (client, buffer, signal) => {
+      const opened = await client.call("open", { bytes: buffer }, { transfer: [buffer], signal })
+
+      if (!opened) return undefined
+
+      return {
+        value: { client, tabs: opened.tabs, layout: opened.layout },
+        details: [ctx.plural("sheets", opened.tabs.length)],
+      }
+    },
+    onDetails: (details) => props.onDetails(details),
+    onError: () => props.onError(),
   })
 
-  // Syncs one workbook worker with the loaded bytes. Terminating it, when they change or the view closes, is what frees
-  // the engine's memory.
-  createKeyed(
-    () => props.bytes,
-    (bytes) => {
-      const controller = new AbortController()
-      const worker = new Worker(new URL("./spreadsheet.worker.ts", import.meta.url), { type: "module" })
-      const client = createWorkerClient<SheetMethods>(worker)
-
-      const crash = () => {
-        if (!controller.signal.aborted) props.onError()
+  return (
+    <Show
+      when={viewer.opened()}
+      keyed
+      fallback={
+        <Show when={viewer.loading()}>
+          <div class="flex min-h-0 flex-1 items-center justify-center">
+            <Loader />
+          </div>
+        </Show>
       }
-
-      worker.addEventListener("error", crash)
-      worker.addEventListener("messageerror", crash)
-
-      onCleanup(() => {
-        controller.abort()
-        client.close()
-        setState({ opened: undefined, shown: undefined, selecting: undefined })
-      })
-
-      // The view owns its bytes, so they move to the worker rather than being copied.
-      const buffer = movableBuffer(bytes)
-
-      void client.call("open", { bytes: buffer }, { transfer: [buffer], signal: controller.signal }).then((opened) => {
-        if (controller.signal.aborted) return
-
-        if (!opened) return props.onError()
-
-        setState({ opened: { client, tabs: opened.tabs }, shown: { layout: opened.layout, target: undefined } })
-        props.onDetails([ctx.plural("sheets", opened.tabs.length)])
-      }, crash)
-    },
+    >
+      {(opened) => <SpreadsheetWorkbook opened={opened.value} />}
+    </Show>
   )
+}
 
-  const active = () => state.selecting ?? state.shown?.layout.info.activeSheet
-  const picking: Picking = { controller: undefined }
+/** One opened workbook: its sheet tabs and the grid of the sheet on show. A reloaded file mounts a new one. */
+function SpreadsheetWorkbook(props: { opened: Opened }) {
+  const ctx = usePlugin()
+  const panel = createUniqueId()
 
-  const show = (index: number, target?: CellAddr) => {
-    const opened = state.opened
+  // The sheet on show, and the tab the user picked while its sheet opens in the worker.
+  const [pickState, setPickState] = createSignal(createSheetPickState(props.opened.layout))
+  // The show calls still running, by attempt.
+  const calls = new Map<number, PendingCall>()
+  const shown = createMemo(() => sheetShown(pickState()))
+  const active = createMemo(() => sheetActiveTab(pickState()))
 
-    if (!opened || (index === active() && !target)) return
+  const dispatch = (event: SheetPickEvent) => {
+    const next = transitionSheetPick(untrack(pickState), event)
 
-    picking.controller?.abort()
+    setPickState(() => next.state)
+    next.effects.forEach(run)
+  }
 
-    // Back to the sheet on show: the pick that was opening is withdrawn, and the grid stays.
-    if (index === state.shown?.layout.info.activeSheet && !target) return void setState("selecting", undefined)
+  const run = (effect: SheetPickEffect) => {
+    if (effect.type === "request-show") return requestShow(effect.attempt, effect.sheet, effect.timeoutMs)
 
-    const controller = new AbortController()
+    if (effect.type === "abort-show") {
+      const call = calls.get(effect.attempt)
 
-    picking.controller = controller
-    setState("selecting", index)
+      calls.delete(effect.attempt)
+      clearTimeout(call?.timer)
+      call?.controller.abort()
 
-    void opened.client.call("show", { sheet: index }, { signal: controller.signal }).then(
+      return
+    }
+
+    showToast({ title: ctx.t("sheet.openFailed") })
+  }
+
+  const requestShow = (attempt: number, sheet: number, timeoutMs: number) => {
+    const call: PendingCall = {
+      controller: new AbortController(),
+      timer: window.setTimeout(() => dispatch({ type: "show.timed-out", attempt }), timeoutMs),
+    }
+
+    const settle = () => {
+      clearTimeout(call.timer)
+      calls.delete(attempt)
+    }
+
+    calls.set(attempt, call)
+    void props.opened.client.call("show", { sheet }, { signal: call.controller.signal }).then(
       (layout) => {
-        // Replaced, not merged as a path setter would, so the grid below mounts afresh for the sheet.
-        if (state.opened === opened) setState({ shown: { layout, target }, selecting: undefined })
+        settle()
+        dispatch({ type: "show.succeeded", attempt, layout })
       },
       (error: Error) => {
-        if (state.opened !== opened || error instanceof WorkerClosedError) return
-
-        // One sheet that fails to open leaves the others readable: the sheet on show stays.
-        setState("selecting", undefined)
-        showToast({ title: ctx.t("sheet.openFailed") })
+        settle()
+        // A stopped worker reports itself through the viewer, so the pick ends without a second notice.
+        dispatch({ type: "show.failed", attempt, closed: error instanceof WorkerClosedError })
       },
     )
   }
 
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  const show = (index: number, target?: CellAddr) => dispatch({ type: "sheet.picked", sheet: index, target })
+
   // A link to a hidden or missing sheet goes nowhere, as in Excel.
   const navigate = (name: string, cell: CellAddr) => {
-    const tab = state.opened?.tabs.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
+    const tab = props.opened.tabs.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
 
     if (tab) show(tab.index, cell)
   }
 
   // The arrow keys move between the sheet tabs and open the one they reach; only the open tab is in the Tab order.
   const roam = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
-    const tabs = state.opened?.tabs ?? []
+    const tabs = props.opened.tabs
     const current = tabs.findIndex((tab) => tab.index === active())
     const forward = getComputedStyle(event.currentTarget).direction === "rtl" ? "ArrowLeft" : "ArrowRight"
     const backward = forward === "ArrowRight" ? "ArrowLeft" : "ArrowRight"
@@ -190,62 +236,51 @@ export default function OfficeSpreadsheet(props: FileViewerProps) {
   const tabID = (index: number | undefined) => `${panel}-tab-${index}`
 
   return (
-    <Show
-      when={state.opened}
-      fallback={
-        <div class="flex min-h-0 flex-1 items-center justify-center">
-          <Loader />
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div
+        id={panel}
+        role={props.opened.tabs.length > 1 ? "tabpanel" : undefined}
+        aria-labelledby={props.opened.tabs.length > 1 ? tabID(sheetShownIndex(pickState())) : undefined}
+        class="flex min-h-0 flex-1"
+      >
+        {/* Each sheet gets its own grid, so its selection and scroll position start fresh. */}
+        <Show when={shown()} keyed>
+          {(shown) => (
+            <SpreadsheetGrid
+              client={props.opened.client}
+              layout={shown.layout}
+              target={shown.target}
+              onNavigate={navigate}
+            />
+          )}
+        </Show>
+      </div>
+      <Show when={props.opened.tabs.length > 1}>
+        <div
+          role="tablist"
+          aria-label={ctx.t("sheet.tabs")}
+          class="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-v2-border-border-muted px-2"
+          onKeyDown={roam}
+        >
+          <For each={props.opened.tabs}>
+            {(tab) => (
+              <button
+                type="button"
+                role="tab"
+                id={tabID(tab.index)}
+                aria-controls={panel}
+                aria-selected={tab.index === active()}
+                tabIndex={tab.index === active() ? 0 : -1}
+                class="h-7 shrink-0 rounded-md px-2.5 text-13-regular text-text-weak hover:bg-v2-background-bg-layer-02 aria-selected:bg-v2-background-bg-layer-02 aria-selected:text-text-strong"
+                onClick={() => show(tab.index)}
+              >
+                {tab.name}
+              </button>
+            )}
+          </For>
         </div>
-      }
-    >
-      {(opened) => (
-        <div class="flex min-h-0 flex-1 flex-col">
-          <div
-            id={panel}
-            role={opened().tabs.length > 1 ? "tabpanel" : undefined}
-            aria-labelledby={opened().tabs.length > 1 ? tabID(state.shown?.layout.info.activeSheet) : undefined}
-            class="flex min-h-0 flex-1"
-          >
-            {/* Each sheet gets its own grid, so its selection and scroll position start fresh. */}
-            <Show when={state.shown} keyed>
-              {(shown) => (
-                <SpreadsheetGrid
-                  client={opened().client}
-                  layout={shown.layout}
-                  target={shown.target}
-                  onNavigate={navigate}
-                />
-              )}
-            </Show>
-          </div>
-          <Show when={opened().tabs.length > 1}>
-            <div
-              role="tablist"
-              aria-label={ctx.t("sheet.tabs")}
-              class="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-v2-border-border-muted px-2"
-              onKeyDown={roam}
-            >
-              <For each={opened().tabs}>
-                {(tab) => (
-                  <button
-                    type="button"
-                    role="tab"
-                    id={tabID(tab.index)}
-                    aria-controls={panel}
-                    aria-selected={tab.index === active()}
-                    tabIndex={tab.index === active() ? 0 : -1}
-                    class="h-7 shrink-0 rounded-md px-2.5 text-13-regular text-text-weak hover:bg-v2-background-bg-layer-02 aria-selected:bg-v2-background-bg-layer-02 aria-selected:text-text-strong"
-                    onClick={() => show(tab.index)}
-                  >
-                    {tab.name}
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
-      )}
-    </Show>
+      </Show>
+    </div>
   )
 }
 
@@ -267,24 +302,33 @@ function SpreadsheetGrid(props: {
   let scroller: HTMLDivElement | undefined
   let canvas: HTMLCanvasElement | undefined
   let frame = 0
-  // The newest frame from the worker, which stays on screen, following the scroll, until the next one arrives.
-  let painted: Painted | undefined
-  // That frame's grid and links where the screen shows them, which pointer hits and links read.
+  // The frame on screen's grid and links where the screen shows them, which pointer hits and links read.
   let shown: { grid: GridMeta | undefined; links: DisplayList } | undefined
-  // The frames asked for, so a late reply never replaces a newer one.
-  const frames: FrameOrder = { requested: "", sent: 0, received: 0, pending: undefined }
-  // When the sheet last scrolled, and the timer that paints once it settles.
-  const scrolling = { at: -Infinity, timer: 0 }
-  // Whether the sheet still has to scroll to where the workbook last showed it, or to a link's target.
-  let opening = true
-  // What a pointer that is down drags across, and the cell it went down on, which a click without a drag follows.
-  let drag: "cells" | "rows" | "columns" | undefined
-  let pressed: CellAddr | undefined
+  // The pointer gesture: what a pointer that is down drags across, and the cell a click without a drag follows.
+  const [pointerState, setPointerState] = createSignal<SheetPointerState>(IDLE_SHEET_POINTER_STATE)
 
-  onCleanup(() => {
-    controller.abort()
-    painted?.frame.bitmap.close()
-  })
+  // Built once: every pointer move during a drag writes them in place.
+  const moveEvent: MoveEvent = {
+    type: "pointer.moved",
+    pointerId: 0,
+    buttons: 0,
+    row: -1,
+    col: -1,
+    focusRow: 0,
+    focusCol: 0,
+  }
+
+  const spot: PointerSpot = { x: 0, y: 0 }
+  // The frames the worker draws, which the newest reply on screen stays until the next replaces it.
+  const [frameState, setFrameState] = createSignal(createSheetFrameState())
+  // The frame calls still running, and the timer that ends scrolling.
+  const calls = new Map<number, PendingCall>()
+  const timers: FrameTimers = { settle: 0 }
+  // Built once: the scroll path dispatches them on every event.
+  const scrollEvent: SheetFrameEvent = { type: "scroll" }
+  const settledEvent: SheetFrameEvent = { type: "scroll.settled" }
+
+  onCleanup(() => controller.abort())
 
   // The last paint, in the engine's scroll coordinates: the scroll position, the size of the cells beside the headers,
   // the frozen panes', the row headers' width, and the farthest point a jump asked for.
@@ -300,21 +344,20 @@ function SpreadsheetGrid(props: {
     reachY: 0,
   })
 
-  // Where the sheet's last cell ends, past the frozen panes, as the latest frame reports it. A viewport past it makes
-  // the engine throw.
-  const [end, setEnd] = createSignal<{ readonly x: number; readonly y: number } | undefined>(undefined, {
+  // Where the sheet's last cell ends, past the frozen panes, as the frame on screen reports it. A viewport past it
+  // makes the engine throw.
+  const end = createMemo(() => sheetEnd(frameState()), undefined, {
     equals: (previous, next) => previous?.x === next?.x && previous?.y === next?.y,
   })
 
-  // `failed` is set while the cells under the scroll position cannot be drawn and the last frame stays on screen.
+  const paintFailed = createMemo(() => sheetPaintFailed(frameState()))
+
   const [state, setState] = createStore<{
     selection: Selection
     hover: { cursor: string; title: string | undefined }
-    failed: boolean
   }>({
     selection: selectionAt({ row: 0, col: 0 }),
     hover: { cursor: "default", title: undefined },
-    failed: false,
   })
 
   const [ratio, setRatio] = createSignal(window.devicePixelRatio || 1)
@@ -365,11 +408,7 @@ function SpreadsheetGrid(props: {
 
     if (size.width <= 0 || size.height <= 0) return
 
-    if (opening) {
-      opening = false
-      setView({ width: size.width, height: size.height })
-      open()
-    }
+    if (needsSheetOpen(untrack(frameState))) dispatch({ type: "sheet.opened", width: size.width, height: size.height })
 
     const limit = end()
     const left = clamp(scroller.scrollLeft, limit ? limit.x + view.frozenWidth - size.width : Infinity)
@@ -378,7 +417,7 @@ function SpreadsheetGrid(props: {
     // While the sheet scrolls, frames reach past the screen, so the next scroll still shows cells while its own frame
     // renders. Once it settles, a frame of the screen alone replaces it.
     const margin = { x: Math.round(size.width / 4), y: Math.round(size.height / 2) }
-    const moving = performance.now() - scrolling.at < settleDelay
+    const moving = sheetMoving(untrack(frameState))
     const x = Math.max(0, left - margin.x)
     const y = Math.max(0, top - margin.y)
 
@@ -409,25 +448,10 @@ function SpreadsheetGrid(props: {
       bottom: Math.min(top + size.height + margin.y / 2, limit.y + view.frozenHeight),
     }
 
-    const serves = (frame: { readonly request: SheetFrameRequest; readonly viewport: SheetViewport } | undefined) =>
-      !!frame &&
-      !!needed &&
-      interchangeable(frame.request, input) &&
-      frame.viewport.x <= needed.x &&
-      frame.viewport.y <= needed.y &&
-      frame.viewport.x + frame.viewport.width >= needed.right &&
-      frame.viewport.y + frame.viewport.height >= needed.bottom
+    // Only the newest request waits its turn in the worker: a scroll that outruns it skips the frames in between.
+    if (sheetFrameNeeded(untrack(frameState), input, needed)) dispatch({ type: "frame.requested", request: input })
 
-    const pending = frames.pending
-
-    if (
-      !moving ||
-      !(
-        serves(painted && { request: painted.request, viewport: painted.frame.viewport }) ||
-        serves(pending?.wider && { request: pending, viewport: pending.wider })
-      )
-    )
-      request(input)
+    const painted = sheetPainted(untrack(frameState))
 
     // Until the first frame arrives the paper shows.
     if (!painted) return setView({ left, top, ...size })
@@ -483,59 +507,78 @@ function SpreadsheetGrid(props: {
     if (header !== headers.width) schedule()
   }
 
-  // Asks the worker for the frame under the scroll position. Only the newest request waits its turn: a scroll that
-  // outruns the worker skips the frames in between.
-  const request = (input: SheetFrameRequest) => {
-    const key = JSON.stringify(input)
+  const dispatch = (event: SheetFrameEvent) => {
+    const next = transitionSheetFrame(untrack(frameState), event)
 
-    if (key === frames.requested) return
+    setFrameState(() => next.state)
+    next.effects.forEach(run)
+  }
 
-    frames.requested = key
-    frames.pending = input
+  const run = (effect: SheetFrameEffect) => {
+    if (effect.type === "schedule-paint") return schedule()
 
-    const order = ++frames.sent
+    if (effect.type === "restart-settle") {
+      clearTimeout(timers.settle)
+      timers.settle = window.setTimeout(() => dispatch(settledEvent), effect.delayMs)
 
-    const settled = () => {
-      if (order === frames.sent) frames.pending = undefined
+      return
     }
 
-    void props.client.call("frame", input, { key: "frame", signal: controller.signal }).then(
+    if (effect.type === "request-frame") return requestFrame(effect.attempt, effect.request, effect.timeoutMs)
+
+    if (effect.type === "abort-frame") return calls.get(effect.attempt)?.controller.abort()
+
+    if (effect.type === "close-frame") return effect.frame.bitmap.close()
+
+    if (effect.type === "open-sheet") {
+      setView({ width: effect.width, height: effect.height })
+      open()
+
+      return
+    }
+
+    clearTimeout(timers.settle)
+    cancelAnimationFrame(frame)
+    calls.forEach((call) => {
+      clearTimeout(call.timer)
+      call.controller.abort()
+    })
+    calls.clear()
+  }
+
+  // Asks the worker for the frame under the scroll position. A newer request with the same key replaces one that
+  // still waits there; one that runs finishes, and shows while the newer renders.
+  const requestFrame = (attempt: number, request: SheetFrameRequest, timeoutMs: number) => {
+    const call: PendingCall = {
+      controller: new AbortController(),
+      timer: window.setTimeout(() => dispatch({ type: "frame.timed-out", attempt }), timeoutMs),
+    }
+
+    const settle = () => {
+      clearTimeout(call.timer)
+      calls.delete(attempt)
+    }
+
+    calls.set(attempt, call)
+    void props.client.call("frame", request, { key: "frame", signal: call.controller.signal }).then(
       (reply) => {
-        settled()
-
-        if (order < frames.received) return reply?.bitmap.close()
-
-        frames.received = order
-        // Cells the engine cannot draw here leave the last frame on screen, with a notice; the next scroll or resize
-        // may draw again.
-        setState("failed", !reply)
-
-        if (!reply) return
-
-        painted?.frame.bitmap.close()
-        painted = { request: input, frame: reply }
-        setEnd(reply.end)
-        schedule()
+        settle()
+        // Cells the engine cannot draw here leave the last frame on screen, with a notice.
+        dispatch(
+          reply ? { type: "frame.succeeded", attempt, request, frame: reply } : { type: "frame.failed", attempt },
+        )
       },
-      (error: Error) => {
-        settled()
-
-        if (error instanceof SupersededError || controller.signal.aborted) return
-
-        setState("failed", true)
+      () => {
+        settle()
+        dispatch({ type: "frame.failed", attempt })
       },
     )
   }
 
-  // A scroll draws frames with a margin until it settles, when one more paint draws the screen alone.
-  const scrolled = () => {
-    scrolling.at = performance.now()
-    clearTimeout(scrolling.timer)
-    scrolling.timer = window.setTimeout(schedule, settleDelay)
-    schedule()
-  }
+  onCleanup(() => dispatch({ type: "disposed" }))
 
-  onCleanup(() => clearTimeout(scrolling.timer))
+  // A scroll draws frames with a margin until it settles, when one more paint draws the screen alone.
+  const scrolled = () => dispatch(scrollEvent)
 
   // One paint per frame, however many scroll, resize and pointer events arrive in it.
   const schedule = () => {
@@ -547,7 +590,6 @@ function SpreadsheetGrid(props: {
     })
   }
 
-  onCleanup(() => cancelAnimationFrame(frame))
   createResizeObserver(() => scroller, schedule)
 
   // Syncs with the display's pixel ratio, which changes at the same CSS size when the window moves to another screen. A
@@ -707,115 +749,130 @@ function SpreadsheetGrid(props: {
     )
   }
 
-  // Where a pointer is on the canvas, as a cell, a whole row or column, or the corner that selects all. While dragging,
-  // a pointer past the cells holds to the nearest one.
-  const hit = (event: PointerEvent, held: boolean) => {
+  // The cell under a pointer; where the pointer is past the headers lands in `spot`. While dragging, a pointer past the
+  // cells holds to the nearest one.
+  const locate = (event: PointerEvent, held: boolean): CellAddr | undefined => {
     const grid = shown?.grid
 
     if (!grid || !canvas) return undefined
 
     const rect = canvas.getBoundingClientRect()
-    const x = event.clientX - rect.left - view.header
-    const y = event.clientY - rect.top - headerHeight
 
-    if (!held && (x >= view.width || y >= view.height)) return undefined
+    spot.x = event.clientX - rect.left - view.header
+    spot.y = event.clientY - rect.top - headerHeight
+
+    if (!held && (spot.x >= view.width || spot.y >= view.height)) return undefined
 
     const cell = cellAtPoint(
       grid,
-      Math.min(Math.max(x, 0), view.width - 1, (grid.colOffsets[grid.colOffsets.length - 1] ?? 0) - 1),
-      Math.min(Math.max(y, 0), view.height - 1, (grid.rowOffsets[grid.rowOffsets.length - 1] ?? 0) - 1),
+      Math.min(Math.max(spot.x, 0), view.width - 1, (grid.colOffsets[grid.colOffsets.length - 1] ?? 0) - 1),
+      Math.min(Math.max(spot.y, 0), view.height - 1, (grid.rowOffsets[grid.rowOffsets.length - 1] ?? 0) - 1),
     )
 
     if (!cell) return undefined
 
-    if (held) return { kind: "cell" as const, cell }
-
-    if (x < 0 && y < 0) return { kind: "all" as const, cell }
-
-    if (y < 0) return { kind: "column" as const, cell }
-
-    if (x < 0) return { kind: "row" as const, cell }
-
-    return { kind: "cell" as const, cell }
+    return cell
   }
 
-  const press = (event: PointerEvent) => {
-    if (event.button !== 0 || !scroller) return
+  // Where a pointer went down: a cell, a whole row or column, or the corner that selects all.
+  const hit = (event: PointerEvent): SheetHit | undefined => {
+    const cell = locate(event, false)
 
-    const target = hit(event, false)
+    if (!cell) return undefined
 
-    if (!target) return
+    if (spot.x < 0 && spot.y < 0) return { kind: "all", cell }
+
+    if (spot.y < 0) return { kind: "column", cell }
+
+    if (spot.x < 0) return { kind: "row", cell }
+
+    return { kind: "cell", cell }
+  }
+
+  const dispatchPointer = (event: SheetPointerEvent) => {
+    const next = transitionSheetPointer(untrack(pointerState), event)
+
+    setPointerState(() => next.state)
+    next.effects.forEach(runPointer)
+  }
+
+  const runPointer = (effect: SheetPointerEffect) => {
+    if (effect.type === "capture-pointer") return scroller?.setPointerCapture(effect.pointerId)
+
+    if (effect.type === "follow-link") return follow(effect.cell)
 
     const anchor = state.selection.anchor
-    const shift = event.shiftKey
-
-    scroller.setPointerCapture(event.pointerId)
-    pressed = target.kind === "cell" && !shift ? target.cell : undefined
 
     // A whole row or column keeps its far end as the anchor, so the arrow keys move on from its first cell.
-    if (target.kind === "all") {
-      drag = undefined
-      select({ anchor: { row: lastCell.row, col: lastCell.col }, focus: { row: 0, col: 0 } })
+    if (effect.type === "select-all")
+      return select({ anchor: { row: lastCell.row, col: lastCell.col }, focus: { row: 0, col: 0 } })
 
-      return
-    }
-
-    if (target.kind === "column") {
-      drag = "columns"
-      select({
-        anchor: { row: lastCell.row, col: shift ? anchor.col : target.cell.col },
-        focus: { row: 0, col: target.cell.col },
+    if (effect.type === "select-column")
+      return select({
+        anchor: { row: lastCell.row, col: effect.extend ? anchor.col : effect.col },
+        focus: { row: 0, col: effect.col },
       })
 
-      return
-    }
-
-    if (target.kind === "row") {
-      drag = "rows"
-      select({
-        anchor: { row: shift ? anchor.row : target.cell.row, col: lastCell.col },
-        focus: { row: target.cell.row, col: 0 },
+    if (effect.type === "select-row")
+      return select({
+        anchor: { row: effect.extend ? anchor.row : effect.row, col: lastCell.col },
+        focus: { row: effect.row, col: 0 },
       })
 
-      return
-    }
+    if (effect.type === "select-cell")
+      return select(effect.extend ? extendTo(state.selection, effect.cell) : at(effect.cell))
 
-    drag = "cells"
-    select(shift ? extendTo(state.selection, target.cell) : at(target.cell))
+    // A drag moves the selection's far corner: to the cell under the pointer, or along the row or column headers.
+    select({ anchor, focus: effect.focus })
   }
 
-  const move = (event: PointerEvent) => {
-    if (drag) {
-      chase(drag, event)
-      extend(drag, hit(event, true)?.cell)
+  onCleanup(() => dispatchPointer({ type: "disposed" }))
 
-      return
-    }
-
-    const target = hit(event, false)
-
-    if (!target || target.kind !== "cell") return setState("hover", { cursor: "default", title: undefined })
-
-    const link = linkAt(target.cell)
-
-    setState("hover", {
-      cursor: link ? "pointer" : "cell",
-      title: link ? linkTitle(link) : undefined,
+  const press = (event: PointerEvent) =>
+    dispatchPointer({
+      type: "pointer.down",
+      pointerId: event.pointerId,
+      button: event.button,
+      shift: event.shiftKey,
+      hit: event.button === 0 ? hit(event) : undefined,
     })
-  }
 
-  // A drag moves the selection's far corner: to the cell under the pointer, or along the row or column headers.
-  const extend = (kind: "cells" | "rows" | "columns", cell: CellAddr | undefined) => {
-    if (!cell) return
+  // Runs on every pointer move: a drag dispatches only when the move changes something, and hovering writes the cursor
+  // and tooltip only when they change.
+  const move = (event: PointerEvent) => {
+    const current = untrack(pointerState)
 
-    const focus = state.selection.focus
+    if (current.status === "dragging") {
+      if (current.pointerId !== event.pointerId) return
 
-    const next = {
-      row: kind === "columns" ? 0 : cell.row,
-      col: kind === "rows" ? 0 : cell.col,
+      moveEvent.pointerId = event.pointerId
+      moveEvent.buttons = event.buttons
+      moveEvent.focusRow = state.selection.focus.row
+      moveEvent.focusCol = state.selection.focus.col
+
+      if ((event.buttons & 1) !== 0) {
+        chase(current.axis, event)
+
+        const cell = locate(event, true)
+
+        moveEvent.row = cell ? cell.row : -1
+        moveEvent.col = cell ? cell.col : -1
+      }
+
+      if (sheetPointerMoveNeeded(current, moveEvent)) dispatchPointer(moveEvent)
+
+      return
     }
 
-    if (next.row !== focus.row || next.col !== focus.col) select({ anchor: state.selection.anchor, focus: next })
+    const cell = locate(event, false)
+    const over = cell && spot.x >= 0 && spot.y >= 0 ? cell : undefined
+    const link = over && linkAt(over)
+    const cursor = over ? (link ? "pointer" : "cell") : "default"
+    const title = link ? linkTitle(link) : undefined
+
+    if (cursor !== state.hover.cursor) setState("hover", "cursor", cursor)
+
+    if (title !== state.hover.title) setState("hover", "title", title)
   }
 
   // A drag past the cells' edge scrolls the sheet toward the pointer, by how far past the edge it is. Along the headers
@@ -832,19 +889,11 @@ function SpreadsheetGrid(props: {
     )
   }
 
-  const release = (event: PointerEvent) => {
-    const was = drag
-    const start = pressed
+  const release = (event: PointerEvent) =>
+    dispatchPointer({ type: "pointer.up", pointerId: event.pointerId, cell: locate(event, false) })
 
-    drag = undefined
-    pressed = undefined
-
-    if (was !== "cells" || !start) return
-
-    const cell = hit(event, false)?.cell
-
-    if (cell && cell.row === start.row && cell.col === start.col) follow(cell)
-  }
+  // A cancelled pointer, or one whose capture another element or the window took, ends its drag.
+  const cancel = (event: PointerEvent) => dispatchPointer({ type: "pointer.cancelled", pointerId: event.pointerId })
 
   // The followable link on a cell; a merged cell's link sits on its first cell.
   const linkAt = (cell: CellAddr): HyperlinkRegion | undefined => {
@@ -982,11 +1031,19 @@ function SpreadsheetGrid(props: {
       if (!controller.signal.aborted) showToast({ title: ctx.t("sheet.copyFailed") })
     }
 
-    void props.client.call("copy", { sheet: sheet(), range: clipped }, { signal: controller.signal }).then((text) => {
-      if (text === undefined) return failed()
+    void props.client.call("copy", { sheet: sheet(), range: clipped }, { signal: controller.signal }).then(
+      (text) => {
+        if (text === undefined) return failed()
 
-      return ctx.system.copy(text).catch(failed)
-    }, failed)
+        return ctx.system.copy(text).catch(failed)
+      },
+      (error: Error) => {
+        // A withdrawn copy or a stopped worker is quiet: the viewer reports a stopped worker itself.
+        if (error instanceof WorkerClosedError) return
+
+        failed()
+      },
+    )
   }
 
   return (
@@ -1014,10 +1071,8 @@ function SpreadsheetGrid(props: {
         onPointerDown={press}
         onPointerMove={move}
         onPointerUp={release}
-        onPointerCancel={() => {
-          drag = undefined
-          pressed = undefined
-        }}
+        onPointerCancel={cancel}
+        onLostPointerCapture={cancel}
       >
         <div
           aria-hidden="true"
@@ -1063,7 +1118,7 @@ function SpreadsheetGrid(props: {
       </div>
       {/* The canvas would cover the scroller's own outline, so the focus ring is laid over both. */}
       <div class="pointer-events-none absolute inset-0 peer-focus-visible:shadow-[inset_0_0_0_2px_var(--v2-border-border-focus)]" />
-      <Show when={state.failed}>
+      <Show when={paintFailed()}>
         <div
           role="status"
           class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-v2-background-bg-base px-3 py-1.5 text-12-regular text-v2-text-text-muted shadow-[var(--v2-elevation-raised)]"
@@ -1098,18 +1153,6 @@ function place(start: number, size: number, current: number, visible: number, al
   if (start + size > current + visible) return start + size - visible
 
   return current
-}
-
-/** Whether two frames draw the same sheet into the same screen, so one can stand in for the other. */
-function interchangeable(left: SheetFrameRequest, right: SheetFrameRequest) {
-  return (
-    left.sheet === right.sheet &&
-    left.ratio === right.ratio &&
-    left.width === right.width &&
-    left.height === right.height &&
-    left.offset.x === right.offset.x &&
-    left.offset.y === right.offset.y
-  )
 }
 
 function clamp(value: number, max: number) {

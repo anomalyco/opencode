@@ -1,81 +1,48 @@
-const MAX_TITLEBAR_HISTORY = 100
+import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
+import { useLocation, useNavigate } from "@solidjs/router"
+import {
+  INITIAL_TITLEBAR_HISTORY_STATE,
+  transitionTitlebarHistory,
+  type TitlebarHistoryEffect,
+  type TitlebarHistoryEvent,
+} from "./history-machine"
 
-type TitlebarAction = "back" | "forward" | undefined
+/** The titlebar's own Back and Forward history, across tab switches and in-app navigation. */
+export function createTitlebarHistory() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [historyState, setHistoryState] = createSignal(INITIAL_TITLEBAR_HISTORY_STATE)
+  let settleTimer: ReturnType<typeof setTimeout> | undefined
 
-export type HistoryLocation = { url: string; state?: unknown }
+  const path = () => `${location.pathname}${location.search}${location.hash}`
 
-export type TitlebarHistory = {
-  stack: HistoryLocation[]
-  index: number
-  action: TitlebarAction
-}
-
-export function applyPath(
-  state: TitlebarHistory,
-  current: HistoryLocation,
-  max = MAX_TITLEBAR_HISTORY,
-): TitlebarHistory {
-  if (!state.stack.length) {
-    const stack = current.url === "/" ? [current] : [{ url: "/" }, current]
-
-    return { stack, index: stack.length - 1, action: undefined }
+  const dispatch = (event: TitlebarHistoryEvent) => {
+    const result = transitionTitlebarHistory(untrack(historyState), event)
+    setHistoryState(result.state)
+    result.effects.forEach(run)
   }
 
-  const active = state.stack[state.index]
-  const sameUrl = current.url === active.url
+  const run = (effect: TitlebarHistoryEffect) => {
+    clearTimeout(settleTimer)
+    settleTimer = undefined
 
-  if (sameUrl || (isSettingsPath(current.url) && isSettingsPath(active.url))) {
-    if (sameUrl && !state.action && current.state === active.state) return state
-
-    return {
-      ...state,
-      stack: state.stack.map((entry, index) => (index === state.index ? current : entry)),
-      action: undefined,
-    }
+    if (effect.type === "timer.clear") return
+    settleTimer = setTimeout(
+      () => dispatch({ type: "traverse.timed-out", attempt: effect.attempt, currentUrl: untrack(path) }),
+      effect.timeoutMs,
+    )
+    navigate(effect.to.url, { state: effect.to.state })
   }
 
-  if (state.action) return { ...state, action: undefined }
+  createEffect(() => {
+    const current = { url: path(), state: location.state }
+    untrack(() => dispatch({ type: "location.changed", current }))
+  })
 
-  return pushPath(state, current, max)
-}
-
-function isSettingsPath(url: string) {
-  return url.split(/[?#]/, 1)[0] === "/settings"
-}
-
-function pushPath(state: TitlebarHistory, path: HistoryLocation, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {
-  const stack = state.stack.slice(0, state.index + 1).concat(path)
-  const next = trimHistory(stack, stack.length - 1, max)
-
-  return { ...state, ...next, action: undefined }
-}
-
-function trimHistory(stack: HistoryLocation[], index: number, max = MAX_TITLEBAR_HISTORY) {
-  if (stack.length <= max) return { stack, index }
-  const cut = stack.length - max
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
-    stack: stack.slice(cut),
-    index: Math.max(0, index - cut),
+    back: () => dispatch({ type: "back" }),
+    forward: () => dispatch({ type: "forward" }),
   }
-}
-
-export function backPath(state: TitlebarHistory) {
-  if (state.index <= 0) return
-  const index = state.index - 1
-  const to = state.stack[index]
-
-  if (!to) return
-
-  return { state: { ...state, index, action: "back" as const }, to }
-}
-
-export function forwardPath(state: TitlebarHistory) {
-  if (state.index >= state.stack.length - 1) return
-  const index = state.index + 1
-  const to = state.stack[index]
-
-  if (!to) return
-
-  return { state: { ...state, index, action: "forward" as const }, to }
 }

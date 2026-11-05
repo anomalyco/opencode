@@ -1,5 +1,15 @@
 import { expect, test, type Page } from "@playwright/test"
-import { REMOTE_SERVER, SERVER, expectPath, project, seed, session, sessionHref, type TabSeed } from "../utils/app"
+import {
+  REMOTE_SERVER,
+  SERVER,
+  expectPath,
+  holdRoute,
+  project,
+  seed,
+  session,
+  sessionHref,
+  type TabSeed,
+} from "../utils/app"
 import { mockServers, type MockServerConfig } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -151,7 +161,9 @@ test("a remote session whose server signed the app out asks to sign in again, th
   })
   await seed(page, {
     storage: {
-      "opencode.global.dat:server": { list: [{ type: "http", http: { url: REMOTE_SERVER, password: "old-password" } }] },
+      "opencode.global.dat:server": {
+        list: [{ type: "http", http: { url: REMOTE_SERVER, password: "old-password" } }],
+      },
     },
   })
   await page.goto(sessionHref(sessionB.id, REMOTE_SERVER))
@@ -174,6 +186,80 @@ test("a remote session whose server signed the app out asks to sign in again, th
   await expect(editor).toHaveCount(0)
   await expectSessionTitle(page, sessionB.title)
   await expect(signedOut).toHaveCount(0)
+})
+
+// The session route waits this long for an uncached session before it calls the server unreachable.
+const RESOLUTION_TIMEOUT_MS = 30_000
+
+// How often the app checks each server's health.
+const SERVER_HEALTH_POLL_MS = 10_000
+
+test("a session its server never answers for says the server is unreachable, then opens", async ({ page }) => {
+  const late = session({ id: "ses_server_a_late", directory: directoryA, title: "Late session" })
+  const sessions = [sessionA]
+  await setup(page, { tabs: [], a: { sessions } })
+  const metadata = await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
+  await page.clock.install()
+  await page.goto(sessionHref(late.id))
+  await metadata.arrived
+  const unreachable = page.getByText("Can't reach this server", { exact: true })
+  await expect(unreachable).toHaveCount(0)
+
+  await page.clock.fastForward(RESOLUTION_TIMEOUT_MS)
+  await expect(unreachable).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
+
+  // The request that hung still fills the cache when it answers.
+  sessions.push(late)
+  metadata.release()
+  await expectSessionTitle(page, late.title)
+  await expect(unreachable).toHaveCount(0)
+})
+
+// The inbox shows what it has once this long passes, even while a server still has not answered.
+const INBOX_SETTLE_TIMEOUT_MS = 10_000
+
+test("one server that never answers the inbox index does not hide the other server's sessions", async ({ page }) => {
+  await setup(page, { tabs: [] })
+  await seed(page, { settings: { appearance: { tabLayout: "inbox" } } })
+
+  const index = await holdRoute(page, new RegExp(`^${REMOTE_SERVER}/api/session\\?(.*&)?order=desc`), {
+    method: "GET",
+  })
+
+  await page.clock.install()
+  await page.goto("/")
+  await index.arrived
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  const row = inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: sessionA.title })
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  await expect(row).toHaveCount(0)
+
+  await page.clock.fastForward(INBOX_SETTLE_TIMEOUT_MS)
+  await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(row).toBeVisible()
+})
+
+test("an open session stays visible while its server stops answering", async ({ page }) => {
+  const late = session({ id: "ses_server_a_late", directory: directoryA, title: "Late session" })
+  await setup(page, { tabs: [sessionA.id, late.id], a: { sessions: [sessionA] } })
+  await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
+  await page.clock.install()
+  await page.goto(sessionHref(sessionA.id))
+  await expectSessionTitle(page, sessionA.title)
+
+  await page.route(`${SERVER}/api/info`, (route) => route.fulfill({ status: 503, body: "" }))
+  await page.clock.fastForward(SERVER_HEALTH_POLL_MS)
+  const unreachable = page.getByText("Can't reach this server", { exact: true })
+
+  // An uncached session on the same server proves the app now considers the server down.
+  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(late.id)}"])`).click()
+  await expect(unreachable).toBeVisible()
+
+  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionA.id)}"])`).click()
+  await expectSessionTitle(page, sessionA.title)
+  await expect(unreachable).toHaveCount(0)
 })
 
 test("auto-accept responds for an unfocused server session and its child", async ({ page }) => {

@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import {
+  AUTO_APPROVE_REPLY_TIMEOUT_MS,
+  AUTO_APPROVE_SWEEP_TIMEOUT_MS,
   INITIAL_AUTO_APPROVE_STATE,
+  INITIAL_AUTO_APPROVE_SWEEP_STATE,
   needsUser,
   transitionAutoApprove,
+  transitionAutoApproveSweep,
   type AutoApproveEffect,
   type AutoApproveEvent,
   type AutoApproveState,
+  type AutoApproveSweepEffect,
+  type AutoApproveSweepEvent,
+  type AutoApproveSweepState,
+  type AutoApproveSweepTransition,
   type AutoApproveTransition,
 } from "./auto-approve-machine"
 
@@ -32,6 +40,14 @@ const waiting = (runId: string, attempt: number): AutoApproveState => ({
   attempt,
 })
 
+const reply = (runId: string, attempt: number): AutoApproveEffect => ({
+  type: "reply",
+  sessionID: "ses_1",
+  runId,
+  attempt,
+  timeoutMs: AUTO_APPROVE_REPLY_TIMEOUT_MS,
+})
+
 const gaveUp: AutoApproveState = { status: "gave-up", projectID: "proj_1" }
 
 function replay(events: AutoApproveEvent[], from = INITIAL_AUTO_APPROVE_STATE) {
@@ -47,10 +63,7 @@ describe("transitionAutoApprove", () => {
     const steps = replay([approve("r1"), { type: "reply.succeeded", runId: "r1", attempt: 0 }])
 
     expect(steps.map((step) => step.state)).toEqual([replying("r1", 0), { status: "replied" }])
-    expect(steps.map((step) => step.effects)).toEqual([
-      [{ type: "reply", sessionID: "ses_1", runId: "r1", attempt: 0 }],
-      [],
-    ])
+    expect(steps.map((step) => step.effects)).toEqual([[reply("r1", 0)], [{ type: "clear-reply-timer" }]])
   })
 
   test("surfaces the request in the dock once every retry fails", () => {
@@ -72,14 +85,50 @@ describe("transitionAutoApprove", () => {
       gaveUp,
     ])
     expect(steps.map((step) => step.effects)).toEqual([
-      [{ type: "reply", sessionID: "ses_1", runId: "r1", attempt: 0 }],
-      [{ type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
-      [{ type: "reply", sessionID: "ses_1", runId: "r1", attempt: 1 }],
-      [{ type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
-      [{ type: "reply", sessionID: "ses_1", runId: "r1", attempt: 2 }],
-      [],
+      [reply("r1", 0)],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
+      [reply("r1", 1)],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
+      [reply("r1", 2)],
+      [{ type: "clear-reply-timer" }],
     ])
     expect(steps.map((step) => needsUser(step.state, true))).toEqual([false, false, false, false, false, true])
+  })
+
+  // A reply that never answered used to keep its request hidden from the dock for good.
+  test("a reply that never answers times out through the retries and surfaces the request", () => {
+    const steps = replay([
+      approve("r1"),
+      { type: "reply.timed-out", runId: "r1", attempt: 0 },
+      // The timed-out first reply settles late.
+      { type: "reply.failed", runId: "r1", attempt: 0 },
+      { type: "retry.due", runId: "r1", attempt: 1 },
+      { type: "reply.timed-out", runId: "r1", attempt: 1 },
+      { type: "retry.due", runId: "r1", attempt: 2 },
+      { type: "reply.timed-out", runId: "r1", attempt: 2 },
+    ])
+
+    expect(steps.map((step) => step.state)).toEqual([
+      replying("r1", 0),
+      waiting("r1", 1),
+      waiting("r1", 1),
+      replying("r1", 1),
+      waiting("r1", 2),
+      replying("r1", 2),
+      gaveUp,
+    ])
+    expect(steps[2]?.state).toBe(steps[1]?.state)
+    expect(steps.map((step) => step.effects)).toEqual([
+      [reply("r1", 0)],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 1, delayMs: 1000 }],
+      [],
+      [reply("r1", 1)],
+      [{ type: "clear-reply-timer" }, { type: "schedule-retry", runId: "r1", attempt: 2, delayMs: 2000 }],
+      [reply("r1", 2)],
+      [{ type: "clear-reply-timer" }],
+    ])
+    expect(needsUser(steps.at(-2)!.state, true)).toBe(false)
+    expect(needsUser(steps.at(-1)!.state, true)).toBe(true)
   })
 
   test("recovers on a later attempt", () => {
@@ -113,7 +162,9 @@ describe("transitionAutoApprove", () => {
     const stale: AutoApproveEvent[] = [
       { type: "reply.failed", runId: "r1", attempt: 0 },
       { type: "reply.succeeded", runId: "r1", attempt: 0 },
+      { type: "reply.timed-out", runId: "r1", attempt: 0 },
       { type: "reply.failed", runId: "r2", attempt: 1 },
+      { type: "reply.timed-out", runId: "r2", attempt: 1 },
       { type: "retry.due", runId: "r2", attempt: 0 },
     ]
 
@@ -129,22 +180,42 @@ describe("transitionAutoApprove", () => {
     expect(transitionAutoApprove(pausing, { type: "retry.due", runId: "r1", attempt: 1 }).state).toBe(pausing)
   })
 
-  test.each<{ from: AutoApproveState; cancel: AutoApproveState; resolved: AutoApproveState; clears: boolean }>([
+  // Leaving a reply stops its timeout, so it never reports a timed-out attempt for a cycle that ended.
+  test.each<{
+    from: AutoApproveState
+    cancel: AutoApproveState
+    resolved: AutoApproveState
+    effects: AutoApproveEffect[]
+  }>([
     {
       from: INITIAL_AUTO_APPROVE_STATE,
       cancel: INITIAL_AUTO_APPROVE_STATE,
       resolved: INITIAL_AUTO_APPROVE_STATE,
-      clears: false,
+      effects: [],
     },
-    { from: replying("r1", 0), cancel: INITIAL_AUTO_APPROVE_STATE, resolved: { status: "replied" }, clears: false },
-    { from: waiting("r1", 1), cancel: INITIAL_AUTO_APPROVE_STATE, resolved: { status: "replied" }, clears: true },
-    { from: gaveUp, cancel: INITIAL_AUTO_APPROVE_STATE, resolved: { status: "replied" }, clears: false },
-    { from: { status: "replied" }, cancel: { status: "replied" }, resolved: { status: "replied" }, clears: false },
+    {
+      from: replying("r1", 0),
+      cancel: INITIAL_AUTO_APPROVE_STATE,
+      resolved: { status: "replied" },
+      effects: [{ type: "clear-reply-timer" }],
+    },
+    {
+      from: waiting("r1", 1),
+      cancel: INITIAL_AUTO_APPROVE_STATE,
+      resolved: { status: "replied" },
+      effects: [{ type: "cancel-retry" }],
+    },
+    { from: gaveUp, cancel: INITIAL_AUTO_APPROVE_STATE, resolved: { status: "replied" }, effects: [] },
+    { from: { status: "replied" }, cancel: { status: "replied" }, resolved: { status: "replied" }, effects: [] },
   ])("cancel and resolved from $from.status", (input) => {
-    const effects: AutoApproveEffect[] = input.clears ? [{ type: "cancel-retry" }] : []
-
-    expect(transitionAutoApprove(input.from, { type: "cancel" })).toEqual({ state: input.cancel, effects })
-    expect(transitionAutoApprove(input.from, { type: "resolved" })).toEqual({ state: input.resolved, effects })
+    expect(transitionAutoApprove(input.from, { type: "cancel" })).toEqual({
+      state: input.cancel,
+      effects: input.effects,
+    })
+    expect(transitionAutoApprove(input.from, { type: "resolved" })).toEqual({
+      state: input.resolved,
+      effects: input.effects,
+    })
   })
 })
 
@@ -157,4 +228,118 @@ test.each<{ state: AutoApproveState; on: boolean; off: boolean }>([
 ])("needsUser for $state.status", (input) => {
   expect(needsUser(input.state, true)).toBe(input.on)
   expect(needsUser(input.state, false)).toBe(input.off)
+})
+
+describe("transitionAutoApproveSweep", () => {
+  const run = (runId: string, attempt: number) => ({
+    type: "sweep.run" as const,
+    runId,
+    attempt,
+    timeoutMs: AUTO_APPROVE_SWEEP_TIMEOUT_MS,
+  })
+
+  function sweepReplay(
+    events: AutoApproveSweepEvent[],
+    from: AutoApproveSweepState = INITIAL_AUTO_APPROVE_SWEEP_STATE,
+  ) {
+    return events.reduce<AutoApproveSweepTransition[]>((steps, event) => {
+      steps.push(transitionAutoApproveSweep(steps.at(-1)?.state ?? from, event))
+
+      return steps
+    }, [])
+  }
+
+  // A sweep stalled on one request used to hold its retries back for good.
+  test("a sweep that never finishes times out, retries and comes to rest", () => {
+    const steps = sweepReplay([
+      { type: "sweep.start", runId: "s1" },
+      { type: "sweep.timed-out", runId: "s1", attempt: 0 },
+      // The aborted sweep settles late.
+      { type: "sweep.failed", runId: "s1", attempt: 0 },
+      { type: "sweep.retry-due", runId: "s1", attempt: 1 },
+      { type: "sweep.failed", runId: "s1", attempt: 1 },
+      { type: "sweep.retry-due", runId: "s1", attempt: 2 },
+      { type: "sweep.timed-out", runId: "s1", attempt: 2 },
+    ])
+
+    expect(steps.map((step) => step.state)).toEqual([
+      { status: "sweeping", runId: "s1", attempt: 0 },
+      { status: "waiting-retry", runId: "s1", attempt: 1 },
+      { status: "waiting-retry", runId: "s1", attempt: 1 },
+      { status: "sweeping", runId: "s1", attempt: 1 },
+      { status: "waiting-retry", runId: "s1", attempt: 2 },
+      { status: "sweeping", runId: "s1", attempt: 2 },
+      INITIAL_AUTO_APPROVE_SWEEP_STATE,
+    ])
+    expect(steps[2]?.state).toBe(steps[1]?.state)
+    expect(steps.map((step) => step.effects)).toEqual([
+      [run("s1", 0)],
+      [{ type: "sweep.abort" }, { type: "sweep.schedule-retry", runId: "s1", attempt: 1, delayMs: 1000 }],
+      [],
+      [run("s1", 1)],
+      [{ type: "sweep.abort" }, { type: "sweep.schedule-retry", runId: "s1", attempt: 2, delayMs: 2000 }],
+      [run("s1", 2)],
+      [{ type: "sweep.abort" }],
+    ])
+  })
+
+  test("a complete sweep comes to rest", () => {
+    const steps = sweepReplay([
+      { type: "sweep.start", runId: "s1" },
+      { type: "sweep.succeeded", runId: "s1", attempt: 0 },
+    ])
+
+    expect(steps.at(-1)).toEqual({ state: INITIAL_AUTO_APPROVE_SWEEP_STATE, effects: [{ type: "sweep.abort" }] })
+  })
+
+  test("a newer start replaces the sweep or its retry, and the old sweep's results are ignored", () => {
+    const sweeping: AutoApproveSweepState = { status: "sweeping", runId: "s1", attempt: 0 }
+    const restarted = transitionAutoApproveSweep(sweeping, { type: "sweep.start", runId: "s2" })
+
+    expect(restarted).toEqual({
+      state: { status: "sweeping", runId: "s2", attempt: 0 },
+      effects: [{ type: "sweep.abort" }, run("s2", 0)],
+    })
+
+    const stale: AutoApproveSweepEvent[] = [
+      { type: "sweep.succeeded", runId: "s1", attempt: 0 },
+      { type: "sweep.failed", runId: "s1", attempt: 0 },
+      { type: "sweep.timed-out", runId: "s1", attempt: 0 },
+      { type: "sweep.retry-due", runId: "s2", attempt: 0 },
+    ]
+
+    stale.forEach((event) => {
+      const result = transitionAutoApproveSweep(restarted.state, event)
+
+      expect(result.state).toBe(restarted.state)
+      expect(result.effects).toEqual([])
+    })
+
+    expect(
+      transitionAutoApproveSweep(
+        { status: "waiting-retry", runId: "s1", attempt: 1 },
+        { type: "sweep.start", runId: "s2" },
+      ),
+    ).toEqual({
+      state: { status: "sweeping", runId: "s2", attempt: 0 },
+      effects: [{ type: "sweep.cancel-retry" }, run("s2", 0)],
+    })
+  })
+
+  test.each<{ from: AutoApproveSweepState; effects: AutoApproveSweepEffect[] }>([
+    { from: { status: "sweeping", runId: "s1", attempt: 0 }, effects: [{ type: "sweep.abort" }] },
+    { from: { status: "waiting-retry", runId: "s1", attempt: 1 }, effects: [{ type: "sweep.cancel-retry" }] },
+  ])("cancel from $from.status", (input) => {
+    expect(transitionAutoApproveSweep(input.from, { type: "sweep.cancel" })).toEqual({
+      state: INITIAL_AUTO_APPROVE_SWEEP_STATE,
+      effects: input.effects,
+    })
+  })
+
+  test("cancel while idle changes nothing", () => {
+    const result = transitionAutoApproveSweep(INITIAL_AUTO_APPROVE_SWEEP_STATE, { type: "sweep.cancel" })
+
+    expect(result.state).toBe(INITIAL_AUTO_APPROVE_SWEEP_STATE)
+    expect(result.effects).toEqual([])
+  })
 })

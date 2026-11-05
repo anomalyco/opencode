@@ -441,6 +441,7 @@ function ProjectRow(props: {
                   project={props.project}
                   unread={props.actions.hasUnread(props.server, props.project)}
                   canImportSession={props.actions.canImportSession}
+                  importingSession={props.actions.importingSession()}
                   canRevealProject={props.actions.canReveal}
                   onOpenProjectNewSession={props.actions.openNewSession}
                   onImportSession={props.actions.importSession}

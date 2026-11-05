@@ -151,6 +151,38 @@ test("a rejected Git init releases its session's button without showing an error
   await expect(init).toBeEnabled()
 })
 
+test("a created Git repository whose project refresh fails still refreshes the session without an error", async ({
+  page,
+}) => {
+  await openSession(page, {
+    name: "ReviewInitRefresh",
+    project: { vcs: undefined },
+    onVcsInit: () => undefined,
+    sessions: [{ id: "ses_init_refresh", title: "Initialize Refresh" }],
+    seed: {
+      panes: { ses_init_refresh: { review: true } },
+      storage: reviewTabs("C:/OpenCode/ReviewInitRefresh", "ses_init_refresh"),
+    },
+  })
+  const panel = page.locator("#review-panel")
+  const init = panel.getByRole("button", { name: "Create Git repository", exact: true })
+  await expect(init).toBeEnabled()
+
+  // The repository is created; the project list refresh after it fails.
+  await page.route(/\/api\/project(\?|$)/, (route) =>
+    route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} }),
+  )
+  const created = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
+  const project = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/project")
+  const session = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/session/ses_init_refresh")
+  await init.click()
+  expect((await created).status()).toBe(204)
+  expect((await project).status()).toBe(500)
+  expect((await session).status()).toBe(200)
+  await expect(panel.getByRole("button", { name: "Creating Git repository…", exact: true })).toHaveCount(0)
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+})
+
 test("opens file picker launchers when randomUUID is unavailable on insecure HTTP origins", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(globalThis, "isSecureContext", { configurable: true, value: false })
@@ -672,6 +704,64 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
 })
 
+test("the file tree follows a folder the review closes and lists a recreated folder's files", async ({ page }) => {
+  const directory = "C:/OpenCode/TreeFollow"
+  const disk = { src: true }
+
+  const workspace = await openSession(page, {
+    name: "TreeFollow",
+    vcsDiff: [fileDiff("src/a.ts")],
+    fileList: (path) => {
+      if (!disk.src) return path ? [] : [fileNode(directory, "README.md")]
+
+      if (path === "src") return [fileNode(directory, "src/a.ts")]
+
+      return path ? [] : [fileNode(directory, "src", "directory"), fileNode(directory, "README.md")]
+    },
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_treefollow: { review: true } },
+      storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: true } },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
+  // Only the selected tab's tree is visible; the file browser stays mounted, hidden, behind the review.
+  const folder = panel.getByRole("treeitem", { name: "src" })
+  const file = panel.getByRole("treeitem", { name: "a.ts" })
+
+  await openReviewLauncher(panel)
+  await expect(file).toBeVisible()
+  await openFileLauncher(panel)
+  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toBeVisible()
+
+  // The review shares the workspace's folders: closing one there closes it in the file browser too.
+  await panel.locator("#session-side-panel-review-tab").click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await tab("Open file").click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await expect(file).toHaveCount(0)
+
+  // A deleted folder takes its files with it, so they show again once it is recreated and opened.
+  await folder.click()
+  await expect(file).toBeVisible()
+  disk.src = false
+  await workspace.push([filesystemEvent(directory, "src", "unlink")])
+  await expect(folder).toHaveCount(0)
+  disk.src = true
+  await workspace.push([filesystemEvent(directory, "src", "add")])
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toBeVisible()
+})
+
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
   // Enough lines to scroll the code view, ending in the draft's name.
   const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
@@ -739,7 +829,7 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
 
   // A restored file tab whose file was deleted shows its inline not-found state without a toast; clicking a broken link
-  // when no tab is open for it shows the toast.
+  // when no tab is open for it shows one toast.
   await page.route("**/api/fs/read/shopping.txt*", (route) =>
     route.fulfill({
       status: 404,
@@ -755,11 +845,73 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(panel.getByText("File not found: shopping.txt", { exact: true })).toBeVisible()
   await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
 
+  // Behind another tab, the deleted file's tab is what its link selects: the click never does nothing.
+  await page.getByRole("button", { name: "Toggle session context" }).click()
+  await expect(missingTab).toHaveAttribute("aria-selected", "false")
+  await link.click()
+  await expect(missingTab).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+
   await missingTab.locator("..").getByRole("button", { name: "Close tab" }).click()
   await expect(missingTab).toHaveCount(0)
   await link.click()
   await expect(page.getByText("Failed to load file", { exact: true })).toBeVisible()
   await expect(missingTab).toHaveCount(0)
+})
+
+// A change reported while a file's read is in flight used to join that read, so the tab kept the bytes from before the
+// change until the next change.
+test("a file changed during its read shows the change", async ({ page }) => {
+  const reads: string[] = []
+  const arrived = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<void>()
+
+  const messages = [
+    { id: "msg_prompt", type: "user", text: "Update the lists", time: { created: 1 } },
+    {
+      id: "msg_reply",
+      type: "assistant",
+      agent: "build",
+      model: { id: "test", providerID: "opencode" },
+      content: [{ type: "text", text: "Updated [notes.txt](notes.txt) and [shopping.txt](shopping.txt)." }],
+      time: { created: 2, completed: 3 },
+    },
+  ] satisfies SessionMessageInfo[]
+
+  const workspace = await openSession(page, {
+    name: "FileReadRace",
+    fileList: () => [],
+    fileContent: async (path) => {
+      reads.push(path)
+
+      if (path !== "shopping.txt") return `contents:${path}`
+
+      if (reads.filter((item) => item === path).length > 1) return "after change"
+      arrived.resolve()
+      await held.promise
+
+      return "before change"
+    },
+    pageMessages: () => ({ items: messages }),
+  })
+
+  const panel = page.locator("#review-panel")
+  await page.getByRole("link", { name: "notes.txt", exact: true }).click()
+  await expect(panel.getByText("contents:notes.txt", { exact: true })).toBeVisible()
+
+  await page.getByRole("link", { name: "shopping.txt", exact: true }).click()
+  await arrived.promise
+  // Events arrive in order, so the reread of notes.txt shows that the change to shopping.txt was handled before it.
+  await workspace.push([
+    filesystemEvent(workspace.directory, "shopping.txt", "change"),
+    filesystemEvent(workspace.directory, "notes.txt", "change"),
+  ])
+  await expect.poll(() => reads.filter((item) => item === "notes.txt").length).toBe(2)
+  held.resolve()
+
+  await expect(panel.getByRole("tab", { name: "shopping.txt" })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("after change", { exact: true })).toBeVisible()
+  await expect(panel.getByText("before change", { exact: true })).toHaveCount(0)
 })
 
 test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
@@ -769,6 +921,7 @@ test("artifact actions copy and download content, switch source, and follow the 
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
   const source = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80"/></svg>'
   const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
+  const broken = '<svg xmlns="http://www.w3.org/2000/svg"><rect'
 
   const notes = [
     "---",
@@ -803,6 +956,8 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "notes.md") return { content: notes }
 
+      if (path === "broken.svg") return { content: broken }
+
       return { type: "binary", content: "AAEC", encoding: "base64" }
     },
     pageMessages: () => ({
@@ -815,7 +970,7 @@ test("artifact actions copy and download content, switch source, and follow the 
           content: [
             {
               type: "text",
-              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg)",
             },
           ],
           time: { created: 1, completed: 2 },
@@ -951,6 +1106,13 @@ test("artifact actions copy and download content, switch source, and follow the 
   await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
   await page.getByRole("menuitem", { name: "Copy path", exact: true }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${workspace.directory}/sample.bin`)
+
+  // A text SVG that fails to decode shows the binary placeholder but can still show its source.
+  await page.getByRole("link", { name: "Broken", exact: true }).click()
+  await expect(toolbar.getByText("broken.svg", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Couldn't load this file.", { exact: true })).toBeVisible()
+  await toolbar.getByRole("button", { name: "View source", exact: true }).click()
+  await expect(panel.locator("diffs-container")).toContainText(broken)
 })
 
 test("Markdown and DOCX sheets stay aligned when switching at wide and narrow preview widths", async ({ page }) => {
@@ -1045,7 +1207,9 @@ test("Markdown and DOCX sheets stay aligned when switching at wide and narrow pr
     await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
     await expect.poll(() => edges(markdown)).toEqual(reference)
     await expect.poll(() => toolbar.boundingBox()).toEqual(header)
-    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(true)
+    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(
+      true,
+    )
     await panel.getByRole("tab", { name: "other.docx", exact: true }).click()
     await expect(word).toHaveAttribute("data-e2e-probe", "other-warm")
     await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
@@ -1198,6 +1362,28 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   await expect(stage).toHaveAttribute("data-zoom", "actual")
   expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 30, 1)
   expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 20, 1)
+  // A pan whose release the image never heard ends on the next move without the button, and pans nothing.
+  const touched = (await image.boundingBox())!
+  await page.mouse.down()
+  await expect(image).toHaveCSS("cursor", "grabbing")
+  await image.evaluate(
+    (element, point) =>
+      element.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          buttons: 0,
+          clientX: point.x,
+          clientY: point.y,
+        }),
+      ),
+    { x: anchor.x - 100, y: anchor.y - 100 },
+  )
+  await expect(image).toHaveCSS("cursor", "grab")
+  expect(await image.boundingBox()).toEqual(touched)
+  await page.mouse.up()
   // Keyboard-accessible fit restores the exact original geometry.
   await fit.focus()
   await page.keyboard.press("Enter")
@@ -1720,6 +1906,139 @@ test("desktop review waits for the session's stored mode before it loads changes
   await expect(mode("Branch changes")).toBeVisible()
   await expect(file).toHaveText("beta.ts")
   expect(working).toEqual([])
+})
+
+// A failed request used to settle like an empty one, so the review claimed the working tree was clean.
+test("a failed diff request offers a retry instead of a clean working tree", async ({ page }) => {
+  await openSession(page, { name: "ReviewDiffFailure", vcsDiff: [fileDiff("src/alpha.ts")] })
+  const changes = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    if (!changes.failing || new URL(route.request().url()).searchParams.get("untracked") !== "folders")
+      return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const failure = panel.getByRole("alert")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(failure.getByText("Couldn't load changes", { exact: true })).toBeVisible()
+  await expect(panel.locator('[data-slot="session-review-v2-empty-changes"]')).toHaveCount(0)
+  changes.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("alpha.ts")
+  await expect(failure).toHaveCount(0)
+})
+
+// A large file's full patch that failed to load used to leave its preview blank, with no reason and no way to load it.
+test("a large file whose full diff fails to load says so, and loads on Try again", async ({ page }) => {
+  // The listing leaves the patch out, as the server does for a large file; the bounded request carries it.
+  await openSession(page, {
+    name: "ReviewDetailFailure",
+    vcsDiff: (input) => [fileDiff("big.ts", { loaded: input.context === "3" })],
+  })
+  const full = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?.*context=3/, (route) => {
+    if (!full.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const preview = panel.locator('[data-slot="session-review-v2-diff-scroll"]')
+  const failure = preview.getByRole("alert")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("big.ts")
+  // The request runs three times, a second and then two apart, before the preview gives up.
+  await expect(failure.getByText("Couldn't load changes", { exact: true })).toBeVisible()
+  full.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(preview.locator("diffs-container")).toContainText("export const value = 'after'")
+  await expect(failure).toHaveCount(0)
+})
+
+// A failed search used to read "No results found", as if the workspace had no such file.
+test("a failed file search offers a retry instead of no results", async ({ page }) => {
+  const directory = "C:/OpenCode/ReviewSearchFailure"
+  await openSession(page, {
+    name: "ReviewSearchFailure",
+    fileList: () => [fileNode(directory, "README.md")],
+    findFiles: (input) => (input.query === "nested" ? [fileNode(directory, "src/nested.ts")] : []),
+    seed: { panes: { ses_reviewsearchfailure: { review: true } } },
+  })
+  const search = { failing: true }
+  await page.route(/\/api\/fs\/find\?/, (route) => {
+    if (!search.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const filter = panel.getByRole("combobox", { name: "Filter files" })
+  const failure = panel.getByRole("alert")
+
+  await openFileLauncher(panel)
+  await filter.fill("nested")
+  await expect(failure.getByText("Couldn't search files", { exact: true })).toBeVisible()
+  await expect(panel.getByText("No results found", { exact: true })).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath("file-search-failed.png"), animations: "disabled" })
+  search.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.getByRole("option", { name: /nested\.ts/ })).toBeVisible()
+  await expect(failure).toHaveCount(0)
+})
+
+// An untracked folder whose listing failed used to look empty, and opening it again never asked the server again.
+test("an untracked folder that cannot load says so, and loads once it is opened again", async ({ page }) => {
+  const workspace = await openSession(page, {
+    name: "ReviewFolderFailure",
+    vcsDiff: (input) =>
+      input.directory.endsWith("/untracked")
+        ? [fileDiff("untracked/notes.ts", { status: "added" })]
+        : [fileDiff("src/alpha.ts"), fileDiff("untracked/", { status: "added" })],
+  })
+
+  const listing = { failing: true, failures: 0 }
+
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    const directory = new URL(route.request().url()).searchParams.get("location[directory]")
+
+    if (!listing.failing || directory !== `${workspace.directory}/untracked`) return route.fallback()
+    listing.failures += 1
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const folder = panel.getByRole("treeitem", { name: "untracked" })
+  const notes = panel.getByRole("treeitem", { name: "notes.ts" })
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(panel.getByRole("treeitem", { name: "alpha.ts" })).toBeVisible()
+  // Retries back off over 1, 2 and 4 seconds; the installed clock follows real time until a fast-forward skips it.
+  await page.clock.install()
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+
+  for (const failures of [1, 2, 3]) {
+    await expect.poll(() => listing.failures).toBe(failures)
+    await page.clock.fastForward(1_000 * 2 ** (failures - 1))
+  }
+
+  await expect.poll(() => listing.failures).toBe(4)
+  await expect(folder).toContainText("Couldn't load changes")
+  await expect(notes).toHaveCount(0)
+
+  listing.failing = false
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await expect(folder).not.toContainText("Couldn't load changes")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(notes).toBeVisible()
+  await expect(folder).toContainText("1")
+  expect(listing.failures).toBe(4)
 })
 
 test("a chosen mode the session stops offering shows as Git, and comes back when it is offered again", async ({

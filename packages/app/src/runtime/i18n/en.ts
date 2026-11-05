@@ -249,6 +249,7 @@ export const dict = {
   "provider.connect.form.open": "Open link",
   "provider.connect.form.openAgain": "Open link again",
   "provider.connect.form.finished": "I finished",
+  "provider.connect.form.browserFailed": "We couldn't open your browser. Open the link below, then select I finished.",
   "provider.connect.form.selectOne": "Select at least one option",
   "provider.connect.form.minItems": "Select at least {{count}}",
   "provider.connect.form.maxItems": "Select at most {{count}}",
@@ -391,6 +392,7 @@ export const dict = {
   "dialog.mcp.signIn.paste.label": "Redirect URL",
   "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
   "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
+  "dialog.mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
@@ -401,6 +403,7 @@ export const dict = {
   "mcp.status.needs_auth": "Needs auth",
   "mcp.status.disabled": "Disabled",
   "mcp.auth.interactiveForm": "MCP server {{name}} requires an interactive authentication form",
+  "mcp.timedOut": "{{name}} took too long to respond",
 
   "dialog.fork.empty": "No messages to fork from",
 
@@ -490,6 +493,7 @@ export const dict = {
   "toast.permissions.autoaccept.off.description": "Permission requests will require approval",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "toast.language.loadFailed.title": "Failed to load {{language}}",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",
@@ -499,6 +503,7 @@ export const dict = {
   "toast.session.export.success.description": "Saved session to {{filename}}",
   "toast.session.export.failed.title": "Failed to export session",
   "toast.session.export.failed.description": "An error occurred while exporting the session",
+  "toast.session.import.pending": "Importing session…",
   "toast.session.copyID.failed.title": "Failed to copy session ID",
   "toast.session.copyID.failed.description": "An error occurred while copying the session ID",
   "toast.project.copyID.failed.title": "Failed to copy project ID",
@@ -593,6 +598,8 @@ export const dict = {
   "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "Nothing here yet",
   "home.sessions.empty.description": "Create a session to get started",
+  "home.sessions.load.failed": "Couldn't load sessions",
+  "home.sessions.load.timeout": "The server took too long to answer",
   "home.sessions.group.today": "Today",
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
@@ -682,6 +689,7 @@ export const dict = {
   "session.websearch.loadFailed": "Could not load search providers.",
   "session.websearch.empty": "No search providers available.",
   "session.websearch.failed": "Could not save your choice. Please try again.",
+  "session.websearch.unavailable": "That search provider is no longer available. Choose another.",
   "session.websearch.retry": "Retry",
   "session.question.minimize": "Minimize question",
   "session.question.restore": "Restore question",
@@ -692,6 +700,7 @@ export const dict = {
   "session.new.project.trigger.tooltip": "Choose project",
   "session.new.worktree.creating": "Creating worktree",
   "session.new.starting": "Starting session",
+  "session.new.timedOut": "The server took too long to respond. Send again to retry.",
   "session.new.workspace.runIn": "Run session in",
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
@@ -833,7 +842,8 @@ export const dict = {
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description": "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.foldUserMessages.description":
+    "Fold your messages past 12 lines behind a Read more button",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
@@ -898,7 +908,8 @@ export const dict = {
   "settings.appearance.row.tabs.horizontal": "Horizontal",
   "settings.appearance.row.tabs.vertical": "Vertical",
   "settings.general.row.interfaceMode.title": "Interface layout",
-  "settings.general.row.interfaceMode.description": "Choose how you switch between sessions and keep track of what's running",
+  "settings.general.row.interfaceMode.description":
+    "Choose how you switch between sessions and keep track of what's running",
   "settings.general.row.interfaceMode.top": "Top tabs",
   "settings.general.row.interfaceMode.side": "Side tabs",
   "settings.general.row.interfaceMode.inbox": "Inbox",
@@ -937,6 +948,7 @@ export const dict = {
   "settings.extensions.availableAll": "Available to all projects",
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
+  "settings.extensions.plugins.loadFailed": "Could not load plugins",
   "project.settings.title": "Edit project",
   "project.settings.autoAccept.description": "Approve this project's permission requests without asking",
   "project.settings.autoAccept.default.on": "Use default (On)",
@@ -1008,9 +1020,6 @@ export const dict = {
   "settings.timeline.custom": "Custom",
   "settings.timeline.row.turnDiffs.title": "Changed files",
   "settings.timeline.row.turnDiffs.description": "List the files each turn changed when it finishes",
-  "settings.timeline.row.newMessagesDivider.title": "New messages divider",
-  "settings.timeline.row.newMessagesDivider.description":
-    "When you return to a session, jump to the first unread message.",
   "settings.timeline.advanced": "Advanced",
   "settings.timeline.advanced.description": "Set placement and details for each activity category.",
   "settings.timeline.group": "Group",

@@ -90,8 +90,11 @@ export interface MockServerConfig {
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
-  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  // `directory` is the requested `location[directory]`, such as an untracked folder the review opened.
+  /** `context` is the patch's lines of context, sent when the review asks for a large file's full patch. */
+  vcsDiff?: unknown[] | ((input: { mode?: string; directory: string; context?: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
+  beforeAgentsResponse?: () => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
@@ -109,6 +112,10 @@ export interface MockServerConfig {
   // Without it, permission replies answer 501 MockUnsupported.
   onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
+  // Records form replies. The mock keeps listing a replied form unless `forms` stops returning it.
+  onFormReply?: (input: { sessionID: string; formID: string; body: unknown }) => void
+  // Web search providers (`GET /api/websearch/provider`), none by default.
+  websearchProviders?: Resolvable<unknown[]>
   // MCP servers. A list serves every workspace; a function receives the requested directory.
   mcp?: unknown[] | ((directory: string) => unknown[])
   // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
@@ -116,9 +123,19 @@ export interface MockServerConfig {
   onMcpAction?: (input: { server: string; action: "connect" | "disconnect"; directory: string }) => void | MockMcpStatus
   // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
   // Without it, OAuth connects answer 501 MockUnsupported.
-  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  // `paste` starts a sign-in that also accepts the redirect URL pasted from the browser.
+  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => {
+    url: string
+    paste?: boolean
+  }
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
+  // Accepts a pasted redirect URL (POST .../connect/oauth/:attemptID/complete). Without it, pastes answer 501.
+  onIntegrationOAuthComplete?: (input: { attemptID: string; body: unknown }) => void
+  // Returning true fails the next `/api/mcp/resource` listing with a 500.
+  mcpResourceFailures?: () => boolean
+  // Runs on DELETE .../connect/oauth/:attemptID, which closes an OAuth attempt the dialog left.
+  onIntegrationOAuthCancel?: (attemptID: string) => void
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -127,8 +144,9 @@ export interface MockServerConfig {
   // and return the answer; by default it creates `<directory>/<name>`. A created directory joins the project's sandboxes.
   onWorktreeCreate?: (input: Schema.Json) => void | MockAnswer | Promise<void | MockAnswer>
   onWorktreeRemove?: (input: Worktree.RemoveInput) => void | Promise<void>
-  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based).
-  onSessionCreate?: (body: Schema.JsonObject, attempt: number) => void | MockAnswer
+  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based); the
+  // hook may hold the request.
+  onSessionCreate?: (body: Schema.JsonObject, attempt: number) => void | MockAnswer | Promise<void | MockAnswer>
   // Title of created sessions (default: the request's title, else "New session").
   createdSessionTitle?: string
   // Slash commands served by `/api/command`.
@@ -143,6 +161,9 @@ export interface MockServerConfig {
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  // POST /api/session/:id/fork creates `<id>_fork` in the same directory. The hook may hold the request, or return an
+  // answer to replace the response.
+  onFork?: (input: { sessionID: string; body: Schema.JsonObject }) => void | MockAnswer | Promise<void | MockAnswer>
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
@@ -711,7 +732,8 @@ function mockHandlers(
           const payload = Option.getOrElse(decodeJsonObject(input), () => ({}))
           const fields = Option.getOrUndefined(decodeSessionCreate(payload))
           state.sessionCreates += 1
-          const answer = config.onSessionCreate?.(payload, state.sessionCreates)
+          const attempt = state.sessionCreates
+          const answer = yield* Effect.promise(async () => config.onSessionCreate?.(payload, attempt))
 
           if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
 
@@ -731,6 +753,27 @@ function mockHandlers(
           return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
+      .handleRaw("sessionFork", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const body = Option.getOrElse(decodeJsonObject(input), (): Schema.JsonObject => ({}))
+          const answer = yield* Effect.promise(async () => config.onFork?.({ sessionID: ctx.params.sessionID, body }))
+
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+
+          const parent = config.sessions.find((item) => item.id === ctx.params.sessionID)
+          const id = `${ctx.params.sessionID}_fork`
+
+          const forked = currentSession(
+            { ...parent, id, title: `${parent?.title ?? ctx.params.sessionID} (fork)` },
+            config.directory,
+          )
+
+          if (!config.sessions.some((item) => item.id === id)) config.sessions.push(forked)
+
+          return HttpServerResponse.jsonUnsafe({ data: forked })
+        }),
+      )
       .handleAll({
         info: () =>
           Effect.succeed({
@@ -746,20 +789,23 @@ function mockHandlers(
           }),
         config: () => Effect.succeed(configEntries),
         reference: () => Effect.succeed({ location: location(config), data: [] }),
+        // `beforeAgentsResponse` holds the Location's agent list, as a cold Location does while its plugins activate.
         agent: (ctx) =>
-          Effect.succeed({
-            location: location(config, requestDirectory(config, ctx.request)),
-            data: [
-              {
-                id: "build",
-                name: "Build",
-                mode: "primary",
-                hidden: false,
-                request: { settings: {}, headers: {}, body: {} },
-                permissions: [],
-              },
-            ],
-          }),
+          Effect.promise(async () => config.beforeAgentsResponse?.()).pipe(
+            Effect.as({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: [
+                {
+                  id: "build",
+                  name: "Build",
+                  mode: "primary",
+                  hidden: false,
+                  request: { settings: {}, headers: {}, body: {} },
+                  permissions: [],
+                },
+              ],
+            }),
+          ),
         provider: () =>
           Effect.succeed({ location: location(config), data: currentProviders(resolve(config.provider)) }),
         model: () => Effect.succeed({ location: location(config), data: currentModels(resolve(config.provider)) }),
@@ -799,16 +845,15 @@ function mockHandlers(
             state.attempts.set(attemptID, created)
             const started = start({ integrationID: ctx.params.integrationID, directory, body: ctx.payload })
 
-            return {
-              location: location(config, directory),
-              data: {
-                attemptID,
-                url: started.url,
-                instructions: "",
-                mode: "auto",
-                time: { created, expires: created + 600_000 },
-              },
+            const data = {
+              attemptID,
+              url: started.url,
+              instructions: "",
+              mode: "auto",
+              time: { created, expires: created + 600_000 },
             }
+
+            return { location: location(config, directory), data: started.paste ? { ...data, paste: true } : data }
           })
         },
         integrationOAuthStatus: (ctx) =>
@@ -825,6 +870,18 @@ function mockHandlers(
               },
             })
           }),
+        integrationOAuthComplete: (ctx) => {
+          const complete = config.onIntegrationOAuthComplete
+
+          if (!complete) return unsupported("complete pasted OAuth sign-ins", "onIntegrationOAuthComplete")
+
+          return Effect.sync(() => complete({ attemptID: ctx.params.attemptID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          )
+        },
+        integrationOAuthCancel: (ctx) =>
+          Effect.sync(() => config.onIntegrationOAuthCancel?.(ctx.params.attemptID)).pipe(Effect.andThen(noContent)),
+        integrationConnectExternal: () => noContent,
         credentialActivate: (ctx) =>
           Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialUpdate: (ctx) =>
@@ -848,10 +905,14 @@ function mockHandlers(
         mcpConnect: (ctx) => mcpAction(ctx.params.server, "connect", ctx.request),
         mcpDisconnect: (ctx) => mcpAction(ctx.params.server, "disconnect", ctx.request),
         mcpResource: (ctx) =>
-          Effect.succeed({
-            location: location(config, requestDirectory(config, ctx.request)),
-            data: { resources: [], templates: [] },
-          }),
+          Effect.suspend(() =>
+            config.mcpResourceFailures?.()
+              ? Effect.fail(new MockInternal({ message: "MCP resource list failed" }))
+              : Effect.succeed({
+                  location: location(config, requestDirectory(config, ctx.request)),
+                  data: { resources: [], templates: [] },
+                }),
+          ),
         projectList: () =>
           Effect.sync(() => {
             if (config.projects) return resolve(config.projects)
@@ -868,7 +929,8 @@ function mockHandlers(
           }),
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
-        websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
+        websearchProviders: () =>
+          Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
         worktreeList: () =>
@@ -964,7 +1026,11 @@ function mockHandlers(
           Effect.sync(() => ({
             location: location(config),
             data: Predicate.isFunction(config.vcsDiff)
-              ? config.vcsDiff({ mode: ctx.query.mode })
+              ? config.vcsDiff({
+                  mode: ctx.query.mode,
+                  directory: requestDirectory(config, ctx.request),
+                  context: ctx.query.context,
+                })
               : (config.vcsDiff ?? []),
           })),
         fsList: (ctx) =>
@@ -1159,9 +1225,11 @@ function mockHandlers(
                 ...Object.entries(config.sessionPermissions ?? {}).flatMap(([id, list]) =>
                   currentPermissions(list).length > 0 && status[id]?.type !== "idle" ? [id] : [],
                 ),
+                // Location elicitations (`sessionID: "global"`) belong to no Session.
                 ...resolve(config.forms ?? []).flatMap((form) =>
                   Predicate.isObject(form) &&
                   Predicate.isString(form.sessionID) &&
+                  form.sessionID !== "global" &&
                   status[form.sessionID]?.type !== "idle"
                     ? [form.sessionID]
                     : [],
@@ -1188,7 +1256,10 @@ function mockHandlers(
               (form) => Predicate.isObject(form) && form.sessionID === ctx.params.sessionID,
             ),
           }),
-        sessionFormReply: () => noContent,
+        sessionFormReply: (ctx) =>
+          Effect.sync(() =>
+            config.onFormReply?.({ sessionID: ctx.params.sessionID, formID: ctx.params.formID, body: ctx.payload }),
+          ).pipe(Effect.andThen(noContent)),
         sessionFormCancel: () => noContent,
         sessionBackground: (ctx) =>
           Effect.sync(() => config.onBackground?.({ sessionID: ctx.params.sessionID })).pipe(Effect.andThen(noContent)),

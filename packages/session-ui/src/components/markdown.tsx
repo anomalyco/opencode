@@ -3,7 +3,9 @@ import { abort } from "@opencode/util/abort"
 import { checksum } from "@opencode/util/encode"
 import {
   type ComponentProps,
+  createComputed,
   createEffect,
+  createMemo,
   createResource,
   createSignal,
   createUniqueId,
@@ -11,6 +13,7 @@ import {
   onCleanup,
   type Setter,
   splitProps,
+  untrack,
 } from "solid-js"
 import { isServer, render } from "solid-js/web"
 import { Icon } from "@opencode/ui/icon"
@@ -44,6 +47,15 @@ import {
   type CodeDecorationEffect,
   type CodeDecorationEvent,
 } from "./markdown-code-machine"
+import {
+  createMarkdownPhaseState,
+  DISPOSED_MARKDOWN_PHASE_EVENT,
+  INLINE_PATH_CHECK_TIMEOUT_MS,
+  markdownMode,
+  markdownReady,
+  transitionMarkdownPhase,
+  type MarkdownPhaseEvent,
+} from "./markdown-phase-machine"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
@@ -60,6 +72,7 @@ import { createImagePreview } from "./image-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 import { markdownClipboardHtml } from "./markdown-clipboard"
+import { createCopyFeedback } from "./copy"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -79,6 +92,8 @@ type RenderResult = {
   text: string
   blocks: RenderedBlock[]
   ready: boolean
+  /** Rendered from a live projection, so a stream that ends still waits for its settled render. */
+  live?: boolean
 }
 
 const renderedCodeTokens = new WeakMap<HTMLDivElement, RenderedCodeState>()
@@ -136,7 +151,7 @@ type CopyLabels = {
 
 type CopyButtonState = {
   setLabels: Setter<CopyLabels>
-  setCopied: Setter<boolean>
+  copy: (text: string) => void
   dispose: () => void
 }
 
@@ -166,15 +181,19 @@ function createCopyButton(labels: CopyLabels) {
 
   const dispose = render(() => {
     const [labelState, setLabels] = createSignal(labels, { equals: false })
-    const [copied, setCopied] = createSignal(false)
+    const copy = createCopyFeedback()
     state.setLabels = setLabels
-    state.setCopied = setCopied
+    state.copy = copy.copy
+    createEffect(() => {
+      if (copy.copied()) return host.setAttribute("data-copied", "true")
+      host.removeAttribute("data-copied")
+    })
 
-    return <MarkdownCopyButton labels={labelState()} copied={copied()} />
+    return <MarkdownCopyButton labels={labelState()} copied={copy.copied()} />
   }, host)
 
   state.dispose = dispose
-  // SAFETY: `render` runs its function synchronously, so both setters are assigned before this line.
+  // SAFETY: `render` runs its function synchronously, so `setLabels` and `copy` are assigned before this line.
   copyButtonState.set(host, state as CopyButtonState)
 
   return host
@@ -199,20 +218,6 @@ function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
       />
     </Tooltip>
   )
-}
-
-function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
-  const state = copyButtonState.get(host)
-  state?.setLabels(labels)
-  state?.setCopied(copied)
-
-  if (copied) {
-    host.setAttribute("data-copied", "true")
-
-    return
-  }
-
-  host.removeAttribute("data-copied")
 }
 
 const codeHostSelector = '[data-slot="markdown-copy-button"], [data-component="markdown-code"]'
@@ -627,16 +632,9 @@ function setupLocalLinks(root: HTMLDivElement, open: () => OpenMarkdownLocalFile
   }
 }
 
-function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
-  const timeouts = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
-
-  const updateLabel = (button: HTMLElement) => {
-    const labels = getLabels()
-    const copied = button.getAttribute("data-copied") === "true"
-    setCopyState(button, labels, copied)
-  }
-
-  const handleClick = async (event: MouseEvent) => {
+// Each button owns its feedback, so a block replaced mid-feedback drops its reset timer with its host.
+function setupCodeCopy(root: HTMLDivElement) {
+  const handleClick = (event: MouseEvent) => {
     const target = event.target
 
     if (!(target instanceof Element)) return
@@ -645,37 +643,13 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
 
     if (!(button instanceof HTMLElement)) return
     const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
-    const content = code?.textContent ?? ""
-
-    if (!content) return
-    const clipboard = navigator?.clipboard
-
-    if (!clipboard) return
-    await clipboard.writeText(content)
-    const labels = getLabels()
-    setCopyState(button, labels, true)
-    const existing = timeouts.get(button)
-
-    if (existing) clearTimeout(existing)
-    const timeout = setTimeout(() => setCopyState(button, labels, false), 2000)
-    timeouts.set(button, timeout)
-  }
-
-  const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
-
-  for (const button of buttons) {
-    if (button instanceof HTMLElement) updateLabel(button)
+    copyButtonState.get(button)?.copy(code?.textContent ?? "")
   }
 
   root.addEventListener("click", handleClick)
 
   return () => {
     root.removeEventListener("click", handleClick)
-
-    for (const timeout of timeouts.values()) {
-      clearTimeout(timeout)
-    }
-
     disposeCodeHosts(root)
   }
 }
@@ -768,25 +742,75 @@ export function Markdown(
   let appliedLabels: CopyLabels | undefined
   // The code block languages the blocks were decorated for; false before the first run.
   let decoratedMatch: MarkdownCodeBlockMatch | undefined | false = false
-  let streamed = false
+  // Every streamed delta dispatches a rendered event, so the driver reuses its events and the machine returns the same
+  // state when nothing changed.
+  const [phase, setPhase] = createSignal(createMarkdownPhaseState(!!local.streaming))
+  const mode = createMemo(() => markdownMode(phase()))
+  const syncEvent = { type: "props.sync" as const, streaming: false }
+  const renderedEvent = { type: "dom.rendered" as const, rendered: false, pendingChecks: 0, reused: false }
+  let checkTimer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatchPhase = (event: MarkdownPhaseEvent, checks?: Promise<void>[]) => {
+    const previous = untrack(phase)
+    const next = transitionMarkdownPhase(previous, event)
+
+    if (next === previous) return
+    const started = next.status === "checking" && (previous.status !== "checking" || previous.attempt !== next.attempt)
+
+    if (previous.status === "checking" && (next.status !== "checking" || started)) {
+      clearTimeout(checkTimer)
+      checkTimer = undefined
+    }
+
+    if (next.status === "disposed") {
+      if (markdownMode(previous) !== "static") disposeMarkdownProjection(owner)
+
+      return
+    }
+
+    setPhase(next)
+    // The timeline observes this attribute, and toggling it to its current value records no mutation.
+    untrack(root)?.toggleAttribute("data-markdown-ready", markdownReady(next))
+
+    if (!started) return
+    const attempt = next.attempt
+    checkTimer = setTimeout(() => dispatchPhase({ type: "checks.timed-out", attempt }), INLINE_PATH_CHECK_TIMEOUT_MS)
+    // Each check catches its own failure, so this always settles.
+    void Promise.all(checks ?? []).then(() => dispatchPhase({ type: "checks.settled", attempt }))
+  }
+
+  // Runs before the resources below read the mode, so a stream that ends never projects with the old mode.
+  createComputed(() => {
+    syncEvent.streaming = !!local.streaming
+    dispatchPhase(syncEvent)
+  })
 
   const [projection] = createResource(
     () => {
-      if (isServer) return
-      const live = local.streaming ?? false
+      if (isServer || mode() === "static") return
 
-      if (live) streamed = true
-
-      if (!live && !streamed) return
-
-      return { key: owner, text: local.text, live }
+      return { key: owner, text: local.text, live: mode() === "streaming" }
     },
-    (src) => projectMarkdown(src.key, src.text, src.live),
-    { initialValue: pendingProjection("") },
+    // A failed projection renders the text unprojected, so the block still settles and the next delta projects again.
+    // The result names the mode it was projected for, so a settled render never uses the last live projection.
+    (src) =>
+      projectMarkdown(src.key, src.text, src.live)
+        .catch((error) => {
+          if (
+            !(error instanceof MarkdownWorkerDisposedError) &&
+            !(error instanceof MarkdownWorkerSupersededError) &&
+            !(error instanceof MarkdownWorkerUnavailableError)
+          )
+            console.error("Markdown projection worker failed", error)
+
+          return src.live ? pendingProjection(src.text) : completedProjection(src.text)
+        })
+        .then((value) => ({ text: value.text, blocks: value.blocks, live: src.live })),
+    { initialValue: { text: "", blocks: [], live: true } },
   )
 
   const currentProjection = () => {
-    if (!(local.streaming ?? false) && !streamed) return completedProjection(local.text)
+    if (mode() === "static") return completedProjection(local.text)
     const value = projection.latest
 
     if (value?.text === local.text) return value
@@ -796,13 +820,16 @@ export function Markdown(
     return pendingProjection(local.text)
   }
 
-  const initial = initialResult(
-    local.text,
-    local.cacheKey,
-    local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
-    owner,
-    local.deferUntilReady,
-  )
+  const initial = {
+    ...initialResult(
+      local.text,
+      local.cacheKey,
+      local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
+      owner,
+      local.deferUntilReady,
+    ),
+    live: !!local.streaming,
+  }
 
   const [html] = createResource(
     () => {
@@ -810,23 +837,31 @@ export function Markdown(
         return {
           text: local.text,
           key: local.cacheKey,
+          mode: "static" as const,
           projection: pendingProjection(local.text),
         }
-      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection.latest
 
-      if (!value || value.text !== local.text) return
+      if (mode() === "static")
+        return { text: local.text, key: local.cacheKey, mode: mode(), projection: completedProjection(local.text) }
+      const value = projection.latest
+
+      if (value.text !== local.text || value.live !== (mode() === "streaming")) return
 
       return {
         text: local.text,
         key: local.cacheKey,
+        mode: mode(),
         projection: value,
       }
     },
     (src): RenderResult | Promise<RenderResult> => {
+      const live = src.mode === "streaming"
+
       if (isServer)
         return {
           text: src.text,
           ready: true,
+          live,
           blocks: [
             {
               key: "server",
@@ -838,11 +873,11 @@ export function Markdown(
           ],
         } satisfies RenderResult
 
-      if (!src.text) return { text: src.text, blocks: [], ready: true } satisfies RenderResult
+      if (!src.text) return { text: src.text, blocks: [], ready: true, live } satisfies RenderResult
 
-      if (!streamed && initial.ready && initial.text === src.text) return initial
+      if (src.mode === "static" && initial.ready && initial.text === src.text) return initial
 
-      const base = src.key ?? (!streamed ? checksum(src.text) : undefined)
+      const base = src.key ?? (src.mode === "static" ? checksum(src.text) : undefined)
 
       const render = async (block: Block, index: number): Promise<RenderedBlock> => {
         const key = base ? `${base}:${index}:${block.mode}` : undefined
@@ -922,15 +957,16 @@ export function Markdown(
           const blocks = queued.map((item, index) => (item instanceof Promise ? resolved.get(index)! : item))
           lastRender = { base, blocks: src.projection.blocks, rendered: blocks }
 
-          return { text: src.text, blocks, ready: true } satisfies RenderResult
+          return { text: src.text, blocks, ready: true, live } satisfies RenderResult
         })
         .catch(
           () =>
             (lifetime.signal.aborted
-              ? { text: src.text, blocks: [], ready: false }
+              ? { text: src.text, blocks: [], ready: false, live }
               : {
                   text: src.text,
                   ready: true,
+                  live,
                   blocks: [
                     {
                       key: base ?? "fallback",
@@ -970,7 +1006,6 @@ export function Markdown(
       images = readImage ? createMarkdownImages(readImage) : undefined
     }
 
-    delete container.dataset.markdownReady
     const codeBlocks = markdown?.codeBlocks
     const match = codeBlocks?.current()
 
@@ -981,15 +1016,17 @@ export function Markdown(
 
     const redecorate = decoratedMatch !== false && decoratedMatch !== match
     decoratedMatch = match
+    renderedEvent.rendered = !!result?.ready && result.text === local.text && !!result.live === (mode() === "streaming")
 
     if (content.length === 0) {
+      renderedEvent.reused = renderedBlocks.length === 0
       renderedBlocks = []
       disposeCodeHosts(container)
       disposeRenderedMarkdown(container)
       container.innerHTML = ""
       images?.update(container)
-
-      if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
+      renderedEvent.pendingChecks = 0
+      dispatchPhase(renderedEvent)
 
       return
     }
@@ -1008,13 +1045,17 @@ export function Markdown(
     const sessionLinks = markdown?.sessionTitle
     const localFileExists = markdown?.localFileExists
 
+    renderedEvent.reused = content.length === renderedBlocks.length
+
     const pending = content.flatMap((block, index) => {
       const current = container.children[index]
+      const kept = renderedBlocks[index] === block && current instanceof HTMLDivElement
 
-      const check =
-        renderedBlocks[index] === block && current instanceof HTMLDivElement
-          ? inlineCodeChecks.get(current)?.pending
-          : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
+      if (!kept) renderedEvent.reused = false
+
+      const check = kept
+        ? inlineCodeChecks.get(current)?.pending
+        : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
 
       return check ? [check] : []
     })
@@ -1051,15 +1092,11 @@ export function Markdown(
     if (appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied)
       container
         .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+        .forEach((button) => copyButtonState.get(button)?.setLabels(labels))
 
     appliedLabels = labels
 
-    if (!copyCleanup)
-      copyCleanup = setupCodeCopy(container, () => ({
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      }))
+    if (!copyCleanup) copyCleanup = setupCodeCopy(container)
 
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
 
@@ -1069,21 +1106,10 @@ export function Markdown(
 
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
-
-    if (!result?.ready || result.text !== local.text) return
-
-    if (local.streaming || pending.length === 0) {
-      container.dataset.markdownReady = ""
-
-      return
-    }
-
     // Cold timelines already wait for Markdown readiness before measuring and revealing their content. Include
     // path classification so the first visible frame uses the final blue-link styling and padding.
-    void Promise.all(pending).then(() => {
-      if (lifetime.signal.aborted || renderedBlocks !== content || result.text !== local.text) return
-      container.dataset.markdownReady = ""
-    })
+    renderedEvent.pendingChecks = pending.length
+    dispatchPhase(renderedEvent, pending)
   })
 
   onCleanup(() => {
@@ -1103,7 +1129,7 @@ export function Markdown(
 
     if (container) disposeRenderedMarkdown(container)
 
-    if (streamed) disposeMarkdownProjection(owner)
+    dispatchPhase(DISPOSED_MARKDOWN_PHASE_EVENT)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
     settledMarkdown.clear()

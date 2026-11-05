@@ -1,7 +1,7 @@
 import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
 import { useQueries, useQueryClient } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
-import { createEffect, createMemo, onCleanup, startTransition } from "solid-js"
+import { createComputed, createEffect, createMemo, createSignal, onCleanup, startTransition, untrack } from "solid-js"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { canUseServer } from "@/runtime/server/health-machine"
@@ -17,12 +17,23 @@ import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { workingSince } from "./inbox-working"
+import {
+  INITIAL_INBOX_BRANCH_STATE,
+  selectBranchLoading,
+  transitionInboxBranch,
+  type InboxBranchEffect,
+  type InboxBranchEvent,
+} from "./inbox-branch-machine"
+import {
+  INITIAL_INBOX_SETTLE_STATE,
+  selectInboxLoading,
+  transitionInboxSettle,
+  type InboxSettleEffect,
+  type InboxSettleEvent,
+} from "./inbox-settle-machine"
 
 // Keep the immutable result opaque so Solid Query does not recursively unwrap every session.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
-
-// Branch lookups each run git on the server, so load them a few at a time.
-const BRANCH_BATCH = 4
 
 // Root sessions fetched per server.
 const INDEX_LIMIT = 50
@@ -217,42 +228,71 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     onCleanup(() => clearInterval(interval))
   })
 
-  // The index can arrive before the active-session snapshot. Check unfinished runs too so pending requests
-  // settle before the first paint.
-  const [requests, setRequests] = createStore<{ checked: Record<string, true> }>({ checked: {} })
-
-  createEffect(() => {
-    entries().forEach((entry) => {
-      if ((entry.status !== "working" && workingSince(entry.session) === undefined) || requests.checked[entry.key])
-        return
-      void Promise.allSettled([
-        entry.ctx.data.session.permission.sync(entry.session.id),
-        entry.ctx.data.session.form.sync(entry.session.id),
-      ]).then(() => setRequests("checked", entry.key, true))
-    })
-  })
-
-  // Settled once every reachable server answered the index and every working root's requests loaded. A server that
-  // never connects or fails its health check does not hold the screen.
-  // Once settled it stays settled, so a session starting later never blanks the screen again.
-  const settled = createMemo(
-    (previous: boolean) =>
-      previous ||
-      (servers.hydrated() &&
-        connections().every((item, index) => {
-          if (!canUseServer(global.servers.health[ServerConnection.key(item.conn)])) return true
-
-          return !!queries[index]?.isSuccess || !!queries[index]?.isError
-        }) &&
-        entries().every(
-          (entry) =>
-            (entry.status !== "working" && workingSince(entry.session) === undefined) || !!requests.checked[entry.key],
-        )),
-    false,
-  )
-
   // Rows are keyed by stable strings so live session updates do not remount them.
   const byKey = createMemo(() => new Map(entries().map((entry) => [entry.key, entry])))
+
+  // The index can arrive before the active-session snapshot. Check unfinished runs too so pending requests
+  // settle before the first paint.
+  const [settleState, setSettleState] = createSignal(INITIAL_INBOX_SETTLE_STATE)
+  let revealTimer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatchSettle = (event: InboxSettleEvent) =>
+    untrack(() => {
+      const previous = settleState()
+      const next = transitionInboxSettle(previous, event)
+
+      if (next.state !== previous) setSettleState(next.state)
+      next.effects.forEach(runSettleEffect)
+    })
+
+  const runSettleEffect = (effect: InboxSettleEffect) => {
+    if (effect.type === "reveal-timer.clear") {
+      clearTimeout(revealTimer)
+      revealTimer = undefined
+
+      return
+    }
+
+    if (effect.type === "reveal-timer.start") {
+      clearTimeout(revealTimer)
+      revealTimer = setTimeout(() => {
+        revealTimer = undefined
+        dispatchSettle({ type: "reveal.timed-out" })
+      }, effect.timeoutMs)
+
+      return
+    }
+
+    const entry = byKey().get(effect.key)
+
+    void Promise.allSettled(
+      entry
+        ? [
+            Promise.try(() => entry.ctx.data.session.permission.sync(entry.session.id)),
+            Promise.try(() => entry.ctx.data.session.form.sync(entry.session.id)),
+          ]
+        : [],
+    ).then(() => dispatchSettle({ type: "requests.settled", key: effect.key }))
+  }
+
+  // Synchronous, so a warm cache settles before the first paint without flashing the loader. A server that never
+  // connects or fails its health check does not hold the screen, and the machine's reveal timer bounds one that stalls.
+  createComputed(() =>
+    dispatchSettle({
+      type: "sync",
+      hydrated: servers.hydrated(),
+      serversSettled: connections().every((item, index) => {
+        if (!canUseServer(global.servers.health[ServerConnection.key(item.conn)])) return true
+
+        return !!queries[index]?.isSuccess || !!queries[index]?.isError
+      }),
+      workingKeys: entries().flatMap((entry) =>
+        entry.status === "working" || workingSince(entry.session) !== undefined ? [entry.key] : [],
+      ),
+    }),
+  )
+
+  onCleanup(() => dispatchSettle({ type: "disposed" }))
 
   const selected = (entry: InboxEntry) => {
     const route = layout.route()
@@ -262,43 +302,89 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     return route.sessionId === entry.session.id || entry.ctx.data.session.root(route.sessionId) === entry.session.id
   }
 
-  // Git info is not stored on the session, so load it for the rows a view shows and mark each location settled once
-  // its load ends.
-  const [vcs, setVcs] = createStore<{ settled: Record<string, true> }>({ settled: {} })
-  const queued = new Set<string>()
-  const queue: InboxEntry[] = []
-  const drain = { running: false }
+  // Git info is not stored on the session, so load it for the rows a view shows. `branchTargets` keeps the latest row
+  // per location for the lookup; the machine owns each location's phase.
+  const [branchState, setBranchState] = createSignal(INITIAL_INBOX_BRANCH_STATE)
+  const branchTargets = new Map<string, InboxEntry>()
+  const branchTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
-  const run = async () => {
-    if (drain.running) return
-    drain.running = true
+  const dispatchBranch = (event: InboxBranchEvent) =>
+    untrack(() => {
+      const previous = branchState()
+      const next = transitionInboxBranch(previous, event)
 
-    while (queue.length) {
-      await Promise.all(
-        queue.splice(0, BRANCH_BATCH).map((entry) => {
-          const location = entry.ctx.data.location
+      if (next.state !== previous) setBranchState(next.state)
+      next.effects.forEach(runBranchEffect)
+    })
 
-          return (location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location))
-            .then(() => location.vcs.sync(entry.session.location))
-            .catch(() => undefined)
-            .then(() => setVcs("settled", locationKey(entry), true))
-        }),
-      )
+  const runBranchEffect = (effect: InboxBranchEffect) => {
+    if (effect.type === "timers.clear") {
+      branchTimers.forEach(clearTimeout)
+      branchTimers.clear()
+      branchTargets.clear()
+
+      return
     }
 
-    drain.running = false
+    if (effect.type === "timer.clear") {
+      clearTimeout(branchTimers.get(effect.attempt))
+      branchTimers.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "retry.schedule") {
+      branchTimers.set(
+        effect.attempt,
+        setTimeout(() => {
+          branchTimers.delete(effect.attempt)
+          dispatchBranch({ type: "retry.due", key: effect.key, attempt: effect.attempt })
+        }, effect.delayMs),
+      )
+
+      return
+    }
+
+    branchTimers.set(
+      effect.attempt,
+      setTimeout(() => {
+        branchTimers.delete(effect.attempt)
+        dispatchBranch({ type: "load.timed-out", key: effect.key, attempt: effect.attempt })
+      }, effect.timeoutMs),
+    )
+    // A synchronous throw rejects too, so every attempt settles into an event.
+    void Promise.try(() => {
+      const entry = branchTargets.get(effect.key)
+
+      if (!entry) throw new Error(`No inbox row for location ${effect.key}`)
+      const location = entry.ctx.data.location
+
+      return (
+        location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location)
+      ).then(() => location.vcs.sync(entry.session.location))
+    }).then(
+      () => dispatchBranch({ type: "load.succeeded", key: effect.key, attempt: effect.attempt }),
+      () => dispatchBranch({ type: "load.failed", key: effect.key, attempt: effect.attempt }),
+    )
   }
 
+  createEffect(() =>
+    dispatchBranch({
+      type: "connections.changed",
+      connected: connections().flatMap((item) =>
+        item.ctx.sdk.connection.status() === "connected" ? [ServerConnection.key(item.conn)] : [],
+      ),
+    }),
+  )
+
+  onCleanup(() => dispatchBranch({ type: "disposed" }))
+
   const loadBranches = (list: InboxEntry[]) => {
-    list.forEach((entry) => {
-      const key = locationKey(entry)
-
-      if (queued.has(key)) return
-
-      queued.add(key)
-      queue.push(entry)
+    list.forEach((entry) => branchTargets.set(locationKey(entry), entry))
+    dispatchBranch({
+      type: "enqueue",
+      targets: list.map((entry) => ({ key: locationKey(entry), server: entry.server })),
     })
-    void run()
   }
 
   const open = (entry: InboxEntry) => {
@@ -342,13 +428,14 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     now: (status: InboxStatus) => (status === "working" ? clock.second : clock.minute),
     entries,
     /** The first load has not settled: lists would still move or claim nothing needs you. */
-    loading: () => !settled(),
+    loading: () => selectInboxLoading(settleState()),
     byKey,
     selected,
     open,
     loadBranches,
     branchLoading: (entry: InboxEntry) =>
-      !vcs.settled[locationKey(entry)] && !entry.ctx.data.location.vcs.info(entry.session.location),
+      !entry.ctx.data.location.vcs.info(entry.session.location) &&
+      selectBranchLoading(branchState(), locationKey(entry)),
     branch: (entry: InboxEntry) =>
       entry.ctx.data.location.vcs.info(entry.session.location)?.branch.current ?? undefined,
     inWorktree: inboxInWorktree,

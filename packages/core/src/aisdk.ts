@@ -389,7 +389,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       prepare: (input) => Effect.succeed(input.body),
       execute: () => Effect.succeed({ frames: Stream.empty }),
     },
-    defaults: {
+    options: {
       headers: info.headers,
       http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
@@ -934,7 +934,8 @@ function llmError(error: unknown, operation: "request" | "read") {
 const errorValue = (error: unknown) => (isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
-// Bun network error list in handleFetchError; the messages are undici's fetch
+// Bun network error list in handleFetchError, plus the unreachable-host codes that list leaves out and
+// ModelRetry gives a longer budget; the messages are undici's fetch
 // TypeError and stream termination strings plus our header and chunk timeout errors.
 // Unrecognized shapes still retry via the UnknownProvider default; this match
 // only adds transport semantics (continuation eligibility, display).
@@ -943,6 +944,11 @@ const NETWORK_ERROR_CODES = new Set([
   "ECONNREFUSED",
   "ETIMEDOUT",
   "EPIPE",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ENETDOWN",
   "ConnectionRefused",
   "ConnectionClosed",
   "FailedToOpenSocket",
@@ -989,6 +995,8 @@ function apiCallError(error: APICallError) {
     cause: error,
   })
   if (error.statusCode !== undefined || !error.isRetryable) return failure
+  // "Cannot connect to API" wraps the runtime's error; keep its code so retry and display can tell why.
+  const code = networkFailure(error.cause)?.code
   return new AIError({
     reason: new TransportError({
       message: failure.message,
@@ -998,6 +1006,7 @@ function apiCallError(error: APICallError) {
       transport: "http",
       operation: "request",
       url: error.url,
+      ...(code === undefined ? {} : { code }),
     }),
   })
 }

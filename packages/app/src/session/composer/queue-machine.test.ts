@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
 import {
   createQueueState,
+  movedTarget,
   selectQueueRows,
   transitionQueue,
   viewQueue,
@@ -169,6 +170,55 @@ describe("queue changes run one at a time", () => {
   })
 })
 
+describe("replaced inbox IDs", () => {
+  const moved = (state: QueueState) => viewQueue(state, { working: true, behavior: "queue" }).moved
+
+  // Edits `id` as a queued prompt; its replacement and the prompts after it take `next`.
+  function edit(state: QueueState, id: string, next: string[]) {
+    const confirmed = replay(state, [
+      { type: "edit.start", id, reverted: false, draft: draft("") },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt(`${id} edited`), ids: next },
+    ])
+
+    return { state: confirmed.state, attempt: runs(confirmed.effects)[0].attempt }
+  }
+
+  test("an edit's replacements chain across later edits until their prompts leave the queue", () => {
+    const first = edit(createQueueState([one]), "inb_1", ["msg_1"])
+    // In flight, the panel already sees the replacement it may swap in.
+    expect(moved(first.state)).toEqual({ inb_1: "msg_1" })
+
+    const settled = replay(first.state, [
+      { type: "inbox.synced", items: [item("msg_1")] },
+      { type: "mutation.succeeded", attempt: first.attempt },
+    ]).state
+
+    expect(settled.status).toBe("idle")
+    expect(moved(settled)).toEqual({ inb_1: "msg_1" })
+
+    const second = edit(settled, "msg_1", ["msg_2"])
+
+    const chained = replay(second.state, [
+      { type: "inbox.synced", items: [item("msg_2")] },
+      { type: "mutation.succeeded", attempt: second.attempt },
+    ]).state
+
+    expect(movedTarget(moved(chained), "inb_1", new Set(["msg_2"]))).toBe("msg_2")
+    expect(movedTarget(moved(chained), "inb_1", new Set(["msg_1", "msg_2"]))).toBe("msg_1")
+
+    // Once the last replacement is delivered, nothing it maps is queued.
+    expect(moved(transitionQueue(chained, { type: "inbox.synced", items: [] }).state)).toEqual({})
+  })
+
+  test("a failed edit leaves no replacement behind", () => {
+    const sent = edit(createQueueState([one, two]), "inb_1", ["msg_1", "msg_2"])
+    expect(moved(sent.state)).toEqual({ inb_1: "msg_1", inb_2: "msg_2" })
+
+    const failed = transitionQueue(sent.state, { type: "mutation.failed", attempt: sent.attempt, hidden: [] })
+    expect(moved(failed.state)).toEqual({})
+  })
+})
+
 describe("optimistic rows", () => {
   test("a steer hides its row until the server confirms or refuses it", () => {
     const requested = transitionQueue(createQueueState([one, two]), { type: "steer.requested", id: "inb_1" })
@@ -240,23 +290,168 @@ describe("stale results", () => {
     ])
   })
 
-  test("dispose returns the draft and ignores results for operations no longer in flight", () => {
-    const editing = replay(createQueueState([one, two]), [
+  test("after dispose an operation that settles starts no expiry timer, toast or waiting operation", () => {
+    const editing = replay(createQueueState([one, two, three]), [
       { type: "steer.requested", id: "inb_2" },
+      { type: "remove.requested", id: "inb_3" },
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("my draft") },
     ])
 
+    const attempt = runs(editing.effects)[0].attempt
     const disposed = transitionQueue(editing.state, { type: "dispose" })
 
-    expect(disposed.state.status).toBe("mutating")
+    expect(disposed.state).toEqual({ status: "disposed" })
     expect(disposed.effects).toEqual([
       { type: "draft.restore", stash: draft("my draft"), focus: false },
       { type: "timer.clearAll" },
     ])
+    expect(viewQueue(disposed.state, { working: true, behavior: "queue" })).toMatchObject({ rows: [], busy: false })
 
-    const stale = transitionQueue(disposed.state, { type: "mutation.succeeded", attempt: 0 })
+    for (const event of [
+      { type: "mutation.succeeded", attempt },
+      { type: "mutation.failed", attempt, hidden: [] },
+    ] satisfies QueueEvent[])
+      expect(transitionQueue(disposed.state, event)).toEqual({ state: disposed.state, effects: [] })
+  })
 
-    expect(stale.state).toBe(disposed.state)
+  test("an edit the server never admitted before dispose returns to the saved draft if it then fails", () => {
+    const sent = replay(createQueueState([one]), [
+      { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited"), ids },
+      { type: "dispose" },
+    ])
+
+    const attempt = runs(sent.effects)[0].attempt
+
+    expect(transitionQueue(sent.state, { type: "mutation.failed", attempt, hidden: [] }).effects).toEqual([
+      { type: "draft.merge", prompt: prompt("inb_1 edited"), context: [], focus: false },
+    ])
+
+    const admitted = transitionQueue(sent.state, { type: "mutation.admitted", attempt }).state
+
+    expect(transitionQueue(admitted, { type: "mutation.failed", attempt, hidden: [] }).effects).toEqual([])
+  })
+
+  test("dispose stops an undo before its cancel, and an undo the server applied anyway returns its prompt", () => {
+    const undoing = transitionQueue(createQueueState([one]), { type: "undo.requested", id: "inb_1", mode: "normal" })
+    const attempt = runs(undoing.effects)[0].attempt
+    const disposed = transitionQueue(undoing.state, { type: "dispose" })
+
+    expect(disposed.effects).toEqual([{ type: "mutation.abort", attempt }, { type: "timer.clearAll" }])
+    expect(
+      transitionQueue(disposed.state, { type: "mutation.undone", attempt, prompt: prompt("inb_1 text"), context: [] })
+        .effects,
+    ).toEqual([{ type: "draft.merge", prompt: prompt("inb_1 text"), context: [], focus: false }])
+  })
+})
+
+describe("an operation past its bound", () => {
+  test("a stalled undo gives the composer back and ignores its late answer", () => {
+    const undoing = transitionQueue(createQueueState([one]), { type: "undo.requested", id: "inb_1", mode: "normal" })
+    const attempt = runs(undoing.effects)[0].attempt
+
+    expect(undoing.effects).toContainEqual({ type: "mutation.timer.start", attempt })
+    expect(viewQueue(undoing.state, { working: true, behavior: "queue" }).undoing).toBe(true)
+
+    const timedOut = transitionQueue(undoing.state, {
+      type: "mutation.timed-out",
+      attempt,
+      hidden: [],
+      stage: "running",
+    })
+
+    expect(timedOut.state.status).toBe("idle")
+    expect(viewQueue(timedOut.state, { working: true, behavior: "queue" }).undoing).toBe(false)
+    expect(timedOut.effects).toEqual([
+      { type: "mutation.abort", attempt },
+      { type: "toast", key: "common.requestFailed" },
+      { type: "mutation.timer.clear" },
+    ])
+    expect(transitionQueue(timedOut.state, { type: "mutation.failed", attempt, hidden: [] }).state).toBe(timedOut.state)
+  })
+
+  test("a steered edit whose admission is in flight keeps the edit until the server answers", () => {
+    const sent = replay(createQueueState([one, two]), [
+      { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
+      { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 edited"), ids },
+    ])
+
+    const attempt = runs(sent.effects)[0].attempt
+    const waiting = transitionQueue(sent.state, { type: "mutation.timed-out", attempt, hidden: [], stage: "committed" })
+
+    // The replacement may already be delivered: the composer must not get the edit back while it may have gone out.
+    expect(waiting.state).toBe(sent.state)
+    expect(waiting.effects).toEqual([])
+
+    // Delivered, a later failure of the original's cancel leaves the edit with the server.
+    const admitted = transitionQueue(waiting.state, { type: "mutation.admitted", attempt }).state
+
+    expect(
+      transitionQueue(admitted, { type: "mutation.failed", attempt, hidden: [] }).effects.some(
+        (effect) => effect.type === "draft.merge",
+      ),
+    ).toBe(false)
+
+    // Refused, it really did not go out, so it returns to the composer.
+    expect(transitionQueue(waiting.state, { type: "mutation.failed", attempt, hidden: [] }).effects).toContainEqual({
+      type: "draft.merge",
+      prompt: prompt("inb_1 edited"),
+      context: [],
+    })
+  })
+
+  test("an undo whose cancel is in flight waits for the server's answer", () => {
+    const undoing = transitionQueue(createQueueState([one]), { type: "undo.requested", id: "inb_1", mode: "normal" })
+    const attempt = runs(undoing.effects)[0].attempt
+
+    expect(
+      transitionQueue(undoing.state, { type: "mutation.timed-out", attempt, hidden: [], stage: "committed" }).state,
+    ).toBe(undoing.state)
+  })
+
+  test("a stalled reorder hides the copy it withdrew and starts the steer waiting behind it", () => {
+    const reordering = replay(createQueueState([one, two, three]), [
+      { type: "reorder.requested", inboxIDs: ["inb_2", "inb_1", "inb_3"], reverted: false },
+      { type: "steer.requested", id: "inb_3" },
+      { type: "inbox.synced", items: [one, two, three, item("msg_2")] },
+    ])
+
+    const attempt = runs(reordering.effects)[0].attempt
+
+    const timedOut = transitionQueue(reordering.state, {
+      type: "mutation.timed-out",
+      attempt,
+      hidden: ["msg_2"],
+      stage: "running",
+    })
+
+    expect(timedOut.effects).toContainEqual({ type: "mutation.abort", attempt })
+    expect(timedOut.effects).toContainEqual({ type: "toast", key: "common.requestFailed" })
+    expect(timedOut.effects).toContainEqual(expect.objectContaining({ type: "timer.start" }))
+    expect(runs(timedOut.effects)).toMatchObject([{ type: "steer", id: "inb_3" }])
+    expect(rowIDs(timedOut.state)).toEqual(["inb_1", "inb_2"])
+    // A steer is one request the request queue already bounds, so it gets no timer of its own.
+    expect(timedOut.effects.filter((effect) => effect.type === "mutation.timer.start")).toEqual([])
+  })
+
+  test("an edit the server holds whose queue re-read stalled counts as done", () => {
+    const sent = replay(createQueueState([one]), [
+      { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited"), ids },
+    ])
+
+    const attempt = runs(sent.effects)[0].attempt
+
+    const timedOut = transitionQueue(sent.state, {
+      type: "mutation.timed-out",
+      attempt,
+      hidden: [],
+      stage: "settled",
+    })
+
+    expect(timedOut.state.status).toBe("idle")
+    expect(timedOut.effects).not.toContainEqual({ type: "toast", key: "common.requestFailed" })
+    expect(timedOut.effects.some((effect) => effect.type === "draft.merge")).toBe(false)
   })
 })
 

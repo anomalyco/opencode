@@ -10,8 +10,6 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { isServerUnauthorized } from "@/runtime/server/health-machine"
-import { usePlatform } from "@/runtime/platform/platform"
-import { cameraHint, createCameraAvailability } from "./camera"
 import { createServerConnectController } from "./controller"
 import type { ServerConnectField, ServerOriginal } from "./machine"
 import { ConnectMethodSwitch } from "./method"
@@ -26,11 +24,9 @@ export const DialogServer: Component<{
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
-  const platform = usePlatform()
   const servers = useServers()
   const global = useGlobal()
   const tabs = useTabs()
-  const camera = createCameraAvailability()
   const edited = props.mode === "edit" ? props.server : undefined
 
   const originalOf = (server: ServerConnection.Http): ServerOriginal => ({
@@ -53,6 +49,7 @@ export const DialogServer: Component<{
     target: edited ? { kind: "edit", original: untrack(original) ?? originalOf(edited) } : { kind: "add" },
     original,
     removeTabs: (key) => tabs.removeServer(key),
+    closing: () => dialog.closing,
     // Close first: onSave may open the next dialog, such as the folder picker an interrupted action continues with.
     onClose: (saved) => {
       dialog.close()
@@ -102,10 +99,7 @@ export const DialogServer: Component<{
           fallback={
             <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
               <PairingScanner
-                onCancel={() => {
-                  form.dispatch({ type: "scan.cancelled" })
-                  void camera.refetch()
-                }}
+                onCancel={() => form.dispatch({ type: "scan.cancelled" })}
                 redeem={form.redeem}
                 onScan={(link) => form.dispatch({ type: "scan.completed", link })}
               />
@@ -206,22 +200,18 @@ export const DialogServer: Component<{
                 </span>
               </div>
             </Show>
-            <Show when={view().draft.method === "link" && platform.platform === "web"}>
-              <Show
-                when={camera.available.latest || camera.available.loading}
-                fallback={<span class="settings-server-dialog-hint">{language.t(cameraHint())}</span>}
+            <Show when={view().showScan}>
+              <Button
+                variant="neutral"
+                size="large"
+                class="!w-full self-stretch"
+                disabled={!view().canScan}
+                onClick={() => form.dispatch({ type: "scan.started" })}
               >
-                <Button
-                  variant="neutral"
-                  size="large"
-                  class="!w-full self-stretch"
-                  disabled={view().disabled || !camera.available.latest}
-                  onClick={() => form.dispatch({ type: "scan.started" })}
-                >
-                  {language.t("server.connect.scan")}
-                </Button>
-              </Show>
+                {language.t("server.connect.scan")}
+              </Button>
             </Show>
+            <Show when={view().cameraHint}>{(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}</Show>
             <ConnectMethodSwitch
               method={view().draft.method}
               disabled={view().disabled}

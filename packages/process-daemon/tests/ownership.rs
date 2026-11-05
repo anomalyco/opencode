@@ -13,7 +13,7 @@ use opencode_pty::daemon::Registration;
 use opencode_pty::protocol::{
     AttachmentRole, Envelope, Request, Response, read_frame, write_frame,
 };
-use opencode_pty::service::TerminalInfo;
+use opencode_pty::service::{ProcessInfo, ProcessMode};
 
 struct Daemon {
     child: Child,
@@ -52,7 +52,7 @@ impl Daemon {
             }
             thread::sleep(Duration::from_millis(10));
         };
-        assert_eq!(registration.protocol, 7);
+        assert_eq!(registration.protocol, 8);
         Self {
             child,
             root,
@@ -100,19 +100,18 @@ impl Daemon {
         (stream, response)
     }
 
-    fn terminal(&self, command: &str) -> TerminalInfo {
-        match self.request(Request::Create {
+    fn terminal(&self, command: &str) -> ProcessInfo {
+        match self.request(Request::CreatePty {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), command.into()],
             cwd: self.directory.clone(),
-            title: "ownership".into(),
-            group_id: "ownership".into(),
             env: Default::default(),
+            group_id: "ownership".into(),
+            title: "ownership".into(),
             cols: 80,
             rows: 24,
-            mode: Default::default(),
         }) {
-            Response::Created { terminal } => terminal,
+            Response::Created { process } => process,
             response => panic!("create: {response:?}"),
         }
     }
@@ -163,7 +162,7 @@ impl Drop for Daemon {
     }
 }
 
-fn assert_terminal_stopped(terminal: &TerminalInfo) {
+fn assert_terminal_stopped(terminal: &ProcessInfo) {
     // SAFETY: signal zero only checks whether this child PID still exists.
     assert_eq!(unsafe { libc::kill(terminal.pid.unwrap() as i32, 0) }, -1);
     assert_eq!(
@@ -311,14 +310,14 @@ fn shutdown_ends_an_idle_subscription() {
 }
 
 #[test]
-fn rename_is_advertised_and_served() {
+fn rename_is_served() {
     use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
 
     let mut daemon = Daemon::start();
-    assert_eq!(daemon.registration.features, ["rename", "pipe"]);
+    assert!(daemon.registration.features.is_empty());
     assert!(matches!(
         daemon.request(Request::Ping),
-        Response::Pong { features, .. } if features == ["rename", "pipe"]
+        Response::Pong { protocol: 8, features, .. } if features.is_empty()
     ));
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
@@ -354,9 +353,9 @@ fn rename_is_advertised_and_served() {
         }
     }
     assert!(
-        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals }
-        if terminals.len() == 1 && terminals[0].title == "renamed"
-            && terminals[0].user_title.as_deref() == Some("renamed"))
+        matches!(daemon.request(Request::List { mode: ProcessMode::Pty }), Response::Processes { processes }
+        if processes.len() == 1 && processes[0].pty.as_ref().unwrap().title == "renamed"
+            && processes[0].pty.as_ref().unwrap().user_title.as_deref() == Some("renamed"))
     );
     assert!(matches!(
         daemon.request(Request::Rename {
@@ -410,7 +409,7 @@ fn handoff_preserves_daemon_and_terminal_and_shutdown_overrides_it() {
         if instance_id == daemon.registration.instance_id && pid == daemon.child.id())
     );
     assert!(
-        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals }
+        matches!(daemon.request(Request::List { mode: ProcessMode::Pty }), Response::Processes { processes: terminals }
         if terminals.len() == 1 && terminals[0].id == terminal.id && terminals[0].pid == terminal.pid)
     );
     assert!(matches!(
@@ -554,7 +553,11 @@ fn stop_signals_stop_terminals_and_clean_up() {
         assert_eq!(unsafe { libc::kill(probe.pid.unwrap() as i32, signal) }, 0);
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
-            let Response::Terminals { terminals } = daemon.request(Request::List { mode: None })
+            let Response::Processes {
+                processes: terminals,
+            } = daemon.request(Request::List {
+                mode: ProcessMode::Pty,
+            })
             else {
                 panic!("list failed");
             };
@@ -580,41 +583,36 @@ fn stop_signals_stop_terminals_and_clean_up() {
 }
 
 #[test]
-fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
-    use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
-    use opencode_pty::service::ProcessMode;
-
+fn pipe_processes_survive_handoff_and_stay_out_of_pty_lists() {
     let mut daemon = Daemon::start();
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
     let terminal = daemon.terminal("exec cat");
-    let Response::Created { terminal: process } = daemon.request(Request::Create {
+    let output_file = daemon.root.join("pipe.out");
+    let Response::Created { process } = daemon.request(Request::CreatePipe {
         program: "/bin/sh".into(),
         args: vec![
             "-c".into(),
             "echo before; sleep 1; echo after; exit 4".into(),
         ],
         cwd: daemon.directory.clone(),
-        title: String::new(),
-        group_id: "ownership".into(),
         env: Default::default(),
-        cols: 0,
-        rows: 0,
-        mode: ProcessMode::Pipe,
+        group_id: "ownership".into(),
+        output_path: output_file.clone(),
+        metadata: Default::default(),
     }) else {
         panic!("create pipe");
     };
     assert_eq!(process.mode, ProcessMode::Pipe);
     let ids = |mode| match daemon.request(Request::List { mode }) {
-        Response::Terminals { terminals } => terminals
+        Response::Processes { processes } => processes
             .into_iter()
-            .map(|terminal| terminal.id)
+            .map(|process| process.id)
             .collect::<Vec<_>>(),
         response => panic!("list: {response:?}"),
     };
-    assert_eq!(ids(None), vec![terminal.id]);
-    assert_eq!(ids(Some(ProcessMode::Pty)), vec![terminal.id]);
-    assert_eq!(ids(Some(ProcessMode::Pipe)), vec![process.id]);
+    assert_eq!(ids(ProcessMode::Pty), vec![terminal.id]);
+    assert_eq!(ids(ProcessMode::Pipe), vec![process.id]);
     assert!(matches!(
         daemon.request(Request::Snapshot { id: process.id }),
         Response::Error { message } if message.contains("pipe process")
@@ -629,39 +627,29 @@ fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
     assert!(matches!(response, Response::Owned));
     drop(old);
 
-    let mut subscription = daemon.connect();
-    let Response::Attached { replay_base64, .. } = daemon.send(
-        &mut subscription,
-        Request::Subscribe {
-            id: process.id,
-            offset: 0,
-            attachment_id: "pipe-observer".into(),
-            role: AttachmentRole::Observer,
-            takeover: false,
-        },
-    ) else {
-        panic!("subscribe");
-    };
-    let mut output = base64::engine::general_purpose::STANDARD
-        .decode(replay_base64)
+    let mut wait = daemon.connect();
+    wait.set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
-    let exit = loop {
-        match read_subscription_event(&mut subscription).unwrap() {
-            SubscriptionEvent::Output { bytes, .. } => output.extend(bytes),
-            SubscriptionEvent::Response(response) => {
-                if let Response::Exited { exit_code, .. } = *response {
-                    break exit_code;
-                }
-            }
-        }
+    let Response::Exited {
+        exit_code,
+        output_lines,
+        final_offset,
+        ..
+    } = daemon.send(&mut wait, Request::Wait { id: process.id })
+    else {
+        panic!("wait");
     };
-    assert_eq!(exit, Some(4));
-    assert_eq!(String::from_utf8(output).unwrap(), "before\nafter\n");
+    assert_eq!(exit_code, Some(4));
+    assert_eq!((output_lines, final_offset), (Some(2), 13));
+    assert_eq!(
+        std::fs::read_to_string(&output_file).unwrap(),
+        "before\nafter\n"
+    );
     assert!(matches!(
         daemon.request(Request::Terminate { id: process.id }),
         Response::Ok
     ));
-    drop(subscription);
+    drop(wait);
     drop(successor);
     daemon.wait();
     assert_terminal_stopped(&terminal);
@@ -669,22 +657,20 @@ fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
 
 #[test]
 fn pipe_processes_do_not_inherit_the_daemons_blocked_signals() {
-    use opencode_pty::service::{ProcessMode, TerminalLifecycle};
+    use opencode_pty::service::TerminalLifecycle;
 
     let mut daemon = Daemon::start();
     let (_owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
     for (signal, name) in [(libc::SIGTERM, "SIGTERM"), (libc::SIGINT, "SIGINT")] {
-        let Response::Created { terminal: process } = daemon.request(Request::Create {
+        let Response::Created { process } = daemon.request(Request::CreatePipe {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "exec sleep 1000".into()],
             cwd: daemon.directory.clone(),
-            title: String::new(),
-            group_id: "ownership".into(),
             env: Default::default(),
-            cols: 0,
-            rows: 0,
-            mode: ProcessMode::Pipe,
+            group_id: "ownership".into(),
+            output_path: daemon.root.join(format!("{name}.out")),
+            metadata: Default::default(),
         }) else {
             panic!("create pipe");
         };
@@ -695,9 +681,12 @@ fn pipe_processes_do_not_inherit_the_daemons_blocked_signals() {
         );
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            let Response::Terminals { terminals } = daemon.request(Request::List {
-                mode: Some(ProcessMode::Pipe),
-            }) else {
+            let Response::Processes {
+                processes: terminals,
+            } = daemon.request(Request::List {
+                mode: ProcessMode::Pipe,
+            })
+            else {
                 panic!("list failed");
             };
             let lifecycle = terminals

@@ -5,9 +5,10 @@ import { useCheckServerHealth } from "@/runtime/server/health"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { replaceServerConnection } from "@/servers/registry/management"
 import {
-  createServerConnectState,
   selectServerConnectView,
+  startServerConnect,
   transitionServerConnect,
+  type ServerCameraSupport,
   type ServerConnectEffect,
   type ServerConnectEvent,
   type ServerConnectTarget,
@@ -25,6 +26,8 @@ export type ServerConnectControllerOptions =
       readonly removeTabs: (key: ServerConnection.Key) => void
       /** Closes the dialog. `saved` is the server a successful save stored. */
       readonly onClose: (saved: ServerConnection.Http | undefined) => void
+      /** True once the dialog starts closing, so a check that finishes during its exit animation saves nothing. */
+      readonly closing?: Accessor<boolean>
     }
 
 export function createServerConnectController(options: ServerConnectControllerOptions) {
@@ -34,8 +37,10 @@ export function createServerConnectController(options: ServerConnectControllerOp
   const check = useCheckServerHealth()
   // Shared with the scanner, so a retry after a failed check reuses the token of a spent one-time code.
   const redeem = useRedeemPairing()
-  const [machine, setMachine] = createSignal(createServerConnectState(options.target))
+  const initial = startServerConnect(options.target, cameraSupport(platform.platform))
+  const [machine, setMachine] = createSignal(initial.state)
   let timer: ReturnType<typeof setTimeout> | undefined
+  let cameraTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatch = (event: ServerConnectEvent) => {
     const prev = untrack(machine)
@@ -56,6 +61,24 @@ export function createServerConnectController(options: ServerConnectControllerOp
     if (effect.type === "timer.stop") {
       clearTimeout(timer)
       timer = undefined
+
+      return
+    }
+
+    if (effect.type === "camera.probe") {
+      clearTimeout(cameraTimer)
+      cameraTimer = setTimeout(() => dispatch({ type: "camera.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+      void Promise.try(probeCamera).then(
+        (available) => dispatch({ type: "camera.settled", attempt: effect.attempt, available }),
+        () => dispatch({ type: "camera.settled", attempt: effect.attempt, available: false }),
+      )
+
+      return
+    }
+
+    if (effect.type === "camera.timer.stop") {
+      clearTimeout(cameraTimer)
+      cameraTimer = undefined
 
       return
     }
@@ -144,7 +167,15 @@ export function createServerConnectController(options: ServerConnectControllerOp
   if (options.surface === "dialog" && options.original)
     createEffect(on(options.original, (original) => dispatch({ type: "original.synced", original })))
 
+  if (options.surface === "dialog" && options.closing) {
+    const closing = options.closing
+    createEffect(() => {
+      if (closing()) dispatch({ type: "disposed" })
+    })
+  }
+
   onCleanup(() => dispatch({ type: "disposed" }))
+  initial.effects.forEach(run)
 
   const view = createMemo(() =>
     selectServerConnectView(machine(), {
@@ -155,4 +186,27 @@ export function createServerConnectController(options: ServerConnectControllerOp
   )
 
   return { view, dispatch, redeem }
+}
+
+function cameraSupport(platform: string): ServerCameraSupport {
+  if (platform !== "web") return "none"
+
+  if (!window.isSecureContext) return "insecure"
+
+  if (!navigator.mediaDevices?.getUserMedia || !navigator.mediaDevices.enumerateDevices) return "unavailable"
+
+  return "probe"
+}
+
+async function probeCamera() {
+  const denied = await navigator.permissions?.query({ name: "camera" }).then(
+    (permission) => permission.state === "denied",
+    () => false,
+  )
+
+  if (denied) return false
+
+  const devices = await navigator.mediaDevices.enumerateDevices()
+
+  return devices.some((device) => device.kind === "videoinput")
 }
