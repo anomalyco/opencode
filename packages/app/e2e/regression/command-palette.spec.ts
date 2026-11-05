@@ -132,6 +132,54 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
 })
 
+test("titlebar search asks for one bounded result set after a pause in typing", async ({ page }) => {
+  await openPaletteWorkspace(page, true)
+  const searches: URL[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (request.method() !== "GET" || url.pathname !== "/api/session") return
+
+    if (!url.searchParams.get("search")) return
+
+    searches.push(url)
+  })
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toHaveAttribute("aria-selected", "true")
+
+  const searched = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+
+    return (
+      request.method() === "GET" &&
+      url.pathname === "/api/session" &&
+      url.searchParams.get("search") === "Palette fixture"
+    )
+  })
+
+  // A burst of input in one task is one pause: every keystroke must supersede the last, and only the pause searches.
+  await input.evaluate((element) => {
+    // SAFETY: the dialog's combobox is SearchList's own text input, which is an HTMLInputElement.
+    const field = element as HTMLInputElement
+    const value = "Palette fixture"
+
+    for (let index = 1; index <= value.length; index++) {
+      field.value = value.slice(0, index)
+      field.dispatchEvent(new InputEvent("input", { bubbles: true }))
+    }
+  })
+
+  const request = new URL((await searched).url())
+  await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toBeVisible()
+  expect(searches).toHaveLength(1)
+  expect(request.searchParams.get("limit")).toBe("50")
+  expect(request.searchParams.get("parentID")).toBe("null")
+  expect(request.searchParams.get("archived")).toBe("false")
+  expect(request.searchParams.get("cursor")).toBeNull()
+})
+
 test("titlebar search shows one server's matches while another server's search fails", async ({ page }) => {
   await mockRemoteServer(page, { name: "Remote" })
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

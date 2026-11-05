@@ -338,11 +338,11 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
+    // A reader far enough up to see the jump-to-latest button stays put; anyone closer is taken to the new prompt.
     onResponseSubmit: () => {
-      const anchor = input.timeline.follow.anchor()
+      const scroll = input.timeline.scroll
 
-      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
+      if (input.timeline.follow.following() || !(scroll.overflow && scroll.jump)) input.timeline.actions.resume()
     },
     openParent,
     focusPrompt: () => focusPrompt(),
