@@ -24,7 +24,7 @@ const info = {
   output: { head: 0, tail: 128 },
 }
 
-const message = (body: { readonly type: string }): ConnectionEvent => ({
+const message = <Body extends { readonly type: string }>(body: Body): ConnectionEvent => ({
   type: "socket.message",
   text: JSON.stringify(body),
 })
