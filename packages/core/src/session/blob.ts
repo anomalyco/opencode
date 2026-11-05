@@ -6,9 +6,11 @@ import { Cause, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
+import { App } from "../app.js"
 import { Config } from "../config.js"
 import { DatabaseBatch } from "../database/batch.js"
 import type { Database } from "../database/database.js"
+import { Flag } from "../flag.js"
 import type { Instance } from "../instance/service.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionSchema } from "./schema.js"
@@ -257,19 +259,21 @@ export interface Owner {
 type Pending = Map<string, typeof BlobTable.$inferInsert>
 type AssistantPart = SessionMessage.Assistant["content"][number]
 
-/** Reads `experimental.media_blob` from the Config in scope on every call; without one, it is off. */
+/** Reads the `media_blob` flag from the Config in scope on every call; without one, it is off. */
 export const enabled = Effect.gen(function* () {
   const config = yield* Effect.serviceOption(Config.Service)
   if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.media_blob === true
+  return yield* Flag.enabled("media_blob")
 })
 
 /**
- * {@link enabled} as `session`'s location configures it, where its media is written. Off when that location can't
- * boot or load its config, which surfaces as defects too, so a broken location never fails the caller.
+ * {@link enabled} as `session`'s location configures it, where its media is written, for the build channel in `app`
+ * (location services don't carry it). Off when that location can't boot or load its config, which surfaces as
+ * defects too, so a broken location never fails the caller.
  */
-export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Info) =>
+export const enabledFor = (instances: Instance.Interface, app: App.Info, session: SessionSchema.Info) =>
   enabled.pipe(
+    Effect.provideService(App.Metadata, app),
     instances.provide(session),
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause)

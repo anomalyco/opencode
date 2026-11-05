@@ -11,11 +11,8 @@ import { useLocal } from "@/providers/models/selection"
 import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
-import { useWorkspaceLocation } from "@/workspaces/location"
 import { createWorktree } from "@/workspaces/create"
 import { showToast } from "@/shell/notifications/toast"
-import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
-import { createSessionMessageHandoff } from "@/session/handoff"
 import type { DraftMcpControls } from "./mcp"
 import {
   createNewSessionStartState,
@@ -74,6 +71,7 @@ type Started = Awaited<ReturnType<NewSessionComposerAdapter["start"]>>
 export function createNewSessionComposerAdapter(props: {
   draftID: string
   worktree: () => string
+  root: () => string
   branch: () => string | undefined
   submitted: () => void
   mcp: DraftMcpControls
@@ -86,7 +84,6 @@ export function createNewSessionComposerAdapter(props: {
   const server = useServer()
   const serverSDK = useServerSDK()
   const tabs = useTabs()
-  const location = useWorkspaceLocation()
   const language = useLanguage()
   const model = createComposerModelSelection({ agent: () => local.agent.current() })
   const controls = createComposerControls({ model })
@@ -99,11 +96,7 @@ export function createNewSessionComposerAdapter(props: {
     working: () => false,
     submitted: props.submitted,
     start(selection, submission, message) {
-      const currentDirectory = location().directory
-
-      const projectDirectory =
-        data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
-
+      const projectDirectory = props.root()
       const worktree = props.worktree()
       const directory = worktree === "main" ? projectDirectory : worktree
       const sessionID = Session.ID.create()
@@ -181,7 +174,7 @@ export function createNewSessionComposerAdapter(props: {
                 local.session.promote(effect.directory, effect.sessionID, {
                   agent: selection.agent,
                   model: selection.model,
-                  variant: selection.variant ?? null,
+                  variant: selection.variant,
                   choices: model.remembered(),
                 })
                 submission.retarget(
@@ -233,11 +226,7 @@ export function createNewSessionComposerAdapter(props: {
   const createdSession = (id: Session.ID, directory: string): ComposerSession => ({
     id,
     directory,
-    handoff: createSessionMessageHandoff(
-      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(base64Encode(directory), id)),
-      id,
-      serverSDK.event,
-    ),
+    handoff: server.ctx.handoff.forSession(id),
     api: serverSDK.api.session,
     data,
     current: () => data.session.get(id),

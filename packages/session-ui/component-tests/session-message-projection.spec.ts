@@ -1,6 +1,6 @@
 import { expect, story } from "../../stories/playwright/story"
 
-story("reveals turn speed only while hovering the response metadata", async ({ mount, page }) => {
+story("reveals turn speed with the response footer", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
 
   const footer = timeline.locator('[data-slot="text-part-copy-wrapper"]').last()
@@ -14,12 +14,11 @@ story("reveals turn speed only while hovering the response metadata", async ({ m
   await expect(speed).toHaveText("·60.0 tok/s")
   await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
   await expect(footer).toHaveCSS("opacity", "1")
-  await expect(speed).toBeHidden()
+  await expect(speed).toBeVisible()
 
   for (const width of [1000, 390]) {
     await page.setViewportSize({ width, height: 844 })
     await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
-    await meta.hover()
     await expect(speed).toBeVisible()
     expect(
       await speed.evaluate((element) => {
@@ -31,7 +30,7 @@ story("reveals turn speed only while hovering the response metadata", async ({ m
       }),
     ).toBe(true)
     await footer.getByRole("button", { name: "Copy response", exact: true }).hover()
-    await expect(speed).toBeHidden()
+    await expect(speed).toBeVisible()
   }
 })
 

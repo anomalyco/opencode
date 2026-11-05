@@ -93,6 +93,8 @@ type PaneFixtureState = {
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
+  /** Main drops picker requests unanswered, as when the tab has no page or no registration yet. */
+  dropInspect: boolean
   highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
   /** The page's zoom as main last reported it. */
@@ -103,6 +105,8 @@ type PaneFixtureState = {
   external: string[]
   /** Cookies the page's address can read. */
   cookies: number
+  /** Main fails the next cookie read, as when the pane is suspended. */
+  failSite: boolean
   selection: string
 }
 
@@ -156,12 +160,14 @@ export function mountBrowserPane(input: PaneHost) {
       captures: 0,
       holdCapture: false,
       picker: {},
+      dropInspect: false,
       highlights: [],
       comments: [],
       zoom: 1,
       history: { visits: [] },
       external: [],
       cookies: 3,
+      failSite: false,
       selection: "default",
     })
 
@@ -199,10 +205,12 @@ export function mountBrowserPane(input: PaneHost) {
       },
       embed: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
-        setStore("captures", (count) => count + 1)
+        const count = store.captures + 1
+        setStore("captures", count)
 
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
-        const canvas = new OffscreenCanvas(4, 4)
+        // Each capture is a pixel wider than the last, so a spec can tell which one a still shows.
+        const canvas = new OffscreenCanvas(3 + count, 4)
         const paint = canvas.getContext("2d")
 
         if (paint) {
@@ -351,6 +359,8 @@ export function mountBrowserPane(input: PaneHost) {
         const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
 
         if (!key) throw new Error("Unknown picker binding")
+
+        if (store.dropInspect) return
         setStore("picker", key, value.enabled)
         emit(key, { type: "inspect", tabID: value.tabID, active: value.enabled })
       },
@@ -368,7 +378,14 @@ export function mountBrowserPane(input: PaneHost) {
         setStore("zoom", next)
         emit(store.session, { type: "page", tabID: value.tabID, zoom: next })
       },
-      site: async () => ({ cookies: store.cookies }),
+      site: async () => {
+        if (store.failSite) {
+          setStore("failSite", false)
+          throw new Error("browser.pane.unavailable")
+        }
+
+        return { cookies: store.cookies }
+      },
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
@@ -530,6 +547,7 @@ export function mountBrowserPane(input: PaneHost) {
             </For>
             <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
             <button onClick={pick}>Pick element</button>
+            <button onClick={() => setStore("dropInspect", true)}>Drop picker requests</button>
             <select
               aria-label="Picked element scenario"
               onChange={(event) => setStore("selection", event.currentTarget.value)}
@@ -537,6 +555,7 @@ export function mountBrowserPane(input: PaneHost) {
               <For each={["default", "long", "fallback", "low", "zoomed"]}>{(value) => <option>{value}</option>}</For>
             </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
+            <button onClick={() => setStore("failSite", true)}>Fail next site read</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
               Page icon
             </button>

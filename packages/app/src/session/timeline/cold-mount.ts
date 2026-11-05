@@ -43,7 +43,6 @@ export type ColdMountEffect =
   | { readonly type: "check.schedule"; readonly attempt: number }
   | { readonly type: "check.sample"; readonly attempt: number }
   | { readonly type: "pin" }
-  | { readonly type: "reveal" }
   | { readonly type: "release" }
 
 export type ColdMountTransition = {
@@ -130,7 +129,7 @@ export function transitionColdMount(state: ColdMountState, event: ColdMountEvent
   if (event.type === "timeout") {
     if (!current(state, event.attempt)) return quiet(state)
 
-    return { state: revealed, effects: [{ type: "release" }, { type: "pin" }, { type: "reveal" }] }
+    return { state: revealed, effects: [{ type: "release" }, { type: "pin" }] }
   }
 
   return { state: revealed, effects: [{ type: "release" }] }
@@ -168,7 +167,7 @@ function sampled(
 
   if (event.sample === "pinned") return quiet({ ...state, checking: false })
 
-  return { state: revealed, effects: [{ type: "release" }, { type: "reveal" }] }
+  return { state: revealed, effects: [{ type: "release" }] }
 }
 
 function current(state: Exclude<ColdMountState, { type: "revealed" }>, attempt: number) {

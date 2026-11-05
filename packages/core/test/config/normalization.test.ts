@@ -600,6 +600,24 @@ describe("ConfigNormalize", () => {
     }
   })
 
+  test("normalizes every registered flag as a boolean", () => {
+    const result = normalized({ experimental: { todo: true, media_blob: false, schedules: "yes" } })
+    expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "schedules"]],
+    ])
+  })
+
+  test("passes experimental.all_flags through as a boolean", () => {
+    expect(normalized({ experimental: { all_flags: true } }).encoded.experimental).toEqual({ all_flags: true })
+    expect(normalized({ experimental: { all_flags: false } }).encoded.experimental).toEqual({ all_flags: false })
+    const invalid = normalized({ experimental: { all_flags: "yes" } })
+    expect(invalid.encoded.experimental).toBeUndefined()
+    expect(invalid.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "all_flags"]],
+    ])
+  })
+
   test("never emits experimental policies", () => {
     expect(
       normalized({ experimental: { policies: [{ action: "provider.use", resource: "*", effect: "deny" }] } }).encoded,

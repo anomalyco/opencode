@@ -150,6 +150,19 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("integrationOAuthCancel", "/api/integration/:integrationID/connect/oauth/:attemptID", {
+      params: { integrationID: Schema.String, attemptID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("integrationConnectExternal", "/api/integration/:integrationID/connect/external", {
+      params: { integrationID: Schema.String },
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("credentialActivate", "/api/credential/:credentialID/activate", {
       params: { credentialID: Schema.String },
       success: NoContent,
@@ -412,6 +425,13 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.post("sessionCompact", "/api/session/:sessionID/compact", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionFork", "/api/session/:sessionID/fork", {
       params: SessionParams,
       payload: JsonPayload,
       success: Json,

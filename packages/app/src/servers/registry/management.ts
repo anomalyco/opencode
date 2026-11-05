@@ -1,43 +1,4 @@
-import { normalizeServerUrl, ServerConnection } from "@/runtime/server/registry"
-import type { ServerProbeResult } from "@/runtime/server/health-machine"
-
-export type ServerFormValues = {
-  url: string
-  name: string
-  password: string
-}
-
-export function createServerHealthPreview(check: (server: ServerConnection.HttpBase) => Promise<ServerProbeResult>) {
-  let generation = 0
-
-  const cancel = () => {
-    generation += 1
-  }
-
-  const preview = async (values: ServerFormValues, setStatus: (value: boolean | undefined) => void) => {
-    const current = ++generation
-    setStatus(undefined)
-    const normalized = normalizeServerUrl(values.url)
-
-    if (!normalized) return
-    const host = normalized.replace(/^https?:\/\//, "").split("/")[0]
-
-    if (!host) return
-
-    if (!host.includes("localhost") && !host.startsWith("127.0.0.1") && !host.includes(".") && !host.includes(":"))
-      return
-
-    const http: ServerConnection.HttpBase = { url: normalized }
-
-    if (values.password) http.password = values.password
-    const result = await check(http)
-
-    if (current !== generation) return
-    setStatus(result.type === "healthy")
-  }
-
-  return { cancel, preview }
-}
+import type { ServerConnection } from "@/runtime/server/registry"
 
 export function replaceServerConnection(
   originalKey: ServerConnection.Key,

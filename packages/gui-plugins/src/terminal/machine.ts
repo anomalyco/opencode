@@ -1,32 +1,57 @@
 import type { PersistentPtyInfo } from "@opencode/client"
 
-/** A session's terminal list once the server offers terminals. */
+/**
+ * A session's terminal list once the server offers terminals. `connection` is the server connection whose answer the
+ * known list is: a refresh keeps the previous one until it answers.
+ */
 export type List =
   | { readonly status: "loading"; readonly attempt: number }
-  | { readonly status: "ready"; readonly items: readonly PersistentPtyInfo[] }
-  | { readonly status: "refreshing"; readonly items: readonly PersistentPtyInfo[]; readonly attempt: number }
+  | { readonly status: "ready"; readonly connection: number; readonly items: readonly PersistentPtyInfo[] }
+  | {
+      readonly status: "refreshing"
+      readonly connection: number
+      readonly items: readonly PersistentPtyInfo[]
+      readonly attempt: number
+    }
   | { readonly status: "failed"; readonly error: string }
 
 /** A session's terminal list while the server's support is checked again: a known list stays shown. */
 export type Held =
   | { readonly status: "waiting" }
-  | { readonly status: "ready"; readonly items: readonly PersistentPtyInfo[] }
+  | { readonly status: "ready"; readonly connection: number; readonly items: readonly PersistentPtyInfo[] }
 
 /**
  * One server's terminal support and the terminal lists of its loaded sessions. Each request takes the server's next
  * attempt number, so an answer whose attempt the state no longer holds is stale. `issued` is the last one handed out.
+ * `connections` counts the server's connections: each reconnect, such as after a restart, starts the next one.
  */
 export type State =
   | { readonly status: "unknown" }
-  | { readonly status: "checking"; readonly attempt: number; readonly sessions: Readonly<Record<string, Held>> }
-  | { readonly status: "unsupported"; readonly issued: number; readonly sessions: readonly string[] }
+  | {
+      readonly status: "checking"
+      readonly connections: number
+      readonly attempt: number
+      readonly sessions: Readonly<Record<string, Held>>
+    }
+  | {
+      readonly status: "unsupported"
+      readonly connections: number
+      readonly issued: number
+      readonly sessions: readonly string[]
+    }
   | {
       readonly status: "failed"
+      readonly connections: number
       readonly issued: number
       readonly sessions: readonly string[]
       readonly error: string
     }
-  | { readonly status: "supported"; readonly issued: number; readonly sessions: Readonly<Record<string, List>> }
+  | {
+      readonly status: "supported"
+      readonly connections: number
+      readonly issued: number
+      readonly sessions: Readonly<Record<string, List>>
+    }
 
 export type Event =
   /** The model started following the server, its event stream connected again, or a restarted server replaced it. */
@@ -51,6 +76,11 @@ export type Event =
   | { readonly type: "terminal.updated"; readonly sessionID: string; readonly terminal: PersistentPtyInfo }
   /** This client changed a listed terminal's info. */
   | { readonly type: "terminal.replaced"; readonly sessionID: string; readonly terminal: PersistentPtyInfo }
+  /**
+   * This client created a terminal. It joins a known list at once: the refresh that follows can lose to a newer one
+   * the server's `persistent-pty.added` started, and the tab must be listed when it is selected.
+   */
+  | { readonly type: "terminal.created"; readonly sessionID: string; readonly terminal: PersistentPtyInfo }
   | { readonly type: "sessions.removed"; readonly sessionIDs: readonly string[] }
 
 export type Command =
@@ -109,6 +139,17 @@ export function sessionView(state: State, sessionID: string): View {
   return { type: "ready", items: session.items }
 }
 
+/**
+ * The server connection whose answer the session's known list is, or 0 before one. It moves to a reconnect only once
+ * that connection lists the session again, so a terminal the restarted server still runs can attach by then.
+ */
+export function sessionConnection(state: State, sessionID: string) {
+  if (state.status !== "checking" && state.status !== "supported") return 0
+  const session = state.sessions[sessionID]
+
+  return session?.status === "ready" || session?.status === "refreshing" ? session.connection : 0
+}
+
 /** The listed terminals, in the server's order; none until the list is known. */
 export function viewItems(current: View) {
   return current.type === "ready" ? current.items : NONE
@@ -136,19 +177,24 @@ export function tabTargetable(current: View, id: string) {
 }
 
 function unknown(state: State, event: Event): Transition {
-  if (event.type === "server.connected") return check(1, {})
+  if (event.type === "server.connected") return check(1, {}, 1)
 
-  if (event.type === "session.loaded") return check(1, { [event.sessionID]: { status: "waiting" } })
+  if (event.type === "session.loaded") return check(1, { [event.sessionID]: { status: "waiting" } }, 1)
 
   return unchanged(state)
 }
 
 function checking(state: Extract<State, { status: "checking" }>, event: Event): Transition {
-  if (event.type === "server.connected") return check(state.attempt + 1, state.sessions)
+  if (event.type === "server.connected") return check(state.attempt + 1, state.sessions, state.connections + 1)
 
   if (event.type === "capability.checked" && event.attempt === state.attempt) {
     if (!event.supported)
-      return changed({ status: "unsupported", issued: state.attempt, sessions: Object.keys(state.sessions) })
+      return changed({
+        status: "unsupported",
+        connections: state.connections,
+        issued: state.attempt,
+        sessions: Object.keys(state.sessions),
+      })
 
     // Every session lists again; a list it already had stays shown meanwhile.
     const ids = Object.keys(state.sessions)
@@ -158,14 +204,15 @@ function checking(state: Extract<State, { status: "checking" }>, event: Event): 
         const held = state.sessions[id]
         const attempt = state.attempt + 1 + index
 
-        if (held?.status === "ready") return [id, { status: "refreshing", items: held.items, attempt }]
+        if (held?.status === "ready")
+          return [id, { status: "refreshing", connection: held.connection, items: held.items, attempt }]
 
         return [id, { status: "loading", attempt }]
       }),
     )
 
     return changed(
-      { status: "supported", issued: state.attempt + ids.length, sessions },
+      { status: "supported", connections: state.connections, issued: state.attempt + ids.length, sessions },
       ids.map((sessionID, index): Command => ({ type: "load-list", sessionID, attempt: state.attempt + 1 + index })),
     )
   }
@@ -173,6 +220,7 @@ function checking(state: Extract<State, { status: "checking" }>, event: Event): 
   if (event.type === "capability.failed" && event.attempt === state.attempt)
     return changed({
       status: "failed",
+      connections: state.connections,
       issued: state.attempt,
       sessions: Object.keys(state.sessions),
       error: event.error,
@@ -190,7 +238,7 @@ function checking(state: Extract<State, { status: "checking" }>, event: Event): 
       ...state,
       sessions: {
         ...state.sessions,
-        [event.sessionID]: { status: "ready", items: replace(held.items, event.terminal) },
+        [event.sessionID]: { ...held, items: replace(held.items, event.terminal) },
       },
     })
   }
@@ -206,6 +254,7 @@ function resting(state: Extract<State, { status: "unsupported" | "failed" }>, ev
     return check(
       state.issued + 1,
       Object.fromEntries(state.sessions.map((id): [string, Held] => [id, { status: "waiting" }])),
+      event.type === "server.connected" ? state.connections + 1 : state.connections,
     )
 
   if (event.type === "session.loaded" && !state.sessions.includes(event.sessionID))
@@ -224,11 +273,12 @@ function supported(state: Supported, event: Event): Transition {
       Object.fromEntries(
         Object.entries(state.sessions).map(([id, list]): [string, Held] => {
           if (list.status === "ready" || list.status === "refreshing")
-            return [id, { status: "ready", items: list.items }]
+            return [id, { status: "ready", connection: list.connection, items: list.items }]
 
           return [id, { status: "waiting" }]
         }),
       ),
+      state.connections + 1,
     )
 
   const list = "sessionID" in event ? state.sessions[event.sessionID] : undefined
@@ -246,17 +296,23 @@ function supported(state: Supported, event: Event): Transition {
       return unchanged(state)
 
     if (event.type === "list.loaded")
-      return changed(put(state, event.sessionID, { status: "ready", items: event.items }), [
-        { type: "sync-tabs", sessionID: event.sessionID, items: event.items },
-      ])
+      return changed(
+        put(state, event.sessionID, { status: "ready", connection: state.connections, items: event.items }),
+        [{ type: "sync-tabs", sessionID: event.sessionID, items: event.items }],
+      )
 
     // A server whose terminal daemon can't run offers no terminals until the next connection checks again.
     if (event.type === "list.unavailable")
-      return changed({ status: "unsupported", issued: state.issued, sessions: Object.keys(state.sessions) })
+      return changed({
+        status: "unsupported",
+        connections: state.connections,
+        issued: state.issued,
+        sessions: Object.keys(state.sessions),
+      })
 
     // A failed refresh keeps the terminals already shown.
     if (list.status === "refreshing")
-      return changed(put(state, event.sessionID, { status: "ready", items: list.items }))
+      return changed(put(state, event.sessionID, { status: "ready", connection: list.connection, items: list.items }))
 
     return changed(put(state, event.sessionID, { status: "failed", error: event.error }))
   }
@@ -271,6 +327,11 @@ function supported(state: Supported, event: Event): Transition {
     return event.type === "terminal.updated" ? load(state, event.sessionID) : unchanged(state)
   }
 
+  if (event.type === "terminal.created")
+    return (list?.status === "ready" || list?.status === "refreshing") && !listed(list.items, event.terminal.id)
+      ? changed(put(state, event.sessionID, { ...list, items: [...list.items, event.terminal] }))
+      : unchanged(state)
+
   if (event.type === "sessions.removed" && event.sessionIDs.some((id) => id in state.sessions))
     return changed({ ...state, sessions: omit(state.sessions, event.sessionIDs) })
 
@@ -283,14 +344,14 @@ function load(state: Supported, sessionID: string): Transition {
 
   const next =
     list?.status === "ready" || list?.status === "refreshing"
-      ? ({ status: "refreshing", items: list.items, attempt } satisfies List)
+      ? ({ status: "refreshing", connection: list.connection, items: list.items, attempt } satisfies List)
       : ({ status: "loading", attempt } satisfies List)
 
   return changed({ ...put(state, sessionID, next), issued: attempt }, [{ type: "load-list", sessionID, attempt }])
 }
 
-function check(attempt: number, sessions: Readonly<Record<string, Held>>): Transition {
-  return changed({ status: "checking", attempt, sessions }, [{ type: "check-capability", attempt }])
+function check(attempt: number, sessions: Readonly<Record<string, Held>>, connections: number): Transition {
+  return changed({ status: "checking", connections, attempt, sessions }, [{ type: "check-capability", attempt }])
 }
 
 function put(state: Supported, sessionID: string, list: List): Supported {

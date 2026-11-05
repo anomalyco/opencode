@@ -126,7 +126,11 @@ function SessionScreenContent(props: {
     widths: useLayout().panelWidth,
   })
 
-  const timeline = createSessionTimelineInteraction(session)
+  const mobileView = attachment.mobile.current
+
+  const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
+
+  const timeline = createSessionTimelineInteraction(session, conversationVisible)
 
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
@@ -218,15 +222,11 @@ function SessionScreenContent(props: {
     if (screen.side.open()) setStore("sideMounted", true)
   })
 
-  const mobileView = attachment.mobile.current
-
   const mobileEntry = createMemo(() => {
     const key = mobileView()
 
     return key === "session" ? undefined : mobile.find(key)
   })
-
-  const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
 
   // Narrow-screen views that ask to stay mounted once shown, e.g. a terminal that keeps its shell's screen.
   createEffect(() => {
@@ -301,7 +301,6 @@ function SessionScreenContent(props: {
         <PluginLinks session={own()} active={active()}>
           <MessageTimeline
             active={active()}
-            caughtUp={timeline.resource.state === "ready" && timeline.resource.latest === source.identity.sessionID()}
             hideHeader={!isDesktop()}
             registerHeaderGap={registerHeaderGap}
             session={source}
@@ -500,7 +499,7 @@ function SessionScreenContent(props: {
 
             {/* Hidden rather than unmounted: removing it makes the transcript frame the last child, and structural
                 selectors in the transcript then restyle every element in it as the side panel starts to close. */}
-            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={() => screen.size.start()}>
+            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-end-1"
                 direction="horizontal"
@@ -561,7 +560,7 @@ function SessionScreenContent(props: {
             classList={{ hidden: !bottomOpen() }}
             style={{ height: `${session.layout.view().bottom.height()}px` }}
           >
-            <div onPointerDown={() => screen.size.start()}>
+            <div onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-top-1"
                 direction="vertical"

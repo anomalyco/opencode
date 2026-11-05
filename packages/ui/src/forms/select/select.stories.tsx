@@ -165,6 +165,35 @@ export const Surfaces = {
   ),
 }
 
+export const HighlightPreview = {
+  render: () => {
+    const [current, setCurrent] = createSignal("Apple")
+    const [shown, setShown] = createSignal("Apple")
+
+    return (
+      <div style={{ display: "grid", gap: "12px", width: "280px" }}>
+        <Select
+          appearance="base"
+          options={fruits}
+          current={current()}
+          onHighlight={(value) => {
+            const previous = shown()
+            setShown(value)
+
+            return () => setShown(previous)
+          }}
+          onSelect={(value) => {
+            if (!value) return
+            setCurrent(value)
+            setShown(value)
+          }}
+        />
+        <output data-slot="select-preview">Showing {shown()}</output>
+      </div>
+    )
+  },
+}
+
 export const WithField = {
   parameters: { frameHeight: "500px" },
   render: (args) => {

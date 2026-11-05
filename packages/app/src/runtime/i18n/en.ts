@@ -401,6 +401,7 @@ export const dict = {
   "mcp.status.needs_auth": "Needs auth",
   "mcp.status.disabled": "Disabled",
   "mcp.auth.interactiveForm": "MCP server {{name}} requires an interactive authentication form",
+  "mcp.timedOut": "{{name}} took too long to respond",
 
   "dialog.fork.empty": "No messages to fork from",
 
@@ -593,6 +594,8 @@ export const dict = {
   "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "Nothing here yet",
   "home.sessions.empty.description": "Create a session to get started",
+  "home.sessions.load.failed": "Couldn't load sessions",
+  "home.sessions.load.timeout": "The server took too long to answer",
   "home.sessions.group.today": "Today",
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
@@ -682,6 +685,7 @@ export const dict = {
   "session.websearch.loadFailed": "Could not load search providers.",
   "session.websearch.empty": "No search providers available.",
   "session.websearch.failed": "Could not save your choice. Please try again.",
+  "session.websearch.unavailable": "That search provider is no longer available. Choose another.",
   "session.websearch.retry": "Retry",
   "session.question.minimize": "Minimize question",
   "session.question.restore": "Restore question",
@@ -833,7 +837,8 @@ export const dict = {
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description": "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.foldUserMessages.description":
+    "Fold your messages past 12 lines behind a Read more button",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
@@ -898,7 +903,8 @@ export const dict = {
   "settings.appearance.row.tabs.horizontal": "Horizontal",
   "settings.appearance.row.tabs.vertical": "Vertical",
   "settings.general.row.interfaceMode.title": "Interface layout",
-  "settings.general.row.interfaceMode.description": "Choose how you switch between sessions and keep track of what's running",
+  "settings.general.row.interfaceMode.description":
+    "Choose how you switch between sessions and keep track of what's running",
   "settings.general.row.interfaceMode.top": "Top tabs",
   "settings.general.row.interfaceMode.side": "Side tabs",
   "settings.general.row.interfaceMode.inbox": "Inbox",
@@ -1008,9 +1014,6 @@ export const dict = {
   "settings.timeline.custom": "Custom",
   "settings.timeline.row.turnDiffs.title": "Changed files",
   "settings.timeline.row.turnDiffs.description": "List the files each turn changed when it finishes",
-  "settings.timeline.row.newMessagesDivider.title": "New messages divider",
-  "settings.timeline.row.newMessagesDivider.description":
-    "When you return to a session, jump to the first unread message.",
   "settings.timeline.advanced": "Advanced",
   "settings.timeline.advanced.description": "Set placement and details for each activity category.",
   "settings.timeline.group": "Group",

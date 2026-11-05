@@ -396,6 +396,36 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
   })
 }
 
+test("a tab whose overlapping renames both fail shows its saved title again", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+  const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
+  await expect(title).toHaveText(a.title)
+  const released = Promise.withResolvers<void>()
+  const saves: string[] = []
+  await page.route(new RegExp(`/api/session/${a.id}(\\?|$)`), async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    saves.push(route.request().postDataJSON().title)
+    await released.promise
+    await route.fulfill({ status: 500, json: { message: "Rename failed" } })
+  })
+
+  for (const name of ["First name", "Second name"]) {
+    await title.dblclick()
+    await expect(editor).toBeFocused()
+    await editor.fill(name)
+    await editor.press("Enter")
+    await expect(title).toHaveText(name)
+  }
+
+  await expect.poll(() => saves).toEqual(["First name", "Second name"])
+  released.resolve()
+  // The rollback restores the title the server holds, never the first rename that was never saved.
+  await expect(title).toHaveText(a.title)
+  await expect(page.locator('[data-testid^="toast-v2-"]').filter({ hasText: "Request failed" })).toHaveCount(1)
+})
+
 for (const tabLayout of ["horizontal", "vertical"] as const) {
   test(`a ${tabLayout} tab deletes its session after confirmation`, async ({ page }) => {
     await mockWorkspace(page, { name: "Tabs", sessions: [a, b], seed: { settings: { appearance: { tabLayout } } } })
@@ -624,6 +654,22 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
+test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
+  const time = { created: T0, updated: T0, idle: T0 + 1 }
+
+  await mockWorkspace(page, {
+    name: "FailedTabs",
+    sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
+  })
+  await page.goto(sessionHref(a.id))
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  await expect(tab(b.id).locator('[data-mark="failed"]')).toBeVisible()
+  await expect(tab(b.id).locator('[data-mark="unread"]')).toBeHidden()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-mark="failed"]')).toBeHidden()
+})
+
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"
@@ -807,6 +853,47 @@ for (const [screen, href] of [
     )
   })
 }
+
+test("the collapsed sidebar peeks from a resting toggle, Escape cancels a pending peek, and a click docks it", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a],
+    seed: { settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+
+  const toggle = page
+    .locator('[data-slot="collapsed-sidebar-toggle"]')
+    .getByRole("button", { name: "Toggle sidebar", exact: true })
+
+  await expect(sidebar).toHaveAttribute("data-state", "closed")
+  await expect(toggle).toBeVisible()
+  // See "tab preview opens cold": pause at a fixed offset from an explicit install time.
+  const start = Date.now()
+  await page.clock.install({ time: start })
+  await page.clock.pauseAt(start + 10_000)
+
+  // The toggle's 500ms dwell, cut short by Escape, never peeks.
+  await toggle.hover()
+  await page.keyboard.press("Escape")
+  await page.clock.runFor(600)
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+
+  await page.mouse.move(600, 400)
+  await toggle.hover()
+  await page.clock.runFor(600)
+  await expect(sidebar).toHaveAttribute("data-peek", "")
+
+  // Docking from the peek hands the sidebar over, and the peek ends once the dock lands.
+  await toggle.click()
+  await page.clock.runFor(2000)
+  await expect(sidebar).toHaveAttribute("data-state", "open")
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+})
 
 test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
@@ -1404,6 +1491,39 @@ test("⌘W past the side panel's last tab keeps the session tab", async ({ page 
 
   // From the composer ⌘W closes the session tab, so only a swallowed press above leaves Beta to land on.
   await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘W past the side panel's last tab keeps the session tab when focus leaves the panel just after", async ({
+  page,
+}) => {
+  // Stands in for a panel that hands focus back after its close rather than during it.
+  await page.addInitScript(() => {
+    const observer = new MutationObserver((records) => {
+      const hidden = records.some(
+        (record) =>
+          record.target instanceof Element &&
+          record.target.id === "review-panel" &&
+          record.target.getAttribute("aria-hidden") === "true",
+      )
+
+      if (!hidden) return
+      observer.disconnect()
+      document.querySelector<HTMLElement>('[data-component="composer-editor"]')?.focus()
+    })
+
+    observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["aria-hidden"] })
+  })
+
+  const sessions = await emptySidePanel(page)
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  await expect(composer).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+
+  // Only a swallowed press above leaves Beta for this one to land on.
+  await composer.click()
   await page.keyboard.press("ControlOrMeta+w")
   await expectPath(page, sessionHref(sessions.beta.id))
   await expect(sessions.alphaTab).toHaveCount(0)

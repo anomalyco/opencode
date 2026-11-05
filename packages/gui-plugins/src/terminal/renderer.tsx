@@ -55,9 +55,16 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     layout.open(key(id), session, layout.narrow() ? undefined : { tab: "select" })
   }
 
+  // `new` selects the terminal and asks it to take focus, unless the user moved on while it was created. Then opening
+  // its tab, which asks for focus again, gives that up.
   const create = (session: MountedSession, terminal: TerminalSession) =>
     void terminal.new().then((id) => {
-      if (id && !ctx.signal.aborted) show(session, terminal, id)
+      if (!id || ctx.signal.aborted) return
+      const focused = terminal.focusRequested(id)
+
+      layout.open(key(id), session, layout.narrow() ? undefined : { tab: "select" })
+
+      if (!focused) terminal.cancelFocus()
     })
 
   ctx.add(BuiltinSlot, {

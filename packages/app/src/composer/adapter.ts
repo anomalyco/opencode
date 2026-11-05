@@ -56,8 +56,10 @@ export type ComposerQueue = {
 export type ComposerSession = {
   id: string
   directory: string
+  // The timeline's optimistic prompt: shown on `set`, held after `settle` until its admission echo, removed on `clear`.
   handoff: {
     set: (handoff: SessionMessageHandoff) => void
+    settle: (messageID: string) => void
     clear: (messageID: string) => void
   }
   api: {
