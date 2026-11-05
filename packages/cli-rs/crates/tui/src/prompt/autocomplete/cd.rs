@@ -28,7 +28,7 @@ pub fn command(prompt: Weak<Inner>) -> TuiCommand {
         true
     })
     .title("Change working directory")
-    .slash(Slash { name: "cd".to_owned(), aliases: Vec::new(), arguments: true })
+    .slash(Slash::new("cd").arguments())
 }
 
 /// The project whose recents `/cd` keeps: the session's, else the default location's

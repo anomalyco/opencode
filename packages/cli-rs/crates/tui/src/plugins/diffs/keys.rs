@@ -7,7 +7,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
-use opencode_ui::keymap::{GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
 
 use super::viewer::Viewer;
@@ -87,17 +87,13 @@ pub fn layer(viewer: &Rc<Viewer>, target: Option<FocusId>, enabled: Condition) -
 
 /// `diff.open` (`/diff`, in the palette): toggles the session's panel, or opens the full-screen route elsewhere.
 pub fn open_layer(tui: &Rc<Tui>, open: Rc<dyn Fn(&Tui)>) -> KeymapLayer<FocusId> {
-    KeymapLayer {
-        mode: Some(GLOBAL_MODE.to_owned()),
-        commands: vec![
-            TuiCommand::new("diff.open", bind!(tui, |tui, _, _| open(&tui)))
-                .title("Open diff viewer")
-                .group("VCS")
-                .palette()
-                .slash(Slash { name: "diff".to_owned(), aliases: Vec::new(), arguments: false }),
-        ],
-        ..KeymapLayer::default()
-    }
+    KeymapLayer::global(vec![
+        TuiCommand::new("diff.open", bind!(tui, |tui, _, _| open(&tui)))
+            .title("Open diff viewer")
+            .group("VCS")
+            .palette()
+            .slash("diff"),
+    ])
 }
 
 #[cfg(test)]

@@ -12,13 +12,10 @@ pub fn help(cx: &Rc<DialogCx>) -> View {
         move || dialogs.clear()
     };
     let (enter, escape) = (close(&cx.dialogs), close(&cx.dialogs));
-    cx.layer(KeymapLayer {
-        commands: vec![
-            TuiCommand::inline("return", move |_, _| enter()).title("Close help").group("Dialog"),
-            TuiCommand::inline("escape", move |_, _| escape()).title("Close help").group("Dialog"),
-        ],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        TuiCommand::inline("return", move |_, _| enter()).title("Close help").group("Dialog"),
+        TuiCommand::inline("escape", move |_, _| escape()).title("Close help").group("Dialog"),
+    ]));
     // TS interpolates `undefined` when the palette command has no shortcut.
     let shortcut = cx.keymap.shortcut(COMMAND_PALETTE_COMMAND).unwrap_or_else(|| "undefined".to_owned());
     let message = format!("Press {shortcut} to see all available actions and commands in any context.");

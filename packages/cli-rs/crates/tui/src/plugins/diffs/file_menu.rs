@@ -101,16 +101,15 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
     let (on_close, on_run) = (weak.clone(), weak);
     let layer = tui
         .keymap
-        .layer(KeymapLayer {
-            mode: Some(MODE.to_owned()),
-            commands: vec![
+        .layer(
+            KeymapLayer::new(vec![
                 TuiCommand::inline("escape,ctrl+c", move |_, _| close(&on_close))
                     .title("Close file menu")
                     .group("Diff"),
                 TuiCommand::inline("return", move |_, _| run(&on_run, file)).title(label).group("Diff"),
-            ],
-            ..KeymapLayer::default()
-        })
+            ])
+            .mode(MODE),
+        )
         .inspect_err(|error| log::error!("{ID} file menu layer: {error}"))
         .ok();
     *viewer.menu.borrow_mut() = Some(Menu { app: app.clone(), overlay, _layer: layer, _mode: mode });

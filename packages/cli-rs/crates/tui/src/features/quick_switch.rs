@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use opencode_api::generated::V2Event;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
-use opentui::keymap::{Condition, Disposer};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use opentui::keymap::Condition;
 
 use crate::app::Tui;
 use crate::dialogs::session_list::pins;
@@ -31,23 +31,15 @@ pub fn install(tui: &Rc<Tui>) {
                 .enabled(enabled())
         })
         .collect();
-    let names = commands.iter().filter_map(|command| command.id.clone()).collect();
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
-        // `pinnedSessionBindingCommands`, bound only while tabs are off.
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            enabled: enabled(),
-            bindings: names,
-            ..KeymapLayer::default()
-        },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("quick switch keymap layer: {error}");
-        }
-    }
+    let names: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
+    tui.keymap.install(
+        "quick switch",
+        [
+            KeymapLayer::global(commands),
+            // `pinnedSessionBindingCommands`, bound only while tabs are off.
+            KeymapLayer::global(Vec::new()).enabled(enabled()).bindings(names),
+        ],
+    );
 }
 
 /// `quickSwitch`: opens the session in `slot` (1-based), unless it is open already.

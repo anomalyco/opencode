@@ -32,7 +32,7 @@ use opencode_ui::dialog::{
     DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
     footer, header, layout_view,
 };
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::prompt::{PromptProps, prompt};
 use opencode_ui::select::{self, Gutter, SelectAction, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -60,22 +60,15 @@ pub fn install(tui: &Rc<Tui>) {
         .group("Integration")
         .palette()
         .suggested(Condition::when(move || suggested.upgrade().is_some_and(|local| !local.connected())))
-        .slash(Slash { name: "connect".to_owned(), aliases: Vec::new(), arguments: false });
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-        // `appGlobalBindingCommands`.
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            bindings: vec!["provider.connect".to_owned()],
-            ..KeymapLayer::default()
-        },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("integration keymap layer: {error}");
-        }
-    }
+        .slash("connect");
+    tui.keymap.install(
+        "integration",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appGlobalBindingCommands`.
+            KeymapLayer::global(Vec::new()).bindings(["provider.connect"]),
+        ],
+    );
 }
 
 /// The model dialog of the connected provider, as `/connect` and the model dialog open it.
@@ -934,23 +927,20 @@ impl Oauth {
                 let (open, copy) = (Rc::downgrade(&me), Rc::downgrade(&me));
                 let open: Rc<dyn Fn()> = Rc::new(bind!(open, |me| me.open()));
                 let copy: Rc<dyn Fn()> = Rc::new(bind!(copy, |me| me.copy()));
-                cx.layer(KeymapLayer {
-                    commands: vec![
-                        TuiCommand::inline("return", {
-                            let open = open.clone();
-                            move |_, _| open()
-                        })
-                        .title("Open authorization URL")
-                        .group("Dialog"),
-                        TuiCommand::inline("c", {
-                            let copy = copy.clone();
-                            move |_, _| copy()
-                        })
-                        .title("Copy authorization details")
-                        .group("Dialog"),
-                    ],
-                    ..KeymapLayer::default()
-                });
+                cx.layer(KeymapLayer::new(vec![
+                    TuiCommand::inline("return", {
+                        let open = open.clone();
+                        move |_, _| open()
+                    })
+                    .title("Open authorization URL")
+                    .group("Dialog"),
+                    TuiCommand::inline("c", {
+                        let copy = copy.clone();
+                        move |_, _| copy()
+                    })
+                    .title("Copy authorization details")
+                    .group("Dialog"),
+                ]));
                 let closing = me.clone();
                 cx.on_close(Disposer::new(move || closing.close()));
                 oauth_view(
@@ -1133,7 +1123,7 @@ fn oauth_view(
     actions: Option<CopyOpen>,
 ) -> View {
     let app = &cx.app;
-    let head = header(cx, HeaderProps { title: title.to_owned(), ..HeaderProps::default() });
+    let head = header(cx, HeaderProps::new(title));
     let body = View::new(app).gap(1);
     if let Some((url, instructions)) = url {
         let open = actions.as_ref().map(|(_, open)| open.clone());
@@ -1191,7 +1181,7 @@ fn command_starting(flow: &Flow, integration: IntegrationInfo, method: Integrati
                 command_view(cx, &title, "Starting command…").0
             },
             None,
-            DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+            DialogOptions::new(DialogSize::Large),
         );
     }
     let client = flow.local.client.clone();
@@ -1249,7 +1239,7 @@ impl Command {
                 view
             },
             None,
-            DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+            DialogOptions::new(DialogSize::Large),
         );
         self.poll();
     }

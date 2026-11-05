@@ -109,26 +109,23 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let (copy_key, investigate_key) = (copy.clone(), investigate.clone());
     let top = scroll.clone();
     let bottom = scroll.clone();
-    cx.layer(KeymapLayer {
-        commands: vec![
-            TuiCommand::inline("escape", move |_, _| on_back()).title("Back").group("Dialog"),
-            TuiCommand::inline("c", move |_, _| copy_key()).title("Copy details").group("Dialog"),
-            TuiCommand::inline("i", move |_, _| investigate_key()).title("Investigate error").group("Dialog"),
-            TuiCommand::inline("up", scroll_by(-1.0)).group("Dialog"),
-            TuiCommand::inline("down", scroll_by(1.0)).group("Dialog"),
-            TuiCommand::inline("pageup", scroll_by(-20.0)).group("Dialog"),
-            TuiCommand::inline("pagedown", scroll_by(20.0)).group("Dialog"),
-            TuiCommand::inline("home", move |_, _| {
-                top.scroll_to(0.0, 0.0);
-            })
-            .group("Dialog"),
-            TuiCommand::inline("end", move |_, _| {
-                bottom.scroll_to(0.0, f64::MAX);
-            })
-            .group("Dialog"),
-        ],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        TuiCommand::inline("escape", move |_, _| on_back()).title("Back").group("Dialog"),
+        TuiCommand::inline("c", move |_, _| copy_key()).title("Copy details").group("Dialog"),
+        TuiCommand::inline("i", move |_, _| investigate_key()).title("Investigate error").group("Dialog"),
+        TuiCommand::inline("up", scroll_by(-1.0)).group("Dialog"),
+        TuiCommand::inline("down", scroll_by(1.0)).group("Dialog"),
+        TuiCommand::inline("pageup", scroll_by(-20.0)).group("Dialog"),
+        TuiCommand::inline("pagedown", scroll_by(20.0)).group("Dialog"),
+        TuiCommand::inline("home", move |_, _| {
+            top.scroll_to(0.0, 0.0);
+        })
+        .group("Dialog"),
+        TuiCommand::inline("end", move |_, _| {
+            bottom.scroll_to(0.0, f64::MAX);
+        })
+        .group("Dialog"),
+    ]));
 
     let title = Text::new(app, props.title.clone())
         .fg(theme.text.base)

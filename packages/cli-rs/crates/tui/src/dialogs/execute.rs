@@ -62,7 +62,7 @@ pub fn show(tui: &Tui, part: SessionMessageAssistantTool) -> Weak<Live> {
     tui.dialogs.replace(
         move |cx| view(cx, weak, &live, page),
         Some(Box::new(move || drop(keep))),
-        DialogOptions { size: DialogSize::XLarge, key: Some("execute".to_owned()) },
+        DialogOptions::new(DialogSize::XLarge).key("execute"),
     );
     tui.dialogs.set_centered(true);
     handle
@@ -175,27 +175,24 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
     };
     let (top, bottom) = (scroll.clone(), scroll.clone());
     let page_rows = f64::from(max_height);
-    cx.layer(KeymapLayer {
-        commands: vec![
-            TuiCommand::inline("up", scroll_by(-1.0)).title("Scroll up").group("Execute"),
-            TuiCommand::inline("down", scroll_by(1.0)).title("Scroll down").group("Execute"),
-            TuiCommand::inline("pageup", scroll_by(-page_rows)).title("Previous page").group("Execute"),
-            TuiCommand::inline("pagedown", scroll_by(page_rows)).title("Next page").group("Execute"),
-            TuiCommand::inline("home", move |_, _| {
-                top.scroll_to(0.0, 0.0);
-            })
-            .title("Scroll to code")
-            .group("Execute"),
-            TuiCommand::inline("end", move |_, _| {
-                bottom.scroll_to(0.0, f64::MAX);
-            })
-            .title("Scroll to output")
-            .group("Execute"),
-            TuiCommand::inline("c", copy_command(Copied::Code)).title("Copy code").group("Execute"),
-            TuiCommand::inline("o", copy_command(Copied::Output)).title("Copy output").group("Execute"),
-        ],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        TuiCommand::inline("up", scroll_by(-1.0)).title("Scroll up").group("Execute"),
+        TuiCommand::inline("down", scroll_by(1.0)).title("Scroll down").group("Execute"),
+        TuiCommand::inline("pageup", scroll_by(-page_rows)).title("Previous page").group("Execute"),
+        TuiCommand::inline("pagedown", scroll_by(page_rows)).title("Next page").group("Execute"),
+        TuiCommand::inline("home", move |_, _| {
+            top.scroll_to(0.0, 0.0);
+        })
+        .title("Scroll to code")
+        .group("Execute"),
+        TuiCommand::inline("end", move |_, _| {
+            bottom.scroll_to(0.0, f64::MAX);
+        })
+        .title("Scroll to output")
+        .group("Execute"),
+        TuiCommand::inline("c", copy_command(Copied::Code)).title("Copy code").group("Execute"),
+        TuiCommand::inline("o", copy_command(Copied::Output)).title("Copy output").group("Execute"),
+    ]));
 
     opencode_ui::dialog::layout_view(cx, &head, &body, Some(&foot), DIALOG_INSET, 1)
 }

@@ -21,7 +21,7 @@ use opencode_api::generated::{
 use opencode_api::pty::{Connector, Tungstenite};
 use opencode_local::serial::Serial;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use serde_json::{Value, json};
 
@@ -437,14 +437,9 @@ fn apply_layer(tui: &Tui) {
         } else {
             Condition::Never
         }),
-        command("session.terminal", new_terminal).title("New terminal").bind(Bind::Off).slash(Slash {
-            name: "terminal".to_owned(),
-            aliases: Vec::new(),
-            arguments: false,
-        }),
+        command("session.terminal", new_terminal).title("New terminal").bind(Bind::Off).slash("terminal"),
     ];
-    let layer =
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), enabled: in_session, commands, ..KeymapLayer::default() };
+    let layer = KeymapLayer::global(commands).enabled(in_session);
     match tui.keymap.layer(layer) {
         Ok(disposer) => *tui.terminals.layer.borrow_mut() = Some((available, shown, disposer)),
         Err(error) => log::error!("terminal keymap layer: {error}"),

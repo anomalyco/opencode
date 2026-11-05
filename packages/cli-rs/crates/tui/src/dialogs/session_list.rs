@@ -165,7 +165,7 @@ pub fn show(tui: &Tui) {
             view
         },
         None,
-        DialogOptions { size: DialogSize::Large, key: None },
+        DialogOptions::new(DialogSize::Large),
     );
     list.load();
 }

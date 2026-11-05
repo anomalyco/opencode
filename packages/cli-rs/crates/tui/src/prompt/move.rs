@@ -13,7 +13,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput};
 use opencode_store::Location;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -184,7 +184,7 @@ pub fn command(prompt: Weak<Inner>) -> TuiCommand {
     .title("Manage workspaces")
     .group("Session")
     .palette()
-    .slash(Slash { name: "worktrees".to_owned(), aliases: Vec::new(), arguments: false })
+    .slash("worktrees")
 }
 
 /// Submits a staged new worktree: creates it, then `then` gets its directory (`None` after a failure,

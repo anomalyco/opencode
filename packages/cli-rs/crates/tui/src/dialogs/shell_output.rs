@@ -34,7 +34,7 @@ pub fn show(tui: &Tui, shell: ShellInfo, location: Location) {
     tui.dialogs.replace(
         move |cx| build(&weak, cx, shell, location),
         None,
-        DialogOptions { size: DialogSize::XLarge, key: Some("shell-output".to_owned()) },
+        DialogOptions::new(DialogSize::XLarge).key("shell-output"),
     );
     tui.dialogs.set_centered(true);
 }
@@ -101,29 +101,26 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         let scroll = scroll.clone();
         TuiCommand::inline(key, move |_, _| run(&scroll, page)).title(title).group("Shell")
     };
-    cx.layer(KeymapLayer {
-        commands: vec![
-            scroll_command("up", "Scroll output up", |scroll, _| {
-                scroll.scroll_by(0.0, -1.0);
-            }),
-            scroll_command("down", "Scroll output down", |scroll, _| {
-                scroll.scroll_by(0.0, 1.0);
-            }),
-            scroll_command("pageup", "Previous output page", |scroll, page| {
-                scroll.scroll_by(0.0, -page);
-            }),
-            scroll_command("pagedown", "Next output page", |scroll, page| {
-                scroll.scroll_by(0.0, page);
-            }),
-            scroll_command("home", "First loaded output", |scroll, _| {
-                scroll.scroll_to(0.0, 0.0);
-            }),
-            scroll_command("end", "Follow shell output", |scroll, _| {
-                scroll.scroll_to_bottom();
-            }),
-        ],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        scroll_command("up", "Scroll output up", |scroll, _| {
+            scroll.scroll_by(0.0, -1.0);
+        }),
+        scroll_command("down", "Scroll output down", |scroll, _| {
+            scroll.scroll_by(0.0, 1.0);
+        }),
+        scroll_command("pageup", "Previous output page", |scroll, page| {
+            scroll.scroll_by(0.0, -page);
+        }),
+        scroll_command("pagedown", "Next output page", |scroll, page| {
+            scroll.scroll_by(0.0, page);
+        }),
+        scroll_command("home", "First loaded output", |scroll, _| {
+            scroll.scroll_to(0.0, 0.0);
+        }),
+        scroll_command("end", "Follow shell output", |scroll, _| {
+            scroll.scroll_to_bottom();
+        }),
+    ]));
 
     let poll = Rc::new(Poll {
         tui: tui.clone(),
