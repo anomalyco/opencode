@@ -1339,6 +1339,7 @@ dependencies = [
 name = "opencode-ui"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
  "indexmap",
  "log",
@@ -1346,6 +1347,7 @@ dependencies = [
  "opencode-local",
  "opencode-parity",
  "opentui",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",
@@ -1386,6 +1388,7 @@ dependencies = [
  "tree-sitter-yaml",
  "tree-sitter-zig",
  "unicode-width",
+ "url",
 ]
 
 [[package]]
