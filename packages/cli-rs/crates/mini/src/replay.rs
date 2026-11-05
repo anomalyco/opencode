@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use opencode_api::client::{Call, Client, RequestOptions};
-use opencode_api::generated::EventSubscribeInput;
+use opencode_api::generated::{EventSubscribeInput, ExperimentalSessionWaitInput, SessionID, SessionInterruptInput};
 use opencode_api::transport::SseResponse;
 use opentui::app::ProxyError;
 use opentui::prelude::*;
@@ -836,33 +836,6 @@ pub async fn post(proxy: &AppProxy, incoming: Incoming) -> bool {
     }
 }
 
-/// `session.prompt` with `delivery: "steer"` after switching the agent and model (`runPromptTurn`). Returns the
-/// admitted inbox item's text.
-pub async fn prompt(
-    client: &Client,
-    session: &str,
-    id: &str,
-    text: &str,
-    agent: Option<&str>,
-    model: Option<&Value>,
-) -> Result<(), String> {
-    let error = |error: opencode_api::error::Error| error.to_string();
-    if let Some(agent) = agent {
-        let mut call = Call::new("POST", format!("/api/session/{}/agent", encode(session)), 204, &[400, 401, 404]);
-        call.json(&json!({ "agent": agent })).map_err(error)?;
-        client.empty(call, &RequestOptions::default()).await.map_err(error)?;
-    }
-    if let Some(model) = model {
-        let mut call = Call::new("POST", format!("/api/session/{}/model", encode(session)), 204, &[400, 401, 404]);
-        call.json(&json!({ "model": model })).map_err(error)?;
-        client.empty(call, &RequestOptions::default()).await.map_err(error)?;
-    }
-    let mut call = Call::new("POST", format!("/api/session/{}/prompt", encode(session)), 200, &[400, 401, 404, 409]);
-    call.json(&json!({ "id": id, "text": text, "delivery": "steer" })).map_err(error)?;
-    client.json::<Value>(call, &RequestOptions::default()).await.map_err(error)?;
-    Ok(())
-}
-
 /// `model.default` at `directory`: the model a session without one uses, as `(providerID, id)`.
 pub async fn default_model(client: &Client, directory: &str) -> Option<(String, String)> {
     let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
@@ -874,20 +847,39 @@ pub async fn default_model(client: &Client, directory: &str) -> Option<(String, 
 
 /// `experimental.session.wait`: returns once the session is idle.
 pub async fn wait(client: &Client, session: &str) -> Result<(), String> {
-    let call = Call::new("POST", format!("/api/experimental/session/{}/wait", encode(session)), 204, &[400, 401, 404]);
-    client.empty(call, &RequestOptions::default()).await.map_err(|error| error.to_string())
+    let input = ExperimentalSessionWaitInput { session_id: SessionID(session.to_owned()) };
+    client.experimental_session_wait(&input, &RequestOptions::default()).await.map_err(|error| error.to_string())
 }
 
-/// `session.interrupt` with `resume: true`.
-pub async fn interrupt(client: &Client, session: &str) -> Result<(), String> {
-    let mut call = Call::new("POST", format!("/api/session/{}/interrupt", encode(session)), 204, &[400, 401, 404]);
-    call.json(&json!({ "resume": true })).map_err(|error| error.to_string())?;
-    client.empty(call, &RequestOptions::default()).await.map_err(|error| error.to_string())
+/// `session.interrupt`, for mini's two-press gesture (`resume: true`) and run's shutdown.
+pub async fn interrupt(client: &Client, session: &str, resume: Option<bool>) -> Result<(), String> {
+    let input = SessionInterruptInput { session_id: SessionID(session.to_owned()), resume };
+    client.session_interrupt(&input, &RequestOptions::default()).await.map(drop).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The two-press interrupt sends `resume` as a query value, as `session.interrupt` declares, and takes the
+    /// server's 200 as success.
+    #[tokio::test]
+    async fn interrupt_resumes_through_the_query() {
+        use opencode_api::memory::{Memory, Route};
+        let memory = Memory::new(vec![Route::json(
+            "POST",
+            "/api/session/ses_1/interrupt",
+            200,
+            &json!({ "interrupted": true }),
+        )]);
+        let client = Client::with_transport("http://test", Arc::new(memory.clone())).unwrap();
+        assert_eq!(interrupt(&client, "ses_1", Some(true)).await, Ok(()));
+        let sent = memory.requests();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].path, "/api/session/ses_1/interrupt");
+        assert_eq!(sent[0].query, [("resume".to_owned(), vec!["true".to_owned()])].into());
+        assert_eq!(sent[0].body, None);
+    }
 
     fn texts(output: &Output) -> Vec<(EntryKind, String)> {
         output.commits.iter().map(|commit| (commit.kind, commit.text.clone())).collect()
