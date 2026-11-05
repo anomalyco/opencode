@@ -33,8 +33,13 @@ type Waiter = {
   readonly timer: ReturnType<typeof setTimeout>
 }
 
+/** Answers a request the agent sends to the client, such as `elicitation/create`. */
+type ClientHandler = (method: string, params: unknown) => unknown
+
 type AcpProcess = {
   readonly pid: number
+  /** Requests and notifications the agent sent to the client, in arrival order. */
+  readonly received: ReadonlyArray<JsonRpcMessage>
   readonly exited: Promise<number>
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
   readonly close: () => Promise<number>
@@ -78,8 +83,9 @@ export async function createAcpFixture(
     root,
     home,
     llm: { requests },
-    spawn() {
+    spawn(input: { readonly onRequest?: ClientHandler } = {}) {
       const acp = spawnAcp({
+        onRequest: input.onRequest,
         env: isolatedEnv(root, {
           USERPROFILE: root,
           OPENCODE_CONFIG: undefined,
@@ -107,11 +113,11 @@ export async function createAcpFixture(
   }
 }
 
-export function initialize(acp: AcpProcess) {
+export function initialize(acp: AcpProcess, clientCapabilities: Record<string, unknown> = {}) {
   return acp
     .request<InitializeResponse>("initialize", {
       protocolVersion: 1,
-      clientCapabilities: { _meta: { "terminal-auth": true } },
+      clientCapabilities: { _meta: { "terminal-auth": true }, ...clientCapabilities },
       clientInfo: { name: "opencode-local-acp", version: "0.1.0" },
     })
     .then(expectOk)
@@ -185,7 +191,10 @@ function verifierConfig(llmUrl: string) {
   }
 }
 
-function spawnAcp(input: { readonly env: Record<string, string | undefined> }): AcpProcess {
+function spawnAcp(input: {
+  readonly env: Record<string, string | undefined>
+  readonly onRequest?: ClientHandler
+}): AcpProcess {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", "acp"], {
     cwd: path.join(import.meta.dir, "../.."),
     env: input.env,
@@ -197,6 +206,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
   const decoder = new TextDecoder()
   const errorDecoder = new TextDecoder()
   const messages: JsonRpcMessage[] = []
+  const received: JsonRpcMessage[] = []
   const waiters: Waiter[] = []
   let nextID = 1
   let failure: Error | undefined
@@ -214,6 +224,11 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
   }
 
   const dispatch = (message: JsonRpcMessage) => {
+    if (typeof message.method === "string") {
+      received.push(message)
+      if (message.id !== undefined) answer(message.id, message.method, message.params)
+      return
+    }
     const index = waiters.findIndex((waiter) => waiter.predicate(message))
     if (index === -1) {
       messages.push(message)
@@ -273,7 +288,16 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     })
   }
 
-  const write = async (message: JsonRpcRequest) => {
+  const answer = (id: unknown, method: string, params: unknown) => {
+    const result = input.onRequest?.(method, params)
+    const response =
+      result === undefined
+        ? { jsonrpc: "2.0", id, error: { code: -32601, message: `Unhandled client request: ${method}` } }
+        : { jsonrpc: "2.0", id, result }
+    write(response).catch((error) => fail(asError(error)))
+  }
+
+  const write = async (message: JsonRpcRequest | JsonRpcMessage) => {
     if (inputClosed) throw new Error("ACP stdin is closed")
     await child.stdin.write(encoder.encode(`${JSON.stringify(message)}\n`))
     await child.stdin.flush()
@@ -292,6 +316,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
 
   return {
     pid: child.pid,
+    received,
     exited: child.exited,
     request,
     async close() {

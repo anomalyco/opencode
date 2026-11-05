@@ -265,7 +265,9 @@ includes `toolCallId` when OpenCode sent that tool call as a `session/update` fo
 }
 ```
 
-- OpenCode never sends forms that might collect secrets.
+- OpenCode never sends forms that might collect secrets. If a question mentions a password, token, API key or similar
+  secret, OpenCode offers only its choices, without a typed answer. If it has no choices, OpenCode doesn't show it and
+  tells the model why.
 - If a field accepts a typed answer next to its options, the schema adds an optional `<key>_custom` string property.
   For a single choice, a non-empty custom answer replaces the selected option. For a multiple choice, OpenCode adds it
   to the selected options.

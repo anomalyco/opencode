@@ -66,11 +66,76 @@ describe("acp elicitation mapping", () => {
       [{ key: "q0", title: "GitHub token", type: "string" }],
       [{ key: "q0", title: "Password", type: "string", hidden: true, default: "" }],
       [{ key: "q0", title: "Setup", description: "Paste your API key", type: "string" }],
-      [{ key: "q0", title: "Setup", type: "string", options: [{ value: "a", label: "Use my access token" }] }],
+      [{ key: "q0", title: "Token", type: "string", options: [], custom: true }],
     ]
     expect(credentials.map((fields) => ACPElicitation.requestedSchema(form(fields), capable))).toEqual(
       credentials.map(() => undefined),
     )
+  })
+
+  test("sends choices that mention secrets without a typed answer", () => {
+    expect(
+      ACPElicitation.requestedSchema(
+        form([
+          {
+            key: "q0",
+            title: "Token",
+            description: "Which API token should I use?",
+            type: "string",
+            options: [
+              { value: "Alpha", label: "Alpha" },
+              { value: "Beta", label: "Beta" },
+            ],
+            custom: true,
+            required: true,
+          },
+          {
+            key: "q1",
+            title: "Logging",
+            description: "Which fields may carry secrets?",
+            type: "multiselect",
+            options: [{ value: "Headers", label: "Headers with access tokens" }],
+            custom: true,
+          },
+          { key: "q2", title: "Do you have an API key?", type: "boolean" },
+          { key: "q3", title: "Token budget", type: "integer" },
+        ]),
+        capable,
+      ),
+    ).toEqual({
+      type: "object",
+      properties: {
+        q0: {
+          type: "string",
+          title: "Token",
+          description: "Which API token should I use?",
+          oneOf: [
+            { const: "Alpha", title: "Alpha", description: undefined },
+            { const: "Beta", title: "Beta", description: undefined },
+          ],
+          default: undefined,
+        },
+        q1: {
+          type: "array",
+          title: "Logging",
+          description: "Which fields may carry secrets?",
+          items: { anyOf: [{ const: "Headers", title: "Headers with access tokens", description: undefined }] },
+          minItems: undefined,
+          maxItems: undefined,
+          default: undefined,
+        },
+        q2: { type: "boolean", title: "Do you have an API key?", description: undefined, default: undefined },
+        q3: {
+          type: "integer",
+          title: "Token budget",
+          description: undefined,
+          minimum: undefined,
+          maximum: undefined,
+          default: undefined,
+        },
+      },
+      required: ["q0"],
+    })
   })
 })
 
@@ -126,5 +191,30 @@ describe("acp elicitation over the wire", () => {
     expect(acp.server.cancelledForms.map((item) => item.message)).toEqual(ids.map(() => undefined))
     expect(acp.server.repliedForms).toEqual([])
     expect(acp.server.interrupts).toEqual([])
+  })
+
+  test("tells the model why a question asking for a secret wasn't shown", async () => {
+    await using acp = await startSession({
+      capabilities: { elicitation: true },
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        ephemeralEvent("form.created", {
+          form: {
+            id: "frm_secret",
+            sessionID,
+            title: "Questions",
+            metadata: { kind: "question" },
+            fields: [{ key: "q0", title: "Setup", description: "Paste your API key", type: "string" }],
+          },
+        }),
+      ],
+      onFormCancel: ({ sessionID }) => [succeeded(sessionID)],
+    })
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    expect(acp.elicitations).toEqual([])
+    expect(acp.server.cancelledForms).toEqual([
+      { sessionID: acp.sessionId, formID: "frm_secret", message: ACPElicitation.SecretQuestionMessage },
+    ])
   })
 })

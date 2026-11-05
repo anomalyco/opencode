@@ -35,6 +35,9 @@ type Input = {
 export const UnshownQuestionMessage =
   "The question couldn't be shown to the user in this client. Continue without an answer: make reasonable assumptions and state them, or ask the user in your reply if you can't proceed."
 
+export const SecretQuestionMessage =
+  "The question wasn't shown to the user because it asks for a typed answer that might be a secret, such as a password, token or API key, and OpenCode doesn't collect secrets through forms in this client. If you don't need a secret, ask again with wording that doesn't mention one or with fixed choices. Otherwise continue without an answer, or ask the user in your reply if you can't proceed."
+
 function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
   return client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message }).pipe(
     Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
@@ -50,8 +53,8 @@ function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
 export function requestedSchema(form: AskedForm, capabilities: Capabilities): ElicitationSchema | undefined {
   if (!capabilities.formElicitation) return undefined
   if (Option.isNone(Schema.decodeUnknownOption(ElicitedKind)(form.metadata))) return undefined
-  if (form.fields.some(credentialLike)) return undefined
-  const fields = form.fields.filter((field): field is InputField => field.type !== "external")
+  if (form.fields.some(asksForSecret)) return undefined
+  const fields = form.fields.filter((field): field is InputField => field.type !== "external").map(choicesOnly)
   if (fields.length !== form.fields.length || fields.some((field) => field.when?.length)) return undefined
   if (fields.some((field) => field.hidden && field.required && field.default === undefined)) return undefined
   const keys = new Set(fields.map((field) => field.key))
@@ -65,10 +68,14 @@ export function requestedSchema(form: AskedForm, capabilities: Capabilities): El
 }
 
 // The question tool returns the message to the model, so the turn continues instead of ending as interrupted.
-export function cancelUnshown(client: OpenCodeClient, form: Form.Info) {
-  return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined).pipe(
-    Effect.uninterruptible,
-  )
+export function cancelUnshown(client: OpenCodeClient, form: Form.Info, capabilities: Capabilities) {
+  return cancel(client, form, unshownMessage(form, capabilities)).pipe(Effect.uninterruptible)
+}
+
+function unshownMessage(form: Form.Info, capabilities: Capabilities) {
+  if (form.metadata?.kind !== QuestionKind) return undefined
+  if (capabilities.formElicitation && form.fields.some(asksForSecret)) return SecretQuestionMessage
+  return UnshownQuestionMessage
 }
 
 function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answer | undefined {
@@ -106,6 +113,18 @@ export function respond(input: Input, outcome: Form.Answer | "cancel") {
         Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
       ),
     )
+}
+
+// Only a typed answer can carry a secret, so a field with choices to pick from is still safe to send.
+function asksForSecret(field: Form.Field) {
+  if (field.type !== "string" && field.type !== "multiselect") return false
+  return (field.options ?? []).length === 0 && credentialLike(field)
+}
+
+function choicesOnly(field: InputField): InputField {
+  if (field.type !== "string" && field.type !== "multiselect") return field
+  if (!field.custom || !credentialLike(field)) return field
+  return { ...field, custom: false }
 }
 
 function credentialLike(field: Form.Field) {
