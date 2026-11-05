@@ -141,11 +141,32 @@ impl Transport for Moving {
 }
 
 fn mount_with(endpoint: Option<Endpoint>) -> Harness {
+    mount_routes(endpoint, routes())
+}
+
+/// Three running subagents of `ses_a`, listed in this order.
+fn mount_family() -> Harness {
+    let children = [("ses_c", "Scan"), ("ses_d", "Lint"), ("ses_e", "Test")];
+    let mut sessions = vec![session("ses_a", None, "Fix the parser", 3)];
+    sessions.extend(
+        children.iter().map(|(id, title)| session(id, Some("ses_a"), &format!("{title} (@explore subagent)"), 2)),
+    );
+    let running: serde_json::Map<String, Value> =
+        children.iter().map(|(id, _)| ((*id).to_owned(), json!({ "type": "running" }))).collect();
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": sessions, "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/active", 200, &json!({ "data": running })),
+    ];
+    routes.extend(self::routes());
+    mount_routes(None, routes)
+}
+
+fn mount_routes(endpoint: Option<Endpoint>, routes: Vec<MemoryRoute>) -> Harness {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
     let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     let state = paths.state.clone();
-    let memory = Memory::new(routes());
+    let memory = Memory::new(routes);
     let transport: Arc<dyn Transport> = match endpoint {
         Some(endpoint) => Arc::new(Moving { memory: memory.clone(), endpoint }),
         None => Arc::new(memory.clone()),
@@ -236,6 +257,47 @@ impl Harness {
         reply.into_inner().expect("a reply")
     }
 
+    /// The cell where `label` starts on screen.
+    fn at(&self, label: &str) -> Option<(u16, u16)> {
+        at(&self.app.text(), label)
+    }
+
+    /// The subagent rows on screen, top to bottom.
+    fn rows(&self) -> Vec<&'static str> {
+        let text = self.app.text();
+        let mut rows: Vec<_> = ["Scan", "Lint", "Test"]
+            .into_iter()
+            .filter_map(|title| at(&text, &format!("Explore: {title} ()")).map(|(_, y)| (y, title)))
+            .collect();
+        rows.sort();
+        rows.into_iter().map(|(_, title)| title).collect()
+    }
+
+    /// The subagent rows drawn as the selection, with the focused action background.
+    fn focused(&self) -> Vec<&'static str> {
+        let focused = self.tui.page().background.action.primary.focused;
+        let capture = self.app.render();
+        let text = capture.text();
+        ["Scan", "Lint", "Test"]
+            .into_iter()
+            .filter(|title| {
+                at(&text, &format!("Explore: {title} ()"))
+                    .is_some_and(|(x, y)| capture.cell(u32::from(x), u32::from(y)).unwrap().bg == focused)
+            })
+            .collect()
+    }
+
+    /// One durable event of a subagent, as a running subagent streams them.
+    fn emit(&self, kind: &str, session: &str) {
+        let seq = self.next.get() + 1;
+        self.next.set(seq);
+        self.memory.emit(&json!({
+            "id": format!("evt_{seq}"), "created": seq, "type": kind,
+            "durable": { "aggregateID": session, "seq": seq, "version": 1 },
+            "location": { "directory": "/project" }, "data": { "sessionID": session },
+        }));
+    }
+
     fn call(&self, tool: &str, arguments: Value, session: Option<&str>) -> Value {
         let mut params = json!({ "name": tool, "arguments": arguments });
         if let Some(session) = session {
@@ -243,6 +305,13 @@ impl Harness {
         }
         self.request("tools/call", params)["result"].clone()
     }
+}
+
+fn at(screen: &str, label: &str) -> Option<(u16, u16)> {
+    screen.lines().enumerate().find_map(|(y, line)| {
+        let byte = line.find(label)?;
+        Some((line[..byte].chars().count() as u16, y as u16))
+    })
 }
 
 fn text(result: &Value) -> (&str, bool) {
@@ -377,4 +446,55 @@ fn the_shell_output_dialog_shows_the_output_without_escapes() {
     assert_eq!(query(&outputs[1], "cursor").as_deref(), Some("0"));
     assert_eq!(query(&outputs[1], "limit").as_deref(), Some("65536"));
     assert_eq!(query(&outputs[1], "location[directory]").as_deref(), Some("/project"));
+}
+
+#[test]
+fn the_subagent_selection_follows_the_keys_while_subagents_stream_under_a_resting_pointer() {
+    let harness = mount_family();
+    harness.app.press("down");
+    assert!(harness.wait(|harness| harness.rows().len() == 3));
+    let rows = harness.rows();
+    assert_eq!(harness.focused(), [rows[0]]);
+    // The pointer rests on the first row, where the prompt was. Rows redrawn under it must not take the selection.
+    let (x, y) = harness.at(&format!("Explore: {} ()", rows[0])).unwrap();
+    harness.app.hover(x, y);
+    for (key, expected) in [("down", 1), ("down", 2), ("up", 1)] {
+        harness.app.press(key);
+        for session in ["ses_c", "ses_d", "ses_e", "ses_c"] {
+            harness.emit("session.execution.started", session);
+            harness.settle();
+        }
+        harness.settle();
+        assert_eq!(harness.rows(), rows, "the order holds");
+        assert_eq!(harness.focused(), [rows[expected]], "after {key}");
+    }
+    // Moving the pointer selects the row under it (`onMouseMove`).
+    let (x, y) = harness.at(&format!("Explore: {} ()", rows[2])).unwrap();
+    harness.app.hover(x, y);
+    assert!(harness.wait(|harness| harness.focused() == [rows[2]]));
+}
+
+#[test]
+fn a_finished_subagent_leaves_the_selection_on_its_row_index() {
+    let harness = mount_family();
+    harness.app.press("down");
+    assert!(harness.wait(|harness| harness.rows().len() == 3));
+    let rows = harness.rows();
+    let id = |title: &str| match title {
+        "Scan" => "ses_c",
+        "Lint" => "ses_d",
+        _ => "ses_e",
+    };
+    harness.app.press("down");
+    assert!(harness.wait(|harness| harness.focused() == [rows[1]]));
+    // As in TS, the selection is an index: the next subagent moves up into it.
+    harness.emit("session.execution.succeeded", id(rows[1]));
+    assert!(harness.wait(|harness| harness.rows() == [rows[0], rows[2]]));
+    assert_eq!(harness.focused(), [rows[2]]);
+    // Past the end of the list, it moves to the last row.
+    harness.emit("session.execution.succeeded", id(rows[2]));
+    assert!(harness.wait(|harness| harness.rows() == [rows[0]]));
+    assert_eq!(harness.focused(), [rows[0]]);
+    harness.app.press("up");
+    assert!(harness.wait(|harness| !harness.app.text().contains("Subagents")));
 }
