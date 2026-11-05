@@ -90,6 +90,8 @@ pub struct Prompt {
     inner: Rc<Inner>,
 }
 
+pub(crate) type OnSubmit = Rc<dyn Fn(&Tui)>;
+
 pub struct Inner {
     pub(crate) tui: Weak<Tui>,
     pub(crate) app: App,
@@ -129,6 +131,8 @@ pub struct Inner {
     interrupt: Cell<u32>,
     interrupt_timer: Cell<Option<TimerId>>,
     pub(crate) submitting: Cell<bool>,
+    /// Runs when a prompt with text is sent and the composer clears (`onSubmit`).
+    pub(crate) on_submit: RefCell<Option<OnSubmit>>,
     pub(crate) catalog: RefCell<Option<Rc<Catalog>>>,
     layers: RefCell<Vec<Disposer>>,
     /// The mentions' extmarks and the parts they stand for (E.3).
@@ -190,6 +194,11 @@ impl Prompt {
 
     pub fn focus(&self, tui: &Tui) {
         tui.app.focus(&self.inner.textarea);
+    }
+
+    /// Sets what runs when a prompt with text is sent (`onSubmit`).
+    pub fn on_submit(&self, run: impl Fn(&Tui) + 'static) {
+        *self.inner.on_submit.borrow_mut() = Some(Rc::new(run));
     }
 }
 
@@ -355,6 +364,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         interrupt: Cell::new(0),
         interrupt_timer: Cell::new(None),
         submitting: Cell::new(false),
+        on_submit: RefCell::new(None),
         catalog: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
         parts: parts::Parts::default(),

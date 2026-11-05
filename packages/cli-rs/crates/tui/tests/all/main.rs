@@ -27,6 +27,7 @@ mod queue;
 mod review_ms1;
 mod review_ms34;
 mod root;
+mod session_view;
 mod sessions;
 mod settings;
 mod shared_state;
