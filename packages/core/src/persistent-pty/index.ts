@@ -363,6 +363,7 @@ const makeLayer = (options: Options = {}) =>
       const shutdown = Effect.fn("PersistentPty.shutdown")(function* () {
         const response = yield* daemon.shutdown.pipe(Effect.mapError(unavailable))
         current.clear()
+        yield* detaching.handoffDropped
         if (!response) return
         if (response.type !== "ok") return yield* unexpected(response)
       })

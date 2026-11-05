@@ -17,6 +17,8 @@ const HOOK_BUDGET = Duration.millis(500)
 export interface Interface {
   /** Records that a daemon handoff was prepared successfully. */
   readonly handoffPrepared: Effect.Effect<void>
+  /** Records that the prepared handoff no longer holds: the daemon was shut down, so nothing can outlive this server. */
+  readonly handoffDropped: Effect.Effect<void>
   /**
    * Called once shutdown starts, before any service is torn down. Returns whether this server is detaching,
    * after running the detaching hooks (best effort, bounded) when it is.
@@ -39,6 +41,9 @@ export const make = Effect.sync(() => {
   return Service.of({
     handoffPrepared: Effect.sync(() => {
       prepared = true
+    }),
+    handoffDropped: Effect.sync(() => {
+      prepared = false
     }),
     begin: Effect.gen(function* () {
       stopping = true
