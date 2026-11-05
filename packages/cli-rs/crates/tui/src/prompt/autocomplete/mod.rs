@@ -21,8 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    AgentInfoMode, FileFindInput, FileListInput, FileSystemEntryType, LocationQueryInput,
-    ReferenceSource,
+    AgentInfoMode, FileFindInput, FileListInput, FileSystemEntryType, LocationQueryInput, ReferenceSource,
 };
 use opencode_local::jsonl::{self, Frecency};
 use opencode_local::serial::Serial;
@@ -79,14 +78,12 @@ impl Shared {
         let Some(state) = tui.state_dir() else {
             return;
         };
-        let (frecency, recents, storage) =
-            (self.frecency.clone(), self.recents.clone(), tui.storage());
+        let (frecency, recents, storage) = (self.frecency.clone(), self.recents.clone(), tui.storage());
         // `paths.cwd`: the directory the TUI started in.
         let cwd = PathBuf::from(&tui.directory);
         self.writer().run(move || {
             load_frecency(&frecency, &state, &cwd);
-            let stored =
-                storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
+            let stored = storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
             if let Ok(mut slot) = recents.lock() {
                 *slot = stored;
             }
@@ -94,8 +91,7 @@ impl Shared {
     }
 
     fn writer(&self) -> &Serial {
-        self.writer
-            .get_or_init(|| Serial::new("prompt-autocomplete"))
+        self.writer.get_or_init(|| Serial::new("prompt-autocomplete"))
     }
 
     /// `getFrecency(path)`.
@@ -103,10 +99,7 @@ impl Shared {
         self.frecency
             .lock()
             .ok()
-            .and_then(|slot| {
-                slot.as_ref()
-                    .map(|frecency| frecency.score(path, jsonl::now_ms()))
-            })
+            .and_then(|slot| slot.as_ref().map(|frecency| frecency.score(path, jsonl::now_ms())))
             .unwrap_or(0.0)
     }
 
@@ -122,9 +115,7 @@ impl Shared {
             load_frecency(&frecency, &state, &cwd);
             match jsonl::save_frecency(&state, &cwd, &path, jsonl::now_ms()) {
                 Ok((path, visit)) => {
-                    if let Some(frecency) =
-                        frecency.lock().ok().as_mut().and_then(|slot| slot.as_mut())
-                    {
+                    if let Some(frecency) = frecency.lock().ok().as_mut().and_then(|slot| slot.as_mut()) {
                         frecency.record(path, visit);
                     }
                 }
@@ -142,10 +133,7 @@ impl Shared {
             .unwrap_or_default()
             .iter()
             .filter_map(|item| {
-                Some((
-                    item["directory"].as_str()?.to_owned(),
-                    item["usedAt"].as_f64().unwrap_or_default(),
-                ))
+                Some((item["directory"].as_str()?.to_owned(), item["usedAt"].as_f64().unwrap_or_default()))
             })
             .collect();
         items.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -157,10 +145,7 @@ impl Shared {
         let directory = directory.to_owned();
         self.update_recents(tui, project, move |list| {
             list.retain(|item| item["directory"].as_str() != Some(&directory));
-            list.insert(
-                0,
-                json!({ "directory": directory, "usedAt": jsonl::now_ms() }),
-            );
+            list.insert(0, json!({ "directory": directory, "usedAt": jsonl::now_ms() }));
             list.truncate(10);
         });
     }
@@ -173,21 +158,13 @@ impl Shared {
     }
 
     /// Changes the project's list in memory now and in storage on a blocking thread.
-    fn update_recents(
-        &self,
-        tui: &Tui,
-        project: &str,
-        change: impl Fn(&mut Vec<Value>) + Send + Clone + 'static,
-    ) {
+    fn update_recents(&self, tui: &Tui, project: &str, change: impl Fn(&mut Vec<Value>) + Send + Clone + 'static) {
         let project = project.to_owned();
         let apply = move |value: &mut Value, change: &dyn Fn(&mut Vec<Value>)| {
             if !value["projects"].is_object() {
                 value["projects"] = json!({});
             }
-            let mut list = value["projects"][&project]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
+            let mut list = value["projects"][&project].as_array().cloned().unwrap_or_default();
             change(&mut list);
             value["projects"][&project] = Value::Array(list);
         };
@@ -238,12 +215,7 @@ fn recents_initial() -> Value {
 #[derive(Clone, Debug)]
 enum Action {
     /// `insertPart`: a mention of `text`, and the path frecency counts, if any.
-    Part {
-        text: String,
-        kind: Kind,
-        part: Value,
-        visit: Option<String>,
-    },
+    Part { text: String, kind: Kind, part: Value, visit: Option<String> },
     /// A keymap command without arguments runs.
     Run(String),
     /// `insertSlash`: `/name ` replaces the prompt up to the cursor.
@@ -415,11 +387,7 @@ impl Autocomplete {
     pub fn complete_queueable(&self) -> bool {
         let state = &self.0;
         let queueable = state.visible.get() == Some(Mode::Command)
-            && state
-                .options
-                .borrow()
-                .get(state.selected.get())
-                .is_some_and(|item| item.queueable);
+            && state.options.borrow().get(state.selected.get()).is_some_and(|item| item.queueable);
         if queueable {
             state.select();
         }
@@ -447,11 +415,7 @@ impl State {
         }
         if self.visible.get().is_some() {
             let index = self.index.get();
-            let typed = prompt
-                .textarea
-                .buffer()
-                .range(index, offset)
-                .unwrap_or_default();
+            let typed = prompt.textarea.buffer().range(index, offset).unwrap_or_default();
             if offset <= index || typed.contains(char::is_whitespace) {
                 self.hide(false);
                 return;
@@ -528,11 +492,8 @@ impl State {
 
     /// Recomputes the search, starts a file or directory search if it changed, and redraws.
     fn refresh(&self) {
-        let (Some(tui), Some(prompt), Some(mode)) = (
-            self.tui.upgrade(),
-            self.prompt.upgrade(),
-            self.visible.get(),
-        ) else {
+        let (Some(tui), Some(prompt), Some(mode)) = (self.tui.upgrade(), self.prompt.upgrade(), self.visible.get())
+        else {
             return;
         };
         let start = match mode {
@@ -541,11 +502,7 @@ impl State {
         };
         let cursor = prompt.textarea.cursor_offset();
         let search = if cursor >= start {
-            prompt
-                .textarea
-                .buffer()
-                .range(start, cursor)
-                .unwrap_or_default()
+            prompt.textarea.buffer().range(start, cursor).unwrap_or_default()
         } else {
             String::new()
         };
@@ -560,8 +517,7 @@ impl State {
             self.fetch(&tui, mode, &search, &location);
         }
         let options = self.compute(&tui, &prompt, &location, mode, &search);
-        self.selected
-            .set(self.selected.get().min(options.len().saturating_sub(1)));
+        self.selected.set(self.selected.get().min(options.len().saturating_sub(1)));
         *self.options.borrow_mut() = options;
         self.render(&tui);
     }
@@ -620,33 +576,20 @@ impl State {
                 None => {
                     let previous = state.results.borrow().clone();
                     if previous.mode == Some(mode) {
-                        Results {
-                            failed: true,
-                            ..previous
-                        }
+                        Results { failed: true, ..previous }
                     } else {
-                        Results {
-                            failed: true,
-                            mode: Some(mode),
-                            query: query.clone(),
-                            ..Results::default()
-                        }
+                        Results { failed: true, mode: Some(mode), query: query.clone(), ..Results::default() }
                     }
                 }
             };
             state.results.replace(next);
             state.refresh();
         };
-        let request_location = Some(LocationQueryInput {
-            directory: Some(directory.clone()),
-        });
+        let request_location = Some(LocationQueryInput { directory: Some(directory.clone()) });
         let query_for_results = search.to_owned();
         if mode == Mode::Directory {
             let search = parse::directory_search(&base, &directory, &home);
-            let input = FileListInput {
-                location: request_location,
-                path: Some(search.directory.clone()),
-            };
+            let input = FileListInput { location: request_location, path: Some(search.directory.clone()) };
             tui.app.spawn(
                 async move { client.file_list(&input, &RequestOptions::default()).await },
                 move |_, result| {
@@ -661,51 +604,31 @@ impl State {
             );
             return;
         }
-        let input = FileFindInput {
-            location: request_location,
-            query: base,
-            limit: Some(20),
-            ..FileFindInput::default()
-        };
-        tui.app.spawn(
-            async move { client.file_find(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                finish(result.ok().map(|output| {
-                    let root = output.location.directory.0.clone();
-                    Results {
-                        items: output
-                            .data
-                            .iter()
-                            .map(|entry| {
-                                file_item(&root, &entry.path.0, &entry.r#type, range, width)
-                            })
-                            .collect(),
-                        failed: false,
-                        mode: Some(Mode::Reference),
-                        query: query_for_results,
-                        resolved: true,
-                    }
-                }))
-            },
-        );
+        let input =
+            FileFindInput { location: request_location, query: base, limit: Some(20), ..FileFindInput::default() };
+        tui.app.spawn(async move { client.file_find(&input, &RequestOptions::default()).await }, move |_, result| {
+            finish(result.ok().map(|output| {
+                let root = output.location.directory.0.clone();
+                Results {
+                    items: output
+                        .data
+                        .iter()
+                        .map(|entry| file_item(&root, &entry.path.0, &entry.r#type, range, width))
+                        .collect(),
+                    failed: false,
+                    mode: Some(Mode::Reference),
+                    query: query_for_results,
+                    resolved: true,
+                }
+            }))
+        });
     }
 
     /// The options to show (`options` memo).
-    fn compute(
-        &self,
-        tui: &Tui,
-        prompt: &Inner,
-        location: &Location,
-        mode: Mode,
-        search: &str,
-    ) -> Vec<Item> {
+    fn compute(&self, tui: &Tui, prompt: &Inner, location: &Location, mode: Mode, search: &str) -> Vec<Item> {
         let results = {
             let results = self.results.borrow();
-            if results.mode == Some(mode) {
-                results.clone()
-            } else {
-                Results::default()
-            }
+            if results.mode == Some(mode) { results.clone() } else { Results::default() }
         };
         let width = self.content_width(tui);
         if mode == Mode::Directory {
@@ -714,38 +637,21 @@ impl State {
             } else {
                 Vec::new()
             };
-            let seen: Vec<Option<String>> = supplemental
-                .iter()
-                .map(|item| item.absolute.clone())
-                .collect();
+            let seen: Vec<Option<String>> = supplemental.iter().map(|item| item.absolute.clone()).collect();
             return supplemental
                 .into_iter()
-                .chain(
-                    results
-                        .items
-                        .into_iter()
-                        .filter(|item| !seen.contains(&item.absolute)),
-                )
+                .chain(results.items.into_iter().filter(|item| !seen.contains(&item.absolute)))
                 .collect();
         }
         let references = reference_items(tui, location);
         if let Some(name) = self.reference_match(tui, location, mode) {
-            return references
-                .into_iter()
-                .filter(|item| item.display == format!("@{name}"))
-                .collect();
+            return references.into_iter().filter(|item| item.display == format!("@{name}")).collect();
         }
-        let files = if mode == Mode::Reference {
-            results.items
-        } else {
-            Vec::new()
-        };
+        let files = if mode == Mode::Reference { results.items } else { Vec::new() };
         let others: Vec<Item> = match mode {
-            Mode::Reference => skill_items(tui, location)
-                .into_iter()
-                .chain(references)
-                .chain(agent_items(tui, location))
-                .collect(),
+            Mode::Reference => {
+                skill_items(tui, location).into_iter().chain(references).chain(agent_items(tui, location)).collect()
+            }
             _ if self.index.get() == 0 => command_items(tui, location),
             _ => Vec::new(),
         };
@@ -755,24 +661,14 @@ impl State {
         let complete = &tui.prompt.complete;
         let targets: Vec<(&str, Option<&str>)> = others
             .iter()
-            .map(|item| {
-                (
-                    item.value.as_deref().unwrap_or(&item.display),
-                    item.description.as_deref(),
-                )
-            })
+            .map(|item| (item.value.as_deref().unwrap_or(&item.display), item.description.as_deref()))
             .collect();
-        rank(mode, search, &targets, |index| {
-            others[index]
-                .path
-                .as_deref()
-                .map_or(0.0, |path| complete.score(path))
-        })
-        .into_iter()
-        .map(|index| others[index].clone())
-        .chain(files)
-        .take(ROWS)
-        .collect()
+        rank(mode, search, &targets, |index| others[index].path.as_deref().map_or(0.0, |path| complete.score(path)))
+            .into_iter()
+            .map(|index| others[index].clone())
+            .chain(files)
+            .take(ROWS)
+            .collect()
     }
 
     /// The anchor's width less the borders and padding (`anchor.width - 4`).
@@ -828,10 +724,7 @@ impl State {
         let offset = (self.offset.get() as i64 + delta).clamp(0, max) as usize;
         self.offset.set(offset);
         let last = (count.saturating_sub(1)).min(offset + limit.max(1) - 1);
-        let selected = self
-            .selected
-            .get()
-            .clamp(offset.min(count.saturating_sub(1)), last);
+        let selected = self.selected.get().clamp(offset.min(count.saturating_sub(1)), last);
         if selected != self.selected.get() {
             self.confirming.replace(None);
             self.selected.set(selected);
@@ -870,12 +763,7 @@ impl State {
         };
         let textarea = &prompt.textarea;
         match action {
-            Action::Part {
-                text,
-                kind,
-                part,
-                visit,
-            } => {
+            Action::Part { text, kind, part, visit } => {
                 parts::insert(prompt, self.index.get(), text, *kind, part.clone());
                 if let Some(path) = visit {
                     tui.prompt.complete.visit(&tui, path.clone());
@@ -912,11 +800,7 @@ impl State {
         let path = shown.strip_prefix('@').unwrap_or(shown);
         let cursor = textarea.cursor_offset();
         let text = if self.visible.get() == Some(Mode::Directory) {
-            if path.ends_with('/') {
-                path.to_owned()
-            } else {
-                format!("{path}/")
-            }
+            if path.ends_with('/') { path.to_owned() } else { format!("{path}/") }
         } else {
             format!("@{path}/")
         };
@@ -930,11 +814,7 @@ impl State {
 
     /// `prompt.autocomplete.destructive` (Ctrl+D): the first press asks, the second removes.
     fn destructive(&self) {
-        let Some(action) = self
-            .options
-            .borrow()
-            .get(self.selected.get())
-            .and_then(|item| item.destructive.clone())
+        let Some(action) = self.options.borrow().get(self.selected.get()).and_then(|item| item.destructive.clone())
         else {
             return;
         };
@@ -946,12 +826,9 @@ impl State {
             self.render(&tui);
             return;
         }
-        tui.prompt
-            .complete
-            .remove(&tui, &action.project, &action.id);
+        tui.prompt.complete.remove(&tui, &action.project, &action.id);
         let count = self.options.borrow().len();
-        self.selected
-            .set(self.selected.get().min(count.saturating_sub(2)));
+        self.selected.set(self.selected.get().min(count.saturating_sub(2)));
         self.confirming.replace(None);
         self.refresh();
     }
@@ -985,9 +862,7 @@ impl State {
             let message = match mode {
                 Mode::Command => "No matching commands",
                 Mode::Directory if loading => "Searching…",
-                Mode::Directory if failed => {
-                    "Could not search directories. Keep typing to try again."
-                }
+                Mode::Directory if failed => "Could not search directories. Keep typing to try again.",
                 Mode::Directory => "No matching directories",
                 _ if loading => "Searching…",
                 _ if failed => "Could not search files. Keep typing to try again.",
@@ -995,11 +870,7 @@ impl State {
             };
             let error = mode == Mode::Reference && !loading && failed;
             let label = Text::new(app, truncate(message, width.saturating_sub(4).max(1)))
-                .fg(if error {
-                    theme.text.feedback.error.base
-                } else {
-                    theme.text.muted
-                })
+                .fg(if error { theme.text.feedback.error.base } else { theme.text.muted })
                 .wrap(WrapMode::None);
             let row = View::new(app)
                 .row()
@@ -1017,16 +888,9 @@ impl State {
         let offset = self.offset.get().min(options.len().saturating_sub(height));
         for (index, item) in options.iter().enumerate().skip(offset).take(height) {
             let active = index == selected;
-            let confirm = item
-                .destructive
-                .as_ref()
-                .is_some_and(|action| Some(&action.id) == confirming.as_ref());
+            let confirm = item.destructive.as_ref().is_some_and(|action| Some(&action.id) == confirming.as_ref());
             let (bg, fg, muted) = if confirm {
-                (
-                    theme.background.action.destructive.focused,
-                    theme.text.action.destructive.focused,
-                    theme.text.muted,
-                )
+                (theme.background.action.destructive.focused, theme.text.action.destructive.focused, theme.text.muted)
             } else if active {
                 (
                     theme.background.action.primary.focused,
@@ -1036,28 +900,16 @@ impl State {
             } else {
                 (row_bg, theme.text.base, theme.text.muted)
             };
-            let label_width = item
-                .label
-                .filter(|_| !confirm)
-                .map_or(0, |label| label.width() + 2);
+            let label_width = item.label.filter(|_| !confirm).map_or(0, |label| label.width() + 2);
             let content = width.saturating_sub(4 + label_width).max(1);
-            let shown = if confirm {
-                "Press ctrl+d to confirm"
-            } else {
-                item.display.as_str()
-            };
+            let shown = if confirm { "Press ctrl+d to confirm" } else { item.display.as_str() };
             let row = View::new(app)
                 .row()
                 .grow(1.0)
                 .bg(bg)
                 .padding_edge(Edge::Left, 1)
                 .padding_edge(Edge::Right, 1)
-                .child(
-                    &Text::new(app, truncate_middle(shown, content))
-                        .fg(fg)
-                        .shrink(0.0)
-                        .wrap(WrapMode::None),
-                );
+                .child(&Text::new(app, truncate_middle(shown, content)).fg(fg).shrink(0.0).wrap(WrapMode::None));
             if !confirm {
                 if let Some(description) = &item.description {
                     let description = description.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1108,22 +960,14 @@ impl State {
 /// The fuzzy order of options shown as `targets` (their value or display, and description) for `search`,
 /// at most ten (`fuzzysort.go` in the `options` memo). Prefix matches score double, and frecency raises a
 /// path's score.
-fn rank(
-    mode: Mode,
-    search: &str,
-    targets: &[(&str, Option<&str>)],
-    frecency: impl Fn(usize) -> f64,
-) -> Vec<usize> {
+fn rank(mode: Mode, search: &str, targets: &[(&str, Option<&str>)], frecency: impl Fn(usize) -> f64) -> Vec<usize> {
     let prefix = match mode {
         Mode::Reference => "@",
         Mode::Command => "/",
         Mode::Directory => "",
     };
     let starts = format!("{prefix}{search}");
-    let keys: Vec<&str> = targets
-        .iter()
-        .map(|(key, _)| parse::file_line_range(key.trim_end()).0)
-        .collect();
+    let keys: Vec<&str> = targets.iter().map(|(key, _)| parse::file_line_range(key.trim_end()).0).collect();
     // Descriptions count for slash commands only; for `@` they surfaced unrelated items.
     let fields: Vec<[Option<&str>; 2]> = targets
         .iter()
@@ -1135,11 +979,7 @@ fn rank(
         &fields,
         |fields| *fields,
         |_, score, index| {
-            let bonus = if keys[index].starts_with(&starts) {
-                2.0
-            } else {
-                1.0
-            };
+            let bonus = if keys[index].starts_with(&starts) { 2.0 } else { 1.0 };
             score * bonus * (1.0 + frecency(index))
         },
         if mode == Mode::Reference { 0.5 } else { 0.0 },
@@ -1156,12 +996,7 @@ fn split_border() -> [char; 11] {
 fn rail(app: &App, theme: &opencode_ui::theme::Theme, color: Option<Color>, row: &View) -> View {
     View::new(app)
         .row()
-        .child(
-            &Text::new(app, "┃")
-                .width(1)
-                .shrink(0.0)
-                .fg(color.unwrap_or(theme.border.base)),
-        )
+        .child(&Text::new(app, "┃").width(1).shrink(0.0).fg(color.unwrap_or(theme.border.base)))
         .child(row)
 }
 
@@ -1181,10 +1016,7 @@ fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
     };
     let visible = {
         let weak = weak.clone();
-        Condition::when(move || {
-            weak.upgrade()
-                .is_some_and(|state| state.visible.get().is_some())
-        })
+        Condition::when(move || weak.upgrade().is_some_and(|state| state.visible.get().is_some()))
     };
     let layer = KeymapLayer {
         mode: Some(MODE.to_owned()),
@@ -1192,38 +1024,14 @@ fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
         enabled: visible,
         bindings: vec!["prompt.queue".to_owned()],
         commands: vec![
-            command(
-                "prompt.autocomplete.prev",
-                "Previous autocomplete item",
-                |state| state.move_by(-1),
-            ),
-            command(
-                "prompt.autocomplete.next",
-                "Next autocomplete item",
-                |state| state.move_by(1),
-            ),
-            command("prompt.autocomplete.hide", "Hide autocomplete", |state| {
-                state.hide(false)
-            }),
-            command("prompt.clear", "Dismiss autocomplete", |state| {
-                state.hide(true)
-            }),
-            command(
-                "prompt.autocomplete.select",
-                "Select autocomplete item",
-                State::select,
-            ),
-            command(
-                "prompt.autocomplete.complete",
-                "Complete autocomplete item",
-                State::complete,
-            ),
-            command(
-                "prompt.autocomplete.destructive",
-                "Confirm autocomplete action",
-                State::destructive,
-            )
-            .bind(Bind::Key("ctrl+d".to_owned())),
+            command("prompt.autocomplete.prev", "Previous autocomplete item", |state| state.move_by(-1)),
+            command("prompt.autocomplete.next", "Next autocomplete item", |state| state.move_by(1)),
+            command("prompt.autocomplete.hide", "Hide autocomplete", |state| state.hide(false)),
+            command("prompt.clear", "Dismiss autocomplete", |state| state.hide(true)),
+            command("prompt.autocomplete.select", "Select autocomplete item", State::select),
+            command("prompt.autocomplete.complete", "Complete autocomplete item", State::complete),
+            command("prompt.autocomplete.destructive", "Confirm autocomplete action", State::destructive)
+                .bind(Bind::Key("ctrl+d".to_owned())),
         ],
         ..KeymapLayer::default()
     };
@@ -1243,8 +1051,7 @@ fn directory_argument(tui: &Tui, before: &str) -> Option<u32> {
     }
     let command = tui.keymap.commands().into_iter().find(|command| {
         command.slash.as_ref().is_some_and(|slash| {
-            slash.arguments
-                && (slash.name == name || slash.aliases.iter().any(|alias| alias == name))
+            slash.arguments && (slash.name == name || slash.aliases.iter().any(|alias| alias == name))
         })
     })?;
     if command.id != cd::COMMAND {
@@ -1268,36 +1075,22 @@ fn command_items(tui: &Tui, location: &Location) -> Vec<Item> {
             std::iter::once(slash.name.clone())
                 .chain(slash.aliases.clone())
                 .map(|name| {
-                    let action = if slash.arguments {
-                        Action::Slash(name.clone())
-                    } else {
-                        Action::Run(command.id.clone())
-                    };
-                    Item {
-                        description: description.clone(),
-                        ..Item::new(format!("/{name}"), action)
-                    }
+                    let action =
+                        if slash.arguments { Action::Slash(name.clone()) } else { Action::Run(command.id.clone()) };
+                    Item { description: description.clone(), ..Item::new(format!("/{name}"), action) }
                 })
                 .collect()
         })
         .collect();
-    let server = tui.data.read(|state| {
-        state
-            .location(Some(location))
-            .and_then(|data| data.command.clone())
-            .unwrap_or_default()
-    });
+    let server =
+        tui.data.read(|state| state.location(Some(location)).and_then(|data| data.command.clone()).unwrap_or_default());
     items.extend(server.into_iter().map(|command| Item {
         description: command.description.clone(),
         queueable: true,
         ..Item::new(format!("/{}", command.name), Action::Slash(command.name))
     }));
     items.sort_by(|a, b| locale_compare(&a.display, &b.display));
-    let max = items
-        .iter()
-        .map(|item| item.display.encode_utf16().count())
-        .max()
-        .unwrap_or(0);
+    let max = items.iter().map(|item| item.display.encode_utf16().count()).max().unwrap_or(0);
     if max == 0 {
         return items;
     }
@@ -1331,12 +1124,8 @@ fn locale_compare(a: &str, b: &str) -> Ordering {
 
 /// Visible subagents (`agents` memo).
 fn agent_items(tui: &Tui, location: &Location) -> Vec<Item> {
-    let agents = tui.data.read(|state| {
-        state
-            .location(Some(location))
-            .and_then(|data| data.agent.clone())
-            .unwrap_or_default()
-    });
+    let agents =
+        tui.data.read(|state| state.location(Some(location)).and_then(|data| data.agent.clone()).unwrap_or_default());
     agents
         .into_iter()
         .filter(|agent| !agent.hidden && agent.mode != AgentInfoMode::Primary)
@@ -1357,12 +1146,8 @@ fn agent_items(tui: &Tui, location: &Location) -> Vec<Item> {
 
 /// The location's skills (`skillOptions` memo).
 fn skill_items(tui: &Tui, location: &Location) -> Vec<Item> {
-    let skills = tui.data.read(|state| {
-        state
-            .location(Some(location))
-            .and_then(|data| data.skill.clone())
-            .unwrap_or_default()
-    });
+    let skills =
+        tui.data.read(|state| state.location(Some(location)).and_then(|data| data.skill.clone()).unwrap_or_default());
     skills
         .into_iter()
         .map(|skill| Item {
@@ -1383,12 +1168,9 @@ fn skill_items(tui: &Tui, location: &Location) -> Vec<Item> {
 
 /// Visible references, as file mentions of their directories (`referenceAliases` memo).
 fn reference_items(tui: &Tui, location: &Location) -> Vec<Item> {
-    let references = tui.data.read(|state| {
-        state
-            .location(Some(location))
-            .and_then(|data| data.reference.clone())
-            .unwrap_or_default()
-    });
+    let references = tui
+        .data
+        .read(|state| state.location(Some(location)).and_then(|data| data.reference.clone()).unwrap_or_default());
     references
         .into_iter()
         .filter(|reference| reference.hidden != Some(true))
@@ -1396,9 +1178,7 @@ fn reference_items(tui: &Tui, location: &Location) -> Vec<Item> {
             let source = match &reference.source {
                 ReferenceSource::Git(git) => git.repository.clone(),
                 ReferenceSource::Local(local) => local.path.0.clone(),
-                ReferenceSource::Unknown(value) => {
-                    value["path"].as_str().unwrap_or_default().to_owned()
-                }
+                ReferenceSource::Unknown(value) => value["path"].as_str().unwrap_or_default().to_owned(),
             };
             Item {
                 description: Some(format!(" {source}")),
@@ -1468,8 +1248,7 @@ fn directory_items(
     output: opencode_api::generated::FileListOutput,
     width: usize,
 ) -> Vec<Item> {
-    let exact =
-        parse::directory_exact(query, search).map(|value| (value, search.directory.clone()));
+    let exact = parse::directory_exact(query, search).map(|value| (value, search.directory.clone()));
     let root = output.location.directory.0.clone();
     let listed = output
         .data
@@ -1512,10 +1291,7 @@ fn recent_items(tui: &Tui, prompt: &Inner, width: usize) -> Vec<Item> {
                 is_directory: true,
                 path: Some(value.clone()),
                 absolute: Some(directory.clone()),
-                destructive: Some(Destructive {
-                    id: directory,
-                    project: project.clone(),
-                }),
+                destructive: Some(Destructive { id: directory, project: project.clone() }),
                 ..Item::new(truncate_middle(&value, width), Action::Directory(value))
             }
         })
@@ -1535,10 +1311,7 @@ mod tests {
     /// same, ties and the limit of ten included.
     #[test]
     fn rank_matches_fuzzysort() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../parity/fixtures/E.3/fuzzy.json"
-        );
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../parity/fixtures/E.3/fuzzy.json");
         let fixture: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let cases = fixture["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 28);
@@ -1551,20 +1324,11 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|option| {
-                    (
-                        option["display"].as_str().unwrap(),
-                        option["description"].as_str(),
-                    )
-                })
+                .map(|option| (option["display"].as_str().unwrap(), option["description"].as_str()))
                 .collect();
             let query = case["query"].as_str().unwrap();
             let expected: Vec<usize> = serde_json::from_value(case["results"].clone()).unwrap();
-            assert_eq!(
-                rank(mode, query, &targets, |_| 0.0),
-                expected,
-                "{key} {query:?}"
-            );
+            assert_eq!(rank(mode, query, &targets, |_| 0.0), expected, "{key} {query:?}");
         }
     }
 

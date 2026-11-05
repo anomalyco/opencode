@@ -21,25 +21,14 @@ pub fn before_logger(cli: &Cli) {
 pub fn run(context: &Context, args: &AcpArgs) -> anyhow::Result<()> {
     if args.login {
         // TS runs the `auth login` handler with no target, method, or answers.
-        let login = AuthLoginArgs {
-            target: None,
-            method: None,
-            answer: Vec::new(),
-        };
+        let login = AuthLoginArgs { target: None, method: None, answer: Vec::new() };
         return super::auth::run(
             context,
-            &AuthArgs {
-                command: Some(AuthCommand::Login(login)),
-                server: ServerFlags::default(),
-            },
+            &AuthArgs { command: Some(AuthCommand::Login(login)), server: ServerFlags::default() },
         );
     }
     let print_logs = std::env::var("OPENCODE_PRINT_LOGS").as_deref() == Ok("1");
-    let failure = opencode_acp::run(
-        &TsCommand::from_env().standalone(),
-        print_logs,
-        crate::help::VERSION,
-    )?;
+    let failure = opencode_acp::run(&TsCommand::from_env().standalone(), print_logs, crate::help::VERSION)?;
     let Some(failure) = failure else {
         return Ok(());
     };

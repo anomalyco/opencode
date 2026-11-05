@@ -27,22 +27,13 @@ use serde_json::{Map, Value, json};
 fn ts_root() -> PathBuf {
     std::env::var_os("OPENCODE_TS_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../..")
-                .canonicalize()
-                .unwrap()
-        })
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap())
 }
 
 fn available() -> bool {
-    let present = ts_root().join("node_modules").is_dir()
-        && Command::new("bun").arg("--version").output().is_ok();
+    let present = ts_root().join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
-        eprintln!(
-            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            ts_root().display()
-        );
+        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", ts_root().display());
     }
     present
 }
@@ -73,22 +64,13 @@ fn command(args: &[&str], home: Option<&Path>) -> Command {
 
 fn spawn(args: &[&str], home: Option<&Path>, input: &Value) -> Child {
     let mut child = command(args, home).spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(input.to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(input.to_string().as_bytes()).unwrap();
     child
 }
 
 fn finish(child: Child) -> Vec<Value> {
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     // Effect logs (the migration's "migrated cli config") go to stdout before the result line.
     let stdout = String::from_utf8(output.stdout).unwrap();
     serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
@@ -114,12 +96,8 @@ fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
 
 fn paths(home: &Path) -> Paths {
     let vars = env(home);
-    Paths::from_vars(|name| {
-        vars.iter()
-            .find(|(key, _)| *key == name)
-            .map(|(_, value)| value.clone().into_os_string())
-    })
-    .unwrap()
+    Paths::from_vars(|name| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string()))
+        .unwrap()
 }
 
 fn segments(path: &Value) -> Vec<Segment> {
@@ -179,16 +157,7 @@ fn jsonc_edits_and_parse_match_typescript() {
         json!({"path": ["n"], "value": 1e21}),
         json!({"path": ["n"], "value": 1.5e-7}),
     ];
-    let invalid = [
-        "{",
-        "{\"a\" 1}",
-        "{a: 1}",
-        "[01]",
-        "{} x",
-        "/* open",
-        "{\"a\": tru}",
-        "\"\\x\"",
-    ];
+    let invalid = ["{", "{\"a\" 1}", "{a: 1}", "[01]", "{} x", "/* open", "{\"a\": tru}", "\"\\x\""];
     let mut cases: Vec<Value> = texts
         .iter()
         .flat_map(|text| {
@@ -199,12 +168,7 @@ fn jsonc_edits_and_parse_match_typescript() {
             })
         })
         .collect();
-    cases.extend(
-        texts
-            .iter()
-            .chain(&invalid)
-            .map(|text| json!({ "text": text })),
-    );
+    cases.extend(texts.iter().chain(&invalid).map(|text| json!({ "text": text })));
     let expected = oracle(&["jsonc"], None, &Value::Array(cases.clone()));
     let mut failures = Vec::new();
     for (case, expected) in cases.iter().zip(&expected) {
@@ -220,13 +184,7 @@ fn jsonc_edits_and_parse_match_typescript() {
             failures.push(format!("{case}: TypeScript {expected}, Rust {actual}"));
         }
     }
-    assert!(
-        failures.is_empty(),
-        "{} of {} cases differ:\n{}",
-        failures.len(),
-        cases.len(),
-        failures.join("\n")
-    );
+    assert!(failures.is_empty(), "{} of {} cases differ:\n{}", failures.len(), cases.len(), failures.join("\n"));
     eprintln!("{} JSONC cases match", cases.len());
 }
 
@@ -326,15 +284,9 @@ fn decode_and_resolve_match_typescript() {
                     "sounds": r.attention.sounds,
                 }),
             ),
-            (
-                "leader",
-                json!({"timeout": r.leader_timeout.as_millis() as u64}),
-            ),
+            ("leader", json!({"timeout": r.leader_timeout.as_millis() as u64})),
             ("mouse", json!(r.mouse)),
-            (
-                "cursor",
-                json!({"style": r.cursor_style.as_str(), "blinking": r.cursor_blinking}),
-            ),
+            ("cursor", json!({"style": r.cursor_style.as_str(), "blinking": r.cursor_blinking})),
             ("session", serde_json::to_value(&session).unwrap()),
             ("tabs", tabs_value),
         ];
@@ -343,11 +295,7 @@ fn decode_and_resolve_match_typescript() {
         }
         assert_eq!(sorted(&actual), sorted(expected), "{value}");
     }
-    eprintln!(
-        "{} decode and {} resolve cases match",
-        corpus.as_array().unwrap().len(),
-        valid.len()
-    );
+    eprintln!("{} decode and {} resolve cases match", corpus.as_array().unwrap().len(), valid.len());
 }
 
 // Resolve spreads its input, so its key order is not the schema's; compare without order.
@@ -408,23 +356,10 @@ fn jsonl_parsers_match_typescript() {
         .collect();
     let stash = "{\"prompt\":{\"text\":\"a\",\"pasted\":[]},\"timestamp\":5,\"extra\":1}\n{\"prompt\":{\"text\":\"b\"},\"timestamp\":6}\n{\"timestamp\":\"7\",\"prompt\":{\"text\":\"c\",\"pasted\":[]}}\n{\"timestamp\":8,\"prompt\":{\"pasted\":[],\"text\":\"d\"}}\n";
     let frecency = "{\"path\":\"/a\",\"frequency\":1,\"lastOpen\":10}\n{\"path\":\"/b\",\"frequency\":1,\"lastOpen\":30,\"x\":1}\n{\"path\":\"/a\",\"frequency\":2,\"lastOpen\":20}\nnope\n{\"path\":\"/c\",\"frequency\":4,\"lastOpen\":20}\n";
-    let expected = oracle(
-        &["jsonl"],
-        None,
-        &json!({"history": history, "stash": stash, "frecency": frecency}),
-    );
-    assert_eq!(
-        text(&Value::Array(jsonl::parse_history(&history))),
-        text(&expected[0])
-    );
-    assert_eq!(
-        text(&Value::Array(jsonl::parse_stash(stash))),
-        text(&expected[1])
-    );
-    assert_eq!(
-        text(&Value::Array(jsonl::parse_frecency(frecency))),
-        text(&expected[2])
-    );
+    let expected = oracle(&["jsonl"], None, &json!({"history": history, "stash": stash, "frecency": frecency}));
+    assert_eq!(text(&Value::Array(jsonl::parse_history(&history))), text(&expected[0]));
+    assert_eq!(text(&Value::Array(jsonl::parse_stash(stash))), text(&expected[1]));
+    assert_eq!(text(&Value::Array(jsonl::parse_frecency(frecency))), text(&expected[2]));
 }
 
 /// One `cli.json` scenario: files to seed, an overlay, and ops.
@@ -464,8 +399,7 @@ fn set(draft: &mut Value, path: &[Value], value: &Value) {
     let (last, parents) = path.split_last().unwrap();
     let parent = parents.iter().fold(draft, |node, key| {
         let map = node.as_object_mut().unwrap();
-        map.entry(key.as_str().unwrap())
-            .or_insert_with(|| json!({}))
+        map.entry(key.as_str().unwrap()).or_insert_with(|| json!({}))
     });
     let map = parent.as_object_mut().unwrap();
     if value.is_null() {
@@ -549,10 +483,7 @@ fn cli_config_files_match_typescript() {
         },
         Scenario {
             name: "v1 migration",
-            files: vec![
-                ("config/opencode/tui.json", tui),
-                ("state/opencode/kv.json", kv),
-            ],
+            files: vec![("config/opencode/tui.json", tui), ("state/opencode/kv.json", kv)],
             overlay: None,
             ops: json!([{"get": true}, {"update": [[["theme", "name"], "nord"]]}]),
         },
@@ -570,10 +501,7 @@ fn cli_config_files_match_typescript() {
         },
         Scenario {
             name: "overlay",
-            files: vec![(
-                "config/opencode/cli.json",
-                "{\n  \"theme\": { \"name\": \"file\" }\n}\n",
-            )],
+            files: vec![("config/opencode/cli.json", "{\n  \"theme\": { \"name\": \"file\" }\n}\n")],
             overlay: Some("{\"theme\":{\"name\":\"over\"},\"session\":{\"tps\":false}}"),
             ops: json!([
                 {"get": true},
@@ -600,24 +528,14 @@ fn cli_config_files_match_typescript() {
                 "{} op {index} {op}: TypeScript {typescript}, Rust {actual}",
                 scenario.name
             );
-            assert_eq!(
-                files_of(rs_home.path()),
-                files_of(ts_home.path()),
-                "{} op {index} {op}",
-                scenario.name
-            );
+            assert_eq!(files_of(rs_home.path()), files_of(ts_home.path()), "{} op {index} {op}", scenario.name);
             // The mixed home alternates clients on the same files.
             if index % 2 == 0 {
                 ts_op(mixed_home.path(), scenario.overlay, op);
             } else {
                 rust_config_op(&mixed, op);
             }
-            assert_eq!(
-                files_of(mixed_home.path()),
-                files_of(ts_home.path()),
-                "{} mixed op {index}",
-                scenario.name
-            );
+            assert_eq!(files_of(mixed_home.path()), files_of(ts_home.path()), "{} mixed op {index}", scenario.name);
         }
         eprintln!("{}: {} ops match", scenario.name, ops.len());
     }
@@ -629,12 +547,7 @@ fn ts_op(home: &Path, overlay: Option<&str>, op: &Value) -> Value {
         command.env("OPENCODE_CLI_CONFIG_CONTENT", overlay);
     }
     let mut child = command.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(json!([op]).to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(json!([op]).to_string().as_bytes()).unwrap();
     finish(child).remove(0)
 }
 
@@ -663,12 +576,7 @@ fn model_and_storage_files_match_typescript() {
     let typescript = oracle(&["model", ts_file.to_str().unwrap()], None, &ops);
     let prefs = ModelPreferences::new(mixed.path());
     let mixed_file = mixed.path().join("model.json");
-    let model = |v: &Value| {
-        Model::new(
-            v["providerID"].as_str().unwrap(),
-            v["modelID"].as_str().unwrap(),
-        )
-    };
+    let model = |v: &Value| Model::new(v["providerID"].as_str().unwrap(), v["modelID"].as_str().unwrap());
     for (index, op) in ops.as_array().unwrap().iter().enumerate() {
         if index % 2 == 0 {
             oracle(&["model", mixed_file.to_str().unwrap()], None, &json!([op]));
@@ -677,36 +585,20 @@ fn model_and_storage_files_match_typescript() {
         if let Some(m) = op.get("recent") {
             prefs.add_recent(&model(m)).unwrap();
         } else if let Some(m) = op.get("favorite") {
-            prefs
-                .set_favorite(&model(m), op["enabled"].as_bool().unwrap())
-                .unwrap();
+            prefs.set_favorite(&model(m), op["enabled"].as_bool().unwrap()).unwrap();
         } else if let Some(m) = op.get("variant") {
             prefs.save_variant(&model(m), op["value"].as_str()).unwrap();
         }
     }
-    assert_eq!(
-        fs::read_to_string(&mixed_file).unwrap(),
-        fs::read_to_string(&ts_file).unwrap()
-    );
+    assert_eq!(fs::read_to_string(&mixed_file).unwrap(), fs::read_to_string(&ts_file).unwrap());
     let loaded = prefs.load();
     let last = &typescript.last().unwrap()["ok"];
     assert_eq!(
         loaded.recent.iter().map(Model::key).collect::<Vec<_>>(),
-        last["recent"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|m| model(m).key())
-            .collect::<Vec<_>>()
+        last["recent"].as_array().unwrap().iter().map(|m| model(m).key()).collect::<Vec<_>>()
     );
     assert_eq!(
-        Value::Object(
-            loaded
-                .variant
-                .into_iter()
-                .map(|(k, v)| (k, Value::String(v)))
-                .collect()
-        ),
+        Value::Object(loaded.variant.into_iter().map(|(k, v)| (k, Value::String(v))).collect()),
         last["variant"]
     );
 
@@ -722,11 +614,7 @@ fn model_and_storage_files_match_typescript() {
     let ts_state = tempfile::tempdir().unwrap();
     let mixed_state = tempfile::tempdir().unwrap();
     let all: Vec<Value> = sets.iter().map(storage_op).collect();
-    oracle(
-        &["storage", ts_state.path().to_str().unwrap(), "dev"],
-        None,
-        &Value::Array(all),
-    );
+    oracle(&["storage", ts_state.path().to_str().unwrap(), "dev"], None, &Value::Array(all));
     let storage = Storage::new(mixed_state.path(), "dev").unwrap();
     for (index, set) in sets.iter().enumerate() {
         if index % 2 == 0 {
@@ -749,10 +637,7 @@ fn model_and_storage_files_match_typescript() {
         None,
         &json!([{"key": "session-list", "initial": initial}]),
     );
-    assert_eq!(
-        read_back[0]["ok"],
-        storage.load("session-list", &initial).unwrap()
-    );
+    assert_eq!(read_back[0]["ok"], storage.load("session-list", &initial).unwrap());
 }
 
 #[test]
@@ -768,46 +653,22 @@ fn typescript_waits_for_the_rust_locks() {
     let options = Options::default();
     let held = [
         lock::acquire(&paths.locks(), &config.path().to_string_lossy(), &options).unwrap(),
-        lock::acquire(
-            &paths.state.join("dev/locks"),
-            &storage.file("view").unwrap().to_string_lossy(),
-            &options,
-        )
-        .unwrap(),
+        lock::acquire(&paths.state.join("dev/locks"), &storage.file("view").unwrap().to_string_lossy(), &options)
+            .unwrap(),
         lock::acquire(&paths.locks(), &prefs.path().to_string_lossy(), &options).unwrap(),
     ];
     let state = paths.state.to_str().unwrap().to_string();
     let model = prefs.path().to_str().unwrap().to_string();
     let children = [
-        spawn(
-            &["config"],
-            Some(home.path()),
-            &json!([{"update": [[["mouse"], false]]}]),
-        ),
-        spawn(
-            &["storage", &state, "dev"],
-            None,
-            &json!([{"key": "view", "initial": {}, "set": {"open": true}}]),
-        ),
-        spawn(
-            &["model", &model],
-            None,
-            &json!([{"recent": {"providerID": "a", "modelID": "b"}}]),
-        ),
+        spawn(&["config"], Some(home.path()), &json!([{"update": [[["mouse"], false]]}])),
+        spawn(&["storage", &state, "dev"], None, &json!([{"key": "view", "initial": {}, "set": {"open": true}}])),
+        spawn(&["model", &model], None, &json!([{"recent": {"providerID": "a", "modelID": "b"}}])),
     ];
-    let files = [
-        config.path().to_path_buf(),
-        storage.file("view").unwrap(),
-        prefs.path().to_path_buf(),
-    ];
+    let files = [config.path().to_path_buf(), storage.file("view").unwrap(), prefs.path().to_path_buf()];
     // Long enough for Bun to start and block on each lock.
     thread::sleep(Duration::from_secs(3));
     for file in &files {
-        assert!(
-            !file.exists(),
-            "{} was written while Rust held its lock",
-            file.display()
-        );
+        assert!(!file.exists(), "{} was written while Rust held its lock", file.display());
     }
     for lock in held {
         lock.release().unwrap();
@@ -816,13 +677,8 @@ fn typescript_waits_for_the_rust_locks() {
         finish(child);
     }
     for file in &files {
-        assert!(
-            file.exists(),
-            "{} was not written after the release",
-            file.display()
-        );
+        assert!(file.exists(), "{} was not written after the release", file.display());
     }
-    let written: Map<String, Value> =
-        serde_json::from_str(&fs::read_to_string(&files[0]).unwrap()).unwrap();
+    let written: Map<String, Value> = serde_json::from_str(&fs::read_to_string(&files[0]).unwrap()).unwrap();
     assert_eq!(written.get("mouse"), Some(&json!(false)));
 }

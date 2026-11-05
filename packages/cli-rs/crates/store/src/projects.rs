@@ -13,11 +13,8 @@ const GLOBAL_PROJECT: &str = "global";
 impl State {
     /// Projects that are not archived, most recently active first.
     pub fn projects(&self) -> Vec<&Project> {
-        let mut projects: Vec<&Project> = self
-            .projects
-            .values()
-            .filter(|project| project.time.archived.is_none())
-            .collect();
+        let mut projects: Vec<&Project> =
+            self.projects.values().filter(|project| project.time.archived.is_none()).collect();
         projects.sort_by_key(|project| std::cmp::Reverse(project.time.active));
         projects
     }
@@ -57,14 +54,9 @@ impl State {
             let Some(info) = self.info.get(&id) else {
                 continue;
             };
-            let explicit = data
-                .adopted
-                .as_ref()
-                .is_some_and(|adopted| adopted.contains(&info.project_id));
+            let explicit = data.adopted.as_ref().is_some_and(|adopted| adopted.contains(&info.project_id));
             let directory = if explicit {
-                self.projects
-                    .get(&info.project_id)
-                    .map(|project| project.canonical.0.clone())
+                self.projects.get(&info.project_id).map(|project| project.canonical.0.clone())
             } else {
                 Some(info.location.directory.0.clone())
             };
@@ -88,15 +80,8 @@ impl State {
 
 /// `Worktree.adopt`: the project and subpath a session at `directory` takes when `event` resolves
 /// a repository, or `None` when the session stays where it is.
-pub fn adopt(
-    project: &str,
-    directory: &str,
-    event: &WorktreeResolvedData,
-) -> Option<(String, Option<String>)> {
-    let adopted = event
-        .adopted
-        .as_ref()
-        .is_some_and(|adopted| adopted.iter().any(|id| id.0 == project));
+pub fn adopt(project: &str, directory: &str, event: &WorktreeResolvedData) -> Option<(String, Option<String>)> {
+    let adopted = event.adopted.as_ref().is_some_and(|adopted| adopted.iter().any(|id| id.0 == project));
     if project != event.previous.0 && project != GLOBAL_PROJECT && !adopted {
         return None;
     }
@@ -106,16 +91,8 @@ pub fn adopt(
     let directory = normalize(directory);
     let root = normalize(&event.directory.0);
     let windows = is_windows_root(&root);
-    let key = if windows {
-        directory.to_lowercase()
-    } else {
-        directory.clone()
-    };
-    let parent = if windows {
-        root.to_lowercase()
-    } else {
-        root.clone()
-    };
+    let key = if windows { directory.to_lowercase() } else { directory.clone() };
+    let parent = if windows { root.to_lowercase() } else { root.clone() };
     if key != parent && !key.starts_with(&format!("{parent}/")) {
         return None;
     }
@@ -125,20 +102,17 @@ pub fn adopt(
 
 /// Forward slashes, no empty or `.` segments, `..` applied.
 fn normalize(value: &str) -> String {
-    value
-        .replace('\\', "/")
-        .split('/')
-        .fold(String::new(), |mut result, segment| {
-            match segment {
-                "" | "." => {}
-                ".." => result.truncate(result.rfind('/').unwrap_or(0)),
-                _ => {
-                    result.push('/');
-                    result.push_str(segment);
-                }
+    value.replace('\\', "/").split('/').fold(String::new(), |mut result, segment| {
+        match segment {
+            "" | "." => {}
+            ".." => result.truncate(result.rfind('/').unwrap_or(0)),
+            _ => {
+                result.push('/');
+                result.push_str(segment);
             }
-            result
-        })
+        }
+        result
+    })
 }
 
 /// `/^\/[a-z]:/i`
@@ -157,10 +131,7 @@ impl Data {
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {
-                state.projects = projects
-                    .into_iter()
-                    .map(|project| (project.id.clone(), project))
-                    .collect();
+                state.projects = projects.into_iter().map(|project| (project.id.clone(), project)).collect();
                 state.log.projects();
             });
             Ok(())
@@ -174,34 +145,25 @@ impl Data {
     /// Reads a project's saved permissions once per invalidation.
     pub fn project_permission_sync(&self, id: &ProjectID) -> Task<()> {
         let id = id.clone();
-        self.sync_run(
-            format!("project.permission:{}", id.0),
-            move |data| async move {
-                let saved = data
-                    .client()
-                    .permission_saved_list(
-                        &PermissionSavedListInput {
-                            project_id: Some(id.clone()),
-                        },
-                        &RequestOptions::default(),
-                    )
-                    .await
-                    .map_err(Error::new)?;
-                data.write(|state| {
-                    state.project_permissions.insert(id, saved);
-                    state.log.projects();
-                });
-                Ok(())
-            },
-        )
+        self.sync_run(format!("project.permission:{}", id.0), move |data| async move {
+            let saved = data
+                .client()
+                .permission_saved_list(
+                    &PermissionSavedListInput { project_id: Some(id.clone()) },
+                    &RequestOptions::default(),
+                )
+                .await
+                .map_err(Error::new)?;
+            data.write(|state| {
+                state.project_permissions.insert(id, saved);
+                state.log.projects();
+            });
+            Ok(())
+        })
     }
 
     pub fn project_permission_invalidate(&self, id: &ProjectID) {
-        self.write(|state| {
-            state
-                .syncs
-                .invalidate(&format!("project.permission:{}", id.0))
-        });
+        self.write(|state| state.syncs.invalidate(&format!("project.permission:{}", id.0)));
     }
 }
 
@@ -222,26 +184,14 @@ mod tests {
     fn adopts_sessions_under_the_repository_root() {
         let resolved = event("/repo", &["directory-root"]);
         let adopt = |project: &str, directory: &str| adopt(project, directory, &resolved);
-        assert_eq!(
-            adopt("directory-root", "/repo"),
-            Some(("repository".into(), None))
-        );
-        assert_eq!(
-            adopt("global", "/repo/alias/../app/"),
-            Some(("repository".into(), Some("app".into())))
-        );
+        assert_eq!(adopt("directory-root", "/repo"), Some(("repository".into(), None)));
+        assert_eq!(adopt("global", "/repo/alias/../app/"), Some(("repository".into(), Some("app".into()))));
         assert_eq!(adopt("global", "/repo/../other"), None);
         assert_eq!(adopt("global", "/repo-other"), None);
         assert_eq!(adopt("other-repository", "/repo/vendor"), None);
         assert_eq!(adopt("repository", "/repo/app"), None);
-        assert_eq!(
-            adopt("global", "\\repo\\.\\Legacy"),
-            Some(("repository".into(), Some("Legacy".into())))
-        );
+        assert_eq!(adopt("global", "\\repo\\.\\Legacy"), Some(("repository".into(), Some("Legacy".into()))));
         let windows = event("C:\\Repo", &[]);
-        assert_eq!(
-            super::adopt("global", "c:/repo/App", &windows),
-            Some(("repository".into(), Some("App".into())))
-        );
+        assert_eq!(super::adopt("global", "c:/repo/App", &windows), Some(("repository".into(), Some("App".into()))));
     }
 }

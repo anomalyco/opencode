@@ -7,8 +7,7 @@ use indexmap::IndexMap;
 use regex::Regex;
 
 use super::{
-    Composite, Diagram, Note, NoteSide, State, StateDirection, StateKind, Transition,
-    end_marker_id, start_marker_id,
+    Composite, Diagram, Note, NoteSide, State, StateDirection, StateKind, Transition, end_marker_id, start_marker_id,
 };
 use crate::core::text::{decode, first_meaningful_line, js_trim, numbered_lines, split_lines};
 use crate::{Kind, SyntaxError};
@@ -17,19 +16,14 @@ fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("state pattern")
 }
 
-static STATE: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r#"(?i)^state\s+"([^"]+)"\s+as\s+(\S+)$"#));
-static COMPOSITE: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r#"(?i)^state\s+(?:"([^"]+)"\s+as\s+)?(\S+)\s*\{$"#));
+static STATE: LazyLock<Regex> = LazyLock::new(|| pattern(r#"(?i)^state\s+"([^"]+)"\s+as\s+(\S+)$"#));
+static COMPOSITE: LazyLock<Regex> = LazyLock::new(|| pattern(r#"(?i)^state\s+(?:"([^"]+)"\s+as\s+)?(\S+)\s*\{$"#));
 static CHOICE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^state\s+(\S+)\s+<<choice>>$"));
 static TRANSITION: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)(?:\s*:\s*(.*))?$"));
-static DIRECTION: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^direction\s+(TB|TD|BT|LR|RL)$"));
-static NOTE_INLINE: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^note\s+(left|right)\s+of\s+(\S+)\s*:\s*(.*)$"));
-static NOTE_START: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^note\s+(left|right)\s+of\s+(\S+)\s*$"));
+static DIRECTION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^direction\s+(TB|TD|BT|LR|RL)$"));
+static NOTE_INLINE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^note\s+(left|right)\s+of\s+(\S+)\s*:\s*(.*)$"));
+static NOTE_START: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^note\s+(left|right)\s+of\s+(\S+)\s*$"));
 static NOTE_END: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^end\s+note$"));
 
 fn is_header(line: &str) -> bool {
@@ -42,20 +36,10 @@ pub fn is_state(content: &str) -> bool {
 }
 
 fn side(value: &str) -> NoteSide {
-    if value.eq_ignore_ascii_case("left") {
-        NoteSide::Left
-    } else {
-        NoteSide::Right
-    }
+    if value.eq_ignore_ascii_case("left") { NoteSide::Left } else { NoteSide::Right }
 }
 
-fn ensure(
-    states: &mut IndexMap<String, State>,
-    id: &str,
-    label: &str,
-    kind: StateKind,
-    parent: Option<&str>,
-) {
+fn ensure(states: &mut IndexMap<String, State>, id: &str, label: &str, kind: StateKind, parent: Option<&str>) {
     if let Some(existing) = states.get_mut(id) {
         if existing.label == existing.id && label != id {
             existing.label = label.to_string();
@@ -71,12 +55,7 @@ fn ensure(
     }
     states.insert(
         id.to_string(),
-        State {
-            id: id.to_string(),
-            label: label.to_string(),
-            kind,
-            parent_id: parent.map(str::to_string),
-        },
+        State { id: id.to_string(), label: label.to_string(), kind, parent_id: parent.map(str::to_string) },
     );
 }
 
@@ -96,9 +75,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut parents: Vec<(String, usize, String)> = Vec::new();
     let mut pending: Option<PendingNote> = None;
     let mut direction = StateDirection::LR;
-    let error = |number: usize, line: &str, reason: &str| {
-        SyntaxError::new(Kind::State, number, line, reason)
-    };
+    let error = |number: usize, line: &str, reason: &str| SyntaxError::new(Kind::State, number, line, reason);
 
     for source in numbered_lines(content) {
         let line = source.text;
@@ -120,11 +97,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         }
         if line == "}" {
             if parents.pop().is_none() {
-                return Err(error(
-                    source.number,
-                    line,
-                    "Unexpected \"}\" without an open composite state",
-                ));
+                return Err(error(source.number, line, "Unexpected \"}\" without an open composite state"));
             }
             continue;
         }
@@ -132,11 +105,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         let parent = parent.as_deref();
         if let Some(captures) = DIRECTION.captures(line) {
             if !parents.is_empty() {
-                return Err(error(
-                    source.number,
-                    line,
-                    "Composite-local direction is not supported",
-                ));
+                return Err(error(source.number, line, "Composite-local direction is not supported"));
             }
             direction = StateDirection::parse(&captures[1]).unwrap_or(StateDirection::LR);
             continue;
@@ -170,13 +139,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             continue;
         }
         if let Some(captures) = STATE.captures(line) {
-            ensure(
-                &mut states,
-                &captures[2],
-                &decode(&captures[1]),
-                StateKind::State,
-                parent,
-            );
+            ensure(&mut states, &captures[2], &decode(&captures[1]), StateKind::State, parent);
             continue;
         }
         if let Some(captures) = CHOICE.captures(line) {
@@ -189,27 +152,13 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             if raw_from.contains("-->") || raw_to.contains("-->") {
                 return Err(SyntaxError::unsupported(Kind::State, source.number, line));
             }
-            let from = if raw_from == "[*]" {
-                start_marker_id(parent)
-            } else {
-                raw_from.to_string()
-            };
-            let to = if raw_to == "[*]" {
-                end_marker_id(parent)
-            } else {
-                raw_to.to_string()
-            };
-            let (from_label, from_kind) = if raw_from == "[*]" {
-                ("●", StateKind::Start)
-            } else {
-                (from.as_str(), StateKind::State)
-            };
+            let from = if raw_from == "[*]" { start_marker_id(parent) } else { raw_from.to_string() };
+            let to = if raw_to == "[*]" { end_marker_id(parent) } else { raw_to.to_string() };
+            let (from_label, from_kind) =
+                if raw_from == "[*]" { ("●", StateKind::Start) } else { (from.as_str(), StateKind::State) };
             ensure(&mut states, &from, from_label, from_kind, parent);
-            let (to_label, to_kind) = if raw_to == "[*]" {
-                ("◎", StateKind::End)
-            } else {
-                (to.as_str(), StateKind::State)
-            };
+            let (to_label, to_kind) =
+                if raw_to == "[*]" { ("◎", StateKind::End) } else { (to.as_str(), StateKind::State) };
             ensure(&mut states, &to, to_label, to_kind, parent);
             let label = decode(captures.get(3).map_or("", |m| js_trim(m.as_str())));
             transitions.push(Transition { from, to, label });
@@ -218,42 +167,21 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         return Err(SyntaxError::unsupported(Kind::State, source.number, line));
     }
     if let Some(note) = pending {
-        return Err(error(
-            note.number,
-            &note.source,
-            "Unclosed note; expected \"end note\"",
-        ));
+        return Err(error(note.number, &note.source, "Unclosed note; expected \"end note\""));
     }
     if let Some((_, number, line)) = parents.last() {
-        return Err(error(
-            *number,
-            line,
-            "Unclosed composite state; expected \"}\"",
-        ));
+        return Err(error(*number, line, "Unclosed composite state; expected \"}\""));
     }
     if composites.is_empty() {
-        return Ok(Diagram {
-            direction,
-            states: states.into_values().collect(),
-            transitions,
-            composites,
-            notes,
-        });
+        return Ok(Diagram { direction, states: states.into_values().collect(), transitions, composites, notes });
     }
-    let ids: HashSet<&str> = composites
-        .iter()
-        .map(|composite| composite.id.as_str())
-        .collect();
+    let ids: HashSet<&str> = composites.iter().map(|composite| composite.id.as_str()).collect();
     let resolve = |id: &str, marker: fn(Option<&str>) -> String| {
         if !ids.contains(id) {
             return id.to_string();
         }
         let marker = marker(Some(id));
-        if states.contains_key(&marker) {
-            marker
-        } else {
-            id.to_string()
-        }
+        if states.contains_key(&marker) { marker } else { id.to_string() }
     };
     let transitions = transitions
         .iter()
@@ -263,16 +191,6 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             label: transition.label.clone(),
         })
         .collect();
-    let states = states
-        .values()
-        .filter(|state| !ids.contains(state.id.as_str()))
-        .cloned()
-        .collect();
-    Ok(Diagram {
-        direction,
-        states,
-        transitions,
-        composites,
-        notes,
-    })
+    let states = states.values().filter(|state| !ids.contains(state.id.as_str())).cloned().collect();
+    Ok(Diagram { direction, states, transitions, composites, notes })
 }

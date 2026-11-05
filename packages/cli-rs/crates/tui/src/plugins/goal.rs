@@ -9,9 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{
-    LocationQueryInput, RpcCallInput, SessionCommandInput, SessionID, V2Event,
-};
+use opencode_api::generated::{LocationQueryInput, RpcCallInput, SessionCommandInput, SessionID, V2Event};
 use opencode_ui::dialog::{self, DialogOptions, FooterAction, FooterProps, HeaderProps};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
@@ -89,12 +87,7 @@ impl Goals {
     }
 
     /// Starts following `session`'s goal; `changed` runs after each change of it.
-    pub fn track(
-        &self,
-        tui: &Tui,
-        session: SessionID,
-        changed: impl Fn(&Tui) + 'static,
-    ) -> Rc<Tracker> {
+    pub fn track(&self, tui: &Tui, session: SessionID, changed: impl Fn(&Tui) + 'static) -> Rc<Tracker> {
         let tracker = Rc::new_cyclic(|this| Tracker {
             tui: tui.weak(),
             session,
@@ -112,12 +105,7 @@ impl Goals {
     }
 
     fn event(&self, event: &V2Event) {
-        let trackers: Vec<Rc<Tracker>> = self
-            .trackers
-            .borrow()
-            .iter()
-            .filter_map(Weak::upgrade)
-            .collect();
+        let trackers: Vec<Rc<Tracker>> = self.trackers.borrow().iter().filter_map(Weak::upgrade).collect();
         for tracker in trackers {
             let Some(tui) = tracker.tui.upgrade() else {
                 continue;
@@ -125,17 +113,12 @@ impl Goals {
             match event {
                 V2Event::ServerConnected(_) => tracker.load(&tui),
                 V2Event::Rpc(event) if event.r#type == CHANGED => {
-                    if event.data.get("sessionID").and_then(|id| id.as_str())
-                        != Some(tracker.session.0.as_str())
-                    {
+                    if event.data.get("sessionID").and_then(|id| id.as_str()) != Some(tracker.session.0.as_str()) {
                         continue;
                     }
                     // A change that arrives while a read is in flight is newer than its reply.
                     tracker.turn.set(tracker.turn.get() + 1);
-                    let goal = event
-                        .data
-                        .get("goal")
-                        .and_then(|goal| Goal::deserialize(goal).ok());
+                    let goal = event.data.get("goal").and_then(|goal| Goal::deserialize(goal).ok());
                     tracker.set(&tui, goal);
                 }
                 _ => {}
@@ -167,38 +150,30 @@ impl Tracker {
     fn load(&self, tui: &Tui) {
         let turn = self.turn.get() + 1;
         self.turn.set(turn);
-        let directory = tui.data.read(|state| {
-            state
-                .session(&self.session)
-                .map(|session| session.location.directory.0.clone())
-        });
+        let directory =
+            tui.data.read(|state| state.session(&self.session).map(|session| session.location.directory.0.clone()));
         let input = RpcCallInput {
             rpc_id: RPC.to_owned(),
             method: "get".to_owned(),
-            location: directory.map(|directory| LocationQueryInput {
-                directory: Some(directory),
-            }),
+            location: directory.map(|directory| LocationQueryInput { directory: Some(directory) }),
             input: Some(json!({ "sessionID": self.session.0 })),
         };
         let client = tui.data.client().clone();
         let weak = self.this.clone();
-        tui.app.spawn(
-            async move { client.rpc_call(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(tracker) = weak.upgrade() else {
-                    return;
-                };
-                let Some(tui) = tracker.tui.upgrade() else {
-                    return;
-                };
-                let Ok(output) = result else { return };
-                if tracker.turn.get() != turn {
-                    return;
-                }
-                let goal = output.output.and_then(|goal| Goal::deserialize(goal).ok());
-                tracker.set(&tui, goal);
-            },
-        );
+        tui.app.spawn(async move { client.rpc_call(&input, &RequestOptions::default()).await }, move |_, result| {
+            let Some(tracker) = weak.upgrade() else {
+                return;
+            };
+            let Some(tui) = tracker.tui.upgrade() else {
+                return;
+            };
+            let Ok(output) = result else { return };
+            if tracker.turn.get() != turn {
+                return;
+            }
+            let goal = output.output.and_then(|goal| Goal::deserialize(goal).ok());
+            tracker.set(&tui, goal);
+        });
     }
 
     fn set(&self, tui: &Tui, goal: Option<Goal>) {
@@ -237,9 +212,7 @@ fn label(goal: &Goal) -> &'static str {
 pub fn status(tui: &Tui, tracker: &Rc<Tracker>, goal: &Goal) -> View {
     let theme = tui.page();
     let rest = color(&theme, goal);
-    let text = Text::new(&tui.app, format!("◎ {}", label(goal)))
-        .fg(rest)
-        .wrap(WrapMode::None);
+    let text = Text::new(&tui.app, format!("◎ {}", label(goal))).fg(rest).wrap(WrapMode::None);
     let hover = text.clone();
     let base = theme.text.base;
     text.on_hover(move |cx, hovered| {
@@ -265,10 +238,7 @@ pub fn status(tui: &Tui, tracker: &Rc<Tracker>, goal: &Goal) -> View {
 /// `showGoal`: the dialog, or how to start a goal.
 pub fn open(tui: &Tui, tracker: &Tracker) {
     if tracker.goal().is_none() {
-        tui.toasts.show(ToastOptions::new(
-            Variant::Info,
-            "No goal is set. Start one with /goal <objective>.",
-        ));
+        tui.toasts.show(ToastOptions::new(Variant::Info, "No goal is set. Start one with /goal <objective>."));
         return;
     }
     show(tui, tracker);
@@ -307,14 +277,11 @@ fn show(tui: &Tui, tracker: &Tracker) {
             primary.push(action("clear", "x", &clear));
             let bind = |key: &str, title: &str, enabled: bool, run: &Rc<dyn Fn()>| {
                 let run = run.clone();
-                TuiCommand::inline(key, move |_, _| run())
-                    .title(title)
-                    .group("Dialog")
-                    .enabled(if enabled {
-                        Condition::Always
-                    } else {
-                        Condition::Never
-                    })
+                TuiCommand::inline(key, move |_, _| run()).title(title).group("Dialog").enabled(if enabled {
+                    Condition::Always
+                } else {
+                    Condition::Never
+                })
             };
             cx.layer(KeymapLayer {
                 commands: vec![
@@ -329,11 +296,8 @@ fn show(tui: &Tui, tracker: &Tracker) {
                 Status::Paused => "Paused",
                 Status::Complete => "Met",
             };
-            let details = View::new(app).child(
-                &Text::new(app, format!("◎ {state}"))
-                    .fg(color(theme, &goal))
-                    .wrap(WrapMode::None),
-            );
+            let details = View::new(app)
+                .child(&Text::new(app, format!("◎ {state}")).fg(color(theme, &goal)).wrap(WrapMode::None));
             if let Some(reason) = &goal.reason {
                 details.add(&Text::new(app, reason.clone()).fg(theme.text.muted));
             }
@@ -341,28 +305,11 @@ fn show(tui: &Tui, tracker: &Tracker) {
                 .gap(1)
                 .child(&Text::new(app, goal.objective.clone()).fg(theme.text.base))
                 .child(&details);
-            let header = dialog::header(
-                cx,
-                HeaderProps {
-                    title: "Goal".to_owned(),
-                    ..HeaderProps::default()
-                },
-            );
-            dialog::layout(
-                cx,
-                &header,
-                &body,
-                Some(FooterProps {
-                    primary,
-                    ..FooterProps::default()
-                }),
-            )
+            let header = dialog::header(cx, HeaderProps { title: "Goal".to_owned(), ..HeaderProps::default() });
+            dialog::layout(cx, &header, &body, Some(FooterProps { primary, ..FooterProps::default() }))
         },
         None,
-        DialogOptions {
-            key: Some(DIALOG.to_owned()),
-            ..DialogOptions::default()
-        },
+        DialogOptions { key: Some(DIALOG.to_owned()), ..DialogOptions::default() },
     );
 }
 
@@ -379,20 +326,10 @@ fn command(tui: &Tui, session: &SessionID, text: &str) {
         ..SessionCommandInput::default()
     };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_command(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let (Err(error), Some(tui)) = (result, weak.upgrade()) else {
-                return;
-            };
-            tui.toasts.show(
-                ToastOptions::new(Variant::Error, error.to_string())
-                    .title("Failed to update the goal"),
-            );
-        },
-    );
+    tui.app.spawn(async move { client.session_command(&input, &RequestOptions::default()).await }, move |_, result| {
+        let (Err(error), Some(tui)) = (result, weak.upgrade()) else {
+            return;
+        };
+        tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title("Failed to update the goal"));
+    });
 }

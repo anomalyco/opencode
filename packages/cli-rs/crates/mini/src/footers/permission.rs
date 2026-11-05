@@ -85,10 +85,7 @@ impl State {
         if choices.is_empty() {
             return;
         }
-        let index = choices
-            .iter()
-            .position(|choice| *choice == self.selected)
-            .unwrap_or(0);
+        let index = choices.iter().position(|choice| *choice == self.selected).unwrap_or(0);
         let len = choices.len();
         self.selected = choices[(index + if forward { 1 } else { len - 1 }) % len];
     }
@@ -145,10 +142,7 @@ impl State {
 
 fn reply(decision: PermissionReply, message: &str) -> Reply {
     let message = message.trim();
-    Reply {
-        decision,
-        message: (!message.is_empty()).then(|| message.to_owned()),
-    }
+    Reply { decision, message: (!message.is_empty()).then(|| message.to_owned()) }
 }
 
 /// A request and its tool call's input and metadata once it stopped streaming (`MiniPermissionRequest`).
@@ -226,12 +220,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     let compact = width < 56 || body.height < 12;
     let stage = body.state.stage;
     let busy = body.state.submitting;
-    let saves = body
-        .request
-        .info
-        .save
-        .as_ref()
-        .is_some_and(|save| !save.is_empty());
+    let saves = body.request.info.save.as_ref().is_some_and(|save| !save.is_empty());
     let choices = body.state.choices(saves);
     root.clear();
     root.bg(theme.surface);
@@ -252,35 +241,22 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         .padding_edge(Edge::Bottom, pad_y)
         .gap(gap)
         .child(
-            &Text::new(
-                app,
-                vec![
-                    (if body.mono { "! " } else { "△ " }).fg(theme.permission),
-                    title.fg(theme.text),
-                ],
-            )
-            .height(1)
-            .wrap(WrapMode::None)
-            .truncate(true),
+            &Text::new(app, vec![(if body.mono { "! " } else { "△ " }).fg(theme.permission), title.fg(theme.text)])
+                .height(1)
+                .wrap(WrapMode::None)
+                .truncate(true),
         );
     if !compact && stage == Stage::Reject {
         header.add(&Text::new(app, "Tell OpenCode what to do differently").fg(theme.muted));
     }
     root.add(&header);
     let waiting = || {
-        Text::new(
-            app,
-            if compact {
-                "Waiting…"
-            } else {
-                "Waiting for permission event…"
-            },
-        )
-        .fg(theme.running)
-        .height(1)
-        .wrap(WrapMode::None)
-        .truncate(true)
-        .shrink(0.0)
+        Text::new(app, if compact { "Waiting…" } else { "Waiting for permission event…" })
+            .fg(theme.running)
+            .height(1)
+            .wrap(WrapMode::None)
+            .truncate(true)
+            .shrink(0.0)
     };
 
     if stage == Stage::Reject {
@@ -296,21 +272,12 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
             .focused_colors(theme.formfield_focused_text, theme.formfield_focused_bg)
             .cursor_color(theme.formfield_focused_text);
         field.set_text(&body.state.message);
-        let holder = View::new(app)
-            .grow(1.0)
-            .shrink(1.0)
-            .basis(Length::Auto)
-            .min_width(0)
-            .child(&field);
+        let holder = View::new(app).grow(1.0).shrink(1.0).basis(Length::Auto).min_width(0).child(&field);
         if !wide {
             holder.width(Length::percent(100.0));
         }
         let controls = View::new(app)
-            .direction(if wide {
-                FlexDirection::Row
-            } else {
-                FlexDirection::Column
-            })
+            .direction(if wide { FlexDirection::Row } else { FlexDirection::Column })
             .align_items(if wide { Align::Center } else { Align::Stretch })
             .justify(Justify::SpaceBetween)
             .bg(theme.line)
@@ -325,16 +292,10 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
             controls.add(&waiting());
         } else {
             let hint = |key: &str, label: &str| {
-                Text::new(
-                    app,
-                    vec![
-                        format!("{key} ").fg(theme.text),
-                        label.to_owned().fg(theme.muted),
-                    ],
-                )
-                .height(1)
-                .wrap(WrapMode::None)
-                .shrink(0.0)
+                Text::new(app, vec![format!("{key} ").fg(theme.text), label.to_owned().fg(theme.muted)])
+                    .height(1)
+                    .wrap(WrapMode::None)
+                    .shrink(0.0)
             };
             controls.add(
                 &View::new(app)
@@ -356,10 +317,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 .justify(Justify::End)
                 .child(&controls),
         );
-        return Painted {
-            scroll: None,
-            field: Some(field),
-        };
+        return Painted { scroll: None, field: Some(field) };
     }
 
     let (frame, scroller) = Scroller::new(app, theme, !body.mono, true);
@@ -369,17 +327,9 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         .content_view()
         .padding_edge(Edge::Left, if compact { 0 } else { 1 })
         .padding_edge(Edge::Right, if body.mono { 0 } else { 1 });
-    let content = View::new(app)
-        .column()
-        .width(Length::percent(100.0))
-        .shrink(0.0)
-        .gap(gap);
+    let content = View::new(app).column().width(Length::percent(100.0)).shrink(0.0).gap(gap);
     let line = |text: String, color: Color| {
-        Text::new(app, text)
-            .fg(color)
-            .wrap(WrapMode::Word)
-            .width(Length::percent(100.0))
-            .shrink(0.0)
+        Text::new(app, text).fg(color).wrap(WrapMode::Word).width(Length::percent(100.0)).shrink(0.0)
     };
     if stage == Stage::Permission {
         let info = body.info;
@@ -389,15 +339,9 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 .padding_edge(Edge::Left, if compact { 0 } else { 1 })
                 .shrink(0.0)
                 .child(
-                    &Text::new(
-                        app,
-                        vec![
-                            format!("{} ", info.icon).fg(theme.muted),
-                            info.title.clone().fg(theme.text),
-                        ],
-                    )
-                    .wrap(WrapMode::Word)
-                    .width(Length::percent(100.0)),
+                    &Text::new(app, vec![format!("{} ", info.icon).fg(theme.muted), info.title.clone().fg(theme.text)])
+                        .wrap(WrapMode::Word)
+                        .width(Length::percent(100.0)),
                 ),
         );
         // M.4 draws diffs; until then the diff and the patch show as text.
@@ -408,11 +352,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         } else if info.lines.is_empty() {
             content.add(&line("No diff provided".to_owned(), theme.muted));
         } else {
-            let lines = View::new(app)
-                .column()
-                .width(Length::percent(100.0))
-                .shrink(0.0)
-                .gap(gap);
+            let lines = View::new(app).column().width(Length::percent(100.0)).shrink(0.0).gap(gap);
             for text in &info.lines {
                 lines.add(&line(text.clone(), theme.text));
             }
@@ -445,25 +385,12 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         format!(
             "{} select  enter confirm  esc {}",
             if body.mono { "left/right" } else { "⇆" },
-            if stage == Stage::Always {
-                "cancel"
-            } else {
-                "reject"
-            }
+            if stage == Stage::Always { "cancel" } else { "reject" }
         )
     };
-    let controls_width = choices
-        .iter()
-        .map(|choice| choice.label().width() + 3)
-        .sum::<usize>()
-        .saturating_sub(1);
-    let inline = controls_width + hint_text.width()
-        < usize::from(width).saturating_sub(if compact { 0 } else { 5 });
-    let buttons = View::new(app)
-        .row()
-        .flex_wrap(Wrap::Wrap)
-        .column_gap(1)
-        .shrink(0.0);
+    let controls_width = choices.iter().map(|choice| choice.label().width() + 3).sum::<usize>().saturating_sub(1);
+    let inline = controls_width + hint_text.width() < usize::from(width).saturating_sub(if compact { 0 } else { 5 });
+    let buttons = View::new(app).row().flex_wrap(Wrap::Wrap).column_gap(1).shrink(0.0);
     if inline {
         buttons.width(controls_width as u32);
     } else {
@@ -471,11 +398,8 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     }
     for choice in &choices {
         let selected = *choice == body.state.selected;
-        let mut label = choice.label().fg(if selected {
-            theme.action_focused_text
-        } else {
-            theme.action_secondary_text
-        });
+        let mut label =
+            choice.label().fg(if selected { theme.action_focused_text } else { theme.action_secondary_text });
         if selected && body.mono {
             label = label.inverse();
         }
@@ -485,20 +409,12 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 .height(1)
                 .shrink(0.0)
                 .padding_x(1)
-                .bg(if selected {
-                    theme.action_focused_bg
-                } else {
-                    Color::TRANSPARENT
-                })
+                .bg(if selected { theme.action_focused_bg } else { Color::TRANSPARENT })
                 .child(&Text::new(app, vec![label]).wrap(WrapMode::None)),
         );
     }
     let controls = View::new(app)
-        .direction(if inline {
-            FlexDirection::Row
-        } else {
-            FlexDirection::Column
-        })
+        .direction(if inline { FlexDirection::Row } else { FlexDirection::Column })
         .justify(Justify::SpaceBetween)
         .width(Length::percent(100.0))
         .gap(gap)
@@ -521,26 +437,13 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 "enter".fg(theme.text),
                 " confirm  ".fg(theme.muted),
                 "esc".fg(theme.text),
-                (if stage == Stage::Always {
-                    " cancel"
-                } else {
-                    " reject"
-                })
-                .fg(theme.muted),
+                (if stage == Stage::Always { " cancel" } else { " reject" }).fg(theme.muted),
             ]
         };
-        controls.add(
-            &Text::new(app, spans)
-                .height(1)
-                .wrap(WrapMode::None)
-                .shrink(0.0),
-        );
+        controls.add(&Text::new(app, spans).height(1).wrap(WrapMode::None).shrink(0.0));
     }
     root.add(&controls);
-    Painted {
-        scroll: Some(scroller),
-        field: None,
-    }
+    Painted { scroll: Some(scroller), field: None }
 }
 
 #[cfg(test)]
@@ -556,53 +459,26 @@ mod tests {
         assert_eq!(state.selected, Choice::Reject);
         state.shift(true, &choices);
         assert_eq!(state.selected, Choice::Once);
-        assert_eq!(
-            state.clone().run(Choice::Once).unwrap().decision,
-            PermissionReply::Once
-        );
+        assert_eq!(state.clone().run(Choice::Once).unwrap().decision, PermissionReply::Once);
 
         assert_eq!(state.run(Choice::Always), None);
-        assert_eq!(
-            (state.stage, state.selected),
-            (Stage::Always, Choice::Confirm)
-        );
+        assert_eq!((state.stage, state.selected), (Stage::Always, Choice::Confirm));
         state.escape();
-        assert_eq!(
-            (state.stage, state.selected),
-            (Stage::Permission, Choice::Always)
-        );
+        assert_eq!((state.stage, state.selected), (Stage::Permission, Choice::Always));
         state.run(Choice::Always);
-        assert_eq!(
-            state.run(Choice::Confirm).unwrap().decision,
-            PermissionReply::Always
-        );
+        assert_eq!(state.run(Choice::Confirm).unwrap().decision, PermissionReply::Always);
         assert_eq!(state.run(Choice::Cancel), None);
         assert_eq!(state.stage, Stage::Permission);
 
         state.escape();
-        assert_eq!(
-            (state.stage, state.selected),
-            (Stage::Reject, Choice::Reject)
-        );
+        assert_eq!((state.stage, state.selected), (Stage::Reject, Choice::Reject));
         state.message = "  use rg  ".into();
-        assert_eq!(
-            state.reject(),
-            Some(Reply {
-                decision: PermissionReply::Reject,
-                message: Some("use rg".into())
-            })
-        );
+        assert_eq!(state.reject(), Some(Reply { decision: PermissionReply::Reject, message: Some("use rg".into()) }));
         state.cancel();
-        assert_eq!(
-            (state.stage, state.selected),
-            (Stage::Permission, Choice::Reject)
-        );
+        assert_eq!((state.stage, state.selected), (Stage::Permission, Choice::Reject));
         state.submitting = true;
         assert_eq!(state.reject(), None);
         assert_eq!(state.run(Choice::Once), None);
-        assert_eq!(
-            State::new("per_2").choices(false),
-            vec![Choice::Once, Choice::Reject]
-        );
+        assert_eq!(State::new("per_2").choices(false), vec![Choice::Once, Choice::Reject]);
     }
 }

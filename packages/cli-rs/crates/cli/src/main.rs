@@ -70,10 +70,7 @@ fn main() -> ExitCode {
     let result = match &cli.global {
         // Effect CLI runs the first action flag given, in this order, instead of the command.
         global if global.version => help::version(),
-        args::GlobalArgs {
-            completions: Some(shell),
-            ..
-        } => help::completions(*shell),
+        args::GlobalArgs { completions: Some(shell), .. } => help::completions(*shell),
         global => {
             if global.print_logs {
                 set_print_logs();
@@ -83,10 +80,7 @@ fn main() -> ExitCode {
             signals::install();
             let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
             let args = serde_json::to_string(
-                &std::env::args_os()
-                    .skip(1)
-                    .map(|arg| arg.to_string_lossy().into_owned())
-                    .collect::<Vec<_>>(),
+                &std::env::args_os().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>(),
             )
             .unwrap_or_default();
             log::info!(
@@ -98,11 +92,7 @@ fn main() -> ExitCode {
                 "cli starting"
             );
             let result = commands::run(&commands::Context { server }, &cli);
-            if let Some(error) = result
-                .as_ref()
-                .err()
-                .filter(|error| error.downcast_ref::<output::Exit>().is_none())
-            {
+            if let Some(error) = result.as_ref().err().filter(|error| error.downcast_ref::<output::Exit>().is_none()) {
                 log::error!(cause = format!("{error:#}").as_str(), args = args.as_str(); "cli process failed");
             }
             result

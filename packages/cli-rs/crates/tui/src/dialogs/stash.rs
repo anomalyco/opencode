@@ -19,11 +19,7 @@ pub type OnSelect = Rc<dyn Fn(&Value)>;
 
 /// Opens the dialog (`prompt.stash.list`).
 pub fn show(tui: &Tui, on_select: OnSelect) {
-    let list = Rc::new(List {
-        tui: tui.weak(),
-        select: RefCell::new(None),
-        to_delete: Cell::new(None),
-    });
+    let list = Rc::new(List { tui: tui.weak(), select: RefCell::new(None), to_delete: Cell::new(None) });
     let built = list.clone();
     tui.dialogs.replace(
         move |cx| {
@@ -72,10 +68,7 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
             view
         },
         None,
-        DialogOptions {
-            size: DialogSize::Medium,
-            key: None,
-        },
+        DialogOptions { size: DialogSize::Medium, key: None },
     );
 }
 
@@ -104,15 +97,10 @@ impl List {
             .map(|(index, entry)| {
                 let text = entry["prompt"]["text"].as_str().unwrap_or_default();
                 let lines = text.matches('\n').count() + 1;
-                let title = if deleting == Some(index) {
-                    format!("Press {key} again to confirm")
-                } else {
-                    preview(text)
-                };
-                let mut option = SelectOption::new(title, index).description(relative_time(
-                    entry["timestamp"].as_f64().unwrap_or(0.0),
-                    now,
-                ));
+                let title =
+                    if deleting == Some(index) { format!("Press {key} again to confirm") } else { preview(text) };
+                let mut option = SelectOption::new(title, index)
+                    .description(relative_time(entry["timestamp"].as_f64().unwrap_or(0.0), now));
                 if lines > 1 {
                     option.footer = Some(format!("~{lines} lines"));
                 }

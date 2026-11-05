@@ -29,9 +29,7 @@ pub fn plugin() -> Definition<Tui> {
                 dispose.dispose(&tui);
             }
         });
-        cx.slot(Placement::append(slot::PROMPT_FOOTER), move |tui, input| {
-            Box::new(Footer::new(tui, &goals, input))
-        });
+        cx.slot(Placement::append(slot::PROMPT_FOOTER), move |tui, input| Box::new(Footer::new(tui, &goals, input)));
     })
 }
 
@@ -71,13 +69,8 @@ struct Live {
 
 impl Footer {
     fn new(tui: &Tui, goals: &Goals, input: &SlotInput) -> Self {
-        let prompt = input
-            .prompt
-            .clone()
-            .unwrap_or(opencode_plugin::slot::PromptFooter {
-                shell: false,
-                show_details: true,
-            });
+        let prompt =
+            input.prompt.clone().unwrap_or(opencode_plugin::slot::PromptFooter { shell: false, show_details: true });
         let session = input.session_id.clone().map(SessionID);
         let inner = Rc::new_cyclic(|this: &Weak<Inner>| {
             let goal = session.clone().map(|session| {
@@ -131,8 +124,7 @@ impl Inner {
                     Some(_) => {
                         let cost = state.cost(session);
                         [
-                            session_usage(state, session)
-                                .map(|usage| format_usage(usage.tokens, usage.percent)),
+                            session_usage(state, session).map(|usage| format_usage(usage.tokens, usage.percent)),
                             (cost > 0.0).then(|| money(cost)),
                         ]
                         .into_iter()
@@ -158,14 +150,7 @@ impl Inner {
         let (usage, shortcuts) = if status.is_empty() {
             (false, width >= 44)
         } else {
-            layout(
-                i64::from(width) - 8,
-                &status,
-                commands
-                    .as_ref()
-                    .map(|key| format!("{key} commands"))
-                    .as_slice(),
-            )
+            layout(i64::from(width) - 8, &status, commands.as_ref().map(|key| format!("{key} commands")).as_slice())
         };
         Model {
             width,
@@ -196,19 +181,9 @@ impl Inner {
         let app = &tui.app;
         let root = &self.root;
         if self.shell {
-            let label = if model.width < 44 {
-                "shell"
-            } else {
-                "exit shell mode"
-            };
+            let label = if model.width < 44 { "shell" } else { "exit shell mode" };
             root.shrink(0.0);
-            root.add(
-                &Text::new(
-                    app,
-                    vec!["esc ".fg(theme.text.base), label.fg(theme.text.muted)],
-                )
-                .shrink(0.0),
-            );
+            root.add(&Text::new(app, vec!["esc ".fg(theme.text.base), label.fg(theme.text.muted)]).shrink(0.0));
             return;
         }
         let details = self.show_details;
@@ -220,15 +195,9 @@ impl Inner {
                     .wrap(WrapMode::None)
                     .shrink(0.0);
             }
-            Text::new(
-                app,
-                vec![
-                    format!("{key} ").fg(theme.text.base),
-                    label.fg(theme.text.muted),
-                ],
-            )
-            .wrap(WrapMode::None)
-            .shrink(0.0)
+            Text::new(app, vec![format!("{key} ").fg(theme.text.base), label.fg(theme.text.muted)])
+                .wrap(WrapMode::None)
+                .shrink(0.0)
         };
         let busy = model.goal.is_some() || model.live.is_some() || !model.status.is_empty();
         if busy {
@@ -240,21 +209,12 @@ impl Inner {
             }
             if let (Some(goal), Some(tracker)) = (&model.goal, &self.goal) {
                 if model.live.is_some() {
-                    status.add(
-                        &Text::new(app, " · ")
-                            .fg(theme.text.muted)
-                            .wrap(WrapMode::None)
-                            .shrink(0.0),
-                    );
+                    status.add(&Text::new(app, " · ").fg(theme.text.muted).wrap(WrapMode::None).shrink(0.0));
                 }
                 status.add(&goal::status(tui, tracker, goal));
             }
             if details && model.usage {
-                let lead = if model.live.is_some() || model.goal.is_some() {
-                    " · "
-                } else {
-                    ""
-                };
+                let lead = if model.live.is_some() || model.goal.is_some() { " · " } else { "" };
                 status.add(
                     &Text::new(app, format!("{lead}{}", model.status.join(" · ")))
                         .fg(theme.text.muted)
@@ -283,15 +243,9 @@ fn live_view(tui: &Tui, live: &Live) -> View {
     if let Some(key) = &live.key {
         spans.push(format!("{key} ").fg(theme.text.base));
     }
-    let parts: Vec<&str> = [&live.subagents, &live.shells]
-        .into_iter()
-        .flatten()
-        .map(String::as_str)
-        .collect();
+    let parts: Vec<&str> = [&live.subagents, &live.shells].into_iter().flatten().map(String::as_str).collect();
     spans.push(parts.join(" · ").into());
-    let text = Text::new(app, spans)
-        .fg(theme.text.muted)
-        .wrap(WrapMode::None);
+    let text = Text::new(app, spans).fg(theme.text.muted).wrap(WrapMode::None);
     let hover = text.clone();
     let (base, muted) = (theme.text.base, theme.text.muted);
     text.on_hover(move |cx, hovered| {

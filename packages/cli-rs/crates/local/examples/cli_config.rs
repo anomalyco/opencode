@@ -14,10 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let text = fs::read_to_string(&file).unwrap_or_default();
     let info = cli_config::decode_text(&text).unwrap_or_default();
     let resolved = Resolved::new(info.clone(), |name| std::env::var(name).ok());
-    let keys: Vec<String> = info
-        .to_value()
-        .as_object()
-        .map_or(Vec::new(), |map| map.keys().cloned().collect());
+    let keys: Vec<String> = info.to_value().as_object().map_or(Vec::new(), |map| map.keys().cloned().collect());
     println!("file:      {} ({} bytes)", file.display(), text.len());
     // Compare with sha1(JSON.stringify(decoded)) on the TypeScript side.
     let decoded = opencode_local::jsonc::stringify(&info.to_value());
@@ -30,11 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("keybinds:  {} overrides", resolved.keybinds().len());
     println!("leader:    {:?}", resolved.leader_timeout);
-    println!(
-        "tabs:      {} enabled={}",
-        resolved.tabs.mode.as_str(),
-        resolved.tabs.enabled
-    );
+    println!("tabs:      {} enabled={}", resolved.tabs.mode.as_str(), resolved.tabs.enabled);
 
     let temp = tempfile::tempdir()?;
     let paths = Paths::from_vars(|name| match name {
@@ -59,10 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for line in updated.lines().filter(|line| !before.contains(line)) {
         println!("  + {line}");
     }
-    for line in before
-        .iter()
-        .filter(|line| !updated.lines().any(|l| l == **line))
-    {
+    for line in before.iter().filter(|line| !updated.lines().any(|l| l == **line)) {
         println!("  - {line}");
     }
     Ok(())

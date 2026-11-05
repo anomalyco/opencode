@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    LocationQueryInput, SessionMessageShell, SessionMessageShellExit, SessionMessageShellStatus,
-    ShellID, ShellOutputInput,
+    LocationQueryInput, SessionMessageShell, SessionMessageShellExit, SessionMessageShellStatus, ShellID,
+    ShellOutputInput,
 };
 use opencode_store::Data;
 use opencode_ui::motion::Spinner;
@@ -78,14 +78,8 @@ impl Shell {
         let command = Text::new(cx.app, "").fg(theme.text.base);
         let header = View::new(cx.app).column();
         let output = Text::new(cx.app, "").fg(theme.text.muted).visible(false);
-        let body = View::new(cx.app)
-            .column()
-            .gap(1)
-            .child(&header)
-            .child(&output);
-        let error = Text::new(cx.app, "")
-            .fg(theme.text.feedback.error.base)
-            .visible(false);
+        let body = View::new(cx.app).column().gap(1).child(&header).child(&output);
+        let error = Text::new(cx.app, "").fg(theme.text.feedback.error.base).visible(false);
         // `BlockTool`: a `┃` in the page color on the raised surface.
         let root = View::new(cx.app)
             .column()
@@ -133,11 +127,7 @@ impl Shell {
             let expanded = !inner.expanded.get();
             inner.expanded.set(expanded);
             if expanded {
-                let background = inner
-                    .props
-                    .borrow()
-                    .as_ref()
-                    .is_some_and(|props| props.background);
+                let background = inner.props.borrow().as_ref().is_some_and(|props| props.background);
                 inner.load(!background);
             }
             inner.render();
@@ -157,9 +147,7 @@ impl Shell {
                 Some(SessionMessageShellExit::Number(code)) if *code != 0.0 => {
                     Some(format!("Command exited with code {code}"))
                 }
-                Some(SessionMessageShellExit::String(code)) => {
-                    Some(format!("Command exited with code {code}"))
-                }
+                Some(SessionMessageShellExit::String(code)) => Some(format!("Command exited with code {code}")),
                 _ => None,
             },
         };
@@ -172,9 +160,7 @@ impl Shell {
             error,
             background: shell.is_some(),
             // A session can move while its shell still runs in the original location.
-            location: shell
-                .map(|shell| shell.location.directory.clone())
-                .or_else(|| cx.directory.map(str::to_owned)),
+            location: shell.map(|shell| shell.location.directory.clone()).or_else(|| cx.directory.map(str::to_owned)),
             width: cx.content_width(),
         };
         if self.0.props.borrow().as_ref() == Some(&props) {
@@ -248,9 +234,7 @@ impl Inner {
                     .shell_output(
                         &ShellOutputInput {
                             id: props.shell.clone(),
-                            location: props.location.map(|directory| LocationQueryInput {
-                                directory: Some(directory),
-                            }),
+                            location: props.location.map(|directory| LocationQueryInput { directory: Some(directory) }),
                             cursor: Some(cursor),
                             limit: Some(LIMIT as i64),
                         },
@@ -316,11 +300,7 @@ impl Inner {
                         read.output.as_str()
                     };
                     let text = strip_ansi(current.trim());
-                    if read.truncated {
-                        format!("[earlier output omitted]\n{text}")
-                    } else {
-                        text
-                    }
+                    if read.truncated { format!("[earlier output omitted]\n{text}") } else { text }
                 }
             }
         };
@@ -328,11 +308,7 @@ impl Inner {
         let max_chars = MAX_LINES * 20.max(width.saturating_sub(6 + if running { 2 } else { 0 }));
         let input = format!("{}{}", if running { "" } else { "$ " }, props.command);
         let collapsed = collapse_shell_output(&input, &output, MAX_LINES, max_chars);
-        let (input, output) = if expanded {
-            (input, output)
-        } else {
-            (collapsed.input, collapsed.output)
-        };
+        let (input, output) = if expanded { (input, output) } else { (collapsed.input, collapsed.output) };
         // A shell message always has an ID, so its output can always open.
         self.expandable.set(true);
         self.paint_background();
@@ -343,22 +319,14 @@ impl Inner {
                 let row = View::new(&self.app)
                     .row()
                     .gap(1)
-                    .child(
-                        &Spinner::new(&self.app)
-                            .color(theme.text.base)
-                            .animations(self.animations),
-                    )
+                    .child(&Spinner::new(&self.app).color(theme.text.base).animations(self.animations))
                     .child(&self.command.clone().grow(1.0).min_width(0));
                 self.header.add(&row);
             } else {
                 self.header.add(&self.command);
             }
         }
-        self.command.wrap(if expanded {
-            WrapMode::Word
-        } else {
-            WrapMode::Char
-        });
+        self.command.wrap(if expanded { WrapMode::Word } else { WrapMode::Char });
         if expanded {
             self.command.max_height(Length::Undefined);
         } else {
@@ -375,11 +343,7 @@ impl Inner {
 
     fn paint_background(&self) {
         let raised = self.theme.background.raised.base;
-        self.root.bg(if self.hover.get() && self.expandable.get() {
-            self.theme.decrease(&raised, 1)
-        } else {
-            raised
-        });
+        self.root.bg(if self.hover.get() && self.expandable.get() { self.theme.decrease(&raised, 1) } else { raised });
     }
 }
 
@@ -390,63 +354,37 @@ pub struct Collapsed {
 }
 
 /// `collapseShellOutput`: the command in at most two lines, then the output's tail in what is left.
-pub fn collapse_shell_output(
-    input: &str,
-    output: &str,
-    max_lines: usize,
-    max_chars: usize,
-) -> Collapsed {
+pub fn collapse_shell_output(input: &str, output: &str, max_lines: usize, max_chars: usize) -> Collapsed {
     if input.is_empty() {
         let overflow = collapse_tool_output(output, max_lines, max_chars).1;
         return Collapsed {
             input: String::new(),
-            output: if overflow {
-                collapse_tail(output, max_lines, max_chars)
-            } else {
-                output.to_owned()
-            },
+            output: if overflow { collapse_tail(output, max_lines, max_chars) } else { output.to_owned() },
             overflow,
         };
     }
     let line_chars = (max_chars / max_lines.max(1)).max(1);
-    let (command, command_overflow, command_lines) =
-        collapse_command(input, max_lines.min(2), line_chars);
+    let (command, command_overflow, command_lines) = collapse_command(input, max_lines.min(2), line_chars);
     if output.is_empty() {
-        return Collapsed {
-            input: command,
-            output: String::new(),
-            overflow: command_overflow,
-        };
+        return Collapsed { input: command, output: String::new(), overflow: command_overflow };
     }
     let lines = max_lines.saturating_sub(command_lines + 1).max(1);
     let chars = max_chars.saturating_sub(command.chars().count() + 2).max(1);
     let overflow = collapse_tool_output(output, lines, chars).1;
     Collapsed {
         input: command,
-        output: if overflow {
-            collapse_tail(output, lines, chars)
-        } else {
-            output.to_owned()
-        },
+        output: if overflow { collapse_tail(output, lines, chars) } else { output.to_owned() },
         overflow: command_overflow || overflow,
     }
 }
 
 /// `collapseToolOutput`: the first `max_lines` lines and `max_chars` characters, and whether it cut.
-pub(crate) fn collapse_tool_output(
-    output: &str,
-    max_lines: usize,
-    max_chars: usize,
-) -> (String, bool) {
+pub(crate) fn collapse_tool_output(output: &str, max_lines: usize, max_chars: usize) -> (String, bool) {
     let lines: Vec<&str> = output.split('\n').collect();
     if lines.len() <= max_lines && output.chars().count() <= max_chars {
         return (output.to_owned(), false);
     }
-    let mut visible: Vec<String> = lines
-        .iter()
-        .take(max_lines)
-        .map(|line| (*line).to_owned())
-        .collect();
+    let mut visible: Vec<String> = lines.iter().take(max_lines).map(|line| (*line).to_owned()).collect();
     if lines.len() > max_lines
         && let Some(last) = visible.last_mut()
     {
@@ -505,28 +443,17 @@ fn collapse_tail(output: &str, max_lines: usize, max_chars: usize) -> String {
     if lines.len() <= max_lines && output.chars().count() <= max_chars {
         return output.to_owned();
     }
-    let count = lines
-        .len()
-        .saturating_sub(max_lines.saturating_sub(1))
-        .max(1);
-    let label = format!(
-        "({count} earlier {})",
-        if count == 1 { "line" } else { "lines" }
-    );
+    let count = lines.len().saturating_sub(max_lines.saturating_sub(1)).max(1);
+    let label = format!("({count} earlier {})", if count == 1 { "line" } else { "lines" });
     if max_lines <= 1 {
         return label;
     }
-    let preview: Vec<char> = lines[lines.len() - (max_lines - 1).min(lines.len())..]
-        .join("\n")
-        .chars()
-        .collect();
+    let preview: Vec<char> = lines[lines.len() - (max_lines - 1).min(lines.len())..].join("\n").chars().collect();
     let available = max_chars as isize - label.chars().count() as isize - 1;
     if available <= 0 {
         return label;
     }
-    let tail: String = preview[preview.len().saturating_sub(available as usize)..]
-        .iter()
-        .collect();
+    let tail: String = preview[preview.len().saturating_sub(available as usize)..].iter().collect();
     format!("{label}\n{tail}")
 }
 

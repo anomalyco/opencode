@@ -84,9 +84,7 @@ fn handle(tui: &Tui, event: &V2Event) {
             let data = &event.data;
             let mut toast = ToastOptions::new(variant(data.variant.as_str()), data.message.clone());
             toast.title = data.title.clone();
-            toast.duration = data
-                .duration
-                .map(|duration| Duration::from_millis(duration.max(0) as u64));
+            toast.duration = data.duration.map(|duration| Duration::from_millis(duration.max(0) as u64));
             tui.toasts.show(toast);
         }
         V2Event::TuiPromptAppend(event) if here(tui, event.location.as_ref()) => {
@@ -97,18 +95,13 @@ fn handle(tui: &Tui, event: &V2Event) {
             }
         }
         V2Event::SessionExecutionSucceeded(event)
-            if tui.route()
-                == (Route::Session {
-                    id: event.data.session_id.clone(),
-                })
+            if tui.route() == (Route::Session { id: event.data.session_id.clone() })
                 && matches!(tui.local.usage(), Some(Some(_))) =>
         {
             tui.local.load_usage(true);
         }
         V2Event::TuiSessionSelect(event) if here(tui, event.location.as_ref()) => {
-            tui.navigate(Route::Session {
-                id: event.data.session_id.clone(),
-            });
+            tui.navigate(Route::Session { id: event.data.session_id.clone() });
         }
         V2Event::SessionDeleted(event) => {
             let Route::Session { id } = tui.route() else {
@@ -180,14 +173,10 @@ fn mcp_toasts(tui: &Tui) {
         }
         let weak = tui.weak();
         let toast = if status == "needs_auth" {
-            ToastOptions::new(
-                Variant::Warning,
-                format!("Connect \"{name}\" to use its tools."),
-            )
-            .title("MCP server needs authentication")
+            ToastOptions::new(Variant::Warning, format!("Connect \"{name}\" to use its tools."))
+                .title("MCP server needs authentication")
         } else {
-            ToastOptions::new(Variant::Error, "Run /mcps to view details.")
-                .title(format!("MCP server failed: {name}"))
+            ToastOptions::new(Variant::Error, "Run /mcps to view details.").title(format!("MCP server failed: {name}"))
         };
         tui.toasts.show(toast.action("Open MCP servers", move || {
             if let Some(tui) = weak.upgrade() {

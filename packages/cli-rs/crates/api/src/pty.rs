@@ -92,10 +92,7 @@ pub fn decode(text: &str) -> Option<Message> {
             },
         },
         "replay_complete" => Message::ReplayComplete,
-        "resized" => Message::Resized {
-            size: size(&value)?,
-            checkpoint: field("checkpoint")?.as_str()?.to_owned(),
-        },
+        "resized" => Message::Resized { size: size(&value)?, checkpoint: field("checkpoint")?.as_str()?.to_owned() },
         "controller_changed" => Message::ControllerChanged {
             attachment_id: match optional("attachmentID")? {
                 None => None,
@@ -109,12 +106,10 @@ pub fn decode(text: &str) -> Option<Message> {
                 Some(value) => Some(Some(value.as_f64()?)),
             },
         },
-        "title_changed" => Message::TitleChanged {
-            title: field("title")?.as_str()?.to_owned(),
-        },
-        "foreground_process_changed" => Message::ForegroundProcessChanged {
-            process: nullable_string(field("process")?)?,
-        },
+        "title_changed" => Message::TitleChanged { title: field("title")?.as_str()?.to_owned() },
+        "foreground_process_changed" => {
+            Message::ForegroundProcessChanged { process: nullable_string(field("process")?)? }
+        }
         _ => return None,
     };
     Some(message)
@@ -123,10 +118,7 @@ pub fn decode(text: &str) -> Option<Message> {
 /// `{cols, rows}` as JSON numbers. A size beyond `u16` saturates.
 fn size(value: &Value) -> Option<Size> {
     let cell = |name: &str| value.get(name)?.as_f64().map(|number| number as u16);
-    Some(Size {
-        cols: cell("cols")?,
-        rows: cell("rows")?,
-    })
+    Some(Size { cols: cell("cols")?, rows: cell("rows")? })
 }
 
 /// An interaction frame: size only without `data`, an input frame with it (even when empty).
@@ -190,9 +182,7 @@ pub struct Tungstenite;
 impl Connector for Tungstenite {
     fn open(&self, url: Url) -> BoxFuture<Result<Socket, String>> {
         Box::pin(async move {
-            let socket = ws::connect(&url, &[])
-                .await
-                .map_err(|error| error.to_string())?;
+            let socket = ws::connect(&url, &[]).await.map_err(|error| error.to_string())?;
             let (mut sink, mut stream) = socket.split();
             let (socket, mut remote) = pair();
             let deliver = remote.deliver.clone();
@@ -238,11 +228,7 @@ pub struct ConnectInput {
 }
 
 /// Asks for a connect ticket, then opens the socket. Returns the URL it opened, too.
-pub async fn connect(
-    client: &Client,
-    connector: &dyn Connector,
-    input: &ConnectInput,
-) -> Result<(Url, Socket), Error> {
+pub async fn connect(client: &Client, connector: &dyn Connector, input: &ConnectInput) -> Result<(Url, Socket), Error> {
     let token = client
         .experimental_persistent_pty_connect_token(
             &ExperimentalPersistentPtyConnectTokenInput {
@@ -252,22 +238,14 @@ pub async fn connect(
             &RequestOptions::default(),
         )
         .await?;
-    let url = client
-        .transport()
-        .route(url(client.base_url(), input, &token.ticket)?);
-    let socket = connector
-        .open(url.clone())
-        .await
-        .map_err(Error::Transport)?;
+    let url = client.transport().route(url(client.base_url(), input, &token.ticket)?);
+    let socket = connector.open(url.clone()).await.map_err(Error::Transport)?;
     Ok((url, socket))
 }
 
 /// The socket URL, with the query in the TypeScript client's order.
 pub fn url(base: &Url, input: &ConnectInput, ticket: &str) -> Result<Url, Error> {
-    let path = format!(
-        "api/experimental/persistent-pty/{}/connect",
-        crate::client::path_param(&input.pty_id)?
-    );
+    let path = format!("api/experimental/persistent-pty/{}/connect", crate::client::path_param(&input.pty_id)?);
     let cursor = input.cursor.to_string();
     Ok(ws::ticket_url(
         base,
@@ -325,31 +303,13 @@ mod tests {
         assert_eq!(
             messages.into_iter().map(decoded).collect::<Vec<_>>(),
             [
-                Message::Attached {
-                    input_protocol: Some(1.0),
-                    size: SIZE,
-                    role: Some(Role::Controller)
-                },
+                Message::Attached { input_protocol: Some(1.0), size: SIZE, role: Some(Role::Controller) },
                 Message::ReplayComplete,
-                Message::Resized {
-                    size: Size {
-                        cols: 100,
-                        rows: 30
-                    },
-                    checkpoint: "G2M=".into()
-                },
-                Message::ControllerChanged {
-                    attachment_id: Some(Some("attachment-1".into()))
-                },
-                Message::Exited {
-                    exit_code: Some(Some(0.0))
-                },
-                Message::TitleChanged {
-                    title: "vim".into()
-                },
-                Message::ForegroundProcessChanged {
-                    process: Some("vim".into())
-                },
+                Message::Resized { size: Size { cols: 100, rows: 30 }, checkpoint: "G2M=".into() },
+                Message::ControllerChanged { attachment_id: Some(Some("attachment-1".into())) },
+                Message::Exited { exit_code: Some(Some(0.0)) },
+                Message::TitleChanged { title: "vim".into() },
+                Message::ForegroundProcessChanged { process: Some("vim".into()) },
                 Message::ForegroundProcessChanged { process: None },
             ]
             .map(Some)
@@ -358,12 +318,9 @@ mod tests {
 
     #[test]
     fn reads_only_the_size_from_attached_terminal_info_whatever_else_the_server_version_sends() {
-        let attached = |terminal: Value| json!({ "type": "attached", "inputProtocol": 1, "info": terminal, "role": "controller" });
-        let expected = Some(Message::Attached {
-            input_protocol: Some(1.0),
-            size: SIZE,
-            role: Some(Role::Controller),
-        });
+        let attached =
+            |terminal: Value| json!({ "type": "attached", "inputProtocol": 1, "info": terminal, "role": "controller" });
+        let expected = Some(Message::Attached { input_protocol: Some(1.0), size: SIZE, role: Some(Role::Controller) });
         assert_eq!(decoded(attached(info())), expected);
         let mut extra = info();
         extra["userTitle"] = json!("build");
@@ -376,37 +333,21 @@ mod tests {
     fn decodes_minimal_messages_and_the_fields_json_stringify_drops() {
         assert_eq!(
             decoded(json!({ "type": "attached", "info": { "size": { "cols": 80, "rows": 24 } } })),
-            Some(Message::Attached {
-                input_protocol: None,
-                size: SIZE,
-                role: None
-            })
+            Some(Message::Attached { input_protocol: None, size: SIZE, role: None })
         );
-        assert_eq!(
-            decoded(json!({ "type": "replay_complete" })),
-            Some(Message::ReplayComplete)
-        );
+        assert_eq!(decoded(json!({ "type": "replay_complete" })), Some(Message::ReplayComplete));
         assert_eq!(
             decoded(json!({ "type": "controller_changed", "generation": 5 })),
-            Some(Message::ControllerChanged {
-                attachment_id: None
-            })
+            Some(Message::ControllerChanged { attachment_id: None })
         );
         assert_eq!(
             decoded(json!({ "type": "controller_changed", "attachmentID": null })),
-            Some(Message::ControllerChanged {
-                attachment_id: Some(None)
-            })
+            Some(Message::ControllerChanged { attachment_id: Some(None) })
         );
-        assert_eq!(
-            decoded(json!({ "type": "exited", "finalOffset": 512 })),
-            Some(Message::Exited { exit_code: None })
-        );
+        assert_eq!(decoded(json!({ "type": "exited", "finalOffset": 512 })), Some(Message::Exited { exit_code: None }));
         assert_eq!(
             decoded(json!({ "type": "exited", "exitCode": null })),
-            Some(Message::Exited {
-                exit_code: Some(None)
-            })
+            Some(Message::Exited { exit_code: Some(None) })
         );
     }
 
@@ -414,18 +355,13 @@ mod tests {
     fn ignores_fields_it_does_not_know() {
         assert_eq!(
             decoded(json!({ "type": "title_changed", "title": "vim", "extra": true })),
-            Some(Message::TitleChanged {
-                title: "vim".into()
-            })
+            Some(Message::TitleChanged { title: "vim".into() })
         );
     }
 
     #[test]
     fn returns_none_for_unknown_message_types() {
-        assert_eq!(
-            decoded(json!({ "type": "future_message", "value": 1 })),
-            None
-        );
+        assert_eq!(decoded(json!({ "type": "future_message", "value": 1 })), None);
     }
 
     #[test]
@@ -436,11 +372,9 @@ mod tests {
             "null".into(),
             "42".into(),
             json!({ "endOffset": 1 }).to_string(),
-            json!({ "type": "resized", "cols": "100", "rows": 30, "generation": 4, "checkpoint": "" })
-                .to_string(),
+            json!({ "type": "resized", "cols": "100", "rows": 30, "generation": 4, "checkpoint": "" }).to_string(),
             json!({ "type": "resized", "cols": 100, "rows": 30, "generation": 4 }).to_string(),
-            json!({ "type": "attached", "inputProtocol": 1, "role": "controller", "generation": 1 })
-                .to_string(),
+            json!({ "type": "attached", "inputProtocol": 1, "role": "controller", "generation": 1 }).to_string(),
             json!({ "type": "foreground_process_changed" }).to_string(),
         ];
         for input in inputs {
@@ -450,30 +384,12 @@ mod tests {
 
     #[test]
     fn encodes_a_size_only_interaction_frame() {
-        assert_eq!(
-            frame(
-                Size {
-                    cols: 300,
-                    rows: 24
-                },
-                None
-            ),
-            [0, 1, 44, 0, 24]
-        );
+        assert_eq!(frame(Size { cols: 300, rows: 24 }, None), [0, 1, 44, 0, 24]);
     }
 
     #[test]
     fn encodes_an_input_frame_with_its_data() {
-        assert_eq!(
-            frame(
-                Size {
-                    cols: 80,
-                    rows: 513
-                },
-                Some(&[104, 105])
-            ),
-            [1, 0, 80, 2, 1, 104, 105]
-        );
+        assert_eq!(frame(Size { cols: 80, rows: 513 }, Some(&[104, 105])), [1, 0, 80, 2, 1, 104, 105]);
     }
 
     #[test]
@@ -483,12 +399,8 @@ mod tests {
 
     #[test]
     fn the_socket_url_matches_the_typescript_client() {
-        let input = ConnectInput {
-            pty_id: PtyID("pty_1/x".into()),
-            cursor: 128,
-            attachment_id: "att".into(),
-            takeover: true,
-        };
+        let input =
+            ConnectInput { pty_id: PtyID("pty_1/x".into()), cursor: 128, attachment_id: "att".into(), takeover: true };
         let base = Url::parse("https://host/prefix").unwrap();
         assert_eq!(
             url(&base, &input, "tk").unwrap().as_str(),
@@ -506,8 +418,7 @@ mod tests {
             200,
             &json!({ "data": { "ticket": "tk", "expires_in": 30 } }),
         )]);
-        let client =
-            Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
+        let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
         let opened = Arc::new(Mutex::new(None));
         let remote = Arc::new(Mutex::new(None));
         let connector = {
@@ -520,12 +431,8 @@ mod tests {
                 Ok(socket)
             }
         };
-        let input = ConnectInput {
-            pty_id: PtyID("pty_1".into()),
-            cursor: 0,
-            attachment_id: "att".into(),
-            takeover: false,
-        };
+        let input =
+            ConnectInput { pty_id: PtyID("pty_1".into()), cursor: 0, attachment_id: "att".into(), takeover: false };
         let (url, socket) = connect(&client, &connector, &input).await.unwrap();
         assert_eq!(
             url.as_str(),
@@ -535,10 +442,7 @@ mod tests {
         let request = &memory.requests()[0];
         assert_eq!(
             (request.method.as_str(), request.path.as_str()),
-            (
-                "POST",
-                "/api/experimental/persistent-pty/pty_1/connect-token"
-            )
+            ("POST", "/api/experimental/persistent-pty/pty_1/connect-token")
         );
         socket.outgoing.send(frame(SIZE, None)).await.unwrap();
         let mut far = remote.lock().unwrap().take().unwrap();
@@ -552,37 +456,18 @@ mod tests {
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
-            socket
-                .send(ws::Message::text(r#"{"type":"replay_complete"}"#))
-                .await
-                .unwrap();
-            socket
-                .send(ws::Message::binary(vec![104, 105]))
-                .await
-                .unwrap();
+            socket.send(ws::Message::text(r#"{"type":"replay_complete"}"#)).await.unwrap();
+            socket.send(ws::Message::binary(vec![104, 105])).await.unwrap();
             let received = socket.next().await.unwrap().unwrap();
             socket.close(None).await.unwrap();
             received
         });
         let url = Url::parse(&format!("ws://{address}/connect")).unwrap();
         let mut socket = Tungstenite.open(url).await.unwrap();
-        assert_eq!(
-            socket.incoming.recv().await,
-            Some(Incoming::Text(r#"{"type":"replay_complete"}"#.into()))
-        );
-        assert_eq!(
-            socket.incoming.recv().await,
-            Some(Incoming::Binary(vec![104, 105]))
-        );
-        socket
-            .outgoing
-            .send(vec![1, 0, 80, 0, 24, 120])
-            .await
-            .unwrap();
-        assert_eq!(
-            server.await.unwrap(),
-            ws::Message::binary(vec![1, 0, 80, 0, 24, 120])
-        );
+        assert_eq!(socket.incoming.recv().await, Some(Incoming::Text(r#"{"type":"replay_complete"}"#.into())));
+        assert_eq!(socket.incoming.recv().await, Some(Incoming::Binary(vec![104, 105])));
+        socket.outgoing.send(vec![1, 0, 80, 0, 24, 120]).await.unwrap();
+        assert_eq!(server.await.unwrap(), ws::Message::binary(vec![1, 0, 80, 0, 24, 120]));
         assert_eq!(socket.incoming.recv().await, Some(Incoming::Closed));
     }
 }

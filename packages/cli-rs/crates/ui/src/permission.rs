@@ -29,25 +29,14 @@ pub fn presentation(
     let input = normalize_input(canonical, input);
     let mut metadata = dict(tool_metadata);
     if let Some(extra) = request_metadata {
-        metadata.extend(
-            extra
-                .iter()
-                .map(|(key, value)| (key.clone(), value.clone())),
-        );
+        metadata.extend(extra.iter().map(|(key, value)| (key.clone(), value.clone())));
     }
     let text = |map: &Map<String, Value>, key: &str| -> String {
-        map.get(key)
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned()
+        map.get(key).and_then(Value::as_str).unwrap_or_default().to_owned()
     };
     let first = resources.first().cloned().unwrap_or_default();
     let or = |value: String, fallback: &str| {
-        if value.is_empty() {
-            fallback.to_owned()
-        } else {
-            value
-        }
+        if value.is_empty() { fallback.to_owned() } else { value }
     };
     let some = |value: String| (!value.is_empty()).then_some(value);
 
@@ -55,23 +44,12 @@ pub fn presentation(
         "edit" => {
             let file = or(text(&input, "path"), &first);
             let files = metadata.get("files").and_then(Value::as_array);
-            let changed = dict(
-                files
-                    .and_then(|files| files.first())
-                    .unwrap_or(&Value::Null),
-            );
-            let diff = some(or(
-                or(text(&changed, "patch"), &text(&changed, "diff")),
-                &text(&metadata, "diff"),
-            ));
+            let changed = dict(files.and_then(|files| files.first()).unwrap_or(&Value::Null));
+            let diff = some(or(or(text(&changed, "patch"), &text(&changed, "diff")), &text(&metadata, "diff")));
             Presentation {
                 icon: "→",
                 title: format!("Edit {}", format_path(&file)),
-                patch: if diff.is_some() {
-                    None
-                } else {
-                    some(text(&input, "patchText"))
-                },
+                patch: if diff.is_some() { None } else { some(text(&input, "patchText")) },
                 diff,
                 file: Some(file),
                 ..Presentation::default()
@@ -83,9 +61,7 @@ pub fn presentation(
             Presentation {
                 icon: "→",
                 title: format!("{title} {}", format_path(&value)),
-                lines: some(value)
-                    .map(|value| vec![format!("Path: {}", format_path(&value))])
-                    .unwrap_or_default(),
+                lines: some(value).map(|value| vec![format!("Path: {}", format_path(&value))]).unwrap_or_default(),
                 ..Presentation::default()
             }
         }
@@ -95,9 +71,7 @@ pub fn presentation(
             Presentation {
                 icon: "✱",
                 title: format!("{title} \"{pattern}\""),
-                lines: some(pattern)
-                    .map(|pattern| vec![format!("Pattern: {pattern}")])
-                    .unwrap_or_default(),
+                lines: some(pattern).map(|pattern| vec![format!("Pattern: {pattern}")]).unwrap_or_default(),
                 ..Presentation::default()
             }
         }
@@ -129,9 +103,7 @@ pub fn presentation(
             Presentation {
                 icon: "%",
                 title: format!("WebFetch {url}"),
-                lines: some(url)
-                    .map(|url| vec![format!("URL: {url}")])
-                    .unwrap_or_default(),
+                lines: some(url).map(|url| vec![format!("URL: {url}")]).unwrap_or_default(),
                 ..Presentation::default()
             }
         }
@@ -140,14 +112,8 @@ pub fn presentation(
             let title = web_search_provider_label(metadata.get("provider").unwrap_or(&Value::Null));
             Presentation {
                 icon: "◈",
-                title: if query.is_empty() {
-                    title
-                } else {
-                    format!("{title} \"{query}\"")
-                },
-                lines: some(query)
-                    .map(|query| vec![format!("Query: {query}")])
-                    .unwrap_or_default(),
+                title: if query.is_empty() { title } else { format!("{title} \"{query}\"") },
+                lines: some(query).map(|query| vec![format!("Query: {query}")]).unwrap_or_default(),
                 ..Presentation::default()
             }
         }
@@ -155,9 +121,8 @@ pub fn presentation(
             let file = text(&input, "path");
             let operation = or(text(&input, "operation"), "request");
             let number = |key: &str| input.get(key).and_then(finite_number);
-            let position = number("line")
-                .zip(number("character"))
-                .map(|(line, character)| format!("{line}:{character}"));
+            let position =
+                number("line").zip(number("character")).map(|(line, character)| format!("{line}:{character}"));
             let mut title = format!("LSP {operation}");
             let mut lines = Vec::new();
             if input.get("operation").is_some_and(truthy) {
@@ -173,24 +138,13 @@ pub fn presentation(
             if let Some(position) = position {
                 lines.push(format!("Position: {position}"));
             }
-            Presentation {
-                icon: "→",
-                title,
-                lines,
-                ..Presentation::default()
-            }
+            Presentation { icon: "→", title, lines, ..Presentation::default() }
         }
         "external_directory" => {
-            let raw = or(
-                or(text(&metadata, "parentDir"), &text(&metadata, "filepath")),
-                &first,
-            );
+            let raw = or(or(text(&metadata, "parentDir"), &text(&metadata, "filepath")), &first);
             Presentation {
                 icon: "←",
-                title: format!(
-                    "Access external directory {}",
-                    format_path(&wildcard_directory(&raw))
-                ),
+                title: format!("Access external directory {}", format_path(&wildcard_directory(&raw))),
                 lines: resources.iter().map(|item| format!("- {item}")).collect(),
                 ..Presentation::default()
             }
@@ -229,10 +183,7 @@ fn wildcard_directory(value: &str) -> String {
     let separators = |text: &str| !text.is_empty() && text.chars().all(|c| c == '/' || c == '\\');
     let drive_root = {
         let bytes = prefix.as_bytes();
-        bytes.len() == 3
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':'
-            && matches!(bytes[2], b'/' | b'\\')
+        bytes.len() == 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'/' | b'\\')
     };
     if separators(prefix) || drive_root {
         return prefix.to_owned();
@@ -242,16 +193,8 @@ fn wildcard_directory(value: &str) -> String {
 
 fn normalize_input(action: &str, value: &Value) -> Map<String, Value> {
     let mut input = dict(value);
-    let text = |key: &str| {
-        input
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|text| !text.is_empty())
-            .map(str::to_owned)
-    };
-    let path = text("path")
-        .or_else(|| text("filePath"))
-        .or_else(|| text("filepath"));
+    let text = |key: &str| input.get(key).and_then(Value::as_str).filter(|text| !text.is_empty()).map(str::to_owned);
+    let path = text("path").or_else(|| text("filePath")).or_else(|| text("filepath"));
     let agent = text("agent").or_else(|| text("subagent_type"));
     if let Some(path) = path.filter(|_| matches!(action, "read" | "edit" | "list" | "lsp")) {
         input.insert("path".to_owned(), Value::String(path));

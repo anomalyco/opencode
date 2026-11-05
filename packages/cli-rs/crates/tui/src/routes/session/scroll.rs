@@ -49,10 +49,7 @@ impl Controls {
         let app = &tui.app;
         let theme = tui.page();
         let latest_text = Text::new(app, "Jump to latest ↓").fg(theme.text.action.secondary.base);
-        let latest = View::new(app)
-            .padding_edge(Edge::Left, 1)
-            .visible(false)
-            .child(&latest_text);
+        let latest = View::new(app).padding_edge(Edge::Left, 1).visible(false).child(&latest_text);
         transcript.status().add(&latest);
         let slack = View::new(app).shrink(0.0).height(0).visible(false);
         transcript.scroll().add(&slack);
@@ -82,12 +79,8 @@ impl Controls {
     pub fn follow_submits(&self, prompt: &crate::prompt::editor::Prompt) {
         let weak = Rc::downgrade(&self.0);
         prompt.on_submit(move |tui| {
-            let keep = tui
-                .settings
-                .info()
-                .session
-                .and_then(|session| session.submit_scroll)
-                == Some(SubmitScroll::Keep);
+            let keep =
+                tui.settings.info().session.and_then(|session| session.submit_scroll) == Some(SubmitScroll::Keep);
             if let Some(inner) = weak.upgrade().filter(|_| !keep) {
                 inner.to_bottom(tui);
             }
@@ -104,10 +97,8 @@ impl Controls {
         let Some(session) = inner.transcript.session() else {
             return;
         };
-        let Some(anchor) = tui
-            .tabs
-            .scroll_anchor(tui, &session.0)
-            .filter(|anchor| inner.transcript.mount_around(tui, &anchor.row))
+        let Some(anchor) =
+            tui.tabs.scroll_anchor(tui, &session.0).filter(|anchor| inner.transcript.mount_around(tui, &anchor.row))
         else {
             return;
         };
@@ -152,17 +143,12 @@ impl Inner {
             let Some(inner) = weak.upgrade() else { return };
             inner.latest_hover.set(hovered);
             let action = &inner.theme.text.action.secondary;
-            inner
-                .latest_text
-                .fg(if hovered { action.hovered } else { action.base });
+            inner.latest_text.fg(if hovered { action.hovered } else { action.base });
         });
         // The wheel and the content's growth move the view; the label follows after they settle.
         let weak = self.this.clone();
         self.transcript.scroll().on_mouse(move |cx, event| {
-            if !matches!(
-                event.kind,
-                MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
-            ) {
+            if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
                 return;
             }
             let Some(inner) = weak.upgrade() else { return };
@@ -177,30 +163,22 @@ impl Inner {
             });
         });
         let weak = self.this.clone();
-        self.transcript
-            .scroll()
-            .content_view()
-            .on_resize(move |_, _| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.update_away();
-                }
-            });
+        self.transcript.scroll().content_view().on_resize(move |_, _| {
+            if let Some(inner) = weak.upgrade() {
+                inner.update_away();
+            }
+        });
         self.register(tui);
     }
 
     /// `session.scrollbar` and the `scroll` section.
     fn configure(&self, info: &Info) {
         let session = info.session.as_ref();
-        let scrollbar = session
-            .and_then(|session| session.scrollbar)
-            .unwrap_or(false);
+        let scrollbar = session.and_then(|session| session.scrollbar).unwrap_or(false);
         self.scrollbar.set(scrollbar);
         let scroll = self.transcript.scroll();
         scroll.scrollbars(scrollbar);
-        scroll.scrollbar_colors(
-            self.theme.border.base,
-            self.theme.decrease(&self.theme.background.raised.base, 1),
-        );
+        scroll.scrollbar_colors(self.theme.border.base, self.theme.decrease(&self.theme.background.raised.base, 1));
         // The viewport's and the bar's one-cell paddings (`viewportOptions`, `verticalScrollbarOptions`).
         // The wrapper's resizes the viewport, which shows or hides the bar right away.
         let padding = u16::from(scrollbar);
@@ -210,9 +188,7 @@ impl Inner {
         if speed.and_then(|scroll| scroll.acceleration) == Some(true) {
             scroll.scroll_acceleration(MacOsScroll::default());
         } else {
-            let speed = speed
-                .and_then(|scroll| scroll.speed)
-                .map_or(3.0, |speed| speed.0);
+            let speed = speed.and_then(|scroll| scroll.speed).map_or(3.0, |speed| speed.0);
             scroll.scroll_acceleration(Speed(speed));
         }
     }
@@ -241,107 +217,55 @@ impl Inner {
         let grouping = session.grouping != Some(Grouping::None);
         let verbosity = session.verbosity.unwrap_or(Verbosity::Medium);
         let commands = vec![
-            command("session.page.up", "Page up", |inner, tui| {
-                inner.move_by(tui, -inner.height() / 2.0)
-            }),
-            command("session.page.down", "Page down", |inner, tui| {
-                inner.move_by(tui, inner.height() / 2.0)
-            }),
-            command("session.line.up", "Line up", |inner, tui| {
-                inner.move_by(tui, -1.0)
-            }),
-            command("session.line.down", "Line down", |inner, tui| {
-                inner.move_by(tui, 1.0)
-            }),
-            command("session.half.page.up", "Half page up", |inner, tui| {
-                inner.move_by(tui, -inner.height() / 4.0)
-            }),
-            command("session.half.page.down", "Half page down", |inner, tui| {
-                inner.move_by(tui, inner.height() / 4.0)
-            }),
+            command("session.page.up", "Page up", |inner, tui| inner.move_by(tui, -inner.height() / 2.0)),
+            command("session.page.down", "Page down", |inner, tui| inner.move_by(tui, inner.height() / 2.0)),
+            command("session.line.up", "Line up", |inner, tui| inner.move_by(tui, -1.0)),
+            command("session.line.down", "Line down", |inner, tui| inner.move_by(tui, 1.0)),
+            command("session.half.page.up", "Half page up", |inner, tui| inner.move_by(tui, -inner.height() / 4.0)),
+            command("session.half.page.down", "Half page down", |inner, tui| inner.move_by(tui, inner.height() / 4.0)),
             command("session.first", "First message", Inner::first),
             command("session.last", "Last message", Inner::to_bottom),
-            command(
-                "session.toggle.scrollbar",
-                "Toggle session scrollbar",
-                |inner, tui| {
-                    let next = !inner.scrollbar.get();
-                    set(tui, "scrollbar", Value::Bool(next));
-                },
-            ),
-            command(
-                "session.toggle.exploration_grouping",
-                if grouping {
-                    "Show tool calls individually"
-                } else {
-                    "Group related tool calls"
-                },
-                |_, tui| {
-                    let grouping = tui
-                        .settings
-                        .info()
-                        .session
-                        .and_then(|session| session.grouping)
-                        != Some(Grouping::None);
-                    set(
-                        tui,
-                        "grouping",
-                        Value::from(if grouping { "none" } else { "auto" }),
-                    );
-                },
-            ),
-            command(
-                "session.verbosity.cycle",
-                &format!("Verbosity: {}", titlecase(verbosity.as_str())),
-                |_, tui| {
-                    let current = tui
-                        .settings
-                        .info()
-                        .session
-                        .and_then(|session| session.verbosity)
-                        .unwrap_or(Verbosity::Medium);
-                    let next = match current {
-                        Verbosity::Low => "medium",
-                        Verbosity::Medium => "high",
-                        Verbosity::High => "low",
-                    };
-                    set(tui, "verbosity", Value::from(next));
-                },
-            )
-            .palette(),
-            command(
-                "session.messages_last_user",
-                "Jump to last user message",
-                Inner::last_user,
-            ),
-            command("session.message.next", "Next message", |inner, tui| {
-                inner.to_message(tui, true, false)
+            command("session.toggle.scrollbar", "Toggle session scrollbar", |inner, tui| {
+                let next = !inner.scrollbar.get();
+                set(tui, "scrollbar", Value::Bool(next));
             }),
             command(
-                "session.message.previous",
-                "Previous message",
-                |inner, tui| inner.to_message(tui, false, false),
+                "session.toggle.exploration_grouping",
+                if grouping { "Show tool calls individually" } else { "Group related tool calls" },
+                |_, tui| {
+                    let grouping =
+                        tui.settings.info().session.and_then(|session| session.grouping) != Some(Grouping::None);
+                    set(tui, "grouping", Value::from(if grouping { "none" } else { "auto" }));
+                },
             ),
-            command(
-                "session.message.user.next",
-                "Next user message",
-                |inner, tui| inner.to_message(tui, true, true),
-            ),
-            command(
-                "session.message.user.previous",
-                "Previous user message",
-                |inner, tui| inner.to_message(tui, false, true),
-            ),
+            command("session.verbosity.cycle", &format!("Verbosity: {}", titlecase(verbosity.as_str())), |_, tui| {
+                let current =
+                    tui.settings.info().session.and_then(|session| session.verbosity).unwrap_or(Verbosity::Medium);
+                let next = match current {
+                    Verbosity::Low => "medium",
+                    Verbosity::Medium => "high",
+                    Verbosity::High => "low",
+                };
+                set(tui, "verbosity", Value::from(next));
+            })
+            .palette(),
+            command("session.messages_last_user", "Jump to last user message", Inner::last_user),
+            command("session.message.next", "Next message", |inner, tui| inner.to_message(tui, true, false)),
+            command("session.message.previous", "Previous message", |inner, tui| inner.to_message(tui, false, false)),
+            command("session.message.user.next", "Next user message", |inner, tui| inner.to_message(tui, true, true)),
+            command("session.message.user.previous", "Previous user message", |inner, tui| {
+                inner.to_message(tui, false, true)
+            }),
         ];
         let names = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
         let unfocused = {
             let app = tui.app.clone();
             let textarea = tui.textarea.clone();
             Condition::when(move || {
-                textarea.borrow().as_ref().is_none_or(|textarea| {
-                    app.focused()
-                        .is_none_or(|widget| widget.id() != textarea.id())
-                })
+                textarea
+                    .borrow()
+                    .as_ref()
+                    .is_none_or(|textarea| app.focused().is_none_or(|widget| widget.id() != textarea.id()))
             })
         };
         let layers = [
@@ -397,9 +321,7 @@ impl Inner {
     fn move_by(&self, tui: &Tui, delta: f64) {
         self.clear_navigation();
         let scroll = self.transcript.scroll().clone();
-        if delta < 0.0 && self.transcript.reveal_older(tui)
-            || delta > 0.0 && self.transcript.reveal_newer(tui)
-        {
+        if delta < 0.0 && self.transcript.reveal_older(tui) || delta > 0.0 && self.transcript.reveal_newer(tui) {
             let weak = self.this.clone();
             after_layout(&tui.app, move || {
                 scroll.scroll_by(0.0, delta);
@@ -520,9 +442,7 @@ impl Inner {
         self.slack_height.set(height);
         self.slack.visible(height > 0.0);
         self.slack.height(height.max(0.0) as u16);
-        self.transcript
-            .scroll()
-            .sticky(self.navigation.borrow().is_none() && height <= 0.0);
+        self.transcript.scroll().sticky(self.navigation.borrow().is_none() && height <= 0.0);
     }
 
     /// `updateAwayFromBottom`: shows "Jump to latest" while the reader is away from the bottom.
@@ -554,16 +474,12 @@ impl Inner {
 
 /// Writes `session.<key>` to `cli.json`; the settings listener applies it.
 fn set(tui: &Tui, key: &'static str, value: Value) {
-    settings::update(tui, move |root| {
-        settings::set_path(root, &["session", key], value)
-    });
+    settings::update(tui, move |root| settings::set_path(root, &["session", key], value));
 }
 
 fn titlecase(text: &str) -> String {
     let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
+    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
 }
 
 /// Runs `continuation` once the next frame is laid out (`scroll.afterLayout`): the first step runs

@@ -16,9 +16,7 @@ use crate::{Registry, SlotInput, Status, slot};
 /// lock keeps a build and its read together.
 pub(crate) fn build(features: &str) -> Vec<u8> {
     static BUILT: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
-    let mut built = BUILT
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((_, library)) = built.iter().find(|(known, _)| known == features) {
         return library.clone();
     }
@@ -33,11 +31,7 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
         .status()
         .unwrap();
     assert!(status.success(), "the sample plugin did not build");
-    let name = format!(
-        "{}opencode_sample_plugin{}",
-        std::env::consts::DLL_PREFIX,
-        std::env::consts::DLL_SUFFIX
-    );
+    let name = format!("{}opencode_sample_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
     let library = fs::read(target.join("debug").join(name)).unwrap();
     built.push((features.to_owned(), library.clone()));
     library
@@ -84,41 +78,17 @@ fn the_sample_registers_a_command_a_fence_a_slot_and_a_route() {
     assert!(screen.contains("SAMPLE v1 WORLD"), "{screen}");
 
     // The command writes its storage key and toasts once the current event is done.
-    assert!(matches!(
-        host.keymap().dispatch("sample.hello", None),
-        RunResult::Ok
-    ));
+    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
     assert!(host.toasts.borrow().is_empty());
     host.app.advance(Duration::from_millis(1));
-    assert_eq!(
-        *host.toasts.borrow(),
-        [(Toast::Success, None, "Hello from sample v1 (1)".to_owned())]
-    );
-    assert_eq!(
-        host.storage
-            .borrow()
-            .get("plugin.sample.count")
-            .map(String::as_str),
-        Some("{\"count\":1}")
-    );
-    assert!(matches!(
-        host.keymap().dispatch("sample.open", None),
-        RunResult::Ok
-    ));
+    assert_eq!(*host.toasts.borrow(), [(Toast::Success, None, "Hello from sample v1 (1)".to_owned())]);
+    assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":1}"));
+    assert!(matches!(host.keymap().dispatch("sample.open", None), RunResult::Ok));
     host.app.advance(Duration::from_millis(1));
-    assert_eq!(
-        *host.routes.borrow(),
-        [("sample".to_owned(), "hello".to_owned())]
-    );
+    assert_eq!(*host.routes.borrow(), [("sample".to_owned(), "hello".to_owned())]);
 
     let parent = View::new(host.app());
-    let mounted = registry.mount(
-        &*host,
-        &parent,
-        slot::HOME_FOOTER,
-        &SlotInput::default(),
-        |_| {},
-    );
+    let mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
     assert!(!mounted.is_empty());
     host.app().root().clear();
     host.app().root().add(&parent);
@@ -137,25 +107,15 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
     let registry = active(&host, &build(""));
     let screen = markdown(&host, &registry, "```sample-panic\nboom\n```\n");
     assert!(screen.contains("boom"), "{screen}");
-    assert_eq!(
-        status(&registry),
-        Status::Failed("render-fence panicked: sample fence panicked".to_owned())
-    );
+    assert_eq!(status(&registry), Status::Failed("render-fence panicked: sample fence panicked".to_owned()));
     host.app.advance(Duration::from_millis(1));
     assert_eq!(
         *host.toasts.borrow(),
-        [(
-            Toast::Error,
-            Some("Plugin failed: sample".to_owned()),
-            "Run /plugins to view details.".to_owned()
-        )]
+        [(Toast::Error, Some("Plugin failed: sample".to_owned()), "Run /plugins to view details.".to_owned())]
     );
     // A failed plugin is not called again: its fences keep the code view, its commands do nothing.
     let screen = markdown(&host, &registry, "```sample\nquiet\n```\n");
-    assert!(
-        screen.contains("quiet") && !screen.contains("QUIET"),
-        "{screen}"
-    );
+    assert!(screen.contains("quiet") && !screen.contains("QUIET"), "{screen}");
     host.keymap().dispatch("sample.hello", None);
     host.app.advance(Duration::from_millis(1));
     assert!(host.storage.borrow().is_empty());
@@ -171,40 +131,18 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
 fn a_panicking_command_fails_the_plugin() {
     let host = host();
     let registry = active(&host, &build(""));
-    assert!(matches!(
-        host.keymap().dispatch("sample.panic", None),
-        RunResult::Ok
-    ));
-    assert_eq!(
-        status(&registry),
-        Status::Failed("run-command panicked: sample command panicked".to_owned())
-    );
+    assert!(matches!(host.keymap().dispatch("sample.panic", None), RunResult::Ok));
+    assert_eq!(status(&registry), Status::Failed("run-command panicked: sample command panicked".to_owned()));
 }
 
 #[test]
 fn versions_follow_the_abi_rules() {
-    let load = |library: &[u8], options: Option<&str>| {
-        Backend::<TestHost>::load(&Native, library, options).err()
-    };
+    let load = |library: &[u8], options: Option<&str>| Backend::<TestHost>::load(&Native, library, options).err();
     // The current build has the 1.1 entry; a 1.0 build has the shorter table and still loads and works.
     let current = build("");
-    assert_eq!(
-        Native.inspect(&current).unwrap(),
-        Inspected {
-            major: 1,
-            minor: 1,
-            version: Some("0.1.0".to_owned()),
-        }
-    );
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 1, version: Some("0.1.0".to_owned()) });
     let old = build("abi-1-0");
-    assert_eq!(
-        Native.inspect(&old).unwrap(),
-        Inspected {
-            major: 1,
-            minor: 0,
-            version: None,
-        }
-    );
+    assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
     let host = host();
     let registry = active(&host, &old);
     let screen = markdown(&host, &registry, "```sample\nold\n```\n");
@@ -227,15 +165,8 @@ fn versions_follow_the_abi_rules() {
         load(&build("requires-future"), None).unwrap(),
         "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.1; update opencode-rs"
     );
-    assert_eq!(
-        load(&current, Some("{\"fail\":true}")).unwrap(),
-        "sample setup failed"
-    );
-    assert!(
-        load(b"not a library", None)
-            .unwrap()
-            .starts_with("cannot load the library")
-    );
+    assert_eq!(load(&current, Some("{\"fail\":true}")).unwrap(), "sample setup failed");
+    assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
 }
 
 #[test]

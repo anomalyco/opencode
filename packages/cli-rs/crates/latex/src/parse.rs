@@ -71,62 +71,20 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Row(Vec<Node>),
-    Symbol {
-        value: String,
-        role: Option<Role>,
-    },
+    Symbol { value: String, role: Option<Role> },
     Text(String),
     Space(usize),
-    Fraction {
-        numerator: Box<Node>,
-        denominator: Box<Node>,
-        bar: bool,
-        align: Option<Align>,
-    },
-    Root {
-        body: Box<Node>,
-        index: Option<Box<Node>>,
-    },
-    Scripts {
-        base: Box<Node>,
-        superscript: Option<Box<Node>>,
-        subscript: Option<Box<Node>>,
-    },
-    Delimited {
-        left: String,
-        body: Box<Node>,
-        right: String,
-    },
-    Matrix {
-        rows: Vec<Vec<Node>>,
-        environment: Environment,
-        columns: Option<String>,
-    },
-    Brace {
-        body: Box<Node>,
-        over: bool,
-    },
-    Accent {
-        accent: Accent,
-        body: Box<Node>,
-    },
-    Variant {
-        variant: Variant,
-        body: Box<Node>,
-    },
-    Operator {
-        value: String,
-        limits: bool,
-    },
-    OverUnder {
-        base: Box<Node>,
-        over: Option<Box<Node>>,
-        under: Option<Box<Node>>,
-    },
-    Color {
-        color: String,
-        body: Box<Node>,
-    },
+    Fraction { numerator: Box<Node>, denominator: Box<Node>, bar: bool, align: Option<Align> },
+    Root { body: Box<Node>, index: Option<Box<Node>> },
+    Scripts { base: Box<Node>, superscript: Option<Box<Node>>, subscript: Option<Box<Node>> },
+    Delimited { left: String, body: Box<Node>, right: String },
+    Matrix { rows: Vec<Vec<Node>>, environment: Environment, columns: Option<String> },
+    Brace { body: Box<Node>, over: bool },
+    Accent { accent: Accent, body: Box<Node> },
+    Variant { variant: Variant, body: Box<Node> },
+    Operator { value: String, limits: bool },
+    OverUnder { base: Box<Node>, over: Option<Box<Node>>, under: Option<Box<Node>> },
+    Color { color: String, body: Box<Node> },
 }
 
 /// Why a source is not rendered (TS `LatexParseError`); the plugin then shows the source.
@@ -156,11 +114,7 @@ pub fn parse(source: &str) -> Result<Node> {
         });
     }
     check_nesting(&source)?;
-    let mut parser = Parser {
-        source,
-        position: 0,
-        depth: 0,
-    };
+    let mut parser = Parser { source, position: 0, depth: 0 };
     let body = parser.row(&|_| false)?;
     parser.skip_whitespace();
     if !parser.done() {
@@ -221,18 +175,9 @@ impl Parser {
                 let previous = body.pop().unwrap_or(Node::Row(Vec::new()));
                 let mut scripts = match previous {
                     scripts @ Node::Scripts { .. } => scripts,
-                    base => Node::Scripts {
-                        base: Box::new(base),
-                        superscript: None,
-                        subscript: None,
-                    },
+                    base => Node::Scripts { base: Box::new(base), superscript: None, subscript: None },
                 };
-                if let Node::Scripts {
-                    superscript,
-                    subscript,
-                    ..
-                } = &mut scripts
-                {
+                if let Node::Scripts { superscript, subscript, .. } = &mut scripts {
                     match current {
                         Some('^') => *superscript = Some(script),
                         _ => *subscript = Some(script),
@@ -273,10 +218,7 @@ impl Parser {
                 self.position += 1;
                 let value = current.map(String::from).unwrap_or_default();
                 let role = infer_role(&value);
-                Ok(Node::Symbol {
-                    value,
-                    role: Some(role),
-                })
+                Ok(Node::Symbol { value, role: Some(role) })
             }
         }
     }
@@ -292,13 +234,9 @@ impl Parser {
                 self.skip_whitespace();
                 let mut align = None;
                 if command == "cfrac" && self.peek() == Some('[') {
-                    let option = ["[]", "[l]", "[r]"]
-                        .into_iter()
-                        .find(|option| self.starts_with(option));
+                    let option = ["[]", "[l]", "[r]"].into_iter().find(|option| self.starts_with(option));
                     let Some(option) = option else {
-                        return self.fail(
-                            "Unsupported \\cfrac alignment; expected [l], [r], or []".into(),
-                        );
+                        return self.fail("Unsupported \\cfrac alignment; expected [l], [r], or []".into());
                     };
                     self.position += option.chars().count();
                     align = match option {
@@ -321,25 +259,15 @@ impl Parser {
                     bar: false,
                     align: None,
                 };
-                return Ok(Node::Delimited {
-                    left: "(".into(),
-                    body: Box::new(fraction),
-                    right: ")".into(),
-                });
+                return Ok(Node::Delimited { left: "(".into(), body: Box::new(fraction), right: ")".into() });
             }
             "sqrt" => {
                 let index = self.optional_argument()?.map(Box::new);
-                return Ok(Node::Root {
-                    body: Box::new(self.argument()?),
-                    index,
-                });
+                return Ok(Node::Root { body: Box::new(self.argument()?), index });
             }
             "left" => return self.left_right(),
             "middle" => {
-                return Ok(Node::Symbol {
-                    value: self.read_delimiter()?,
-                    role: None,
-                });
+                return Ok(Node::Symbol { value: self.read_delimiter()?, role: None });
             }
             "right" => {
                 self.position = start;
@@ -348,20 +276,14 @@ impl Parser {
             _ => {}
         }
         if let Some(accent) = accent(command) {
-            return Ok(Node::Accent {
-                accent,
-                body: Box::new(self.argument()?),
-            });
+            return Ok(Node::Accent { accent, body: Box::new(self.argument()?) });
         }
         if let Some(variant) = variant(command) {
             let body = match command {
                 "textrm" => Node::Text(self.read_text_group()?),
                 _ => self.argument()?,
             };
-            return Ok(Node::Variant {
-                variant,
-                body: Box::new(body),
-            });
+            return Ok(Node::Variant { variant, body: Box::new(body) });
         }
         match command {
             "text" | "mbox" => return Ok(Node::Text(self.read_text_group()?)),
@@ -370,62 +292,33 @@ impl Parser {
                 if limits {
                     self.position += 1;
                 }
-                return Ok(Node::Operator {
-                    value: self.read_text_group()?,
-                    limits,
-                });
+                return Ok(Node::Operator { value: self.read_text_group()?, limits });
             }
             "overset" | "stackrel" => {
                 let over = Box::new(self.argument()?);
                 let base = Box::new(self.argument()?);
-                return Ok(Node::OverUnder {
-                    base,
-                    over: Some(over),
-                    under: None,
-                });
+                return Ok(Node::OverUnder { base, over: Some(over), under: None });
             }
             "underset" => {
                 let under = Box::new(self.argument()?);
                 let base = Box::new(self.argument()?);
-                return Ok(Node::OverUnder {
-                    base,
-                    over: None,
-                    under: Some(under),
-                });
+                return Ok(Node::OverUnder { base, over: None, under: Some(under) });
             }
             "overbrace" | "underbrace" => {
-                return Ok(Node::Brace {
-                    body: Box::new(self.argument()?),
-                    over: command == "overbrace",
-                });
+                return Ok(Node::Brace { body: Box::new(self.argument()?), over: command == "overbrace" });
             }
             "textcolor" => {
                 let color = self.read_raw_group()?;
-                return Ok(Node::Color {
-                    color,
-                    body: Box::new(self.argument()?),
-                });
+                return Ok(Node::Color { color, body: Box::new(self.argument()?) });
             }
             "color" => {
                 let color = self.read_raw_group()?;
-                return Ok(Node::Color {
-                    color,
-                    body: Box::new(row(self.row(&|_| false)?)),
-                });
+                return Ok(Node::Color { color, body: Box::new(row(self.row(&|_| false)?)) });
             }
             "not" => {
                 return Ok(match self.atom()? {
-                    Node::Symbol { value, role } => Node::Symbol {
-                        value: negate(&value),
-                        role,
-                    },
-                    target => Node::Row(vec![
-                        Node::Symbol {
-                            value: "¬".into(),
-                            role: None,
-                        },
-                        target,
-                    ]),
+                    Node::Symbol { value, role } => Node::Symbol { value: negate(&value), role },
+                    target => Node::Row(vec![Node::Symbol { value: "¬".into(), role: None }, target]),
                 });
             }
             "pmod" => {
@@ -437,69 +330,42 @@ impl Parser {
                 ]));
             }
             "mod" | "bmod" => {
-                return Ok(Node::Operator {
-                    value: "mod".into(),
-                    limits: false,
-                });
+                return Ok(Node::Operator { value: "mod".into(), limits: false });
             }
             "displaylines" => {
                 self.skip_whitespace();
                 self.expect("{")?;
                 return self.matrix(Environment::Gathered, "}", None);
             }
-            "limits" | "nolimits" | "displaystyle" | "textstyle" | "scriptstyle"
-            | "scriptscriptstyle" => {
+            "limits" | "nolimits" | "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
                 return Ok(Node::Row(Vec::new()));
             }
             _ => {}
         }
         if is_big(command) {
-            return Ok(Node::Symbol {
-                value: self.read_delimiter()?,
-                role: None,
-            });
+            return Ok(Node::Symbol { value: self.read_delimiter()?, role: None });
         }
         if let Some(width) = symbols::spacing(command) {
             return Ok(Node::Space(width));
         }
         if let Some((value, role)) = symbols::symbol(command) {
-            return Ok(Node::Symbol {
-                value: value.into(),
-                role: Some(role),
-            });
+            return Ok(Node::Symbol { value: value.into(), role: Some(role) });
         }
         if let Some(value) = symbols::large_operator(command) {
-            return Ok(Node::Operator {
-                value: value.into(),
-                limits: !command.contains("int"),
-            });
+            return Ok(Node::Operator { value: value.into(), limits: !command.contains("int") });
         }
         if symbols::is_named_operator(command) {
             let limits = command.starts_with("lim") || command == "min" || command == "max";
-            return Ok(Node::Operator {
-                value: command.into(),
-                limits,
-            });
+            return Ok(Node::Operator { value: command.into(), limits });
         }
         if command == "backslash" {
-            return Ok(Node::Symbol {
-                value: "\\".into(),
-                role: None,
-            });
+            return Ok(Node::Symbol { value: "\\".into(), role: None });
         }
-        if let Some(value) =
-            symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(command))
-        {
-            return Ok(Node::Symbol {
-                value: value.into(),
-                role: None,
-            });
+        if let Some(value) = symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(command)) {
+            return Ok(Node::Symbol { value: value.into(), role: None });
         }
         if matches!(command, "{" | "}" | "%" | "#" | "$" | "&" | "_") {
-            return Ok(Node::Symbol {
-                value: command.into(),
-                role: None,
-            });
+            return Ok(Node::Symbol { value: command.into(), role: None });
         }
         self.fail_at(format!("Unsupported command \\{command}"), start)
     }
@@ -512,11 +378,7 @@ impl Parser {
         };
         let columns = match environment {
             Environment::Array => {
-                let columns: String = self
-                    .read_raw_group()?
-                    .chars()
-                    .filter(|c| !c.is_whitespace())
-                    .collect();
+                let columns: String = self.read_raw_group()?.chars().filter(|c| !c.is_whitespace()).collect();
                 let valid = !columns.is_empty()
                     && columns.chars().all(|c| "lcr|".contains(c))
                     && columns.chars().any(|c| "lcr".contains(c));
@@ -530,12 +392,7 @@ impl Parser {
         self.matrix(environment, &format!("\\end{{{raw}}}"), columns)
     }
 
-    fn matrix(
-        &mut self,
-        environment: Environment,
-        end: &str,
-        columns: Option<String>,
-    ) -> Result<Node> {
+    fn matrix(&mut self, environment: Environment, end: &str, columns: Option<String>) -> Result<Node> {
         let mut rows = Vec::new();
         let mut cells = Vec::new();
         while !self.done() {
@@ -544,9 +401,8 @@ impl Parser {
                 break;
             }
             let cell_start = self.position;
-            let cell = self.row(&|parser| {
-                parser.peek() == Some('&') || parser.starts_with("\\\\") || parser.starts_with(end)
-            })?;
+            let cell = self
+                .row(&|parser| parser.peek() == Some('&') || parser.starts_with("\\\\") || parser.starts_with(end))?;
             cells.push(row(cell));
             self.skip_whitespace();
             if self.peek() == Some('&') {
@@ -564,11 +420,7 @@ impl Parser {
             }
             // Empty cells are valid only when a cell, row, or closing delimiter advances the parser.
             if self.position == cell_start {
-                return self.fail(format!(
-                    "Unexpected \"{}\" in {}",
-                    self.peek_str(),
-                    environment_name(environment)
-                ));
+                return self.fail(format!("Unexpected \"{}\" in {}", self.peek_str(), environment_name(environment)));
             }
         }
         if !self.starts_with(end) {
@@ -578,21 +430,14 @@ impl Parser {
         if !cells.is_empty() || rows.is_empty() {
             rows.push(cells);
         }
-        Ok(Node::Matrix {
-            rows,
-            environment,
-            columns,
-        })
+        Ok(Node::Matrix { rows, environment, columns })
     }
 
     fn left_right(&mut self) -> Result<Node> {
         let left = self.read_delimiter()?;
         let at_right = |parser: &Parser| {
             parser.starts_with("\\right")
-                && !parser
-                    .source
-                    .get(parser.position + 6)
-                    .is_some_and(|&c| is_command_letter(c))
+                && !parser.source.get(parser.position + 6).is_some_and(|&c| is_command_letter(c))
         };
         let body = row(self.row(&at_right)?);
         if !at_right(self) {
@@ -600,11 +445,7 @@ impl Parser {
         }
         self.read_command()?;
         let right = self.read_delimiter()?;
-        Ok(Node::Delimited {
-            left,
-            body: Box::new(body),
-            right,
-        })
+        Ok(Node::Delimited { left, body: Box::new(body), right })
     }
 
     fn argument(&mut self) -> Result<Node> {
@@ -663,9 +504,7 @@ impl Parser {
         let start = self.position;
         if self.peek() == Some('\\') {
             let command = self.read_command()?;
-            return match symbols::delimiter(&format!("\\{command}"))
-                .or_else(|| symbols::delimiter(&command))
-            {
+            return match symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(&command)) {
                 Some(delimiter) => Ok(delimiter.into()),
                 None => self.fail_at(format!("Unsupported delimiter \\{command}"), start),
             };
@@ -717,10 +556,7 @@ impl Parser {
     fn limits_modifier(&mut self, body: &mut [Node]) -> bool {
         let Some(name) = ["limits", "nolimits"].into_iter().find(|name| {
             self.starts_with(&format!("\\{name}"))
-                && !self
-                    .source
-                    .get(self.position + 1 + name.len())
-                    .is_some_and(|&c| is_command_letter(c))
+                && !self.source.get(self.position + 1 + name.len()).is_some_and(|&c| is_command_letter(c))
         }) else {
             return false;
         };
@@ -740,13 +576,7 @@ impl Parser {
     }
 
     fn is_escaped(&self, index: usize) -> bool {
-        self.source[..index]
-            .iter()
-            .rev()
-            .take_while(|&&c| c == '\\')
-            .count()
-            % 2
-            == 1
+        self.source[..index].iter().rev().take_while(|&&c| c == '\\').count() % 2 == 1
     }
 
     /// A raw group with TeX's text escapes resolved (`readTextGroup`).
@@ -950,15 +780,9 @@ const ENVIRONMENTS: &[(&str, Environment)] = &[
 ];
 
 fn environment(name: &str) -> Option<Environment> {
-    ENVIRONMENTS
-        .iter()
-        .find(|(key, _)| *key == name)
-        .map(|(_, environment)| *environment)
+    ENVIRONMENTS.iter().find(|(key, _)| *key == name).map(|(_, environment)| *environment)
 }
 
 fn environment_name(environment: Environment) -> &'static str {
-    ENVIRONMENTS
-        .iter()
-        .find(|(_, value)| *value == environment)
-        .map_or("", |(name, _)| name)
+    ENVIRONMENTS.iter().find(|(_, value)| *value == environment).map_or("", |(name, _)| name)
 }

@@ -9,8 +9,8 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo,
-    SessionInboxUpdateInput, SessionMessageID,
+    SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput,
+    SessionMessageID,
 };
 use opencode_store::{Changes, State};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
@@ -81,18 +81,11 @@ pub fn mutate(
                 Action::Steer => SessionInboxDelivery::Steer,
                 Action::Queue => SessionInboxDelivery::Queue,
                 Action::Cancel => {
-                    let input = SessionInboxCancelInput {
-                        session_id: session,
-                        inbox_id: id,
-                    };
+                    let input = SessionInboxCancelInput { session_id: session, inbox_id: id };
                     return client.session_inbox_cancel(&input, &options).await;
                 }
             };
-            let input = SessionInboxUpdateInput {
-                session_id: session,
-                inbox_id: id,
-                delivery,
-            };
+            let input = SessionInboxUpdateInput { session_id: session, inbox_id: id, delivery };
             client.session_inbox_update(&input, &options).await
         },
         move |_, result| {
@@ -228,15 +221,8 @@ impl Inner {
         .palette()
         .enabled(queued);
         for layer in [
-            KeymapLayer {
-                mode: Some(GLOBAL_MODE.to_owned()),
-                commands: vec![command],
-                ..KeymapLayer::default()
-            },
-            KeymapLayer {
-                bindings: vec!["session.queued_prompts".to_owned()],
-                ..KeymapLayer::default()
-            },
+            KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
+            KeymapLayer { bindings: vec!["session.queued_prompts".to_owned()], ..KeymapLayer::default() },
         ] {
             match tui.keymap.layer(layer) {
                 Ok(disposer) => self.layers.borrow_mut().push(disposer),
@@ -255,10 +241,7 @@ impl Inner {
         };
         let theme = tui.page();
         let first = first.replace('\n', " ");
-        let mut spans = vec![Span::styled(
-            format!("{} queued", queued.len()),
-            Style::new().fg(theme.text.base),
-        )];
+        let mut spans = vec![Span::styled(format!("{} queued", queued.len()), Style::new().fg(theme.text.base))];
         if !first.is_empty() {
             spans.push(Span::raw(format!(" · {first}")));
         }
@@ -279,36 +262,24 @@ impl Inner {
             return;
         };
         let Some(text) = tui.data.read(|state| {
-            prompts(state, &self.session)
-                .into_iter()
-                .find_map(|(id, text)| (id == inbox).then_some(text))
+            prompts(state, &self.session).into_iter().find_map(|(id, text)| (id == inbox).then_some(text))
         }) else {
             return;
         };
         if prompt.mode.get() == Mode::Shell && !prompt.textarea.text().is_empty() {
-            tui.toasts.show(ToastOptions::new(
-                Variant::Error,
-                "Leave shell mode before undoing a queued prompt",
-            ));
+            tui.toasts.show(ToastOptions::new(Variant::Error, "Leave shell mode before undoing a queued prompt"));
             return;
         }
         let session = self.session.clone();
-        mutate(
-            tui,
-            &self.session,
-            Action::Cancel,
-            inbox,
-            Some("undo"),
-            move |tui, undone| {
-                if !undone {
-                    return;
-                }
-                super::actions::append_prompt(tui, &session, &text);
-                tui.dialogs.clear();
-                if tui.route() == (crate::routes::Route::Session { id: session }) {
-                    tui.app.focus(&prompt.textarea);
-                }
-            },
-        );
+        mutate(tui, &self.session, Action::Cancel, inbox, Some("undo"), move |tui, undone| {
+            if !undone {
+                return;
+            }
+            super::actions::append_prompt(tui, &session, &text);
+            tui.dialogs.clear();
+            if tui.route() == (crate::routes::Route::Session { id: session }) {
+                tui.app.focus(&prompt.textarea);
+            }
+        });
     }
 }

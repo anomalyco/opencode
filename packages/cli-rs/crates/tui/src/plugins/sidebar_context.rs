@@ -21,9 +21,7 @@ pub fn plugin() -> Definition<Tui> {
 
 fn view(tui: &Tui, session: &SessionID) -> Option<View> {
     sync_catalogs(tui, session, &[Catalog::Model]);
-    let (usage, cost) = tui
-        .data
-        .read(|state| (session_usage(state, session), state.cost(session)));
+    let (usage, cost) = tui.data.read(|state| (session_usage(state, session), state.cost(session)));
     if usage.is_none() && cost <= 0.0 {
         return None;
     }
@@ -53,50 +51,28 @@ pub struct Usage {
 pub fn session_usage(state: &State, session: &SessionID) -> Option<Usage> {
     let info = state.session(session)?;
     let location = Location::from(&info.location);
-    let models = state
-        .location(Some(&location))
-        .and_then(|data| data.model.as_deref());
-    let boundary = info
-        .revert
-        .as_ref()
-        .map(|revert| revert.message_id.0.as_str());
+    let models = state.location(Some(&location)).and_then(|data| data.model.as_deref());
+    let boundary = info.revert.as_ref().map(|revert| revert.message_id.0.as_str());
     usage(state.messages(session), models, boundary)
 }
 
 /// `contextUsage`: the last assistant message with tokens after the last completed compaction and before
 /// `boundary`.
-pub fn usage(
-    messages: &[SessionMessageInfo],
-    models: Option<&[ModelInfo]>,
-    boundary: Option<&str>,
-) -> Option<Usage> {
+pub fn usage(messages: &[SessionMessageInfo], models: Option<&[ModelInfo]>, boundary: Option<&str>) -> Option<Usage> {
     let end = match boundary {
-        Some(boundary) => messages
-            .iter()
-            .position(|message| message.id() == boundary)?,
+        Some(boundary) => messages.iter().position(|message| message.id() == boundary)?,
         None => messages.len(),
     };
     let messages = &messages[..end];
     let start = messages
         .iter()
-        .rposition(|message| {
-            matches!(
-                message,
-                SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(_))
-            )
-        })
+        .rposition(|message| matches!(message, SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(_))))
         .map_or(0, |index| index + 1);
-    let (model, tokens) = messages[start..]
-        .iter()
-        .rev()
-        .find_map(|message| match message {
-            SessionMessageInfo::Assistant(message) => {
-                Some((&message.model, message.tokens.as_ref()?))
-            }
-            _ => None,
-        })?;
-    let total =
-        tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
+    let (model, tokens) = messages[start..].iter().rev().find_map(|message| match message {
+        SessionMessageInfo::Assistant(message) => Some((&message.model, message.tokens.as_ref()?)),
+        _ => None,
+    })?;
+    let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
     if total <= 0.0 {
         return None;
     }
@@ -106,21 +82,14 @@ pub fn usage(
         .find(|item| item.provider_id == model.provider_id && item.id == model.id)
         .map(|model| model.limit.context)
         .filter(|context| *context > 0);
-    Some(Usage {
-        tokens: total,
-        percent: context.map(|context| (total / context as f64 * 100.0).round() as i64),
-    })
+    Some(Usage { tokens: total, percent: context.map(|context| (total / context as f64 * 100.0).round() as i64) })
 }
 
 /// `Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })`: `$1,234.56`.
 pub fn money(value: f64) -> String {
     let cents = (value.abs() * 100.0).round() as u64;
     let sign = if value < 0.0 { "-" } else { "" };
-    format!(
-        "{sign}${}.{:02}",
-        grouped((cents / 100) as f64),
-        cents % 100
-    )
+    format!("{sign}${}.{:02}", grouped((cents / 100) as f64), cents % 100)
 }
 
 /// `toLocaleString()` of a whole number: `12,345`.

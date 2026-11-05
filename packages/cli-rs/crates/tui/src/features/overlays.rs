@@ -56,8 +56,7 @@ pub fn connection_changed(tui: &Tui, state: &State) {
         // server that is still starting from showing "Data migration failed".
         if !overlays.polling.replace(true) {
             let weak = tui.weak();
-            tui.app
-                .set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
+            tui.app.set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
         }
     }
     if connected {
@@ -68,25 +67,20 @@ pub fn connection_changed(tui: &Tui, state: &State) {
         return;
     }
     overlays.connected.set(false);
-    let delay = if state.status == Status::Reconnecting {
-        Duration::from_millis(1000)
-    } else {
-        Duration::from_millis(5000)
-    };
+    let delay =
+        if state.status == Status::Reconnecting { Duration::from_millis(1000) } else { Duration::from_millis(5000) };
     let weak = tui.weak();
-    overlays
-        .timer
-        .set(Some(tui.app.set_timeout(delay, move |_| {
-            let Some(tui) = weak.upgrade() else { return };
-            tui.overlays.timer.set(None);
-            if tui.overlays.reconnecting.borrow().is_some() {
-                return;
-            }
-            let view = reconnecting(&tui);
-            tui.app.root().add(&view);
-            *tui.overlays.reconnecting.borrow_mut() = Some(view);
-            tui.app.request_redraw();
-        })));
+    overlays.timer.set(Some(tui.app.set_timeout(delay, move |_| {
+        let Some(tui) = weak.upgrade() else { return };
+        tui.overlays.timer.set(None);
+        if tui.overlays.reconnecting.borrow().is_some() {
+            return;
+        }
+        let view = reconnecting(&tui);
+        tui.app.root().add(&view);
+        *tui.overlays.reconnecting.borrow_mut() = Some(view);
+        tui.app.request_redraw();
+    })));
 }
 
 /// `Reconnecting`: a dimmed screen with a centered panel.
@@ -96,19 +90,11 @@ fn reconnecting(tui: &Tui) -> View {
     let managed = tui.startup.args.managed;
     let spinner = Spinner::new(app)
         .color(theme.text.base)
-        .label(if managed {
-            "Restarting service…"
-        } else {
-            "Connection lost…"
-        })
+        .label(if managed { "Restarting service…" } else { "Connection lost…" })
         .animations(opencode_ui::motion::enabled(tui.config().info.animations));
     let note = Text::new(
         app,
-        if managed {
-            "Your session will resume automatically."
-        } else {
-            "Reconnecting to the server automatically."
-        },
+        if managed { "Your session will resume automatically." } else { "Reconnecting to the server automatically." },
     )
     .fg(theme.text.muted);
     let panel = View::new(app)
@@ -157,16 +143,12 @@ fn poll_migration(weak: &Weak<Tui>) {
             match status["status"].as_str() {
                 Some("completed") => {}
                 Some("error") => {
-                    let message = status["error"]
-                        .as_str()
-                        .unwrap_or("Unknown error")
-                        .to_owned();
+                    let message = status["error"].as_str().unwrap_or("Unknown error").to_owned();
                     migration_failed(&tui, message);
                 }
                 _ => {
                     let weak = weak.clone();
-                    cx.app()
-                        .set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
+                    cx.app().set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
                 }
             }
         },
@@ -232,13 +214,7 @@ mod tests {
         use serde_json::json;
         let progress = |value| super::progress(&value);
         assert_eq!(progress(json!({ "label": "Sessions" })), "Sessions");
-        assert_eq!(
-            progress(json!({ "label": "Sessions", "numerator": 3 })),
-            "Sessions 3"
-        );
-        assert_eq!(
-            progress(json!({ "label": "Sessions", "numerator": 3, "denominator": 9 })),
-            "Sessions 3/9"
-        );
+        assert_eq!(progress(json!({ "label": "Sessions", "numerator": 3 })), "Sessions 3");
+        assert_eq!(progress(json!({ "label": "Sessions", "numerator": 3, "denominator": 9 })), "Sessions 3/9");
     }
 }

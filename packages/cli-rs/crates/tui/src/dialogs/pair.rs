@@ -27,22 +27,11 @@ pub fn install(tui: &Rc<Tui>) {
     .title("Pair device")
     .group("System")
     .palette()
-    .slash(Slash {
-        name: "pair".to_owned(),
-        aliases: vec!["web".to_owned()],
-        arguments: false,
-    });
+    .slash(Slash { name: "pair".to_owned(), aliases: vec!["web".to_owned()], arguments: false });
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: the configured keybind (`none` by default).
-        KeymapLayer {
-            bindings: vec!["server.pair".to_owned()],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { bindings: vec!["server.pair".to_owned()], ..KeymapLayer::default() },
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
@@ -63,24 +52,10 @@ pub fn show(tui: &Tui) {
             if let Some(tui) = weak.upgrade() {
                 load(&tui, cx, &body);
             }
-            layout(
-                cx,
-                &header(
-                    cx,
-                    HeaderProps {
-                        title: "Pair".to_owned(),
-                        ..HeaderProps::default()
-                    },
-                ),
-                &body,
-                None,
-            )
+            layout(cx, &header(cx, HeaderProps { title: "Pair".to_owned(), ..HeaderProps::default() }), &body, None)
         },
         None,
-        DialogOptions {
-            size: DialogSize::Large,
-            ..DialogOptions::default()
-        },
+        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
     );
 }
 
@@ -94,16 +69,9 @@ pub struct Pairing {
 
 /// The links of `pairing.code` on each of the server's URLs.
 pub fn pairing(server: &ServerInfo, pairing: &PairingCode) -> Pairing {
-    let link = |base: &url::Url| {
-        base.join(&format!("/auth/connect/{}", pairing.code))
-            .map(String::from)
-            .unwrap_or_default()
-    };
-    let urls: Vec<url::Url> = server
-        .urls
-        .iter()
-        .filter_map(|url| url::Url::parse(url).ok())
-        .collect();
+    let link =
+        |base: &url::Url| base.join(&format!("/auth/connect/{}", pairing.code)).map(String::from).unwrap_or_default();
+    let urls: Vec<url::Url> = server.urls.iter().filter_map(|url| url::Url::parse(url).ok()).collect();
     let localhost = server
         .urls
         .first()
@@ -114,9 +82,7 @@ pub fn pairing(server: &ServerInfo, pairing: &PairingCode) -> Pairing {
         links: urls.iter().map(link).collect(),
         localhost,
         minutes: (pairing.expires_in as f64 / 60.0).round() as i64,
-        loopback: urls
-            .iter()
-            .any(|url| matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))),
+        loopback: urls.iter().any(|url| matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))),
     }
 }
 
@@ -126,11 +92,8 @@ fn load(tui: &Tui, cx: &Rc<DialogCx>, body: &View) {
     tui.app.spawn(
         async move {
             let options = RequestOptions::default();
-            let (server, code) = futures_util::future::join(
-                client.server_info(&options),
-                client.server_pair(&options),
-            )
-            .await;
+            let (server, code) =
+                futures_util::future::join(client.server_info(&options), client.server_pair(&options)).await;
             Ok::<_, opencode_api::error::Error>(pairing(&server?, &code?))
         },
         move |_, result| {
@@ -148,10 +111,7 @@ fn load(tui: &Tui, cx: &Rc<DialogCx>, body: &View) {
                             .bold(),
                     );
                     body.add(&Text::new(&cx.app, error.to_string()).fg(theme.text.muted));
-                    body.add(
-                        &Text::new(&cx.app, "Close and reopen Pair to try again.")
-                            .fg(theme.text.muted),
-                    );
+                    body.add(&Text::new(&cx.app, "Close and reopen Pair to try again.").fg(theme.text.muted));
                 }
             }
             cx.app.request_redraw();
@@ -174,22 +134,12 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
         side.width(Length::Percent(100.0));
     }
     side.add(
-        &Text::new(
-            app,
-            format!(
-                "Open a link to connect. Links work once and expire in {} minutes.",
-                value.minutes
-            ),
-        )
-        .fg(theme.text.muted)
-        .wrap(WrapMode::Word),
+        &Text::new(app, format!("Open a link to connect. Links work once and expire in {} minutes.", value.minutes))
+            .fg(theme.text.muted)
+            .wrap(WrapMode::Word),
     );
     if let Some(url) = &value.localhost {
-        side.add(
-            &View::new(app)
-                .child(&Text::new(app, "This device").fg(theme.text.muted))
-                .child(&link(url)),
-        );
+        side.add(&View::new(app).child(&Text::new(app, "This device").fg(theme.text.muted)).child(&link(url)));
     }
     let links = View::new(app).child(&Text::new(app, "Links").fg(theme.text.muted));
     for url in &value.links {
@@ -198,12 +148,9 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
     side.add(&links);
     if value.loopback {
         side.add(
-            &Text::new(
-                app,
-                "Run `opencode service set hostname 0.0.0.0` to access the service remotely.",
-            )
-            .fg(theme.text.muted)
-            .wrap(WrapMode::Word),
+            &Text::new(app, "Run `opencode service set hostname 0.0.0.0` to access the service remotely.")
+                .fg(theme.text.muted)
+                .wrap(WrapMode::Word),
         );
     }
 
@@ -211,13 +158,10 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
     if horizontal {
         code.grow(1.0).align_items(Align::End);
     } else {
-        code.width(Length::Percent(100.0))
-            .align_items(Align::Center);
+        code.width(Length::Percent(100.0)).align_items(Align::Center);
     }
     if let Some(url) = value.links.first() {
-        code.add(
-            &Text::new(app, opencode_ui::qr::render_unicode_compact(url, 1)).fg(theme.text.base),
-        );
+        code.add(&Text::new(app, opencode_ui::qr::render_unicode_compact(url, 1)).fg(theme.text.base));
     }
 
     let row = View::new(app).gap(2).child(&side).child(&code);
@@ -229,9 +173,8 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
     if height >= 36 {
         return row;
     }
-    let scroll = ScrollBox::new(app)
-        .scrollbars(false)
-        .height((8.max(i32::from(height) - i32::from(height) / 4 - 6)) as u32);
+    let scroll =
+        ScrollBox::new(app).scrollbars(false).height((8.max(i32::from(height) - i32::from(height) / 4 - 6)) as u32);
     scroll.add(&row);
     View::new(app).child(&scroll)
 }

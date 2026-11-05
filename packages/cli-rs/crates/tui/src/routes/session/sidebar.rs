@@ -60,11 +60,7 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     let theme = tui.page();
     let raised = theme.background.raised.base;
     let title = Text::new(app, "").fg(theme.text.base).bold();
-    let content = View::new(app)
-        .column()
-        .shrink(0.0)
-        .gap(1)
-        .padding_edge(Edge::Right, 1);
+    let content = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Right, 1);
     let scroll = ScrollBox::new(app)
         .axes(false, true)
         // TS draws the bar over the content's right padding; this keeps the content at its width.
@@ -72,11 +68,7 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
         .grow(1.0)
         .min_height(0);
     scroll.add(&content);
-    let footer = View::new(app)
-        .column()
-        .shrink(0.0)
-        .gap(1)
-        .padding_edge(Edge::Top, 1);
+    let footer = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Top, 1);
     let panel = View::new(app)
         .column()
         .bg(raised)
@@ -85,30 +77,16 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
         .shrink(0.0)
         .padding_y(1)
         .padding_x(2)
-        .child(
-            &View::new(app)
-                .shrink(0.0)
-                .padding_edge(Edge::Right, 2)
-                .padding_edge(Edge::Bottom, 1)
-                .child(&title),
-        )
+        .child(&View::new(app).shrink(0.0).padding_edge(Edge::Right, 2).padding_edge(Edge::Bottom, 1).child(&title))
         .child(&scroll)
         .child(&footer);
-    let input = SlotInput {
-        session_id: Some(session.0.clone()),
-        ..SlotInput::default()
-    };
+    let input = SlotInput { session_id: Some(session.0.clone()), ..SlotInput::default() };
     let slots = vec![
         crate::plugins::host::slot(tui, &content, slot::SIDEBAR_CONTENT, &input, |_| {}),
         crate::plugins::host::slot(tui, &footer, slot::SIDEBAR_FOOTER, &input, |_| {}),
     ];
-    let docked = View::new(app)
-        .column()
-        .shrink(0.0)
-        .width(SESSION_SIDEBAR_WIDTH)
-        .min_width(0)
-        .min_height(0)
-        .visible(false);
+    let docked =
+        View::new(app).column().shrink(0.0).width(SESSION_SIDEBAR_WIDTH).min_width(0).min_height(0).visible(false);
     let overlay = View::new(app)
         .absolute()
         .position(Edge::Top, 0)
@@ -165,11 +143,7 @@ impl Sidebar {
         }
         self.inner.layout(tui);
         if self.inner.placed.get() != Place::Hidden {
-            self.inner
-                .slots
-                .borrow()
-                .iter()
-                .for_each(|slot| slot.sync(tui, changes));
+            self.inner.slots.borrow().iter().for_each(|slot| slot.sync(tui, changes));
         }
     }
 
@@ -188,11 +162,7 @@ impl Drop for Sidebar {
 
 impl Inner {
     fn retitle(&self, tui: &Tui) {
-        let title = tui.data.read(|state| {
-            state
-                .session(&self.session)
-                .map(crate::dialogs::session_list::title)
-        });
+        let title = tui.data.read(|state| state.session(&self.session).map(crate::dialogs::session_list::title));
         self.title.set_text(title.unwrap_or_default());
         tui.app.request_redraw();
     }
@@ -204,10 +174,7 @@ impl Inner {
 
     /// `rightPane() === "sidebar"`.
     fn wanted(&self, tui: &Tui) -> bool {
-        let panel = tui
-            .panels
-            .current()
-            .is_some_and(|panel| panel.session == self.session.0);
+        let panel = tui.panels.current().is_some_and(|panel| panel.session == self.session.0);
         // A panel that opens closes the sidebar it replaces.
         if panel && !self.panel_shown.replace(true) {
             self.open.set(false);
@@ -218,11 +185,8 @@ impl Inner {
         if panel {
             return false;
         }
-        let child = tui.data.read(|state| {
-            state
-                .session(&self.session)
-                .is_some_and(|session| session.parent_id.is_some())
-        });
+        let child =
+            tui.data.read(|state| state.session(&self.session).is_some_and(|session| session.parent_id.is_some()));
         if child {
             return false;
         }
@@ -242,10 +206,7 @@ impl Inner {
         // The sections skip syncs while hidden, so they catch up as the sidebar shows.
         if before == Place::Hidden {
             let everything = Changes::everything();
-            self.slots
-                .borrow()
-                .iter()
-                .for_each(|slot| slot.sync(tui, &everything));
+            self.slots.borrow().iter().for_each(|slot| slot.sync(tui, &everything));
         }
         self.panel.detach();
         if place == Place::Docked {
@@ -267,12 +228,7 @@ impl Inner {
             crate::dialogs::settings::set_path(draft, &["session", "sidebar"], json!(value));
         });
         self.open.set(!visible);
-        if !visible
-            && tui
-                .panels
-                .current()
-                .is_some_and(|panel| panel.session == self.session.0)
-        {
+        if !visible && tui.panels.current().is_some_and(|panel| panel.session == self.session.0) {
             tui.panels.close(tui);
             self.panel_shown.set(false);
         }
@@ -281,11 +237,7 @@ impl Inner {
 }
 
 fn setting(tui: &Tui) -> SidebarSetting {
-    tui.settings
-        .info()
-        .session
-        .and_then(|session| session.sidebar)
-        .unwrap_or(SidebarSetting::Auto)
+    tui.settings.info().session.and_then(|session| session.sidebar).unwrap_or(SidebarSetting::Auto)
 }
 
 /// `session.sidebar.toggle` in the palette, and Escape or Ctrl+C to close the overlay while no dialog is open.
@@ -315,8 +267,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         let weak = Rc::downgrade(inner);
         let tui = tui.weak();
         Condition::when(move || {
-            weak.upgrade()
-                .is_some_and(|inner| inner.placed.get() == Place::Overlay)
+            weak.upgrade().is_some_and(|inner| inner.placed.get() == Place::Overlay)
                 && tui.upgrade().is_some_and(|tui| !tui.dialogs.is_open())
         })
     };
@@ -334,11 +285,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         },
         KeymapLayer {
             enabled: overlay,
-            commands: vec![
-                TuiCommand::inline("escape,ctrl+c", close)
-                    .title("Close sidebar")
-                    .group("Session"),
-            ],
+            commands: vec![TuiCommand::inline("escape,ctrl+c", close).title("Close sidebar").group("Session")],
             ..KeymapLayer::default()
         },
     ];
@@ -361,10 +308,7 @@ type Render = Box<dyn Fn(&Tui) -> Option<View>>;
 
 impl Section {
     pub fn new(tui: &Tui, render: impl Fn(&Tui) -> Option<View> + 'static) -> Self {
-        let section = Self {
-            root: View::new(&tui.app).column().shrink(0.0),
-            render: Box::new(render),
-        };
+        let section = Self { root: View::new(&tui.app).column().shrink(0.0), render: Box::new(render) };
         section.refresh(tui);
         section
     }
@@ -410,10 +354,7 @@ impl Fold {
             .and_then(|storage| storage.load(&key, &json!({ "open": true })).ok())
             .and_then(|value| value.get("open").and_then(serde_json::Value::as_bool))
             .unwrap_or(true);
-        Rc::new(Self {
-            key,
-            open: Cell::new(open),
-        })
+        Rc::new(Self { key, open: Cell::new(open) })
     }
 
     pub fn open(&self) -> bool {
@@ -455,11 +396,8 @@ pub fn on_click(view: &impl Widget, down: bool, run: impl Fn() + 'static) {
 /// Reads the session location's `catalogs` once per invalidation: TS reads a catalog the first time a view asks
 /// for it, and the sections ask before the session's location is known.
 pub fn sync_catalogs(tui: &Tui, session: &SessionID, catalogs: &[opencode_store::Catalog]) {
-    let location = tui.data.read(|state| {
-        state
-            .session(session)
-            .map(|info| opencode_store::Location::from(&info.location))
-    });
+    let location =
+        tui.data.read(|state| state.session(session).map(|info| opencode_store::Location::from(&info.location)));
     let Some(location) = location else { return };
     for catalog in catalogs {
         drop(tui.data.catalog_sync(*catalog, Some(&location)));

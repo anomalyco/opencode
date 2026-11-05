@@ -35,11 +35,7 @@ impl History {
             next.push(item.copy());
         }
         let skip = next.len().saturating_sub(LIMIT);
-        Self {
-            items: next.split_off(skip),
-            index: None,
-            draft: String::new(),
-        }
+        Self { items: next.split_off(skip), index: None, draft: String::new() }
     }
 
     /// `pushPromptHistory`.
@@ -52,19 +48,12 @@ impl History {
             items.push(prompt.copy());
         }
         let skip = items.len().saturating_sub(LIMIT);
-        Self {
-            items: items.split_off(skip),
-            index: None,
-            draft: String::new(),
-        }
+        Self { items: items.split_off(skip), index: None, draft: String::new() }
     }
 
     /// `movePromptHistory`.
     pub fn step(&self, up: bool, text: &str, cursor: u32) -> Move {
-        let none = || Move {
-            state: self.clone(),
-            apply: None,
-        };
+        let none = || Move { state: self.clone(), apply: None };
         if self.items.is_empty() || (up && cursor != 0) || (!up && cursor != measure(text)) {
             return none();
         }
@@ -74,11 +63,7 @@ impl History {
             }
             let index = self.items.len() - 1;
             return Move {
-                state: Self {
-                    index: Some(index),
-                    draft: text.to_owned(),
-                    ..self.clone()
-                },
+                state: Self { index: Some(index), draft: text.to_owned(), ..self.clone() },
                 apply: Some((self.items[index].text.clone(), 0)),
             };
         };
@@ -88,22 +73,13 @@ impl History {
         let next = if up { index - 1 } else { index + 1 };
         if next >= self.items.len() {
             return Move {
-                state: Self {
-                    index: None,
-                    ..self.clone()
-                },
+                state: Self { index: None, ..self.clone() },
                 apply: Some((self.draft.clone(), measure(&self.draft))),
             };
         }
         let text = self.items[next].text.clone();
         let cursor = if up { 0 } else { measure(&text) };
-        Move {
-            state: Self {
-                index: Some(next),
-                ..self.clone()
-            },
-            apply: Some((text, cursor)),
-        }
+        Move { state: Self { index: Some(next), ..self.clone() }, apply: Some((text, cursor)) }
     }
 }
 
@@ -112,11 +88,7 @@ mod tests {
     use super::*;
 
     fn texts(history: &History) -> Vec<&str> {
-        history
-            .items
-            .iter()
-            .map(|item| item.text.as_str())
-            .collect()
+        history.items.iter().map(|item| item.text.as_str()).collect()
     }
 
     #[test]
@@ -130,10 +102,7 @@ mod tests {
         ]);
         assert_eq!(texts(&history), ["a", "b", "a"]);
         assert_eq!(texts(&history.push(&RunPrompt::text("a"))), ["a", "b", "a"]);
-        assert_eq!(
-            texts(&history.push(&RunPrompt::text("c"))),
-            ["a", "b", "a", "c"]
-        );
+        assert_eq!(texts(&history.push(&RunPrompt::text("c"))), ["a", "b", "a", "c"]);
         let many: Vec<RunPrompt> = (0..205).map(|i| RunPrompt::text(i.to_string())).collect();
         let history = History::new(&many);
         assert_eq!(history.items.len(), 200);

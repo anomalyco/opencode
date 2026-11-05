@@ -11,14 +11,8 @@ fn main() -> std::io::Result<()> {
     let files = Files::new(&paths, &channels.channel);
     println!("config:       {}", paths.config.display());
     println!("state:        {}", paths.state.display());
-    println!(
-        "channel:      {} (storage {})",
-        channels.channel, channels.storage
-    );
-    println!(
-        "default port: {}",
-        channel::default_port(&channels.channel, cfg!(windows))
-    );
+    println!("channel:      {} (storage {})", channels.channel, channels.storage);
+    println!("default port: {}", channel::default_port(&channels.channel, cfg!(windows)));
     println!("registration: {}", files.file.display());
     match files.read() {
         Some(info) => println!("service:      {info:?}"),

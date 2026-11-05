@@ -146,11 +146,6 @@ pub struct Route {
 
 impl Route {
     pub fn new(edge: Rc<Edge>, points: Vec<Point>) -> Self {
-        Self {
-            edge,
-            points,
-            label_axis: None,
-            label_point: None,
-        }
+        Self { edge, points, label_axis: None, label_point: None }
     }
 }

@@ -128,11 +128,8 @@ impl Permission {
         let inner = &self.0;
         let (requests, family) = tui.data.read(|state| {
             let family = family(state, &inner.session);
-            let requests: Vec<PermissionRequest> = family
-                .iter()
-                .flat_map(|id| state.permissions(id).unwrap_or_default())
-                .cloned()
-                .collect();
+            let requests: Vec<PermissionRequest> =
+                family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
             (requests, family)
         });
         // A full sync (a reconnect) reads again: the store invalidated what it read before.
@@ -151,17 +148,9 @@ impl Permission {
             return;
         }
         let head = requests.into_iter().next();
-        let current = inner
-            .prompted
-            .borrow()
-            .request
-            .as_ref()
-            .map(|r| r.id.clone());
+        let current = inner.prompted.borrow().request.as_ref().map(|r| r.id.clone());
         if head.as_ref().map(|r| &r.id) != current.as_ref() {
-            *inner.prompted.borrow_mut() = Prompted {
-                request: head,
-                ..Prompted::default()
-            };
+            *inner.prompted.borrow_mut() = Prompted { request: head, ..Prompted::default() };
             inner.stage_changed();
             return;
         }
@@ -207,21 +196,10 @@ pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -
 
 /// The sessions whose requests a session prompts for: a root and its descendants, a child none.
 fn family(state: &State, session: &SessionID) -> Vec<SessionID> {
-    if state
-        .session(session)
-        .is_some_and(|info| info.parent_id.is_some())
-    {
+    if state.session(session).is_some_and(|info| info.parent_id.is_some()) {
         return Vec::new();
     }
-    std::iter::once(session.clone())
-        .chain(
-            state
-                .family(session)
-                .iter()
-                .filter(|id| *id != session)
-                .cloned(),
-        )
-        .collect()
+    std::iter::once(session.clone()).chain(state.family(session).iter().filter(|id| *id != session).cloned()).collect()
 }
 
 impl Inner {
@@ -248,11 +226,8 @@ impl Inner {
 
     fn choices(&self) -> Vec<Choice> {
         let prompted = self.prompted.borrow();
-        let save = prompted
-            .request
-            .as_ref()
-            .and_then(|request| request.save.as_ref())
-            .is_some_and(|save| !save.is_empty());
+        let save =
+            prompted.request.as_ref().and_then(|request| request.save.as_ref()).is_some_and(|save| !save.is_empty());
         if save {
             return vec![Choice::Once, Choice::Always, Choice::Reject];
         }
@@ -329,16 +304,8 @@ impl Inner {
             .title("Select option")
             .group("Permission"),
         );
-        commands.push(
-            TuiCommand::inline("escape", run(Inner::dismiss))
-                .title("Reject permission")
-                .group("Permission"),
-        );
-        KeymapLayer {
-            commands,
-            bindings: vec!["app.exit".to_owned(), FULLSCREEN.to_owned()],
-            ..KeymapLayer::default()
-        }
+        commands.push(TuiCommand::inline("escape", run(Inner::dismiss)).title("Reject permission").group("Permission"));
+        KeymapLayer { commands, bindings: vec!["app.exit".to_owned(), FULLSCREEN.to_owned()], ..KeymapLayer::default() }
     }
 
     /// `RejectPrompt`'s layer.
@@ -417,11 +384,9 @@ impl Inner {
             Choice::Always => PermissionReply::Always,
             Choice::Reject => {
                 // A subagent's request asks what to do differently.
-                let child = tui.data.read(|state| {
-                    state
-                        .session(&request.session_id)
-                        .is_some_and(|info| info.parent_id.is_some())
-                });
+                let child = tui
+                    .data
+                    .read(|state| state.session(&request.session_id).is_some_and(|info| info.parent_id.is_some()));
                 if child {
                     self.prompted.borrow_mut().stage = Stage::Reject;
                     self.stage_changed();
@@ -450,19 +415,8 @@ impl Inner {
         let Some(request) = self.prompted.borrow().request.clone() else {
             return;
         };
-        let message = self
-            .reject
-            .borrow()
-            .as_ref()
-            .map(Textarea::text)
-            .filter(|text| !text.is_empty());
-        reply(
-            &tui,
-            &request,
-            PermissionReply::Reject,
-            message,
-            Box::new(|| {}),
-        );
+        let message = self.reject.borrow().as_ref().map(Textarea::text).filter(|text| !text.is_empty());
+        reply(&tui, &request, PermissionReply::Reject, message, Box::new(|| {}));
     }
 
     fn render(self: &Rc<Self>) {
@@ -517,21 +471,12 @@ impl Inner {
         let app = &tui.app;
         let current = tui.data.read(|state| {
             let (input, metadata) = source(state, request);
-            let directory = state
-                .session(&request.session_id)
-                .map(|info| info.location.directory.0.clone());
+            let directory = state.session(&request.session_id).map(|info| info.location.directory.0.clone());
             let cwd = std::env::current_dir().unwrap_or_default();
             let home = std::env::home_dir();
-            presentation(
-                &request.action,
-                &request.resources,
-                request.metadata.as_ref(),
-                &input,
-                &metadata,
-                &|path| {
-                    opencode_ui::path::format(path, directory.as_deref(), &cwd, home.as_deref())
-                },
-            )
+            presentation(&request.action, &request.resources, request.metadata.as_ref(), &input, &metadata, &|path| {
+                opencode_ui::path::format(path, directory.as_deref(), &cwd, home.as_deref())
+            })
         });
 
         let title_row = View::new(app)
@@ -548,26 +493,14 @@ impl Inner {
                     .gap(1)
                     .padding_edge(Edge::Left, 2)
                     .shrink(0.0)
-                    .child(
-                        &Text::new(app, current.icon)
-                            .fg(theme.text.muted)
-                            .shrink(0.0),
-                    )
+                    .child(&Text::new(app, current.icon).fg(theme.text.muted).shrink(0.0))
                     .child(&Text::new(app, current.title.clone()).fg(theme.text.base)),
             );
         }
         let body = if selected == Choice::Always {
-            lines_view(
-                app,
-                &always_lines(&request.action, request.save.as_deref().unwrap_or_default()),
-                |index| {
-                    if index == 0 {
-                        theme.text.muted
-                    } else {
-                        theme.text.base
-                    }
-                },
-            )
+            lines_view(app, &always_lines(&request.action, request.save.as_deref().unwrap_or_default()), |index| {
+                if index == 0 { theme.text.muted } else { theme.text.base }
+            })
         } else {
             presentation_body(tui, theme, request, &current)
         };
@@ -581,12 +514,7 @@ impl Inner {
             .grow(1.0)
             .basis(Length::Auto)
             .min_height(0)
-            .child(
-                &View::new(app)
-                    .padding_edge(Edge::Left, 1)
-                    .shrink(0.0)
-                    .child(&header),
-            )
+            .child(&View::new(app).padding_edge(Edge::Left, 1).shrink(0.0).child(&header))
             .child(&body);
 
         let actions = View::new(app).row().gap(1).shrink(0.0);
@@ -624,12 +552,7 @@ impl Inner {
         let hints = View::new(app).row().gap(2).shrink(0.0);
         let expanded = self.prompted.borrow().expanded;
         if let Some(key) = tui.keymap.shortcut(FULLSCREEN) {
-            hints.add(&hint(
-                app,
-                theme,
-                &key,
-                if expanded { "minimize" } else { "fullscreen" },
-            ));
+            hints.add(&hint(app, theme, &key, if expanded { "minimize" } else { "fullscreen" }));
         }
         if choices.len() > 1 {
             hints.add(&hint(app, theme, "⇆", "select"));
@@ -663,9 +586,11 @@ impl Inner {
                     .child(&Text::new(app, "△").fg(theme.text.feedback.error.base))
                     .child(&Text::new(app, "Reject permission").fg(theme.text.base)),
             )
-            .child(&View::new(app).padding_edge(Edge::Left, 1).child(
-                &Text::new(app, "Tell OpenCode what to do differently").fg(theme.text.muted),
-            ));
+            .child(
+                &View::new(app)
+                    .padding_edge(Edge::Left, 1)
+                    .child(&Text::new(app, "Tell OpenCode what to do differently").fg(theme.text.muted)),
+            );
         let field = Textarea::new(app)
             .mouse_pointer(MousePointer::DEFAULT)
             .grow(1.0)
@@ -688,12 +613,7 @@ impl Inner {
                 inner.cancel_reject();
             }
         });
-        let actions = View::new(app)
-            .row()
-            .gap(2)
-            .shrink(0.0)
-            .child(&confirm)
-            .child(&cancel);
+        let actions = View::new(app).row().gap(2).shrink(0.0).child(&confirm).child(&cancel);
         let view = View::new(app)
             .column()
             .bg(theme.background.raised.base)
@@ -722,26 +642,19 @@ fn reply(
         message,
     };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move { data.permission_reply(input).await },
-        move |_, result| {
-            let Err(error) = result else { return };
-            failed();
-            if let Some(tui) = weak.upgrade() {
-                tui.toasts.error(error.to_string());
-            }
-        },
-    );
+    tui.app.spawn(async move { data.permission_reply(input).await }, move |_, result| {
+        let Err(error) = result else { return };
+        failed();
+        if let Some(tui) = weak.upgrade() {
+            tui.toasts.error(error.to_string());
+        }
+    });
 }
 
 /// The footer row both stages share; it stacks below 80 columns.
 fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
     View::new(app)
-        .direction(if narrow {
-            FlexDirection::Column
-        } else {
-            FlexDirection::Row
-        })
+        .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
         .shrink(0.0)
         .gap(1)
         .padding_edge(Edge::Top, 1)
@@ -749,25 +662,14 @@ fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
         .padding_edge(Edge::Right, 3)
         .padding_edge(Edge::Bottom, 1)
         .bg(theme.decrease(&theme.background.raised.base, 1))
-        .justify(if narrow {
-            Justify::Start
-        } else {
-            Justify::SpaceBetween
-        })
+        .justify(if narrow { Justify::Start } else { Justify::SpaceBetween })
         .align_items(if narrow { Align::Start } else { Align::Center })
 }
 
 /// `key` in the text color, then `label` muted.
 /// `{key} <span muted>{label}</span>` in one text, so the space takes the key's color.
 fn hint(app: &App, theme: &Theme, key: &str, label: &str) -> Text {
-    Text::new(
-        app,
-        vec![
-            format!("{key} ").fg(theme.text.base),
-            label.to_owned().fg(theme.text.muted),
-        ],
-    )
-    .shrink(0.0)
+    Text::new(app, vec![format!("{key} ").fg(theme.text.base), label.to_owned().fg(theme.text.muted)]).shrink(0.0)
 }
 
 fn lines_view(app: &App, lines: &[String], color: impl Fn(usize) -> Color) -> View {
@@ -778,12 +680,7 @@ fn lines_view(app: &App, lines: &[String], color: impl Fn(usize) -> Color) -> Vi
     view
 }
 
-fn presentation_body(
-    tui: &Tui,
-    theme: &Theme,
-    request: &PermissionRequest,
-    current: &Presentation,
-) -> View {
+fn presentation_body(tui: &Tui, theme: &Theme, request: &PermissionRequest, current: &Presentation) -> View {
     let app = &tui.app;
     if request.action == "edit" {
         return edit_body(tui, theme, current);
@@ -797,9 +694,7 @@ fn presentation_body(
         for line in &current.lines {
             patterns.add(&Text::new(app, line.clone()).fg(theme.text.base));
         }
-        return view
-            .child(&Text::new(app, "Patterns").fg(theme.text.muted))
-            .child(&patterns);
+        return view.child(&Text::new(app, "Patterns").fg(theme.text.muted)).child(&patterns);
     }
     let color = if matches!(request.action.as_str(), "shell" | "subagent" | "task") {
         theme.text.base
@@ -818,20 +713,9 @@ fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
     let app = &tui.app;
     let syntax = opencode_ui::code::syntax_theme(theme);
     let scroll = || ScrollBox::new(app).height(Length::percent(100.0));
-    let column = View::new(app)
-        .column()
-        .gap(1)
-        .grow(1.0)
-        .basis(Length::Auto)
-        .min_height(0);
+    let column = View::new(app).column().gap(1).grow(1.0).basis(Length::Auto).min_height(0);
     if let Some(diff) = &current.diff {
-        let view = match tui
-            .config()
-            .info
-            .diffs
-            .as_ref()
-            .and_then(|diffs| diffs.view)
-        {
+        let view = match tui.config().info.diffs.as_ref().and_then(|diffs| diffs.view) {
             Some(ConfigDiffView::Unified) => DiffView::Unified,
             Some(ConfigDiffView::Split) => DiffView::Split,
             _ if tui.app.size().0 > 120 => DiffView::Split,
@@ -839,27 +723,22 @@ fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
         };
         let file = current.file.as_deref().unwrap_or_default();
         let filetype = opentui::syntax::filetype_for_path(file);
-        let diff =
-            opencode_ui::diff::view(app, theme, &syntax, diff, view, filetype, WrapMode::Word, 0);
+        let diff = opencode_ui::diff::view(app, theme, &syntax, diff, view, filetype, WrapMode::Word, 0);
         return column.child(&scroll().child(&diff));
     }
     if let Some(patch) = &current.patch {
-        let code =
-            opencode_ui::code::view(app, theme, &syntax, Some("diff"), patch).fg(theme.text.muted);
+        let code = opencode_ui::code::view(app, theme, &syntax, Some("diff"), patch).fg(theme.text.muted);
         return column.child(&scroll().child(&code));
     }
     column.child(
-        &View::new(app)
-            .padding_edge(Edge::Left, 1)
-            .child(&Text::new(app, "No diff provided").fg(theme.text.muted)),
+        &View::new(app).padding_edge(Edge::Left, 1).child(&Text::new(app, "No diff provided").fg(theme.text.muted)),
     )
 }
 
 /// The tool call's input and metadata once it stopped streaming (`PermissionPrompt`'s `source`).
 fn source(state: &State, request: &PermissionRequest) -> (Value, Value) {
     let found = request.source.as_ref().and_then(|source| {
-        let Some(SessionMessageInfo::Assistant(message)) =
-            state.message(&request.session_id, &source.message_id)
+        let Some(SessionMessageInfo::Assistant(message)) = state.message(&request.session_id, &source.message_id)
         else {
             return None;
         };
@@ -871,10 +750,9 @@ fn source(state: &State, request: &PermissionRequest) -> (Value, Value) {
         })
     });
     match found {
-        Some(state) if state.get("status").and_then(Value::as_str) != Some("streaming") => (
-            state.get("input").cloned().unwrap_or(Value::Null),
-            state.get("metadata").cloned().unwrap_or(Value::Null),
-        ),
+        Some(state) if state.get("status").and_then(Value::as_str) != Some("streaming") => {
+            (state.get("input").cloned().unwrap_or(Value::Null), state.get("metadata").cloned().unwrap_or(Value::Null))
+        }
         _ => (Value::Null, Value::Null),
     }
 }

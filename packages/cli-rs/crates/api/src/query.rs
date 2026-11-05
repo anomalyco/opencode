@@ -8,9 +8,7 @@ use serde_json::Value;
 pub fn append(pairs: &mut Vec<(String, String)>, key: &str, value: &Value) {
     match value {
         Value::Array(items) => items.iter().for_each(|item| append(pairs, key, item)),
-        Value::Object(map) => map
-            .iter()
-            .for_each(|(child, item)| append(pairs, &format!("{key}[{child}]"), item)),
+        Value::Object(map) => map.iter().for_each(|(child, item)| append(pairs, &format!("{key}[{child}]"), item)),
         _ => pairs.push((key.to_owned(), js_string(value))),
     }
 }
@@ -75,10 +73,7 @@ mod tests {
     #[test]
     fn nested_objects_use_brackets() {
         assert_eq!(
-            query(
-                "location",
-                json!({ "directory": "/a b", "workspace": { "id": "w" } })
-            ),
+            query("location", json!({ "directory": "/a b", "workspace": { "id": "w" } })),
             "location%5Bdirectory%5D=%2Fa+b&location%5Bworkspace%5D%5Bid%5D=w"
         );
     }
@@ -91,14 +86,7 @@ mod tests {
 
     #[test]
     fn numbers_match_javascript() {
-        let cases = [
-            (1.0, "1"),
-            (1.5, "1.5"),
-            (1e21, "1e+21"),
-            (1e-7, "1e-7"),
-            (0.000001, "0.000001"),
-            (-0.0, "0"),
-        ];
+        let cases = [(1.0, "1"), (1.5, "1.5"), (1e21, "1e+21"), (1e-7, "1e-7"), (0.000001, "0.000001"), (-0.0, "0")];
         for (value, text) in cases {
             assert_eq!(js_string(&json!(value)), text, "{value}");
         }

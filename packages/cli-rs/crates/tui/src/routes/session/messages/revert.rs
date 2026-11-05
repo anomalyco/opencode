@@ -71,11 +71,7 @@ impl Banner {
             let Some(inner) = weak.upgrade() else { return };
             inner.hover.set(hovered);
             let raised = inner.theme.background.raised.base;
-            inner.body.bg(if hovered {
-                inner.theme.decrease(&raised, 1)
-            } else {
-                raised
-            });
+            inner.body.bg(if hovered { inner.theme.decrease(&raised, 1) } else { raised });
         });
         let weak = Rc::downgrade(&inner);
         inner.root.on_click(move |_, _| {
@@ -109,17 +105,10 @@ impl Banner {
             .iter()
             .position(|message| opencode_store::MessageExt::id(message) == boundary)
             .map_or(0, |start| {
-                messages[start..]
-                    .iter()
-                    .filter(|message| matches!(message, SessionMessageInfo::User(_)))
-                    .count()
+                messages[start..].iter().filter(|message| matches!(message, SessionMessageInfo::User(_))).count()
             });
-        let props = Props {
-            count,
-            files: files.to_vec(),
-            redo,
-            width: usize::from(tui.app.size().0).saturating_sub(4),
-        };
+        let props =
+            Props { count, files: files.to_vec(), redo, width: usize::from(tui.app.size().0).saturating_sub(4) };
         self.0.root.visible(true);
         if self.0.rendered.borrow().as_ref() == Some(&props) {
             return;
@@ -136,13 +125,9 @@ impl Inner {
         let muted = theme.text.muted;
         self.body.clear();
         let plural = if props.count == 1 { "" } else { "s" };
-        self.body
-            .add(&Text::new(app, format!("{} message{plural} reverted", props.count)).fg(muted));
+        self.body.add(&Text::new(app, format!("{} message{plural} reverted", props.count)).fg(muted));
         if !props.files.is_empty() {
-            let list = View::new(app)
-                .column()
-                .padding_edge(Edge::Top, 1)
-                .padding_edge(Edge::Bottom, 1);
+            let list = View::new(app).column().padding_edge(Edge::Top, 1).padding_edge(Edge::Bottom, 1);
             for file in &props.files {
                 let added = (file.additions > 0).then(|| format!("+{}", file.additions));
                 let removed = (file.deletions > 0).then(|| format!("-{}", file.deletions));
@@ -156,11 +141,7 @@ impl Inner {
                     .gap(1)
                     .shrink(0.0)
                     .child(&Text::new(app, status_label(&file.status)).fg(muted))
-                    .child(
-                        &Text::new(app, path)
-                            .fg(theme.text.base)
-                            .wrap(WrapMode::None),
-                    );
+                    .child(&Text::new(app, path).fg(theme.text.base).wrap(WrapMode::None));
                 if let Some(added) = added {
                     row.add(&Text::new(app, added).fg(theme.diff.text.added));
                 }
@@ -189,12 +170,7 @@ impl Inner {
         self.app.spawn(
             async move {
                 client
-                    .session_revert_clear(
-                        &SessionRevertClearInput {
-                            session_id: session,
-                        },
-                        &RequestOptions::default(),
-                    )
+                    .session_revert_clear(&SessionRevertClearInput { session_id: session }, &RequestOptions::default())
                     .await
             },
             move |_, result| {

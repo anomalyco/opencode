@@ -29,16 +29,10 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), path.clone(), body.clone()));
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
         let location = json!({ "directory": "/project" });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [session()], "cursor": {} })),
@@ -84,11 +78,7 @@ impl Transport for Fixture {
             ("POST", _) => (204, Value::Null),
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -118,11 +108,7 @@ struct Setup {
 impl Setup {
     fn new(source: Source) -> Self {
         let seen = Seen::default();
-        let client = Client::with_transport(
-            "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone() }),
-        )
-        .unwrap();
+        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
         let app = TestApp::new(90, 30);
         let tui = opencode_tui::mount(
             &app,
@@ -131,9 +117,7 @@ impl Setup {
                 directory: "/project".into(),
                 config: Resolved::new(Info::default(), |_| None),
                 roots: None,
-                route: Route::Session {
-                    id: SessionID("ses_a".into()),
-                },
+                route: Route::Session { id: SessionID("ses_a".into()) },
                 continue_: false,
                 events: false,
             },
@@ -145,20 +129,14 @@ impl Setup {
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
     }
 
     fn wait(&self, what: &str, done: impl Fn() -> bool) {
-        assert!(
-            self.app.wait_until(Duration::from_secs(5), done),
-            "{what}:\n{}",
-            self.app.text()
-        );
+        assert!(self.app.wait_until(Duration::from_secs(5), done), "{what}:\n{}", self.app.text());
     }
 
     fn posts(&self) -> Vec<(String, Value)> {
@@ -190,27 +168,16 @@ fn selection(file: &str, start: (u32, u32), end: (u32, u32), text: &str) -> Valu
 #[test]
 fn ide_selection_shows_and_goes_once_before_the_prompt() {
     let ide = Ide::start();
-    let setup = Setup::new(Source {
-        port: Some(ide.port),
-        ..Source::default()
-    });
-    setup.wait("the MCP handshake", || {
-        ide.methods() == ["initialize", "notifications/initialized"]
-    });
+    let setup = Setup::new(Source { port: Some(ide.port), ..Source::default() });
+    setup.wait("the MCP handshake", || ide.methods() == ["initialize", "notifications/initialized"]);
     let initialize = ide.received.lock().unwrap()[0].clone();
     assert_eq!(
         initialize["params"],
         json!({ "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": { "name": "opencode", "version": "0.0.0" } })
     );
-    assert_eq!(
-        setup.tui.prompt.editor.server().unwrap()["serverInfo"]["name"],
-        "fake-ide"
-    );
+    assert_eq!(setup.tui.prompt.editor.server().unwrap()["serverInfo"]["name"], "fake-ide");
 
-    ide.notify(
-        "selection_changed",
-        selection("/project/src/main.rs", (3, 1), (5, 2), "fn main() {\n}"),
-    );
+    ide.notify("selection_changed", selection("/project/src/main.rs", (3, 1), (5, 2), "fn main() {\n}"));
     setup.wait_for("main.rs#3-5");
     assert_eq!(setup.tui.prompt.editor.label_state(), LabelState::Pending);
 
@@ -222,27 +189,15 @@ fn ide_selection_shows_and_goes_once_before_the_prompt() {
     assert!(setup.posts().is_empty());
 
     setup.app.press("return");
-    setup.wait("the prompt", || {
-        setup
-            .posts()
-            .iter()
-            .any(|(path, _)| path.ends_with("/prompt"))
-    });
+    setup.wait("the prompt", || setup.posts().iter().any(|(path, _)| path.ends_with("/prompt")));
     let posts = setup.posts();
     let paths: Vec<&str> = posts
         .iter()
         .map(|(path, _)| path.as_str())
         .filter(|path| path.ends_with("/synthetic") || path.ends_with("/prompt"))
         .collect();
-    assert_eq!(
-        paths,
-        ["/api/session/ses_a/synthetic", "/api/session/ses_a/prompt"]
-    );
-    let synthetic = &posts
-        .iter()
-        .find(|(path, _)| path.ends_with("/synthetic"))
-        .unwrap()
-        .1;
+    assert_eq!(paths, ["/api/session/ses_a/synthetic", "/api/session/ses_a/prompt"]);
+    let synthetic = &posts.iter().find(|(path, _)| path.ends_with("/synthetic")).unwrap().1;
     assert_eq!(
         synthetic["text"],
         "<system-reminder>Note: The user selected #3-5 from \"/project/src/main.rs\". ```fn main() {\n}```\n\n This may or may not be relevant to the current task.</system-reminder>\n"
@@ -253,70 +208,33 @@ fn ide_selection_shows_and_goes_once_before_the_prompt() {
     // Sent once: the next prompt goes alone, and the label stays, muted.
     setup.app.type_text("again");
     setup.app.press("return");
-    setup.wait("the second prompt", || {
-        setup
-            .posts()
-            .iter()
-            .filter(|(path, _)| path.ends_with("/prompt"))
-            .count()
-            == 2
-    });
-    let synthetics = setup
-        .posts()
-        .iter()
-        .filter(|(path, _)| path.ends_with("/synthetic"))
-        .count();
+    setup.wait("the second prompt", || setup.posts().iter().filter(|(path, _)| path.ends_with("/prompt")).count() == 2);
+    let synthetics = setup.posts().iter().filter(|(path, _)| path.ends_with("/synthetic")).count();
     assert_eq!(synthetics, 1);
     setup.wait_for("main.rs#3-5");
 
     // `prompt.editor_context.clear` removes it.
-    setup
-        .tui
-        .keymap
-        .dispatch("prompt.editor_context.clear", None);
+    setup.tui.keymap.dispatch("prompt.editor_context.clear", None);
     setup.wait("the label to go", || !setup.app.text().contains("main.rs#"));
 }
 
 #[test]
 fn ide_mentions_insert_file_parts_with_their_lines() {
     let ide = Ide::start();
-    let setup = Setup::new(Source {
-        port: Some(ide.port),
-        ..Source::default()
-    });
+    let setup = Setup::new(Source { port: Some(ide.port), ..Source::default() });
     setup.wait("the MCP handshake", || ide.methods().len() == 2);
     setup.app.type_text("look at ");
-    ide.notify(
-        "at_mentioned",
-        json!({ "filePath": "/project/src/lib.rs", "lineStart": 12, "lineEnd": 20 }),
-    );
-    setup.wait("the mention", || {
-        setup.textarea().text() == "look at @src/lib.rs#12-20 "
-    });
+    ide.notify("at_mentioned", json!({ "filePath": "/project/src/lib.rs", "lineStart": 12, "lineEnd": 20 }));
+    setup.wait("the mention", || setup.textarea().text() == "look at @src/lib.rs#12-20 ");
     let marks = setup.textarea().extmarks();
     assert_eq!(marks.len(), 1);
     assert_eq!((marks[0].start, marks[0].end), (8, 25));
     // One line, outside the project: an absolute path and no end.
-    ide.notify(
-        "at_mentioned",
-        json!({ "filePath": "/elsewhere/a b.ts", "lineStart": 4, "lineEnd": 4 }),
-    );
-    setup.wait("the second mention", || {
-        setup.textarea().text().ends_with("@/elsewhere/a b.ts#4 ")
-    });
+    ide.notify("at_mentioned", json!({ "filePath": "/elsewhere/a b.ts", "lineStart": 4, "lineEnd": 4 }));
+    setup.wait("the second mention", || setup.textarea().text().ends_with("@/elsewhere/a b.ts#4 "));
     setup.app.press("return");
-    setup.wait("the prompt", || {
-        setup
-            .posts()
-            .iter()
-            .any(|(path, _)| path.ends_with("/prompt"))
-    });
-    let prompt = setup
-        .posts()
-        .into_iter()
-        .find(|(path, _)| path.ends_with("/prompt"))
-        .unwrap()
-        .1;
+    setup.wait("the prompt", || setup.posts().iter().any(|(path, _)| path.ends_with("/prompt")));
+    let prompt = setup.posts().into_iter().find(|(path, _)| path.ends_with("/prompt")).unwrap().1;
     assert_eq!(
         prompt["files"],
         json!([
@@ -336,19 +254,12 @@ fn lock_files_name_the_server_and_its_token() {
     std::fs::create_dir_all(&locks).unwrap();
     std::fs::write(
         locks.join(format!("{}.lock", ide.port)),
-        json!({ "workspaceFolders": ["/project"], "authToken": "token-1", "transport": "ws" })
-            .to_string(),
+        json!({ "workspaceFolders": ["/project"], "authToken": "token-1", "transport": "ws" }).to_string(),
     )
     .unwrap();
-    let setup = Setup::new(Source {
-        home: Some(home.path().to_owned()),
-        ..Source::default()
-    });
+    let setup = Setup::new(Source { home: Some(home.path().to_owned()), ..Source::default() });
     setup.wait("the MCP handshake", || ide.methods().len() == 2);
-    assert_eq!(
-        *ide.authorization.lock().unwrap(),
-        [Some("token-1".to_owned())]
-    );
+    assert_eq!(*ide.authorization.lock().unwrap(), [Some("token-1".to_owned())]);
 }
 
 #[test]
@@ -364,18 +275,11 @@ fn zed_selection_is_read_from_its_database() {
         ..Source::default()
     });
     // `index.*` names its directory too; bytes 6..17 run from line 1 into line 2.
-    let directory = root
-        .path()
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let directory = root.path().file_name().unwrap().to_string_lossy().into_owned();
     setup.wait_for(&format!("{directory}/index.ts#1-2"));
     // The next poll sees a new selection.
     let connection = rusqlite::Connection::open(&db).unwrap();
-    connection
-        .execute("update editor_selections set start = 12, end = 17", [])
-        .unwrap();
+    connection.execute("update editor_selections set start = 12, end = 17", []).unwrap();
     drop(connection);
     setup.wait_for(&format!("{directory}/index.ts#2"));
     let selection = setup.tui.prompt.editor.selection().unwrap();
@@ -398,16 +302,6 @@ fn zed_database(db: &Path, file: &Path, (start, end): (u32, u32)) {
             insert into items values (7, 1, 1, 'Editor', 1);",
         )
         .unwrap();
-    connection
-        .execute(
-            "insert into editors values (7, 1, ?1, null)",
-            [file.to_string_lossy()],
-        )
-        .unwrap();
-    connection
-        .execute(
-            "insert into editor_selections values (7, 1, ?1, ?2)",
-            [start, end],
-        )
-        .unwrap();
+    connection.execute("insert into editors values (7, 1, ?1, null)", [file.to_string_lossy()]).unwrap();
+    connection.execute("insert into editor_selections values (7, 1, ?1, ?2)", [start, end]).unwrap();
 }

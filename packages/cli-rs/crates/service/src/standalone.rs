@@ -42,11 +42,9 @@ pub struct Error(pub String);
 
 /// Starts `command` (program first, `TsCommand::standalone`) in `cwd` and waits for its ready line.
 pub async fn start(command: &[OsString], cwd: &Path, print_logs: bool) -> Result<Server, Error> {
-    let (program, args) = command
-        .split_first()
-        .ok_or_else(|| Error("Failed to resolve standalone server command".to_owned()))?;
-    let password =
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>());
+    let (program, args) =
+        command.split_first().ok_or_else(|| Error("Failed to resolve standalone server command".to_owned()))?;
+    let password = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>());
     let mut child = Command::new(program)
         .args(args)
         .current_dir(cwd)
@@ -55,35 +53,19 @@ pub async fn start(command: &[OsString], cwd: &Path, print_logs: bool) -> Result
         .env("OPENCODE_PASSWORD", &password)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(if print_logs {
-            Stdio::inherit()
-        } else {
-            Stdio::null()
-        })
+        .stderr(if print_logs { Stdio::inherit() } else { Stdio::null() })
         .spawn()
-        .map_err(|error| {
-            Error(format!(
-                "Failed to start standalone server: {}: {error}",
-                program.to_string_lossy()
-            ))
-        })?;
+        .map_err(|error| Error(format!("Failed to start standalone server: {}: {error}", program.to_string_lossy())))?;
     let pid = child.id().unwrap_or_default();
     let lease = child.stdin.take();
     let mut lines = BufReader::new(child.stdout.take().expect("stdout is piped")).lines();
     let ready = lines.next_line().await.ok().flatten();
     // Keep draining stdout after readiness so later server writes cannot hit EPIPE.
     tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
-    let mut server = Server {
-        endpoint: Endpoint::new(String::new(), Some(password)),
-        pid,
-        child,
-        lease,
-    };
+    let mut server = Server { endpoint: Endpoint::new(String::new(), Some(password)), pid, child, lease };
     // An early return drops `server`, which ends the lease and stops the child.
     let Some(ready) = ready else {
-        return Err(Error(
-            "Standalone server exited before reporting readiness".to_owned(),
-        ));
+        return Err(Error("Standalone server exited before reporting readiness".to_owned()));
     };
     server.endpoint.url = serde_json::from_str::<serde_json::Value>(&ready)
         .ok()
@@ -102,10 +84,7 @@ impl Server {
     pub async fn shutdown(mut self) {
         self.lease.take();
         stop::signal(self.pid, Signal::Term);
-        if tokio::time::timeout(FORCE_KILL_AFTER, self.child.wait())
-            .await
-            .is_err()
-        {
+        if tokio::time::timeout(FORCE_KILL_AFTER, self.child.wait()).await.is_err() {
             let _ = self.child.kill().await;
         }
     }

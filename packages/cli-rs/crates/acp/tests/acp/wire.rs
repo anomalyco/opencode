@@ -17,9 +17,7 @@ use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -38,31 +36,19 @@ pub fn ephemeral_event(kind: &str, data: Value) -> Value {
 }
 
 pub fn delivered(session_id: &str, inbox_id: &str) -> Value {
-    durable_event(
-        "session.inbox.delivered",
-        json!({ "sessionID": session_id, "inboxID": inbox_id }),
-    )
+    durable_event("session.inbox.delivered", json!({ "sessionID": session_id, "inboxID": inbox_id }))
 }
 
 pub fn succeeded(session_id: &str) -> Value {
-    durable_event(
-        "session.execution.succeeded",
-        json!({ "sessionID": session_id }),
-    )
+    durable_event("session.execution.succeeded", json!({ "sessionID": session_id }))
 }
 
 pub fn interrupted(session_id: &str) -> Value {
-    durable_event(
-        "session.execution.interrupted",
-        json!({ "sessionID": session_id, "reason": "user" }),
-    )
+    durable_event("session.execution.interrupted", json!({ "sessionID": session_id, "reason": "user" }))
 }
 
 pub fn failed(session_id: &str, error: Value) -> Value {
-    durable_event(
-        "session.execution.failed",
-        json!({ "sessionID": session_id, "error": error }),
-    )
+    durable_event("session.execution.failed", json!({ "sessionID": session_id, "error": error }))
 }
 
 pub fn turn(session_id: &str, inbox_id: &str, events: Vec<Value>) -> Vec<Value> {
@@ -167,22 +153,16 @@ pub fn permission_asked(session_id: &str, id: &str, input: Value) -> Value {
 
 /// A `FileDiff.Info` with a unified patch from `before` to `after` (`createTwoFilesPatch`).
 pub fn file_diff(file: &str, before: &str, after: &str, status: &str) -> Value {
-    let patch = similar::TextDiff::from_lines(before, after)
-        .unified_diff()
-        .context_radius(4)
-        .header(file, file)
-        .to_string();
     let patch =
-        format!("===================================================================\n{patch}");
+        similar::TextDiff::from_lines(before, after).unified_diff().context_radius(4).header(file, file).to_string();
+    let patch = format!("===================================================================\n{patch}");
     json!({ "file": file, "patch": patch, "additions": 1, "deletions": 1, "status": status })
 }
 
 /// `file_diff` with the common indentation of the hunk lines removed, as core trims patch-tool diffs.
 pub fn trimmed(file: &str, before: &str, after: &str) -> Value {
     let mut recorded = file_diff(file, before, after, "modified");
-    let body = |line: &str| {
-        line.starts_with([' ', '+', '-']) && !line.starts_with("---") && !line.starts_with("+++")
-    };
+    let body = |line: &str| line.starts_with([' ', '+', '-']) && !line.starts_with("---") && !line.starts_with("+++");
     let patch = recorded["patch"].as_str().unwrap().to_owned();
     let indent = patch
         .split('\n')
@@ -199,11 +179,7 @@ pub fn trimmed(file: &str, before: &str, after: &str) -> Value {
         .split('\n')
         .map(|line| {
             if body(line) {
-                format!(
-                    "{}{}",
-                    &line[..1],
-                    line.get(1 + indent..).unwrap_or_default()
-                )
+                format!("{}{}", &line[..1], line.get(1 + indent..).unwrap_or_default())
             } else {
                 line.to_owned()
             }
@@ -281,8 +257,7 @@ pub type Answer = Arc<dyn Fn(&Value) -> Reply + Send + Sync>;
 
 /// Answers a request in place of the fake server's routes (`fetch`). Gets the server and the recorded
 /// request (`method`, `path`, `query`, `body`).
-pub type Fetch =
-    Arc<dyn Fn(&Arc<Server>, &Value) -> Option<BoxFuture<'static, Response>> + Send + Sync>;
+pub type Fetch = Arc<dyn Fn(&Arc<Server>, &Value) -> Option<BoxFuture<'static, Response>> + Send + Sync>;
 
 pub type Hook<I> = Arc<dyn Fn(I) -> BoxFuture<'static, Vec<Value>> + Send + Sync>;
 
@@ -331,11 +306,7 @@ pub struct State {
 
 impl State {
     pub fn prompts(&self) -> Vec<Value> {
-        self.submissions
-            .iter()
-            .filter(|item| item["kind"] == "prompt")
-            .cloned()
-            .collect()
+        self.submissions.iter().filter(|item| item["kind"] == "prompt").cloned().collect()
     }
 }
 
@@ -354,10 +325,7 @@ impl Server {
         Arc::new(Self {
             state: Mutex::new(State {
                 models: vec![test_model(), second_model()],
-                agents: vec![
-                    agent("build", "Build", None),
-                    agent("plan", "Plan", Some("Plan first")),
-                ],
+                agents: vec![agent("build", "Build", None), agent("plan", "Plan", Some("Plan first"))],
                 commands: vec![review_command()],
                 plugins: vec![json!({
                     "id": "opencode.models.dev", "source": { "type": "builtin" },
@@ -414,28 +382,18 @@ impl Server {
         self.changed.notify_waiters();
     }
 
-    async fn handle(
-        self: Arc<Self>,
-        request: Request,
-        aborted: CancellationToken,
-    ) -> Result<Response, String> {
+    async fn handle(self: Arc<Self>, request: Request, aborted: CancellationToken) -> Result<Response, String> {
         if self.stopped.load(Ordering::SeqCst) {
             return Err("connection refused".to_owned());
         }
         let path = request.url.path().to_owned();
         let query: HashMap<String, String> = request.url.query_pairs().into_owned().collect();
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
-        let recorded =
-            json!({ "method": request.method, "path": path, "query": query, "body": body });
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
+        let recorded = json!({ "method": request.method, "path": path, "query": query, "body": body });
         {
             let mut state = self.state();
-            state
-                .requests
-                .push((request.method.to_owned(), path.clone()));
+            state.requests.push((request.method.to_owned(), path.clone()));
             state.recorded.push(recorded.clone());
         }
         self.changed();
@@ -450,10 +408,9 @@ impl Server {
         let response = match (request.method, segments.as_slice()) {
             ("GET", ["api", "event"]) => return Ok(self.events_stream()),
             ("GET", ["api", "model"]) => catalog(&query, json!(self.state().models)),
-            ("GET", ["api", "model", "default"]) => catalog(
-                &query,
-                self.state().models.first().cloned().unwrap_or(Value::Null),
-            ),
+            ("GET", ["api", "model", "default"]) => {
+                catalog(&query, self.state().models.first().cloned().unwrap_or(Value::Null))
+            }
             ("GET", ["api", "agent"]) => catalog(&query, json!(self.state().agents)),
             ("GET", ["api", "command"]) => catalog(&query, json!(self.state().commands)),
             ("GET", ["api", "plugin"]) => catalog(&query, json!(self.state().plugins)),
@@ -463,9 +420,7 @@ impl Server {
                     .sessions
                     .values()
                     .filter(|session| {
-                        query
-                            .get("directory")
-                            .is_none_or(|directory| session["location"]["directory"] == *directory)
+                        query.get("directory").is_none_or(|directory| session["location"]["directory"] == *directory)
                     })
                     .cloned()
                     .collect();
@@ -473,10 +428,7 @@ impl Server {
             }
             ("POST", ["api", "session"]) => {
                 let id = format!("ses_{}", self.sessions.fetch_add(1, Ordering::SeqCst) + 1);
-                let mut session = make_session(
-                    &id,
-                    body["location"]["directory"].as_str().unwrap_or_default(),
-                );
+                let mut session = make_session(&id, body["location"]["directory"].as_str().unwrap_or_default());
                 for key in ["permissions", "metadata"] {
                     if let Some(value) = body.get(key) {
                         session[key] = value.clone();
@@ -511,8 +463,7 @@ impl Server {
                 let source = self.state().sessions.get(*id).cloned();
                 match source {
                     Some(mut session) => {
-                        let forked =
-                            format!("ses_{}", self.sessions.fetch_add(1, Ordering::SeqCst) + 1);
+                        let forked = format!("ses_{}", self.sessions.fetch_add(1, Ordering::SeqCst) + 1);
                         session["id"] = json!(forked);
                         let mut state = self.state();
                         let messages = state.messages.get(*id).cloned().unwrap_or_default();
@@ -525,14 +476,8 @@ impl Server {
             }
             ("GET", ["api", "session", id, "message"]) => {
                 let items = self.state().messages.get(*id).cloned().unwrap_or_default();
-                let start: usize = query
-                    .get("cursor")
-                    .and_then(|cursor| cursor.parse().ok())
-                    .unwrap_or(0);
-                let limit: usize = query
-                    .get("limit")
-                    .and_then(|limit| limit.parse().ok())
-                    .unwrap_or(200);
+                let start: usize = query.get("cursor").and_then(|cursor| cursor.parse().ok()).unwrap_or(0);
+                let limit: usize = query.get("limit").and_then(|limit| limit.parse().ok()).unwrap_or(200);
                 let data: Vec<Value> = items.iter().skip(start).take(limit).cloned().collect();
                 let cursor = if start + limit < items.len() {
                     json!({ "next": (start + limit).to_string() })
@@ -542,15 +487,11 @@ impl Server {
                 json_response(200, json!({ "data": data, "cursor": cursor }))
             }
             ("POST", ["api", "session", id, "model"]) => {
-                self.state()
-                    .selections
-                    .push(json!({ "sessionID": id, "model": body["model"] }));
+                self.state().selections.push(json!({ "sessionID": id, "model": body["model"] }));
                 no_content()
             }
             ("POST", ["api", "session", id, "agent"]) => {
-                self.state()
-                    .selections
-                    .push(json!({ "sessionID": id, "agent": body["agent"] }));
+                self.state().selections.push(json!({ "sessionID": id, "agent": body["agent"] }));
                 no_content()
             }
             ("POST", ["api", "session", id, "prompt"]) => {
@@ -598,12 +539,7 @@ impl Server {
                 let mut submission = json!({ "kind": "synthetic", "sessionID": id });
                 merge(&mut submission, &body);
                 self.state().submissions.push(submission);
-                enqueued(
-                    id,
-                    "msg_synthetic",
-                    "synthetic",
-                    json!({ "text": body["text"] }),
-                )
+                enqueued(id, "msg_synthetic", "synthetic", json!({ "text": body["text"] }))
             }
             ("POST", ["api", "session", id, "interrupt"]) => {
                 let session_id = (*id).to_owned();
@@ -661,11 +597,7 @@ impl Server {
                 }));
                 no_content()
             }
-            _ => Response {
-                status: 404,
-                headers: Vec::new(),
-                body: Box::pin(futures_util::stream::empty()),
-            },
+            _ => Response { status: 404, headers: Vec::new(), body: Box::pin(futures_util::stream::empty()) },
         };
         self.changed();
         Ok(response)
@@ -673,9 +605,8 @@ impl Server {
 
     fn events_stream(&self) -> Response {
         let (sender, receiver) = mpsc::unbounded_channel();
-        let _ = sender.send(Ok(Bytes::from(
-            "data: {\"id\":\"evt_connected\",\"type\":\"server.connected\",\"data\":{}}\n\n",
-        )));
+        let _ = sender
+            .send(Ok(Bytes::from("data: {\"id\":\"evt_connected\",\"type\":\"server.connected\",\"data\":{}}\n\n")));
         lock(&self.streams).push(sender);
         let body = futures_util::stream::unfold(receiver, |mut receiver| async move {
             receiver.recv().await.map(|item| (item, receiver))
@@ -706,25 +637,15 @@ pub fn json_response(status: u16, body: Value) -> Response {
 }
 
 pub fn no_content() -> Response {
-    Response {
-        status: 204,
-        headers: Vec::new(),
-        body: Box::pin(futures_util::stream::empty()),
-    }
+    Response { status: 204, headers: Vec::new(), body: Box::pin(futures_util::stream::empty()) }
 }
 
 fn not_found(id: &str) -> Response {
-    json_response(
-        404,
-        json!({ "_tag": "SessionNotFoundError", "sessionID": id, "message": "session not found" }),
-    )
+    json_response(404, json!({ "_tag": "SessionNotFoundError", "sessionID": id, "message": "session not found" }))
 }
 
 fn catalog(query: &HashMap<String, String>, data: Value) -> Response {
-    let directory = query
-        .get("location[directory]")
-        .cloned()
-        .unwrap_or_else(|| "/workspace".to_owned());
+    let directory = query.get("location[directory]").cloned().unwrap_or_else(|| "/workspace".to_owned());
     json_response(
         200,
         json!({ "location": { "directory": directory, "project": { "id": "global", "directory": directory } }, "data": data }),
@@ -796,30 +717,19 @@ impl Drop for Wire {
 pub async fn start_wire(options: WireOptions) -> Wire {
     let changed = Arc::new(Notify::new());
     let server = Server::new(options.clone(), changed.clone());
-    let client =
-        Client::with_transport("http://fake.test", Arc::new(FakeTransport(server.clone())))
-            .expect("client");
+    let client = Client::with_transport("http://fake.test", Arc::new(FakeTransport(server.clone()))).expect("client");
     let (client_end, agent_end) = tokio::io::duplex(1 << 22);
     let (agent_read, agent_write) = tokio::io::split(agent_end);
     let mut acp_options = opencode_acp::Options::new("test");
     if let Some(timeout) = options.drain_timeout {
         acp_options.drain_timeout = timeout;
     }
-    let agent = tokio::spawn(opencode_acp::serve(
-        client,
-        agent_read,
-        agent_write,
-        acp_options,
-    ));
+    let agent = tokio::spawn(opencode_acp::serve(client, agent_read, agent_write, acp_options));
     let (client_read, mut client_write) = tokio::io::split(client_end);
     let (outbox, mut outgoing) = mpsc::unbounded_channel::<Value>();
     tokio::spawn(async move {
         while let Some(message) = outgoing.recv().await {
-            if client_write
-                .write_all(format!("{message}\n").as_bytes())
-                .await
-                .is_err()
-            {
+            if client_write.write_all(format!("{message}\n").as_bytes()).await.is_err() {
                 return;
             }
             let _ = client_write.flush().await;
@@ -867,10 +777,7 @@ pub async fn start_wire(options: WireOptions) -> Wire {
 pub async fn start_session(options: WireOptions, capabilities: Value) -> Wire {
     let mut wire = start_wire(options).await;
     wire.initialize(capabilities).await;
-    let session = wire
-        .new_session("/workspace", json!([]))
-        .await
-        .expect("session/new");
+    let session = wire.new_session("/workspace", json!([])).await.expect("session/new");
     wire.session_id = session["sessionId"].as_str().expect("sessionId").to_owned();
     wire
 }
@@ -907,10 +814,7 @@ impl Reader {
     fn receive(&self, message: Value, answers: &mpsc::UnboundedSender<Value>) {
         lock(&self.received).push(message.clone());
         let params = message.get("params").cloned().unwrap_or(Value::Null);
-        match (
-            message.get("method").and_then(Value::as_str),
-            message.get("id"),
-        ) {
+        match (message.get("method").and_then(Value::as_str), message.get("id")) {
             (Some("session/update"), None) => lock(&self.updates).push(params),
             (Some("opencode/session/child_update"), None) => lock(&self.child_updates).push(params),
             (Some("session/request_permission"), Some(id)) => {
@@ -923,10 +827,10 @@ impl Reader {
             }
             (Some("elicitation/create"), Some(id)) => {
                 lock(&self.elicitations).push(params.clone());
-                let reply = self.elicitation.as_ref().map_or_else(
-                    || Reply::Result(json!({ "action": "cancel" })),
-                    |answer| answer(&params),
-                );
+                let reply = self
+                    .elicitation
+                    .as_ref()
+                    .map_or_else(|| Reply::Result(json!({ "action": "cancel" })), |answer| answer(&params));
                 self.reply(id, reply, answers);
             }
             (Some("$/cancel_request"), None) => {
@@ -937,8 +841,7 @@ impl Reader {
                 }
             }
             (None, Some(id)) => {
-                let Some(sender) = id.as_u64().and_then(|id| lock(&self.pending).remove(&id))
-                else {
+                let Some(sender) = id.as_u64().and_then(|id| lock(&self.pending).remove(&id)) else {
                     return;
                 };
                 let result = match message.get("error") {
@@ -991,7 +894,8 @@ impl Wire {
             let outbox = self.outbox.clone();
             tokio::spawn(async move {
                 cancel.cancelled().await;
-                let _ = outbox.send(json!({ "jsonrpc": "2.0", "method": "$/cancel_request", "params": { "requestId": id } }));
+                let _ = outbox
+                    .send(json!({ "jsonrpc": "2.0", "method": "$/cancel_request", "params": { "requestId": id } }));
             });
         }
         let method = method.to_owned();
@@ -1029,24 +933,15 @@ impl Wire {
     }
 
     pub async fn new_session(&self, cwd: &str, mcp_servers: Value) -> Result<Value, RpcError> {
-        self.request(
-            "session/new",
-            json!({ "cwd": cwd, "mcpServers": mcp_servers }),
-        )
-        .await
+        self.request("session/new", json!({ "cwd": cwd, "mcpServers": mcp_servers })).await
     }
 
     pub async fn prompt(&self, session_id: &str, text: &str) -> Result<Value, RpcError> {
-        self.prompt_blocks(session_id, json!([{ "type": "text", "text": text }]))
-            .await
+        self.prompt_blocks(session_id, json!([{ "type": "text", "text": text }])).await
     }
 
     pub async fn prompt_blocks(&self, session_id: &str, prompt: Value) -> Result<Value, RpcError> {
-        self.request(
-            "session/prompt",
-            json!({ "sessionId": session_id, "prompt": prompt }),
-        )
-        .await
+        self.request("session/prompt", json!({ "sessionId": session_id, "prompt": prompt })).await
     }
 
     /// Waits until `read` returns a value.
@@ -1066,18 +961,8 @@ impl Wire {
         }
     }
 
-    pub async fn wait_for_update(
-        &self,
-        description: &str,
-        predicate: impl Fn(&Value) -> bool,
-    ) -> Value {
-        self.until(description, || {
-            lock(&self.updates)
-                .iter()
-                .find(|item| predicate(item))
-                .cloned()
-        })
-        .await
+    pub async fn wait_for_update(&self, description: &str, predicate: impl Fn(&Value) -> bool) -> Value {
+        self.until(description, || lock(&self.updates).iter().find(|item| predicate(item)).cloned()).await
     }
 
     pub fn updates(&self) -> Vec<Value> {
@@ -1089,10 +974,7 @@ impl Wire {
         self.updates()
             .into_iter()
             .filter(|item| {
-                !matches!(
-                    item["update"]["sessionUpdate"].as_str(),
-                    Some("available_commands_update" | "usage_update")
-                )
+                !matches!(item["update"]["sessionUpdate"].as_str(), Some("available_commands_update" | "usage_update"))
             })
             .collect()
     }
@@ -1101,14 +983,11 @@ impl Wire {
 /// `toMatchObject`: every key of `expected` matches; arrays match element by element.
 pub fn matches(actual: &Value, expected: &Value) -> bool {
     match (actual, expected) {
-        (Value::Object(actual), Value::Object(expected)) => expected.iter().all(|(key, value)| {
-            actual
-                .get(key)
-                .map_or(value.is_null(), |item| matches(item, value))
-        }),
+        (Value::Object(actual), Value::Object(expected)) => {
+            expected.iter().all(|(key, value)| actual.get(key).map_or(value.is_null(), |item| matches(item, value)))
+        }
         (Value::Array(actual), Value::Array(expected)) => {
-            actual.len() == expected.len()
-                && actual.iter().zip(expected).all(|(a, e)| matches(a, e))
+            actual.len() == expected.len() && actual.iter().zip(expected).all(|(a, e)| matches(a, e))
         }
         _ => actual == expected,
     }
@@ -1116,16 +995,11 @@ pub fn matches(actual: &Value, expected: &Value) -> bool {
 
 #[track_caller]
 pub fn assert_matches(actual: &Value, expected: &Value) {
-    assert!(
-        matches(actual, expected),
-        "expected to match:\n  actual:   {actual}\n  expected: {expected}"
-    );
+    assert!(matches(actual, expected), "expected to match:\n  actual:   {actual}\n  expected: {expected}");
 }
 
 /// A hook that answers with fixed events.
-pub fn events(
-    build: impl Fn(&PromptCall) -> Vec<Value> + Send + Sync + 'static,
-) -> Hook<PromptCall> {
+pub fn events(build: impl Fn(&PromptCall) -> Vec<Value> + Send + Sync + 'static) -> Hook<PromptCall> {
     Arc::new(move |call| {
         let events = build(&call);
         Box::pin(async move { events })

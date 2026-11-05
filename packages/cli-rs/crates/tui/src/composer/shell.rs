@@ -29,8 +29,7 @@ impl State {
         let height = self.entries.len().min(super::ROWS) as isize;
         let y = self.selected as isize - self.offset as isize;
         if y >= height || y < 0 {
-            self.offset =
-                super::clamp_offset(self.offset as isize + y - height / 2, self.entries.len());
+            self.offset = super::clamp_offset(self.offset as isize + y - height / 2, self.entries.len());
         }
     }
 }
@@ -89,25 +88,16 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command(
-            "composer.shell.select",
-            "View shell output",
-            |inner, tui| open(inner, tui),
-        ),
+        command("composer.shell.select", "View shell output", |inner, tui| open(inner, tui)),
         command("composer.shell.kill", "Kill shell command", |inner, tui| {
             let Some(shell) = selected(inner) else { return };
             let client = tui.data.client().clone();
             tui.app.runtime().spawn(async move {
                 let input = ShellRemoveInput {
                     id: shell.info.id,
-                    location: Some(LocationQueryInput {
-                        directory: Some(shell.location.directory),
-                    }),
+                    location: Some(LocationQueryInput { directory: Some(shell.location.directory) }),
                 };
-                if let Err(error) = client
-                    .shell_remove(&input, &RequestOptions::default())
-                    .await
-                {
+                if let Err(error) = client.shell_remove(&input, &RequestOptions::default()).await {
                     log::warn!("failed to kill the shell command: {error}");
                 }
             });
@@ -133,9 +123,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
         (state.entries.clone(), state.selected, state.offset)
     };
     if entries.is_empty() {
-        inner
-            .body
-            .add(&empty(tui, theme, " No shell commands".to_owned()));
+        inner.body.add(&empty(tui, theme, " No shell commands".to_owned()));
     }
     for index in window(&entries, offset) {
         let hover = {
@@ -167,25 +155,12 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
                 });
             }
         };
-        let command = entries[index]
-            .info
-            .command
-            .split('\n')
-            .next()
-            .unwrap_or_default();
+        let command = entries[index].info.command.split('\n').next().unwrap_or_default();
         inner.body.add(&row(
             tui,
             theme,
-            if index == selected {
-                RowState::Focused
-            } else {
-                RowState::Base
-            },
-            Label {
-                text: command.to_owned(),
-                status: None,
-                truncate: false,
-            },
+            if index == selected { RowState::Focused } else { RowState::Base },
+            Label { text: command.to_owned(), status: None, truncate: false },
             hover,
             click,
         ));
@@ -194,17 +169,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
         return Vec::new();
     }
     vec![
-        (
-            "output".to_owned(),
-            tui.keymap
-                .shortcut("composer.shell.select")
-                .unwrap_or_default(),
-        ),
-        (
-            "kill".to_owned(),
-            tui.keymap
-                .shortcut("composer.shell.kill")
-                .unwrap_or_default(),
-        ),
+        ("output".to_owned(), tui.keymap.shortcut("composer.shell.select").unwrap_or_default()),
+        ("kill".to_owned(), tui.keymap.shortcut("composer.shell.kill").unwrap_or_default()),
     ]
 }

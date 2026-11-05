@@ -16,14 +16,11 @@ use crate::routes::session::sidebar::{Fold, Section, on_click, sync_catalogs};
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.mcp", |cx| {
         let fold = Fold::load(cx.host(), cx.storage_key("view"));
-        cx.slot(
-            Placement::append(slot::SIDEBAR_CONTENT),
-            move |tui, input| {
-                let session = SessionID(input.session_id.clone().unwrap_or_default());
-                let fold = fold.clone();
-                Box::new(Section::new(tui, move |tui| view(tui, &session, &fold)))
-            },
-        );
+        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), move |tui, input| {
+            let session = SessionID(input.session_id.clone().unwrap_or_default());
+            let fold = fold.clone();
+            Box::new(Section::new(tui, move |tui| view(tui, &session, &fold)))
+        });
     })
 }
 
@@ -35,14 +32,8 @@ fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
     }
     let theme = tui.page();
     let app = &tui.app;
-    let on = list
-        .iter()
-        .filter(|item| item.status.tag() == "connected")
-        .count();
-    let bad = list
-        .iter()
-        .filter(|item| matches!(item.status.tag(), "failed" | "needs_auth"))
-        .count();
+    let on = list.iter().filter(|item| item.status.tag() == "connected").count();
+    let bad = list.iter().filter(|item| matches!(item.status.tag(), "failed" | "needs_auth")).count();
     let foldable = list.len() > 2;
     let header = View::new(app).row().gap(1);
     if foldable {
@@ -79,13 +70,8 @@ fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
 /// The MCP servers of the session's location.
 fn servers(tui: &Tui, session: &SessionID) -> Vec<McpServer> {
     tui.data.read(|state| {
-        let location = state
-            .session(session)
-            .map(|info| Location::from(&info.location));
-        state
-            .location(location.as_ref())
-            .and_then(|data| data.mcp_server.clone())
-            .unwrap_or_default()
+        let location = state.session(session).map(|info| Location::from(&info.location));
+        state.location(location.as_ref()).and_then(|data| data.mcp_server.clone()).unwrap_or_default()
     })
 }
 
@@ -124,11 +110,7 @@ fn row(tui: &Tui, theme: &Theme, item: McpServer) -> View {
         )
         .child(
             &Text::new(app, label)
-                .fg(if status == "failed" {
-                    theme.text.feedback.error.base
-                } else {
-                    theme.text.muted
-                })
+                .fg(if status == "failed" { theme.text.feedback.error.base } else { theme.text.muted })
                 .wrap(WrapMode::None)
                 .shrink(0.0),
         );

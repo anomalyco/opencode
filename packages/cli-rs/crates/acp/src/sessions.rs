@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use futures_util::StreamExt;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    AgentID, ExperimentalMcpAddInput, ExperimentalMcpAddInputConfig, LocationQueryInput, ModelRef,
-    SessionID, SessionInfo, SessionSwitchAgentInput, SessionSwitchModelInput,
+    AgentID, ExperimentalMcpAddInput, ExperimentalMcpAddInputConfig, LocationQueryInput, ModelRef, SessionID,
+    SessionInfo, SessionSwitchAgentInput, SessionSwitchModelInput,
 };
 use serde_json::{Map, Value, json};
 use tokio::sync::{mpsc, watch};
@@ -31,17 +31,11 @@ pub struct Attached {
 
 impl Attached {
     pub fn new(id: &str, cwd: &str, selection: Selection) -> Self {
-        Self {
-            id: id.to_owned(),
-            cwd: cwd.to_owned(),
-            selection: Mutex::new(selection),
-        }
+        Self { id: id.to_owned(), cwd: cwd.to_owned(), selection: Mutex::new(selection) }
     }
 
     fn lock(&self) -> MutexGuard<'_, Selection> {
-        self.selection
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.selection.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn selection(&self) -> Selection {
@@ -77,19 +71,12 @@ pub struct Sessions {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl Sessions {
     /// Subscribes before any attach, so a switch right after attaching reaches the session.
-    pub fn new(
-        client: Client,
-        connection: Connection,
-        catalogs: Arc<Catalogs>,
-        scope: CancellationToken,
-    ) -> Arc<Self> {
+    pub fn new(client: Client, connection: Connection, catalogs: Arc<Catalogs>, scope: CancellationToken) -> Arc<Self> {
         let (connected_sender, connected) = watch::channel(false);
         let sessions = Arc::new(Self {
             client,
@@ -131,15 +118,12 @@ impl Sessions {
                     .get("model")
                     .and_then(|model| serde_json::from_value::<ModelRef>(model.clone()).ok())
                     .map(Change::Model),
-                "session.agent.selected" => data
-                    .get("agent")
-                    .and_then(Value::as_str)
-                    .map(|agent| Change::Mode(agent.to_owned())),
+                "session.agent.selected" => {
+                    data.get("agent").and_then(Value::as_str).map(|agent| Change::Mode(agent.to_owned()))
+                }
                 _ => None,
             };
-            let (Some(change), Some(session_id)) =
-                (change, data.get("sessionID").and_then(Value::as_str))
-            else {
+            let (Some(change), Some(session_id)) = (change, data.get("sessionID").and_then(Value::as_str)) else {
                 continue;
             };
             if let Some(entry) = lock(&self.entries).get(session_id) {
@@ -161,22 +145,13 @@ impl Sessions {
         let attached = Arc::new(Attached::new(
             &session.id.0,
             cwd,
-            Selection {
-                model: session.model.clone(),
-                mode_id: session.agent.as_ref().map(|agent| agent.0.clone()),
-            },
+            Selection { model: session.model.clone(), mode_id: session.agent.as_ref().map(|agent| agent.0.clone()) },
         ));
         let (selected, mut selections) = mpsc::unbounded_channel();
         let scope = self.scope.child_token();
         // Swap at once so concurrent attaches of one ID cannot both keep a scope.
-        let replaced = lock(&self.entries).insert(
-            attached.id.clone(),
-            Entry {
-                attached: attached.clone(),
-                scope: scope.clone(),
-                selected,
-            },
-        );
+        let replaced = lock(&self.entries)
+            .insert(attached.id.clone(), Entry { attached: attached.clone(), scope: scope.clone(), selected });
         if let Some(replaced) = replaced {
             replaced.scope.cancel();
         }
@@ -246,13 +221,7 @@ impl Sessions {
         )
     }
 
-    fn changed(
-        &self,
-        attached: &Attached,
-        previous: &Catalog,
-        next: &Catalog,
-        patch: Option<&Change>,
-    ) {
+    fn changed(&self, attached: &Attached, previous: &Catalog, next: &Catalog, patch: Option<&Change>) {
         let selection = attached.update(patch);
         let patched = patch.map_or_else(|| selection.clone(), |change| selection.apply(change));
         let options = config_options(next, &patched);
@@ -284,28 +253,25 @@ impl Sessions {
                 })
                 .collect()
         };
-        let results =
-            futures_util::future::join_all(additions.into_iter().map(|(name, config)| {
-                let client = self.client.clone();
-                let cwd = attached.cwd.clone();
-                // A spawned task finishes even when the caller stops waiting (TS: uninterruptible).
-                tokio::spawn(async move {
-                    let result = client
-                        .experimental_mcp_add(
-                            &ExperimentalMcpAddInput {
-                                server: name.clone(),
-                                location: Some(LocationQueryInput {
-                                    directory: Some(cwd),
-                                }),
-                                config: ExperimentalMcpAddInputConfig::Unknown(config),
-                            },
-                            &RequestOptions::default(),
-                        )
-                        .await;
-                    (name, check(result))
-                })
-            }))
-            .await;
+        let results = futures_util::future::join_all(additions.into_iter().map(|(name, config)| {
+            let client = self.client.clone();
+            let cwd = attached.cwd.clone();
+            // A spawned task finishes even when the caller stops waiting (TS: uninterruptible).
+            tokio::spawn(async move {
+                let result = client
+                    .experimental_mcp_add(
+                        &ExperimentalMcpAddInput {
+                            server: name.clone(),
+                            location: Some(LocationQueryInput { directory: Some(cwd) }),
+                            config: ExperimentalMcpAddInputConfig::Unknown(config),
+                        },
+                        &RequestOptions::default(),
+                    )
+                    .await;
+                (name, check(result))
+            })
+        }))
+        .await;
         let mut failure = None;
         for result in results {
             let Ok((name, result)) = result else { continue };
@@ -334,9 +300,7 @@ impl Sessions {
     }
 
     pub fn detach(&self, session_id: &str) {
-        let attached = lock(&self.entries)
-            .get(session_id)
-            .map(|entry| entry.attached.clone());
+        let attached = lock(&self.entries).get(session_id).map(|entry| entry.attached.clone());
         if let Some(attached) = attached {
             self.remove(session_id, &attached);
         }
@@ -350,9 +314,7 @@ impl Sessions {
         lock(&self.entries)
             .get(session_id)
             .map(|entry| entry.attached.clone())
-            .ok_or_else(|| Failure::SessionNotFound {
-                session_id: session_id.to_owned(),
-            })
+            .ok_or_else(|| Failure::SessionNotFound { session_id: session_id.to_owned() })
     }
 
     /// Runs `work` until it ends or the session detaches.
@@ -365,9 +327,7 @@ impl Sessions {
             .get(&attached.id)
             .filter(|entry| Arc::ptr_eq(&entry.attached, attached))
             .map(|entry| entry.scope.clone())
-            .ok_or_else(|| Failure::SessionNotFound {
-                session_id: attached.id.clone(),
-            })?;
+            .ok_or_else(|| Failure::SessionNotFound { session_id: attached.id.clone() })?;
         tokio::spawn(async move {
             tokio::select! {
                 () = work => {}
@@ -384,19 +344,11 @@ impl Sessions {
         let options = RequestOptions::default();
         check(match change {
             Change::Model(model) => {
-                self.client
-                    .session_switch_model(&SessionSwitchModelInput { session_id, model }, &options)
-                    .await
+                self.client.session_switch_model(&SessionSwitchModelInput { session_id, model }, &options).await
             }
             Change::Mode(agent) => {
                 self.client
-                    .session_switch_agent(
-                        &SessionSwitchAgentInput {
-                            session_id,
-                            agent: AgentID(agent),
-                        },
-                        &options,
-                    )
+                    .session_switch_agent(&SessionSwitchAgentInput { session_id, agent: AgentID(agent) }, &options)
                     .await
             }
         })
@@ -406,10 +358,7 @@ impl Sessions {
 fn pairs(items: Option<&Value>) -> Value {
     let mut object = Map::new();
     for item in items.and_then(Value::as_array).into_iter().flatten() {
-        if let (Some(name), Some(value)) = (
-            item.get("name").and_then(Value::as_str),
-            item.get("value").cloned(),
-        ) {
+        if let (Some(name), Some(value)) = (item.get("name").and_then(Value::as_str), item.get("value").cloned()) {
             object.insert(name.to_owned(), value);
         }
     }
@@ -426,14 +375,7 @@ fn mcp_config(server: &Value) -> Value {
         });
     }
     let mut command = vec![server.get("command").cloned().unwrap_or(Value::Null)];
-    command.extend(
-        server
-            .get("args")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .cloned(),
-    );
+    command.extend(server.get("args").and_then(Value::as_array).into_iter().flatten().cloned());
     json!({
         "type": "local",
         "command": command,

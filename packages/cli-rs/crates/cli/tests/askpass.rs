@@ -45,10 +45,7 @@ fn helper(port: u16, confirm: bool) -> std::process::Output {
         command.env("SSH_ASKPASS_PROMPT", "confirm");
     }
     let output = command.output().unwrap();
-    assert!(
-        !home.path().join("data").exists(),
-        "the helper must not write logs"
-    );
+    assert!(!home.path().join("data").exists(), "the helper must not write logs");
     output
 }
 
@@ -56,24 +53,16 @@ fn helper(port: u16, confirm: bool) -> std::process::Output {
 fn the_executable_askpass_branch_returns_only_the_response_without_cli_output() {
     let (port, desktop) = desktop(vec![br#"{"value":"passphrase\"with spaces"}"#.to_vec()]);
     let output = helper(port, true);
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
-        "passphrase\"with spaces\n"
-    );
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "passphrase\"with spaces\n");
     assert_eq!(output.status.code(), Some(0));
     let request: serde_json::Value = serde_json::from_str(&desktop.join().unwrap()).unwrap();
-    assert_eq!(
-        request,
-        serde_json::json!({ "token": "fixture", "text": "Enter passphrase:", "confirm": true })
-    );
+    assert_eq!(request, serde_json::json!({ "token": "fixture", "text": "Enter passphrase:", "confirm": true }));
     assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
 }
 
 #[test]
 fn a_response_split_inside_a_multi_byte_character_is_written_intact() {
-    let response = serde_json::json!({ "value": "pässwörd" })
-        .to_string()
-        .into_bytes();
+    let response = serde_json::json!({ "value": "pässwörd" }).to_string().into_bytes();
     let split = response.iter().position(|byte| *byte == 0xc3).unwrap() + 1;
     let (port, desktop) = desktop(vec![response[..split].to_vec(), response[split..].to_vec()]);
     let output = helper(port, false);

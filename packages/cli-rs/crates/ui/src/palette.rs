@@ -32,17 +32,15 @@ pub fn command_options(keymap: &Rc<DialogKeymap>) -> Vec<(SelectOption<String>, 
                 .join(" · ");
             let id = command.id.clone();
             let run_keymap = Rc::downgrade(keymap);
-            let mut option = SelectOption::new(
-                command.title.clone().unwrap_or_else(|| command.id.clone()),
-                command.id.clone(),
-            )
-            .search_text(search_text)
-            .on_select(move |dialogs: &Dialogs| {
-                dialogs.clear();
-                if let Some(keymap) = run_keymap.upgrade() {
-                    keymap.dispatch(&id, None);
-                }
-            });
+            let mut option =
+                SelectOption::new(command.title.clone().unwrap_or_else(|| command.id.clone()), command.id.clone())
+                    .search_text(search_text)
+                    .on_select(move |dialogs: &Dialogs| {
+                        dialogs.clear();
+                        if let Some(keymap) = run_keymap.upgrade() {
+                            keymap.dispatch(&id, None);
+                        }
+                    });
             option.description = command.description.clone();
             option.category = command.group.clone();
             option.footer = footer;
@@ -58,24 +56,15 @@ pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>) -> View {
     let commands = command_options(&cx.keymap);
     let options = Rc::new(move |filter: &str| {
         if !filter.is_empty() {
-            return commands
-                .iter()
-                .map(|(option, _)| option.clone())
-                .chain(settings.iter().cloned())
-                .collect();
+            return commands.iter().map(|(option, _)| option.clone()).chain(settings.iter().cloned()).collect();
         }
-        let suggested = commands
-            .iter()
-            .filter(|(_, suggested)| *suggested)
-            .map(|(option, _)| {
-                let mut option = option.clone();
-                option.value = format!("suggested:{}", option.value);
-                option.category = Some("Suggested".to_owned());
-                option
-            });
-        suggested
-            .chain(commands.iter().map(|(option, _)| option.clone()))
-            .collect()
+        let suggested = commands.iter().filter(|(_, suggested)| *suggested).map(|(option, _)| {
+            let mut option = option.clone();
+            option.value = format!("suggested:{}", option.value);
+            option.category = Some("Suggested".to_owned());
+            option
+        });
+        suggested.chain(commands.iter().map(|(option, _)| option.clone())).collect()
     });
     let mut props = SelectProps::dynamic("Commands", options);
     props.search_in_title = true;

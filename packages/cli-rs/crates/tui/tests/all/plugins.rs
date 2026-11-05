@@ -23,9 +23,7 @@ use serde_json::{Value, json};
 /// The sample plugin (`crates/plugin/examples/sample`) built with `features`, once per test run.
 fn build(features: &str) -> Vec<u8> {
     static BUILT: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
-    let mut built = BUILT
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((_, library)) = built.iter().find(|(known, _)| known == features) {
         return library.clone();
     }
@@ -40,11 +38,7 @@ fn build(features: &str) -> Vec<u8> {
         .status()
         .unwrap();
     assert!(status.success(), "the sample plugin did not build");
-    let name = format!(
-        "{}opencode_sample_plugin{}",
-        std::env::consts::DLL_PREFIX,
-        std::env::consts::DLL_SUFFIX
-    );
+    let name = format!("{}opencode_sample_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
     let library = std::fs::read(target.join("debug").join(name)).unwrap();
     built.push((features.to_owned(), library.clone()));
     library
@@ -62,18 +56,14 @@ impl Transport for Fixture {
             let (status, body) = match path.as_str() {
                 "/api/session" => (200, json!({ "data": [], "cursor": {} })),
                 "/api/session/ses_p" => (200, json!({ "data": session() })),
-                "/api/session/ses_p/message" => {
-                    (200, json!({ "data": messages(&self.text), "cursor": {} }))
-                }
+                "/api/session/ses_p/message" => (200, json!({ "data": messages(&self.text), "cursor": {} })),
                 "/api/session/ses_p/permission" => (200, json!({ "data": [] })),
                 _ => (404, json!({})),
             };
             Ok(Response {
                 status,
                 headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(
-                    serde_json::to_vec(&body).unwrap(),
-                ))])),
+                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(serde_json::to_vec(&body).unwrap()))])),
             })
         })
     }
@@ -117,13 +107,7 @@ fn open(route: Route, text: &str, build: &[u8]) -> Harness {
     let plugin = config.join("plugins/sample");
     std::fs::create_dir_all(&plugin).unwrap();
     std::fs::write(plugin.join(entry_file()), build).unwrap();
-    let client = Client::with_transport(
-        "http://opencode.local",
-        Arc::new(Fixture {
-            text: text.to_owned(),
-        }),
-    )
-    .unwrap();
+    let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { text: text.to_owned() })).unwrap();
     let app = TestApp::new(80, 24);
     let tui = opencode_tui::mount(
         &app,
@@ -137,32 +121,17 @@ fn open(route: Route, text: &str, build: &[u8]) -> Harness {
             events: false,
         },
     );
-    external(
-        &tui,
-        External {
-            config_dir: config,
-            cwd: root.path().to_path_buf(),
-        },
-    );
-    Harness {
-        app,
-        tui,
-        plugin,
-        _root: root,
-    }
+    external(&tui, External { config_dir: config, cwd: root.path().to_path_buf() });
+    Harness { app, tui, plugin, _root: root }
 }
 
 fn session_route() -> Route {
-    Route::Session {
-        id: SessionID("ses_p".into()),
-    }
+    Route::Session { id: SessionID("ses_p".into()) }
 }
 
 impl Harness {
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(10), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(10), || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -170,23 +139,13 @@ impl Harness {
 
     fn status(&self) -> opencode_plugin::Status {
         let target = self.plugin.to_string_lossy();
-        self.tui
-            .plugins
-            .entries()
-            .into_iter()
-            .find(|entry| entry.target.as_deref() == Some(&*target))
-            .unwrap()
-            .status
+        self.tui.plugins.entries().into_iter().find(|entry| entry.target.as_deref() == Some(&*target)).unwrap().status
     }
 }
 
 #[test]
 fn the_sample_renders_in_the_transcript_and_reloads_on_change() {
-    let h = open(
-        session_route(),
-        "Here:\n\n```sample\nhello plugin\n```",
-        &build(""),
-    );
+    let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build(""));
     let screen = h.wait_for("SAMPLE v1 HELLO PLUGIN");
     assert!(!screen.contains("hello plugin"), "{screen}");
     assert_eq!(h.status(), opencode_plugin::Status::Active);
@@ -202,9 +161,7 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
     h.wait_for("sample plugin v1: home.footer");
     h.tui.keymap.dispatch("sample.open", None);
     h.wait_for("Sample route hello");
-    assert!(
-        matches!(h.tui.route(), Route::Plugin { ref id, ref name } if id == "sample" && name == "hello")
-    );
+    assert!(matches!(h.tui.route(), Route::Plugin { ref id, ref name } if id == "sample" && name == "hello"));
     // Without storage the command still toasts.
     h.tui.keymap.dispatch("sample.hello", None);
     h.wait_for("Hello from sample v1 (1)");
@@ -215,20 +172,13 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
         .find(|line| line.contains("sample") && line.contains("local"))
         .unwrap_or_else(|| panic!("no sample row:\n{screen}"));
     // An active plugin shows only its origin, as in TS.
-    assert!(
-        row.trim_end().ends_with("local") && !row.contains("failed"),
-        "{screen}"
-    );
+    assert!(row.trim_end().ends_with("local") && !row.contains("failed"), "{screen}");
     print_excerpt("plugin manager with the sample active", &screen);
 }
 
 #[test]
 fn a_panicking_plugin_shows_as_failed_in_the_plugin_manager() {
-    let h = open(
-        session_route(),
-        "Crash:\n\n```sample-panic\nboom\n```",
-        &build(""),
-    );
+    let h = open(session_route(), "Crash:\n\n```sample-panic\nboom\n```", &build(""));
     // The fence falls back to the code view and the TUI keeps running.
     let screen = h.wait_for("boom");
     assert!(!screen.contains("SAMPLE"), "{screen}");
@@ -253,10 +203,7 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     let h = open(Route::Home, "", &build(""));
     h.wait_for("sample plugin v1: home.footer");
     h.tui.keymap.dispatch("sample.panic", None);
-    assert_eq!(
-        h.status(),
-        opencode_plugin::Status::Failed("run-command panicked: sample command panicked".to_owned())
-    );
+    assert_eq!(h.status(), opencode_plugin::Status::Failed("run-command panicked: sample command panicked".to_owned()));
     h.wait_for("Plugin failed: sample");
     h.tui.keymap.dispatch("plugins.list", None);
     h.wait_for("view error space");
@@ -266,9 +213,7 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     h.app.press("escape");
     h.wait_for("enable enter");
     h.app.press("enter");
-    h.app.wait_until(Duration::from_secs(5), || {
-        h.status() == opencode_plugin::Status::Active
-    });
+    h.app.wait_until(Duration::from_secs(5), || h.status() == opencode_plugin::Status::Active);
     assert_eq!(h.status(), opencode_plugin::Status::Active);
 }
 
@@ -278,10 +223,7 @@ fn a_major_abi_mismatch_is_refused_with_its_reason() {
     let opencode_plugin::Status::Failed(error) = h.status() else {
         panic!("{:?}", h.status());
     };
-    assert!(
-        error.starts_with("plugin ABI 2.0 is not supported"),
-        "{error}"
-    );
+    assert!(error.starts_with("plugin ABI 2.0 is not supported"), "{error}");
     h.tui.keymap.dispatch("plugins.list", None);
     let screen = h.wait_for("failed, local");
     assert!(!screen.contains("sample plugin v1"), "{screen}");

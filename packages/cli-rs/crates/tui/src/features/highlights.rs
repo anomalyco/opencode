@@ -25,21 +25,12 @@ pub struct Release {
 
 /// The highlights this build embeds; an invalid value reads as none, as in TS.
 pub fn embedded() -> Vec<Highlight> {
-    option_env!("OPENCODE_RELEASE_HIGHLIGHTS")
-        .and_then(|text| serde_json::from_str(text).ok())
-        .unwrap_or_default()
+    option_env!("OPENCODE_RELEASE_HIGHLIGHTS").and_then(|text| serde_json::from_str(text).ok()).unwrap_or_default()
 }
 
 /// Registers `/highlights` when the build has highlights, and the auto-open. `continue_` is `--continue`.
 pub fn install(tui: &Rc<Tui>, continue_: bool) {
-    install_with(
-        tui,
-        Release {
-            version: tui.startup.args.version.clone(),
-            items: embedded(),
-        },
-        continue_,
-    );
+    install_with(tui, Release { version: tui.startup.args.version.clone(), items: embedded() }, continue_);
 }
 
 /// [`install`] with the release given, for tests.
@@ -55,11 +46,7 @@ pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
         .title("Show release highlights")
         .group("System")
         .palette()
-        .slash(Slash {
-            name: "highlights".to_owned(),
-            aliases: Vec::new(),
-            arguments: false,
-        });
+        .slash(Slash { name: "highlights".to_owned(), aliases: Vec::new(), arguments: false });
         // The layer lives as long as the keymap, which the TUI owns.
         if let Err(error) = tui
             .keymap
@@ -78,12 +65,7 @@ pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
     };
     let weak = tui.weak();
     tui.app.spawn(
-        async move {
-            watch
-                .wait_for(|state| state.status == opencode_api::events::Status::Connected)
-                .await
-                .is_ok()
-        },
+        async move { watch.wait_for(|state| state.status == opencode_api::events::Status::Connected).await.is_ok() },
         move |_, connected| {
             if let (true, Some(tui)) = (connected, weak.upgrade()) {
                 startup(&tui, &release, continue_);
@@ -97,32 +79,22 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
     if !tui.settings.info().highlights.unwrap_or(true) {
         return;
     }
-    let typed = tui
-        .textarea
-        .borrow()
-        .as_ref()
-        .is_some_and(|textarea| !textarea.text().is_empty());
+    let typed = tui.textarea.borrow().as_ref().is_some_and(|textarea| !textarea.text().is_empty());
     if tui.route() != Route::Home || tui.dialogs.is_open() || typed {
         return;
     }
     let args = &tui.startup.args;
-    if args.prompt.is_some() || continue_ || args.session.is_some() || args.new_session_id.is_some()
-    {
+    if args.prompt.is_some() || continue_ || args.session.is_some() || args.new_session_id.is_some() {
         return;
     }
-    if ["OPENCODE_DRIVE", "OPENCODE_STORY", "OPENCODE_ROUTE"]
-        .iter()
-        .any(|name| std::env::var_os(name).is_some())
-    {
+    if ["OPENCODE_DRIVE", "OPENCODE_STORY", "OPENCODE_ROUTE"].iter().any(|name| std::env::var_os(name).is_some()) {
         return;
     }
     let Some(storage) = tui.storage() else { return };
     let input = Input {
         version: release.version.clone(),
         count: release.items.len(),
-        history: tui
-            .state_dir()
-            .is_some_and(|state| state.join("prompt-history.jsonl").exists()),
+        history: tui.state_dir().is_some_and(|state| state.join("prompt-history.jsonl").exists()),
     };
     let (weak, release) = (tui.weak(), release.clone());
     tui.app.spawn(
@@ -135,9 +107,7 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
         move |_, result| {
             let Some(tui) = weak.upgrade() else { return };
             match result {
-                Ok(true) if !tui.dialogs.is_open() => {
-                    highlights::show(&tui, &release.version, &release.items)
-                }
+                Ok(true) if !tui.dialogs.is_open() => highlights::show(&tui, &release.version, &release.items),
                 Ok(_) => {}
                 Err(error) => tui.toasts.error(error),
             }
@@ -176,20 +146,14 @@ pub fn decide(input: &Input, seen: Option<&str>) -> Decision {
         Some(seen) if current <= seen => return Decision::None,
         _ => {}
     }
-    if input.count > 0 {
-        Decision::Show
-    } else {
-        Decision::Record
-    }
+    if input.count > 0 { Decision::Show } else { Decision::Record }
 }
 
 /// `claim`: the decision inside the locked `highlights` update; whether this TUI shows the dialog.
 pub fn claim(storage: &opencode_local::storage::Storage, input: &Input) -> Result<bool, String> {
     let initial = json!({});
     let seen = |value: &Value| value.get("seen").and_then(Value::as_str).map(str::to_owned);
-    let state = storage
-        .load("highlights", &initial)
-        .map_err(|error| error.to_string())?;
+    let state = storage.load("highlights", &initial).map_err(|error| error.to_string())?;
     if decide(input, seen(&state).as_deref()) == Decision::None {
         return Ok(false);
     }
@@ -226,11 +190,7 @@ mod tests {
     use super::*;
 
     fn input(version: &str, count: usize, history: bool) -> Input {
-        Input {
-            version: version.to_owned(),
-            count,
-            history,
-        }
+        Input { version: version.to_owned(), count, history }
     }
 
     /// The cases of `packages/tui/test/highlights.test.ts`, and an unstable or broken seen version.
@@ -247,38 +207,14 @@ mod tests {
             (with(|input| input.history = false), None, Decision::Record),
             (with(|input| input.count = 0), None, Decision::Record),
             (base(), Some("2.0.26"), Decision::Show),
-            (
-                with(|input| input.history = false),
-                Some("1.99.99"),
-                Decision::Show,
-            ),
-            (
-                with(|input| input.count = 0),
-                Some("2.0.26"),
-                Decision::Record,
-            ),
+            (with(|input| input.history = false), Some("1.99.99"), Decision::Show),
+            (with(|input| input.count = 0), Some("2.0.26"), Decision::Record),
             (base(), Some("2.0.27"), Decision::None),
             (base(), Some("2.0.28"), Decision::None),
-            (
-                with(|input| input.version = "2.0.30".into()),
-                Some("2.1.0"),
-                Decision::None,
-            ),
-            (
-                with(|input| input.version = "0.0.0-dev-123".into()),
-                None,
-                Decision::None,
-            ),
-            (
-                with(|input| input.version = "local".into()),
-                None,
-                Decision::None,
-            ),
-            (
-                with(|input| input.history = false),
-                Some("2.0.0-next"),
-                Decision::Record,
-            ),
+            (with(|input| input.version = "2.0.30".into()), Some("2.1.0"), Decision::None),
+            (with(|input| input.version = "0.0.0-dev-123".into()), None, Decision::None),
+            (with(|input| input.version = "local".into()), None, Decision::None),
+            (with(|input| input.history = false), Some("2.0.0-next"), Decision::Record),
             (base(), Some("garbage"), Decision::Show),
         ];
         for (input, seen, expected) in cases {
@@ -293,15 +229,11 @@ mod tests {
         let claims: Vec<bool> = std::thread::scope(|scope| {
             let handles: Vec<_> = (0..4)
                 .map(|_| {
-                    let storage =
-                        opencode_local::storage::Storage::new(state.path(), "latest").unwrap();
+                    let storage = opencode_local::storage::Storage::new(state.path(), "latest").unwrap();
                     scope.spawn(move || claim(&storage, &input("2.0.27", 5, true)).unwrap())
                 })
                 .collect();
-            handles
-                .into_iter()
-                .map(|handle| handle.join().unwrap())
-                .collect()
+            handles.into_iter().map(|handle| handle.join().unwrap()).collect()
         });
         assert_eq!(claims.iter().filter(|claimed| **claimed).count(), 1);
         let file = state.path().join("latest/tui/highlights.json");

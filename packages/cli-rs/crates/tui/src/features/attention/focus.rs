@@ -50,11 +50,7 @@ pub fn install(tui: &Tui) {
     let weak = tui.weak();
     tui.app.on_terminal_focus(move |_, focused| {
         if let Some(tui) = weak.upgrade() {
-            tui.attention.focus.set(if focused {
-                Focus::Focused
-            } else {
-                Focus::Blurred
-            });
+            tui.attention.focus.set(if focused { Focus::Focused } else { Focus::Blurred });
         }
     });
 }

@@ -71,11 +71,7 @@ impl Parts {
 
     /// The part `mark` stands for.
     pub fn get(&self, mark: ExtmarkId) -> Option<(Kind, usize)> {
-        self.0
-            .borrow()
-            .iter()
-            .find(|(id, _, _)| *id == mark)
-            .map(|&(_, kind, index)| (kind, index))
+        self.0.borrow().iter().find(|(id, _, _)| *id == mark).map(|&(_, kind, index)| (kind, index))
     }
 }
 
@@ -88,23 +84,14 @@ pub fn insert(prompt: &Inner, start: u32, text: &str, kind: Kind, part: Value) {
     }
     let textarea = &prompt.textarea;
     let cursor = textarea.cursor_offset();
-    let next = textarea
-        .buffer()
-        .range(cursor, cursor + 1)
-        .unwrap_or_default();
+    let next = textarea.buffer().range(cursor, cursor + 1).unwrap_or_default();
     let mention = format!("@{text}");
-    let inserted = if next == " " {
-        mention.clone()
-    } else {
-        format!("{mention} ")
-    };
+    let inserted = if next == " " { mention.clone() } else { format!("{mention} ") };
     replace(textarea, start, cursor, &inserted);
     let end = start + measure(&mention);
     let id = textarea.add_extmark(start..end, options(prompt, kind));
     let mut parts = prompt.prompt.borrow_mut();
-    let list = parts
-        .as_object_mut()
-        .map(|prompt| prompt.entry(kind.key()).or_insert_with(|| json!([])));
+    let list = parts.as_object_mut().map(|prompt| prompt.entry(kind.key()).or_insert_with(|| json!([])));
     let Some(Value::Array(list)) = list else {
         return;
     };
@@ -133,9 +120,7 @@ pub fn insert_skill(prompt: &Inner, id: &str) {
     let start = prompt.textarea.cursor_offset();
     prompt.textarea.insert(format!("{mention} "));
     let end = start + measure(&mention);
-    let mark = prompt
-        .textarea
-        .add_extmark(start..end, options(prompt, Kind::Skill));
+    let mark = prompt.textarea.add_extmark(start..end, options(prompt, Kind::Skill));
     let mut info = prompt.prompt.borrow_mut();
     info["text"] = Value::String(prompt.textarea.text());
     if !info["skills"].is_array() {
@@ -145,11 +130,7 @@ pub fn insert_skill(prompt: &Inner, id: &str) {
         return;
     };
     skills.push(json!({ "id": id, "mention": { "start": start, "end": end, "text": mention } }));
-    prompt
-        .parts
-        .0
-        .borrow_mut()
-        .push((mark, Kind::Skill, skills.len() - 1));
+    prompt.parts.0.borrow_mut().push((mark, Kind::Skill, skills.len() - 1));
 }
 
 /// Marks the mentions of the `PromptInfo` the textarea now shows (`restoreExtmarksFromPrompt`).
@@ -158,20 +139,14 @@ pub fn restore(prompt: &Inner) {
     prompt.parts.clear();
     let info = prompt.prompt.borrow().clone();
     for kind in Kind::ALL {
-        let list = info
-            .get(kind.key())
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let list = info.get(kind.key()).and_then(Value::as_array).cloned().unwrap_or_default();
         for (index, part) in list.iter().enumerate() {
             let mention = &part[kind.range()];
             if mention["text"].as_str().is_none_or(str::is_empty) {
                 continue;
             }
             let offset = |key: &str| mention[key].as_f64().unwrap_or_default() as u32;
-            let id = prompt
-                .textarea
-                .add_extmark(offset("start")..offset("end"), options(prompt, kind));
+            let id = prompt.textarea.add_extmark(offset("start")..offset("end"), options(prompt, kind));
             prompt.parts.0.borrow_mut().push((id, kind, index));
         }
     }
@@ -235,9 +210,7 @@ pub fn sync(prompt: &Inner) {
 
 /// Whether the prompt has a `kind` part whose `field` is `value` (`hasSkill`).
 pub fn has(prompt: &Inner, kind: Kind, field: &str, value: &Value) -> bool {
-    prompt.prompt.borrow()[kind.key()]
-        .as_array()
-        .is_some_and(|list| list.iter().any(|part| &part[field] == value))
+    prompt.prompt.borrow()[kind.key()].as_array().is_some_and(|list| list.iter().any(|part| &part[field] == value))
 }
 
 /// The parts a submit sends, from a `PromptInfo` snapshot; files go through `attach::files_for_server`.
@@ -247,9 +220,7 @@ pub fn agents(entry: &Value) -> Option<Vec<PromptAgentAttachment>> {
 
 /// Skills, or `None` when there are none (`skills?.length ? skills : undefined`).
 pub fn skills(entry: &Value) -> Option<Vec<PromptInputSkillAttachment>> {
-    serde_json::from_value::<Vec<_>>(entry.get(Kind::Skill.key())?.clone())
-        .ok()
-        .filter(|skills| !skills.is_empty())
+    serde_json::from_value::<Vec<_>>(entry.get(Kind::Skill.key())?.clone()).ok().filter(|skills| !skills.is_empty())
 }
 
 pub use opencode_ui::prompt_input::replace;

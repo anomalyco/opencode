@@ -66,9 +66,7 @@ pub fn scanner_frames(options: &ScannerOptions) -> Vec<String> {
                     let index = state.color_index(char, trail);
                     let lit = index >= 0 && index < trail;
                     match options.style {
-                        ScannerStyle::Diamonds if lit => {
-                            ["⬥", "◆", "⬩", "⬪"][index.min(3) as usize]
-                        }
+                        ScannerStyle::Diamonds if lit => ["⬥", "◆", "⬩", "⬪"][index.min(3) as usize],
                         ScannerStyle::Diamonds => "·",
                         ScannerStyle::Blocks if lit => "■",
                         ScannerStyle::Blocks => "⬝",
@@ -87,10 +85,7 @@ pub fn scanner_colors(options: &ScannerOptions) -> SpinnerColor {
     let [r, g, b, _] = channels(options.color);
     let inactive = f64::from(options.inactive_factor as f32);
     SpinnerColor::Each(Rc::new(move |frame, char, _, chars| {
-        let options = ScannerOptions {
-            width: chars,
-            ..options
-        };
+        let options = ScannerOptions { width: chars, ..options };
         let state = State::at(frame as i64, &options);
         let index = state.color_index(char as i64, colors.len() as i64);
         if index >= 0
@@ -167,11 +162,7 @@ impl State {
 
     /// `calculateColorIndex`: 0 at the head, the distance behind it along the trail, or -1 when unlit.
     fn color_index(&self, char: i64, trail: i64) -> i64 {
-        let distance = if self.forward {
-            self.position - char
-        } else {
-            char - self.position
-        };
+        let distance = if self.forward { self.position - char } else { char - self.position };
         if self.holding {
             return distance + self.hold_progress;
         }
@@ -192,8 +183,7 @@ impl State {
             return min.max(1.0 - progress * (1.0 - min));
         }
         if !self.holding && self.movement_total > 0 {
-            let progress =
-                (self.movement_progress as f64 / 1.max(self.movement_total - 1) as f64).min(1.0);
+            let progress = (self.movement_progress as f64 / 1.max(self.movement_total - 1) as f64).min(1.0);
             return min + progress * (1.0 - min);
         }
         1.0

@@ -50,33 +50,20 @@ impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
         let path = request.url.path().to_owned();
         let query: Vec<(String, String)> = request.url.query_pairs().into_owned().collect();
-        let param = |name: &str| {
-            query
-                .iter()
-                .find(|(key, _)| key == name)
-                .map(|(_, value)| value.clone())
-        };
-        let body = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok());
+        let param = |name: &str| query.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone());
+        let body = request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok());
         let full = match request.url.query() {
             Some(query) => format!("{path}?{query}"),
             None => path.clone(),
         };
-        self.log
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), full, body));
+        self.log.lock().unwrap().push((request.method.to_owned(), full, body));
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/location") => (
                 200,
                 json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
             ),
             ("GET", "/api/project") => (200, projects()),
-            ("GET", "/api/worktree") => {
-                (200, json!([{ "directory": "/tmp/opencode/app-feature" }]))
-            }
+            ("GET", "/api/worktree") => (200, json!([{ "directory": "/tmp/opencode/app-feature" }])),
             ("POST", "/api/worktree") => (200, json!({ "directory": "/tmp/opencode/app-new" })),
             ("POST", "/api/worktree/refresh") => (204, Value::Null),
             ("GET", "/api/session") => {
@@ -90,24 +77,18 @@ impl Transport for Fixture {
                     sessions.push(extra);
                 }
                 sessions.sort_by(|a, b| {
-                    b["time"]["updated"]
-                        .as_f64()
-                        .unwrap()
-                        .total_cmp(&a["time"]["updated"].as_f64().unwrap())
+                    b["time"]["updated"].as_f64().unwrap().total_cmp(&a["time"]["updated"].as_f64().unwrap())
                 });
                 if let Some(search) = param("search") {
                     sessions.retain(|session| {
-                        session["title"]
-                            .as_str()
-                            .is_some_and(|title| title.to_lowercase().contains(&search))
+                        session["title"].as_str().is_some_and(|title| title.to_lowercase().contains(&search))
                     });
                 }
                 (200, json!({ "data": sessions, "cursor": {} }))
             }
-            ("DELETE", _) if path.starts_with("/api/session/") => (
-                self.delete_status,
-                json!({ "_tag": "NotFound", "message": "gone" }),
-            ),
+            ("DELETE", _) if path.starts_with("/api/session/") => {
+                (self.delete_status, json!({ "_tag": "NotFound", "message": "gone" }))
+            }
             ("PATCH", _) if path.starts_with("/api/session/") => (204, Value::Null),
             ("GET", _) if path.starts_with("/api/session/") && path.ends_with("/message") => {
                 (200, json!({ "data": [], "cursor": {} }))
@@ -121,11 +102,7 @@ impl Transport for Fixture {
             }
             _ => (404, json!({})),
         };
-        let bytes = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let bytes = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -137,10 +114,7 @@ impl Transport for Fixture {
 }
 
 fn noon(day: u32) -> f64 {
-    chrono::Utc
-        .with_ymd_and_hms(2026, 3, day, 12, 0, 0)
-        .unwrap()
-        .timestamp_millis() as f64
+    chrono::Utc.with_ymd_and_hms(2026, 3, day, 12, 0, 0).unwrap().timestamp_millis() as f64
 }
 
 fn session(id: &str, title: Option<&str>, updated: f64, extra: Value) -> Value {
@@ -161,19 +135,9 @@ fn session(id: &str, title: Option<&str>, updated: f64, extra: Value) -> Value {
 
 fn scoped() -> Vec<Value> {
     vec![
-        session(
-            "ses_b",
-            Some("Write docs"),
-            noon(3) - 3_600_000.0,
-            json!({}),
-        ),
+        session("ses_b", Some("Write docs"), noon(3) - 3_600_000.0, json!({})),
         session("ses_a", Some("Fix the parser"), noon(3), json!({})),
-        session(
-            "ses_c",
-            None,
-            noon(1),
-            json!({ "location": { "directory": "/tmp/opencode/app-feature" } }),
-        ),
+        session("ses_c", None, noon(1), json!({ "location": { "directory": "/tmp/opencode/app-feature" } })),
     ]
 }
 
@@ -188,18 +152,8 @@ fn other() -> Value {
 
 fn recent(now: f64) -> Vec<Value> {
     vec![
-        session(
-            "ses_r1",
-            Some("Review the plan"),
-            now - 5.0 * 60_000.0,
-            json!({}),
-        ),
-        session(
-            "ses_r2",
-            Some("Fix the parser"),
-            now - 3.0 * 3_600_000.0,
-            json!({}),
-        ),
+        session("ses_r1", Some("Review the plan"), now - 5.0 * 60_000.0, json!({})),
+        session("ses_r2", Some("Fix the parser"), now - 3.0 * 3_600_000.0, json!({})),
         session(
             "ses_r3",
             Some("Explore the worktree"),
@@ -248,56 +202,36 @@ impl Kit {
         std::fs::write(paths.state.join("session.json"), r#"{"pinned":["ses_b"]}"#).unwrap();
         let state = paths.state.clone();
         let log = Arc::new(Mutex::new(Vec::new()));
-        let transport = Fixture {
-            mode,
-            now: opencode_tui::dialogs::session_list::now_ms(),
-            log: log.clone(),
-            delete_status,
-        };
+        let transport =
+            Fixture { mode, now: opencode_tui::dialogs::session_list::now_ms(), log: log.clone(), delete_status };
         let client = Client::with_transport("http://opencode.local", Arc::new(transport)).unwrap();
-        let theme = opencode_ui::theme::Catalog::default()
-            .load("opencode", opencode_ui::theme::ThemeMode::Dark)
-            .unwrap()
-            .theme;
+        let theme =
+            opencode_ui::theme::Catalog::default().load("opencode", opencode_ui::theme::ThemeMode::Dark).unwrap().theme;
         // As the TS screen, the app clears with the page background the backdrop blends over.
         let app = TestApp::with_options(
             100,
             34,
             AppOptions {
-                theme: opentui::theme::Theme {
-                    background: theme.background.base,
-                    ..opentui::theme::Theme::default()
-                },
+                theme: opentui::theme::Theme { background: theme.background.base, ..opentui::theme::Theme::default() },
                 light_theme: None,
                 ..AppOptions::default()
             },
         );
-        let info = decode_text(
-            r#"{ "tabs": { "mode": "off" }, "theme": { "name": "opencode", "mode": "dark" } }"#,
-        )
-        .unwrap();
+        let info =
+            decode_text(r#"{ "tabs": { "mode": "off" }, "theme": { "name": "opencode", "mode": "dark" } }"#).unwrap();
         let tui = opencode_tui::mount(
             &app,
             Deps {
                 client,
                 directory: DIRECTORY.into(),
                 config: Resolved::new(info, |_| None),
-                roots: Some(Roots {
-                    paths,
-                    storage_channel: "test".into(),
-                }),
+                roots: Some(Roots { paths, storage_channel: "test".into() }),
                 route: Route::Home,
                 continue_: false,
                 events: false,
             },
         );
-        let kit = Self {
-            app,
-            tui,
-            log,
-            state,
-            _home: home,
-        };
+        let kit = Self { app, tui, log, state, _home: home };
         // The scoped sessions go into the store, as the TS script remembers them. The read names the
         // `directory`, so `dialog_reads` leaves it out.
         let ids: Vec<&str> = match mode {
@@ -330,10 +264,7 @@ impl Kit {
         );
         assert!(
             kit.app.wait_until(Duration::from_secs(5), || {
-                tui.data.read(|state| {
-                    ids.iter()
-                        .all(|id| state.session(&SessionID((*id).into())).is_some())
-                })
+                tui.data.read(|state| ids.iter().all(|id| state.session(&SessionID((*id).into())).is_some()))
             }),
             "the home never loaded the sessions:\n{}",
             kit.app.text()
@@ -342,18 +273,14 @@ impl Kit {
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
     }
 
     fn wait_gone(&self, text: &str) {
-        let gone = self
-            .app
-            .wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
+        let gone = self.app.wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
@@ -380,9 +307,7 @@ impl Kit {
             .into_iter()
             .filter(|(method, url, _)| {
                 method == "GET"
-                    && ["/api/location?", "/api/project", "/api/session?"]
-                        .iter()
-                        .any(|path| url.starts_with(path))
+                    && ["/api/location?", "/api/project", "/api/session?"].iter().any(|path| url.starts_with(path))
                     && !url.contains("&directory=")
             })
             .map(|(_, url, _)| url)
@@ -395,10 +320,7 @@ impl Kit {
 
     /// Mutating requests, in order.
     fn mutations(&self) -> Vec<Logged> {
-        self.requests()
-            .into_iter()
-            .filter(|(method, _, _)| method != "GET")
-            .collect()
+        self.requests().into_iter().filter(|(method, _, _)| method != "GET").collect()
     }
 
     fn open_list(&self) -> String {
@@ -410,11 +332,7 @@ impl Kit {
 
     fn pins(&self) -> Value {
         let file = self.state.join("session.json");
-        let read = || {
-            std::fs::read_to_string(&file)
-                .ok()
-                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        };
+        let read = || std::fs::read_to_string(&file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
         read().unwrap()
     }
 }
@@ -487,10 +405,7 @@ fn session_list_reads_the_scoped_list_then_all_projects_and_saves_the_scope() {
     kit.clear_log();
     kit.app.press("ctrl+a");
     kit.wait_for("Other project");
-    assert_eq!(
-        kit.dialog_reads(),
-        ["/api/session?limit=50&order=desc&parentID=null&archived=false"]
-    );
+    assert_eq!(kit.dialog_reads(), ["/api/session?limit=50&order=desc&parentID=null&archived=false"]);
     let file = kit.tui.storage().unwrap().file("session-list").unwrap();
     assert!(kit.app.wait_until(Duration::from_secs(5), || {
         std::fs::read_to_string(&file)
@@ -506,10 +421,7 @@ fn session_list_reads_the_scoped_list_then_all_projects_and_saves_the_scope() {
     kit.app.advance(Duration::from_millis(200));
     // The dialog's date heading goes; the home behind keeps its own rows.
     kit.wait_gone("Tue Mar 03 2026");
-    assert_eq!(
-        kit.dialog_reads(),
-        ["/api/session?limit=50&order=desc&search=docs&parentID=null&archived=false"]
-    );
+    assert_eq!(kit.dialog_reads(), ["/api/session?limit=50&order=desc&search=docs&parentID=null&archived=false"]);
 }
 
 #[test]
@@ -530,10 +442,7 @@ fn delete_needs_a_second_press_and_removes_the_row() {
     kit.wait_for("again to confirm");
     kit.app.press("ctrl+d");
     kit.wait_gone("again to confirm");
-    assert_eq!(
-        kit.mutations(),
-        [("DELETE".to_owned(), "/api/session/ses_b".to_owned(), None)]
-    );
+    assert_eq!(kit.mutations(), [("DELETE".to_owned(), "/api/session/ses_b".to_owned(), None)]);
     assert!(kit.tui.dialogs.is_open());
 }
 
@@ -558,9 +467,7 @@ fn pin_toggles_session_json() {
     kit.app.press("ctrl+f");
     kit.wait_gone("Pinned");
     assert!(
-        kit.app.wait_until(Duration::from_secs(5), || {
-            kit.pins() == json!({ "pinned": [] })
-        }),
+        kit.app.wait_until(Duration::from_secs(5), || { kit.pins() == json!({ "pinned": [] }) }),
         "{}\n{}",
         kit.pins(),
         kit.app.text()
@@ -568,9 +475,7 @@ fn pin_toggles_session_json() {
     // Pin the first row again (ses_a is newest).
     kit.app.press("ctrl+f");
     kit.wait_for("Pinned");
-    assert!(kit.app.wait_until(Duration::from_secs(5), || {
-        kit.pins() == json!({ "pinned": ["ses_a"] })
-    }));
+    assert!(kit.app.wait_until(Duration::from_secs(5), || { kit.pins() == json!({ "pinned": ["ses_a"] }) }));
     assert!(kit.mutations().is_empty(), "pins are local");
 }
 
@@ -587,19 +492,10 @@ fn rename_opens_the_prompt_and_patches_the_title() {
     }
     kit.app.type_text("Ship docs");
     kit.app.press("enter");
-    assert!(
-        kit.app
-            .wait_until(Duration::from_secs(5), || !kit.tui.dialogs.is_open()),
-        "{}",
-        kit.app.text()
-    );
+    assert!(kit.app.wait_until(Duration::from_secs(5), || !kit.tui.dialogs.is_open()), "{}", kit.app.text());
     assert_eq!(
         kit.mutations(),
-        [(
-            "PATCH".to_owned(),
-            "/api/session/ses_b".to_owned(),
-            Some(json!({ "title": "Ship docs" }))
-        )]
+        [("PATCH".to_owned(), "/api/session/ses_b".to_owned(), Some(json!({ "title": "Ship docs" })))]
     );
 }
 
@@ -611,10 +507,7 @@ fn enter_opens_the_selected_session() {
     kit.app.press("down");
     kit.app.press("enter");
     assert!(kit.app.wait_until(Duration::from_secs(5), || {
-        kit.tui.route()
-            == Route::Session {
-                id: SessionID("ses_a".into()),
-            }
+        kit.tui.route() == Route::Session { id: SessionID("ses_a".into()) }
     }));
     assert!(!kit.tui.dialogs.is_open());
 }
@@ -646,10 +539,7 @@ fn open_dialog_reads_worktrees_and_creates_one() {
     assert_eq!(
         requests,
         [
-            (
-                "GET".to_owned(),
-                "/api/worktree?projectID=proj_app".to_owned()
-            ),
+            ("GET".to_owned(), "/api/worktree?projectID=proj_app".to_owned()),
             ("POST".to_owned(), "/api/worktree/refresh".to_owned()),
         ]
     );
@@ -665,19 +555,10 @@ fn open_dialog_reads_worktrees_and_creates_one() {
     kit.wait_for("Leave blank for a random name.");
     kit.app.type_text("spike");
     kit.app.press("enter");
-    assert!(
-        kit.app
-            .wait_until(Duration::from_secs(5), || !kit.tui.dialogs.is_open()),
-        "{}",
-        kit.app.text()
-    );
+    assert!(kit.app.wait_until(Duration::from_secs(5), || !kit.tui.dialogs.is_open()), "{}", kit.app.text());
     assert_eq!(
         kit.mutations(),
-        [(
-            "POST".to_owned(),
-            "/api/worktree".to_owned(),
-            Some(json!({ "projectID": "proj_app", "name": "spike" }))
-        )]
+        [("POST".to_owned(), "/api/worktree".to_owned(), Some(json!({ "projectID": "proj_app", "name": "spike" })))]
     );
     assert_eq!(kit.tui.route(), Route::Home);
 }
@@ -690,9 +571,6 @@ fn open_dialog_opens_a_session() {
     kit.app.press("down");
     kit.app.press("enter");
     assert!(kit.app.wait_until(Duration::from_secs(5), || {
-        kit.tui.route()
-            == Route::Session {
-                id: SessionID("ses_r2".into()),
-            }
+        kit.tui.route() == Route::Session { id: SessionID("ses_r2".into()) }
     }));
 }

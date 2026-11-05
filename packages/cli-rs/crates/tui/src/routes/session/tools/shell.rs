@@ -14,9 +14,7 @@ use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
-use super::dispatch::{
-    Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge,
-};
+use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge};
 use crate::app::Tui;
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::messages::shell::{collapse_shell_output, strip_ansi};
@@ -126,47 +124,27 @@ impl Shell {
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
-        let shell = props
-            .metadata
-            .get("shellID")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned);
+        let shell = props.metadata.get("shellID").and_then(serde_json::Value::as_str).map(str::to_owned);
         let status = props.status();
         // A session can move while its shell still runs in the original location.
         let directory = shell
             .as_ref()
-            .and_then(|id| {
-                cx.state
-                    .shell(&ShellID(id.clone()))
-                    .map(|shell| shell.location.directory.clone())
-            })
+            .and_then(|id| cx.state.shell(&ShellID(id.clone())).map(|shell| shell.location.directory.clone()))
             .or(cx.directory.map(str::to_owned));
         let call = Call {
-            output: if shell.is_some() {
-                None
-            } else {
-                props.output.clone()
-            },
+            output: if shell.is_some() { None } else { props.output.clone() },
             shell,
             command: props.input_str("command").map(str::to_owned),
             workdir: format_path(cx, props.input_str("workdir")),
             status,
             background: status == Status::Completed
-                && props
-                    .metadata
-                    .get("status")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("running"),
+                && props.metadata.get("status").and_then(serde_json::Value::as_str) == Some("running"),
             permission: props.permission,
             error: props.error().map(str::to_owned),
             width: content_width(cx),
             directory,
         };
-        self.0.listed.set(
-            call.shell
-                .as_ref()
-                .is_some_and(|id| cx.state.shell(&ShellID(id.clone())).is_some()),
-        );
+        self.0.listed.set(call.shell.as_ref().is_some_and(|id| cx.state.shell(&ShellID(id.clone())).is_some()));
         *self.0.call.borrow_mut() = Some(call);
         self.0.watch();
         self.0.paint();
@@ -187,18 +165,10 @@ impl Inner {
 
     /// Reads [`Self::listed`] again, outside a render (timers and clicks).
     fn refresh(&self) {
-        let Some(id) = self
-            .call
-            .borrow()
-            .as_ref()
-            .and_then(|call| call.shell.clone())
-        else {
+        let Some(id) = self.call.borrow().as_ref().and_then(|call| call.shell.clone()) else {
             return;
         };
-        let listed = self
-            .tui
-            .upgrade()
-            .is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()));
+        let listed = self.tui.upgrade().is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()));
         self.listed.set(listed);
     }
 
@@ -213,11 +183,7 @@ impl Inner {
             return;
         }
         self.was_running.set(true);
-        let background = self
-            .call
-            .borrow()
-            .as_ref()
-            .is_some_and(|call| call.background);
+        let background = self.call.borrow().as_ref().is_some_and(|call| call.background);
         if background && !self.expanded.get() {
             self.stop();
             return;
@@ -267,9 +233,7 @@ impl Inner {
         self.loading.set(true);
         let client = tui.data.client().clone();
         let start = self.cursor.get();
-        let location = call.directory.map(|directory| LocationQueryInput {
-            directory: Some(directory),
-        });
+        let location = call.directory.map(|directory| LocationQueryInput { directory: Some(directory) });
         let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
@@ -283,10 +247,7 @@ impl Inner {
                         cursor: Some(cursor),
                         limit: Some(LIMIT as i64),
                     };
-                    let Ok(response) = client
-                        .shell_output(&input, &RequestOptions::default())
-                        .await
-                    else {
+                    let Ok(response) = client.shell_output(&input, &RequestOptions::default()).await else {
                         break;
                     };
                     let data = response.data;
@@ -363,21 +324,14 @@ impl Inner {
             width: call.width,
         });
         let paint = Paint {
-            command: call
-                .command
-                .as_deref()
-                .is_some_and(|command| !command.is_empty()),
+            command: call.command.as_deref().is_some_and(|command| !command.is_empty()),
             running,
             streaming: call.status == Status::Streaming,
             expanded,
             input: if expanded { input } else { collapsed.input },
             output: if expanded { output } else { collapsed.output },
             background: call.background,
-            color: if call.permission {
-                theme.text.feedback.warning.base
-            } else {
-                theme.text.base
-            },
+            color: if call.permission { theme.text.feedback.warning.base } else { theme.text.base },
         };
         if self.painted.borrow().as_ref() == Some(&paint) {
             return;
@@ -385,42 +339,21 @@ impl Inner {
         let app = &self.app;
         let body = &self.body;
         body.clear();
-        let wrap = if expanded {
-            WrapMode::Word
-        } else {
-            WrapMode::Char
-        };
+        let wrap = if expanded { WrapMode::Word } else { WrapMode::Char };
         let limit = |text: Text| if expanded { text } else { text.max_height(2) };
         if !paint.command {
             if paint.running || paint.streaming {
-                body.add(
-                    &Spinner::new(app)
-                        .color(paint.color)
-                        .label("Writing command…")
-                        .animations(self.animations),
-                );
+                body.add(&Spinner::new(app).color(paint.color).label("Writing command…").animations(self.animations));
             } else {
                 body.add(&Text::new(app, "Writing command…").fg(theme.text.muted));
             }
         } else {
             if paint.running {
-                let spinner = Spinner::new(app)
-                    .color(paint.color)
-                    .animations(self.animations);
-                let text = limit(
-                    Text::new(app, paint.input.clone())
-                        .fg(paint.color)
-                        .wrap(wrap)
-                        .grow(1.0)
-                        .min_width(0),
-                );
+                let spinner = Spinner::new(app).color(paint.color).animations(self.animations);
+                let text = limit(Text::new(app, paint.input.clone()).fg(paint.color).wrap(wrap).grow(1.0).min_width(0));
                 body.add(&View::new(app).row().gap(1).child(&spinner).child(&text));
             } else {
-                body.add(&limit(
-                    Text::new(app, paint.input.clone())
-                        .fg(theme.text.base)
-                        .wrap(wrap),
-                ));
+                body.add(&limit(Text::new(app, paint.input.clone()).fg(theme.text.base).wrap(wrap)));
             }
             if !paint.output.is_empty() {
                 body.add(&Text::new(app, paint.output.clone()).fg(theme.text.muted));
@@ -449,11 +382,7 @@ impl Inner {
             return strip_ansi(output.trim());
         }
         let loaded = self.output.borrow();
-        let source = if loaded.is_empty() {
-            call.output.as_deref().unwrap_or_default()
-        } else {
-            loaded.as_str()
-        };
+        let source = if loaded.is_empty() { call.output.as_deref().unwrap_or_default() } else { loaded.as_str() };
         let text = strip_ansi(source.trim());
         if self.truncated.get() {
             return format!("[earlier output omitted]\n{text}");

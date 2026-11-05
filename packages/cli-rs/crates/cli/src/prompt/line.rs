@@ -140,19 +140,11 @@ impl Line {
     /// The length of `/^\s*(?:[^\w\s]+|\w+)?/` on the reversed text before the cursor.
     fn word_left(&self) -> usize {
         let before: Vec<char> = self.chars[..self.cursor].iter().rev().copied().collect();
-        let spaces = before
-            .iter()
-            .take_while(|char| char.is_whitespace())
-            .count();
+        let spaces = before.iter().take_while(|char| char.is_whitespace()).count();
         let rest = &before[spaces..];
         let word = match rest.first() {
-            Some(first) if is_word(*first) => {
-                rest.iter().take_while(|char| is_word(**char)).count()
-            }
-            Some(_) => rest
-                .iter()
-                .take_while(|char| !is_word(**char) && !char.is_whitespace())
-                .count(),
+            Some(first) if is_word(*first) => rest.iter().take_while(|char| is_word(**char)).count(),
+            Some(_) => rest.iter().take_while(|char| !is_word(**char) && !char.is_whitespace()).count(),
             None => 0,
         };
         spaces + word
@@ -163,14 +155,8 @@ impl Line {
         let after = &self.chars[self.cursor..];
         let Some(first) = after.first() else { return 0 };
         let class = |char: &char| (char.is_whitespace(), is_word(*char));
-        let head = after
-            .iter()
-            .take_while(|char| class(char) == class(first))
-            .count();
-        head + after[head..]
-            .iter()
-            .take_while(|char| char.is_whitespace())
-            .count()
+        let head = after.iter().take_while(|char| class(char) == class(first)).count();
+        head + after[head..].iter().take_while(|char| char.is_whitespace()).count()
     }
 
     fn delete_word_left(&mut self) {
@@ -190,11 +176,7 @@ impl Line {
         } else {
             after.iter().take_while(|char| !is_word(**char)).count()
         };
-        let count = head
-            + after[head..]
-                .iter()
-                .take_while(|char| char.is_whitespace())
-                .count();
+        let count = head + after[head..].iter().take_while(|char| char.is_whitespace()).count();
         self.chars.drain(self.cursor..self.cursor + count);
     }
 }
@@ -209,24 +191,13 @@ mod tests {
     use super::*;
 
     fn key(name: &str, ctrl: bool, meta: bool) -> Key {
-        Key {
-            name: Some(name.to_string()),
-            ctrl,
-            meta,
-            ..Key::default()
-        }
+        Key { name: Some(name.to_string()), ctrl, meta, ..Key::default() }
     }
 
     fn typed(line: &mut Line, text: &str) {
         for char in text.chars() {
             let char = char.to_string();
-            line.feed(
-                Some(&char),
-                &Key {
-                    sequence: char.clone(),
-                    ..Key::default()
-                },
-            );
+            line.feed(Some(&char), &Key { sequence: char.clone(), ..Key::default() });
         }
     }
 

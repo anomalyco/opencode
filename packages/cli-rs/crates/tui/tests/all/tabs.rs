@@ -60,20 +60,10 @@ fn routes() -> Vec<MemoryRoute> {
             &json!({ "data": [], "cursor": {} }),
         ));
         for list in ["inbox", "permission", "form"] {
-            routes.push(MemoryRoute::json(
-                "GET",
-                &format!("/api/session/{id}/{list}"),
-                200,
-                &json!({ "data": [] }),
-            ));
+            routes.push(MemoryRoute::json("GET", &format!("/api/session/{id}/{list}"), 200, &json!({ "data": [] })));
         }
     }
-    routes.push(MemoryRoute::json(
-        "GET",
-        "/api/session",
-        200,
-        &json!({ "data": [], "cursor": {} }),
-    ));
+    routes.push(MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })));
     routes.push(MemoryRoute::json("GET", "/api/config", 200, &json!([])));
     routes
 }
@@ -81,8 +71,7 @@ fn routes() -> Vec<MemoryRoute> {
 fn mount(width: u16, config: Value) -> Harness {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
-    let paths =
-        Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     std::fs::create_dir_all(&paths.state).unwrap();
     let state = paths.state.clone();
     let memory = Memory::new(routes());
@@ -95,24 +84,13 @@ fn mount(width: u16, config: Value) -> Harness {
             client,
             directory: "/project".into(),
             config: Resolved::new(info, |_| None),
-            roots: Some(Roots {
-                paths,
-                storage_channel: CHANNEL.into(),
-            }),
-            route: Route::Session {
-                id: opencode_api::generated::SessionID("ses_a".into()),
-            },
+            roots: Some(Roots { paths, storage_channel: CHANNEL.into() }),
+            route: Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) },
             continue_: false,
             events: true,
         },
     );
-    let harness = Harness {
-        app,
-        tui,
-        memory,
-        state,
-        _home: home,
-    };
+    let harness = Harness { app, tui, memory, state, _home: home };
     harness.wait_for("Fix the parser");
     harness
 }
@@ -126,36 +104,22 @@ impl Harness {
     }
 
     fn open(&self, id: &str) {
-        self.tui.navigate(Route::Session {
-            id: opencode_api::generated::SessionID(id.into()),
-        });
-        let opened = self
-            .app
-            .wait_until(WAIT, || self.ids().iter().any(|tab| tab == id));
+        self.tui.navigate(Route::Session { id: opencode_api::generated::SessionID(id.into()) });
+        let opened = self.app.wait_until(WAIT, || self.ids().iter().any(|tab| tab == id));
         assert!(opened, "no {id} tab: {:?}", self.ids());
     }
 
     /// Waits until the tabs are `ids` and the route is the session `route`, or home.
     fn wait_tabs(&self, ids: &[&str], route: Option<&str>) {
-        let route = route.map_or(Route::Home, |id| Route::Session {
-            id: opencode_api::generated::SessionID(id.into()),
-        });
-        let found = self
-            .app
-            .wait_until(WAIT, || self.ids() == ids && self.tui.route() == route);
+        let route =
+            route.map_or(Route::Home, |id| Route::Session { id: opencode_api::generated::SessionID(id.into()) });
+        let found = self.app.wait_until(WAIT, || self.ids() == ids && self.tui.route() == route);
         assert!(found, "tabs {:?}, route {:?}", self.ids(), self.tui.route());
     }
 
     fn file(&self, key: &str) -> Value {
-        let path = self
-            .state
-            .join(CHANNEL)
-            .join("tui")
-            .join(format!("{key}.json"));
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or(Value::Null)
+        let path = self.state.join(CHANNEL).join("tui").join(format!("{key}.json"));
+        std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or(Value::Null)
     }
 
     /// Waits until `key`'s file satisfies `check`.
@@ -167,12 +131,7 @@ impl Harness {
     }
 
     fn ids(&self) -> Vec<String> {
-        self.tui
-            .tabs
-            .tabs(&self.tui)
-            .into_iter()
-            .map(|tab| tab.session_id)
-            .collect()
+        self.tui.tabs.tabs(&self.tui).into_iter().map(|tab| tab.session_id).collect()
     }
 }
 
@@ -182,10 +141,7 @@ fn both_tabs() -> Value {
 }
 
 fn cwd() -> String {
-    std::env::current_dir()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned()
+    std::env::current_dir().unwrap().to_string_lossy().into_owned()
 }
 
 #[test]
@@ -193,10 +149,7 @@ fn tabs_open_close_and_persist_in_the_cwd_scope() {
     let h = mount(100, json!({ "animations": false }));
     h.open("ses_b");
     let screen = h.wait_for("Write the docs");
-    assert!(
-        screen.lines().next().unwrap().contains("Fix the parser"),
-        "{screen}"
-    );
+    assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
     let file = h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
     assert_eq!(file["cwd"][cwd()]["unread"], json!({}));
 
@@ -220,10 +173,7 @@ fn deleting_the_open_tab_selects_another_without_a_toast() {
         "data": { "sessionID": "ses_b" },
     }));
     let moved = h.app.wait_until(WAIT, || {
-        h.tui.route()
-            == Route::Session {
-                id: opencode_api::generated::SessionID("ses_a".into()),
-            }
+        h.tui.route() == Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) }
     });
     assert!(moved, "{:?}", h.tui.route());
     assert_eq!(h.ids(), ["ses_a"]);
@@ -239,59 +189,33 @@ fn clear_closes_the_tab_and_goes_home() {
     h.wait_tabs(&["ses_a"], None);
     // Home shows the strip with the new-session tab.
     let screen = h.wait_for("New session");
-    assert!(
-        screen.lines().next().unwrap().contains("Fix the parser"),
-        "{screen}"
-    );
+    assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
 }
 
 #[test]
 fn a_split_panel_shows_beside_the_session_and_resizes() {
-    let h = mount(
-        140,
-        json!({ "animations": false, "session": { "sidebar": "hide" } }),
-    );
+    let h = mount(140, json!({ "animations": false, "session": { "sidebar": "hide" } }));
     h.tui.panels.register(
         "test",
         "diff",
-        Rc::new(
-            |tui: &Tui, root: &View, input: &opencode_tui::panel::Input<'_>| {
-                root.add(&Text::new(
-                    &tui.app,
-                    format!("panel for {}", input.target.session),
-                ));
-                Box::new(()) as Box<dyn std::any::Any>
-            },
-        ),
+        Rc::new(|tui: &Tui, root: &View, input: &opencode_tui::panel::Input<'_>| {
+            root.add(&Text::new(&tui.app, format!("panel for {}", input.target.session)));
+            Box::new(()) as Box<dyn std::any::Any>
+        }),
     );
-    let target = Target {
-        plugin: "test".into(),
-        name: "diff".into(),
-        session: "ses_a".into(),
-    };
+    let target = Target { plugin: "test".into(), name: "diff".into(), session: "ses_a".into() };
     h.tui.panels.open(&h.tui, target, Presentation::Panel);
     let screen = h.wait_for("panel for ses_a");
     // The default width is half the panel width (140), so the panel starts at column 70.
-    let row = screen
-        .lines()
-        .find(|line| line.contains("panel for"))
-        .unwrap();
+    let row = screen.lines().find(|line| line.contains("panel for")).unwrap();
     assert_eq!(row.chars().position(|c| c == 'p'), Some(70), "{screen}");
 
     // Drag the handle (on the boundary's right cell, column 69) to column 89: the panel is 50 wide.
     h.app.drag((69, 10), (89, 10));
     let column = || {
-        h.app
-            .text()
-            .lines()
-            .find(|line| line.contains("panel for"))
-            .and_then(|row| row.chars().position(|c| c == 'p'))
+        h.app.text().lines().find(|line| line.contains("panel for")).and_then(|row| row.chars().position(|c| c == 'p'))
     };
-    assert!(
-        h.app.wait_until(WAIT, || column() == Some(90)),
-        "{}",
-        h.app.text()
-    );
+    assert!(h.app.wait_until(WAIT, || column() == Some(90)), "{}", h.app.text());
     h.wait_file("layout", |layout| layout["paneWidth"] == 50);
 
     // Leaving the panel's session closes it.
@@ -304,10 +228,7 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
 #[test]
 fn tabs_and_layout_are_shared_with_the_typescript_client() {
     let Some(script) = oracle() else { return };
-    let h = mount(
-        120,
-        json!({ "animations": false, "tabs": { "layout": "vertical" } }),
-    );
+    let h = mount(120, json!({ "animations": false, "tabs": { "layout": "vertical" } }));
     h.open("ses_b");
     // The second tab's title lands with its session read.
     h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
@@ -323,23 +244,15 @@ fn tabs_and_layout_are_shared_with_the_typescript_client() {
     // TS moves a tab and widens the rail; the running Rust TUI's storage watch picks both up.
     run(&script, &["move", &state, CHANNEL, &cwd(), "ses_b", "0"]);
     run(&script, &["width", &state, CHANNEL, "50"]);
-    let reloaded = h.app.wait_until(WAIT, || {
-        h.ids() == ["ses_b", "ses_a"] && h.tui.frame.rail_width(&h.tui) == 50
-    });
-    assert!(
-        reloaded,
-        "tabs {:?}, rail {}",
-        h.ids(),
-        h.tui.frame.rail_width(&h.tui)
-    );
+    let reloaded = h.app.wait_until(WAIT, || h.ids() == ["ses_b", "ses_a"] && h.tui.frame.rail_width(&h.tui) == 50);
+    assert!(reloaded, "tabs {:?}, rail {}", h.ids(), h.tui.frame.rail_width(&h.tui));
 }
 
 // The TypeScript side of P-FILE, when bun and the workspace's node_modules are there.
 fn oracle() -> Option<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let script = root.join("parity/oracle/E.12-tabs.ts");
-    let present = root.join("../../node_modules").is_dir()
-        && Command::new("bun").arg("--version").output().is_ok();
+    let present = root.join("../../node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
         eprintln!("skipped: needs bun and the workspace node_modules");
         return None;
@@ -353,23 +266,9 @@ fn run(script: &Path, args: &[&str]) -> Value {
         .current_dir(script.parent().unwrap().parent().unwrap())
         .arg(script)
         .args(args)
-        .env(
-            "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
-            std::env::temp_dir().join("opencode-rs-e12-bun-cache"),
-        )
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-e12-bun-cache"))
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_str(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .lines()
-            .last()
-            .unwrap(),
-    )
-    .unwrap()
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    serde_json::from_str(String::from_utf8(output.stdout).unwrap().lines().last().unwrap()).unwrap()
 }

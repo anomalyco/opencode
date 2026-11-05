@@ -40,9 +40,7 @@ impl Transport for Server {
             Ok(Response {
                 status: 200,
                 headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(
-                    serde_json::to_vec(&body).unwrap(),
-                ))])),
+                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(serde_json::to_vec(&body).unwrap()))])),
             })
         })
     }
@@ -124,21 +122,12 @@ fn routes() -> Vec<MemoryRoute> {
 
 fn catalogs(directory: &str, query: Option<&str>) -> Vec<MemoryRoute> {
     let list = |data: Value| json!({ "location": location_at(directory), "data": data });
-    let models = json!([
-        model("opencode", "big", "Big Pickle", 10.0),
-        model("demo", "other", "Other Model", 1.0)
-    ]);
+    let models = json!([model("opencode", "big", "Big Pickle", 10.0), model("demo", "other", "Other Model", 1.0)]);
     let providers = json!([
         { "id": "opencode", "name": "OpenCode", "integrationID": "opencode", "activation": "auto", "package": "@ai-sdk/test" },
         { "id": "demo", "name": "Demo", "activation": "auto", "package": "@ai-sdk/test" },
     ]);
-    let agents = json!([
-        agent(
-            "build",
-            Some(json!({ "providerID": "opencode", "id": "big" }))
-        ),
-        agent("plan", None)
-    ]);
+    let agents = json!([agent("build", Some(json!({ "providerID": "opencode", "id": "big" }))), agent("plan", None)]);
     let routes = [
         MemoryRoute::json("GET", "/api/location", 200, &location_at(directory)),
         MemoryRoute::json("GET", "/api/agent", 200, &list(agents)),
@@ -151,33 +140,16 @@ fn catalogs(directory: &str, query: Option<&str>) -> Vec<MemoryRoute> {
     };
     routes
         .into_iter()
-        .map(|route| {
-            route.with_query([("location[directory]".to_owned(), vec![query.to_owned()])].into())
-        })
+        .map(|route| route.with_query([("location[directory]".to_owned(), vec![query.to_owned()])].into()))
         .collect()
 }
 
 fn sessions() -> Vec<MemoryRoute> {
     let mut routes = vec![
         MemoryRoute::json("GET", "/api/config", 200, &json!([])),
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_g/message",
-            200,
-            &json!({ "data": grouped(), "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/ses_g/message", 200, &json!({ "data": grouped(), "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
     ];
     for (id, directory, title, agent) in [
         ("ses_a", DIRECTORY, "Fix the parser", None),
@@ -193,12 +165,7 @@ fn sessions() -> Vec<MemoryRoute> {
         ));
     }
     for list in ["inbox", "permission", "form"] {
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/:id/{list}"),
-            200,
-            &json!({ "data": [] }),
-        ));
+        routes.push(MemoryRoute::json("GET", &format!("/api/session/:id/{list}"), 200, &json!({ "data": [] })));
     }
     routes
 }
@@ -210,10 +177,7 @@ struct Harness {
 }
 
 fn mount(route: Route, args: Args, config: Value) -> Harness {
-    let server = Arc::new(Server {
-        memory: Memory::new(routes()),
-        limits: Mutex::new(limits(5.0)),
-    });
+    let server = Arc::new(Server { memory: Memory::new(routes()), limits: Mutex::new(limits(5.0)) });
     let client = Client::with_transport("http://opencode.local", server.clone()).unwrap();
     let app = TestApp::new(100, 30);
     let info = cli_config::decode_text(&config.to_string()).unwrap();
@@ -232,9 +196,7 @@ fn mount(route: Route, args: Args, config: Value) -> Harness {
     );
     let h = Harness { app, tui, server };
     let local = h.tui.local.clone();
-    h.wait("the catalog", || {
-        local.catalog_ready() && !local.agents().is_empty()
-    });
+    h.wait("the catalog", || local.catalog_ready() && !local.agents().is_empty());
     h
 }
 
@@ -243,9 +205,7 @@ fn animations_off() -> Value {
 }
 
 fn session_route(id: &str) -> Route {
-    Route::Session {
-        id: SessionID(id.into()),
-    }
+    Route::Session { id: SessionID(id.into()) }
 }
 
 impl Harness {
@@ -254,12 +214,7 @@ impl Harness {
             self.app.render();
             check()
         });
-        assert!(
-            found,
-            "{what} never happened:\n{}\n{:#?}",
-            self.app.text(),
-            self.log()
-        );
+        assert!(found, "{what} never happened:\n{}\n{:#?}", self.app.text(), self.log());
     }
 
     fn wait_for(&self, text: &str) {
@@ -272,21 +227,11 @@ impl Harness {
     }
 
     fn log(&self) -> Vec<String> {
-        self.server
-            .memory
-            .requests()
-            .iter()
-            .map(|logged| format!("{} {}", logged.method, logged.path))
-            .collect()
+        self.server.memory.requests().iter().map(|logged| format!("{} {}", logged.method, logged.path)).collect()
     }
 
     fn count(&self, method: &str, path: &str) -> usize {
-        self.server
-            .memory
-            .requests()
-            .iter()
-            .filter(|logged| logged.method == method && logged.path == path)
-            .count()
+        self.server.memory.requests().iter().filter(|logged| logged.method == method && logged.path == path).count()
     }
 
     /// Mutating requests: everything but reads and the goal plugin's read RPC.
@@ -302,12 +247,7 @@ impl Harness {
     }
 
     fn prompt_text(&self) -> String {
-        self.tui
-            .textarea
-            .borrow()
-            .as_ref()
-            .map(|textarea| textarea.text())
-            .unwrap_or_default()
+        self.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default()
     }
 
     fn row(&self, text: &str) -> (u16, u16) {
@@ -361,12 +301,8 @@ fn tui_prompt_append_appends_to_the_prompt_of_the_current_location() {
             "location": { "directory": directory }, "data": { "text": text },
         })
     };
-    h.server
-        .memory
-        .emit(&append("evt_elsewhere", "/elsewhere", "nope "));
-    h.server
-        .memory
-        .emit(&append("evt_here", DIRECTORY, "world"));
+    h.server.memory.emit(&append("evt_elsewhere", "/elsewhere", "nope "));
+    h.server.memory.emit(&append("evt_here", DIRECTORY, "world"));
     h.wait("the append", || h.prompt_text() == "hello world");
     // The cursor moved to the end.
     h.app.type_text("!");
@@ -405,16 +341,11 @@ fn console_limits_load_show_in_the_prompt_reload_after_a_turn_and_warn_once() {
 fn startup_agent_and_model_reach_the_selection() {
     let h = mount(
         Route::Home,
-        Args {
-            agent: Some("plan".into()),
-            model: Some("demo/other".into()),
-            ..Args::default()
-        },
+        Args { agent: Some("plan".into()), model: Some("demo/other".into()), ..Args::default() },
         animations_off(),
     );
     h.wait("the startup choice", || {
-        h.agent().as_deref() == Some("plan")
-            && h.tui.local.current() == Some(Model::new("demo", "other"))
+        h.agent().as_deref() == Some("plan") && h.tui.local.current() == Some(Model::new("demo", "other"))
     });
     assert_eq!(h.tui.local.recent(), [Model::new("demo", "other")]);
     // `--agent` shows over a session's own agent until the user picks one there (`local.tsx:90-96`).

@@ -8,9 +8,7 @@
 use opentui::prelude::*;
 use opentui::split::{Scrollback, ScrollbackSurface, SnapshotOptions, SplitFooter, SplitSnapshot};
 use opentui::syntax::SyntaxTheme;
-use opentui::widget::{
-    ColumnWidthMode, Markdown, MarkdownColors, MarkdownTableOptions, MarkdownTableStyle,
-};
+use opentui::widget::{ColumnWidthMode, Markdown, MarkdownColors, MarkdownTableOptions, MarkdownTableStyle};
 use serde_json::Value;
 
 use crate::theme::{RunTheme, mono_snapshot, mono_text};
@@ -128,10 +126,7 @@ impl Commit {
 pub enum Body {
     None,
     Text(String),
-    Code {
-        content: String,
-        filetype: Option<String>,
-    },
+    Code { content: String, filetype: Option<String> },
     Markdown(String),
     Structured(tools::Snapshot),
 }
@@ -182,11 +177,7 @@ pub fn entry_body(commit: &Commit, options: BodyOptions) -> Body {
             Phase::Progress => reasoning_body(&raw, mono),
         },
         EntryKind::System | EntryKind::Error => {
-            let text = if commit.phase == Phase::Progress {
-                raw
-            } else {
-                raw.trim().to_owned()
-            };
+            let text = if commit.phase == Phase::Progress { raw } else { raw.trim().to_owned() };
             match text_body(text) {
                 Body::Text(text) => Body::Text(crate::theme::mono_prefix(&text, mono)),
                 body => body,
@@ -228,10 +219,7 @@ fn reasoning_body(raw: &str, mono: bool) -> Body {
         return Body::None;
     }
     let (lead, body) = leading_newlines(&clean);
-    let code = |content: String| Body::Code {
-        content,
-        filetype: Some("markdown".into()),
-    };
+    let code = |content: String| Body::Code { content, filetype: Some("markdown".into()) };
     if let Some(rest) = body.strip_prefix("Thinking:") {
         let rest = rest.trim_start();
         if mono {
@@ -247,10 +235,7 @@ fn reasoning_body(raw: &str, mono: bool) -> Body {
 
 /// `entryFlags`.
 pub fn entry_flags(commit: &Commit) -> Flags {
-    let flags = |start_on_new_line, trailing_newline| Flags {
-        start_on_new_line,
-        trailing_newline,
-    };
+    let flags = |start_on_new_line, trailing_newline| Flags { start_on_new_line, trailing_newline };
     if commit.summary.is_some() {
         return flags(true, false);
     }
@@ -273,8 +258,7 @@ pub fn entry_done(commit: &Commit) -> bool {
         EntryKind::Assistant | EntryKind::Reasoning => commit.phase == Phase::Final,
         EntryKind::Tool => {
             commit.phase == Phase::Final
-                || (commit.phase == Phase::Progress
-                    && commit.tool_state == Some(ToolState::Completed))
+                || (commit.phase == Phase::Progress && commit.tool_state == Some(ToolState::Completed))
         }
         _ => true,
     }
@@ -294,11 +278,7 @@ pub fn entry_can_stream(commit: &Commit, body: &Body) -> bool {
 
 /// `entryGroupKey`: commits of one part share a key and stream into one entry.
 pub fn group_key(commit: &Commit) -> Option<String> {
-    let part = format!(
-        "{}\u{0}{}",
-        commit.message_id.as_deref().unwrap_or(""),
-        commit.part_id.as_deref()?
-    );
+    let part = format!("{}\u{0}{}", commit.message_id.as_deref().unwrap_or(""), commit.part_id.as_deref()?);
     if tools::structured_final(commit) {
         return Some(format!("tool:{part}:final"));
     }
@@ -351,10 +331,9 @@ pub fn entry_look(commit: &Commit, theme: &RunTheme) -> (Color, Attributes) {
         return (entry.system.body, Attributes::NONE);
     }
     match commit.kind {
-        EntryKind::Tool if commit.phase == Phase::Start => (
-            entry.tool.start.unwrap_or(entry.tool.body),
-            Attributes::NONE,
-        ),
+        EntryKind::Tool if commit.phase == Phase::Start => {
+            (entry.tool.start.unwrap_or(entry.tool.body), Attributes::NONE)
+        }
         EntryKind::Assistant => (entry.assistant.body, Attributes::NONE),
         EntryKind::Reasoning => (entry.reasoning.body, Attributes::NONE),
         EntryKind::Error => (entry.error.body, Attributes::BOLD),
@@ -377,10 +356,7 @@ pub fn entry_color(commit: &Commit, theme: &RunTheme) -> Color {
 fn failed(commit: &Commit) -> bool {
     commit.kind == EntryKind::Tool
         && (commit.tool_state == Some(ToolState::Error)
-            || commit
-                .part
-                .as_ref()
-                .is_some_and(|part| part["state"]["status"] == "error"))
+            || commit.part.as_ref().is_some_and(|part| part["state"]["status"] == "error"))
 }
 
 /// A body that streams on a surface.
@@ -416,24 +392,8 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new(
-        footer: SplitFooter,
-        scrollback: Scrollback,
-        theme: RunTheme,
-        mono: bool,
-        wrote: bool,
-    ) -> Self {
-        Self {
-            footer,
-            scrollback,
-            theme,
-            mono,
-            shell_output: false,
-            wrote,
-            tail: None,
-            rendered: None,
-            active: None,
-        }
+    pub fn new(footer: SplitFooter, scrollback: Scrollback, theme: RunTheme, mono: bool, wrote: bool) -> Self {
+        Self { footer, scrollback, theme, mono, shell_output: false, wrote, tail: None, rendered: None, active: None }
     }
 
     pub fn footer(&self) -> &SplitFooter {
@@ -518,13 +478,7 @@ impl Writer {
             self.tail = Some(commit);
             return Ok(());
         }
-        let body = entry_body(
-            &commit,
-            BodyOptions {
-                shell_output: self.shell_output,
-                mono: self.mono,
-            },
-        );
+        let body = entry_body(&commit, BodyOptions { shell_output: self.shell_output, mono: self.mono });
         if body == Body::None {
             if entry_done(&commit) {
                 self.finish_active(false)?;
@@ -533,9 +487,7 @@ impl Writer {
             return Ok(());
         }
         let streams = entry_can_stream(&commit, &body)
-            || (commit.kind == EntryKind::Tool
-                && commit.phase == Phase::Final
-                && matches!(body, Body::Markdown(_)));
+            || (commit.kind == EntryKind::Tool && commit.phase == Phase::Final && matches!(body, Body::Markdown(_)));
         if !matches!(body, Body::Structured(_)) && streams {
             self.write_streaming(&commit, body)?;
             if entry_done(&commit) {
@@ -548,11 +500,7 @@ impl Writer {
             self.finish_active(false)?;
         }
         let rows = separator_rows(self.rendered.as_ref(), &commit, &body);
-        let spaced = if rows > 0 {
-            rows
-        } else {
-            u32::from(self.rendered.is_none() && self.wrote)
-        };
+        let spaced = if rows > 0 { rows } else { u32::from(self.rendered.is_none() && self.wrote) };
         self.write_spacer(spaced)?;
         let body = static_body(&commit, body, spaced);
         let widget = self.entry_widget(&commit, &body);
@@ -577,23 +525,15 @@ impl Writer {
             return Ok(());
         }
         let spacer = Text::new(self.scrollback.app(), "");
-        self.write_widget(
-            &spacer,
-            Flags {
-                start_on_new_line: true,
-                trailing_newline: true,
-            },
-        )?;
+        self.write_widget(&spacer, Flags { start_on_new_line: true, trailing_newline: true })?;
         self.wrote = false;
         Ok(())
     }
 
     fn write_streaming(&mut self, commit: &Commit, body: Body) -> Result<()> {
         let kind = std::mem::discriminant(&body);
-        let reuse = self
-            .active
-            .as_ref()
-            .is_some_and(|active| same_group(Some(&active.commit), commit) && active.kind == kind);
+        let reuse =
+            self.active.as_ref().is_some_and(|active| same_group(Some(&active.commit), commit) && active.kind == kind);
         if !reuse {
             self.finish_active(false)?;
             self.active = Some(self.create_entry(commit, &body)?);
@@ -606,9 +546,7 @@ impl Writer {
             Body::Code { content, .. } => content,
             Body::None | Body::Structured(_) => String::new(),
         };
-        active
-            .content
-            .push_str(&if mono { mono_text(&text) } else { text });
+        active.content.push_str(&if mono { mono_text(&text) } else { text });
         self.flush_active(false, false)?;
         if self.active.as_ref().is_some_and(|active| active.rendered) {
             self.rendered = self.active.as_ref().map(|active| active.commit.clone());
@@ -617,16 +555,11 @@ impl Writer {
     }
 
     fn create_entry(&self, commit: &Commit, body: &Body) -> Result<Active> {
-        let surface = self
-            .scrollback
-            .surface(entry_flags(commit).start_on_new_line)?;
+        let surface = self.scrollback.surface(entry_flags(commit).start_on_new_line)?;
         let widget = match body {
             Body::Text(_) => {
                 let (fg, attributes) = entry_look(commit, &self.theme);
-                let text = Text::new(self.scrollback.app(), "")
-                    .wrap(WrapMode::Word)
-                    .fg(fg)
-                    .attributes(attributes);
+                let text = Text::new(self.scrollback.app(), "").wrap(WrapMode::Word).fg(fg).attributes(attributes);
                 surface.root().add(&text);
                 Stream::Text(text)
             }
@@ -644,11 +577,7 @@ impl Writer {
             widget,
             content: String::new(),
             committed_rows: 0,
-            pending_spacer_rows: if rows > 0 {
-                rows
-            } else {
-                u32::from(self.rendered.is_none() && self.wrote)
-            },
+            pending_spacer_rows: if rows > 0 { rows } else { u32::from(self.rendered.is_none() && self.wrote) },
             rendered: false,
         })
     }
@@ -665,18 +594,10 @@ impl Writer {
                 text.set_text(active.content.clone());
                 active.surface.render()?;
                 let height = active.surface.height();
-                if done {
-                    height
-                } else {
-                    active.committed_rows.max(height.saturating_sub(1))
-                }
+                if done { height } else { active.committed_rows.max(height.saturating_sub(1)) }
             }
             Stream::Markdown(markdown) => {
-                let content = if done {
-                    active.content.as_str()
-                } else {
-                    stable_prefix(&active.content)
-                };
+                let content = if done { active.content.as_str() } else { stable_prefix(&active.content) };
                 if content.is_empty() {
                     return Ok(false);
                 }
@@ -691,9 +612,7 @@ impl Writer {
         }
         let spacer = std::mem::take(&mut active.pending_spacer_rows);
         let trailing = done && target == active.surface.height() && trailing_newline;
-        let snapshot = active
-            .surface
-            .commit_rows(active.committed_rows, target, None, trailing)?;
+        let snapshot = active.surface.commit_rows(active.committed_rows, target, None, trailing)?;
         active.committed_rows = target;
         active.rendered = true;
         self.write_spacer(spacer)?;
@@ -720,15 +639,8 @@ impl Writer {
         let app = self.scrollback.app();
         let theme = &self.theme;
         if commit.compaction {
-            let rule = |app: &App| {
-                View::new(app)
-                    .border_sides(Sides::TOP)
-                    .border_color(theme.block.muted)
-                    .grow(1.0)
-            };
-            let label = View::new(app)
-                .padding_x(1)
-                .child(&Text::new(app, commit.text.clone()).fg(theme.block.muted));
+            let rule = |app: &App| View::new(app).border_sides(Sides::TOP).border_color(theme.block.muted).grow(1.0);
+            let label = View::new(app).padding_x(1).child(&Text::new(app, commit.text.clone()).fg(theme.block.muted));
             return View::new(app)
                 .direction(FlexDirection::Row)
                 .align_items(Align::Center)
@@ -740,11 +652,7 @@ impl Writer {
         match body {
             Body::Text(content) => {
                 let (fg, attributes) = entry_look(commit, theme);
-                Text::new(app, content.clone())
-                    .wrap(WrapMode::Word)
-                    .fg(fg)
-                    .attributes(attributes)
-                    .as_any()
+                Text::new(app, content.clone()).wrap(WrapMode::Word).fg(fg).attributes(attributes).as_any()
             }
             Body::Markdown(content) | Body::Code { content, .. } => {
                 let markdown = self.markdown(commit, body, false);
@@ -777,18 +685,10 @@ impl Writer {
                     marker: color,
                     rule: color,
                 },
-                SyntaxTheme::new()
-                    .first_part_fallback()
-                    .style("default", Style::new().fg(color)),
+                SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color)),
             )
         } else {
-            (
-                MarkdownColors {
-                    text: color,
-                    ..theme.markdown
-                },
-                theme.syntax.clone().unwrap_or_default(),
-            )
+            (MarkdownColors { text: color, ..theme.markdown }, theme.syntax.clone().unwrap_or_default())
         };
         let table = if self.mono {
             MarkdownTableOptions {
@@ -798,10 +698,7 @@ impl Writer {
                 ..MarkdownTableOptions::default()
             }
         } else {
-            MarkdownTableOptions {
-                width_mode: Some(ColumnWidthMode::Content),
-                ..MarkdownTableOptions::default()
-            }
+            MarkdownTableOptions { width_mode: Some(ColumnWidthMode::Content), ..MarkdownTableOptions::default() }
         };
         let syntax = if code { recolor(syntax, color) } else { syntax };
         opencode_ui::grammars::register();
@@ -821,8 +718,7 @@ impl Writer {
             self.scrollback.app(),
             vec![
                 summary.agent.clone().fg(theme.block.text),
-                format!(" {dot} {} {dot} {}", summary.model, summary.duration)
-                    .fg(theme.block.muted),
+                format!(" {dot} {} {dot} {}", summary.model, summary.duration).fg(theme.block.muted),
             ],
         )
         .wrap(WrapMode::None)
@@ -865,9 +761,7 @@ pub fn stable_prefix(content: &str) -> &str {
     let mut previous_blank = false;
     for line in content.split_inclusive('\n') {
         let trimmed = line.trim_start();
-        let marker = ["```", "~~~"]
-            .into_iter()
-            .find(|marker| trimmed.starts_with(marker));
+        let marker = ["```", "~~~"].into_iter().find(|marker| trimmed.starts_with(marker));
         match (fence, marker) {
             (None, Some(marker)) => fence = Some(marker),
             (Some(open), Some(marker)) if open == marker => fence = None,
@@ -888,9 +782,7 @@ mod tests {
     use super::*;
 
     fn assistant(text: &str, phase: Phase) -> Commit {
-        Commit::new(EntryKind::Assistant, Source::Assistant, phase, text)
-            .message("msg_a")
-            .part_id("text:0")
+        Commit::new(EntryKind::Assistant, Source::Assistant, phase, text).message("msg_a").part_id("text:0")
     }
 
     #[test]
@@ -898,44 +790,22 @@ mod tests {
         let options = BodyOptions::default();
         let user = Commit::new(EntryKind::User, Source::System, Phase::Start, "\nhello");
         assert_eq!(entry_body(&user, options), Body::Text("\n› hello".into()));
-        let mono = BodyOptions {
-            mono: true,
-            ..options
-        };
+        let mono = BodyOptions { mono: true, ..options };
         assert_eq!(entry_body(&user, mono), Body::Text("\n> hello".into()));
         let blank = Commit::new(EntryKind::User, Source::System, Phase::Start, "  ");
         assert_eq!(entry_body(&blank, options), Body::None);
-        assert_eq!(
-            entry_body(&assistant("**hi**", Phase::Progress), options),
-            Body::Markdown("**hi**".into())
-        );
-        assert_eq!(
-            entry_body(&assistant("", Phase::Final), options),
-            Body::None
-        );
+        assert_eq!(entry_body(&assistant("**hi**", Phase::Progress), options), Body::Markdown("**hi**".into()));
+        assert_eq!(entry_body(&assistant("", Phase::Final), options), Body::None);
         let mut interrupted = assistant("", Phase::Final);
         interrupted.interrupted = true;
-        assert_eq!(
-            entry_body(&interrupted, options),
-            Body::Text("assistant interrupted".into())
-        );
-        let reasoning = Commit::new(
-            EntryKind::Reasoning,
-            Source::Reasoning,
-            Phase::Progress,
-            "Thinking:   a [REDACTED]plan",
-        );
+        assert_eq!(entry_body(&interrupted, options), Body::Text("assistant interrupted".into()));
+        let reasoning =
+            Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, "Thinking:   a [REDACTED]plan");
         assert_eq!(
             entry_body(&reasoning, options),
-            Body::Code {
-                content: "_Thinking:_ a plan".into(),
-                filetype: Some("markdown".into())
-            }
+            Body::Code { content: "_Thinking:_ a plan".into(), filetype: Some("markdown".into()) }
         );
-        assert_eq!(
-            entry_body(&reasoning, mono),
-            Body::Text("Thinking: a plan".into())
-        );
+        assert_eq!(entry_body(&reasoning, mono), Body::Text("Thinking: a plan".into()));
         let system = Commit::system("  → done \n");
         assert_eq!(entry_body(&system, mono), Body::Text("-> done".into()));
     }
@@ -943,25 +813,12 @@ mod tests {
     #[test]
     fn flags_and_separators() {
         let user = Commit::new(EntryKind::User, Source::System, Phase::Start, "q");
-        assert_eq!(
-            entry_flags(&user),
-            Flags {
-                start_on_new_line: true,
-                trailing_newline: false
-            }
-        );
+        assert_eq!(entry_flags(&user), Flags { start_on_new_line: true, trailing_newline: false });
         let progress = assistant("a", Phase::Progress);
         assert!(!entry_flags(&progress).start_on_new_line);
         assert_eq!(separator_rows(None, &user, &Body::None), 0);
         assert_eq!(separator_rows(Some(&user), &progress, &Body::None), 1);
-        assert_eq!(
-            separator_rows(
-                Some(&progress),
-                &assistant("b", Phase::Progress),
-                &Body::None
-            ),
-            0
-        );
+        assert_eq!(separator_rows(Some(&progress), &assistant("b", Phase::Progress), &Body::None), 0);
         assert!(same_group(Some(&progress), &assistant("b", Phase::Final)));
         assert!(!same_group(Some(&user), &user));
     }
@@ -972,10 +829,7 @@ mod tests {
         assert_eq!(stable_prefix("a\n\nb"), "a");
         assert_eq!(stable_prefix("a\n\nb\n\n\nc"), "a\n\nb");
         assert_eq!(stable_prefix("a\n\n```\nx\n\ny"), "a");
-        assert_eq!(
-            stable_prefix("a\n\n```\nx\n\n```\n\nz"),
-            "a\n\n```\nx\n\n```"
-        );
+        assert_eq!(stable_prefix("a\n\n```\nx\n\n```\n\nz"), "a\n\n```\nx\n\n```");
         assert_eq!(stable_prefix("\n\nlead"), "");
     }
 }

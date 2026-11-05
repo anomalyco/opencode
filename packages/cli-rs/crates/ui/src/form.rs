@@ -97,9 +97,7 @@ pub fn number(value: &Option<SessionMessageShellExit>) -> Option<f64> {
 }
 
 /// `formInitialValues`: the defaults, and the custom text of a string default that is not an option.
-pub fn initial_values(
-    fields: &[FormField],
-) -> (IndexMap<String, FormValue>, HashMap<String, String>) {
+pub fn initial_values(fields: &[FormField]) -> (IndexMap<String, FormValue>, HashMap<String, String>) {
     let answers = fields
         .iter()
         .filter_map(|field| {
@@ -120,9 +118,7 @@ pub fn initial_values(
             let FormField::String(field) = field else {
                 return None;
             };
-            let (Some(options), Some(true), Some(default)) =
-                (&field.options, field.custom, &field.default)
-            else {
+            let (Some(options), Some(true), Some(default)) = (&field.options, field.custom, &field.default) else {
                 return None;
             };
             if options.iter().any(|option| option.value == *default) {
@@ -158,11 +154,7 @@ pub fn rows(field: Option<&FormField>) -> Vec<Row> {
         Some(FormField::Boolean(_)) => {
             return [(true, "Yes"), (false, "No")]
                 .into_iter()
-                .map(|(value, label)| Row {
-                    value: FormValue::Bool(value),
-                    label: label.to_owned(),
-                    description: None,
-                })
+                .map(|(value, label)| Row { value: FormValue::Bool(value), label: label.to_owned(), description: None })
                 .collect();
         }
         Some(FormField::Multiselect(field)) => &field.options,
@@ -279,9 +271,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
             }
             None
         }
-        FormField::Boolean(_) => {
-            (!matches!(value, FormValue::Bool(_))).then(|| "Expected yes or no".to_owned())
-        }
+        FormField::Boolean(_) => (!matches!(value, FormValue::Bool(_))).then(|| "Expected yes or no".to_owned()),
         FormField::Multiselect(field) => {
             let FormValue::Array(items) = value else {
                 return Some("Expected selections".to_owned());
@@ -304,27 +294,19 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
 }
 
 /// `formDisplayValue`: the answer as the review shows it, with option labels.
-pub fn display_value(
-    field: &FormField,
-    value: Option<&FormValue>,
-    empty_multiselect: &str,
-) -> String {
+pub fn display_value(field: &FormField, value: Option<&FormValue>, empty_multiselect: &str) -> String {
     let Some(value) = value else {
         return String::new();
     };
     let rows = rows(Some(field));
     let label = |item: &FormValue| {
-        rows.iter()
-            .find(|row| row.value == *item)
-            .map_or_else(|| value_text(item), |row| row.label.clone())
+        rows.iter().find(|row| row.value == *item).map_or_else(|| value_text(item), |row| row.label.clone())
     };
     match value {
         FormValue::Array(items) if items.is_empty() => empty_multiselect.to_owned(),
-        FormValue::Array(items) => items
-            .iter()
-            .map(|item| label(&FormValue::String(item.clone())))
-            .collect::<Vec<_>>()
-            .join(", "),
+        FormValue::Array(items) => {
+            items.iter().map(|item| label(&FormValue::String(item.clone()))).collect::<Vec<_>>().join(", ")
+        }
         value => label(value),
     }
 }
@@ -342,11 +324,7 @@ pub fn toggle_multiselect(value: Option<&FormValue>, item: &str) -> Vec<String> 
 }
 
 /// `formSetMultiselectCustom`: replaces the previous custom text among the selections with `next`.
-pub fn set_multiselect_custom(
-    value: Option<&FormValue>,
-    previous: Option<&str>,
-    next: &str,
-) -> Vec<String> {
+pub fn set_multiselect_custom(value: Option<&FormValue>, previous: Option<&str>, next: &str) -> Vec<String> {
     let mut values = array(value);
     if let Some(index) = previous
         .filter(|previous| !previous.is_empty())
@@ -391,14 +369,11 @@ pub fn email(text: &str) -> bool {
     let (Some(local), Some(domain)) = (parts.next(), parts.next()) else {
         return false;
     };
-    let plain =
-        |part: &str| !part.is_empty() && !part.contains(char::is_whitespace) && !part.contains('@');
+    let plain = |part: &str| !part.is_empty() && !part.contains(char::is_whitespace) && !part.contains('@');
     // `[^\s@]+\.[^\s@]+`: some dot with text on both sides.
     plain(local)
         && plain(domain)
-        && domain
-            .char_indices()
-            .any(|(index, c)| c == '.' && index > 0 && index + 1 < domain.len())
+        && domain.char_indices().any(|(index, c)| c == '.' && index > 0 && index + 1 < domain.len())
 }
 
 pub fn date(text: &str) -> bool {
@@ -413,13 +388,9 @@ pub fn date(text: &str) -> bool {
 /// What `new Date(text)` accepts, for the ISO shapes forms use.
 pub fn date_time(text: &str) -> bool {
     chrono::DateTime::parse_from_rfc3339(text).is_ok()
-        || [
-            "%Y-%m-%dT%H:%M:%S%.f",
-            "%Y-%m-%dT%H:%M",
-            "%Y-%m-%d %H:%M:%S",
-        ]
-        .iter()
-        .any(|format| chrono::NaiveDateTime::parse_from_str(text, format).is_ok())
+        || ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"]
+            .iter()
+            .any(|format| chrono::NaiveDateTime::parse_from_str(text, format).is_ok())
         || chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
 }
 
@@ -430,9 +401,9 @@ pub fn active(field: &FormField, answers: &HashMap<String, FormValue>) -> bool {
             return false;
         };
         let hit = match value {
-            FormValue::Array(items) => items
-                .iter()
-                .any(|item| equal_when(&FormValue::String(item.clone()), &when.value)),
+            FormValue::Array(items) => {
+                items.iter().any(|item| equal_when(&FormValue::String(item.clone()), &when.value))
+            }
             value => equal_when(value, &when.value),
         };
         if when.op == FormWhenOp::Eq { hit } else { !hit }
@@ -449,10 +420,7 @@ pub fn equal_when(value: &FormValue, want: &FormWhenValue) -> bool {
 }
 
 /// The fields that show for `answers`, in order. External fields always show; unknown kinds never do.
-pub fn visible_fields(
-    fields: &[FormField],
-    answers: &IndexMap<String, FormValue>,
-) -> Vec<FormField> {
+pub fn visible_fields(fields: &[FormField], answers: &IndexMap<String, FormValue>) -> Vec<FormField> {
     let mut seen = HashMap::new();
     fields
         .iter()

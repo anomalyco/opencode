@@ -3,8 +3,8 @@
 
 use opencode_parity::fixtures_dir;
 use opencode_ui::motion::{
-    OneCellMotion, ScannerOptions, ScannerStyle, WORK_SPINNER_NAMES, octant_glyph, one_cell_frame,
-    scanner_frames, seed_launch, seed_mono, work_spinner,
+    OneCellMotion, ScannerOptions, ScannerStyle, WORK_SPINNER_NAMES, octant_glyph, one_cell_frame, scanner_frames,
+    seed_launch, seed_mono, work_spinner,
 };
 use opentui::style::Color;
 use serde::Deserialize;
@@ -19,10 +19,7 @@ struct Functions {
 }
 
 fn load() -> Functions {
-    serde_json::from_str(
-        &std::fs::read_to_string(fixtures_dir().join("U.6/functions.json")).unwrap(),
-    )
-    .unwrap()
+    serde_json::from_str(&std::fs::read_to_string(fixtures_dir().join("U.6/functions.json")).unwrap()).unwrap()
 }
 
 #[test]
@@ -31,16 +28,10 @@ fn one_cell_frames_match_the_typescript_motions() {
     let motions: Vec<(String, OneCellMotion)> = WORK_SPINNER_NAMES
         .iter()
         .map(|name| (name.to_string(), work_spinner(name).unwrap()))
-        .chain([
-            ("seed-launch".to_owned(), seed_launch()),
-            ("seed-mono".to_owned(), seed_mono()),
-        ])
+        .chain([("seed-launch".to_owned(), seed_launch()), ("seed-mono".to_owned(), seed_mono())])
         .collect();
     assert_eq!(
-        motions
-            .iter()
-            .map(|(name, _)| name)
-            .collect::<std::collections::BTreeSet<_>>(),
+        motions.iter().map(|(name, _)| name).collect::<std::collections::BTreeSet<_>>(),
         functions.motions.keys().collect(),
         "the work spinner table"
     );
@@ -60,11 +51,7 @@ fn one_cell_frames_match_the_typescript_motions() {
 fn octant_glyphs_match_for_every_mask() {
     let functions = load();
     for (mask, expected) in functions.octants.iter().enumerate() {
-        assert_eq!(
-            octant_glyph(mask as u8).to_string(),
-            *expected,
-            "mask {mask:#04x}"
-        );
+        assert_eq!(octant_glyph(mask as u8).to_string(), *expected, "mask {mask:#04x}");
     }
 }
 
@@ -78,9 +65,6 @@ fn scanner_frames_match_create_frames() {
         min_alpha: 0.3,
         ..ScannerOptions::new(accent)
     };
-    assert_eq!(
-        scanner_frames(&ScannerOptions::new(accent)),
-        functions.scanner["diamonds"]
-    );
+    assert_eq!(scanner_frames(&ScannerOptions::new(accent)), functions.scanner["diamonds"]);
     assert_eq!(scanner_frames(&blocks), functions.scanner["blocks"]);
 }

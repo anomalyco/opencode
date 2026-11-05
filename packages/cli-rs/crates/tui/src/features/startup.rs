@@ -12,9 +12,7 @@ use std::time::Duration;
 use indexmap::IndexMap;
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{
-    SessionForkInput, SessionID, SessionListInput, SessionListInputOrder,
-};
+use opencode_api::generated::{SessionForkInput, SessionID, SessionListInput, SessionListInputOrder};
 use opencode_local::model_pref::Model;
 use opencode_ui::toast::{ToastOptions, Variant};
 
@@ -82,11 +80,7 @@ enum Target {
 
 impl Startup {
     pub fn new(args: Args) -> Self {
-        Self {
-            new_session_id: RefCell::new(args.new_session_id.clone()),
-            prompt: RefCell::new(None),
-            args,
-        }
+        Self { new_session_id: RefCell::new(args.new_session_id.clone()), prompt: RefCell::new(None), args }
     }
 
     /// Picks the prompt `--prompt` goes to, before the first route mounts.
@@ -145,19 +139,13 @@ impl Startup {
 /// `OPENCODE_ROUTE`: a JSON route for the first screen (`context/route.tsx` `initialRoute`). Anything that is
 /// not a route reads as none.
 pub fn env_route(value: &str) -> Option<Route> {
-    let value: serde_json::Value = serde_json::from_str(value)
-        .inspect_err(|error| log::warn!("OPENCODE_ROUTE is not JSON: {error}"))
-        .ok()?;
+    let value: serde_json::Value =
+        serde_json::from_str(value).inspect_err(|error| log::warn!("OPENCODE_ROUTE is not JSON: {error}")).ok()?;
     let text = |key: &str| value.get(key)?.as_str().map(str::to_owned);
     match value.get("type")?.as_str()? {
         "home" => Some(Route::Home),
-        "session" => Some(Route::Session {
-            id: SessionID(text("sessionID")?),
-        }),
-        "plugin" => Some(Route::Plugin {
-            id: text("id")?,
-            name: text("name")?,
-        }),
+        "session" => Some(Route::Session { id: SessionID(text("sessionID")?) }),
+        "plugin" => Some(Route::Plugin { id: text("id")?, name: text("name")? }),
         _ => None,
     }
 }
@@ -175,21 +163,13 @@ pub fn run(tui: &Tui, continue_: bool) {
     crate::dialogs::model::startup(
         &tui.local,
         tui.startup.args.agent.clone(),
-        tui.startup
-            .model()
-            .map(|(provider, model)| Model::new(&provider, &model)),
+        tui.startup.model().map(|(provider, model)| Model::new(&provider, &model)),
     );
     if continue_ {
         continue_latest(tui, tui.startup.args.fork);
         return;
     }
-    if let Some(id) = tui
-        .startup
-        .args
-        .session
-        .clone()
-        .filter(|_| tui.startup.args.fork)
-    {
+    if let Some(id) = tui.startup.args.session.clone().filter(|_| tui.startup.args.fork) {
         fork(tui, id);
     }
 }
@@ -206,32 +186,25 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
         ..SessionListInput::default()
     };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_list(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            match result {
-                Ok(response) => {
-                    let Some(session) = response.data.into_iter().next() else {
-                        return;
-                    };
-                    if fork_it {
-                        fork(&tui, session.id);
-                        return;
-                    }
-                    let id = session.id.clone();
-                    tui.data.remember(session);
-                    tui.startup.arrive(&id);
-                    tui.navigate(Route::Session { id });
+    tui.app.spawn(async move { client.session_list(&input, &RequestOptions::default()).await }, move |_, result| {
+        let Some(tui) = weak.upgrade() else { return };
+        match result {
+            Ok(response) => {
+                let Some(session) = response.data.into_iter().next() else {
+                    return;
+                };
+                if fork_it {
+                    fork(&tui, session.id);
+                    return;
                 }
-                Err(error) => tui.toasts.error(error.to_string()),
+                let id = session.id.clone();
+                tui.data.remember(session);
+                tui.startup.arrive(&id);
+                tui.navigate(Route::Session { id });
             }
-        },
-    );
+            Err(error) => tui.toasts.error(error.to_string()),
+        }
+    });
 }
 
 /// `session.fork`, then opens the fork.
@@ -240,15 +213,7 @@ fn fork(tui: &Tui, id: SessionID) {
     let weak = tui.weak();
     tui.app.spawn(
         async move {
-            client
-                .session_fork(
-                    &SessionForkInput {
-                        session_id: id,
-                        before: None,
-                    },
-                    &RequestOptions::default(),
-                )
-                .await
+            client.session_fork(&SessionForkInput { session_id: id, before: None }, &RequestOptions::default()).await
         },
         move |_, result| {
             let Some(tui) = weak.upgrade() else { return };
@@ -277,10 +242,7 @@ mod tests {
 
     #[test]
     fn parses_models_as_the_tui_does() {
-        assert_eq!(
-            parse_model("openai/gpt-5/mini"),
-            Some(("openai".into(), "gpt-5/mini".into()))
-        );
+        assert_eq!(parse_model("openai/gpt-5/mini"), Some(("openai".into(), "gpt-5/mini".into())));
         assert_eq!(parse_model("gpt-5"), None);
         assert_eq!(parse_model("/gpt-5"), None);
         assert_eq!(parse_model("openai/"), None);
@@ -290,10 +252,7 @@ mod tests {
     fn the_startup_prompt_goes_to_one_prompt_once() {
         let id = |value: &str| SessionID(value.into());
         let startup = |args: Args, route: Route, continue_: bool| {
-            let startup = Startup::new(Args {
-                prompt: Some("hello".into()),
-                ..args
-            });
+            let startup = Startup::new(Args { prompt: Some("hello".into()), ..args });
             startup.aim(&route, continue_);
             startup
         };
@@ -305,27 +264,14 @@ mod tests {
         let session = startup(Args::default(), Route::Session { id: id("ses_b") }, false);
         assert_eq!(session.take_prompt(None), None);
         assert_eq!(session.take_prompt(Some(&id("ses_a"))), None);
-        assert_eq!(
-            session.take_prompt(Some(&id("ses_b"))).as_deref(),
-            Some("hello")
-        );
+        assert_eq!(session.take_prompt(Some(&id("ses_b"))).as_deref(), Some("hello"));
 
         // `--continue` and `--fork` wait for the session they open; home does not take it meanwhile.
-        let forked = Args {
-            fork: true,
-            session: Some(id("ses_b")),
-            ..Args::default()
-        };
-        for pending in [
-            startup(Args::default(), Route::Home, true),
-            startup(forked, Route::Home, false),
-        ] {
+        let forked = Args { fork: true, session: Some(id("ses_b")), ..Args::default() };
+        for pending in [startup(Args::default(), Route::Home, true), startup(forked, Route::Home, false)] {
             assert_eq!(pending.take_prompt(None), None);
             pending.arrive(&id("ses_c"));
-            assert_eq!(
-                pending.take_prompt(Some(&id("ses_c"))).as_deref(),
-                Some("hello")
-            );
+            assert_eq!(pending.take_prompt(Some(&id("ses_c"))).as_deref(), Some("hello"));
         }
 
         let none = Startup::new(Args::default());
@@ -338,16 +284,11 @@ mod tests {
         assert_eq!(env_route(r#"{"type":"home"}"#), Some(Route::Home));
         assert_eq!(
             env_route(r#"{"type":"session","sessionID":"ses_a"}"#),
-            Some(Route::Session {
-                id: SessionID("ses_a".into())
-            })
+            Some(Route::Session { id: SessionID("ses_a".into()) })
         );
         assert_eq!(
             env_route(r#"{"type":"plugin","id":"x","name":"y","data":{}}"#),
-            Some(Route::Plugin {
-                id: "x".into(),
-                name: "y".into()
-            })
+            Some(Route::Plugin { id: "x".into(), name: "y".into() })
         );
         assert_eq!(env_route(r#"{"type":"session"}"#), None);
         assert_eq!(env_route("not json"), None);

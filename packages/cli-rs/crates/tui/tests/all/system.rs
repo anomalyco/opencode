@@ -44,25 +44,14 @@ impl Transport for Server {
             Some(query) => format!("{path}?{query}"),
             None => path.clone(),
         };
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
-        self.log
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), full, body.clone()));
-        let (status, body) =
-            (self.answer)(request.method, &path, &body).unwrap_or_else(|| match path.as_str() {
-                "/api/session" => (200, json!({ "data": [], "cursor": {} })),
-                _ => (404, json!({})),
-            });
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
+        self.log.lock().unwrap().push((request.method.to_owned(), full, body.clone()));
+        let (status, body) = (self.answer)(request.method, &path, &body).unwrap_or_else(|| match path.as_str() {
+            "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+            _ => (404, json!({})),
+        });
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -75,10 +64,7 @@ impl Transport for Server {
 
 /// The harness config of `parity/lib/component.tsx` plus `extra`.
 fn info(extra: Value) -> Info {
-    merge(&[
-        Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })),
-        Some(extra),
-    ])
+    merge(&[Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })), Some(extra)])
 }
 
 struct Mounted {
@@ -101,10 +87,7 @@ impl Mounted {
 
 fn mount_with(app: &TestApp, info: Info, answer: Answer) -> Mounted {
     let log = Arc::new(Mutex::new(Vec::new()));
-    let transport = Server {
-        answer,
-        log: log.clone(),
-    };
+    let transport = Server { answer, log: log.clone() };
     let client = Client::with_transport("http://opencode.local", Arc::new(transport)).unwrap();
     let tui = opencode_tui::mount(
         app,
@@ -147,9 +130,7 @@ fn dialog_diff(app: &TestApp, name: &str, title: &str) -> Result<(), String> {
     let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
     let mut actual = Fixture::from_capture(&app.render());
     let titled = (0..expected.height).any(|y| {
-        let row: String = (0..expected.width)
-            .map(|x| expected.cell(x, y).unwrap().symbol.clone())
-            .collect();
+        let row: String = (0..expected.width).map(|x| expected.cell(x, y).unwrap().symbol.clone()).collect();
         row.contains(title)
     });
     assert!(titled, "{title:?} is not in {name}");
@@ -158,14 +139,8 @@ fn dialog_diff(app: &TestApp, name: &str, title: &str) -> Result<(), String> {
         .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
         .filter(|&(x, y)| expected.cell(x, y).unwrap().bg != backdrop)
         .collect();
-    let (left, right) = (
-        inside.iter().map(|p| p.0).min().unwrap(),
-        inside.iter().map(|p| p.0).max().unwrap(),
-    );
-    let (top, bottom) = (
-        inside.iter().map(|p| p.1).min().unwrap(),
-        inside.iter().map(|p| p.1).max().unwrap(),
-    );
+    let (left, right) = (inside.iter().map(|p| p.0).min().unwrap(), inside.iter().map(|p| p.0).max().unwrap());
+    let (top, bottom) = (inside.iter().map(|p| p.1).min().unwrap(), inside.iter().map(|p| p.1).max().unwrap());
     for y in 0..expected.height {
         for x in 0..expected.width {
             if !(left..=right).contains(&x) || !(top..=bottom).contains(&y) {
@@ -175,18 +150,14 @@ fn dialog_diff(app: &TestApp, name: &str, title: &str) -> Result<(), String> {
     }
     let comparison = compare(&expected, &actual);
     if !comparison.is_equal() {
-        let path = std::env::temp_dir()
-            .join("opencode-parity")
-            .join(format!("{name}.json"));
+        let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual.to_json()).unwrap();
     }
     if comparison.is_equal() {
         return Ok(());
     }
-    Err(format!(
-        "P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}"
-    ))
+    Err(format!("P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}"))
 }
 
 fn theme(tui: &Tui) -> String {
@@ -341,10 +312,7 @@ fn server_plugins() -> Value {
 fn plugin_server() -> Answer {
     Box::new(|method, path, _| match (method, path) {
         ("GET", "/api/location") => Some((200, location())),
-        ("GET", "/api/plugin") => Some((
-            200,
-            json!({ "location": location(), "data": server_plugins() }),
-        )),
+        ("GET", "/api/plugin") => Some((200, json!({ "location": location(), "data": server_plugins() }))),
         ("POST", "/api/plugin/check") => {
             let mut plugins = server_plugins();
             plugins[0]["source"]["outdated"] = json!(false);
@@ -371,10 +339,7 @@ fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, Rc<std::cell::Cell<u
 }
 
 fn active(tui: &Tui, id: &str) -> bool {
-    tui.plugins
-        .entries()
-        .iter()
-        .any(|entry| entry.id == id && entry.status == opencode_plugin::Status::Active)
+    tui.plugins.entries().iter().any(|entry| entry.id == id && entry.status == opencode_plugin::Status::Active)
 }
 
 #[test]
@@ -384,10 +349,7 @@ fn plugin_manager_matches_typescript() {
     mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     assert_dialog(&app, "E.18b/plugins", "Plugins");
-    assert_eq!(
-        mounted.requests("/api/plugin"),
-        ["GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp"]
-    );
+    assert_eq!(mounted.requests("/api/plugin"), ["GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp"]);
 
     app.press("down");
     assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
@@ -445,10 +407,7 @@ fn plugin_manager_toggles_checks_and_updates() {
         .iter()
         .find(|(_, path, _)| path.starts_with("/api/plugin/update"))
         .map(|(_, _, body)| body.clone());
-    assert_eq!(
-        update,
-        Some(json!({ "targets": ["git+ssh://git@github.com/example/team-plugins.git"] }))
-    );
+    assert_eq!(update, Some(json!({ "targets": ["git+ssh://git@github.com/example/team-plugins.git"] })));
 
     // ctrl+r checks for updates and takes the fresh flags.
     app.press("ctrl+r");
@@ -493,10 +452,7 @@ fn pair_server(fails: bool) -> Answer {
                 "urls": ["http://127.0.0.1:4096/", "http://192.168.1.20:4096/"], "paths": { "tmp": "/tmp" },
             }),
         )),
-        "/api/pair" if fails => Some((
-            503,
-            json!({ "_tag": "ServiceUnavailable", "message": "Pairing is disabled" }),
-        )),
+        "/api/pair" if fails => Some((503, json!({ "_tag": "ServiceUnavailable", "message": "Pairing is disabled" }))),
         "/api/pair" => Some((200, json!({ "code": "XK7Q2M", "expires_in": 600 }))),
         _ => None,
     })
@@ -534,17 +490,8 @@ fn pair_links_follow_the_server_urls() {
     .unwrap();
     let code = serde_json::from_value(json!({ "code": "AB", "expires_in": 90 })).unwrap();
     let value = pair::pairing(&server, &code);
-    assert_eq!(
-        value.links,
-        [
-            "http://[::1]:4096/auth/connect/AB",
-            "https://box.example/auth/connect/AB"
-        ]
-    );
-    assert_eq!(
-        value.localhost.as_deref(),
-        Some("http://localhost:4096/auth/connect/AB")
-    );
+    assert_eq!(value.links, ["http://[::1]:4096/auth/connect/AB", "https://box.example/auth/connect/AB"]);
+    assert_eq!(value.localhost.as_deref(), Some("http://localhost:4096/auth/connect/AB"));
     // `Math.round(90 / 60)`.
     assert_eq!(value.minutes, 2);
     assert!(value.loopback);
@@ -553,23 +500,11 @@ fn pair_links_follow_the_server_urls() {
 // Highlights --------------------------------------------------------------------------------------------------
 
 fn release_highlights() -> Vec<Highlight> {
-    let item = |title: &str, body: &str| Highlight {
-        title: title.to_owned(),
-        body: body.to_owned(),
-    };
+    let item = |title: &str, body: &str| Highlight { title: title.to_owned(), body: body.to_owned() };
     vec![
-        item(
-            "Session tabs",
-            "Open sessions side by side and switch with `ctrl+tab`.",
-        ),
-        item(
-            "Faster startup",
-            "The TUI connects to the background service before it draws the first frame.",
-        ),
-        item(
-            "Pair devices",
-            "Run `/pair` to open this session on your phone, or scan the code.",
-        ),
+        item("Session tabs", "Open sessions side by side and switch with `ctrl+tab`."),
+        item("Faster startup", "The TUI connects to the background service before it draws the first frame."),
+        item("Pair devices", "Run `/pair` to open this session on your phone, or scan the code."),
     ]
 }
 
@@ -577,10 +512,7 @@ fn release_highlights() -> Vec<Highlight> {
 fn highlights_match_typescript() {
     let app = TestApp::new(80, 30);
     let tui = mount(&app, info(json!({})));
-    let release = highlights::Release {
-        version: "2.0.27".to_owned(),
-        items: release_highlights(),
-    };
+    let release = highlights::Release { version: "2.0.27".to_owned(), items: release_highlights() };
     highlights::install_with(&tui, release, false);
     tui.keymap.dispatch("opencode.highlights", None);
     wait_for(&app, "What's new in 2.0.27");
@@ -591,10 +523,9 @@ fn highlights_match_typescript() {
     let app = TestApp::new(80, 20);
     let tui = mount(&app, info(json!({})));
     let mut items = release_highlights();
-    items.extend(release_highlights().into_iter().map(|item| Highlight {
-        title: format!("{} again", item.title),
-        ..item
-    }));
+    items.extend(
+        release_highlights().into_iter().map(|item| Highlight { title: format!("{} again", item.title), ..item }),
+    );
     opencode_tui::dialogs::highlights::show(&tui, "2.0.27", &items);
     wait_for(&app, "What's new in 2.0.27");
     app.press("down");
@@ -612,17 +543,12 @@ fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> 
         ("XDG_CACHE_HOME", home.join("cache")),
     ];
     let paths = Paths::from_vars(|name| {
-        vars.iter()
-            .find(|(key, _)| *key == name)
-            .map(|(_, value)| value.clone().into_os_string())
+        vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string())
     })
     .unwrap();
     let client = Client::with_transport(
         "http://opencode.local",
-        Arc::new(Server {
-            answer: Box::new(|_, _, _| None),
-            log: Default::default(),
-        }),
+        Arc::new(Server { answer: Box::new(|_, _, _| None), log: Default::default() }),
     )
     .unwrap();
     opencode_tui::mount(
@@ -631,10 +557,7 @@ fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> 
             client,
             directory: DIRECTORY.into(),
             config: Resolved::new(info(extra), |_| None),
-            roots: Some(Roots {
-                paths,
-                storage_channel: "test".into(),
-            }),
+            roots: Some(Roots { paths, storage_channel: "test".into() }),
             route: Route::Home,
             continue_: false,
             events: false,
@@ -645,42 +568,29 @@ fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> 
 #[test]
 fn highlights_open_once_after_an_update_into_an_idle_home() {
     let home = tempfile::tempdir().unwrap();
-    let release = highlights::Release {
-        version: "2.0.27".to_owned(),
-        items: release_highlights(),
-    };
+    let release = highlights::Release { version: "2.0.27".to_owned(), items: release_highlights() };
 
     // A new install records the version silently.
     let app = TestApp::new(80, 30);
     let tui = mount_rooted(&app, home.path(), json!({}));
     highlights::startup(&tui, &release, false);
     let storage = tui.storage().unwrap();
-    app.wait_until(WAIT, || {
-        storage.load("highlights", &json!({})).unwrap() == json!({ "seen": "2.0.27" })
-    });
+    app.wait_until(WAIT, || storage.load("highlights", &json!({})).unwrap() == json!({ "seen": "2.0.27" }));
     assert!(!app.text().contains("What's new"), "{}", app.text());
 
     // After an update, a user with history sees them once.
     let state = tui.state_dir().unwrap();
     std::fs::write(state.join("prompt-history.jsonl"), "").unwrap();
-    let update = highlights::Release {
-        version: "2.0.28".to_owned(),
-        ..release.clone()
-    };
+    let update = highlights::Release { version: "2.0.28".to_owned(), ..release.clone() };
     highlights::startup(&tui, &update, false);
     wait_for(&app, "What's new in 2.0.28");
     app.press("enter");
     highlights::startup(&tui, &update, false);
-    app.wait_until(Duration::from_millis(300), || {
-        app.text().contains("What's new")
-    });
+    app.wait_until(Duration::from_millis(300), || app.text().contains("What's new"));
     assert!(!app.text().contains("What's new"), "{}", app.text());
 
     // `--continue`, an open dialog, or `highlights: false` keeps it closed.
-    let next = highlights::Release {
-        version: "2.0.29".to_owned(),
-        ..release.clone()
-    };
+    let next = highlights::Release { version: "2.0.29".to_owned(), ..release.clone() };
     highlights::startup(&tui, &next, true);
     status::show(&tui);
     highlights::startup(&tui, &next, false);
@@ -688,14 +598,9 @@ fn highlights_open_once_after_an_update_into_an_idle_home() {
     let app = TestApp::new(80, 30);
     let off = mount_rooted(&app, home.path(), json!({ "highlights": false }));
     highlights::startup(&off, &next, false);
-    app.wait_until(Duration::from_millis(300), || {
-        app.text().contains("What's new")
-    });
+    app.wait_until(Duration::from_millis(300), || app.text().contains("What's new"));
     assert!(!app.text().contains("What's new"), "{}", app.text());
-    assert_eq!(
-        storage.load("highlights", &json!({})).unwrap(),
-        json!({ "seen": "2.0.28" })
-    );
+    assert_eq!(storage.load("highlights", &json!({})).unwrap(), json!({ "seen": "2.0.28" }));
 }
 
 // Update ------------------------------------------------------------------------------------------------------
@@ -732,11 +637,7 @@ impl FakeUpdater {
     }
 
     fn finish_apply(&self, result: Result<(), String>) -> String {
-        let (version, done) = self
-            .applies
-            .borrow_mut()
-            .pop()
-            .expect("an install is running");
+        let (version, done) = self.applies.borrow_mut().pop().expect("an install is running");
         done(result);
         version
     }
@@ -746,19 +647,12 @@ impl FakeUpdater {
 fn click_on(app: &TestApp, text: &str) {
     let frame = Fixture::from_capture(&app.render());
     let rows: Vec<String> = (0..frame.height)
-        .map(|y| {
-            (0..frame.width)
-                .map(|x| frame.cell(x, y).unwrap().symbol.clone())
-                .collect()
-        })
+        .map(|y| (0..frame.width).map(|x| frame.cell(x, y).unwrap().symbol.clone()).collect())
         .collect();
     let (x, y) = rows
         .iter()
         .enumerate()
-        .find_map(|(y, line)| {
-            line.find(text)
-                .map(|x| (line[..x].chars().count() as u16, y as u16))
-        })
+        .find_map(|(y, line)| line.find(text).map(|x| (line[..x].chars().count() as u16, y as u16)))
         .unwrap_or_else(|| panic!("{text:?} is not on screen:\n{}", rows.join("\n")));
     app.click(x, y);
 }
@@ -771,10 +665,7 @@ fn with_updater(app: &TestApp, tui: Option<Rc<Tui>>) -> (Rc<Tui>, Rc<FakeUpdater
 }
 
 fn available(version: &str) -> update_notification::ClientNotice {
-    update_notification::ClientNotice {
-        kind: update_notification::Kind::Available,
-        version: version.to_owned(),
-    }
+    update_notification::ClientNotice { kind: update_notification::Kind::Available, version: version.to_owned() }
 }
 
 #[test]
@@ -833,25 +724,16 @@ fn update_checks_show_their_result_as_typescript() {
     // A check that finds an update offers it; a check of a closed dialog is dropped.
     update_notification::open(&tui, update_notification::Origin::Manual);
     wait_for(&app, "Checking");
-    updater.finish_check(Ok(Some(update_notification::Check::Notice(available(
-        "2.0.29",
-    )))));
+    updater.finish_check(Ok(Some(update_notification::Check::Notice(available("2.0.29")))));
     wait_for(&app, "update enter");
-    assert_eq!(
-        tui.updates.state(),
-        Some(update_notification::UpdateState::Available(
-            "2.0.29".to_owned()
-        ))
-    );
+    assert_eq!(tui.updates.state(), Some(update_notification::UpdateState::Available("2.0.29".to_owned())));
 
     let app = TestApp::new(80, 30);
     let (tui, updater) = with_updater(&app, None);
     update_notification::open(&tui, update_notification::Origin::Manual);
     wait_for(&app, "Checking");
     tui.dialogs.clear();
-    updater.finish_check(Ok(Some(update_notification::Check::Notice(available(
-        "2.0.30",
-    )))));
+    updater.finish_check(Ok(Some(update_notification::Check::Notice(available("2.0.30")))));
     assert_eq!(tui.updates.state(), None);
     assert!(!app.text().contains("Update"), "{}", app.text());
 }
@@ -873,30 +755,21 @@ fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
     assert!(!app.text().contains("Update available"), "{}", app.text());
     let storage = tui.storage().unwrap();
     app.wait_until(WAIT, || {
-        storage.load("update-notifications", &json!({})).unwrap()
-            == json!({ "versions": ["client:2.0.28"] })
+        storage.load("update-notifications", &json!({})).unwrap() == json!({ "versions": ["client:2.0.28"] })
     });
-    assert_eq!(
-        storage.load("update-notifications", &json!({})).unwrap(),
-        json!({ "versions": ["client:2.0.28"] })
-    );
+    assert_eq!(storage.load("update-notifications", &json!({})).unwrap(), json!({ "versions": ["client:2.0.28"] }));
 
     // A later TUI on the same storage does not show it again, but shows a newer version.
     let app = TestApp::new(80, 30);
     let (tui, _updater) = with_updater(&app, Some(mount_rooted(&app, home.path(), json!({}))));
     update_notification::client_notice(&tui, available("2.0.28"));
-    app.wait_until(Duration::from_millis(300), || {
-        app.text().contains("v2.0.28")
-    });
+    app.wait_until(Duration::from_millis(300), || app.text().contains("v2.0.28"));
     assert!(!app.text().contains("v2.0.28"), "{}", app.text());
     update_notification::client_notice(&tui, available("2.0.29"));
     wait_for(&app, "/update to install v2.0.29");
     update_notification::client_notice(
         &tui,
-        update_notification::ClientNotice {
-            kind: update_notification::Kind::Installed,
-            version: "2.0.29".to_owned(),
-        },
+        update_notification::ClientNotice { kind: update_notification::Kind::Installed, version: "2.0.29".to_owned() },
     );
     wait_for(&app, "/exit restart to use v2.0.29");
 }

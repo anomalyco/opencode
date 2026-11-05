@@ -11,15 +11,12 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer,
-    McpServerStatus,
+    ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
 };
 use opencode_store::{Catalog, Location};
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::select::{
-    self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps,
-};
+use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
@@ -41,17 +38,9 @@ pub fn install(tui: &Rc<Tui>) {
     .title("MCP servers")
     .group("Agent")
     .palette()
-    .slash(Slash {
-        name: "mcps".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    });
+    .slash(Slash { name: "mcps".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appGlobalBindingCommands`.
         KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),
@@ -83,10 +72,8 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
         seen: Cell::new(tui.data.read(|state| state.revision())),
     });
     if details
-        && let Some(server) = initial
-            .as_ref()
-            .and_then(|name| mcp.server(name))
-            .filter(|server| kind(&server.status) == "failed")
+        && let Some(server) =
+            initial.as_ref().and_then(|name| mcp.server(name)).filter(|server| kind(&server.status) == "failed")
     {
         mcp.detail(server);
         return;
@@ -112,10 +99,7 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
                 title: Rc::new({
                     let weak = weak.clone();
                     move |option: Option<&SelectOption<String>>| {
-                        let server = weak
-                            .upgrade()
-                            .zip(option)
-                            .and_then(|(mcp, option)| mcp.server(&option.value));
+                        let server = weak.upgrade().zip(option).and_then(|(mcp, option)| mcp.server(&option.value));
                         toggle_title(server.as_ref()).to_owned()
                     }
                 }),
@@ -134,17 +118,10 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
                     let Some(mcp) = weak.upgrade() else {
                         return Vec::new();
                     };
-                    if !mcp
-                        .focused()
-                        .is_some_and(|server| focused_error(&server).is_some())
-                    {
+                    if !mcp.focused().is_some_and(|server| focused_error(&server).is_some()) {
                         return Vec::new();
                     }
-                    vec![FooterHint {
-                        title: "view error".into(),
-                        label: "enter".into(),
-                        group: Some(Group::Primary),
-                    }]
+                    vec![FooterHint { title: "view error".into(), label: "enter".into(), group: Some(Group::Primary) }]
                 }
             }));
             let (view, handle) = select::select(cx, props);
@@ -182,25 +159,18 @@ impl Mcp {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let loaded = tui.data.read(|state| {
-            state
-                .location(Some(&self.location))
-                .is_some_and(|data| data.mcp_server.is_some())
-        });
+        let loaded =
+            tui.data.read(|state| state.location(Some(&self.location)).is_some_and(|data| data.mcp_server.is_some()));
         if !loaded {
             let weak = Rc::downgrade(self);
-            tui.app.spawn(
-                tui.data
-                    .catalog_sync(Catalog::McpServer, Some(&self.location)),
-                move |_, result| {
-                    if let Err(error) = result {
-                        log::warn!("mcp list: {error}");
-                    }
-                    if let Some(mcp) = weak.upgrade() {
-                        mcp.refresh();
-                    }
-                },
-            );
+            tui.app.spawn(tui.data.catalog_sync(Catalog::McpServer, Some(&self.location)), move |_, result| {
+                if let Err(error) = result {
+                    log::warn!("mcp list: {error}");
+                }
+                if let Some(mcp) = weak.upgrade() {
+                    mcp.refresh();
+                }
+            });
         }
         self.watch(tui.data.subscribe());
     }
@@ -211,21 +181,18 @@ impl Mcp {
             return;
         };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { revisions.changed().await.is_ok().then_some(revisions) },
-            move |_, revisions| {
-                let (Some(mcp), Some(revisions)) = (weak.upgrade(), revisions) else {
-                    return;
-                };
-                let Some(tui) = mcp.tui.upgrade() else { return };
-                let (revision, changes) = tui.data.changes_since(mcp.seen.get());
-                mcp.seen.set(revision);
-                if changes.location(&mcp.location) {
-                    mcp.refresh();
-                }
-                mcp.watch(revisions);
-            },
-        );
+        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
+            let (Some(mcp), Some(revisions)) = (weak.upgrade(), revisions) else {
+                return;
+            };
+            let Some(tui) = mcp.tui.upgrade() else { return };
+            let (revision, changes) = tui.data.changes_since(mcp.seen.get());
+            mcp.seen.set(revision);
+            if changes.location(&mcp.location) {
+                mcp.refresh();
+            }
+            mcp.watch(revisions);
+        });
     }
 
     /// The location's servers by name.
@@ -234,19 +201,14 @@ impl Mcp {
             return Vec::new();
         };
         let mut servers = tui.data.read(|state| {
-            state
-                .location(Some(&self.location))
-                .and_then(|data| data.mcp_server.clone())
-                .unwrap_or_default()
+            state.location(Some(&self.location)).and_then(|data| data.mcp_server.clone()).unwrap_or_default()
         });
         servers.sort_by(|a, b| a.name.cmp(&b.name));
         servers
     }
 
     fn server(&self, name: &str) -> Option<McpServer> {
-        self.servers()
-            .into_iter()
-            .find(|server| server.name == name)
+        self.servers().into_iter().find(|server| server.name == name)
     }
 
     /// The selected server (TS `focusedServer`).
@@ -265,11 +227,7 @@ impl Mcp {
                 let mut option = SelectOption::new(server.name.clone(), server.name);
                 // TS wraps "Connected ✓" in a bold span, which the row's `<text>` draws plain.
                 option.footer = Some(status_label(status, pending).to_owned());
-                option.footer_color = Some(if pending {
-                    theme.text.muted
-                } else {
-                    status_color(theme, status)
-                });
+                option.footer_color = Some(if pending { theme.text.muted } else { status_color(theme, status) });
                 option
             })
             .collect()
@@ -331,9 +289,7 @@ impl Mcp {
         self.loading.borrow_mut().insert(name.to_owned());
         self.refresh();
         let client = tui.data.client().clone();
-        let location = Some(LocationQueryInput {
-            directory: Some(self.location.directory.clone()),
-        });
+        let location = Some(LocationQueryInput { directory: Some(self.location.directory.clone()) });
         let server = name.to_owned();
         let connected = status == "connected";
         let weak = Rc::downgrade(self);
@@ -371,20 +327,14 @@ impl Mcp {
             return;
         };
         let weak = tui.weak();
-        let mut context = format!(
-            "Status: {}\nConfiguration: mcp.servers.{}",
-            kind(&server.status),
-            server.name
-        );
+        let mut context = format!("Status: {}\nConfiguration: mcp.servers.{}", kind(&server.status), server.name);
         if let Some(integration) = &server.integration_id {
             context.push_str(&format!("\nIntegration: {}", integration.0));
         }
         let props = error_details::Props {
             title: format!("MCP server: {}", server.name),
             source: None,
-            error: status_error(&server.status)
-                .unwrap_or("Unknown MCP connection error")
-                .to_owned(),
+            error: status_error(&server.status).unwrap_or("Unknown MCP connection error").to_owned(),
             context: Some(context),
             diagnostic_ref: None,
             on_back: Rc::new({
@@ -403,11 +353,7 @@ impl Mcp {
         let open = tui.weak();
         tui.app.defer(move |_| {
             let Some(tui) = open.upgrade() else { return };
-            tui.dialogs.replace(
-                |cx| error_details::view(&tui, cx, props),
-                None,
-                DialogOptions::default(),
-            );
+            tui.dialogs.replace(|cx| error_details::view(&tui, cx, props), None, DialogOptions::default());
         });
     }
 }
@@ -432,10 +378,7 @@ fn kind(status: &McpServerStatus) -> &str {
         McpServerStatus::Disabled(_) => "disabled",
         McpServerStatus::Failed(_) => "failed",
         McpServerStatus::NeedsAuth(_) => "needs_auth",
-        McpServerStatus::Unknown(value) => value
-            .get("status")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default(),
+        McpServerStatus::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
     }
 }
 

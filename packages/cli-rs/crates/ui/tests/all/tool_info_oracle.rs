@@ -4,8 +4,8 @@
 
 use opencode_api::generated::types::{SessionMessageAssistantTool, ToolContent};
 use opencode_ui::tool_info::{
-    ToolInline, execute_call_summary, execute_calls, primitive_input_summary, read_display_text,
-    tool_inline_info, tool_output_text, tool_path, web_search_provider_label,
+    ToolInline, execute_call_summary, execute_calls, primitive_input_summary, read_display_text, tool_inline_info,
+    tool_output_text, tool_path, web_search_provider_label,
 };
 use serde_json::{Value, json};
 
@@ -58,24 +58,13 @@ fn compare(parts: &[Value]) {
     let failures: Vec<_> = parts
         .iter()
         .filter_map(|case| {
-            let part: SessionMessageAssistantTool =
-                serde_json::from_value(case["part"].clone()).unwrap();
+            let part: SessionMessageAssistantTool = serde_json::from_value(case["part"].clone()).unwrap();
             let actual = encode(&tool_inline_info(&part, case["directory"].as_str()));
-            (actual != case["expected"]).then(|| {
-                format!(
-                    "{}:\n  ts   {}\n  rust {actual}",
-                    case["label"], case["expected"]
-                )
-            })
+            (actual != case["expected"])
+                .then(|| format!("{}:\n  ts   {}\n  rust {actual}", case["label"], case["expected"]))
         })
         .collect();
-    assert!(
-        failures.is_empty(),
-        "{} of {} differ:\n{}",
-        failures.len(),
-        parts.len(),
-        failures.join("\n")
-    );
+    assert!(failures.is_empty(), "{} of {} differ:\n{}", failures.len(), parts.len(), failures.join("\n"));
 }
 
 #[test]
@@ -91,75 +80,31 @@ fn tool_display_helpers_match_typescript() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|item| {
-                serde_json::from_value(item.clone()).unwrap_or(ToolContent::Unknown(item.clone()))
-            })
+            .map(|item| serde_json::from_value(item.clone()).unwrap_or(ToolContent::Unknown(item.clone())))
             .collect();
         let actual = tool_output_text(str_of(&case["name"]), &content);
-        assert_eq!(
-            actual,
-            str_of(&case["expected"]),
-            "toolOutputText {}",
-            case["content"]
-        );
+        assert_eq!(actual, str_of(&case["expected"]), "toolOutputText {}", case["content"]);
     }
     for case in cases("readDisplayText") {
         let actual = read_display_text(str_of(&case["input"]));
-        assert_eq!(
-            actual.as_deref(),
-            case["expected"].as_str(),
-            "readDisplayText {}",
-            case["input"]
-        );
+        assert_eq!(actual.as_deref(), case["expected"].as_str(), "readDisplayText {}", case["input"]);
     }
     for case in cases("toolPath") {
-        let actual = tool_path(
-            str_of(&case["input"]),
-            case["directory"].as_str(),
-            case["home"].as_str(),
-        );
-        assert_eq!(
-            actual,
-            str_of(&case["expected"]),
-            "toolPath {}",
-            case["input"]
-        );
+        let actual = tool_path(str_of(&case["input"]), case["directory"].as_str(), case["home"].as_str());
+        assert_eq!(actual, str_of(&case["expected"]), "toolPath {}", case["input"]);
     }
     for case in cases("primitiveInputSummary") {
-        let omit: Vec<_> = case["omit"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(str_of)
-            .collect();
+        let omit: Vec<_> = case["omit"].as_array().unwrap().iter().map(str_of).collect();
         let actual = primitive_input_summary(case["input"].as_object().unwrap(), &omit);
-        assert_eq!(
-            actual,
-            str_of(&case["expected"]),
-            "primitiveInputSummary {}",
-            case["input"]
-        );
+        assert_eq!(actual, str_of(&case["expected"]), "primitiveInputSummary {}", case["input"]);
     }
     for case in cases("executeCalls") {
-        let actual: Vec<_> = execute_calls(&case["input"])
-            .iter()
-            .map(execute_call_summary)
-            .collect();
-        let expected: Vec<_> = case["expected"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(str_of)
-            .collect();
+        let actual: Vec<_> = execute_calls(&case["input"]).iter().map(execute_call_summary).collect();
+        let expected: Vec<_> = case["expected"].as_array().unwrap().iter().map(str_of).collect();
         assert_eq!(actual, expected, "executeCalls {}", case["input"]);
     }
     for case in cases("webSearchProviderLabel") {
         let actual = web_search_provider_label(&case["provider"]);
-        assert_eq!(
-            actual,
-            str_of(&case["expected"]),
-            "webSearchProviderLabel {}",
-            case["provider"]
-        );
+        assert_eq!(actual, str_of(&case["expected"]), "webSearchProviderLabel {}", case["provider"]);
     }
 }

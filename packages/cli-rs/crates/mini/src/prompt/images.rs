@@ -45,16 +45,8 @@ pub struct Previews {
 
 impl Previews {
     pub fn new(app: &App) -> Self {
-        let root = View::new(app)
-            .row()
-            .width(Length::percent(100.0))
-            .gap(1)
-            .visible(false);
-        Self {
-            app: app.clone(),
-            root,
-            shown: RefCell::default(),
-        }
+        let root = View::new(app).row().width(Length::percent(100.0)).gap(1).visible(false);
+        Self { app: app.clone(), root, shown: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -77,14 +69,9 @@ impl Previews {
         self.root.clear();
         self.root.visible(true).height(u32::from(height));
         for uri in uris.iter().take(VISIBLE) {
-            let cell = View::new(app)
-                .width(u32::from(height * 2))
-                .height(Length::percent(100.0))
-                .shrink(1.0);
-            let image = ImageView::new(app)
-                .fit(ImageFit::Contain)
-                .width(Length::percent(100.0))
-                .height(Length::percent(100.0));
+            let cell = View::new(app).width(u32::from(height * 2)).height(Length::percent(100.0)).shrink(1.0);
+            let image =
+                ImageView::new(app).fit(ImageFit::Contain).width(Length::percent(100.0)).height(Length::percent(100.0));
             match data_uri(uri).map(|bytes| image.load(&bytes)) {
                 Some(Ok(image)) => cell.add(&image),
                 _ => cell.add(&Text::new(app, "No preview").fg(muted)),
@@ -109,9 +96,7 @@ fn data_uri(uri: &str) -> Option<Vec<u8>> {
     if !meta.ends_with(";base64") {
         return Some(payload.as_bytes().to_vec());
     }
-    base64::engine::general_purpose::STANDARD
-        .decode(payload.trim())
-        .ok()
+    base64::engine::general_purpose::STANDARD.decode(payload.trim()).ok()
 }
 
 #[cfg(test)]
@@ -129,11 +114,7 @@ mod tests {
                 mime: Some("image/png".into()),
                 filename: Some("clipboard".into()),
                 description: None,
-                mention: label.map(|text| Mention {
-                    start: 0,
-                    end: 9,
-                    text: text.into(),
-                }),
+                mention: label.map(|text| Mention { start: 0, end: 9, text: text.into() }),
             })
         };
         let parts = [

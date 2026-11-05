@@ -22,12 +22,7 @@ const HEIGHT: u16 = 30;
 
 fn routes() -> Vec<MemoryRoute> {
     let mut routes = vec![
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/config", 200, &json!([])),
     ];
     for (id, title) in [("ses_a", "Fix the parser"), ("ses_b", "Write the docs")] {
@@ -37,12 +32,7 @@ fn routes() -> Vec<MemoryRoute> {
             "time": { "created": 1, "updated": 1 },
             "location": { "directory": "/project" },
         });
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/{id}"),
-            200,
-            &json!({ "data": session }),
-        ));
+        routes.push(MemoryRoute::json("GET", &format!("/api/session/{id}"), 200, &json!({ "data": session })));
         routes.push(MemoryRoute::json(
             "GET",
             &format!("/api/session/{id}/message"),
@@ -50,12 +40,7 @@ fn routes() -> Vec<MemoryRoute> {
             &json!({ "data": [], "cursor": {} }),
         ));
         for list in ["inbox", "permission", "form"] {
-            routes.push(MemoryRoute::json(
-                "GET",
-                &format!("/api/session/{id}/{list}"),
-                200,
-                &json!({ "data": [] }),
-            ));
+            routes.push(MemoryRoute::json("GET", &format!("/api/session/{id}/{list}"), 200, &json!({ "data": [] })));
         }
     }
     routes
@@ -65,35 +50,23 @@ fn routes() -> Vec<MemoryRoute> {
 fn with_tabs(config: Value, check: impl FnOnce(&TestApp, &opencode_tui::Tui)) {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
-    let paths =
-        Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     std::fs::create_dir_all(&paths.state).unwrap();
-    let client =
-        Client::with_transport("http://opencode.local", Arc::new(Memory::new(routes()))).unwrap();
+    let client = Client::with_transport("http://opencode.local", Arc::new(Memory::new(routes()))).unwrap();
     let app = TestApp::new(WIDTH, HEIGHT);
     let tui = opencode_tui::mount(
         &app,
         Deps {
             client,
             directory: "/project".into(),
-            config: Resolved::new(
-                cli_config::decode_text(&config.to_string()).unwrap(),
-                |_| None,
-            ),
-            roots: Some(Roots {
-                paths,
-                storage_channel: "test".into(),
-            }),
-            route: Route::Session {
-                id: opencode_api::generated::SessionID("ses_a".into()),
-            },
+            config: Resolved::new(cli_config::decode_text(&config.to_string()).unwrap(), |_| None),
+            roots: Some(Roots { paths, storage_channel: "test".into() }),
+            route: Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) },
             continue_: false,
             events: true,
         },
     );
-    tui.navigate(Route::Session {
-        id: opencode_api::generated::SessionID("ses_b".into()),
-    });
+    tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_b".into()) });
     wait_for(&app, &["Fix the parser", "Write the docs"]);
     check(&app, &tui);
 }
@@ -121,16 +94,13 @@ fn shaped_cells(app: &TestApp) -> Vec<(u16, u16, MousePointer)> {
 #[test]
 fn every_cell_keeps_the_default_pointer_as_in_typescript() {
     for layout in ["horizontal", "vertical"] {
-        with_tabs(
-            json!({ "animations": false, "tabs": { "layout": layout } }),
-            |app, tui| {
-                assert_eq!(shaped_cells(app), [], "{layout}, session:\n{}", app.text());
+        with_tabs(json!({ "animations": false, "tabs": { "layout": layout } }), |app, tui| {
+            assert_eq!(shaped_cells(app), [], "{layout}, session:\n{}", app.text());
 
-                // A select dialog: its filter input and its rows.
-                tui.keymap.dispatch("command.palette.show", None);
-                wait_for(app, &["Search commands"]);
-                assert_eq!(shaped_cells(app), [], "{layout}, palette:\n{}", app.text());
-            },
-        );
+            // A select dialog: its filter input and its rows.
+            tui.keymap.dispatch("command.palette.show", None);
+            wait_for(app, &["Search commands"]);
+            assert_eq!(shaped_cells(app), [], "{layout}, palette:\n{}", app.text());
+        });
     }
 }

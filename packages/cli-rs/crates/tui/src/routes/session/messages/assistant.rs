@@ -20,24 +20,9 @@ pub struct TextPart {
 
 impl TextPart {
     pub fn new(cx: &Context<'_>) -> Self {
-        let markdown = opencode_ui::markdown::view(
-            cx.app,
-            cx.theme,
-            cx.syntax,
-            cx.renderers,
-            cx.conceal,
-            true,
-        );
-        let root = View::new(cx.app)
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&markdown);
-        Self {
-            root,
-            markdown,
-            text: RefCell::default(),
-            streaming: Cell::new(true),
-        }
+        let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
+        let root = View::new(cx.app).padding_edge(Edge::Left, 3).shrink(0.0).child(&markdown);
+        Self { root, markdown, text: RefCell::default(), streaming: Cell::new(true) }
     }
 
     pub fn root(&self) -> &View {
@@ -73,11 +58,7 @@ pub fn titlecase(text: &str) -> String {
     text.chars()
         .map(|character| {
             let word = character.is_alphanumeric() || character == '_';
-            let next = if word && !previous_word {
-                character.to_ascii_uppercase()
-            } else {
-                character
-            };
+            let next = if word && !previous_word { character.to_ascii_uppercase() } else { character };
             previous_word = word;
             next
         })

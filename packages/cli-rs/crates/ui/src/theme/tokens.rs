@@ -51,12 +51,7 @@ pub struct Feedback<T> {
 
 impl<T: Blank> Blank for Feedback<T> {
     fn blank() -> Self {
-        Self {
-            error: T::blank(),
-            warning: T::blank(),
-            success: T::blank(),
-            info: T::blank(),
-        }
+        Self { error: T::blank(), warning: T::blank(), success: T::blank(), info: T::blank() }
     }
 }
 

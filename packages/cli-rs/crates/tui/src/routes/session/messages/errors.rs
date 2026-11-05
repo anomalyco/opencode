@@ -10,8 +10,7 @@ use std::time::Duration;
 
 use chrono::{Local as Clock, TimeZone};
 use opencode_api::generated::{
-    SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo,
-    SessionStructuredError,
+    SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo, SessionStructuredError,
 };
 use opentui::prelude::*;
 
@@ -38,10 +37,7 @@ pub struct ExecutionError {
 impl ExecutionError {
     pub fn new(cx: &Context<'_>) -> Self {
         let text = Text::new(cx.app, "").fg(cx.theme.text.feedback.error.base);
-        let root = View::new(cx.app)
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&text);
+        let root = View::new(cx.app).padding_edge(Edge::Left, 3).shrink(0.0).child(&text);
         Self { root, text }
     }
 
@@ -53,8 +49,7 @@ impl ExecutionError {
         if let SessionMessageInfo::Idle(idle) = message
             && let Some(error) = &idle.error
         {
-            self.text
-                .set_text(format!("Error: {}", self::message(error)));
+            self.text.set_text(format!("Error: {}", self::message(error)));
         }
     }
 }
@@ -88,17 +83,8 @@ impl StepError {
     pub fn new(cx: &Context<'_>) -> Self {
         let notice = View::new(cx.app).column().visible(false);
         let retry = Retry::new(cx);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(&notice)
-            .child(retry.root());
-        Self {
-            root,
-            notice,
-            retry,
-            rendered: RefCell::default(),
-        }
+        let root = View::new(cx.app).column().shrink(0.0).child(&notice).child(retry.root());
+        Self { root, notice, retry, rendered: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -107,10 +93,7 @@ impl StepError {
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant) {
         self.retry.update(message.retry.as_ref());
-        let interrupted = message
-            .error
-            .as_ref()
-            .is_some_and(|error| error.message == "Step interrupted");
+        let interrupted = message.error.as_ref().is_some_and(|error| error.message == "Step interrupted");
         let notice = match &message.error {
             Some(error) if !interrupted && message.retry.is_none() => {
                 if error.r#type == "provider.free-limit" {
@@ -188,11 +171,7 @@ impl StepError {
                         &View::new(app)
                             .column()
                             .padding_edge(Edge::Top, 1)
-                            .child(
-                                &Text::new(app, label.as_str())
-                                    .fg(muted)
-                                    .wrap(WrapMode::Word),
-                            )
+                            .child(&Text::new(app, label.as_str()).fg(muted).wrap(WrapMode::Word))
                             .child(&Text::new(app, href.as_str()).fg(base)),
                     );
                 }
@@ -218,10 +197,7 @@ struct RetryInner {
 impl Retry {
     fn new(cx: &Context<'_>) -> Self {
         let text = Text::new(cx.app, "").fg(cx.theme.text.feedback.warning.base);
-        let root = View::new(cx.app)
-            .padding_edge(Edge::Left, 3)
-            .visible(false)
-            .child(&text);
+        let root = View::new(cx.app).padding_edge(Edge::Left, 3).visible(false).child(&text);
         Self(Rc::new_cyclic(|this| RetryInner {
             app: cx.app.clone(),
             root,
@@ -247,17 +223,14 @@ impl Retry {
         self.0.root.visible(retry.is_some());
         if self.0.render() > 0 {
             let weak = self.0.this.clone();
-            self.0.timer.set(Some(self.0.app.set_interval(
-                Duration::from_secs(1),
-                move |_| {
-                    let Some(inner) = weak.upgrade() else { return };
-                    if inner.render() == 0
-                        && let Some(timer) = inner.timer.take()
-                    {
-                        inner.app.cancel_timer(timer);
-                    }
-                },
-            )));
+            self.0.timer.set(Some(self.0.app.set_interval(Duration::from_secs(1), move |_| {
+                let Some(inner) = weak.upgrade() else { return };
+                if inner.render() == 0
+                    && let Some(timer) = inner.timer.take()
+                {
+                    inner.app.cancel_timer(timer);
+                }
+            })));
         }
     }
 }
@@ -277,15 +250,8 @@ impl RetryInner {
             return 0;
         };
         let seconds = ((retry.at - now()) / 1000.0).ceil().max(0.0) as u64;
-        let when = if seconds > 0 {
-            format!("Retrying in {seconds}s")
-        } else {
-            "Retry due".to_owned()
-        };
-        self.text.set_text(format!(
-            "⚠ {when} · attempt {} · {}",
-            retry.attempt, retry.error.message
-        ));
+        let when = if seconds > 0 { format!("Retrying in {seconds}s") } else { "Retry due".to_owned() };
+        self.text.set_text(format!("⚠ {when} · attempt {} · {}", retry.attempt, retry.error.message));
         seconds
     }
 }
@@ -297,31 +263,19 @@ fn limit_notice(
     error: &SessionStructuredError,
 ) -> Option<LimitNotice> {
     let local = &cx.tui.local;
-    let body = error
-        .response
-        .as_ref()
-        .map(|response| response.body.as_str());
+    let body = error.response.as_ref().map(|response| response.body.as_str());
     let reset = body.and_then(refusal_reset).or_else(|| {
         retry_reset(
             error.retry_after_ms.map(|delay| delay as f64),
             message.time.completed.unwrap_or(message.time.created),
         )
     });
-    let resets = reset.map_or_else(String::new, |at| {
-        format!("Resets {}. ", usage::format_reset(at))
-    });
-    let key = Some(
-        cx.keys
-            .model_list
-            .clone()
-            .unwrap_or_else(|| "/models".to_owned()),
-    );
+    let resets = reset.map_or_else(String::new, |at| format!("Resets {}. ", usage::format_reset(at)));
+    let key = Some(cx.keys.model_list.clone().unwrap_or_else(|| "/models".to_owned()));
     let models = local.models();
     let name = models
         .iter()
-        .find(|model| {
-            model.provider_id == message.model.provider_id && model.id == message.model.id
-        })
+        .find(|model| model.provider_id == message.model.provider_id && model.id == message.model.id)
         .map_or_else(|| message.model.id.clone(), |model| model.name.clone());
     match error.r#type.as_str() {
         "provider.go-limit" => {
@@ -329,15 +283,11 @@ fn limit_notice(
                 Some(limit) => format!("OpenCode Go {limit} usage limit reached"),
                 None => "OpenCode Go usage limit reached".to_owned(),
             };
-            let link = match body
-                .and_then(|body| json_string(body, "workspace"))
-                .filter(|id| {
-                    (id.starts_with("org_") || id.starts_with("wrk_"))
-                        && id[4..]
-                            .chars()
-                            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-                        && id.len() > 4
-                }) {
+            let link = match body.and_then(|body| json_string(body, "workspace")).filter(|id| {
+                (id.starts_with("org_") || id.starts_with("wrk_"))
+                    && id[4..].chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                    && id.len() > 4
+            }) {
                 Some(workspace) => format!("https://opencode.ai/console/{workspace}/go"),
                 None => "https://opencode.ai/console".to_owned(),
             };
@@ -345,10 +295,7 @@ fn limit_notice(
                 title,
                 body: format!("{resets}Switch to a free model with"),
                 key,
-                link: Some((
-                    "Or turn on Extra Usage on your Go page to keep going now:".to_owned(),
-                    link,
-                )),
+                link: Some(("Or turn on Extra Usage on your Go page to keep going now:".to_owned(), link)),
             })
         }
         "provider.model-budget-limit" => Some(LimitNotice {
@@ -364,21 +311,12 @@ fn limit_notice(
             link: None,
         }),
         _ if error.status == Some(402)
-            && usage::served_by_console(
-                local.provider(message.model.provider_id.as_str()).as_ref(),
-            ) =>
+            && usage::served_by_console(local.provider(message.model.provider_id.as_str()).as_ref()) =>
         {
-            let workspace = local
-                .usage()
-                .flatten()
-                .and_then(|info| info.workspace.name.clone());
+            let workspace = local.usage().flatten().and_then(|info| info.workspace.name.clone());
             Some(LimitNotice {
-                title: format!(
-                    "{} is out of credits",
-                    workspace.as_deref().unwrap_or("Your workspace")
-                ),
-                body: "Paid models are paused until an admin adds credits in OpenCode Console."
-                    .to_owned(),
+                title: format!("{} is out of credits", workspace.as_deref().unwrap_or("Your workspace")),
+                body: "Paid models are paused until an admin adds credits in OpenCode Console.".to_owned(),
                 key: None,
                 link: None,
             })
@@ -389,8 +327,7 @@ fn limit_notice(
 
 /// `freeLimitReset`: the time when that is today and within a day, else the time and date.
 pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<String> {
-    let delay =
-        delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 7.0 * DAY_MS)?;
+    let delay = delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 7.0 * DAY_MS)?;
     let at = base + delay;
     let date = Clock.timestamp_millis_opt(at as i64).single()?;
     let today = Clock.timestamp_millis_opt(now as i64).single()?;
@@ -405,15 +342,12 @@ pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<Strin
 /// `refusalReset`: OpenCode Console names the reset `resetsAt` in the error body.
 fn refusal_reset(body: &str) -> Option<f64> {
     let at = json_string(body, "resetsAt")?;
-    chrono::DateTime::parse_from_rfc3339(at)
-        .ok()
-        .map(|at| at.timestamp_millis() as f64)
+    chrono::DateTime::parse_from_rfc3339(at).ok().map(|at| at.timestamp_millis() as f64)
 }
 
 /// `retryReset`: `retry-after` from `base`; nothing past 45 days, as a bad header.
 fn retry_reset(delay: Option<f64>, base: f64) -> Option<f64> {
-    let delay =
-        delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 45.0 * DAY_MS)?;
+    let delay = delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 45.0 * DAY_MS)?;
     Some(base + delay)
 }
 
@@ -440,9 +374,7 @@ fn json_string<'a>(body: &'a str, key: &str) -> Option<&'a str> {
 
 /// `Date.now()`.
 pub fn now() -> f64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0.0, |elapsed| elapsed.as_millis() as f64)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_millis() as f64)
 }
 
 /// The free-limit and Go-limit stops (`session.step.failed`): restore the stopped prompt when the prompt is empty, and
@@ -470,11 +402,7 @@ impl Stop {
 
 impl LimitWatch {
     /// The new limit stops among the visible messages, after a store flush.
-    pub fn check(
-        &self,
-        messages: &[SessionMessageInfo],
-        pending: &dyn Fn(&str) -> bool,
-    ) -> Vec<Stop> {
+    pub fn check(&self, messages: &[SessionMessageInfo], pending: &dyn Fn(&str) -> bool) -> Vec<Stop> {
         let mut stops = Vec::new();
         for (index, message) in messages.iter().enumerate() {
             let SessionMessageInfo::Assistant(assistant) = message else {
@@ -495,16 +423,9 @@ impl LimitWatch {
             let recalled = messages[..index]
                 .iter()
                 .rev()
-                .take_while(|item| {
-                    !matches!(
-                        item,
-                        SessionMessageInfo::Shell(_) | SessionMessageInfo::Idle(_)
-                    )
-                })
+                .take_while(|item| !matches!(item, SessionMessageInfo::Shell(_) | SessionMessageInfo::Idle(_)))
                 .find_map(|item| match item {
-                    SessionMessageInfo::User(user) if !pending(user.id.as_str()) => {
-                        Some(user.text.clone())
-                    }
+                    SessionMessageInfo::User(user) if !pending(user.id.as_str()) => Some(user.text.clone()),
                     _ => None,
                 });
             let reset = free_limit_reset(
@@ -512,10 +433,7 @@ impl LimitWatch {
                 assistant.time.completed.unwrap_or(assistant.time.created),
                 now(),
             );
-            stops.push(Stop {
-                recalled,
-                offer: free.then_some(reset),
-            });
+            stops.push(Stop { recalled, offer: free.then_some(reset) });
         }
         stops
     }
@@ -574,8 +492,7 @@ mod tests {
         assert_eq!(free_limit_reset(Some(-1.0), 0.0, 0.0), None);
         assert_eq!(free_limit_reset(Some(8.0 * DAY_MS), 0.0, 0.0), None);
         // Over a day away is always the time and the date.
-        let far =
-            free_limit_reset(Some(2.0 * DAY_MS), 1_768_478_400_000.0, 1_768_478_400_000.0).unwrap();
+        let far = free_limit_reset(Some(2.0 * DAY_MS), 1_768_478_400_000.0, 1_768_478_400_000.0).unwrap();
         assert!(far.contains(" · "), "{far}");
     }
 }

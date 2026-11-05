@@ -37,9 +37,7 @@ pub fn part() -> String {
 
 pub fn create(descending: bool, timestamp: i64) -> String {
     let counter = {
-        let mut clock = CLOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut clock = CLOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if clock.0 != timestamp {
             *clock = (timestamp, 0);
         }
@@ -54,18 +52,12 @@ pub fn create(descending: bool, timestamp: i64) -> String {
     }
     let mut bytes = [0_u8; LENGTH - 12];
     rand::fill(&mut bytes);
-    id.extend(
-        bytes
-            .iter()
-            .map(|byte| char::from(CHARS[usize::from(*byte) % CHARS.len()])),
-    );
+    id.extend(bytes.iter().map(|byte| char::from(CHARS[usize::from(*byte) % CHARS.len()])));
     id
 }
 
 fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_millis() as i64)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as i64)
 }
 
 #[cfg(test)]
@@ -87,21 +79,14 @@ mod tests {
     #[test]
     fn matches_the_typescript_identifier_oracle() {
         let cases: Vec<Case> =
-            serde_json::from_str(include_str!("../../../parity/fixtures/F.3/identifier.json"))
-                .unwrap();
+            serde_json::from_str(include_str!("../../../parity/fixtures/F.3/identifier.json")).unwrap();
         assert!(!cases.is_empty());
         for case in cases {
             for _ in 1..case.repeat {
                 create(case.descending, case.timestamp);
             }
             let id = create(case.descending, case.timestamp);
-            assert_eq!(
-                id[..12],
-                case.prefix,
-                "descending {} at {}",
-                case.descending,
-                case.timestamp
-            );
+            assert_eq!(id[..12], case.prefix, "descending {} at {}", case.descending, case.timestamp);
             assert_eq!(id.len(), LENGTH);
             assert!(id[12..].bytes().all(|byte| CHARS.contains(&byte)));
         }

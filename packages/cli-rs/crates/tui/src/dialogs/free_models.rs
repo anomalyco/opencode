@@ -25,9 +25,7 @@ pub fn show(local: &Rc<Local>) {
             let options: select::Options<Model> = {
                 let weak = Rc::downgrade(&local);
                 Rc::new(move |query: &str| {
-                    weak.upgrade().map_or_else(Vec::new, |local| {
-                        options(&local, query, &favorites, &recent, marker)
-                    })
+                    weak.upgrade().map_or_else(Vec::new, |local| options(&local, query, &favorites, &recent, marker))
                 })
             };
             let mut props = SelectProps::dynamic("Free models", options.clone());
@@ -52,9 +50,9 @@ pub fn show(local: &Rc<Local>) {
             let favorite_title = {
                 let weak = Rc::downgrade(&local);
                 move |option: Option<&SelectOption<Model>>| -> String {
-                    let favorite = weak.upgrade().is_some_and(|local| {
-                        option.is_some_and(|option| local.favorite().contains(&option.value))
-                    });
+                    let favorite = weak
+                        .upgrade()
+                        .is_some_and(|local| option.is_some_and(|option| local.favorite().contains(&option.value)));
                     if favorite { "unfavorite" } else { "favorite" }.into()
                 }
             };
@@ -110,26 +108,17 @@ fn options(
     let favored = |option: &SelectOption<Model>| !favorites.contains(&option.value.key());
     let needle = query.trim();
     if !needle.is_empty() {
-        let mut found: Vec<SelectOption<Model>> = fuzzy::go(
-            needle,
-            &all,
-            |option| [Some(option.title.as_str())],
-            |s| s[0],
-            0.0,
-        )
-        .into_iter()
-        .map(|index| all[index].clone())
-        .collect();
+        let mut found: Vec<SelectOption<Model>> =
+            fuzzy::go(needle, &all, |option| [Some(option.title.as_str())], |s| s[0], 0.0)
+                .into_iter()
+                .map(|index| all[index].clone())
+                .collect();
         found.sort_by_key(favored);
         return found;
     }
     // Favorites first, then most recently used, then the server's order.
-    let rank = |option: &SelectOption<Model>| {
-        recent
-            .iter()
-            .position(|key| *key == option.value.key())
-            .unwrap_or(usize::MAX)
-    };
+    let rank =
+        |option: &SelectOption<Model>| recent.iter().position(|key| *key == option.value.key()).unwrap_or(usize::MAX);
     let mut sorted = all;
     sorted.sort_by_key(rank);
     sorted.sort_by_key(favored);

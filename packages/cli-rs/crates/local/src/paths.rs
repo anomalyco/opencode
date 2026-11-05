@@ -36,31 +36,17 @@ impl Paths {
     /// (`packages/cli/src/index.ts:136-142`); it does not move state, so locks and the service
     /// registration stay where other clients look for them.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> io::Result<Self> {
-        let set = |name: &str| {
-            var(name)
-                .filter(|value| !value.is_empty())
-                .map(PathBuf::from)
-        };
+        let set = |name: &str| var(name).filter(|value| !value.is_empty()).map(PathBuf::from);
         let home = set("HOME").or_else(|| set("USERPROFILE")).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "cannot find the home directory: HOME is not set",
-            )
+            io::Error::new(io::ErrorKind::NotFound, "cannot find the home directory: HOME is not set")
         })?;
         let root = |name: &str, fallback: &[&str]| {
-            set(name)
-                .unwrap_or_else(|| {
-                    fallback
-                        .iter()
-                        .fold(home.clone(), |path, part| path.join(part))
-                })
-                .join(APP)
+            set(name).unwrap_or_else(|| fallback.iter().fold(home.clone(), |path, part| path.join(part))).join(APP)
         };
         let data = root("XDG_DATA_HOME", &[".local", "share"]);
         let cache = root("XDG_CACHE_HOME", &[".cache"]);
         let state = root("XDG_STATE_HOME", &[".local", "state"]);
-        let config =
-            set("OPENCODE_CONFIG_DIR").unwrap_or_else(|| root("XDG_CONFIG_HOME", &[".config"]));
+        let config = set("OPENCODE_CONFIG_DIR").unwrap_or_else(|| root("XDG_CONFIG_HOME", &[".config"]));
         Ok(Self {
             // `OPENCODE_TEST_HOME` moves only `home`, as in `global.ts:16-18`.
             home: var("OPENCODE_TEST_HOME").map(PathBuf::from).unwrap_or(home),
@@ -101,9 +87,7 @@ fn tmpdir(var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
 /// an inherited working directory that differs from it; the result has symlinks resolved, as in
 /// TypeScript.
 pub fn start_directory() -> io::Result<PathBuf> {
-    let root = std::env::var_os("PWD")
-        .map(PathBuf::from)
-        .map_or_else(std::env::current_dir, Ok)?;
+    let root = std::env::var_os("PWD").map(PathBuf::from).map_or_else(std::env::current_dir, Ok)?;
     enter(&root)
 }
 
@@ -112,12 +96,7 @@ pub fn start_directory() -> io::Result<PathBuf> {
 pub fn enter(root: &Path) -> io::Result<PathBuf> {
     std::env::set_current_dir(root)
         .and_then(|()| std::env::current_dir())
-        .map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!("Failed to change directory to {}", root.display()),
-            )
-        })
+        .map_err(|err| io::Error::new(err.kind(), format!("Failed to change directory to {}", root.display())))
 }
 
 #[cfg(test)]
@@ -126,10 +105,7 @@ mod tests {
     use std::collections::HashMap;
 
     fn paths(vars: &[(&str, &str)]) -> Paths {
-        let vars: HashMap<String, OsString> = vars
-            .iter()
-            .map(|(k, v)| (k.to_string(), OsString::from(v)))
-            .collect();
+        let vars: HashMap<String, OsString> = vars.iter().map(|(k, v)| (k.to_string(), OsString::from(v))).collect();
         Paths::from_vars(|name| vars.get(name).cloned()).unwrap()
     }
 
@@ -170,11 +146,7 @@ mod tests {
 
     #[test]
     fn empty_config_dir_is_unset() {
-        let p = paths(&[
-            ("HOME", "/h"),
-            ("XDG_CONFIG_HOME", "/x"),
-            ("OPENCODE_CONFIG_DIR", ""),
-        ]);
+        let p = paths(&[("HOME", "/h"), ("XDG_CONFIG_HOME", "/x"), ("OPENCODE_CONFIG_DIR", "")]);
         assert_eq!(p.config, PathBuf::from("/x/opencode"));
     }
 
@@ -194,9 +166,6 @@ mod tests {
         }
         let missing = dir.path().join("missing");
         let err = enter(&missing).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            format!("Failed to change directory to {}", missing.display())
-        );
+        assert_eq!(err.to_string(), format!("Failed to change directory to {}", missing.display()));
     }
 }

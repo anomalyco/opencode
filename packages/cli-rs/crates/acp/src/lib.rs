@@ -49,10 +49,7 @@ pub struct Options {
 
 impl Options {
     pub fn new(version: impl Into<String>) -> Self {
-        Self {
-            version: version.into(),
-            drain_timeout: turn::CANCEL_DRAIN_TIMEOUT,
-        }
+        Self { version: version.into(), drain_timeout: turn::CANCEL_DRAIN_TIMEOUT }
     }
 }
 
@@ -66,12 +63,7 @@ where
     let _guard = scope.clone().drop_guard();
     let (connection, writer) = connection::Connection::new();
     let catalogs = catalog::Catalogs::new(client.clone(), scope.clone());
-    let sessions = sessions::Sessions::new(
-        client.clone(),
-        connection.clone(),
-        catalogs.clone(),
-        scope.clone(),
-    );
+    let sessions = sessions::Sessions::new(client.clone(), connection.clone(), catalogs.clone(), scope.clone());
     let capabilities = Arc::new(Mutex::new(capabilities::Capabilities::default()));
     let turns = turn::Turns::new(
         client.clone(),
@@ -91,26 +83,13 @@ where
         turns,
         version: options.version,
     });
-    connection::run(
-        connection,
-        writer,
-        input,
-        output,
-        Arc::new(agent::Agent { service }),
-    )
-    .await
+    connection::run(connection, writer, input, output, Arc::new(agent::Agent { service })).await
 }
 
 /// `opencode acp`: starts the private server with `server_command` (`TsCommand::standalone`), serves
 /// stdio, and returns the failure to report, if any. The caller exits 1 when there is one.
-pub fn run(
-    server_command: &[OsString],
-    print_logs: bool,
-    version: &str,
-) -> anyhow::Result<Option<String>> {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
+pub fn run(server_command: &[OsString], print_logs: bool, version: &str) -> anyhow::Result<Option<String>> {
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
     let cwd = std::env::current_dir()?;
     let result = runtime.block_on(serve_stdio(server_command, &cwd, print_logs, version));
     // The stdin reader blocks a thread until EOF; do not wait for it.
@@ -126,12 +105,7 @@ async fn serve_stdio(
 ) -> anyhow::Result<Option<String>> {
     let mut server = opencode_service::standalone::start(server_command, cwd, print_logs).await?;
     let client = server.endpoint.client(Arc::new(Reqwest::default()))?;
-    let served = serve(
-        client,
-        tokio::io::stdin(),
-        tokio::io::stdout(),
-        Options::new(version),
-    );
+    let served = serve(client, tokio::io::stdin(), tokio::io::stdout(), Options::new(version));
     tokio::select! {
         closed = served => Ok(match closed {
             Closed::TooLarge(limit) => Some(format!(

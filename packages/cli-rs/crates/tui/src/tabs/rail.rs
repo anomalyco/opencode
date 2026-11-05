@@ -75,12 +75,7 @@ pub fn animating(rail: &Custom<Rail>) -> bool {
 }
 
 pub fn tick(rail: &Custom<Rail>, delta: std::time::Duration) {
-    rail.update(|rail| {
-        rail.pulses
-            .borrow_mut()
-            .values_mut()
-            .for_each(|pulse| pulse.advance(delta))
-    });
+    rail.update(|rail| rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(delta)));
 }
 
 /// What one tab shows, before it is drawn.
@@ -114,15 +109,8 @@ impl Rail {
             Some((session, index)) => model::reorder(&tabs, session, *index).unwrap_or(tabs),
             None => tabs,
         };
-        let active = if tui.tabs.new_tab() {
-            None
-        } else {
-            tui.tabs.current(tui)
-        };
-        let statuses: Vec<Status> = tabs
-            .iter()
-            .map(|tab| tui.tabs.status(tui, &tab.session_id))
-            .collect();
+        let active = if tui.tabs.new_tab() { None } else { tui.tabs.current(tui) };
+        let statuses: Vec<Status> = tabs.iter().map(|tab| tui.tabs.status(tui, &tab.session_id)).collect();
         tui.data.read(|state| {
             tabs.into_iter()
                 .zip(statuses)
@@ -137,17 +125,14 @@ impl Rail {
                         let data = state.location(Some(&location));
                         let project = state.project(&session.project_id);
                         let directory = session.location.directory.0.as_str();
-                        let canonical =
-                            project.map_or(directory, |project| project.canonical.as_str());
+                        let canonical = project.map_or(directory, |project| project.canonical.as_str());
                         let name = if canonical == "/" {
                             crate::dialogs::session_list::basename(directory).to_owned()
                         } else {
                             project
                                 .and_then(|project| project.name.clone())
                                 .filter(|name| !name.is_empty())
-                                .unwrap_or_else(|| {
-                                    crate::dialogs::session_list::basename(canonical).to_owned()
-                                })
+                                .unwrap_or_else(|| crate::dialogs::session_list::basename(canonical).to_owned())
                         };
                         let vcs = data.and_then(|data| data.vcs.as_ref());
                         let worktree = data
@@ -161,16 +146,8 @@ impl Rail {
                         )
                     });
                     let selected = active.as_deref() == Some(tab.session_id.as_str());
-                    let glows = status.attention.is_some()
-                        || (!selected && !status.busy && status.unread.is_some());
-                    Item {
-                        tab,
-                        status,
-                        title,
-                        detail,
-                        selected,
-                        glows,
-                    }
+                    let glows = status.attention.is_some() || (!selected && !status.busy && status.unread.is_some());
+                    Item { tab, status, title, detail, selected, glows }
                 })
                 .collect()
         })
@@ -195,10 +172,7 @@ impl Component for Rail {
         let height = painter.height() as i32;
         let compact = self.compact(width);
         let animations = opencode_ui::motion::enabled(tui.config().info.animations);
-        let numbers = matches!(
-            tui.config().tabs.indicators,
-            opencode_local::cli_config::TabsIndicators::Numbers
-        );
+        let numbers = matches!(tui.config().tabs.indicators, opencode_local::cli_config::TabsIndicators::Numbers);
         let background = theme.background.raised.base;
         let selected_bg = theme.background.action.primary.selected;
         let hovered_bg = theme.background.raised.high;
@@ -215,11 +189,7 @@ impl Component for Rail {
         let top = self.top(compact);
         // Keep the active row in view, as the TS rail scrolls to it after layout.
         let viewport = (height - top).max(1);
-        let active_index = if new_tab {
-            Some(items.len())
-        } else {
-            items.iter().position(|item| item.selected)
-        };
+        let active_index = if new_tab { Some(items.len()) } else { items.iter().position(|item| item.selected) };
         if let Some(index) = active_index {
             let row = index as i32 * stride;
             let rows = if compact {
@@ -241,9 +211,7 @@ impl Component for Rail {
         let prefix = number_width + 1;
         let highlighted = |session: Option<&str>| {
             session.is_some_and(|session| {
-                items
-                    .iter()
-                    .any(|item| item.tab.session_id == session && item.selected)
+                items.iter().any(|item| item.tab.session_id == session && item.selected)
                     || self.hovered.as_deref() == Some(session)
                     || (self.dragged && self.pressed.as_deref() == Some(session))
             })
@@ -256,33 +224,16 @@ impl Component for Rail {
         if compact {
             let below = items
                 .get(self.scroll.get() / stride as usize)
-                .map_or(add_highlighted, |item| {
-                    highlighted(Some(&item.tab.session_id))
-                });
-            let control = if self.search_hovered {
-                hovered_bg
-            } else {
-                background
-            };
+                .map_or(add_highlighted, |item| highlighted(Some(&item.tab.session_id)));
+            let control = if self.search_hovered { hovered_bg } else { background };
             painter.text(
                 0,
                 0,
                 &"▄".repeat(width as usize),
-                Style::new()
-                    .fg(if self.search_hovered {
-                        highlight
-                    } else {
-                        background
-                    })
-                    .bg(background),
+                Style::new().fg(if self.search_hovered { highlight } else { background }).bg(background),
             );
             painter.fill(0, 1, width, 1, control);
-            painter.text(
-                (width as i32 - 1) / 2,
-                1,
-                "⌕",
-                Style::new().fg(theme.text.action.secondary.base),
-            );
+            painter.text((width as i32 - 1) / 2, 1, "⌕", Style::new().fg(theme.text.action.secondary.base));
             let glyph = if self.search_hovered {
                 "▀"
             } else if below {
@@ -290,17 +241,8 @@ impl Component for Rail {
             } else {
                 " "
             };
-            let bg = if self.search_hovered && below {
-                highlight
-            } else {
-                background
-            };
-            painter.text(
-                0,
-                2,
-                &glyph.repeat(width as usize),
-                Style::new().fg(highlight).bg(bg),
-            );
+            let bg = if self.search_hovered && below { highlight } else { background };
+            painter.text(0, 2, &glyph.repeat(width as usize), Style::new().fg(highlight).bg(bg));
         }
 
         for (index, item) in items.iter().enumerate() {
@@ -319,47 +261,23 @@ impl Component for Rail {
             let pulse_bg = blend(tab_bg);
             let feedback = feedback(&status, &theme);
             let glow_hue = feedback.unwrap_or(unread_color);
-            let glow_level = if item.selected && status.attention.is_some() {
-                0.7
-            } else {
-                1.0
-            };
-            let foreground = if hovered || item.selected {
-                theme.text.base
-            } else {
-                theme.text.muted
-            };
+            let glow_level = if item.selected && status.attention.is_some() { 0.7 } else { 1.0 };
+            let foreground = if hovered || item.selected { theme.text.base } else { theme.text.muted };
             let runs = status.runs();
             let number_glow = f64::from(u8::from(
-                status.attention.is_some()
-                    || status.unread == Some(Unread::Error)
-                    || status.complete(),
+                status.attention.is_some() || status.unread == Some(Unread::Error) || status.complete(),
             ));
             let number = {
                 let base = if hovered && !item.selected {
                     foreground
                 } else {
-                    tint(
-                        idle_number,
-                        tint(theme.text.base, pulse_bg, 0.25),
-                        f64::from(u8::from(item.selected)),
-                    )
+                    tint(idle_number, tint(theme.text.base, pulse_bg, 0.25), f64::from(u8::from(item.selected)))
                 };
                 let color = feedback.unwrap_or_else(|| tint(base, glow_hue, number_glow));
                 if runs { active_number } else { color }
             };
             let label = (index + 1).to_string();
-            let glyph_text = |idle: &str| {
-                indicator(
-                    &status,
-                    &label,
-                    idle,
-                    numbers,
-                    animations,
-                    now,
-                    tui.tabs.epoch(),
-                )
-            };
+            let glyph_text = |idle: &str| indicator(&status, &label, idle, numbers, animations, now, tui.tabs.epoch());
             let unread = glyph_text("").1;
             rows.push((y, if compact { 1 } else { 2 }, Some(session.to_owned())));
             if compact {
@@ -377,34 +295,18 @@ impl Component for Rail {
                     let next = if index + 1 == items.len() {
                         add_highlighted
                     } else {
-                        highlighted(
-                            items
-                                .get(index + 1)
-                                .map(|item| item.tab.session_id.as_str()),
-                        )
+                        highlighted(items.get(index + 1).map(|item| item.tab.session_id.as_str()))
                     };
-                    painter.text(
-                        0,
-                        y - 1,
-                        &"▄".repeat(width as usize),
-                        Style::new().fg(pulse_bg).bg(above),
-                    );
+                    painter.text(0, y - 1, &"▄".repeat(width as usize), Style::new().fg(pulse_bg).bg(above));
                     painter.text(
                         0,
                         y + 1,
                         &"▀".repeat(width as usize),
-                        Style::new()
-                            .fg(pulse_bg)
-                            .bg(if next { highlight } else { background }),
+                        Style::new().fg(pulse_bg).bg(if next { highlight } else { background }),
                     );
                 }
                 painter.fill(0, y, width, 1, pulse_bg);
-                let idle = item
-                    .title
-                    .trim_start()
-                    .chars()
-                    .next()
-                    .map_or("U".to_owned(), String::from);
+                let idle = item.title.trim_start().chars().next().map_or("U".to_owned(), String::from);
                 let (glyph, _) = glyph_text(&idle);
                 let color = if item.selected {
                     theme.text.base
@@ -434,29 +336,15 @@ impl Component for Rail {
                     .or_insert_with(|| Pulse::new(animations, input))
                     .clone()
             };
-            let colors = |color: Color,
-                          glow: Color,
-                          flash: Color,
-                          completion: Color,
-                          glow_tail: usize,
-                          bg: Color| pulse::Colors {
-                background: bg,
-                color,
-                glow,
-                flash,
-                completion,
-                glow_tail,
-                flash_tail: Some(8),
+            let colors = |color: Color, glow: Color, flash: Color, completion: Color, glow_tail: usize, bg: Color| {
+                pulse::Colors { background: bg, color, glow, flash, completion, glow_tail, flash_tail: Some(8) }
             };
             // The separator above: this tab's lower half, the previous tab's upper half.
             let previous = index.checked_sub(1).and_then(|before| items.get(before));
             let previous_status = previous.map_or_else(Status::default, |item| item.status);
             let previous_glows = previous.is_some_and(|item| item.glows);
-            let previous_hue =
-                super::strip::feedback(&previous_status, &theme).unwrap_or(unread_color);
-            let previous_level = if previous.is_some_and(|item| item.selected)
-                && previous_status.attention.is_some()
-            {
+            let previous_hue = super::strip::feedback(&previous_status, &theme).unwrap_or(unread_color);
+            let previous_level = if previous.is_some_and(|item| item.selected) && previous_status.attention.is_some() {
                 0.7
             } else {
                 1.0
@@ -487,11 +375,7 @@ impl Component for Rail {
                     glow: previous_glows,
                 },
             );
-            paint_cells(
-                painter,
-                y - 1,
-                pulse::paint(&inner, &lower, Some((&outer, &upper, true)), width as usize),
-            );
+            paint_cells(painter, y - 1, pulse::paint(&inner, &lower, Some((&outer, &upper, true)), width as usize));
             if index + 1 == items.len() {
                 let below = colors(
                     tint(background, theme.text.base, 0.04),
@@ -514,12 +398,7 @@ impl Component for Rail {
                 paint_cells(
                     painter,
                     y + 2,
-                    pulse::paint(
-                        &inner,
-                        &below,
-                        Some((&outer, &quiet, false)),
-                        width as usize,
-                    ),
+                    pulse::paint(&inner, &below, Some((&outer, &quiet, false)), width as usize),
                 );
             }
 
@@ -538,17 +417,9 @@ impl Component for Rail {
                     pulse_bg,
                 )
             };
-            paint_cells(
-                painter,
-                y,
-                pulse::paint(&title_pulse, &title_colors, None, width as usize),
-            );
+            paint_cells(painter, y, pulse::paint(&title_pulse, &title_colors, None, width as usize));
             let sweep = title_pulse.level(width as usize);
-            let number = if sweep == 0.0 {
-                number
-            } else {
-                tint(number, theme.text.base, 0.35 * sweep)
-            };
+            let number = if sweep == 0.0 { number } else { tint(number, theme.text.base, 0.35 * sweep) };
             let (glyph, _) = glyph_text("");
             let indicator_color = if numbers || item.selected {
                 number
@@ -563,11 +434,7 @@ impl Component for Rail {
             }
             painter.text(number_width as i32 - glyph.width() as i32, y, &glyph, style);
             let resting = (width as usize).saturating_sub(prefix + 1).max(1);
-            let title_width = if hovered {
-                resting.saturating_sub(1).max(1)
-            } else {
-                resting
-            };
+            let title_width = if hovered { resting.saturating_sub(1).max(1) } else { resting };
             let visible = take_width(&item.title, title_width);
             let fades = item.title.width() > title_width && title_width > FADE_WIDTH;
             let length = visible.len();
@@ -579,26 +446,15 @@ impl Component for Rail {
                     tint(
                         foreground,
                         glow_color,
-                        0.12 * pulse::unread_glow_intensity(
-                            1 + number_width + character,
-                            width as usize,
-                        ) * glow_text,
+                        0.12 * pulse::unread_glow_intensity(1 + number_width + character, width as usize) * glow_text,
                     )
                 };
-                let color = if fades {
-                    fade(color, pulse_bg, character, length, 0.0)
-                } else {
-                    color
-                };
+                let color = if fades { fade(color, pulse_bg, character, length, 0.0) } else { color };
                 let style = Style::new().fg(color);
                 if item.selected { style.bold() } else { style }
             });
             if hovered {
-                let color = if self.close_hovered {
-                    theme.text.base
-                } else {
-                    theme.text.muted
-                };
+                let color = if self.close_hovered { theme.text.base } else { theme.text.muted };
                 painter.text(width as i32 - 2, y, "✕", Style::new().fg(color));
             }
 
@@ -613,21 +469,13 @@ impl Component for Rail {
                 10,
                 pulse_bg,
             );
-            paint_cells(
-                painter,
-                y + 1,
-                pulse::paint(&detail_pulse, &detail_colors, None, width as usize),
-            );
+            paint_cells(painter, y + 1, pulse::paint(&detail_pulse, &detail_colors, None, width as usize));
             let detail_color = tint(theme.text.muted, pulse_bg, 0.35);
             let visible = take_width(&item.detail, title_width);
             let fades = item.detail.width() > title_width && title_width > FADE_WIDTH;
             let length = visible.len();
             draw_chars(painter, prefix as i32, y + 1, &visible, |character| {
-                Style::new().fg(if fades {
-                    fade(detail_color, pulse_bg, character, length, 0.0)
-                } else {
-                    detail_color
-                })
+                Style::new().fg(if fades { fade(detail_color, pulse_bg, character, length, 0.0) } else { detail_color })
             });
         }
         drop(pulses);
@@ -642,23 +490,10 @@ impl Component for Rail {
             background
         };
         if compact && add_highlighted {
-            let above = if highlighted(items.last().map(|item| item.tab.session_id.as_str())) {
-                highlight
-            } else {
-                background
-            };
-            painter.text(
-                0,
-                y - 1,
-                &"▄".repeat(width as usize),
-                Style::new().fg(highlight).bg(above),
-            );
-            painter.text(
-                0,
-                y + 1,
-                &"▀".repeat(width as usize),
-                Style::new().fg(highlight).bg(background),
-            );
+            let above =
+                if highlighted(items.last().map(|item| item.tab.session_id.as_str())) { highlight } else { background };
+            painter.text(0, y - 1, &"▄".repeat(width as usize), Style::new().fg(highlight).bg(above));
+            painter.text(0, y + 1, &"▀".repeat(width as usize), Style::new().fg(highlight).bg(background));
         }
         painter.fill(0, y, width, 1, blend(bg));
         let strong = new_tab || self.add_hovered;
@@ -667,29 +502,10 @@ impl Component for Rail {
             if new_tab { style.bold() } else { style }
         };
         if compact {
-            painter.text(
-                (width as i32 - 1) / 2,
-                y,
-                "+",
-                style(if strong { theme.text.base } else { idle_number }),
-            );
+            painter.text((width as i32 - 1) / 2, y, "+", style(if strong { theme.text.base } else { idle_number }));
         } else {
-            painter.text(
-                1,
-                y,
-                "+",
-                style(if strong { theme.text.base } else { idle_number }),
-            );
-            painter.text(
-                3,
-                y,
-                NEW_SESSION_TAB_TITLE,
-                style(if strong {
-                    theme.text.base
-                } else {
-                    theme.text.muted
-                }),
-            );
+            painter.text(1, y, "+", style(if strong { theme.text.base } else { idle_number }));
+            painter.text(3, y, NEW_SESSION_TAB_TITLE, style(if strong { theme.text.base } else { theme.text.muted }));
             if new_tab && self.add_hovered {
                 painter.text(width as i32 - 2, y, "×", Style::new().fg(theme.text.muted));
             }
@@ -725,13 +541,8 @@ impl Component for Rail {
                 true
             }
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
-                let step = if matches!(event.kind, MouseEventKind::ScrollUp) {
-                    -1
-                } else {
-                    1
-                };
-                self.scroll
-                    .set((self.scroll.get() as i32 + step).max(0) as usize);
+                let step = if matches!(event.kind, MouseEventKind::ScrollUp) { -1 } else { 1 };
+                self.scroll.set((self.scroll.get() as i32 + step).max(0) as usize);
                 true
             }
             MouseEventKind::Down(MouseButton::Middle) => {
@@ -760,11 +571,7 @@ impl Component for Rail {
                 let stride = self.stride(compact);
                 let index = (y - self.top(compact) + self.scroll.get() as i32).div_euclid(stride);
                 let target = index.clamp(0, count.saturating_sub(1) as i32) as usize;
-                let from = tui
-                    .tabs
-                    .tabs(&tui)
-                    .iter()
-                    .position(|tab| tab.session_id == source);
+                let from = tui.tabs.tabs(&tui).iter().position(|tab| tab.session_id == source);
                 if from != Some(target) {
                     self.preview = Some((source, target));
                 }
@@ -775,9 +582,7 @@ impl Component for Rail {
                     defer(cx, Box::new(crate::dialogs::session_list::show));
                     return true;
                 }
-                if std::mem::take(&mut self.add_pressed)
-                    && row.as_ref().is_some_and(Option::is_none)
-                {
+                if std::mem::take(&mut self.add_pressed) && row.as_ref().is_some_and(Option::is_none) {
                     let close = !compact && on_close && tui.tabs.new_tab();
                     defer(
                         cx,
@@ -796,10 +601,7 @@ impl Component for Rail {
                 };
                 let dragged = std::mem::take(&mut self.dragged);
                 let preview = self.preview.take();
-                let closing = !dragged
-                    && !compact
-                    && on_close
-                    && self.hovered.as_deref() == Some(source.as_str());
+                let closing = !dragged && !compact && on_close && self.hovered.as_deref() == Some(source.as_str());
                 defer(
                     cx,
                     Box::new(move |tui| {
@@ -807,9 +609,7 @@ impl Component for Rail {
                             super::close(tui, Some(&source));
                             return;
                         }
-                        if let Some((session, index)) =
-                            preview.filter(|(session, _)| *session == source)
-                        {
+                        if let Some((session, index)) = preview.filter(|(session, _)| *session == source) {
                             super::reorder(tui, &session, index);
                         }
                         super::select(tui, &source);
@@ -823,10 +623,6 @@ impl Component for Rail {
 }
 
 /// Draws a pulse row across the rail.
-fn paint_cells(
-    painter: &mut Painter<'_>,
-    y: i32,
-    cells: Option<Vec<(Option<char>, Color, Color)>>,
-) {
+fn paint_cells(painter: &mut Painter<'_>, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
     paint_pulse(painter, 0, y, cells);
 }

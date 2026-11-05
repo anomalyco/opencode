@@ -16,8 +16,7 @@ fn enabled() -> bool {
         !(set("NO_COLOR") || flag("--no-color"))
             && (set("FORCE_COLOR")
                 || flag("--color")
-                || (std::io::stdout().is_terminal()
-                    && std::env::var("TERM").as_deref() != Ok("dumb"))
+                || (std::io::stdout().is_terminal() && std::env::var("TERM").as_deref() != Ok("dumb"))
                 || set("CI"))
     })
 }
@@ -29,10 +28,8 @@ fn format(input: &str, open: &str, close: &str, replace: &str) -> String {
         return input.to_string();
     }
     // Every `close` starts with ESC, so a match always starts on a character boundary.
-    let start =
-        (open.len().min(input.len())..=input.len()).find(|index| input.is_char_boundary(*index));
-    let Some(index) = start.and_then(|start| input[start..].find(close).map(|index| index + start))
-    else {
+    let start = (open.len().min(input.len())..=input.len()).find(|index| input.is_char_boundary(*index));
+    let Some(index) = start.and_then(|start| input[start..].find(close).map(|index| index + start)) else {
         return format!("{open}{input}{close}");
     };
     let mut result = String::from(open);

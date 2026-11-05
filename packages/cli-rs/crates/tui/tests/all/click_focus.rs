@@ -31,7 +31,8 @@ fn terminal() -> Value {
 }
 
 fn routes() -> Vec<MemoryRoute> {
-    let location = json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
+    let location =
+        json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
     let session = json!({
         "id": "ses_a", "title": "Fix the parser", "projectID": "proj", "cost": 0,
@@ -54,38 +55,13 @@ fn routes() -> Vec<MemoryRoute> {
             &json!({ "version": "test", "pid": 0, "urls": [], "paths": { "tmp": "/tmp" },
                      "capabilities": { "persistentPty": true } }),
         ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [session], "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a",
-            200,
-            &json!({ "data": session }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a/diff",
-            200,
-            &json!({ "data": [diff] }),
-        ),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [session], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session })),
+        MemoryRoute::json("GET", "/api/session/ses_a/diff", 200, &json!({ "data": [diff] })),
         MemoryRoute::json("GET", "/api/vcs/base", 200, &list(Value::Null)),
         MemoryRoute::json("GET", "/api/vcs/diff", 200, &list(json!([diff]))),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/experimental/session/ses_a/terminal",
-            200,
-            &json!({ "data": [terminal()] }),
-        ),
+        MemoryRoute::json("GET", "/api/session/ses_a/message", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/experimental/session/ses_a/terminal", 200, &json!({ "data": [terminal()] })),
         MemoryRoute::json(
             "GET",
             "/api/experimental/persistent-pty/pty_1/snapshot",
@@ -100,12 +76,7 @@ fn routes() -> Vec<MemoryRoute> {
         ),
     ];
     for list in ["inbox", "permission", "form"] {
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/ses_a/{list}"),
-            200,
-            &json!({ "data": [] }),
-        ));
+        routes.push(MemoryRoute::json("GET", &format!("/api/session/ses_a/{list}"), 200, &json!({ "data": [] })));
     }
     routes
 }
@@ -120,10 +91,7 @@ fn mount() -> Harness {
     let memory = Memory::new(routes());
     let client = Client::with_transport("http://opencode.local", Arc::new(memory)).unwrap();
     // The TUI's own options, as `app::run` builds the app.
-    let options = AppOptions {
-        capture_stderr: false,
-        ..opencode_tui::app::options()
-    };
+    let options = AppOptions { capture_stderr: false, ..opencode_tui::app::options() };
     let app = TestApp::with_options(160, 30, options);
     let info = cli_config::decode_text(r#"{"animations":false}"#).unwrap();
     let tui = opencode_tui::mount(
@@ -133,9 +101,7 @@ fn mount() -> Harness {
             directory: DIRECTORY.into(),
             config: Resolved::new(info, |_| None),
             roots: None,
-            route: Route::Session {
-                id: SessionID("ses_a".into()),
-            },
+            route: Route::Session { id: SessionID("ses_a".into()) },
             continue_: false,
             events: true,
         },
@@ -154,9 +120,7 @@ fn mount() -> Harness {
 
 impl Harness {
     fn wait_for(&self, what: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(what));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(what));
         let screen = self.app.text();
         assert!(found, "{what:?} never showed:\n{screen}");
         screen
@@ -181,10 +145,7 @@ impl Harness {
 
     fn prompt_focused(&self) -> bool {
         let textarea = self.tui.textarea.borrow().clone().unwrap();
-        self.tui
-            .app
-            .focused()
-            .is_some_and(|widget| widget.id() == textarea.id())
+        self.tui.app.focused().is_some_and(|widget| widget.id() == textarea.id())
     }
 
     /// Clicks `at`, types `text`, and asserts the prompt took it.
@@ -204,15 +165,12 @@ impl Harness {
     /// Opens the session's terminal and attaches its socket, so the pane shows the embedded terminal.
     fn open_terminal(&self) -> (u16, u16) {
         assert!(
-            self.app
-                .wait_until(Duration::from_secs(5), || self.tui.terminals.available()),
+            self.app.wait_until(Duration::from_secs(5), || self.tui.terminals.available()),
             "the server never reported terminals"
         );
         self.tui.keymap.dispatch("terminal.toggle", None);
         assert!(
-            self.app.wait_until(Duration::from_secs(5), || {
-                !self.remotes.lock().unwrap().is_empty()
-            }),
+            self.app.wait_until(Duration::from_secs(5), || { !self.remotes.lock().unwrap().is_empty() }),
             "no socket opened"
         );
         let deliver = self.remotes.lock().unwrap()[0].deliver.clone();
@@ -257,9 +215,7 @@ fn clicks_outside_the_prompt_leave_it_focused() {
     // The footer's hints under the prompt.
     let (x, y) = h.find("shift+tab agents", 0);
     h.click_then_type("footer", (x + 2, y), "d");
-    h.tui
-        .toasts
-        .show(ToastOptions::new(Variant::Info, "Saved the draft"));
+    h.tui.toasts.show(ToastOptions::new(Variant::Info, "Saved the draft"));
     let at = h.find("Saved the draft", 0);
     h.click_then_type("toast", at, "e");
     assert_eq!(h.prompt_text(), "abcde");
@@ -311,11 +267,7 @@ fn a_click_on_the_terminal_focuses_it_and_one_on_the_session_pane_gives_it_back(
     h.sent();
     h.app.click(at.0, at.1);
     h.app.type_text("t");
-    assert!(
-        h.sent().ends_with(b"t"),
-        "a click on the terminal did not focus it:\n{}",
-        h.app.text()
-    );
+    assert!(h.sent().ends_with(b"t"), "a click on the terminal did not focus it:\n{}", h.app.text());
     assert_eq!(h.prompt_text(), "");
     // `session-frame.tsx:300-322`: a click on the session pane returns the focus to the prompt.
     h.click_then_type("session pane", (20, 8), "g");
@@ -331,14 +283,7 @@ fn a_click_on_a_panel_focuses_its_host() {
     assert!(h.prompt_focused());
     let (x, y) = h.find("src/main.rs", 0);
     h.app.click(x, y + 2);
-    assert!(
-        !h.prompt_focused(),
-        "a click on the panel left the prompt focused"
-    );
+    assert!(!h.prompt_focused(), "a click on the panel left the prompt focused");
     h.app.type_text("h");
-    assert_eq!(
-        h.prompt_text(),
-        "",
-        "keys after a panel click reached the prompt"
-    );
+    assert_eq!(h.prompt_text(), "", "keys after a panel click reached the prompt");
 }

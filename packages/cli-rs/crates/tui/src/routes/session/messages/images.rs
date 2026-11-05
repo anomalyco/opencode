@@ -9,8 +9,8 @@ use std::rc::Rc;
 use base64::Engine;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    ExperimentalMediaGetInput, MediaHash, PromptFileAttachment, PromptFileSource,
-    SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
+    ExperimentalMediaGetInput, MediaHash, PromptFileAttachment, PromptFileSource, SessionMessageAssistantTool,
+    SessionMessageAssistantToolState, ToolContent,
 };
 use opencode_store::Data;
 use opentui::native::ImageFit;
@@ -80,12 +80,7 @@ impl Images {
                 .align_items(Align::Center)
                 .justify(Justify::Center);
             self.show(&cell, uri);
-            let (tui, images) = (
-                self.tui.clone(),
-                uris.iter()
-                    .map(|uri| (uri.clone(), None))
-                    .collect::<Vec<_>>(),
-            );
+            let (tui, images) = (self.tui.clone(), uris.iter().map(|uri| (uri.clone(), None)).collect::<Vec<_>>());
             cell.on_mouse(move |cx, event| {
                 if event.kind != MouseEventKind::Up(MouseButton::Left) {
                     return;
@@ -105,10 +100,7 @@ impl Images {
                     .shrink(1.0)
                     .align_items(Align::Center)
                     .justify(Justify::Center)
-                    .child(
-                        &Text::new(&self.app, format!("+{} more", uris.len() - VISIBLE))
-                            .wrap(WrapMode::None),
-                    ),
+                    .child(&Text::new(&self.app, format!("+{} more", uris.len() - VISIBLE)).wrap(WrapMode::None)),
             );
         }
         *self.rendered.borrow_mut() = Some(next);
@@ -122,21 +114,10 @@ impl Images {
                 return;
             }
             let client = self.data.client().clone();
-            let input = ExperimentalMediaGetInput {
-                hash: MediaHash(hash.to_owned()),
-            };
-            let (cell, media, uri, app) = (
-                cell.clone(),
-                self.media.clone(),
-                uri.to_owned(),
-                self.app.clone(),
-            );
+            let input = ExperimentalMediaGetInput { hash: MediaHash(hash.to_owned()) };
+            let (cell, media, uri, app) = (cell.clone(), self.media.clone(), uri.to_owned(), self.app.clone());
             self.app.spawn(
-                async move {
-                    client
-                        .experimental_media_get(&input, &RequestOptions::default())
-                        .await
-                },
+                async move { client.experimental_media_get(&input, &RequestOptions::default()).await },
                 move |_, result| {
                     let bytes = result.ok().map(|bytes| bytes.to_vec());
                     place(&app, &cell, bytes.as_deref());
@@ -153,10 +134,7 @@ impl Images {
 
 fn place(app: &App, cell: &View, bytes: Option<&[u8]>) {
     cell.clear();
-    let image = ImageView::new(app)
-        .fit(ImageFit::Cover)
-        .width(Length::Percent(100.0))
-        .height(Length::Percent(100.0));
+    let image = ImageView::new(app).fit(ImageFit::Cover).width(Length::Percent(100.0)).height(Length::Percent(100.0));
     match bytes.map(|bytes| image.load(bytes)) {
         Some(Ok(image)) => cell.add(&image),
         _ => cell.add(&Text::new(app, "No preview")),
@@ -196,9 +174,7 @@ pub fn user_images(files: &[PromptFileAttachment]) -> Vec<String> {
 pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
     let content = match &tool.state {
         SessionMessageAssistantToolState::Completed(done) => done.content.as_slice(),
-        SessionMessageAssistantToolState::Error(failed) => {
-            failed.content.as_deref().unwrap_or_default()
-        }
+        SessionMessageAssistantToolState::Error(failed) => failed.content.as_deref().unwrap_or_default(),
         _ => &[],
     };
     content
@@ -218,11 +194,7 @@ pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
 /// `mediaHashFromUri`: the 64 hex digits of `media:<hash>`.
 pub(crate) fn media_hash(uri: &str) -> Option<&str> {
     let hash = uri.strip_prefix("media:")?;
-    (hash.len() == 64
-        && hash
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
-    .then_some(hash)
+    (hash.len() == 64 && hash.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))).then_some(hash)
 }
 
 /// The bytes of a base64 `data:` URI.
@@ -232,9 +204,7 @@ pub(crate) fn data_uri(uri: &str) -> Option<Vec<u8>> {
     if !meta.ends_with(";base64") {
         return Some(payload.as_bytes().to_vec());
     }
-    base64::engine::general_purpose::STANDARD
-        .decode(payload.trim())
-        .ok()
+    base64::engine::general_purpose::STANDARD.decode(payload.trim()).ok()
 }
 
 #[cfg(test)]

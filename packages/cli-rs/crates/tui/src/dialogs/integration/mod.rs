@@ -18,19 +18,18 @@ use std::time::Duration;
 use opencode_api::client::RequestOptions;
 use opencode_api::error::Error;
 use opencode_api::generated::{
-    ConnectionCredentialInfo, ConnectionInfo, CredentialActivateInput, CredentialID,
-    CredentialRemoveInput, CredentialUpdateInput, FormAnswer, IntegrationAttempt,
-    IntegrationAttemptMode, IntegrationAttemptStatus, IntegrationCommandAttemptStatus,
-    IntegrationCommandCancelInput, IntegrationCommandConnectInput, IntegrationCommandMethod,
-    IntegrationCommandStatusInput, IntegrationConnectExternalInput, IntegrationConnectKeyInput,
-    IntegrationExternalMethod, IntegrationID, IntegrationInfo, IntegrationKeyMethod,
+    ConnectionCredentialInfo, ConnectionInfo, CredentialActivateInput, CredentialID, CredentialRemoveInput,
+    CredentialUpdateInput, FormAnswer, IntegrationAttempt, IntegrationAttemptMode, IntegrationAttemptStatus,
+    IntegrationCommandAttemptStatus, IntegrationCommandCancelInput, IntegrationCommandConnectInput,
+    IntegrationCommandMethod, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
+    IntegrationConnectKeyInput, IntegrationExternalMethod, IntegrationID, IntegrationInfo, IntegrationKeyMethod,
     IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod, IntegrationOauthCancelInput,
-    IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput,
-    LocationQueryInput, ModelInfoStatus, ModelListInput, ProviderListInput,
+    IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
+    ModelInfoStatus, ModelListInput, ProviderListInput,
 };
 use opencode_ui::dialog::{
-    DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction,
-    FooterProps, HeaderProps, footer, header, layout_view,
+    DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
+    footer, header, layout_view,
 };
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::prompt::{PromptProps, prompt};
@@ -43,14 +42,7 @@ use crate::app::Tui;
 use crate::dialogs::model::{Local, locale_compare};
 
 /// `INTEGRATION_PRIORITY`: these come first, as "Popular".
-const PRIORITY: [&str; 6] = [
-    "opencode",
-    "opencode-go",
-    "openai",
-    "github-copilot",
-    "anthropic",
-    "google",
-];
+const PRIORITY: [&str; 6] = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"];
 const SIGN_IN: &str = "Sign in required →";
 const POLL: Duration = Duration::from_millis(500);
 
@@ -71,20 +63,10 @@ pub fn install(tui: &Rc<Tui>) {
     .title("Connect an integration")
     .group("Integration")
     .palette()
-    .suggested(Condition::when(move || {
-        suggested.upgrade().is_some_and(|local| !local.connected())
-    }))
-    .slash(Slash {
-        name: "connect".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    });
+    .suggested(Condition::when(move || suggested.upgrade().is_some_and(|local| !local.connected())))
+    .slash(Slash { name: "connect".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appGlobalBindingCommands`.
         KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),
@@ -107,25 +89,13 @@ pub fn show_models() -> OnConnected {
 
 /// Opens `DialogIntegration`. Without `on_connected`, a connect closes the dialog.
 pub fn show(local: &Rc<Local>, on_connected: Option<OnConnected>) {
-    open_list(
-        Flow {
-            local: local.clone(),
-            on_connected,
-        },
-        None,
-    );
+    open_list(Flow { local: local.clone(), on_connected }, None);
 }
 
 /// `DialogIntegration { integrationID, autoConnect }`, which the MCP dialog (E.17b) opens for a server that needs
 /// sign-in: the integration's accounts or methods at once.
 pub fn show_auto_connect(tui: &Tui, integration: &IntegrationID) {
-    open_list(
-        Flow {
-            local: tui.local.clone(),
-            on_connected: None,
-        },
-        Some(integration.clone()),
-    );
+    open_list(Flow { local: tui.local.clone(), on_connected: None }, Some(integration.clone()));
 }
 
 #[derive(Clone)]
@@ -141,16 +111,11 @@ impl Flow {
 
     /// The integration as the catalog has it now.
     fn latest(&self, id: &IntegrationID) -> Option<IntegrationInfo> {
-        self.local
-            .integrations()?
-            .into_iter()
-            .find(|item| item.id == *id)
+        self.local.integrations()?.into_iter().find(|item| item.id == *id)
     }
 
     fn fail(&self, message: String) {
-        self.local
-            .toasts
-            .show(ToastOptions::new(Variant::Error, message));
+        self.local.toasts.show(ToastOptions::new(Variant::Error, message));
         self.local.dialogs.clear();
     }
 
@@ -190,8 +155,7 @@ impl Method {
 
 /// `integrationOptions`: popular first, then by name and ID.
 fn sorted(mut list: Vec<IntegrationInfo>) -> Vec<IntegrationInfo> {
-    let priority =
-        |id: &IntegrationID| PRIORITY.iter().position(|name| *name == id.0).unwrap_or(99);
+    let priority = |id: &IntegrationID| PRIORITY.iter().position(|name| *name == id.0).unwrap_or(99);
     list.sort_by(|a, b| {
         priority(&a.id)
             .cmp(&priority(&b.id))
@@ -247,18 +211,12 @@ fn signed_out(connection: &ConnectionInfo) -> bool {
     match connection {
         ConnectionInfo::Credential(credential) => credential.status.is_some(),
         ConnectionInfo::Env(env) => env.status.is_some(),
-        ConnectionInfo::Unknown(value) => {
-            value.get("status").is_some_and(|status| !status.is_null())
-        }
+        ConnectionInfo::Unknown(value) => value.get("status").is_some_and(|status| !status.is_null()),
     }
 }
 
 fn from_mcp(integration: &IntegrationInfo) -> bool {
-    integration
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("source"))
-        .and_then(|source| source.as_str())
+    integration.metadata.as_ref().and_then(|metadata| metadata.get("source")).and_then(|source| source.as_str())
         == Some("mcp")
 }
 
@@ -284,11 +242,7 @@ fn open_list(flow: Flow, only: Option<IntegrationID>) {
     if local.integrations().is_none() || only.as_ref().is_some_and(|id| flow.latest(id).is_none()) {
         local.load_integrations();
     }
-    local.dialogs.replace(
-        move |cx| build_list(cx, flow, only),
-        None,
-        DialogOptions::default(),
-    );
+    local.dialogs.replace(move |cx| build_list(cx, flow, only), None, DialogOptions::default());
 }
 
 fn build_list(cx: &Rc<DialogCx>, flow: Flow, only: Option<IntegrationID>) -> View {
@@ -296,11 +250,7 @@ fn build_list(cx: &Rc<DialogCx>, flow: Flow, only: Option<IntegrationID>) -> Vie
     let options: select::Options<IntegrationID> = {
         let local = Rc::downgrade(&flow.local);
         let only = only.clone();
-        Rc::new(move |_| {
-            local.upgrade().map_or_else(Vec::new, |local| {
-                list_options(&local, only.as_ref(), &theme)
-            })
-        })
+        Rc::new(move |_| local.upgrade().map_or_else(Vec::new, |local| list_options(&local, only.as_ref(), &theme)))
     };
     let mut props = SelectProps::dynamic("Connect an integration", options.clone());
     let message = |text: &'static str| -> Rc<dyn Fn() -> AnyWidget> {
@@ -373,11 +323,7 @@ fn list_options(
             let methods = connect_methods(&integration);
             let status = integration.connections.first().is_some_and(signed_out);
             let mut option = SelectOption::new(integration.name.clone(), integration.id.clone())
-                .category(if PRIORITY.contains(&integration.id.0.as_str()) {
-                    "Popular"
-                } else {
-                    "Services"
-                });
+                .category(if PRIORITY.contains(&integration.id.0.as_str()) { "Popular" } else { "Services" });
             if methods.is_empty() {
                 option.description = Some("Environment only".into());
             }
@@ -390,11 +336,7 @@ fn list_options(
             }
             option.disabled = methods.is_empty() && credentials(&integration).is_empty();
             if !integration.connections.is_empty() && !status {
-                option.gutter =
-                    Some(
-                        Rc::new(move |app: &App, _| Text::new(app, "✓").fg(success).as_any())
-                            as Gutter,
-                    );
+                option.gutter = Some(Rc::new(move |app: &App, _| Text::new(app, "✓").fg(success).as_any()) as Gutter);
             }
             option
         })
@@ -434,21 +376,11 @@ struct Manage {
 }
 
 fn manage(flow: &Flow, integration: IntegrationInfo, methods: Vec<Method>) {
-    let focus = if methods.is_empty() {
-        None
-    } else {
-        Some(Account::Add)
-    };
+    let focus = if methods.is_empty() { None } else { Some(Account::Add) };
     open_manage(flow.clone(), integration, methods, focus, String::new());
 }
 
-fn open_manage(
-    flow: Flow,
-    integration: IntegrationInfo,
-    methods: Vec<Method>,
-    focus: Option<Account>,
-    filter: String,
-) {
+fn open_manage(flow: Flow, integration: IntegrationInfo, methods: Vec<Method>, focus: Option<Account>, filter: String) {
     let dialogs = flow.local.dialogs.clone();
     dialogs.replace(
         move |cx| build_manage(cx, flow, integration, methods, focus, &filter),
@@ -469,9 +401,7 @@ fn build_manage(
     let active = credentials(&current).first().map(|item| item.id.clone());
     let selected = focus.clone().or_else(|| {
         if methods.is_empty() {
-            sorted_credentials(&current)
-                .first()
-                .map(|item| Account::Credential(item.id.clone()))
+            sorted_credentials(&current).first().map(|item| Account::Credential(item.id.clone()))
         } else {
             Some(Account::Add)
         }
@@ -489,11 +419,7 @@ fn build_manage(
     let options: select::Options<Account> = {
         let state = Rc::downgrade(&state);
         let theme = cx.theme.clone();
-        Rc::new(move |_| {
-            state
-                .upgrade()
-                .map_or_else(Vec::new, |state| state.options(&theme))
-        })
+        Rc::new(move |_| state.upgrade().map_or_else(Vec::new, |state| state.options(&theme)))
     };
     let mut props = SelectProps::dynamic(state.integration.name.clone(), options);
     props.current = active.map(Account::Credential);
@@ -533,8 +459,7 @@ fn build_manage(
             ..SelectAction::new("dialog.integration.rename", "rename", {
                 let state = Rc::downgrade(&state);
                 move |option| {
-                    if let (Some(state), Account::Credential(id)) = (state.upgrade(), &option.value)
-                    {
+                    if let (Some(state), Account::Credential(id)) = (state.upgrade(), &option.value) {
                         state.rename(id);
                     }
                 }
@@ -546,8 +471,7 @@ fn build_manage(
             ..SelectAction::new("dialog.integration.delete", "remove account", {
                 let state = Rc::downgrade(&state);
                 move |option| {
-                    if let (Some(state), Account::Credential(id)) = (state.upgrade(), &option.value)
-                    {
+                    if let (Some(state), Account::Credential(id)) = (state.upgrade(), &option.value) {
                         state.remove(id);
                     }
                 }
@@ -562,9 +486,7 @@ fn build_manage(
     let weak = Rc::downgrade(&state);
     cx.on_close(state.flow.local.subscribe(move || {
         let Some(state) = weak.upgrade() else { return };
-        let active = credentials(&state.current())
-            .first()
-            .map(|item| item.id.clone());
+        let active = credentials(&state.current()).first().map(|item| item.id.clone());
         if active != state.built.1 {
             let focus = state.selected();
             state.reopen(focus);
@@ -586,55 +508,36 @@ fn sorted_credentials(integration: &IntegrationInfo) -> Vec<ConnectionCredential
 
 impl Manage {
     fn current(&self) -> IntegrationInfo {
-        self.flow
-            .latest(&self.integration.id)
-            .unwrap_or_else(|| self.integration.clone())
+        self.flow.latest(&self.integration.id).unwrap_or_else(|| self.integration.clone())
     }
 
     fn selected(&self) -> Option<Account> {
         let select = self.select.borrow().clone();
-        select
-            .and_then(|select| select.selected())
-            .map(|option| option.value)
+        select.and_then(|select| select.selected()).map(|option| option.value)
     }
 
     fn options(&self, theme: &opencode_ui::theme::Theme) -> Vec<SelectOption<Account>> {
-        let delete_key = self
-            .flow
-            .local
-            .dialogs
-            .keymap()
-            .shortcut("dialog.integration.delete")
-            .unwrap_or_default();
+        let delete_key = self.flow.local.dialogs.keymap().shortcut("dialog.integration.delete").unwrap_or_default();
         let deleting = self.deleting.borrow().clone();
-        let add =
-            (!self.methods.is_empty()).then(|| SelectOption::new("Add account", Account::Add));
+        let add = (!self.methods.is_empty()).then(|| SelectOption::new("Add account", Account::Add));
         add.into_iter()
-            .chain(
-                sorted_credentials(&self.current())
-                    .into_iter()
-                    .map(|connection| {
-                        let confirming = deleting.as_ref() == Some(&connection.id);
-                        let mut option = SelectOption::new(
-                            if confirming {
-                                format!("Press {delete_key} again to confirm")
-                            } else {
-                                connection.label.clone()
-                            },
-                            Account::Credential(connection.id.clone()),
-                        )
-                        .category("Connected accounts");
-                        if connection.status.is_some() {
-                            option.footer = Some(SIGN_IN.into());
-                            option.footer_color = Some(theme.text.feedback.warning.base);
-                        }
-                        if confirming {
-                            option.bg = Some(theme.background.action.destructive.focused);
-                            option.fg = Some(theme.text.action.destructive.focused);
-                        }
-                        option
-                    }),
-            )
+            .chain(sorted_credentials(&self.current()).into_iter().map(|connection| {
+                let confirming = deleting.as_ref() == Some(&connection.id);
+                let mut option = SelectOption::new(
+                    if confirming { format!("Press {delete_key} again to confirm") } else { connection.label.clone() },
+                    Account::Credential(connection.id.clone()),
+                )
+                .category("Connected accounts");
+                if connection.status.is_some() {
+                    option.footer = Some(SIGN_IN.into());
+                    option.footer_color = Some(theme.text.feedback.warning.base);
+                }
+                if confirming {
+                    option.bg = Some(theme.background.action.destructive.focused);
+                    option.fg = Some(theme.text.action.destructive.focused);
+                }
+                option
+            }))
             .collect()
     }
 
@@ -650,12 +553,7 @@ impl Manage {
         if self.reopened.replace(true) {
             return;
         }
-        let filter = self
-            .select
-            .borrow()
-            .as_ref()
-            .map(|select| select.filter())
-            .unwrap_or_default();
+        let filter = self.select.borrow().as_ref().map(|select| select.filter()).unwrap_or_default();
         let flow = self.flow.clone();
         let integration = self.integration.clone();
         let methods = self.methods.clone();
@@ -688,16 +586,10 @@ impl Manage {
             return;
         }
         let client = self.flow.local.client.clone();
-        let input = CredentialActivateInput {
-            credential_id: id.clone(),
-        };
+        let input = CredentialActivateInput { credential_id: id.clone() };
         let local = Rc::downgrade(&self.flow.local);
         self.flow.spawn(
-            async move {
-                client
-                    .credential_activate(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.credential_activate(&input, &RequestOptions::default()).await },
             move |result| {
                 let Some(local) = local.upgrade() else { return };
                 match result {
@@ -710,10 +602,7 @@ impl Manage {
     }
 
     fn rename(&self, id: &CredentialID) {
-        let label = credentials(&self.current())
-            .into_iter()
-            .find(|item| item.id == *id)
-            .map(|item| item.label);
+        let label = credentials(&self.current()).into_iter().find(|item| item.id == *id).map(|item| item.label);
         let flow = self.flow.clone();
         let integration = self.integration.clone();
         let methods = self.methods.clone();
@@ -726,18 +615,10 @@ impl Manage {
                         return;
                     }
                     let client = flow.local.client.clone();
-                    let input = CredentialUpdateInput {
-                        credential_id: id.clone(),
-                        label,
-                    };
-                    let (flow, integration, methods) =
-                        (flow.clone(), integration.clone(), methods.clone());
+                    let input = CredentialUpdateInput { credential_id: id.clone(), label };
+                    let (flow, integration, methods) = (flow.clone(), integration.clone(), methods.clone());
                     flow.clone().spawn(
-                        async move {
-                            client
-                                .credential_update(&input, &RequestOptions::default())
-                                .await
-                        },
+                        async move { client.credential_update(&input, &RequestOptions::default()).await },
                         move |result| match result {
                             Ok(()) => {
                                 // The renamed label shows once the catalog is read again.
@@ -773,18 +654,12 @@ impl Manage {
         }
         let last = credentials(&self.current()).len() == 1;
         let client = self.flow.local.client.clone();
-        let input = CredentialRemoveInput {
-            credential_id: id.clone(),
-        };
+        let input = CredentialRemoveInput { credential_id: id.clone() };
         let name = self.integration.name.clone();
         let local = Rc::downgrade(&self.flow.local);
         let state: Weak<Manage> = Rc::downgrade(self);
         self.flow.spawn(
-            async move {
-                client
-                    .credential_remove(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.credential_remove(&input, &RequestOptions::default()).await },
             move |result| {
                 let Some(local) = local.upgrade() else { return };
                 if let Some(state) = state.upgrade()
@@ -798,10 +673,7 @@ impl Manage {
                         if !last {
                             return;
                         }
-                        local.toasts.show(ToastOptions::new(
-                            Variant::Success,
-                            format!("Disconnected {name}"),
-                        ));
+                        local.toasts.show(ToastOptions::new(Variant::Success, format!("Disconnected {name}")));
                         local.dialogs.clear();
                     }
                     Err(error) => local.toasts.error(error.to_string()),
@@ -825,11 +697,8 @@ fn select_method(flow: &Flow, integration: IntegrationInfo, methods: Vec<Method>
     let dialogs = flow.local.dialogs.clone();
     dialogs.replace(
         move |cx| {
-            let options = methods
-                .iter()
-                .enumerate()
-                .map(|(index, method)| SelectOption::new(method.label(), index))
-                .collect();
+            let options =
+                methods.iter().enumerate().map(|(index, method)| SelectOption::new(method.label(), index)).collect();
             let mut props = SelectProps::new(format!("Connect {}", integration.name), options);
             props.render_filter = false;
             props.on_select = Some(Rc::new(move |option: &SelectOption<usize>| {
@@ -845,10 +714,7 @@ fn select_method(flow: &Flow, integration: IntegrationInfo, methods: Vec<Method>
 fn open_method(flow: &Flow, integration: IntegrationInfo, method: Method) {
     match method {
         Method::Key(method) => {
-            let title = method
-                .label
-                .clone()
-                .unwrap_or_else(|| format!("Connect {}", integration.name));
+            let title = method.label.clone().unwrap_or_else(|| format!("Connect {}", integration.name));
             let flow = flow.clone();
             with_form(&flow.clone(), title.clone(), method.form, move |answer| {
                 key_prompt(&flow, integration, title, answer);
@@ -857,21 +723,15 @@ fn open_method(flow: &Flow, integration: IntegrationInfo, method: Method) {
         Method::Command(method) => command_starting(flow, integration, method),
         Method::External(method) => {
             let flow = flow.clone();
-            with_form(
-                &flow.clone(),
-                method.label.clone(),
-                method.form.clone(),
-                move |answer| external_starting(&flow, integration, method, answer),
-            );
+            with_form(&flow.clone(), method.label.clone(), method.form.clone(), move |answer| {
+                external_starting(&flow, integration, method, answer)
+            });
         }
         Method::Oauth(method) => {
             let flow = flow.clone();
-            with_form(
-                &flow.clone(),
-                method.label.clone(),
-                method.form.clone(),
-                move |answer| oauth_starting(&flow, integration, method, answer),
-            );
+            with_form(&flow.clone(), method.label.clone(), method.form.clone(), move |answer| {
+                oauth_starting(&flow, integration, method, answer)
+            });
         }
     }
 }
@@ -897,12 +757,7 @@ fn with_form(
 // API key (`KeyMethod`)
 // ---------------------------------------------------------------------------------------------------------------
 
-fn key_prompt(
-    flow: &Flow,
-    integration: IntegrationInfo,
-    title: String,
-    answer: Option<FormAnswer>,
-) {
+fn key_prompt(flow: &Flow, integration: IntegrationInfo, title: String, answer: Option<FormAnswer>) {
     let flow = flow.clone();
     let dialogs = flow.local.dialogs.clone();
     dialogs.replace(
@@ -920,14 +775,9 @@ fn key_prompt(
                     answer: answer.clone(),
                     label: None,
                 };
-                let (flow, integration, set_error) =
-                    (flow.clone(), integration.clone(), set_error.clone());
+                let (flow, integration, set_error) = (flow.clone(), integration.clone(), set_error.clone());
                 flow.clone().spawn(
-                    async move {
-                        client
-                            .integration_connect_key(&input, &RequestOptions::default())
-                            .await
-                    },
+                    async move { client.integration_connect_key(&input, &RequestOptions::default()).await },
                     move |result| match result {
                         Ok(()) => connected(&flow, &integration),
                         Err(error) => set_error(error.to_string()),
@@ -954,9 +804,7 @@ fn key_prompt(
 /// An error line that starts empty, and its setter. With `boxed`, the line sits in a `<box gap={1}>` that the
 /// layout keeps even while empty, as the TS descriptions that wrap their `<Show>` in a box do.
 fn error_slot(cx: &Rc<DialogCx>, boxed: bool) -> (View, Rc<dyn Fn(String)>) {
-    let line = Text::new(&cx.app, "")
-        .fg(cx.theme.text.feedback.error.base)
-        .visible(false);
+    let line = Text::new(&cx.app, "").fg(cx.theme.text.feedback.error.base).visible(false);
     let slot = View::new(&cx.app).gap(1).child(&line);
     if !boxed {
         slot.visible(false);
@@ -998,11 +846,7 @@ fn external_starting(
     };
     let flow = flow.clone();
     flow.clone().spawn(
-        async move {
-            client
-                .integration_connect_external(&input, &RequestOptions::default())
-                .await
-        },
+        async move { client.integration_connect_external(&input, &RequestOptions::default()).await },
         move |result| match result {
             Ok(()) => connected(&flow, &integration),
             Err(error) => flow.fail(error.to_string()),
@@ -1048,11 +892,7 @@ fn oauth_starting(
     };
     let flow = flow.clone();
     flow.clone().spawn(
-        async move {
-            client
-                .integration_oauth_connect(&input, &RequestOptions::default())
-                .await
-        },
+        async move { client.integration_oauth_connect(&input, &RequestOptions::default()).await },
         move |result| {
             let attempt = match result {
                 Ok(output) => output.data,
@@ -1153,11 +993,7 @@ impl Oauth {
         let input = self.status_input();
         let weak = Rc::downgrade(self);
         self.flow.local.app.spawn(
-            async move {
-                client
-                    .integration_oauth_status(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.integration_oauth_status(&input, &RequestOptions::default()).await },
             move |cx, result| {
                 let Some(me) = weak.upgrade() else { return };
                 if me.settled.get() {
@@ -1231,11 +1067,7 @@ impl Oauth {
                     };
                     let set_error = set_error.clone();
                     me.flow.clone().spawn(
-                        async move {
-                            client
-                                .integration_oauth_complete(&input, &RequestOptions::default())
-                                .await
-                        },
+                        async move { client.integration_oauth_complete(&input, &RequestOptions::default()).await },
                         move |result| match result {
                             Ok(()) => {
                                 me.settled.set(true);
@@ -1280,14 +1112,8 @@ impl Oauth {
             attempt_id: self.attempt.attempt_id.clone(),
             location: self.flow.location(),
         };
-        self.flow.spawn(
-            async move {
-                client
-                    .integration_oauth_cancel(&input, &RequestOptions::default())
-                    .await
-            },
-            |_| {},
-        );
+        self.flow
+            .spawn(async move { client.integration_oauth_cancel(&input, &RequestOptions::default()).await }, |_| {});
     }
 
     fn open(&self) {
@@ -1302,10 +1128,7 @@ impl Oauth {
     fn copy(&self) {
         let value = oauth_code(&self.attempt.instructions).unwrap_or(self.attempt.url.clone());
         if self.flow.local.app.copy_to_clipboard(&value) {
-            self.flow
-                .local
-                .toasts
-                .show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
+            self.flow.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
             return;
         }
         self.flow.local.toasts.error("Failed to copy to clipboard");
@@ -1314,11 +1137,7 @@ impl Oauth {
 
 /// `Link`: the URL in the link color, as a terminal hyperlink.
 fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
-    let text = Text::new(
-        &cx.app,
-        vec![url.fg(cx.theme.markdown.link).link(url.to_owned())],
-    )
-    .wrap(WrapMode::Word);
+    let text = Text::new(&cx.app, vec![url.fg(cx.theme.markdown.link).link(url.to_owned())]).wrap(WrapMode::Word);
     // `Link`'s `onMouseUp`. The dialog panel stops a release before the app's link handler sees it.
     if let Some(open) = open {
         let app = cx.app.clone();
@@ -1326,10 +1145,7 @@ fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
             let plain = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SHIFT]
                 .into_iter()
                 .all(|modifier| !event.modifiers.contains(modifier));
-            if event.kind == MouseEventKind::Up(MouseButton::Left)
-                && plain
-                && app.selected_text().is_none()
-            {
+            if event.kind == MouseEventKind::Up(MouseButton::Left) && plain && app.selected_text().is_none() {
                 open();
             }
         });
@@ -1350,13 +1166,7 @@ fn oauth_view(
     actions: Option<CopyOpen>,
 ) -> View {
     let app = &cx.app;
-    let head = header(
-        cx,
-        HeaderProps {
-            title: title.to_owned(),
-            ..HeaderProps::default()
-        },
-    );
+    let head = header(cx, HeaderProps { title: title.to_owned(), ..HeaderProps::default() });
     let body = View::new(app).gap(1);
     if let Some((url, instructions)) = url {
         let open = actions.as_ref().map(|(_, open)| open.clone());
@@ -1369,26 +1179,14 @@ fn oauth_view(
     body.add(&Text::new(app, message).fg(cx.theme.text.muted));
     let primary = match (url, actions) {
         (Some((_, instructions)), Some((copy, open))) => vec![
-            FooterAction::new(if oauth_code(instructions).is_some() {
-                "copy code"
-            } else {
-                "copy link"
-            })
-            .key("c")
-            .on_trigger(move || copy()),
-            FooterAction::new("open link")
-                .key("enter")
-                .on_trigger(move || open()),
+            FooterAction::new(if oauth_code(instructions).is_some() { "copy code" } else { "copy link" })
+                .key("c")
+                .on_trigger(move || copy()),
+            FooterAction::new("open link").key("enter").on_trigger(move || open()),
         ],
         _ => Vec::new(),
     };
-    let foot = footer(
-        cx,
-        FooterProps {
-            primary,
-            ..FooterProps::default()
-        },
-    );
+    let foot = footer(cx, FooterProps { primary, ..FooterProps::default() });
     layout_view(cx, &head, &body, Some(&foot), DIALOG_INSET, 1)
 }
 
@@ -1401,11 +1199,7 @@ fn oauth_code(text: &str) -> Option<String> {
         if !head.iter().all(code) || chars.get(start + 4) != Some(&'-') {
             return None;
         }
-        let tail = chars[start + 5..]
-            .iter()
-            .take(5)
-            .take_while(|c| code(c))
-            .count();
+        let tail = chars[start + 5..].iter().take(5).take_while(|c| code(c)).count();
         (tail >= 4).then(|| chars[start..start + 5 + tail].iter().collect())
     })
 }
@@ -1430,10 +1224,7 @@ fn command_starting(flow: &Flow, integration: IntegrationInfo, method: Integrati
                 command_view(cx, &title, "Starting command…").0
             },
             None,
-            DialogOptions {
-                size: DialogSize::Large,
-                ..DialogOptions::default()
-            },
+            DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
         );
     }
     let client = flow.local.client.clone();
@@ -1445,11 +1236,7 @@ fn command_starting(flow: &Flow, integration: IntegrationInfo, method: Integrati
     };
     let flow = flow.clone();
     flow.clone().spawn(
-        async move {
-            client
-                .integration_command_connect(&input, &RequestOptions::default())
-                .await
-        },
+        async move { client.integration_command_connect(&input, &RequestOptions::default()).await },
         move |result| {
             let attempt = match result {
                 Ok(output) => output.data.attempt_id,
@@ -1495,10 +1282,7 @@ impl Command {
                 view
             },
             None,
-            DialogOptions {
-                size: DialogSize::Large,
-                ..DialogOptions::default()
-            },
+            DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
         );
         self.poll();
     }
@@ -1512,11 +1296,7 @@ impl Command {
         };
         let weak = Rc::downgrade(self);
         self.flow.local.app.spawn(
-            async move {
-                client
-                    .integration_command_status(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.integration_command_status(&input, &RequestOptions::default()).await },
             move |cx, result| {
                 let Some(me) = weak.upgrade() else { return };
                 if me.settled.get() {
@@ -1577,14 +1357,8 @@ impl Command {
             attempt_id: self.attempt.clone(),
             location: self.flow.location(),
         };
-        self.flow.spawn(
-            async move {
-                client
-                    .integration_command_cancel(&input, &RequestOptions::default())
-                    .await
-            },
-            |_| {},
-        );
+        self.flow
+            .spawn(async move { client.integration_command_cancel(&input, &RequestOptions::default()).await }, |_| {});
     }
 }
 
@@ -1594,11 +1368,7 @@ fn command_view(cx: &Rc<DialogCx>, title: &str, message: &str) -> (View, Text) {
     let page = cx.theme.page();
     let head = header(
         cx,
-        HeaderProps {
-            title: title.to_owned(),
-            close_label: Some("esc close".into()),
-            ..HeaderProps::default()
-        },
+        HeaderProps { title: title.to_owned(), close_label: Some("esc close".into()), ..HeaderProps::default() },
     );
     let output = Text::new(app, "").fg(page.text.base);
     // `DialogBleed`: the band reaches the dialog's edges.
@@ -1610,10 +1380,7 @@ fn command_view(cx: &Rc<DialogCx>, title: &str, message: &str) -> (View, Text) {
             .padding_edge(Edge::Bottom, 1)
             .child(&output),
     );
-    let body = View::new(app)
-        .gap(1)
-        .child(&band)
-        .child(&Text::new(app, message).fg(cx.theme.text.muted));
+    let body = View::new(app).gap(1).child(&band).child(&Text::new(app, message).fg(cx.theme.text.muted));
     (layout_view(cx, &head, &body, None, DIALOG_INSET, 1), output)
 }
 
@@ -1631,13 +1398,8 @@ fn connected(flow: &Flow, integration: &IntegrationInfo) {
     flow.clone().spawn(
         async move {
             let options = RequestOptions::default();
-            let integrations = IntegrationListInput {
-                location: location.clone(),
-            };
-            let models = ModelListInput {
-                location: location.clone(),
-                types: None,
-            };
+            let integrations = IntegrationListInput { location: location.clone() };
+            let models = ModelListInput { location: location.clone(), types: None };
             let providers = ProviderListInput { location };
             let (integrations, models, providers) = futures_util::future::try_join3(
                 client.integration_list(&integrations, &options),
@@ -1650,19 +1412,14 @@ fn connected(flow: &Flow, integration: &IntegrationInfo) {
         move |result| {
             let local = &flow.local;
             match result {
-                Ok((integrations, models, providers)) => {
-                    local.set_catalog(integrations, models, providers)
-                }
+                Ok((integrations, models, providers)) => local.set_catalog(integrations, models, providers),
                 Err(error) => {
                     log::warn!("integration catalog: {error}");
                     local.toasts.error(error.to_string());
                     return;
                 }
             }
-            local.toasts.show(ToastOptions::new(
-                Variant::Success,
-                format!("Connected {}", integration.name),
-            ));
+            local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {}", integration.name)));
             match &flow.on_connected {
                 Some(on_connected) => on_connected(local, provider_id(local, &integration.id)),
                 None => local.dialogs.clear(),
@@ -1677,17 +1434,14 @@ fn provider_id(local: &Local, integration: &IntegrationID) -> Option<String> {
     let matches: Vec<_> = local
         .providers()
         .into_iter()
-        .filter(|provider| {
-            provider.integration_id.as_ref() == Some(integration) || provider.id.0 == integration.0
-        })
+        .filter(|provider| provider.integration_id.as_ref() == Some(integration) || provider.id.0 == integration.0)
         .collect();
     matches
         .iter()
         .find(|provider| {
-            models.iter().any(|model| {
-                model.provider_id == provider.id
-                    && !matches!(model.status, ModelInfoStatus::Deprecated)
-            })
+            models
+                .iter()
+                .any(|model| model.provider_id == provider.id && !matches!(model.status, ModelInfoStatus::Deprecated))
         })
         .or(matches.first())
         .map(|provider| provider.id.0.clone())
@@ -1706,9 +1460,7 @@ mod tests {
     fn sorts_popular_first_then_by_name() {
         let list = ["zed", "anthropic", "acme", "opencode", "Beta"]
             .into_iter()
-            .map(|id| {
-                integration(json!({ "id": id, "name": id, "methods": [], "connections": [] }))
-            })
+            .map(|id| integration(json!({ "id": id, "name": id, "methods": [], "connections": [] })))
             .collect();
         let ids: Vec<String> = sorted(list).into_iter().map(|item| item.id.0).collect();
         assert_eq!(ids, ["opencode", "anthropic", "acme", "Beta", "zed"]);
@@ -1732,32 +1484,18 @@ mod tests {
     #[test]
     fn summarizes_connections() {
         let with = |connections: serde_json::Value| {
-            summary(&integration(
-                json!({ "id": "x", "name": "X", "methods": [], "connections": connections }),
-            ))
+            summary(&integration(json!({ "id": "x", "name": "X", "methods": [], "connections": connections })))
         };
         assert_eq!(with(json!([])), "");
-        assert_eq!(
-            with(json!([{ "type": "credential", "id": "c1", "label": "work", "method": "key" }])),
-            "work"
-        );
+        assert_eq!(with(json!([{ "type": "credential", "id": "c1", "label": "work", "method": "key" }])), "work");
         assert_eq!(with(json!([{ "type": "env", "name": "X_KEY" }])), "$X_KEY");
-        assert_eq!(
-            with(json!([{ "type": "env", "name": "A" }, { "type": "env", "name": "B" }])),
-            "2 connections"
-        );
+        assert_eq!(with(json!([{ "type": "env", "name": "A" }, { "type": "env", "name": "B" }])), "2 connections");
     }
 
     #[test]
     fn finds_the_device_code() {
-        assert_eq!(
-            oauth_code("Enter code ABCD-1234 at the page").as_deref(),
-            Some("ABCD-1234")
-        );
-        assert_eq!(
-            oauth_code("code WXYZ-12345!").as_deref(),
-            Some("WXYZ-12345")
-        );
+        assert_eq!(oauth_code("Enter code ABCD-1234 at the page").as_deref(), Some("ABCD-1234"));
+        assert_eq!(oauth_code("code WXYZ-12345!").as_deref(), Some("WXYZ-12345"));
         assert_eq!(oauth_code("abcd-1234"), None);
     }
 }

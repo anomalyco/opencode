@@ -7,8 +7,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_ui::dialog::{
-    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer,
-    header, layout_view,
+    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -35,17 +34,9 @@ pub fn entries(tui: &Tui) -> Vec<(&'static str, String)> {
     };
     vec![
         ("Version", format!("{VERSION} ({channel})")),
-        (
-            "Date",
-            chrono::Utc::now()
-                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-                .to_string(),
-        ),
+        ("Date", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
         ("OS", describe_os()),
-        (
-            "Terminal",
-            describe_terminal(|name| std::env::var(name).ok()),
-        ),
+        ("Terminal", describe_terminal(|name| std::env::var(name).ok())),
         ("Session ID", session),
         // The current model is E.16's (`local.model.current()`).
         ("Model", "n/a".to_owned()),
@@ -65,23 +56,11 @@ pub fn show(tui: &Tui) {
                     &View::new(&cx.app)
                         .row()
                         .gap(1)
-                        .child(
-                            &Text::new(&cx.app, format!("{label:<10}"))
-                                .fg(theme.text.muted)
-                                .shrink(0.0),
-                        )
-                        .child(
-                            &Text::new(&cx.app, value.clone())
-                                .fg(theme.text.base)
-                                .wrap(WrapMode::Word),
-                        ),
+                        .child(&Text::new(&cx.app, format!("{label:<10}")).fg(theme.text.muted).shrink(0.0))
+                        .child(&Text::new(&cx.app, value.clone()).fg(theme.text.base).wrap(WrapMode::Word)),
                 );
             }
-            let text = rows
-                .iter()
-                .map(|(label, value)| format!("{label}: {value}"))
-                .collect::<Vec<_>>()
-                .join("\n");
+            let text = rows.iter().map(|(label, value)| format!("{label}: {value}")).collect::<Vec<_>>().join("\n");
             let slot = View::new(&cx.app);
             let copied = Rc::new(Cell::new(false));
             // Draws the footer; after a copy the action reads `✓ copied` in the success color.
@@ -98,20 +77,13 @@ pub fn show(tui: &Tui) {
                 };
                 Rc::new(move || {
                     let Some(cx) = cx.upgrade() else { return };
-                    let mut action =
-                        FooterAction::new(if copied.get() { "✓ copied" } else { "copy" }).key("c");
+                    let mut action = FooterAction::new(if copied.get() { "✓ copied" } else { "copy" }).key("c");
                     action.on_trigger = Some(run.clone());
                     if copied.get() {
                         action.color = Some(cx.theme.text.feedback.success.base);
                     }
                     slot.clear();
-                    slot.add(&footer(
-                        &cx,
-                        FooterProps {
-                            primary: vec![action],
-                            ..FooterProps::default()
-                        },
-                    ));
+                    slot.add(&footer(&cx, FooterProps { primary: vec![action], ..FooterProps::default() }));
                 })
             };
             draw();
@@ -148,19 +120,13 @@ pub fn show(tui: &Tui) {
             )
         },
         None,
-        DialogOptions {
-            size: DialogSize::Large,
-            ..DialogOptions::default()
-        },
+        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
     );
 }
 
 /// Redraws the footer after the current event, since a footer action runs inside the footer it replaces.
 fn redraw(tui: &Weak<Tui>, hook: &Hook) {
-    let (Some(tui), Some(draw)) = (
-        tui.upgrade(),
-        hook.borrow().as_ref().and_then(Weak::upgrade),
-    ) else {
+    let (Some(tui), Some(draw)) = (tui.upgrade(), hook.borrow().as_ref().and_then(Weak::upgrade)) else {
         return;
     };
     tui.app.defer(move |_| draw());
@@ -173,10 +139,7 @@ fn copy(tui: &Weak<Tui>, copied: &Cell<bool>, text: &str) {
         return;
     }
     copied.set(true);
-    tui.toasts.show(ToastOptions::new(
-        Variant::Info,
-        "Debug info copied to clipboard",
-    ));
+    tui.toasts.show(ToastOptions::new(Variant::Info, "Debug info copied to clipboard"));
 }
 
 /// `describeOS`: `Linux 6.1.0 (x64)`, with Node's names for the platform and architecture.
@@ -201,10 +164,7 @@ fn release() -> String {
     std::fs::read_to_string("/proc/sys/kernel/osrelease")
         .ok()
         .or_else(|| {
-            let output = std::process::Command::new("uname")
-                .arg("-r")
-                .output()
-                .ok()?;
+            let output = std::process::Command::new("uname").arg("-r").output().ok()?;
             String::from_utf8(output.stdout).ok()
         })
         .map(|text| text.trim().to_owned())
@@ -214,9 +174,7 @@ fn release() -> String {
 /// `describeTerminal`: the program and version, and the multiplexer.
 pub fn describe_terminal(var: impl Fn(&str) -> Option<String>) -> String {
     let set = |name: &str| var(name).filter(|value| !value.is_empty());
-    let program = set("TERM_PROGRAM")
-        .or_else(|| set("TERM"))
-        .unwrap_or_else(|| "unknown".to_owned());
+    let program = set("TERM_PROGRAM").or_else(|| set("TERM")).unwrap_or_else(|| "unknown".to_owned());
     let version = set("TERM_PROGRAM_VERSION").map_or_else(String::new, |v| format!(" {v}"));
     let multiplexer = if set("TMUX").is_some() {
         " in tmux"
@@ -235,12 +193,7 @@ mod tests {
     #[test]
     fn describe_terminal_matches_typescript() {
         let vars = |pairs: &'static [(&'static str, &'static str)]| {
-            move |name: &str| {
-                pairs
-                    .iter()
-                    .find(|(key, _)| *key == name)
-                    .map(|(_, value)| (*value).to_owned())
-            }
+            move |name: &str| pairs.iter().find(|(key, _)| *key == name).map(|(_, value)| (*value).to_owned())
         };
         assert_eq!(describe_terminal(vars(&[])), "unknown");
         assert_eq!(describe_terminal(vars(&[("TERM", "xterm")])), "xterm");
@@ -252,9 +205,6 @@ mod tests {
             ])),
             "ghostty 1.2 in tmux"
         );
-        assert_eq!(
-            describe_terminal(vars(&[("TERM", "screen"), ("STY", "1.pts")])),
-            "screen in screen"
-        );
+        assert_eq!(describe_terminal(vars(&[("TERM", "screen"), ("STY", "1.pts")])), "screen in screen");
     }
 }

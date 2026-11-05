@@ -14,17 +14,14 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    AbsolutePath, LocationGetInput, LocationQueryInput, ProjectID, SessionMoveInput, V2Event,
-    VcsStatusInput, WorktreeDirectory, WorktreeListInput, WorktreeRefreshInput,
-    WorktreeRemoveInput,
+    AbsolutePath, LocationGetInput, LocationQueryInput, ProjectID, SessionMoveInput, V2Event, VcsStatusInput,
+    WorktreeDirectory, WorktreeListInput, WorktreeRefreshInput, WorktreeRemoveInput,
 };
 use opencode_store::Location;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::motion::Spinner;
 use opencode_ui::path::abbreviate_home;
-use opencode_ui::select::{
-    self, ActionRun, Select, SelectAction, SelectOption, SelectProps, Truncate,
-};
+use opencode_ui::select::{self, ActionRun, Select, SelectAction, SelectOption, SelectProps, Truncate};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
 
@@ -39,13 +36,8 @@ pub const KEY: &str = "worktrees";
 /// `WorkspaceSelection`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selection {
-    Directory {
-        directory: String,
-        subdirectory: bool,
-    },
-    New {
-        name: String,
-    },
+    Directory { directory: String, subdirectory: bool },
+    New { name: String },
 }
 
 /// What a pick runs.
@@ -156,11 +148,7 @@ impl Workspaces {
 
     /// The store's info for `props.location`.
     fn location_info(&self, tui: &Tui) -> Option<opencode_api::generated::LocationPublicInfo> {
-        tui.data.read(|state| {
-            state
-                .location(self.props.location.as_ref())
-                .and_then(|data| data.info.clone())
-        })
+        tui.data.read(|state| state.location(self.props.location.as_ref()).and_then(|data| data.info.clone()))
     }
 
     /// `loadedProject`: when the store's location belongs to another project, reads where this project's
@@ -178,11 +166,7 @@ impl Workspaces {
         let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
-                let input = LocationGetInput {
-                    location: Some(LocationQueryInput {
-                        directory: Some(directory),
-                    }),
-                };
+                let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
                 client
                     .location_get(&input, &RequestOptions::default())
                     .await
@@ -210,16 +194,10 @@ impl Workspaces {
         let Some(tui) = self.tui() else { return };
         self.state.borrow_mut().loading = true;
         let client = tui.data.client().clone();
-        let input = WorktreeListInput {
-            project_id: self.props.project_id.clone(),
-        };
+        let input = WorktreeListInput { project_id: self.props.project_id.clone() };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
-            async move {
-                client
-                    .worktree_list(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.worktree_list(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(workspaces) = weak.upgrade() else {
                     return;
@@ -253,16 +231,10 @@ impl Workspaces {
     fn refresh_worktrees(&self, toast: bool) {
         let Some(tui) = self.tui() else { return };
         let client = tui.data.client().clone();
-        let input = WorktreeRefreshInput {
-            project_id: self.props.project_id.clone(),
-        };
+        let input = WorktreeRefreshInput { project_id: self.props.project_id.clone() };
         let weak = tui.weak();
         tui.app.spawn(
-            async move {
-                client
-                    .worktree_refresh(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.worktree_refresh(&input, &RequestOptions::default()).await },
             move |_, result| {
                 if let (Err(error), Some(tui), true) = (result, weak.upgrade(), toast) {
                     tui.toasts.error(error_message(&error));
@@ -290,9 +262,7 @@ impl Workspaces {
             return Some(directory.clone());
         }
         match self.location_info(tui) {
-            Some(info) if info.project.id == self.props.project_id => {
-                Some(info.project.directory.0)
-            }
+            Some(info) if info.project.id == self.props.project_id => Some(info.project.directory.0),
             _ => self.state.borrow().loaded_project.clone(),
         }
     }
@@ -320,10 +290,7 @@ impl Workspaces {
             return None;
         }
         if let Some(replacement) = &state.replacement {
-            return Some(Selection::Directory {
-                directory: replacement.clone(),
-                subdirectory: false,
-            });
+            return Some(Selection::Directory { directory: replacement.clone(), subdirectory: false });
         }
         self.props.current.clone()
     }
@@ -343,10 +310,7 @@ impl Workspaces {
         let mut roots: Vec<&WorktreeDirectory> = state.directories.iter().flatten().collect();
         let current = current_root.as_deref();
         roots.sort_by(|a, b| {
-            let (a_current, b_current) = (
-                Some(a.directory.as_str()) == current,
-                Some(b.directory.as_str()) == current,
-            );
+            let (a_current, b_current) = (Some(a.directory.as_str()) == current, Some(b.directory.as_str()) == current);
             if a_current || b_current {
                 return b_current.cmp(&a_current);
             }
@@ -382,9 +346,7 @@ impl Workspaces {
                 if current_root.is_none() && Some(&location) == current_directory.as_ref() {
                     continue;
                 }
-                if roots.iter().any(|root| root.directory.0 == location)
-                    || subdirectories.contains(&location)
-                {
+                if roots.iter().any(|root| root.directory.0 == location) || subdirectories.contains(&location) {
                     continue;
                 }
                 subdirectories.push(location);
@@ -394,30 +356,20 @@ impl Workspaces {
             .iter()
             .enumerate()
             .map(|(index, root)| (root.directory.0.clone(), index))
-            .chain(
-                subdirectories
-                    .into_iter()
-                    .filter_map(|location| deepest(&location).map(|root| (location, root))),
-            )
+            .chain(subdirectories.into_iter().filter_map(|location| deepest(&location).map(|root| (location, root))))
             .collect();
         list.sort_by(|a, b| {
             a.1.cmp(&b.1)
                 .then_with(|| {
-                    let (a_root, b_root) =
-                        (a.0 == roots[a.1].directory.0, b.0 == roots[b.1].directory.0);
+                    let (a_root, b_root) = (a.0 == roots[a.1].directory.0, b.0 == roots[b.1].directory.0);
                     b_root.cmp(&a_root)
                 })
                 .then_with(|| a.0.cmp(&b.0))
         });
-        let width = u32::from(tui.app.size().0)
-            .saturating_sub(2)
-            .min(DialogSize::XLarge.width());
+        let width = u32::from(tui.app.size().0).saturating_sub(2).min(DialogSize::XLarge.width());
         let title_width = (select::content_width(width) as usize).max(1);
         let home = std::env::var("HOME").unwrap_or_default();
-        let delete_key = tui
-            .keymap
-            .shortcut("dialog.move_session.delete")
-            .unwrap_or_default();
+        let delete_key = tui.keymap.shortcut("dialog.move_session.delete").unwrap_or_default();
         list.into_iter()
             .map(|(location, index)| {
                 let root = &roots[index].directory.0;
@@ -425,24 +377,15 @@ impl Workspaces {
                 let subdirectory = &location != root;
                 let mut option = SelectOption::new(
                     title.clone(),
-                    Selection::Directory {
-                        directory: location.clone(),
-                        subdirectory,
-                    },
+                    Selection::Directory { directory: location.clone(), subdirectory },
                 )
-                .category(if Some(root.as_str()) == current {
-                    "Current"
-                } else {
-                    "Other"
-                });
+                .category(if Some(root.as_str()) == current { "Current" } else { "Other" });
                 option.title_width = Some(title_width);
                 option.truncate = Truncate::Left;
                 let deleting = state.to_delete.as_ref() == Some(&location);
                 if state.removing.as_ref() == Some(&location) {
-                    option.title_spans = Some(vec![(
-                        format!("Deleting {location}"),
-                        Some(theme.text.feedback.error.base),
-                    )]);
+                    option.title_spans =
+                        Some(vec![(format!("Deleting {location}"), Some(theme.text.feedback.error.base))]);
                 } else if deleting {
                     option.title_spans = Some(vec![(
                         format!("Press {delete_key} again to confirm"),
@@ -451,8 +394,7 @@ impl Workspaces {
                     option.bg = Some(theme.background.action.destructive.base);
                 } else if subdirectory {
                     let suffix = format!("/{}", location[root.len()..].trim_start_matches('/'));
-                    let visible: Vec<char> =
-                        select::truncate_left(&title, title_width).chars().collect();
+                    let visible: Vec<char> = select::truncate_left(&title, title_width).chars().collect();
                     let split = visible.len().saturating_sub(suffix.chars().count());
                     option.title_spans = Some(vec![
                         (visible[..split].iter().collect(), None),
@@ -492,20 +434,11 @@ impl Workspaces {
             .select
             .borrow()
             .as_ref()
-            .map(|select| {
-                (
-                    select.filter(),
-                    select.selected().map(|option| option.value),
-                )
-            })
+            .map(|select| (select.filter(), select.selected().map(|option| option.value)))
             .unwrap_or_default();
         let (show_error, locked, spinning) = {
             let state = self.state.borrow();
-            (
-                self.show_error(),
-                self.locked(),
-                state.working || state.loading || state.project_loading,
-            )
+            (self.show_error(), self.locked(), state.working || state.loading || state.project_loading)
         };
         let session = matches!(tui.route(), Route::Session { .. });
         let current = self.current_value();
@@ -526,16 +459,10 @@ impl Workspaces {
                             move |_: &str| weak.upgrade().map(|w| w.options()).unwrap_or_default()
                         }),
                     );
-                    let title = View::new(app)
-                        .row()
-                        .gap(1)
-                        .child(&Text::new(app, "Worktrees").fg(theme.text.base).bold());
+                    let title =
+                        View::new(app).row().gap(1).child(&Text::new(app, "Worktrees").fg(theme.text.base).bold());
                     if spinning {
-                        title.add(
-                            &Spinner::new(app)
-                                .color(theme.text.muted)
-                                .animations(animations),
-                        );
+                        title.add(&Spinner::new(app).color(theme.text.muted).animations(animations));
                     }
                     props.title_view = Some(title.as_any());
                     props.render_filter = !show_error;
@@ -557,23 +484,15 @@ impl Workspaces {
                                         .fg(theme.text.feedback.error.base)
                                         .bold(),
                                 );
+                                view.add(&Text::new(&app, error.clone().unwrap_or_default()).fg(theme.text.muted));
                                 view.add(
-                                    &Text::new(&app, error.clone().unwrap_or_default())
-                                        .fg(theme.text.muted),
-                                );
-                                view.add(
-                                    &Text::new(&app, "Close and reopen Worktrees to try again.")
-                                        .fg(theme.text.muted),
+                                    &Text::new(&app, "Close and reopen Worktrees to try again.").fg(theme.text.muted),
                                 );
                             } else {
                                 view.add(
                                     &Text::new(
                                         &app,
-                                        if loading {
-                                            "Loading worktrees…"
-                                        } else {
-                                            "No worktrees available"
-                                        },
+                                        if loading { "Loading worktrees…" } else { "No worktrees available" },
                                     )
                                     .fg(theme.text.muted),
                                 );
@@ -635,15 +554,10 @@ impl Workspaces {
                         owner.shown.set(false);
                         owner.select.borrow_mut().take();
                     }));
-                    View::new(app)
-                        .min_height(if show_error { 5 } else { full_height })
-                        .child(&view)
+                    View::new(app).min_height(if show_error { 5 } else { full_height }).child(&view)
                 },
                 None,
-                DialogOptions {
-                    size: DialogSize::XLarge,
-                    key: Some(KEY.into()),
-                },
+                DialogOptions { size: DialogSize::XLarge, key: Some(KEY.into()) },
             );
         }
     }
@@ -665,11 +579,7 @@ impl Workspaces {
     /// `remove`: the first press marks the worktree, the second deletes it.
     fn remove(self: &Rc<Self>, option: &SelectOption<Selection>) {
         let Some(tui) = self.tui() else { return };
-        let Selection::Directory {
-            directory,
-            subdirectory: false,
-        } = &option.value
-        else {
+        let Selection::Directory { directory, subdirectory: false } = &option.value else {
             return;
         };
         if self.state.borrow().removing.is_some() || !self.has_strategy(directory) {
@@ -721,11 +631,7 @@ impl Workspaces {
     fn confirm_force(self: &Rc<Self>, directory: String, deleting_current: bool) {
         let Some(tui) = self.tui() else { return };
         let client = tui.data.client().clone();
-        let input = VcsStatusInput {
-            location: Some(LocationQueryInput {
-                directory: Some(directory.clone()),
-            }),
-        };
+        let input = VcsStatusInput { location: Some(LocationQueryInput { directory: Some(directory.clone()) }) };
         let workspaces = self.clone();
         tui.app.spawn(
             async move {
@@ -743,10 +649,7 @@ impl Workspaces {
                     files,
                     file_changes::Texts {
                         title: Some("Delete worktree?".into()),
-                        message: Some(
-                            "This worktree has file changes. Do you want to delete it anyway?"
-                                .into(),
-                        ),
+                        message: Some("This worktree has file changes. Do you want to delete it anyway?".into()),
                         confirm: Some(("delete".into(), "d".into())),
                     },
                     Rc::new(move |choice| {
@@ -796,21 +699,14 @@ impl Workspaces {
         };
         let workspaces = self.clone();
         tui.app.spawn(
-            async move {
-                client
-                    .worktree_remove(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.worktree_remove(&input, &RequestOptions::default()).await },
             move |_, result| then(&workspaces, result),
         );
     }
 
     fn failed(&self, error: &opencode_api::error::Error) {
         if let Some(tui) = self.tui() {
-            tui.toasts.show(
-                ToastOptions::new(Variant::Error, error_message(error))
-                    .title("Failed to delete worktree"),
-            );
+            tui.toasts.show(ToastOptions::new(Variant::Error, error_message(error)).title("Failed to delete worktree"));
         }
     }
 
@@ -822,10 +718,7 @@ impl Workspaces {
             return false;
         }
         let fallback = self.state.borrow().directories.as_ref().and_then(|list| {
-            list.iter()
-                .rev()
-                .find(|item| item.strategy.is_none())
-                .map(|item| item.directory.0.clone())
+            list.iter().rev().find(|item| item.strategy.is_none()).map(|item| item.directory.0.clone())
         });
         if let Some(fallback) = &fallback {
             self.state.borrow_mut().replacement = Some(fallback.clone());
@@ -837,10 +730,7 @@ impl Workspaces {
         }
         if let Some(fallback) = fallback {
             if let Some(change) = &self.props.on_current_change {
-                change(Selection::Directory {
-                    directory: fallback,
-                    subdirectory: false,
-                });
+                change(Selection::Directory { directory: fallback, subdirectory: false });
             }
             self.rebuild();
             return true;
@@ -881,25 +771,15 @@ impl Workspaces {
     /// `move`: moves the open session to the selected directory.
     fn move_session(&self, option: &SelectOption<Selection>) {
         let Some(tui) = self.tui() else { return };
-        let (Route::Session { id }, Selection::Directory { directory, .. }) =
-            (tui.route(), &option.value)
-        else {
+        let (Route::Session { id }, Selection::Directory { directory, .. }) = (tui.route(), &option.value) else {
             return;
         };
         tui.dialogs.clear();
         let client = tui.data.client().clone();
-        let input = SessionMoveInput {
-            session_id: id,
-            directory: AbsolutePath(directory.clone()),
-            delivery: None,
-        };
+        let input = SessionMoveInput { session_id: id, directory: AbsolutePath(directory.clone()), delivery: None };
         let weak = tui.weak();
         tui.app.spawn(
-            async move {
-                client
-                    .session_move(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.session_move(&input, &RequestOptions::default()).await },
             move |_, result| {
                 if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
                     tui.toasts.error(error_message(&error));
@@ -911,15 +791,14 @@ impl Workspaces {
 
 /// The footer actions: move (in a session), new, delete, and refresh.
 fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection>> {
-    let selected =
-        |command: &str, title: &str, run: fn(&Rc<Workspaces>, &SelectOption<Selection>)| {
-            let weak = weak.clone();
-            SelectAction::new(command, title, move |option: &SelectOption<Selection>| {
-                if let Some(workspaces) = weak.upgrade() {
-                    run(&workspaces, option);
-                }
-            })
-        };
+    let selected = |command: &str, title: &str, run: fn(&Rc<Workspaces>, &SelectOption<Selection>)| {
+        let weak = weak.clone();
+        SelectAction::new(command, title, move |option: &SelectOption<Selection>| {
+            if let Some(workspaces) = weak.upgrade() {
+                run(&workspaces, option);
+            }
+        })
+    };
     let dialog = |command: &str, title: &str, run: fn(&Rc<Workspaces>)| {
         let weak = weak.clone();
         SelectAction {
@@ -933,11 +812,8 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
     };
     let mut actions = Vec::new();
     if session {
-        actions.push(selected(
-            "dialog.move_session.move",
-            "move",
-            |workspaces, option| workspaces.move_session(option),
-        ));
+        actions
+            .push(selected("dialog.move_session.move", "move", |workspaces, option| workspaces.move_session(option)));
     }
     actions.push(dialog("dialog.move_session.new", "new", Workspaces::create));
     actions.push(SelectAction {
@@ -948,50 +824,37 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
                     return true;
                 };
                 match option.map(|option| &option.value) {
-                    Some(Selection::Directory {
-                        directory,
-                        subdirectory: false,
-                    }) => !workspaces.has_strategy(directory),
+                    Some(Selection::Directory { directory, subdirectory: false }) => {
+                        !workspaces.has_strategy(directory)
+                    }
                     _ => true,
                 }
             }
         })),
         ..selected("dialog.move_session.delete", "delete", Workspaces::remove)
     });
-    actions.push(dialog(
-        "dialog.move_session.refresh",
-        "refresh",
-        |workspaces| workspaces.refresh_worktrees(true),
-    ));
+    actions.push(dialog("dialog.move_session.refresh", "refresh", |workspaces| workspaces.refresh_worktrees(true)));
     actions
 }
 
 /// `errorMessage`: a declared error's message, else the error.
 pub(crate) fn error_message(error: &opencode_api::error::Error) -> String {
     match error.declared() {
-        Some(declared) => declared
-            .message
-            .clone()
-            .or_else(|| declared.tag.clone())
-            .unwrap_or_else(|| error.to_string()),
+        Some(declared) => {
+            declared.message.clone().or_else(|| declared.tag.clone()).unwrap_or_else(|| error.to_string())
+        }
         None => error.to_string(),
     }
 }
 
 /// The server marks a delete that would lose file changes (`WorktreeError` with `data.forceRequired`).
 fn force_required(error: &opencode_api::error::Error) -> bool {
-    error
-        .declared()
-        .and_then(|declared| declared.body.get("data")?.get("forceRequired")?.as_bool())
-        == Some(true)
+    error.declared().and_then(|declared| declared.body.get("data")?.get("forceRequired")?.as_bool()) == Some(true)
 }
 
 /// `contains`: `directory` is `root` or below it.
 pub(crate) fn contains(root: &str, directory: &str) -> bool {
-    root == directory
-        || directory
-            .strip_prefix(root.trim_end_matches('/'))
-            .is_some_and(|rest| rest.starts_with('/'))
+    root == directory || directory.strip_prefix(root.trim_end_matches('/')).is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]

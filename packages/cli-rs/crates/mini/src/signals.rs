@@ -14,8 +14,7 @@ use serde_json::{Value, json};
 
 /// `OPENCODE_SHOW_TTFD` is `1` or `true`, in any case.
 pub fn show_timing() -> bool {
-    std::env::var("OPENCODE_SHOW_TTFD")
-        .is_ok_and(|value| matches!(value.to_lowercase().as_str(), "1" | "true"))
+    std::env::var("OPENCODE_SHOW_TTFD").is_ok_and(|value| matches!(value.to_lowercase().as_str(), "1" | "true"))
 }
 
 /// The JSONL trace (`createTrace`), on when `OPENCODE_DIRECT_TRACE` is set to anything.
@@ -43,15 +42,8 @@ impl Trace {
         let latest = json!({ "time": now(), "pid": pid, "cwd": cwd, "argv": argv, "path": path });
         fs::write(directory.join("latest.json"), format!("{latest}\n"))?;
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
-        let trace = Self {
-            path: path.clone(),
-            pid,
-            file: Arc::new(Mutex::new(file)),
-        };
-        trace.write(
-            "trace.start",
-            json!({ "argv": argv, "cwd": cwd, "path": path }),
-        );
+        let trace = Self { path: path.clone(), pid, file: Arc::new(Mutex::new(file)) };
+        trace.write("trace.start", json!({ "argv": argv, "cwd": cwd, "path": path }));
         Ok(trace)
     }
 
@@ -73,9 +65,7 @@ impl Trace {
 
 /// `new Date().toISOString()`.
 fn now() -> String {
-    chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string()
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
 /// Sent to the app on each SIGUSR2 (`signals.sigusr2`); mini reloads its theme.
@@ -127,29 +117,16 @@ mod tests {
         let trace = Trace::start(dir.path(), 42, "/work", &["mini".into()]).unwrap();
         trace.write("send.prompt", json!({ "sessionID": "ses_1" }));
         trace.write("ui.idle", Value::Null);
-        let latest: Value = serde_json::from_str(
-            &fs::read_to_string(dir.path().join("direct/latest.json")).unwrap(),
-        )
-        .unwrap();
+        let latest: Value =
+            serde_json::from_str(&fs::read_to_string(dir.path().join("direct/latest.json")).unwrap()).unwrap();
         assert_eq!(latest["pid"], 42);
         assert_eq!(latest["path"], json!(trace.path()));
-        let name = trace
-            .path()
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
+        let name = trace.path().file_name().unwrap().to_string_lossy().into_owned();
         assert!(name.ends_with("Z-42.jsonl"), "{name}");
-        let lines: Vec<Value> = fs::read_to_string(trace.path())
-            .unwrap()
-            .lines()
-            .map(|line| serde_json::from_str(line).unwrap())
-            .collect();
+        let lines: Vec<Value> =
+            fs::read_to_string(trace.path()).unwrap().lines().map(|line| serde_json::from_str(line).unwrap()).collect();
         let kinds: Vec<_> = lines.iter().map(|line| line["type"].clone()).collect();
-        assert_eq!(
-            kinds,
-            [json!("trace.start"), json!("send.prompt"), json!("ui.idle")]
-        );
+        assert_eq!(kinds, [json!("trace.start"), json!("send.prompt"), json!("ui.idle")]);
         assert_eq!(lines[0]["data"]["cwd"], "/work");
         assert_eq!(lines[1]["data"]["sessionID"], "ses_1");
         assert!(lines[2].get("data").is_none());

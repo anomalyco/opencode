@@ -3,18 +3,9 @@
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hunk {
-    Add {
-        path: String,
-        contents: String,
-    },
-    Delete {
-        path: String,
-    },
-    Update {
-        path: String,
-        move_path: Option<String>,
-        chunks: Vec<Chunk>,
-    },
+    Add { path: String, contents: String },
+    Delete { path: String },
+    Update { path: String, move_path: Option<String>, chunks: Vec<Chunk> },
 }
 
 impl Hunk {
@@ -36,10 +27,7 @@ pub struct Chunk {
 /// `Patch.parse`, or `None` when the text is not a valid patch.
 pub fn parse(patch_text: &str) -> Option<Vec<Hunk>> {
     let stripped = strip_heredoc(js_trim(patch_text));
-    let lines: Vec<&str> = stripped
-        .split('\n')
-        .map(|line| line.strip_suffix('\r').unwrap_or(line))
-        .collect();
+    let lines: Vec<&str> = stripped.split('\n').map(|line| line.strip_suffix('\r').unwrap_or(line)).collect();
     if js_trim(lines[0]) != "*** Begin Patch" {
         return None;
     }
@@ -66,19 +54,14 @@ pub fn parse(patch_text: &str) -> Option<Vec<Hunk>> {
                 content.push(lines[index].strip_prefix('+')?);
                 index += 1;
             }
-            hunks.push(Hunk::Add {
-                path,
-                contents: content.join("\n"),
-            });
+            hunks.push(Hunk::Add { path, contents: content.join("\n") });
             continue;
         }
         if let Some(path) = header.strip_prefix("*** Delete File: ") {
             if index + 1 < end && !is_boundary(js_trim(lines[index + 1])) {
                 return None;
             }
-            hunks.push(Hunk::Delete {
-                path: js_trim(path).to_owned(),
-            });
+            hunks.push(Hunk::Delete { path: js_trim(path).to_owned() });
             index += 1;
             continue;
         }
@@ -99,11 +82,7 @@ pub fn parse(patch_text: &str) -> Option<Vec<Hunk>> {
                 next += 1;
             }
             let (chunks, after) = parse_update(&lines, next, end)?;
-            hunks.push(Hunk::Update {
-                path: js_trim(path).to_owned(),
-                move_path,
-                chunks,
-            });
+            hunks.push(Hunk::Update { path: js_trim(path).to_owned(), move_path, chunks });
             index = after;
             continue;
         }
@@ -114,11 +93,7 @@ pub fn parse(patch_text: &str) -> Option<Vec<Hunk>> {
 
 /// `Patch.derive`: `original` with `chunks` applied. The BOM is dropped from the content.
 pub fn derive(path: &str, chunks: &[Chunk], original: &str) -> Result<String, String> {
-    let mut lines: Vec<String> = original
-        .trim_start_matches('\u{feff}')
-        .split('\n')
-        .map(str::to_owned)
-        .collect();
+    let mut lines: Vec<String> = original.trim_start_matches('\u{feff}').split('\n').map(str::to_owned).collect();
     if lines.last().is_some_and(String::is_empty) {
         lines.pop();
     }
@@ -172,10 +147,8 @@ fn parse_update(lines: &[&str], start: usize, end: usize) -> Option<(Vec<Chunk>,
             if chunks.last().is_some_and(empty) {
                 return None;
             }
-            chunks.push(Chunk {
-                change_context: update_line.strip_prefix("@@ ").map(str::to_owned),
-                ..Chunk::default()
-            });
+            chunks
+                .push(Chunk { change_context: update_line.strip_prefix("@@ ").map(str::to_owned), ..Chunk::default() });
             index += 1;
             continue;
         }
@@ -211,11 +184,7 @@ fn is_boundary(line: &str) -> bool {
 
 type Replacement = (usize, usize, Vec<String>);
 
-fn compute_replacements(
-    lines: &[String],
-    path: &str,
-    chunks: &[Chunk],
-) -> Result<Vec<Replacement>, String> {
+fn compute_replacements(lines: &[String], path: &str, chunks: &[Chunk]) -> Result<Vec<Replacement>, String> {
     let mut replacements = Vec::new();
     let mut line_index = 0;
     for chunk in chunks {
@@ -258,23 +227,15 @@ fn seek(lines: &[String], pattern: &[String], start: usize, eof: bool) -> Option
         |left, right| normalize(js_trim(left)) == normalize(js_trim(right)),
     ];
     let matches = |offset: usize, compare: fn(&str, &str) -> bool| {
-        pattern
-            .iter()
-            .enumerate()
-            .all(|(index, line)| compare(&lines[offset + index], line))
+        pattern.iter().enumerate().all(|(index, line)| compare(&lines[offset + index], line))
     };
     if eof {
         if last < start {
             return None;
         }
-        return compares
-            .iter()
-            .any(|compare| matches(last, *compare))
-            .then_some(last);
+        return compares.iter().any(|compare| matches(last, *compare)).then_some(last);
     }
-    compares
-        .iter()
-        .find_map(|compare| (start..=last).find(|offset| matches(*offset, *compare)))
+    compares.iter().find_map(|compare| (start..=last).find(|offset| matches(*offset, *compare)))
 }
 
 fn normalize(value: &str) -> String {
@@ -308,22 +269,15 @@ fn heredoc_body(input: &str) -> Option<&str> {
         rest = after.trim_start();
     }
     rest = rest.strip_prefix("<<")?;
-    let quote = rest
-        .chars()
-        .next()
-        .filter(|char| *char == '\'' || *char == '"');
+    let quote = rest.chars().next().filter(|char| *char == '\'' || *char == '"');
     if let Some(quote) = quote {
         rest = &rest[1..];
-        let word_len = rest
-            .find(|char: char| !(char.is_ascii_alphanumeric() || char == '_'))
-            .unwrap_or(rest.len());
+        let word_len = rest.find(|char: char| !(char.is_ascii_alphanumeric() || char == '_')).unwrap_or(rest.len());
         let word = &rest[..word_len];
         rest = rest[word_len..].strip_prefix(quote)?;
         return heredoc_rest(input, rest, word);
     }
-    let word_len = rest
-        .find(|char: char| !(char.is_ascii_alphanumeric() || char == '_'))
-        .unwrap_or(rest.len());
+    let word_len = rest.find(|char: char| !(char.is_ascii_alphanumeric() || char == '_')).unwrap_or(rest.len());
     heredoc_rest(input, &rest[word_len..], &rest[..word_len])
 }
 
@@ -357,13 +311,8 @@ mod tests {
         assert_eq!(
             parse(text),
             Some(vec![
-                Hunk::Add {
-                    path: "a.txt".into(),
-                    contents: "one\ntwo".into()
-                },
-                Hunk::Delete {
-                    path: "b.txt".into()
-                },
+                Hunk::Add { path: "a.txt".into(), contents: "one\ntwo".into() },
+                Hunk::Delete { path: "b.txt".into() },
                 Hunk::Update {
                     path: "c.txt".into(),
                     move_path: Some("d.txt".into()),
@@ -378,10 +327,7 @@ mod tests {
         );
         assert_eq!(parse("*** Begin Patch\n*** End Patch"), Some(Vec::new()));
         assert_eq!(parse("nope"), None);
-        assert_eq!(
-            parse("*** Begin Patch\n*** Update File: c.txt\n*** End Patch"),
-            None
-        );
+        assert_eq!(parse("*** Begin Patch\n*** Update File: c.txt\n*** End Patch"), None);
     }
 
     #[test]
@@ -394,16 +340,9 @@ mod tests {
 
     #[test]
     fn derives_with_fuzzy_matching_and_a_trailing_newline() {
-        let chunks = vec![Chunk {
-            old_lines: vec!["  b".into()],
-            new_lines: vec!["  B".into()],
-            ..Chunk::default()
-        }];
+        let chunks = vec![Chunk { old_lines: vec!["  b".into()], new_lines: vec!["  B".into()], ..Chunk::default() }];
         assert_eq!(derive("f", &chunks, "a\nb\nc"), Ok("a\n  B\nc\n".into()));
-        let append = vec![Chunk {
-            new_lines: vec!["z".into()],
-            ..Chunk::default()
-        }];
+        let append = vec![Chunk { new_lines: vec!["z".into()], ..Chunk::default() }];
         assert_eq!(derive("f", &append, "a\n"), Ok("a\nz\n".into()));
         assert!(derive("f", &chunks, "x\n").is_err());
     }

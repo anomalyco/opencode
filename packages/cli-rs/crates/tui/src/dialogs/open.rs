@@ -10,9 +10,9 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectID, ProjectListInput,
-    SessionGetInput, SessionID, SessionInfo, SessionListInput, SessionListInputOrder,
-    WorktreeCreateInput, WorktreeListInput, WorktreeRefreshInput,
+    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectID, ProjectListInput, SessionGetInput,
+    SessionID, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput, WorktreeListInput,
+    WorktreeRefreshInput,
 };
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
@@ -24,9 +24,7 @@ use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
-use super::session_list::{
-    attention, basename, dialog_theme, now_ms, project_name, running, status_gutter, title,
-};
+use super::session_list::{attention, basename, dialog_theme, now_ms, project_name, running, status_gutter, title};
 use crate::app::Tui;
 use crate::routes::Route;
 
@@ -90,11 +88,7 @@ pub fn show(tui: &Tui) {
         prompt: RefCell::new(None),
         footer: View::new(&tui.app),
     });
-    open.build(Selection {
-        view: OpenView::Projects,
-        filter: String::new(),
-        selected: None,
-    });
+    open.build(Selection { view: OpenView::Projects, filter: String::new(), selected: None });
     open.load();
 }
 
@@ -172,12 +166,7 @@ impl Open {
                     }),
                 );
                 props.placeholder = Some(
-                    if worktrees.is_some() {
-                        "Search worktrees…"
-                    } else {
-                        "Search sessions and projects…"
-                    }
-                    .into(),
+                    if worktrees.is_some() { "Search worktrees…" } else { "Search sessions and projects…" }.into(),
                 );
                 props.current = current;
                 props.focus_current = selection.selected.is_some();
@@ -217,9 +206,7 @@ impl Open {
                 if worktrees.is_some() {
                     props.on_cancel = Some(Rc::new(back.clone()));
                     props.bindings = vec![
-                        TuiCommand::inline("left", move |_, _| back())
-                            .title("Return to projects")
-                            .group("Dialog"),
+                        TuiCommand::inline("left", move |_, _| back()).title("Return to projects").group("Dialog"),
                         TuiCommand::inline("ctrl+n", {
                             let weak = weak.clone();
                             move |_, _| {
@@ -231,11 +218,8 @@ impl Open {
                         .title("New worktree")
                         .group("Dialog"),
                     ];
-                    props.footer_hints = vec![FooterHint {
-                        title: "new worktree".into(),
-                        label: "ctrl+n".into(),
-                        group: None,
-                    }];
+                    props.footer_hints =
+                        vec![FooterHint { title: "new worktree".into(), label: "ctrl+n".into(), group: None }];
                 } else {
                     props.bindings = vec![
                         TuiCommand::inline("right", {
@@ -263,10 +247,7 @@ impl Open {
                         });
                         let row = View::new(&app).padding_x(DIALOG_LIST_INSET);
                         if !loading {
-                            row.add(
-                                &Text::new(&app, "No recent sessions or projects")
-                                    .fg(theme.text.muted),
-                            );
+                            row.add(&Text::new(&app, "No recent sessions or projects").fg(theme.text.muted));
                         }
                         row.as_any()
                     }
@@ -274,10 +255,7 @@ impl Open {
                 props.no_match_view = Some(Rc::new({
                     let weak = weak.clone();
                     move || {
-                        let message = weak
-                            .upgrade()
-                            .map(|open| open.no_match())
-                            .unwrap_or_default();
+                        let message = weak.upgrade().map(|open| open.no_match()).unwrap_or_default();
                         View::new(&app)
                             .padding_x(DIALOG_LIST_INSET)
                             .child(&Text::new(&app, message).fg(theme.text.muted))
@@ -301,10 +279,7 @@ impl Open {
                 view
             },
             None,
-            DialogOptions {
-                size: DialogSize::Large,
-                key: Some(KEY.into()),
-            },
+            DialogOptions { size: DialogSize::Large, key: Some(KEY.into()) },
         );
         if let Some(id) = &self.worktree_project() {
             self.load_worktrees(id.clone());
@@ -320,8 +295,7 @@ impl Open {
 
     fn project_title(&self, id: &ProjectID) -> String {
         let state = self.state.borrow();
-        project_name(state.projects.iter().find(|project| project.id == *id))
-            .unwrap_or_else(|| "Project".into())
+        project_name(state.projects.iter().find(|project| project.id == *id)).unwrap_or_else(|| "Project".into())
     }
 
     /// The recent read, the projects, and the default location.
@@ -340,11 +314,7 @@ impl Open {
                     archived: Some(false),
                     ..SessionListInput::default()
                 };
-                let location = LocationGetInput {
-                    location: Some(LocationQueryInput {
-                        directory: Some(directory),
-                    }),
-                };
+                let location = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
                 futures_util::future::join3(
                     client.session_list(&recent, &options),
                     client.project_list(&ProjectListInput::default(), &options),
@@ -361,11 +331,7 @@ impl Open {
                     if let Ok(response) = recent {
                         // A session deleted while the read was in flight stays out.
                         let sessions: Vec<SessionInfo> = tui.data.read(|store| {
-                            response
-                                .data
-                                .into_iter()
-                                .filter(|session| !store.is_missing(&session.id))
-                                .collect()
+                            response.data.into_iter().filter(|session| !store.is_missing(&session.id)).collect()
                         });
                         RECENT.with(|recent| *recent.borrow_mut() = sessions.clone());
                         state.sessions = sessions;
@@ -384,9 +350,8 @@ impl Open {
     /// `matched`: reads the session an exact `ses_` ID names.
     fn find_exact(self: &Rc<Self>, value: &str) {
         let Some(tui) = self.tui() else { return };
-        let exact = value.len() == 30
-            && value.starts_with("ses_")
-            && value[4..].chars().all(|c| c.is_ascii_alphanumeric());
+        let exact =
+            value.len() == 30 && value.starts_with("ses_") && value[4..].chars().all(|c| c.is_ascii_alphanumeric());
         if !exact {
             self.state.borrow_mut().matched = None;
             return;
@@ -397,12 +362,7 @@ impl Open {
         tui.app.spawn(
             async move {
                 client
-                    .session_get(
-                        &SessionGetInput {
-                            session_id: id.clone(),
-                        },
-                        &RequestOptions::default(),
-                    )
+                    .session_get(&SessionGetInput { session_id: id.clone() }, &RequestOptions::default())
                     .await
                     .ok()
                     .filter(|session| session.id == id)
@@ -420,15 +380,9 @@ impl Open {
         self.state.borrow_mut().worktrees = None;
         let client = tui.data.client().clone();
         let weak = Rc::downgrade(self);
-        let input = WorktreeListInput {
-            project_id: id.clone(),
-        };
+        let input = WorktreeListInput { project_id: id.clone() };
         tui.app.spawn(
-            async move {
-                client
-                    .worktree_list(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.worktree_list(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(open) = weak.upgrade() else { return };
                 let Some(tui) = open.tui() else { return };
@@ -436,14 +390,10 @@ impl Open {
                     return;
                 }
                 let directories = match result {
-                    Ok(list) => list
-                        .into_iter()
-                        .map(|worktree| worktree.directory.0)
-                        .collect(),
+                    Ok(list) => list.into_iter().map(|worktree| worktree.directory.0).collect(),
                     Err(error) => {
                         tui.toasts.show(
-                            ToastOptions::new(Variant::Error, error.to_string())
-                                .title("Loading worktrees failed"),
+                            ToastOptions::new(Variant::Error, error.to_string()).title("Loading worktrees failed"),
                         );
                         Vec::new()
                     }
@@ -458,9 +408,7 @@ impl Open {
                     let client = tui.data.client().clone();
                     tui.app.runtime().spawn(async move {
                         let input = WorktreeRefreshInput { project_id: id };
-                        let _ = client
-                            .worktree_refresh(&input, &RequestOptions::default())
-                            .await;
+                        let _ = client.worktree_refresh(&input, &RequestOptions::default()).await;
                     });
                 }
                 open.refresh();
@@ -490,34 +438,22 @@ impl Open {
         self.footer.clear();
         let state = self.state.borrow();
         let line: Option<AnyWidget> = match state.view {
-            OpenView::Worktrees(_) => state.worktrees.is_none().then(|| {
-                Spinner::new(app)
-                    .color(theme.text.muted)
-                    .label("Loading worktrees…")
-                    .as_any()
-            }),
+            OpenView::Worktrees(_) => state
+                .worktrees
+                .is_none()
+                .then(|| Spinner::new(app).color(theme.text.muted).label("Loading worktrees…").as_any()),
             OpenView::Projects => {
                 if state.recent.is_none() || state.projects_loaded.is_none() {
-                    Some(
-                        Spinner::new(app)
-                            .color(theme.text.muted)
-                            .label("Refreshing sessions and projects…")
-                            .as_any(),
-                    )
+                    Some(Spinner::new(app).color(theme.text.muted).label("Refreshing sessions and projects…").as_any())
                 } else {
-                    let what = match (
-                        state.recent == Some(false),
-                        state.projects_loaded == Some(false),
-                    ) {
+                    let what = match (state.recent == Some(false), state.projects_loaded == Some(false)) {
                         (true, true) => Some("sessions and projects"),
                         (true, false) => Some("sessions"),
                         (false, true) => Some("projects"),
                         (false, false) => None,
                     };
                     what.map(|what| {
-                        Text::new(app, format!("Could not refresh {what}."))
-                            .fg(theme.text.feedback.error.base)
-                            .as_any()
+                        Text::new(app, format!("Could not refresh {what}.")).fg(theme.text.feedback.error.base).as_any()
                     })
                 }
             }
@@ -540,12 +476,7 @@ impl Open {
         };
         let state = self.state.borrow();
         if let OpenView::Worktrees(_) = state.view {
-            return if state.worktrees.is_none() {
-                "Loading worktrees…"
-            } else {
-                "No matching worktrees"
-            }
-            .into();
+            return if state.worktrees.is_none() { "Loading worktrees…" } else { "No matching worktrees" }.into();
         }
         if state.recent.is_none() || state.projects_loaded.is_none() {
             return "Searching sessions and projects…".into();
@@ -571,9 +502,7 @@ impl Open {
         let theme = dialog_theme(&tui);
         let state = self.state.borrow();
         let home = home();
-        let width = u32::from(tui.app.size().0)
-            .saturating_sub(2)
-            .min(DialogSize::Large.width());
+        let width = u32::from(tui.app.size().0).saturating_sub(2).min(DialogSize::Large.width());
         let content = select::content_width(width) as i64;
         let now = now_ms();
         // Read before the store lock: the tabs read the store themselves.
@@ -591,9 +520,7 @@ impl Open {
                     if session.parent_id.is_some() || seen.contains(&session.id) {
                         return false;
                     }
-                    if session.time.archived.is_some()
-                        && Some(&session.id) != matched.map(|matched| &matched.id)
-                    {
+                    if session.time.archived.is_some() && Some(&session.id) != matched.map(|matched| &matched.id) {
                         return false;
                     }
                     seen.insert(session.id.clone());
@@ -601,10 +528,7 @@ impl Open {
                 })
                 .collect();
             sessions.sort_by(|a, b| {
-                let (x, y) = (
-                    attention(store, &a.id).is_some(),
-                    attention(store, &b.id).is_some(),
-                );
+                let (x, y) = (attention(store, &a.id).is_some(), attention(store, &b.id).is_some());
                 y.cmp(&x).then(b.time.updated.total_cmp(&a.time.updated))
             });
             // With an empty query the recents leave out open tabs, which the strip shows, unless a
@@ -618,25 +542,16 @@ impl Open {
                             && current.as_deref() != Some(session.id.0.as_str()))
                 })
                 .collect();
-            let attention_count = candidates
-                .iter()
-                .filter(|session| attention(store, &session.id).is_some())
-                .count();
+            let attention_count = candidates.iter().filter(|session| attention(store, &session.id).is_some()).count();
             let recent: Vec<&SessionInfo> = if state.filter.trim().is_empty() {
-                candidates
-                    .into_iter()
-                    .take(RECENT_LIMIT.max(attention_count))
-                    .collect()
+                candidates.into_iter().take(RECENT_LIMIT.max(attention_count)).collect()
             } else {
                 sessions
             };
             recent
                 .into_iter()
                 .map(|session| {
-                    let project = state
-                        .projects
-                        .iter()
-                        .find(|project| project.id == session.project_id);
+                    let project = state.projects.iter().find(|project| project.id == session.project_id);
                     let name = project_name(project).unwrap_or_default();
                     let base = basename(session.location.directory.as_str());
                     let label = if !name.is_empty()
@@ -651,48 +566,32 @@ impl Open {
                         name
                     };
                     let mark = attention(store, &session.id);
-                    let mut option =
-                        SelectOption::new(title(session), Target::Session(session.id.clone()))
-                            .search_text(format!(
-                                "{} {}",
-                                session.id.0, session.location.directory.0
-                            ))
-                            .category("Sessions")
-                            .footer(format!(
-                                "{}{}",
-                                if label.is_empty() {
-                                    String::new()
-                                } else {
-                                    format!("{} · ", select::truncate(&label, 30))
-                                },
-                                time_ago(now, session.time.updated)
-                            ));
+                    let mut option = SelectOption::new(title(session), Target::Session(session.id.clone()))
+                        .search_text(format!("{} {}", session.id.0, session.location.directory.0))
+                        .category("Sessions")
+                        .footer(format!(
+                            "{}{}",
+                            if label.is_empty() {
+                                String::new()
+                            } else {
+                                format!("{} · ", select::truncate(&label, 30))
+                            },
+                            time_ago(now, session.time.updated)
+                        ));
                     let accent = theme.accent().step(200);
-                    let tab: Option<Gutter> = tabs.contains(&session.id.0).then(|| {
-                        Rc::new(move |app: &App, _: Color| Text::new(app, "▪").fg(accent).as_any())
-                            as Gutter
-                    });
-                    option.gutter = status_gutter(
-                        &theme,
-                        mark,
-                        mark.is_none() && running(store, &session.id),
-                        tab,
-                    );
+                    let tab: Option<Gutter> = tabs
+                        .contains(&session.id.0)
+                        .then(|| Rc::new(move |app: &App, _: Color| Text::new(app, "▪").fg(accent).as_any()) as Gutter);
+                    option.gutter = status_gutter(&theme, mark, mark.is_none() && running(store, &session.id), tab);
                     option
                 })
                 .collect()
         });
 
         let current = tui.directory.as_str();
-        let current_project = state
-            .location
-            .as_ref()
-            .map(|location| location.project.canonical.as_str());
-        let mut projects: Vec<&Project> = state
-            .projects
-            .iter()
-            .filter(|project| project.time.archived.is_none())
-            .collect();
+        let current_project = state.location.as_ref().map(|location| location.project.canonical.as_str());
+        let mut projects: Vec<&Project> =
+            state.projects.iter().filter(|project| project.time.archived.is_none()).collect();
         projects.sort_by_key(|project| std::cmp::Reverse(project.time.active));
         let mut canonicals = HashSet::new();
         for project in projects
@@ -704,27 +603,14 @@ impl Open {
             let directory = project.canonical.as_str();
             let title = project_name(Some(project)).unwrap_or_else(|| basename(directory).into());
             let footer = abbreviate_home(directory, &home);
-            let git = project
-                .vcs
-                .as_ref()
-                .is_some_and(|vcs| vcs.as_str() == "git");
+            let git = project.vcs.as_ref().is_some_and(|vcs| vcs.as_str() == "git");
             let width = content - title.width() as i64 - if git { 2 } else { 0 };
             let mut option = SelectOption::new(
                 title,
-                Target::Project {
-                    directory: directory.to_owned(),
-                    project_id: git.then(|| project.id.clone()),
-                },
+                Target::Project { directory: directory.to_owned(), project_id: git.then(|| project.id.clone()) },
             )
-            .footer(format!(
-                "{}{}",
-                truncate_file_path(&footer, width),
-                if git { " →" } else { "" }
-            ))
-            .search_text(format!(
-                "{footer} {}",
-                project_name(Some(project)).unwrap_or_default()
-            ))
+            .footer(format!("{}{}", truncate_file_path(&footer, width), if git { " →" } else { "" }))
+            .search_text(format!("{footer} {}", project_name(Some(project)).unwrap_or_default()))
             .category("Projects");
             if directory == current || Some(directory) == current_project {
                 option.gutter = Some(selected_mark(theme.text.formfield.selected));
@@ -756,14 +642,8 @@ impl Open {
                 basename(directory).to_owned()
             }
         };
-        let dialog = u32::from(tui.app.size().0)
-            .saturating_sub(2)
-            .min(DialogSize::Large.width());
-        let widest = directories
-            .iter()
-            .map(|directory| title(directory).width())
-            .max()
-            .unwrap_or(0);
+        let dialog = u32::from(tui.app.size().0).saturating_sub(2).min(DialogSize::Large.width());
+        let widest = directories.iter().map(|directory| title(directory).width()).max().unwrap_or(0);
         let width = (select::content_width(dialog) as i64 - widest as i64).max(0);
         let mut seen = HashSet::new();
         directories.retain(|directory| seen.insert(*directory));
@@ -784,10 +664,7 @@ impl Open {
                 let pad = (width as usize).saturating_sub(footer.width());
                 let mut option = SelectOption::new(
                     title(directory),
-                    Target::Project {
-                        directory: directory.to_owned(),
-                        project_id: None,
-                    },
+                    Target::Project { directory: directory.to_owned(), project_id: None },
                 )
                 .footer(format!("{footer}{}", " ".repeat(pad)));
                 if directory == current {
@@ -803,25 +680,14 @@ impl Open {
         Selection {
             view: self.state.borrow().view.clone(),
             filter: select.as_ref().map(Select::filter).unwrap_or_default(),
-            selected: select
-                .and_then(|select| select.selected())
-                .map(|option| option.value),
+            selected: select.and_then(|select| select.selected()).map(|option| option.value),
         }
     }
 
     /// `right`: the worktrees of the selected Git project.
     fn show_worktrees(self: &Rc<Self>) {
-        let selected = self
-            .select
-            .borrow()
-            .as_ref()
-            .and_then(Select::selected)
-            .map(|option| option.value);
-        let Some(Target::Project {
-            directory,
-            project_id: Some(id),
-        }) = selected
-        else {
+        let selected = self.select.borrow().as_ref().and_then(Select::selected).map(|option| option.value);
+        let Some(Target::Project { directory, project_id: Some(id) }) = selected else {
             return;
         };
         let back = self.snapshot();
@@ -831,10 +697,7 @@ impl Open {
             open.build(Selection {
                 view: OpenView::Worktrees(id),
                 filter: String::new(),
-                selected: Some(Target::Project {
-                    directory,
-                    project_id: None,
-                }),
+                selected: Some(Target::Project { directory, project_id: None }),
             })
         });
     }
@@ -882,9 +745,7 @@ impl Open {
                             size: DialogSize::Large,
                             placeholder: Some("Worktree name (optional)".into()),
                             description: Some(Rc::new(move |cx| {
-                                Text::new(&cx.app, "Leave blank for a random name.")
-                                    .fg(theme.text.muted)
-                                    .as_any()
+                                Text::new(&cx.app, "Leave blank for a random name.").fg(theme.text.muted).as_any()
                             })),
                             busy_text: Some("Creating worktree…".into()),
                             on_cancel: Some(Rc::new(cancel)),
@@ -904,10 +765,7 @@ impl Open {
                     view
                 },
                 None,
-                DialogOptions {
-                    size: DialogSize::Large,
-                    key: Some(KEY.into()),
-                },
+                DialogOptions { size: DialogSize::Large, key: Some(KEY.into()) },
             );
         });
     }
@@ -926,11 +784,7 @@ impl Open {
         };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
-            async move {
-                client
-                    .worktree_create(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.worktree_create(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(open) = weak.upgrade() else { return };
                 let Some(tui) = open.tui() else { return };
@@ -949,8 +803,7 @@ impl Open {
                     Err(error) => {
                         current.set_busy(false);
                         tui.toasts.show(
-                            ToastOptions::new(Variant::Error, error.to_string())
-                                .title("Creating worktree failed"),
+                            ToastOptions::new(Variant::Error, error.to_string()).title("Creating worktree failed"),
                         );
                     }
                 }
@@ -966,10 +819,9 @@ impl Open {
             tui.dialogs.clear();
             match target {
                 Target::Session(id) => tui.navigate(Route::Session { id }),
-                Target::Project { directory, .. } => crate::features::location::navigate_home(
-                    &tui,
-                    Some(opencode_store::Location::new(directory)),
-                ),
+                Target::Project { directory, .. } => {
+                    crate::features::location::navigate_home(&tui, Some(opencode_store::Location::new(directory)))
+                }
             }
         });
     }
@@ -1025,10 +877,7 @@ pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
         return value.to_owned();
     }
     let root = if value.starts_with('/') { "/" } else { "" };
-    let segments: Vec<&str> = value[root.len()..]
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
+    let segments: Vec<&str> = value[root.len()..].split('/').filter(|segment| !segment.is_empty()).collect();
     let base = segments.last().copied().unwrap_or(value);
     if segments.len() < 2 {
         if root.width() >= max {
@@ -1074,10 +923,7 @@ fn truncate_basename(value: &str, max: usize) -> String {
         return format!("…{}", take_end(extension, max - 1));
     }
     let stem = dot.map_or(value, |dot| &value[..dot]);
-    format!(
-        "{}…{extension}",
-        take_start(stem, max - extension.width() - 1)
-    )
+    format!("{}…{extension}", take_start(stem, max - extension.width() - 1))
 }
 
 fn take_start(value: &str, max: usize) -> String {
@@ -1103,14 +949,8 @@ mod tests {
     #[test]
     fn file_paths_truncate_as_typescript_does() {
         assert_eq!(truncate_file_path("/tmp/a", 10), "/tmp/a");
-        assert_eq!(
-            truncate_file_path("/home/user/projects/opencode", 20),
-            "/…/projects/opencode"
-        );
-        assert_eq!(
-            truncate_file_path("/a/very-long-name.txt", 10),
-            "/…/ve….txt"
-        );
+        assert_eq!(truncate_file_path("/home/user/projects/opencode", 20), "/…/projects/opencode");
+        assert_eq!(truncate_file_path("/a/very-long-name.txt", 10), "/…/ve….txt");
         assert_eq!(truncate_file_path("/x", 0), "");
     }
 

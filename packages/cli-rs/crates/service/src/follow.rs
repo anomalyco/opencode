@@ -34,11 +34,7 @@ pub fn client(
     let follow = Follow {
         inner: transport,
         origin: origin.origin(),
-        route: RwLock::new(Route {
-            url: origin,
-            auth: connection.endpoint.auth.clone(),
-            generation: 0,
-        }),
+        route: RwLock::new(Route { url: origin, auth: connection.endpoint.auth.clone(), generation: 0 }),
         resolving: tokio::sync::Mutex::new(()),
         paths: paths.clone(),
         env: env.clone(),
@@ -121,10 +117,7 @@ impl Follow {
         point(&route.url, &mut request.url);
         request.headers.retain(|(name, _)| name != "authorization");
         if let Some(auth) = &route.auth {
-            request.headers.push((
-                "authorization".to_owned(),
-                format!("Basic {}", auth.token()),
-            ));
+            request.headers.push(("authorization".to_owned(), format!("Basic {}", auth.token())));
         }
         route.generation
     }
@@ -148,11 +141,7 @@ impl Follow {
             return;
         };
         log::info!("service.reconnect url={url}");
-        *self.route.write().expect("route lock") = Route {
-            url,
-            auth: endpoint.auth,
-            generation: generation + 1,
-        };
+        *self.route.write().expect("route lock") = Route { url, auth: endpoint.auth, generation: generation + 1 };
     }
 }
 
@@ -201,14 +190,9 @@ mod tests {
                 .replies(OLD, [Reply::json(200, HEALTH), Reply::Refused])
                 .reply(NEW, Reply::json(200, HEALTH)),
         );
-        let env = Env {
-            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
-            ..Env::default()
-        };
+        let env = Env { ts_bin: Some("/nonexistent/opencode-ts".to_owned()), ..Env::default() };
         let options = connect::Options::default();
-        let connection = connect::resolve(server.clone(), &paths, &env, &options)
-            .await
-            .unwrap();
+        let connection = connect::resolve(server.clone(), &paths, &env, &options).await.unwrap();
         let client = client(server.clone(), &connection, &paths, &env).unwrap();
         register(&paths, 5000, "new");
         let request = RequestOptions::default();
@@ -230,10 +214,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_terminal_socket_follows_a_restarted_service() {
-        const OLD_TOKEN: &str =
-            "http://127.0.0.1:4096/api/experimental/persistent-pty/pty_1/connect-token";
-        const NEW_TOKEN: &str =
-            "http://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect-token";
+        const OLD_TOKEN: &str = "http://127.0.0.1:4096/api/experimental/persistent-pty/pty_1/connect-token";
+        const NEW_TOKEN: &str = "http://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect-token";
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(OsString::from(dir.path())),
@@ -248,18 +230,10 @@ mod tests {
                 .reply(OLD, Reply::json(200, HEALTH))
                 .reply(OLD_TOKEN, Reply::Refused)
                 .reply(NEW, Reply::json(200, HEALTH))
-                .reply(
-                    NEW_TOKEN,
-                    Reply::json(200, r#"{"data":{"ticket":"t1","expires_in":60}}"#),
-                ),
+                .reply(NEW_TOKEN, Reply::json(200, r#"{"data":{"ticket":"t1","expires_in":60}}"#)),
         );
-        let env = Env {
-            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
-            ..Env::default()
-        };
-        let connection = connect::resolve(server.clone(), &paths, &env, &Default::default())
-            .await
-            .unwrap();
+        let env = Env { ts_bin: Some("/nonexistent/opencode-ts".to_owned()), ..Env::default() };
+        let connection = connect::resolve(server.clone(), &paths, &env, &Default::default()).await.unwrap();
         let client = client(server.clone(), &connection, &paths, &env).unwrap();
         register(&paths, 5000, "new");
         let input = pty::ConnectInput {
@@ -300,18 +274,11 @@ mod tests {
                 .replies(OLD, [Reply::json(200, HEALTH), Reply::Refused])
                 .reply(NEW, Reply::json(200, HEALTH)),
         );
-        let env = Env {
-            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
-            ..Env::default()
-        };
-        let connection = connect::resolve(server.clone(), &paths, &env, &Default::default())
-            .await
-            .unwrap();
+        let env = Env { ts_bin: Some("/nonexistent/opencode-ts".to_owned()), ..Env::default() };
+        let connection = connect::resolve(server.clone(), &paths, &env, &Default::default()).await.unwrap();
         let client = client(server.clone(), &connection, &paths, &env).unwrap();
         let endpoint = || {
-            let (url, auth) = client
-                .transport()
-                .endpoint(client.base_url().clone(), client.credentials());
+            let (url, auth) = client.transport().endpoint(client.base_url().clone(), client.credentials());
             (url.to_string(), auth.map(|auth| auth.token()))
         };
         let token = |password: &str| Some(Auth::password(password).token());
@@ -321,10 +288,7 @@ mod tests {
         assert_eq!(endpoint(), ("http://127.0.0.1:5000/".to_owned(), token("new")));
         // Another origin keeps its own address and credentials.
         let other = Auth::password("other");
-        let (url, auth) = client.transport().endpoint(
-            url::Url::parse("http://example.com/").unwrap(),
-            Some(&other),
-        );
+        let (url, auth) = client.transport().endpoint(url::Url::parse("http://example.com/").unwrap(), Some(&other));
         assert_eq!(url.as_str(), "http://example.com/");
         assert!(auth == Some(other));
     }
@@ -341,12 +305,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::from_vars(|name| (name == "HOME").then(|| dir.path().into())).unwrap();
         let client = client(server.clone(), &connection, &paths, &Env::default()).unwrap();
-        assert!(
-            client
-                .server_info(&RequestOptions::default())
-                .await
-                .is_err()
-        );
+        assert!(client.server_info(&RequestOptions::default()).await.is_err());
         // Only the request itself: no discovery ran.
         assert_eq!(server.requests().len(), 1);
     }

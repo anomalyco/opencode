@@ -51,9 +51,7 @@ pub fn renderer() -> impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> {
         let layout = render(block.code).ok();
         let previous = block.previous.map(Widget::id);
         let mut shown = shown.borrow_mut();
-        let retained = previous
-            .and_then(|id| shown.get(&id))
-            .is_some_and(|source| block.code.starts_with(source));
+        let retained = previous.and_then(|id| shown.get(&id)).is_some_and(|source| block.code.starts_with(source));
         if layout.is_none() && streaming && retained {
             return block.previous.cloned();
         }
@@ -87,8 +85,7 @@ fn formula(app: &App, layout: &Layout, theme: &Theme) -> AnyWidget {
                         || ('\u{2500}'..='\u{257f}').contains(&c)
                 });
             let mut attributes = Attributes::NONE;
-            if style.is_some_and(|style| style.bold)
-                || ["=", "<", ">", "≠", "≡", "≤", "≥", "≈"].contains(&char)
+            if style.is_some_and(|style| style.bold) || ["=", "<", ">", "≠", "≡", "≤", "≥", "≈"].contains(&char)
             {
                 attributes |= Attributes::BOLD;
             }
@@ -98,10 +95,7 @@ fn formula(app: &App, layout: &Layout, theme: &Theme) -> AnyWidget {
             if style.is_some_and(|style| style.dim) {
                 attributes |= Attributes::DIM;
             }
-            let style = Style {
-                attributes,
-                ..Style::new().fg(if structural { subdued } else { text })
-            };
+            let style = Style { attributes, ..Style::new().fg(if structural { subdued } else { text }) };
             push(&mut spans, char, style);
             // A wide glyph already takes the next cell.
             column += layout::cell_width(char).max(1) as usize;

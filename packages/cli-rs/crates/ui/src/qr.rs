@@ -4,12 +4,12 @@
 
 // Error correction codewords per block and block count at level L, for versions 1 to 40.
 const ECC_PER_BLOCK: [usize; 40] = [
-    7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30,
-    26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+    7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30,
+    30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
 ];
 const BLOCKS: [usize; 40] = [
-    1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14,
-    15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25,
+    1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19,
+    19, 20, 21, 22, 24, 25,
 ];
 
 type Grid = Vec<Vec<bool>>;
@@ -31,8 +31,7 @@ fn mask(index: usize, x: usize, y: usize) -> bool {
 /// when the text does not fit version 40.
 pub fn encode(text: &str) -> Option<Grid> {
     let bytes = text.as_bytes();
-    let version = (1..=40)
-        .find(|&v| 4 + if v < 10 { 8 } else { 16 } + bytes.len() * 8 <= data_capacity(v) * 8)?;
+    let version = (1..=40).find(|&v| 4 + if v < 10 { 8 } else { 16 } + bytes.len() * 8 <= data_capacity(v) * 8)?;
     let size = version * 4 + 17;
     let mut modules = vec![vec![false; size]; size];
     let mut reserved = vec![vec![false; size]; size];
@@ -48,10 +47,7 @@ pub fn encode(text: &str) -> Option<Grid> {
                 .iter()
                 .enumerate()
                 .map(|(y, row)| {
-                    row.iter()
-                        .enumerate()
-                        .map(|(x, &dark)| dark != (!reserved[y][x] && mask(index, x, y)))
-                        .collect()
+                    row.iter().enumerate().map(|(x, &dark)| dark != (!reserved[y][x] && mask(index, x, y))).collect()
                 })
                 .collect();
             draw_format(index, size, &mut |x, y, dark| masked[y][x] = dark);
@@ -122,11 +118,7 @@ fn draw_function_patterns(version: usize, size: usize, set: &mut dyn FnMut(usize
             }
             for dy in -2i64..=2 {
                 for dx in -2i64..=2 {
-                    set(
-                        (cx as i64 + dx) as usize,
-                        (cy as i64 + dy) as usize,
-                        dx.abs().max(dy.abs()) != 1,
-                    );
+                    set((cx as i64 + dx) as usize, (cy as i64 + dy) as usize, dx.abs().max(dy.abs()) != 1);
                 }
             }
         }
@@ -151,14 +143,8 @@ fn alignment_positions(version: usize, size: usize) -> Vec<usize> {
         return Vec::new();
     }
     let count = version / 7 + 2;
-    let step = if version == 32 {
-        26
-    } else {
-        (version * 4 + 4).div_ceil(count * 2 - 2) * 2
-    };
-    std::iter::once(6)
-        .chain((0..count - 1).map(|i| size - 7 - (count - 2 - i) * step))
-        .collect()
+    let step = if version == 32 { 26 } else { (version * 4 + 4).div_ceil(count * 2 - 2) * 2 };
+    std::iter::once(6).chain((0..count - 1).map(|i| size - 7 - (count - 2 - i) * step)).collect()
 }
 
 fn draw_format(mask: usize, size: usize, set: &mut dyn FnMut(usize, usize, bool)) {
@@ -209,10 +195,8 @@ fn data_codewords(bytes: &[u8], version: usize) -> Vec<u8> {
     append(&mut bits, 0, terminator);
     let pad = (8 - bits.len() % 8) % 8;
     append(&mut bits, 0, pad);
-    let mut data: Vec<u8> = bits
-        .chunks(8)
-        .map(|chunk| chunk.iter().fold(0u8, |byte, &bit| (byte << 1) | bit))
-        .collect();
+    let mut data: Vec<u8> =
+        bits.chunks(8).map(|chunk| chunk.iter().fold(0u8, |byte, &bit| (byte << 1) | bit)).collect();
     let filled = data.len();
     data.extend((0..capacity - filled).map(|i| if i % 2 == 0 { 0xec } else { 0x11 }));
     data
@@ -232,10 +216,7 @@ fn add_error_correction(data: &[u8], version: usize) -> Vec<u8> {
             &data[start..start + short_length + usize::from(i >= short)]
         })
         .collect();
-    let remainders: Vec<Vec<u8>> = split
-        .iter()
-        .map(|block| reed_solomon_remainder(block, &divisor))
-        .collect();
+    let remainders: Vec<Vec<u8>> = split.iter().map(|block| reed_solomon_remainder(block, &divisor)).collect();
     let mut result = Vec::new();
     for i in 0..=short_length {
         result.extend(split.iter().filter_map(|row| row.get(i)));
@@ -258,11 +239,7 @@ fn draw_codewords(modules: &mut Grid, reserved: &Grid, codewords: &[u8]) {
         for vertical in 0..size {
             for j in 0..2 {
                 let x = (right - j) as usize;
-                let y = if (right + 1) & 2 == 0 {
-                    size - 1 - vertical
-                } else {
-                    vertical
-                };
+                let y = if (right + 1) & 2 == 0 { size - 1 - vertical } else { vertical };
                 if reserved[y][x] || i >= codewords.len() * 8 {
                     continue;
                 }
@@ -276,14 +253,8 @@ fn draw_codewords(modules: &mut Grid, reserved: &Grid, codewords: &[u8]) {
 
 fn penalty(modules: &Grid) -> i64 {
     let size = modules.len();
-    let columns: Grid = (0..size)
-        .map(|x| modules.iter().map(|row| row[x]).collect())
-        .collect();
-    let lines: i64 = modules
-        .iter()
-        .chain(columns.iter())
-        .map(|line| line_penalty(line))
-        .sum();
+    let columns: Grid = (0..size).map(|x| modules.iter().map(|row| row[x]).collect()).collect();
+    let lines: i64 = modules.iter().chain(columns.iter()).map(|line| line_penalty(line)).sum();
     // Each 2x2 block of one colour, found from its bottom-right module.
     let boxes = (1..size)
         .flat_map(|y| (1..size).map(move |x| (x, y)))
@@ -311,8 +282,7 @@ fn line_penalty(line: &[bool]) -> i64 {
     };
     let finders = |history: &[usize; 7]| -> i64 {
         let n = history[1];
-        let core =
-            n > 0 && history[2] == n && history[3] == n * 3 && history[4] == n && history[5] == n;
+        let core = n > 0 && history[2] == n && history[3] == n * 3 && history[4] == n && history[5] == n;
         i64::from(core && history[0] >= n * 4 && history[6] >= n)
             + i64::from(core && history[6] >= n * 4 && history[0] >= n)
     };
@@ -362,16 +332,15 @@ fn reed_solomon_divisor(degree: usize) -> Vec<u8> {
 }
 
 fn reed_solomon_remainder(data: &[u8], divisor: &[u8]) -> Vec<u8> {
-    data.iter()
-        .fold(vec![0u8; divisor.len()], |remainder, &byte| {
-            let factor = byte ^ remainder[0];
-            remainder[1..]
-                .iter()
-                .chain(std::iter::once(&0))
-                .zip(divisor)
-                .map(|(&value, &d)| value ^ multiply(d, factor))
-                .collect()
-        })
+    data.iter().fold(vec![0u8; divisor.len()], |remainder, &byte| {
+        let factor = byte ^ remainder[0];
+        remainder[1..]
+            .iter()
+            .chain(std::iter::once(&0))
+            .zip(divisor)
+            .map(|(&value, &d)| value ^ multiply(d, factor))
+            .collect()
+    })
 }
 
 // Multiplies in GF(2^8) modulo x^8 + x^4 + x^3 + x^2 + 1.
@@ -404,12 +373,8 @@ mod tests {
     // The golden codes of `packages/util/test/qr.test.ts`: each row is hex with a leading 1 bit.
     #[test]
     fn matches_the_reference_encoder() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../util/test/fixtures/qr.json"
-        );
-        let fixtures: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../util/test/fixtures/qr.json");
+        let fixtures: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         for fixture in fixtures.as_array().unwrap() {
             let version = fixture["version"].as_u64().unwrap() as usize;
             let modules = encode(fixture["text"].as_str().unwrap()).unwrap();
@@ -419,12 +384,8 @@ mod tests {
                 .unwrap()
                 .iter()
                 .map(|row| {
-                    let bits: String = row
-                        .as_str()
-                        .unwrap()
-                        .chars()
-                        .map(|c| format!("{:04b}", c.to_digit(16).unwrap()))
-                        .collect();
+                    let bits: String =
+                        row.as_str().unwrap().chars().map(|c| format!("{:04b}", c.to_digit(16).unwrap())).collect();
                     let bits = bits.trim_start_matches('0');
                     bits[1..].chars().map(|bit| bit == '1').collect()
                 })

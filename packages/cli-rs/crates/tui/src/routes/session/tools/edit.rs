@@ -31,10 +31,7 @@ struct Shown {
 
 impl Edit {
     pub fn new(cx: &Context<'_>) -> Self {
-        Self {
-            block: BlockTool::new(cx),
-            shown: RefCell::default(),
-        }
+        Self { block: BlockTool::new(cx), shown: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -46,10 +43,7 @@ impl Edit {
         let file = first_file(props.metadata.get("files"));
         let path = file.as_ref().map(|file| file.path.as_str()).or(input_path);
         let header = if file.is_some() || input_path.is_some_and(|path| !path.is_empty()) {
-            Header::Path {
-                label: "← Edit".to_owned(),
-                value: format_path(cx, path),
-            }
+            Header::Path { label: "← Edit".to_owned(), value: format_path(cx, path) }
         } else {
             Header::Title("# Preparing edit…".to_owned())
         };
@@ -102,12 +96,7 @@ impl Edit {
             shown.wrap,
             0,
         );
-        children.add(
-            &View::new(cx.app)
-                .padding_edge(Edge::Left, 1)
-                .padding_edge(Edge::Right, 3)
-                .child(&diff),
-        );
+        children.add(&View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 3).child(&diff));
         if let Some(errors) = diagnostics::view(cx, &props.metadata, &shown.input_path) {
             children.add(&errors);
         }
@@ -126,10 +115,7 @@ fn first_file(files: Option<&Value>) -> Option<File> {
     files?.as_array()?.iter().find_map(|item| {
         let file = item.as_object()?;
         let text = |key: &str| file.get(key).and_then(Value::as_str);
-        let number = |key: &str| {
-            file.get(key)
-                .and_then(opencode_ui::tool_info::finite_number)
-        };
+        let number = |key: &str| file.get(key).and_then(opencode_ui::tool_info::finite_number);
         let kind = text("type").or(match text("status") {
             Some("added") => Some("add"),
             Some("deleted") => Some("delete"),
@@ -143,10 +129,7 @@ fn first_file(files: Option<&Value>) -> Option<File> {
             && number("additions").is_some()
             && number("deletions").is_some();
         let relative = relative.filter(|path| !path.is_empty() && complete)?;
-        Some(File {
-            path: relative.to_owned(),
-            patch: text("patch")?.to_owned(),
-        })
+        Some(File { path: relative.to_owned(), patch: text("patch")?.to_owned() })
     })
 }
 
@@ -163,11 +146,13 @@ mod tests {
             { "relativePath": "b.rs", "status": "modified", "patch": "@@ -1 +1 @@", "additions": 1, "deletions": 1 },
         ]);
         let file = first_file(Some(&files)).unwrap();
-        assert_eq!(
-            (file.path.as_str(), file.patch.as_str()),
-            ("b.rs", "@@ -1 +1 @@")
+        assert_eq!((file.path.as_str(), file.patch.as_str()), ("b.rs", "@@ -1 +1 @@"));
+        assert!(
+            first_file(Some(
+                &json!([{ "file": "c.rs", "status": "renamed", "patch": "", "additions": 0, "deletions": 0 }])
+            ))
+            .is_none()
         );
-        assert!(first_file(Some(&json!([{ "file": "c.rs", "status": "renamed", "patch": "", "additions": 0, "deletions": 0 }]))).is_none());
         assert!(first_file(Some(&json!({}))).is_none());
     }
 }

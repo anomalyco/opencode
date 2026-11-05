@@ -45,27 +45,16 @@ pub fn show(tui: &Tui, session: SessionID, title: Option<String>) {
 
 fn rename(tui: &Tui, session: SessionID, title: String) {
     let client = tui.data.client().clone();
-    let input = SessionUpdateInput {
-        session_id: session,
-        title: Some(title),
-        ..SessionUpdateInput::default()
-    };
+    let input = SessionUpdateInput { session_id: session, title: Some(title), ..SessionUpdateInput::default() };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_update(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            match result {
-                Ok(()) => tui.dialogs.clear(),
-                Err(error) => tui.toasts.show(
-                    ToastOptions::new(Variant::Error, format!("Failed to rename session: {error}"))
-                        .duration(Duration::from_millis(5000)),
-                ),
-            }
-        },
-    );
+    tui.app.spawn(async move { client.session_update(&input, &RequestOptions::default()).await }, move |_, result| {
+        let Some(tui) = weak.upgrade() else { return };
+        match result {
+            Ok(()) => tui.dialogs.clear(),
+            Err(error) => tui.toasts.show(
+                ToastOptions::new(Variant::Error, format!("Failed to rename session: {error}"))
+                    .duration(Duration::from_millis(5000)),
+            ),
+        }
+    });
 }

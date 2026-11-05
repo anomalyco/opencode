@@ -30,9 +30,7 @@ pub fn plugin() -> Definition<Tui> {
         let handler = tui.app.on_message(move |_, Signal(event)| {
             let Some(tui) = weak.upgrade() else { return };
             // The actions are built under the store's read guard and carried out after it.
-            let actions = tui
-                .data
-                .read(|state| tracker.borrow_mut().event(event, &Snapshot(state)));
+            let actions = tui.data.read(|state| tracker.borrow_mut().event(event, &Snapshot(state)));
             for action in actions {
                 run(&tui, action);
             }
@@ -131,14 +129,11 @@ impl Sessions for Snapshot<'_> {
     fn running_child(&self, id: &str) -> bool {
         // Only direct children: a grandchild reports to its own parent, so waiting on it could mean no sound at
         // all. Running shells don't count, or a session with a dev server running would never play one.
-        self.0
-            .family(&SessionID(id.to_owned()))
-            .iter()
-            .any(|child| {
-                child.0 != id
-                    && self.parent(&child.0).as_deref() == Some(id)
-                    && self.0.status(child) == SessionStatus::Running
-            })
+        self.0.family(&SessionID(id.to_owned())).iter().any(|child| {
+            child.0 != id
+                && self.parent(&child.0).as_deref() == Some(id)
+                && self.0.status(child) == SessionStatus::Running
+        })
     }
 }
 
@@ -220,17 +215,8 @@ impl Tracker {
                 }
                 let error = &event.data.error;
                 if error.r#type != "provider.free-limit" && error.r#type != "provider.go-limit" {
-                    actions.push(request(
-                        sessions,
-                        Some(id),
-                        error.message.clone(),
-                        AttentionSoundName::Error,
-                        None,
-                    ));
-                    actions.push(Action::Toast {
-                        session: id.clone(),
-                        message: error.message.clone(),
-                    });
+                    actions.push(request(sessions, Some(id), error.message.clone(), AttentionSoundName::Error, None));
+                    actions.push(Action::Toast { session: id.clone(), message: error.message.clone() });
                 }
                 self.ended(id, sessions, &mut actions);
             }
@@ -246,18 +232,9 @@ impl Tracker {
         if self.errored.remove(id) {
             return;
         }
-        let sound = if sessions.parent(id).is_some() {
-            AttentionSoundName::SubagentDone
-        } else {
-            AttentionSoundName::Done
-        };
-        actions.push(request(
-            sessions,
-            Some(id),
-            "Session done".to_owned(),
-            sound,
-            None,
-        ));
+        let sound =
+            if sessions.parent(id).is_some() { AttentionSoundName::SubagentDone } else { AttentionSoundName::Done };
+        actions.push(request(sessions, Some(id), "Session done".to_owned(), sound, None));
     }
 }
 
@@ -274,11 +251,7 @@ fn request(
         title: title.or_else(|| session.and_then(|id| sessions.title(id))),
         message,
         notification: (!subagent).then_some(When::Blurred),
-        sound: Some(Sound {
-            name: sound,
-            when: When::Always,
-            volume: None,
-        }),
+        sound: Some(Sound { name: sound, when: When::Always, volume: None }),
     })
 }
 
@@ -318,9 +291,7 @@ mod tests {
         }
 
         fn running_child(&self, id: &str) -> bool {
-            self.sessions
-                .iter()
-                .any(|(child, (_, parent))| *parent == Some(id) && self.running.contains(child))
+            self.sessions.iter().any(|(child, (_, parent))| *parent == Some(id) && self.running.contains(child))
         }
     }
 
@@ -376,28 +347,16 @@ mod tests {
             title: Some(title.to_owned()),
             message: message.to_owned(),
             notification: blurred.then_some(When::Blurred),
-            sound: Some(Sound {
-                name: sound,
-                when: When::Always,
-                volume: None,
-            }),
+            sound: Some(Sound { name: sound, when: When::Always, volume: None }),
         })
     }
 
     fn run(fake: &Fake, tracker: &mut Tracker, events: &[V2Event]) -> Vec<Action> {
-        events
-            .iter()
-            .flat_map(|event| tracker.event(event, fake))
-            .collect()
+        events.iter().flat_map(|event| tracker.event(event, fake)).collect()
     }
 
     fn done() -> Action {
-        notified(
-            "Demo session",
-            "Session done",
-            AttentionSoundName::Done,
-            true,
-        )
+        notified("Demo session", "Session done", AttentionSoundName::Done, true)
     }
 
     #[test]
@@ -405,10 +364,7 @@ mod tests {
         let fake = Fake::new();
         let mut tracker = Tracker::default();
         let boom = || notified("Demo session", "boom", AttentionSoundName::Error, true);
-        let toast = || Action::Toast {
-            session: "session".to_owned(),
-            message: "boom".to_owned(),
-        };
+        let toast = || Action::Toast { session: "session".to_owned(), message: "boom".to_owned() };
         let started = || execution("started", "session");
         let actions = run(
             &fake,
@@ -432,22 +388,8 @@ mod tests {
     fn forms_and_permissions_notify_once_until_resolved() {
         let fake = Fake::new();
         let mut tracker = Tracker::default();
-        let question = |title| {
-            notified(
-                title,
-                "Input needs response",
-                AttentionSoundName::Question,
-                true,
-            )
-        };
-        let asked = || {
-            notified(
-                "Demo session",
-                "Permission needs input",
-                AttentionSoundName::Permission,
-                true,
-            )
-        };
+        let question = |title| notified(title, "Input needs response", AttentionSoundName::Question, true);
+        let asked = || notified("Demo session", "Permission needs input", AttentionSoundName::Permission, true);
         let actions = run(
             &fake,
             &mut tracker,
@@ -457,12 +399,7 @@ mod tests {
                 form("cancelled", "form-1", "session", ""),
                 form("created", "form-1", "session", "Input requested"),
                 form("replied", "form-1", "session", ""),
-                form(
-                    "created",
-                    "form-2",
-                    "global",
-                    "demo-mcp is requesting input",
-                ),
+                form("created", "form-2", "global", "demo-mcp is requesting input"),
                 permission("asked", "per_1"),
                 permission("asked", "per_1"),
                 permission("replied", "per_1"),
@@ -514,18 +451,8 @@ mod tests {
         assert_eq!(
             actions,
             [
-                notified(
-                    "Questions",
-                    "Input needs response",
-                    AttentionSoundName::Question,
-                    false
-                ),
-                notified(
-                    "Subagent session",
-                    "Session done",
-                    AttentionSoundName::SubagentDone,
-                    false
-                ),
+                notified("Questions", "Input needs response", AttentionSoundName::Question, false),
+                notified("Subagent session", "Session done", AttentionSoundName::SubagentDone, false),
             ]
         );
     }
@@ -535,12 +462,7 @@ mod tests {
         let mut fake = Fake::new();
         fake.running.extend(["subagent", "second", "nested"]);
         let mut tracker = Tracker::default();
-        let cycle = || {
-            [
-                execution("started", "session"),
-                execution("succeeded", "session"),
-            ]
-        };
+        let cycle = || [execution("started", "session"), execution("succeeded", "session")];
         assert_eq!(run(&fake, &mut tracker, &cycle()), []);
         fake.running.remove("subagent");
         assert_eq!(run(&fake, &mut tracker, &cycle()), []);
@@ -556,16 +478,9 @@ mod tests {
         let actions = run(
             &fake,
             &mut tracker,
-            &[
-                execution("started", "session"),
-                failed("session", "unknown"),
-                execution("succeeded", "session"),
-            ],
+            &[execution("started", "session"), failed("session", "unknown"), execution("succeeded", "session")],
         );
         assert_eq!(actions.len(), 2, "{actions:?}");
-        assert_eq!(
-            actions[0],
-            notified("Demo session", "boom", AttentionSoundName::Error, true)
-        );
+        assert_eq!(actions[0], notified("Demo session", "boom", AttentionSoundName::Error, true));
     }
 }

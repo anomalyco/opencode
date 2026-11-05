@@ -77,13 +77,7 @@ pub fn animating(strip: &Custom<Strip>) -> bool {
 }
 
 pub fn tick(strip: &Custom<Strip>, delta: std::time::Duration) {
-    strip.update(|strip| {
-        strip
-            .pulses
-            .borrow_mut()
-            .values_mut()
-            .for_each(|pulse| pulse.advance(delta))
-    });
+    strip.update(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(delta)));
 }
 
 /// The colors shared by every tab.
@@ -120,11 +114,7 @@ pub(super) fn indicator(
         "?".to_owned()
     } else if status.runs() {
         let frames = opencode_ui::motion::SPINNER_FRAMES;
-        let frame = if animations {
-            (now.duration_since(epoch).as_millis() / 80) as usize % frames.len()
-        } else {
-            0
-        };
+        let frame = if animations { (now.duration_since(epoch).as_millis() / 80) as usize % frames.len() } else { 0 };
         frames[frame].to_owned()
     } else if label == "+" {
         "+".to_owned()
@@ -137,32 +127,14 @@ pub(super) fn indicator(
 }
 
 /// `fadeTitleColor`.
-pub(super) fn fade(
-    color: Color,
-    background: Color,
-    index: usize,
-    length: usize,
-    leading: f64,
-) -> Color {
+pub(super) fn fade(color: Color, background: Color, index: usize, length: usize, leading: f64) -> Color {
     let step = |position: f64| {
-        if position <= 0.0 {
-            0.0
-        } else {
-            0.2 + 0.72 * ((position - 1.0) / (FADE_WIDTH as f64 - 1.0).max(1.0))
-        }
+        if position <= 0.0 { 0.0 } else { 0.2 + 0.72 * ((position - 1.0) / (FADE_WIDTH as f64 - 1.0).max(1.0)) }
     };
-    let start = if index < FADE_WIDTH {
-        (FADE_WIDTH - index) as f64
-    } else {
-        0.0
-    };
+    let start = if index < FADE_WIDTH { (FADE_WIDTH - index) as f64 } else { 0.0 };
     let end = index as f64 - (length as f64 - FADE_WIDTH as f64) + 1.0;
     let opacity = (step(start) * leading).max(step(end));
-    if opacity == 0.0 {
-        color
-    } else {
-        tint(color, background, opacity)
-    }
+    if opacity == 0.0 { color } else { tint(color, background, opacity) }
 }
 
 /// `Locale.takeWidth` over characters.
@@ -182,12 +154,7 @@ pub(super) fn take_width(text: &str, width: usize) -> Vec<char> {
 
 /// Draws a pulse row from `x`: half blocks for an edge, else a blank on the default foreground, as the TS
 /// renderable sets its cells.
-pub(super) fn paint_pulse(
-    painter: &mut Painter<'_>,
-    x: i32,
-    y: i32,
-    cells: Option<Vec<(Option<char>, Color, Color)>>,
-) {
+pub(super) fn paint_pulse(painter: &mut Painter<'_>, x: i32, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
     for (column, (glyph, fg, bg)) in cells.into_iter().flatten().enumerate() {
         let (glyph, fg) = glyph.map_or((' ', Color::DEFAULT_FOREGROUND), |glyph| (glyph, fg));
         painter.cell(x + column as i32, y, glyph, Style::new().fg(fg).bg(bg));
@@ -240,16 +207,9 @@ impl Component for Strip {
         };
         let theme = tui.page();
         let animations = opencode_ui::motion::enabled(tui.config().info.animations);
-        let numbers = matches!(
-            tui.config().tabs.indicators,
-            opencode_local::cli_config::TabsIndicators::Numbers
-        );
+        let numbers = matches!(tui.config().tabs.indicators, opencode_local::cli_config::TabsIndicators::Numbers);
         let (items, new_tab) = self.items(&tui);
-        let active = if new_tab {
-            Some(NEW_TAB.to_owned())
-        } else {
-            tui.tabs.current(&tui)
-        };
+        let active = if new_tab { Some(NEW_TAB.to_owned()) } else { tui.tabs.current(&tui) };
         let show_plus = !new_tab;
         let width = painter.width() as i64;
         let ids: Vec<&str> = items.iter().map(|tab| tab.session_id.as_str()).collect();
@@ -267,13 +227,11 @@ impl Component for Strip {
         };
         let statuses: Vec<Status> = items[layout.visible()]
             .iter()
-            .map(|tab| {
-                if tab.session_id == NEW_TAB {
-                    Status::default()
-                } else {
-                    tui.tabs.status(&tui, &tab.session_id)
-                }
-            })
+            .map(
+                |tab| {
+                    if tab.session_id == NEW_TAB { Status::default() } else { tui.tabs.status(&tui, &tab.session_id) }
+                },
+            )
             .collect();
         let titles: Vec<String> = tui.data.read(|state| {
             items[layout.visible()]
@@ -290,12 +248,7 @@ impl Component for Strip {
 
         let mut x = 0usize;
         if layout.before > 0 {
-            painter.text(
-                0,
-                0,
-                &format!("‹{}", layout.before),
-                Style::new().fg(theme.text.muted),
-            );
+            painter.text(0, 0, &format!("‹{}", layout.before), Style::new().fg(theme.text.muted));
             x += model::overflow_width(layout.before);
         }
         let number_width = items.len().to_string().len().max(2);
@@ -313,25 +266,13 @@ impl Component for Strip {
             let selection = f64::from(u8::from(selected));
             let activity = f64::from(u8::from(status.complete()));
             let lifted = (hovered || dragged) && !selected;
-            let base = if lifted {
-                theme.background.action.primary.hovered
-            } else {
-                theme.background.base
-            };
-            let background = tint(
-                base,
-                theme.decrease(&theme.background.raised.base, 1),
-                if dragged { 1.0 } else { selection },
-            );
+            let base = if lifted { theme.background.action.primary.hovered } else { theme.background.base };
+            let background =
+                tint(base, theme.decrease(&theme.background.raised.base, 1), if dragged { 1.0 } else { selection });
             let feedback = feedback(&status, &theme);
-            let glow_level = if selected && status.attention.is_some() {
-                0.7
-            } else {
-                1.0
-            };
+            let glow_level = if selected && status.attention.is_some() { 0.7 } else { 1.0 };
             let glow_color = tint(background, feedback.unwrap_or(palette.unread), glow_level);
-            let glows = status.attention.is_some()
-                || (!selected && !status.busy && status.unread.is_some());
+            let glows = status.attention.is_some() || (!selected && !status.busy && status.unread.is_some());
             let left = x as i32;
             painter.fill(left, 0, tab_width as u32, 1, background);
 
@@ -355,28 +296,15 @@ impl Component for Strip {
                 flash_tail: None,
             };
             let sweep = pulse.level(tab_width);
-            paint_pulse(
-                painter,
-                left,
-                0,
-                pulse::paint(pulse, &colors, None, tab_width),
-            );
+            paint_pulse(painter, left, 0, pulse::paint(pulse, &colors, None, tab_width));
 
-            let foreground = if hovered {
-                theme.text.base
-            } else {
-                tint(theme.text.muted, theme.text.base, selection)
-            };
+            let foreground = if hovered { theme.text.base } else { tint(theme.text.muted, theme.text.base, selection) };
             let runs = status.runs();
             let number = {
                 let base = if hovered && !selected {
                     foreground
                 } else {
-                    tint(
-                        palette.idle_number,
-                        tint(theme.text.base, background, 0.25),
-                        selection,
-                    )
+                    tint(palette.idle_number, tint(theme.text.base, background, 0.25), selection)
                 };
                 let color = if runs {
                     palette.active_number
@@ -386,20 +314,8 @@ impl Component for Strip {
                 tint(color, theme.text.base, 0.15 * sweep)
             };
             let bold = selected || dragged;
-            let label = if session == NEW_TAB {
-                "+".to_owned()
-            } else {
-                (index + 1).to_string()
-            };
-            let (glyph, unread) = indicator(
-                &status,
-                &label,
-                "",
-                numbers,
-                animations,
-                now,
-                tui.tabs.epoch(),
-            );
+            let label = if session == NEW_TAB { "+".to_owned() } else { (index + 1).to_string() };
+            let (glyph, unread) = indicator(&status, &label, "", numbers, animations, now, tui.tabs.epoch());
             let indicator_color = if numbers || selected {
                 number
             } else if unread {
@@ -412,56 +328,31 @@ impl Component for Strip {
             if bold {
                 style = style.bold();
             }
-            painter.text(
-                left + number_width as i32 - glyph_width as i32,
-                0,
-                &glyph,
-                style,
-            );
+            painter.text(left + number_width as i32 - glyph_width as i32, 0, &glyph, style);
 
             let resting = tab_width.saturating_sub(1 + number_width).max(1);
-            let available = if hovered {
-                resting.saturating_sub(2).max(1)
-            } else {
-                resting
-            };
+            let available = if hovered { resting.saturating_sub(2).max(1) } else { resting };
             let title = &titles[offset];
             let visible = take_width(title, available);
             let fades = title.width() > available && available > FADE_WIDTH;
             let length = visible.len();
-            draw_chars(
-                painter,
-                left + number_width as i32 + 1,
-                0,
-                &visible,
-                |character| {
-                    let color = if glows {
-                        tint(
-                            foreground,
-                            glow_color,
-                            0.12 * pulse::unread_glow_intensity(
-                                1 + number_width + character,
-                                tab_width,
-                            ),
-                        )
-                    } else {
-                        foreground
-                    };
-                    let color = if fades {
-                        fade(color, background, character, length, 0.0)
-                    } else {
-                        color
-                    };
-                    let style = Style::new().fg(color);
-                    if bold { style.bold() } else { style }
-                },
-            );
-            if hovered && tab_width >= 2 {
-                let color = if self.close_hovered {
-                    theme.text.base
+            draw_chars(painter, left + number_width as i32 + 1, 0, &visible, |character| {
+                let color = if glows {
+                    tint(
+                        foreground,
+                        glow_color,
+                        0.12 * pulse::unread_glow_intensity(1 + number_width + character, tab_width),
+                    )
                 } else {
-                    tint(theme.text.muted, theme.text.base, 0.6)
+                    foreground
                 };
+                let color = if fades { fade(color, background, character, length, 0.0) } else { color };
+                let style = Style::new().fg(color);
+                if bold { style.bold() } else { style }
+            });
+            if hovered && tab_width >= 2 {
+                let color =
+                    if self.close_hovered { theme.text.base } else { tint(theme.text.muted, theme.text.base, 0.6) };
                 painter.text(left + tab_width as i32 - 2, 0, "✕", Style::new().fg(color));
             }
             slots.push((x, tab_width, session.to_owned()));
@@ -469,20 +360,13 @@ impl Component for Strip {
         }
         drop(pulses);
         if layout.after > 0 {
-            painter.text(
-                x as i32,
-                0,
-                &format!(" {}›", layout.after),
-                Style::new().fg(theme.text.muted),
-            );
+            painter.text(x as i32, 0, &format!(" {}›", layout.after), Style::new().fg(theme.text.muted));
             x += model::overflow_width(layout.after);
         }
         self.plus.set(None);
         if show_plus {
             let style = if self.plus_hovered {
-                Style::new()
-                    .fg(theme.text.base)
-                    .bg(theme.background.action.primary.hovered)
+                Style::new().fg(theme.text.base).bg(theme.background.action.primary.hovered)
             } else {
                 // A transparent background blends an alpha muted token as the TS `<text>` does.
                 Style::new().fg(theme.text.muted).bg(Color::TRANSPARENT)
@@ -495,10 +379,7 @@ impl Component for Strip {
 
     fn mouse(&mut self, cx: &mut Cx<'_>, event: &MouseEvent, local: (i32, i32)) -> bool {
         let x = local.0;
-        let on_plus = self
-            .plus
-            .get()
-            .is_some_and(|plus| x >= plus as i32 && x < (plus + ADD_TAB_WIDTH) as i32);
+        let on_plus = self.plus.get().is_some_and(|plus| x >= plus as i32 && x < (plus + ADD_TAB_WIDTH) as i32);
         let slot = self.slot_at(x);
         let close = |session: &str, slots: &[(usize, usize, String)]| {
             slots
@@ -518,21 +399,14 @@ impl Component for Strip {
         match event.kind {
             MouseEventKind::Moved => {
                 self.hovered = slot.clone();
-                self.close_hovered = slot
-                    .as_deref()
-                    .is_some_and(|session| close(session, &self.slots.borrow()));
+                self.close_hovered = slot.as_deref().is_some_and(|session| close(session, &self.slots.borrow()));
                 self.plus_hovered = on_plus;
                 true
             }
             MouseEventKind::Down(MouseButton::Middle) => {
                 let Some(session) = slot else { return false };
                 self.pressed = None;
-                defer(
-                    cx,
-                    Box::new(move |tui| {
-                        super::close(tui, (session != NEW_TAB).then_some(session.as_str()))
-                    }),
-                );
+                defer(cx, Box::new(move |tui| super::close(tui, (session != NEW_TAB).then_some(session.as_str()))));
                 true
             }
             MouseEventKind::Down(MouseButton::Left) => {
@@ -587,9 +461,7 @@ impl Component for Strip {
                             super::close(tui, (source != NEW_TAB).then_some(source.as_str()));
                             return;
                         }
-                        if let Some((session, index)) =
-                            preview.filter(|(session, _)| *session == source)
-                        {
+                        if let Some((session, index)) = preview.filter(|(session, _)| *session == source) {
                             super::reorder(tui, &session, index);
                         }
                         if source != NEW_TAB {

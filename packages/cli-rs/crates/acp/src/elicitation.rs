@@ -5,8 +5,7 @@ use std::sync::LazyLock;
 
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID,
-    SessionInterruptInput,
+    FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID, SessionInterruptInput,
 };
 use regex::Regex;
 use serde_json::{Map, Value, json};
@@ -61,27 +60,15 @@ pub fn requested_schema(form: &Value, capabilities: &Capabilities) -> Option<Val
         return None;
     }
     if fields.iter().any(|field| {
-        kind_of(field) == "external"
-            || field
-                .get("when")
-                .and_then(Value::as_array)
-                .is_some_and(|when| !when.is_empty())
+        kind_of(field) == "external" || field.get("when").and_then(Value::as_array).is_some_and(|when| !when.is_empty())
     }) {
         return None;
     }
-    if fields.iter().any(|field| {
-        flag(field, "hidden") && flag(field, "required") && field.get("default").is_none()
-    }) {
+    if fields.iter().any(|field| flag(field, "hidden") && flag(field, "required") && field.get("default").is_none()) {
         return None;
     }
-    let keys: HashSet<&str> = fields
-        .iter()
-        .filter_map(|field| field.get("key")?.as_str())
-        .collect();
-    let visible: Vec<&Value> = fields
-        .into_iter()
-        .filter(|field| !flag(field, "hidden"))
-        .collect();
+    let keys: HashSet<&str> = fields.iter().filter_map(|field| field.get("key")?.as_str()).collect();
+    let visible: Vec<&Value> = fields.into_iter().filter(|field| !flag(field, "hidden")).collect();
     if !visible.iter().all(|field| representable(field, &keys)) {
         return None;
     }
@@ -91,31 +78,20 @@ pub fn requested_schema(form: &Value, capabilities: &Capabilities) -> Option<Val
             properties.insert(key, schema);
         }
     }
-    let required: Vec<Value> = visible
-        .iter()
-        .filter(|field| flag(field, "required"))
-        .filter_map(|field| field.get("key").cloned())
-        .collect();
+    let required: Vec<Value> =
+        visible.iter().filter(|field| flag(field, "required")).filter_map(|field| field.get("key").cloned()).collect();
     Some(json!({ "type": "object", "properties": properties, "required": required }))
 }
 
 // The question tool returns the message to the model, so the turn continues instead of ending as interrupted.
 pub async fn cancel_unshown(client: &Client, form: &Value) {
-    let question = form
-        .get("metadata")
-        .and_then(|metadata| metadata.get("kind"))
-        .and_then(Value::as_str)
-        == Some(QUESTION_KIND);
+    let question =
+        form.get("metadata").and_then(|metadata| metadata.get("kind")).and_then(Value::as_str) == Some(QUESTION_KIND);
     let client = client.clone();
     let form = form.clone();
     // A spawned task finishes even when the turn stops waiting (TS: uninterruptible).
     let _ = tokio::spawn(async move {
-        cancel(
-            &client,
-            &form,
-            question.then(|| UNSHOWN_QUESTION_MESSAGE.to_owned()),
-        )
-        .await;
+        cancel(&client, &form, question.then(|| UNSHOWN_QUESTION_MESSAGE.to_owned())).await;
     })
     .await;
 }
@@ -136,18 +112,11 @@ pub async fn ask(input: &Input) -> Result<Outcome, Failure> {
         "message".to_owned(),
         json!(child::prefix_title(
             input.child.as_ref(),
-            input
-                .form
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
+            input.form.get("title").and_then(Value::as_str).unwrap_or_default()
         )),
     );
     params.insert("requestedSchema".to_owned(), input.requested_schema.clone());
-    let response = input
-        .connection
-        .request("elicitation/create", Value::Object(params))
-        .await?;
+    let response = input.connection.request("elicitation/create", Value::Object(params)).await?;
     Ok(answer(&input.form, &response).map_or(Outcome::Cancel, Outcome::Answer))
 }
 
@@ -223,10 +192,7 @@ fn field_answer(field: &Value, content: &Map<String, Value>) -> Option<Value> {
     if !matches!(kind, "string" | "multiselect") || !flag(field, "custom") || !has_options(field) {
         return value;
     }
-    let custom = content
-        .get(&custom_key(field))
-        .and_then(Value::as_str)
-        .filter(|custom| !custom.trim().is_empty());
+    let custom = content.get(&custom_key(field)).and_then(Value::as_str).filter(|custom| !custom.trim().is_empty());
     let Some(custom) = custom else { return value };
     if kind == "string" {
         return Some(json!(custom));
@@ -242,10 +208,7 @@ fn field_answer(field: &Value, content: &Map<String, Value>) -> Option<Value> {
 
 fn credential_like(field: &Value) -> bool {
     let labels: Vec<&str> = if matches!(kind_of(field), "string" | "multiselect") {
-        options(field)
-            .iter()
-            .filter_map(|option| option.get("label")?.as_str())
-            .collect()
+        options(field).iter().filter_map(|option| option.get("label")?.as_str()).collect()
     } else {
         Vec::new()
     };
@@ -261,10 +224,7 @@ fn representable(field: &Value, keys: &HashSet<&str>) -> bool {
     if !matches!(kind, "string" | "multiselect") || !has_options(field) {
         return true;
     }
-    let values: HashSet<&str> = options(field)
-        .iter()
-        .filter_map(|option| option.get("value")?.as_str())
-        .collect();
+    let values: HashSet<&str> = options(field).iter().filter_map(|option| option.get("value")?.as_str()).collect();
     let defaults: Vec<&str> = match field.get("default") {
         None => Vec::new(),
         Some(Value::String(value)) => vec![value.as_str()],
@@ -307,11 +267,7 @@ fn field_properties(field: &Value) -> Vec<(String, Value)> {
         "multiselect" => {
             schema.insert("items".to_owned(), json!({ "anyOf": enum_options(field) }));
             let min_items = field.get("minItems").and_then(Value::as_f64);
-            let min_items = if flag(field, "required") {
-                Some(min_items.unwrap_or(0.0).max(1.0))
-            } else {
-                min_items
-            };
+            let min_items = if flag(field, "required") { Some(min_items.unwrap_or(0.0).max(1.0)) } else { min_items };
             if let Some(min_items) = min_items {
                 schema.insert("minItems".to_owned(), number(min_items));
             }
@@ -329,12 +285,7 @@ fn field_properties(field: &Value) -> Vec<(String, Value)> {
     }
 }
 
-fn with_other(
-    field: &Value,
-    key: String,
-    select: Map<String, Value>,
-    description: &str,
-) -> Vec<(String, Value)> {
+fn with_other(field: &Value, key: String, select: Map<String, Value>, description: &str) -> Vec<(String, Value)> {
     let mut properties = vec![(key.clone(), Value::Object(select))];
     if !flag(field, "custom") {
         return properties;
@@ -355,11 +306,7 @@ fn with_other(
 fn string_constraints(schema: &mut Map<String, Value>, field: &Value) {
     copy(schema, field, &["format"]);
     let min_length = field.get("minLength").and_then(Value::as_f64);
-    let min_length = if flag(field, "required") {
-        Some(min_length.unwrap_or(0.0).max(1.0))
-    } else {
-        min_length
-    };
+    let min_length = if flag(field, "required") { Some(min_length.unwrap_or(0.0).max(1.0)) } else { min_length };
     if let Some(min_length) = min_length {
         schema.insert("minLength".to_owned(), number(min_length));
     }
@@ -402,10 +349,7 @@ fn number(value: f64) -> Value {
 }
 
 fn options(field: &Value) -> &[Value] {
-    field
-        .get("options")
-        .and_then(Value::as_array)
-        .map_or(&[], Vec::as_slice)
+    field.get("options").and_then(Value::as_array).map_or(&[], Vec::as_slice)
 }
 
 fn has_options(field: &Value) -> bool {
@@ -417,10 +361,7 @@ fn custom_key(field: &Value) -> String {
 }
 
 fn kind_of(field: &Value) -> &str {
-    field
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
+    field.get("type").and_then(Value::as_str).unwrap_or_default()
 }
 
 fn flag(field: &Value, key: &str) -> bool {
@@ -428,22 +369,14 @@ fn flag(field: &Value, key: &str) -> bool {
 }
 
 fn text(value: &Value, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned()
+    value.get(key).and_then(Value::as_str).unwrap_or_default().to_owned()
 }
 
 async fn cancel(client: &Client, form: &Value, message: Option<String>) {
     let session_id = text(form, "sessionID");
     let result = client
         .session_form_cancel(
-            &SessionFormCancelInput {
-                session_id: session_id.clone(),
-                form_id: FormID(text(form, "id")),
-                message,
-            },
+            &SessionFormCancelInput { session_id: session_id.clone(), form_id: FormID(text(form, "id")), message },
             &RequestOptions::default(),
         )
         .await;
@@ -454,10 +387,7 @@ async fn cancel(client: &Client, form: &Value, message: Option<String>) {
     if let Ok(session_id) = decode_session_id(&session_id) {
         let _ = client
             .session_interrupt(
-                &SessionInterruptInput {
-                    session_id: SessionID(session_id),
-                    resume: None,
-                },
+                &SessionInterruptInput { session_id: SessionID(session_id), resume: None },
                 &RequestOptions::default(),
             )
             .await;

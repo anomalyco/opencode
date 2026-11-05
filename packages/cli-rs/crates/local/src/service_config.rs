@@ -57,9 +57,7 @@ impl Info {
         let map = object(text)?;
         let remote = match map.get("remote") {
             None => None,
-            Some(value) => Some(Remote {
-                route: value.as_object()?.get("route")?.as_str()?.to_string(),
-            }),
+            Some(value) => Some(Remote { route: value.as_object()?.get("route")?.as_str()?.to_string() }),
         };
         decode(&map, remote)
     }
@@ -83,11 +81,7 @@ fn decode(map: &Map<String, Value>, remote: Option<Remote>) -> Option<Info> {
         Some(value) => Some(Some(value.as_str()?.to_string())),
     };
     let strings = |value: &Value| {
-        value
-            .as_array()?
-            .iter()
-            .map(|item| item.as_str().map(str::to_string))
-            .collect::<Option<Vec<_>>>()
+        value.as_array()?.iter().map(|item| item.as_str().map(str::to_string)).collect::<Option<Vec<_>>>()
     };
     Some(Info {
         disabled: match map.get("disabled") {
@@ -104,9 +98,7 @@ fn decode(map: &Map<String, Value>, remote: Option<Remote>) -> Option<Info> {
         port: match map.get("port") {
             None => None,
             Some(value) => {
-                let port = value
-                    .as_f64()
-                    .filter(|port| port.fract() == 0.0 && (1.0..=65_535.0).contains(port))?;
+                let port = value.as_f64().filter(|port| port.fract() == 0.0 && (1.0..=65_535.0).contains(port))?;
                 Some(port as u16)
             }
         },
@@ -161,15 +153,8 @@ pub enum Key {
 }
 
 impl Key {
-    pub const ALL: [Key; 7] = [
-        Key::Disabled,
-        Key::Remote,
-        Key::Hostname,
-        Key::Port,
-        Key::Password,
-        Key::Cors,
-        Key::Env,
-    ];
+    pub const ALL: [Key; 7] =
+        [Key::Disabled, Key::Remote, Key::Hostname, Key::Port, Key::Password, Key::Cors, Key::Env];
 
     pub fn parse(key: &str) -> Result<Self, Error> {
         Self::ALL
@@ -210,10 +195,7 @@ impl Edit {
     pub fn set(key: &str, value: &str, nested: Option<&str>) -> Result<Self, Error> {
         let key = Key::parse(key)?;
         if key != Key::Env && nested.is_some() {
-            return Err(invalid(format!(
-                "Usage: opencode service set {} <value>",
-                key.name()
-            )));
+            return Err(invalid(format!("Usage: opencode service set {} <value>", key.name())));
         }
         let flag = |name: &str| match value {
             "true" => Ok(true),
@@ -227,20 +209,15 @@ impl Edit {
             Key::Port => Edit::Port(
                 js_number(value)
                     .filter(|port| port.fract() == 0.0 && (1.0..=65_535.0).contains(port))
-                    .ok_or_else(|| invalid("Port must be between 1 and 65535"))?
-                    as u16,
+                    .ok_or_else(|| invalid("Port must be between 1 and 65535"))? as u16,
             ),
             Key::Password => Edit::Password(value.to_string()),
             Key::Env => {
-                let nested = nested
-                    .ok_or_else(|| invalid("Usage: opencode service set env <key> <value>"))?;
+                let nested = nested.ok_or_else(|| invalid("Usage: opencode service set env <key> <value>"))?;
                 Edit::Env(value.to_string(), nested.to_string())
             }
             Key::Cors => {
-                let cors: Vec<String> = value
-                    .split(',')
-                    .map(|origin| origin.trim().to_string())
-                    .collect();
+                let cors: Vec<String> = value.split(',').map(|origin| origin.trim().to_string()).collect();
                 if !cors.iter().all(|origin| is_origin(origin)) {
                     return Err(invalid(
                         "CORS must be a comma-separated list of HTTP(S) origins without paths or trailing slashes",
@@ -255,15 +232,11 @@ impl Edit {
     pub fn unset(key: &str, name: Option<&str>) -> Result<Self, Error> {
         let key = Key::parse(key)?;
         if key != Key::Env && name.is_some() {
-            return Err(invalid(format!(
-                "Usage: opencode service unset {}",
-                key.name()
-            )));
+            return Err(invalid(format!("Usage: opencode service unset {}", key.name())));
         }
         if key == Key::Env {
             return Ok(Edit::UnsetEnv(
-                name.ok_or_else(|| invalid("Usage: opencode service unset env <key>"))?
-                    .to_string(),
+                name.ok_or_else(|| invalid("Usage: opencode service unset env <key>"))?.to_string(),
             ));
         }
         Ok(Edit::Unset(key))
@@ -284,9 +257,8 @@ impl Edit {
 
 // `URL.parse(origin)` is an http or https URL whose origin is exactly the input.
 fn is_origin(origin: &str) -> bool {
-    url::Url::parse(origin).is_ok_and(|url| {
-        matches!(url.scheme(), "http" | "https") && url.origin().ascii_serialization() == origin
-    })
+    url::Url::parse(origin)
+        .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.origin().ascii_serialization() == origin)
 }
 
 // JavaScript `Number(text)` for the forms a port can take: surrounding whitespace, decimal and
@@ -296,21 +268,14 @@ fn js_number(text: &str) -> Option<f64> {
     if text.is_empty() {
         return Some(0.0);
     }
-    let prefixed = |radix| {
-        u64::from_str_radix(&text[2..], radix)
-            .ok()
-            .map(|n| n as f64)
-    };
+    let prefixed = |radix| u64::from_str_radix(&text[2..], radix).ok().map(|n| n as f64);
     match text.get(..2).map(str::to_ascii_lowercase).as_deref() {
         Some("0x") => return prefixed(16),
         Some("0o") => return prefixed(8),
         Some("0b") => return prefixed(2),
         _ => {}
     }
-    if text
-        .bytes()
-        .any(|b| b.is_ascii_alphabetic() && b != b'e' && b != b'E')
-    {
+    if text.bytes().any(|b| b.is_ascii_alphabetic() && b != b'e' && b != b'E') {
         return None;
     }
     text.parse().ok()
@@ -319,12 +284,7 @@ fn js_number(text: &str) -> Option<f64> {
 /// Drops `XDG_STATE_HOME` from the configured service environment: the service keeps the state
 /// directory it was started with, where clients find its registration.
 pub fn process_env(env: Option<&IndexMap<String, String>>) -> Option<IndexMap<String, String>> {
-    env.map(|env| {
-        env.iter()
-            .filter(|(key, _)| *key != "XDG_STATE_HOME")
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
-    })
+    env.map(|env| env.iter().filter(|(key, _)| *key != "XDG_STATE_HOME").map(|(k, v)| (k.clone(), v.clone())).collect())
 }
 
 /// The service config file of a channel.
@@ -379,11 +339,7 @@ impl ServiceConfig {
     fn write(&self, map: &Map<String, Value>) -> io::Result<()> {
         let dir = self.file.parent().unwrap_or(Path::new("."));
         fs::create_dir_all(dir)?;
-        let temp = PathBuf::from(format!(
-            "{}.{}.tmp",
-            self.file.display(),
-            std::process::id()
-        ));
+        let temp = PathBuf::from(format!("{}.{}.tmp", self.file.display(), std::process::id()));
         let mut options = fs::OpenOptions::new();
         options.write(true).create(true).truncate(true);
         #[cfg(unix)]
@@ -464,10 +420,7 @@ impl ServiceConfig {
         };
         let key = Key::parse(key)?;
         if key != Key::Env && name.is_some() {
-            return Err(invalid(format!(
-                "Usage: opencode service get {}",
-                key.name()
-            )));
+            return Err(invalid(format!("Usage: opencode service get {}", key.name())));
         }
         if key == Key::Password {
             return Ok(self.password(None)?);
@@ -478,9 +431,7 @@ impl ServiceConfig {
             Key::Remote => info.remote.is_some().to_string(),
             Key::Hostname => info.hostname.unwrap_or_default(),
             Key::Port => info.port.map(|port| port.to_string()).unwrap_or_default(),
-            Key::Cors => pretty(
-                &serde_json::to_value(info.cors.unwrap_or_default()).expect("cors serializes"),
-            ),
+            Key::Cors => pretty(&serde_json::to_value(info.cors.unwrap_or_default()).expect("cors serializes")),
             Key::Env => {
                 let env = info.env.unwrap_or_default();
                 match name {
@@ -500,12 +451,8 @@ impl ServiceConfig {
             Edit::Remote(false) | Edit::Unset(Key::Remote) => self.disable_remote(),
             Edit::Password(value) => self.password(Some(value)).map(drop),
             Edit::Env(name, value) => self.update(|map| {
-                let env = map
-                    .entry("env")
-                    .or_insert_with(|| Value::Object(Map::new()));
-                env.as_object_mut()
-                    .expect("env is an object")
-                    .insert(name.clone(), value.clone().into());
+                let env = map.entry("env").or_insert_with(|| Value::Object(Map::new()));
+                env.as_object_mut().expect("env is an object").insert(name.clone(), value.clone().into());
             }),
             Edit::UnsetEnv(name) => self.update(|map| {
                 // TypeScript rebuilds the object, so a remaining `env` moves to the end.
@@ -542,10 +489,7 @@ fn pretty(value: &Value) -> String {
 
 // 64 random bits as 16 hex characters, a valid DNS label.
 fn route() -> String {
-    rand::random::<[u8; 8]>()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    rand::random::<[u8; 8]>().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]
@@ -565,7 +509,10 @@ mod tests {
 
     #[test]
     fn parse_follows_the_schema() {
-        let info = Info::parse(r#"{"port":80.0,"remote":{"route":"r","x":1},"remoteAccepted":true,"env":{"A":"b"},"other":1}"#).unwrap();
+        let info = Info::parse(
+            r#"{"port":80.0,"remote":{"route":"r","x":1},"remoteAccepted":true,"env":{"A":"b"},"other":1}"#,
+        )
+        .unwrap();
         assert_eq!(info.port, Some(80));
         assert_eq!(info.remote, Some(Remote { route: "r".into() }));
         assert!(info.remote_accepted);
@@ -587,74 +534,27 @@ mod tests {
     #[test]
     fn edits_validate_like_typescript() {
         let message = |result: Result<Edit, Error>| result.unwrap_err().to_string();
-        assert_eq!(
-            message(Edit::set("nope", "1", None)),
-            "Unknown service config key: nope"
-        );
-        assert_eq!(
-            message(Edit::set("port", "1", Some("x"))),
-            "Usage: opencode service set port <value>"
-        );
-        assert_eq!(
-            message(Edit::set("disabled", "yes", None)),
-            "Disabled must be true or false"
-        );
-        assert_eq!(
-            message(Edit::set("remote", "1", None)),
-            "Remote must be true or false"
-        );
-        assert_eq!(
-            message(Edit::set("env", "A", None)),
-            "Usage: opencode service set env <key> <value>"
-        );
-        assert_eq!(
-            message(Edit::unset("env", None)),
-            "Usage: opencode service unset env <key>"
-        );
-        assert_eq!(
-            message(Edit::unset("port", Some("x"))),
-            "Usage: opencode service unset port"
-        );
+        assert_eq!(message(Edit::set("nope", "1", None)), "Unknown service config key: nope");
+        assert_eq!(message(Edit::set("port", "1", Some("x"))), "Usage: opencode service set port <value>");
+        assert_eq!(message(Edit::set("disabled", "yes", None)), "Disabled must be true or false");
+        assert_eq!(message(Edit::set("remote", "1", None)), "Remote must be true or false");
+        assert_eq!(message(Edit::set("env", "A", None)), "Usage: opencode service set env <key> <value>");
+        assert_eq!(message(Edit::unset("env", None)), "Usage: opencode service unset env <key>");
+        assert_eq!(message(Edit::unset("port", Some("x"))), "Usage: opencode service unset port");
         for bad in ["", "0", "65536", "1.5", "abc", "1_0"] {
-            assert_eq!(
-                message(Edit::set("port", bad, None)),
-                "Port must be between 1 and 65535",
-                "{bad}"
-            );
+            assert_eq!(message(Edit::set("port", bad, None)), "Port must be between 1 and 65535", "{bad}");
         }
-        for (text, port) in [
-            ("80", 80),
-            (" 80 ", 80),
-            ("80.0", 80),
-            ("8e1", 80),
-            ("0x50", 80),
-            ("+80", 80),
-        ] {
-            assert_eq!(
-                Edit::set("port", text, None).unwrap(),
-                Edit::Port(port),
-                "{text}"
-            );
+        for (text, port) in [("80", 80), (" 80 ", 80), ("80.0", 80), ("8e1", 80), ("0x50", 80), ("+80", 80)] {
+            assert_eq!(Edit::set("port", text, None).unwrap(), Edit::Port(port), "{text}");
         }
         assert_eq!(
             Edit::set("cors", "http://a.test, https://b.test:8443", None).unwrap(),
             Edit::Cors(vec!["http://a.test".into(), "https://b.test:8443".into()])
         );
-        for bad in [
-            "http://a.test/",
-            "http://a.test/x",
-            "ftp://a.test",
-            "http://A.test",
-            "http://a.test:80",
-            "a,,b",
-        ] {
+        for bad in ["http://a.test/", "http://a.test/x", "ftp://a.test", "http://A.test", "http://a.test:80", "a,,b"] {
             assert!(Edit::set("cors", bad, None).is_err(), "{bad}");
         }
-        assert!(
-            !Edit::set("disabled", "false", None)
-                .unwrap()
-                .stops_service()
-        );
+        assert!(!Edit::set("disabled", "false", None).unwrap().stops_service());
         assert!(Edit::set("disabled", "true", None).unwrap().stops_service());
         assert!(!Edit::unset("disabled", None).unwrap().stops_service());
         assert!(Edit::set("remote", "true", None).unwrap().needs_tunnel());
@@ -678,10 +578,7 @@ mod tests {
         );
         config.apply(&Edit::UnsetEnv("B".into())).unwrap();
         config.apply(&Edit::Disabled(true)).unwrap();
-        assert_eq!(
-            config.get(Some("env"), None).unwrap(),
-            "{\n  \"A\": \"2\"\n}"
-        );
+        assert_eq!(config.get(Some("env"), None).unwrap(), "{\n  \"A\": \"2\"\n}");
         assert_eq!(config.get(Some("env"), Some("A")).unwrap(), "2");
         assert_eq!(config.get(Some("port"), None).unwrap(), "5000");
         assert_eq!(config.get(Some("disabled"), None).unwrap(), "true");
@@ -694,10 +591,7 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                fs::metadata(&config.file).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
+            assert_eq!(fs::metadata(&config.file).unwrap().permissions().mode() & 0o777, 0o600);
         }
     }
 
@@ -732,13 +626,7 @@ mod tests {
             format!("{{\n  \"port\": 5,\n  \"remote\": {{\n    \"route\": \"{route}\"\n  }}\n}}\n")
         );
         fs::write(&config.file, r#"{"remote":false,"port":5}"#).unwrap();
-        assert_eq!(
-            config.read().unwrap(),
-            Info {
-                port: Some(5),
-                ..Info::default()
-            }
-        );
+        assert_eq!(config.read().unwrap(), Info { port: Some(5), ..Info::default() });
         fs::write(&config.file, "not json").unwrap();
         assert_eq!(config.read().unwrap(), Info::default());
 
@@ -751,15 +639,10 @@ mod tests {
 
     #[test]
     fn process_env_keeps_the_state_directory() {
-        let env: IndexMap<String, String> = [("XDG_STATE_HOME", "/x"), ("A", "b")]
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
+        let env: IndexMap<String, String> =
+            [("XDG_STATE_HOME", "/x"), ("A", "b")].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         assert_eq!(
-            process_env(Some(&env))
-                .unwrap()
-                .into_iter()
-                .collect::<Vec<_>>(),
+            process_env(Some(&env)).unwrap().into_iter().collect::<Vec<_>>(),
             vec![("A".to_string(), "b".to_string())]
         );
         assert_eq!(process_env(None), None);

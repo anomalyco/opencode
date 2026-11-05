@@ -26,9 +26,7 @@ mod ui;
 pub fn run(context: &Context, args: &RunArgs) -> anyhow::Result<()> {
     let json = args.format == OutputFormat::Json;
     let exit = Rc::new(Cell::new(0u8));
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
     tokio::task::LocalSet::new().block_on(&runtime, async {
         // A one-off run uses the background service when it is already up, but never leaves a new one running.
         let server = match connect_without_autostart(context).await {
@@ -55,27 +53,16 @@ struct Failure {
 
 impl<T: std::fmt::Display> From<T> for Failure {
     fn from(error: T) -> Self {
-        Self {
-            message: error.to_string(),
-            session: None,
-        }
+        Self { message: error.to_string(), session: None }
     }
 }
 
-async fn execute(
-    args: &RunArgs,
-    server: &Connected,
-    json: bool,
-    exit: &Rc<Cell<u8>>,
-) -> Result<(), Failure> {
+async fn execute(args: &RunArgs, server: &Connected, json: bool, exit: &Rc<Cell<u8>>) -> Result<(), Failure> {
     if args.fork && !args.continue_ && args.session.is_none() {
         return Err("--fork requires --continue or --session".into());
     }
     if args.worktree.is_some() && (args.continue_ || args.session.is_some()) {
-        return Err(
-            "--worktree starts a new session and cannot be combined with --continue or --session"
-                .into(),
-        );
+        return Err("--worktree starts a new session and cannot be combined with --continue or --session".into());
     }
     let root = opencode_local::paths::start_directory()?;
     let directory = root.to_string_lossy().into_owned();
@@ -90,69 +77,37 @@ async fn execute(
     if message.trim().is_empty() {
         return Err("You must provide a message".into());
     }
-    let files = args
-        .file
-        .iter()
-        .map(|file| files::prepare(file, &root))
-        .collect::<Result<Vec<_>, _>>()?;
+    let files = args.file.iter().map(|file| files::prepare(file, &root)).collect::<Result<Vec<_>, _>>()?;
 
     let client = &server.client;
     let explicit = target::parse_model(args.model.as_deref())?;
     let worktree = match args.worktree() {
         None => None,
-        Some(name) => Some(
-            target::create_worktree_location(
-                client,
-                Some(directory.clone()),
-                name.map(str::to_owned),
-            )
-            .await?,
-        ),
+        Some(name) => {
+            Some(target::create_worktree_location(client, Some(directory.clone()), name.map(str::to_owned)).await?)
+        }
     };
     if let Some(worktree) = &worktree {
-        ui::println(&[&format!(
-            "{}worktree {}{}",
-            ui::TEXT_DIM,
-            worktree.root,
-            ui::TEXT_NORMAL
-        )]);
+        ui::println(&[&format!("{}worktree {}{}", ui::TEXT_DIM, worktree.root, ui::TEXT_NORMAL)]);
     }
     let target = target::resolve_session_target(
         client,
         TargetInput {
-            directory: Some(
-                worktree
-                    .map(|worktree| worktree.directory)
-                    .unwrap_or(directory),
-            ),
+            directory: Some(worktree.map(|worktree| worktree.directory).unwrap_or(directory)),
             continue_latest: args.continue_,
             session: args.session.clone().map(SessionID),
             fork: args.fork,
             model: explicit,
             agent: args.agent.clone(),
-            environment: server
-                .is_service()
-                .then(opencode_store::environment::session_environment),
+            environment: server.is_service().then(opencode_store::environment::session_environment),
         },
-        |next| async move {
-            Ok(Prepared {
-                model: next.model,
-                agent: next.agent,
-            })
-        },
+        |next| async move { Ok(Prepared { model: next.model, agent: next.agent }) },
     )
     .await?;
     let session = target.session.id.0.clone();
-    let failed = |error: String| Failure {
-        message: error,
-        session: Some(session.clone()),
-    };
+    let failed = |error: String| Failure { message: error, session: Some(session.clone()) };
     let title = match &args.title {
-        Some(title) if !target.resume => Some(if title.is_empty() {
-            default_title(&message)
-        } else {
-            title.clone()
-        }),
+        Some(title) if !target.resume => Some(if title.is_empty() { default_title(&message) } else { title.clone() }),
         _ => None,
     };
     // Archive before the first prompt is admitted, so the run never reaches an inbox as working or finished.
@@ -192,10 +147,7 @@ async fn execute(
 /// separator to the parsed message.
 fn words(args: &RunArgs) -> Vec<String> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    let after = argv
-        .iter()
-        .position(|arg| arg == "--")
-        .map_or(&[][..], |at| &argv[at + 1..]);
+    let after = argv.iter().position(|arg| arg == "--").map_or(&[][..], |at| &argv[at + 1..]);
     args.message.iter().chain(after).cloned().collect()
 }
 
@@ -203,13 +155,7 @@ fn words(args: &RunArgs) -> Vec<String> {
 fn format_message(words: &[String]) -> Option<String> {
     let value = words
         .iter()
-        .map(|word| {
-            if word.contains(' ') {
-                format!("\"{}\"", word.replace('"', "\\\""))
-            } else {
-                word.clone()
-            }
-        })
+        .map(|word| if word.contains(' ') { format!("\"{}\"", word.replace('"', "\\\"")) } else { word.clone() })
         .collect::<Vec<_>>()
         .join(" ");
     (!value.is_empty()).then_some(value)
@@ -259,24 +205,15 @@ mod tests {
     #[test]
     fn messages_quote_words_with_spaces() {
         let words = ["fix".to_owned(), "the \"bug\" now".to_owned()];
-        assert_eq!(
-            format_message(&words).as_deref(),
-            Some("fix \"the \\\"bug\\\" now\"")
-        );
+        assert_eq!(format_message(&words).as_deref(), Some("fix \"the \\\"bug\\\" now\""));
         assert_eq!(format_message(&[]), None);
     }
 
     #[test]
     fn stdin_follows_the_message() {
-        assert_eq!(
-            merge_input(Some("a".into()), Some("b\n".into())).as_deref(),
-            Some("a\nb\n")
-        );
+        assert_eq!(merge_input(Some("a".into()), Some("b\n".into())).as_deref(), Some("a\nb\n"));
         assert_eq!(merge_input(None, Some("".into())), None);
-        assert_eq!(
-            merge_input(Some("a".into()), Some("".into())).as_deref(),
-            Some("a")
-        );
+        assert_eq!(merge_input(Some("a".into()), Some("".into())).as_deref(), Some("a"));
     }
 
     #[test]

@@ -23,16 +23,8 @@ pub fn install(tui: &Rc<Tui>) {
     .title("Clear session")
     .group("Session")
     .palette()
-    .slash(Slash {
-        name: "clear".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    });
-    let layer = KeymapLayer {
-        mode: Some(GLOBAL_MODE.to_owned()),
-        commands: vec![command],
-        ..KeymapLayer::default()
-    };
+    .slash(Slash { name: "clear".to_owned(), aliases: Vec::new(), arguments: false });
+    let layer = KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() };
     // The layer lives as long as the keymap, which the TUI owns.
     if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
         log::error!("clear keymap layer: {error}");
@@ -66,26 +58,18 @@ pub fn navigate_new(tui: &Tui) {
 /// `newSessionLocation`: the open session's location with `session.new_location: inherit`, unless the server
 /// reported it missing; else the launch directory.
 fn new_location(tui: &Tui) -> Location {
-    let launch = Location::new(
-        tui.data
-            .read(|state| state.default_location().directory.clone()),
-    );
+    let launch = Location::new(tui.data.read(|state| state.default_location().directory.clone()));
     let current = match tui.route() {
         Route::Session { id } => tui
             .data
-            .read(|state| {
-                state
-                    .session(&id)
-                    .map(|session| Location::from(&session.location))
-            })
+            .read(|state| state.session(&id).map(|session| Location::from(&session.location)))
             .or_else(|| crate::features::location::current(tui)),
         _ => None,
     };
     let unavailable = crate::features::location::error(tui);
     match current {
         Some(current)
-            if tui.config().new_location == NewLocation::Inherit
-                && Some(&current) != unavailable.as_ref() =>
+            if tui.config().new_location == NewLocation::Inherit && Some(&current) != unavailable.as_ref() =>
         {
             current
         }

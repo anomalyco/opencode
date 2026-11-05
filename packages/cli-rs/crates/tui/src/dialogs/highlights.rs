@@ -3,9 +3,7 @@
 
 use std::rc::Rc;
 
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout,
-};
+use opencode_ui::dialog::{DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;
 use serde::Deserialize;
@@ -32,36 +30,23 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
             let (_, height) = app.size();
             let max_height = (i32::from(height) * 6 / 10 - 2).max(6);
 
-            let list = View::new(app)
-                .gap(1)
-                .padding_x(DIALOG_INSET)
-                .bg(overlay.background.raised.high);
+            let list = View::new(app).gap(1).padding_x(DIALOG_INSET).bg(overlay.background.raised.high);
             for item in &items {
-                let body = Text::new(app, "")
-                    .fg(overlay.text.muted)
-                    .wrap(WrapMode::Word);
+                let body = Text::new(app, "").fg(overlay.text.muted).wrap(WrapMode::Word);
                 // Backticks mark code spans, which stand out from the muted description.
                 body.set_text(
                     item.body
                         .split('`')
                         .enumerate()
                         .map(|(index, part)| {
-                            let color = if index % 2 == 1 {
-                                overlay.text.base
-                            } else {
-                                overlay.text.muted
-                            };
+                            let color = if index % 2 == 1 { overlay.text.base } else { overlay.text.muted };
                             Span::styled(part.to_owned(), Style::new().fg(color))
                         })
                         .collect::<Vec<_>>(),
                 );
                 list.add(
                     &View::new(app)
-                        .child(
-                            &Text::new(app, item.title.clone())
-                                .fg(overlay.text.base)
-                                .bold(),
-                        )
+                        .child(&Text::new(app, item.title.clone()).fg(overlay.text.base).bold())
                         .child(&body),
                 );
             }
@@ -96,26 +81,14 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
                 .group("Dialog"),
             ];
             for bind in ["up", "k"] {
-                commands.push(
-                    TuiCommand::inline(bind, by(-1.0))
-                        .title("Scroll up")
-                        .group("Dialog"),
-                );
+                commands.push(TuiCommand::inline(bind, by(-1.0)).title("Scroll up").group("Dialog"));
             }
             for bind in ["down", "j"] {
-                commands.push(
-                    TuiCommand::inline(bind, by(1.0))
-                        .title("Scroll down")
-                        .group("Dialog"),
-                );
+                commands.push(TuiCommand::inline(bind, by(1.0)).title("Scroll down").group("Dialog"));
             }
             commands.extend([
-                TuiCommand::inline("pageup", by(-page))
-                    .title("Previous page")
-                    .group("Dialog"),
-                TuiCommand::inline("pagedown", by(page))
-                    .title("Next page")
-                    .group("Dialog"),
+                TuiCommand::inline("pageup", by(-page)).title("Previous page").group("Dialog"),
+                TuiCommand::inline("pagedown", by(page)).title("Next page").group("Dialog"),
                 TuiCommand::inline("home", move |_, _| {
                     top.scroll_to(0.0, 0.0);
                 })
@@ -127,27 +100,15 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
                 .title("Scroll to bottom")
                 .group("Dialog"),
             ]);
-            cx.layer(KeymapLayer {
-                commands,
-                ..KeymapLayer::default()
-            });
+            cx.layer(KeymapLayer { commands, ..KeymapLayer::default() });
 
             let mut ok = FooterAction::new("ok").key("enter");
             ok.on_trigger = Some(Rc::new(close));
             layout(
                 cx,
-                &header(
-                    cx,
-                    HeaderProps {
-                        title: title.clone(),
-                        ..HeaderProps::default()
-                    },
-                ),
+                &header(cx, HeaderProps { title: title.clone(), ..HeaderProps::default() }),
                 &band,
-                Some(FooterProps {
-                    primary: vec![ok],
-                    ..FooterProps::default()
-                }),
+                Some(FooterProps { primary: vec![ok], ..FooterProps::default() }),
             )
         },
         None,

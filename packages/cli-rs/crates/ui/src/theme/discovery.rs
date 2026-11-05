@@ -12,10 +12,7 @@ pub fn config_directories(config: &Path, cwd: &Path) -> Vec<PathBuf> {
     let mut ancestors: Vec<&Path> = cwd.ancestors().collect();
     ancestors.reverse();
     let mut result = vec![config.to_path_buf()];
-    for directory in ancestors
-        .into_iter()
-        .map(|directory| directory.join(".opencode"))
-    {
+    for directory in ancestors.into_iter().map(|directory| directory.join(".opencode")) {
         if !result.contains(&directory) {
             result.push(directory);
         }
@@ -39,27 +36,15 @@ pub fn discover(directories: &[PathBuf]) -> io::Result<IndexMap<String, Value>> 
             let entry = entry?;
             let kind = entry.file_type()?;
             let path = entry.path();
-            if (kind.is_file() || kind.is_symlink())
-                && path
-                    .extension()
-                    .is_some_and(|extension| extension == "json")
-            {
+            if (kind.is_file() || kind.is_symlink()) && path.extension().is_some_and(|extension| extension == "json") {
                 files.push(path);
             }
         }
         files.sort();
         for file in files {
-            let value =
-                serde_json::from_str(&std::fs::read_to_string(&file)?).map_err(|error| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("{}: {error}", file.display()),
-                    )
-                })?;
-            let name = file
-                .file_stem()
-                .map(|stem| stem.to_string_lossy().into_owned())
-                .unwrap_or_default();
+            let value = serde_json::from_str(&std::fs::read_to_string(&file)?)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {error}", file.display())))?;
+            let name = file.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
             result.insert(name, value);
         }
     }
@@ -72,10 +57,7 @@ mod tests {
 
     #[test]
     fn config_directories_lists_config_then_each_ancestor() {
-        let directories = config_directories(
-            Path::new("/home/u/.config/opencode"),
-            Path::new("/home/u/project"),
-        );
+        let directories = config_directories(Path::new("/home/u/.config/opencode"), Path::new("/home/u/project"));
         let expected = [
             "/home/u/.config/opencode",
             "/.opencode",
@@ -92,10 +74,9 @@ mod tests {
     fn discover_reads_sorted_json_files_and_later_directories_override() {
         let root = tempfile::tempdir().unwrap();
         let (first, second) = (root.path().join("one"), root.path().join("two"));
-        for (directory, files) in [
-            (&first, ["b.json", "a.json", "notes.txt"]),
-            (&second, ["b.json", "c.json", "skip.md"]),
-        ] {
+        for (directory, files) in
+            [(&first, ["b.json", "a.json", "notes.txt"]), (&second, ["b.json", "c.json", "skip.md"])]
+        {
             std::fs::create_dir_all(directory.join("themes")).unwrap();
             for file in files {
                 let content = format!("{{\"from\":\"{}\"}}", directory.display());
@@ -109,9 +90,6 @@ mod tests {
         assert_eq!(themes["a"]["from"], first.display().to_string());
 
         std::fs::write(second.join("themes").join("broken.json"), "{").unwrap();
-        assert_eq!(
-            discover(&[second]).unwrap_err().kind(),
-            io::ErrorKind::InvalidData
-        );
+        assert_eq!(discover(&[second]).unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
 }

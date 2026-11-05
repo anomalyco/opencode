@@ -36,8 +36,7 @@ pub struct Options {
 }
 
 /// Runs a tool with its arguments; an `Err` becomes an `isError` result with the message.
-pub type Handler =
-    Arc<dyn Fn(Map<String, Value>, Context) -> BoxFuture<Result<ToolResult, String>> + Send + Sync>;
+pub type Handler = Arc<dyn Fn(Map<String, Value>, Context) -> BoxFuture<Result<ToolResult, String>> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Tool {
@@ -68,17 +67,11 @@ pub struct ToolResult {
 
 impl ToolResult {
     pub fn text(text: impl Into<String>) -> Self {
-        Self {
-            content: vec![Content::Text(text.into())],
-            is_error: false,
-        }
+        Self { content: vec![Content::Text(text.into())], is_error: false }
     }
 
     pub fn error(text: impl Into<String>) -> Self {
-        Self {
-            is_error: true,
-            ..Self::text(text)
-        }
+        Self { is_error: true, ..Self::text(text) }
     }
 
     fn to_value(&self) -> Value {
@@ -140,9 +133,7 @@ pub struct Tungstenite;
 impl Connector for Tungstenite {
     fn open(&self, url: Url, headers: Vec<(String, String)>) -> BoxFuture<Result<Socket, String>> {
         Box::pin(async move {
-            let socket = ws::connect(&url, &headers)
-                .await
-                .map_err(|error| error.to_string())?;
+            let socket = ws::connect(&url, &headers).await.map_err(|error| error.to_string())?;
             let (mut sink, mut stream) = socket.split();
             let (socket, mut remote) = pair();
             let deliver = remote.deliver.clone();
@@ -171,8 +162,7 @@ impl Connector for Tungstenite {
                     }
                 }
                 let close = tokio_tungstenite::tungstenite::protocol::CloseFrame {
-                    code:
-                        tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
+                    code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
                     reason: "".into(),
                 };
                 let _ = sink.send(ws::Message::Close(Some(close))).await;
@@ -291,10 +281,7 @@ async fn serve(
 pub async fn respond(options: &Options, method: &str, params: &Value) -> Map<String, Value> {
     let result = |value: Value| Map::from_iter([("result".to_owned(), value)]);
     let error = |code: i64, message: String| {
-        Map::from_iter([(
-            "error".to_owned(),
-            json!({ "code": code, "message": message }),
-        )])
+        Map::from_iter([("error".to_owned(), json!({ "code": code, "message": message }))])
     };
     match method {
         "initialize" => result(json!({
@@ -321,10 +308,7 @@ pub async fn respond(options: &Options, method: &str, params: &Value) -> Map<Str
         })),
         "tools/call" => {
             let name = params.get("name");
-            let Some(tool) = options
-                .tools
-                .iter()
-                .find(|tool| name.and_then(Value::as_str) == Some(tool.name.as_str()))
+            let Some(tool) = options.tools.iter().find(|tool| name.and_then(Value::as_str) == Some(tool.name.as_str()))
             else {
                 let name = match name {
                     Some(Value::String(name)) => name.clone(),
@@ -333,11 +317,7 @@ pub async fn respond(options: &Options, method: &str, params: &Value) -> Map<Str
                 };
                 return error(-32602, format!("Unknown tool: {name}"));
             };
-            let arguments = params
-                .get("arguments")
-                .and_then(Value::as_object)
-                .cloned()
-                .unwrap_or_default();
+            let arguments = params.get("arguments").and_then(Value::as_object).cloned().unwrap_or_default();
             let context = Context {
                 session_id: params
                     .get("_meta")
@@ -345,9 +325,7 @@ pub async fn respond(options: &Options, method: &str, params: &Value) -> Map<Str
                     .and_then(Value::as_str)
                     .map(str::to_owned),
             };
-            let outcome = (tool.handler)(arguments, context)
-                .await
-                .unwrap_or_else(ToolResult::error);
+            let outcome = (tool.handler)(arguments, context).await.unwrap_or_else(ToolResult::error);
             result(outcome.to_value())
         }
         _ => error(-32601, format!("Method not found: {method}")),
@@ -371,10 +349,7 @@ mod tests {
 
     fn tool(
         name: &str,
-        handler: impl Fn(Map<String, Value>, Context) -> Result<ToolResult, String>
-        + Send
-        + Sync
-        + 'static,
+        handler: impl Fn(Map<String, Value>, Context) -> Result<ToolResult, String> + Send + Sync + 'static,
     ) -> Tool {
         let handler = Arc::new(handler);
         Tool {
@@ -405,38 +380,24 @@ mod tests {
             let callback = move |request: &Request, response: Response| {
                 *record.lock().unwrap() = (
                     request.uri().to_string(),
-                    request
-                        .headers()
-                        .get("authorization")
-                        .map(|value| value.to_str().unwrap().to_owned()),
+                    request.headers().get("authorization").map(|value| value.to_str().unwrap().to_owned()),
                 );
                 Ok(response)
             };
-            let socket = tokio_tungstenite::accept_hdr_async(stream, callback)
-                .await
-                .unwrap();
+            let socket = tokio_tungstenite::accept_hdr_async(stream, callback).await.unwrap();
             let (uri, authorization) = seen.lock().unwrap().clone();
-            Self {
-                uri,
-                authorization,
-                socket,
-                next: 0,
-            }
+            Self { uri, authorization, socket, next: 0 }
         }
 
         async fn send(&mut self, value: Value) {
-            self.socket
-                .send(ws::Message::text(value.to_string()))
-                .await
-                .unwrap();
+            self.socket.send(ws::Message::text(value.to_string())).await.unwrap();
         }
 
         /// Sends a request and returns the reply with the same ID.
         async fn request(&mut self, method: &str, params: Value) -> Value {
             self.next += 1;
             let id = self.next;
-            self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
-                .await;
+            self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })).await;
             loop {
                 match self.socket.next().await.unwrap().unwrap() {
                     ws::Message::Text(text) => {
@@ -459,8 +420,7 @@ mod tests {
                     json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "opencode", "version": "1.0.0" } }),
                 )
                 .await;
-            self.send(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))
-                .await;
+            self.send(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).await;
             reply
         }
 
@@ -489,18 +449,14 @@ mod tests {
                 tools: vec![
                     Tool {
                         description: Some("Return the calling session".into()),
-                        ..tool("whoami", |_, context| {
-                            Ok(ToolResult::text(context.session_id.unwrap_or("none".into())))
-                        })
+                        ..tool("whoami", |_, context| Ok(ToolResult::text(context.session_id.unwrap_or("none".into()))))
                     },
                     Tool {
                         input_schema: json!({ "properties": { "text": { "type": "string" } }, "required": ["text"] })
                             .as_object()
                             .unwrap()
                             .clone(),
-                        ..tool("echo", |args, _| {
-                            Ok(ToolResult::text(args["text"].as_str().unwrap_or_default()))
-                        })
+                        ..tool("echo", |args, _| Ok(ToolResult::text(args["text"].as_str().unwrap_or_default())))
                     },
                     tool("fail", |_, _| Err("boom".into())),
                 ],
@@ -541,13 +497,11 @@ mod tests {
             json!({ "content": [{ "type": "text", "text": "ses_1" }] })
         );
         assert_eq!(
-            peer.call(json!({ "name": "whoami", "arguments": {} }))
-                .await["result"],
+            peer.call(json!({ "name": "whoami", "arguments": {} })).await["result"],
             json!({ "content": [{ "type": "text", "text": "none" }] })
         );
         assert_eq!(
-            peer.call(json!({ "name": "echo", "arguments": { "text": "hi" } }))
-                .await["result"],
+            peer.call(json!({ "name": "echo", "arguments": { "text": "hi" } })).await["result"],
             json!({ "content": [{ "type": "text", "text": "hi" }] })
         );
         assert_eq!(
@@ -555,8 +509,7 @@ mod tests {
             json!({ "content": [{ "type": "text", "text": "boom" }], "isError": true })
         );
         assert_eq!(
-            peer.call(json!({ "name": "missing", "arguments": {} }))
-                .await["error"],
+            peer.call(json!({ "name": "missing", "arguments": {} })).await["error"],
             json!({ "code": -32602, "message": "Unknown tool: missing" })
         );
         assert_eq!(
@@ -600,19 +553,13 @@ mod tests {
             .unwrap();
         let mut second = Peer::accept(&listener).await;
         assert_eq!(
-            second
-                .call(json!({ "name": "ping", "arguments": {} }))
-                .await["result"],
+            second.call(json!({ "name": "ping", "arguments": {} })).await["result"],
             json!({ "content": [{ "type": "text", "text": "pong" }] })
         );
     }
 
     /// A connector that counts the sockets it opened and hands their far ends to the test.
-    fn tracked() -> (
-        Arc<dyn Connector>,
-        Arc<AtomicUsize>,
-        mpsc::UnboundedReceiver<Remote>,
-    ) {
+    fn tracked() -> (Arc<dyn Connector>, Arc<AtomicUsize>, mpsc::UnboundedReceiver<Remote>) {
         let opened = Arc::new(AtomicUsize::new(0));
         let (remotes, receiver) = mpsc::unbounded_channel();
         let count = opened.clone();
@@ -661,11 +608,7 @@ mod tests {
         let _connection = connect(quiet(), connector);
         let drop_socket = async |remotes: &mut mpsc::UnboundedReceiver<Remote>| {
             let remote = remotes.recv().await.unwrap();
-            remote
-                .deliver
-                .send(Incoming::Text("not json".into()))
-                .await
-                .unwrap();
+            remote.deliver.send(Incoming::Text("not json".into())).await.unwrap();
             remote.deliver.send(Incoming::Closed).await.unwrap();
             settle().await;
         };
@@ -698,9 +641,7 @@ mod tests {
         let remote = remotes.recv().await.unwrap();
         remote
             .deliver
-            .send(Incoming::Text(
-                json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }).to_string(),
-            ))
+            .send(Incoming::Text(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }).to_string()))
             .await
             .unwrap();
         remote.deliver.send(Incoming::Closed).await.unwrap();

@@ -33,30 +33,17 @@ struct Fixture {
 }
 
 fn missing(id: &str) -> (u16, Value) {
-    (
-        404,
-        json!({ "_tag": "SessionNotFoundError", "sessionID": id, "message": format!("Session not found: {id}") }),
-    )
+    (404, json!({ "_tag": "SessionNotFoundError", "sessionID": id, "message": format!("Session not found: {id}") }))
 }
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), path.clone(), body.clone()));
-        let created = (request.method == "POST" && path == "/api/session").then(|| {
-            (
-                self.created.clone(),
-                body["id"].as_str().unwrap_or_default().to_owned(),
-            )
-        });
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
+        let created = (request.method == "POST" && path == "/api/session")
+            .then(|| (self.created.clone(), body["id"].as_str().unwrap_or_default().to_owned()));
         let location = json!({ "directory": "/project" });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [session("ses_a")], "cursor": {} })),
@@ -66,20 +53,11 @@ impl Transport for Fixture {
                 200,
                 json!({ "location": location, "data": [agent("build", "primary"), agent("plan", "primary"), agent("general", "subagent")] }),
             ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [model("p", "m", "Model M")] }),
-            ),
+            ("GET", "/api/model") => (200, json!({ "location": location, "data": [model("p", "m", "Model M")] })),
             ("GET", "/api/provider") => (200, json!({ "location": location, "data": [] })),
             ("GET", "/api/config") => (200, json!([])),
-            ("GET", "/api/command") => (
-                200,
-                json!({ "location": location, "data": [{ "name": "review" }] }),
-            ),
-            ("POST", "/api/session") => (
-                200,
-                json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) }),
-            ),
+            ("GET", "/api/command") => (200, json!({ "location": location, "data": [{ "name": "review" }] })),
+            ("POST", "/api/session") => (200, json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) })),
             ("POST", path) if path.ends_with("/prompt") => (
                 200,
                 json!({
@@ -93,8 +71,7 @@ impl Transport for Fixture {
             ("GET", path) if path.starts_with("/api/session/ses_") => {
                 let id = path.split('/').nth(3).unwrap_or_default();
                 // `ses_a` exists from the start: a not-found read of its inbox would delete it.
-                let created =
-                    id == "ses_a" || self.created.lock().unwrap().iter().any(|known| known == id);
+                let created = id == "ses_a" || self.created.lock().unwrap().iter().any(|known| known == id);
                 match path.split('/').nth(4) {
                     _ if !created => missing(id),
                     None => (200, json!({ "data": session(id) })),
@@ -104,19 +81,13 @@ impl Transport for Fixture {
             }
             ("PATCH", path) if path.contains("/inbox/") => (204, Value::Null),
             ("POST", path)
-                if ["/model", "/agent", "/shell", "/command", "/background"]
-                    .iter()
-                    .any(|end| path.ends_with(end)) =>
+                if ["/model", "/agent", "/shell", "/command", "/background"].iter().any(|end| path.ends_with(end)) =>
             {
                 (204, Value::Null)
             }
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             if let Some((created, id)) = created {
                 tokio::time::sleep(Duration::from_millis(200)).await;
@@ -174,10 +145,7 @@ impl Setup {
         let seen = Seen::default();
         let client = Client::with_transport(
             "http://opencode.local",
-            Arc::new(Fixture {
-                seen: seen.clone(),
-                created: Arc::default(),
-            }),
+            Arc::new(Fixture { seen: seen.clone(), created: Arc::default() }),
         )
         .unwrap();
         let app = TestApp::new(90, 24);
@@ -187,21 +155,13 @@ impl Setup {
                 client,
                 directory: "/project".into(),
                 config: Resolved::new(Info::default(), |_| None),
-                roots: Some(Roots {
-                    paths: paths(home.path()),
-                    storage_channel: "latest".into(),
-                }),
+                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
                 route,
                 continue_: false,
                 events: false,
             },
         );
-        Self {
-            app,
-            tui,
-            seen,
-            _home: home,
-        }
+        Self { app, tui, seen, _home: home }
     }
 
     fn wait_for(&self, text: &str) -> String {
@@ -217,11 +177,7 @@ impl Setup {
     }
 
     fn textarea(&self) -> Textarea {
-        self.tui
-            .textarea
-            .borrow()
-            .clone()
-            .expect("the prompt fills Tui::textarea")
+        self.tui.textarea.borrow().clone().expect("the prompt fills Tui::textarea")
     }
 
     fn requests(&self, method: &str, suffix: &str) -> Vec<Value> {
@@ -235,26 +191,17 @@ impl Setup {
     }
 
     fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<Value> {
-        let found = self
-            .app
-            .wait_until(WAIT, || self.requests(method, suffix).len() >= count);
-        assert!(
-            found,
-            "no {method} …{suffix}: {:?}",
-            self.seen.lock().unwrap()
-        );
+        let found = self.app.wait_until(WAIT, || self.requests(method, suffix).len() >= count);
+        assert!(found, "no {method} …{suffix}: {:?}", self.seen.lock().unwrap());
         self.requests(method, suffix)
     }
 
     fn history(&self) -> String {
-        std::fs::read_to_string(self._home.path().join("state/prompt-history.jsonl"))
-            .unwrap_or_default()
+        std::fs::read_to_string(self._home.path().join("state/prompt-history.jsonl")).unwrap_or_default()
     }
 
     fn wait_history(&self, lines: usize) -> String {
-        let found = self
-            .app
-            .wait_until(WAIT, || self.history().lines().count() >= lines);
+        let found = self.app.wait_until(WAIT, || self.history().lines().count() >= lines);
         assert!(found, "history has {:?}", self.history());
         self.history()
     }
@@ -275,9 +222,7 @@ fn paths(home: &Path) -> Paths {
 }
 
 fn session_route() -> Route {
-    Route::Session {
-        id: SessionID("ses_a".into()),
-    }
+    Route::Session { id: SessionID("ses_a".into()) }
 }
 
 #[test]
@@ -286,13 +231,7 @@ fn typing_edits_through_the_input_layer_and_enter_submits() {
     setup.ready();
     let screen = setup.wait_for("Build");
     assert!(screen.contains("Build · Model M p"), "{screen}");
-    assert!(
-        setup
-            .app
-            .app()
-            .focused()
-            .is_some_and(|widget| widget.id() == setup.textarea().id())
-    );
+    assert!(setup.app.app().focused().is_some_and(|widget| widget.id() == setup.textarea().id()));
 
     setup.app.type_text("hllo worlx");
     // `input.word.backward` (alt+b), `input.move.right`, `input.line.end`, `input.backspace`.
@@ -320,11 +259,7 @@ fn typing_edits_through_the_input_layer_and_enter_submits() {
     // The selection is committed before the prompt is sent.
     let models = setup.requests("POST", "/api/session/ses_a/model");
     assert_eq!(models[0]["model"], json!({ "providerID": "p", "id": "m" }));
-    assert!(
-        setup
-            .requests("POST", "/api/session/ses_a/agent")
-            .is_empty()
-    );
+    assert!(setup.requests("POST", "/api/session/ses_a/agent").is_empty());
     assert_eq!(setup.textarea().text(), "");
     // The optimistic prompt shows in the transcript at once.
     setup.wait_for("hello world");
@@ -451,10 +386,7 @@ fn ctrl_c_clears_then_exits_and_long_prompts_go_to_history() {
     setup.app.type_text("a prompt long enough to keep");
     setup.app.press("ctrl+c");
     let history = setup.wait_history(1);
-    assert!(
-        history.contains("a prompt long enough to keep"),
-        "{history}"
-    );
+    assert!(history.contains("a prompt long enough to keep"), "{history}");
     assert!(!history.contains("short"), "{history}");
     // On an empty prompt Ctrl+C is `app.exit`.
     setup.app.press("ctrl+c");
@@ -484,10 +416,7 @@ fn drafts_survive_route_changes() {
 fn escape_twice_interrupts_a_running_session() {
     let setup = Setup::new(session_route());
     setup.ready();
-    setup.tui.data.set_status(
-        &SessionID("ses_a".into()),
-        opencode_store::SessionStatus::Running,
-    );
+    setup.tui.data.set_status(&SessionID("ses_a".into()), opencode_store::SessionStatus::Running);
     setup.wait_for("esc interrupt");
     setup.app.press("escape");
     setup.wait_for("esc again to interrupt");
@@ -507,27 +436,17 @@ fn home_prompt_creates_a_session_and_opens_it() {
     setup.app.type_text("Reply with ok");
     setup.app.press("return");
     let created = setup.wait_request("POST", "/api/session", 1);
-    let created: Vec<_> = created
-        .into_iter()
-        .filter(|body| body.get("id").is_some())
-        .collect();
+    let created: Vec<_> = created.into_iter().filter(|body| body.get("id").is_some()).collect();
     assert_eq!(created[0]["agent"], "build");
     assert_eq!(created[0]["model"], json!({ "providerID": "p", "id": "m" }));
     let id = created[0]["id"].as_str().unwrap().to_owned();
     let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
     assert_eq!(prompts[0]["text"], "Reply with ok");
-    let opened = setup.app.wait_until(WAIT, || {
-        setup.tui.route()
-            == Route::Session {
-                id: SessionID(id.clone()),
-            }
-    });
+    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
     assert!(opened, "{:?}", setup.tui.route());
     setup.wait_for("Reply with ok");
     // The new session reads nothing before its create lands, so no "Session not found" toast.
-    let toast = setup.app.wait_until(Duration::from_millis(500), || {
-        setup.app.text().contains("not found")
-    });
+    let toast = setup.app.wait_until(Duration::from_millis(500), || setup.app.text().contains("not found"));
     assert!(!toast, "{}", setup.app.text());
 }
 
@@ -536,16 +455,10 @@ fn ts_root() -> Option<std::path::PathBuf> {
     let root = std::env::var_os("OPENCODE_TS_ROOT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let present = root.join("node_modules").is_dir()
-        && std::process::Command::new("bun")
-            .arg("--version")
-            .output()
-            .is_ok();
+    let present =
+        root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
     if !present {
-        eprintln!(
-            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            root.display()
-        );
+        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
     }
     present.then_some(root)
 }
@@ -566,18 +479,9 @@ fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(ops.to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(ops.to_string().as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
     serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
 }
@@ -598,7 +502,8 @@ fn history_file_is_shared_with_typescript() {
     let rust = setup.wait_history(3);
     let state = setup._home.path().join("state");
 
-    let entry = json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [], "mode": "normal" });
+    let entry =
+        json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [], "mode": "normal" });
     let moves = typescript_history(
         &root,
         &state,
@@ -610,21 +515,14 @@ fn history_file_is_shared_with_typescript() {
             { "append": entry },
         ]),
     );
-    assert_eq!(
-        moves,
-        json!(["second \"quoted\" ünïcode", "ls -la", "first", null])
-    );
+    assert_eq!(moves, json!(["second \"quoted\" ünïcode", "ls -la", "first", null]));
     let typescript = std::fs::read_to_string(state.join("prompt-history.jsonl")).unwrap();
     // TypeScript's load rewrites every entry as it serializes them: the Rust lines survive unchanged.
     assert_eq!(typescript, format!("{rust}{}\n", entry));
 
     let home = tempfile::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
-    std::fs::copy(
-        state.join("prompt-history.jsonl"),
-        home.path().join("state/prompt-history.jsonl"),
-    )
-    .unwrap();
+    std::fs::copy(state.join("prompt-history.jsonl"), home.path().join("state/prompt-history.jsonl")).unwrap();
     let again = Setup::with_home(session_route(), home);
     again.ready();
     let loaded = again.app.wait_until(WAIT, || {

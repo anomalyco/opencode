@@ -13,11 +13,7 @@ impl State {
 
     /// Sessions with pending permission requests.
     pub fn permission_sessions(&self) -> Vec<&SessionID> {
-        self.permission
-            .iter()
-            .filter(|(_, requests)| !requests.is_empty())
-            .map(|(session, _)| session)
-            .collect()
+        self.permission.iter().filter(|(_, requests)| !requests.is_empty()).map(|(session, _)| session).collect()
     }
 
     pub(crate) fn on_permission_asked(&mut self, data: &PermissionAskedData) {
@@ -60,12 +56,7 @@ impl Data {
             move |data, started| async move {
                 let list = data
                     .client()
-                    .permission_list(
-                        &PermissionListInput {
-                            session_id: session.clone(),
-                        },
-                        &RequestOptions::default(),
-                    )
+                    .permission_list(&PermissionListInput { session_id: session.clone() }, &RequestOptions::default())
                     .await
                     .map_err(|error| evict_missing(&data, error))?;
                 data.write(|state| {
@@ -81,20 +72,12 @@ impl Data {
     }
 
     pub fn permission_invalidate(&self, session: &SessionID) {
-        self.write(|state| {
-            state
-                .syncs
-                .invalidate(&format!("session.permission:{}", session.0))
-        });
+        self.write(|state| state.syncs.invalidate(&format!("session.permission:{}", session.0)));
     }
 
     /// Replies and drops the request; an already settled request counts as replied.
     pub async fn permission_reply(&self, input: PermissionReplyInput) -> Result<(), Error> {
-        if let Err(error) = self
-            .client()
-            .permission_reply(&input, &RequestOptions::default())
-            .await
-        {
+        if let Err(error) = self.client().permission_reply(&input, &RequestOptions::default()).await {
             let error = Error::new(error);
             if !is_tag(&error, "PermissionNotFoundError") {
                 return Err(error);

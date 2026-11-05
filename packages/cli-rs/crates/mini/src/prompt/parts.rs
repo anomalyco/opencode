@@ -37,14 +37,8 @@ pub struct File {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Part {
     File(File),
-    Agent {
-        name: String,
-        mention: Option<Mention>,
-    },
-    Skill {
-        id: String,
-        mention: Option<Mention>,
-    },
+    Agent { name: String, mention: Option<Mention> },
+    Skill { id: String, mention: Option<Mention> },
 }
 
 impl Part {
@@ -92,10 +86,7 @@ pub struct RunPrompt {
 
 impl RunPrompt {
     pub fn text(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            ..Self::default()
-        }
+        Self { text: text.into(), ..Self::default() }
     }
 
     pub fn has_file(&self) -> bool {
@@ -109,21 +100,13 @@ impl RunPrompt {
 
     /// `promptCopy`: the prompt without its message ID and delivery.
     pub fn copy(&self) -> Self {
-        Self {
-            message_id: None,
-            delivery: None,
-            ..self.clone()
-        }
+        Self { message_id: None, delivery: None, ..self.clone() }
     }
 
     /// `promptAppend`: `following` after a blank line, its mentions shifted along. The result is a normal
     /// prompt that keeps this prompt's command, or the following one's when this text is empty.
     pub fn append(&self, following: &RunPrompt) -> Self {
-        let text = if self.text.is_empty() {
-            String::new()
-        } else {
-            format!("{}\n\n", self.text)
-        };
+        let text = if self.text.is_empty() { String::new() } else { format!("{}\n\n", self.text) };
         let offset = opencode_ui::prompt_input::parse::measure(&text);
         let shifted = following.parts.iter().cloned().map(|mut part| {
             if let Some(mention) = part.mention_mut() {
@@ -133,11 +116,7 @@ impl RunPrompt {
             part
         });
         Self {
-            command: if self.text.is_empty() {
-                following.command.clone()
-            } else {
-                self.command.clone()
-            },
+            command: if self.text.is_empty() { following.command.clone() } else { self.command.clone() },
             text: text + &following.text,
             parts: self.parts.iter().cloned().chain(shifted).collect(),
             ..Self::default()
@@ -181,9 +160,7 @@ impl RunPrompt {
         self.parts
             .iter()
             .filter_map(|part| match part {
-                Part::Agent { name, mention } => {
-                    Some(with_mention(json!({ "name": name }), mention))
-                }
+                Part::Agent { name, mention } => Some(with_mention(json!({ "name": name }), mention)),
                 _ => None,
             })
             .collect()
@@ -302,20 +279,11 @@ mod tests {
 
     #[test]
     fn wire_shapes_follow_the_transport() {
-        let at = |start, end, text: &str| {
-            Some(Mention {
-                start,
-                end,
-                text: text.into(),
-            })
-        };
+        let at = |start, end, text: &str| Some(Mention { start, end, text: text.into() });
         let prompt = RunPrompt {
             text: "ask @general about @src/a.ts".into(),
             parts: vec![
-                Part::Agent {
-                    name: "general".into(),
-                    mention: at(4, 12, "@general"),
-                },
+                Part::Agent { name: "general".into(), mention: at(4, 12, "@general") },
                 Part::File(File {
                     url: "file:///w/src/a.ts".into(),
                     mime: Some("text/plain".into()),
@@ -323,10 +291,7 @@ mod tests {
                     description: None,
                     mention: at(19, 28, "@src/a.ts"),
                 }),
-                Part::Skill {
-                    id: "tidy".into(),
-                    mention: None,
-                },
+                Part::Skill { id: "tidy".into(), mention: None },
             ],
             ..RunPrompt::default()
         };
@@ -338,9 +303,7 @@ mod tests {
         );
         assert_eq!(
             prompt.agents(),
-            [
-                json!({ "name": "general", "mention": { "start": 4, "end": 12, "text": "@general" } })
-            ]
+            [json!({ "name": "general", "mention": { "start": 4, "end": 12, "text": "@general" } })]
         );
         assert_eq!(prompt.skills(), [json!({ "id": "tidy" })]);
         let back = RunPrompt::from_message(&json!({
@@ -358,30 +321,16 @@ mod tests {
     fn append_shifts_the_following_mentions() {
         let general = |start, end| Part::Agent {
             name: "general".into(),
-            mention: Some(Mention {
-                start,
-                end,
-                text: "@general".into(),
-            }),
+            mention: Some(Mention { start, end, text: "@general".into() }),
         };
-        let command = |name: &str| {
-            Some(Command {
-                name: name.into(),
-                arguments: String::new(),
-                source: None,
-            })
-        };
+        let command = |name: &str| Some(Command { name: name.into(), arguments: String::new(), source: None });
         let undone = RunPrompt {
             text: "ask @general".into(),
             parts: vec![general(4, 12)],
             command: command("later"),
             ..RunPrompt::default()
         };
-        let draft = RunPrompt {
-            shell: true,
-            command: command("draft"),
-            ..RunPrompt::text("héllo")
-        };
+        let draft = RunPrompt { shell: true, command: command("draft"), ..RunPrompt::text("héllo") };
         let next = draft.append(&undone);
         assert_eq!(next.text, "héllo\n\nask @general");
         // "héllo\n\n" is seven offsets.
@@ -390,10 +339,7 @@ mod tests {
         assert!(!next.shell);
         // Into an empty draft: unchanged offsets and the undone prompt's command.
         let next = RunPrompt::default().append(&undone);
-        assert_eq!(
-            (next.text.as_str(), next.parts.clone()),
-            ("ask @general", vec![general(4, 12)])
-        );
+        assert_eq!((next.text.as_str(), next.parts.clone()), ("ask @general", vec![general(4, 12)]));
         assert_eq!(next.command, command("later"));
     }
 }
