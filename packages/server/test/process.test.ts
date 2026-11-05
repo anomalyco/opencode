@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Detaching } from "@opencode/core/detaching"
+import { Effect, Exit, Scope } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
@@ -257,5 +258,26 @@ it.live("server info lists remote URLs alongside local addresses while they are 
     expect((yield* info()).urls).toEqual([base, "https://example.opentunnel.xyz"])
     remote.urls = []
     expect((yield* info()).urls).toEqual([base])
+  }),
+)
+
+it.live("enters detaching on shutdown before the application scope closes", () =>
+  Effect.gen(function* () {
+    for (const prepared of [true, false]) {
+      const detaching = yield* Detaching.make
+      if (prepared) yield* detaching.handoffPrepared
+      const parent = yield* Scope.make()
+      // Same order as ServerProcess.start: fork the application scope, then register the hook.
+      const application = yield* Scope.fork(parent)
+      const seen: boolean[] = []
+      yield* Scope.addFinalizer(
+        application,
+        Effect.sync(() => seen.push(detaching.isDetaching())),
+      )
+      yield* ServerProcess.enterDetachingOnShutdown(() => detaching).pipe(Scope.provide(parent))
+      expect(detaching.isDetaching()).toBe(false)
+      yield* Scope.close(parent, Exit.void)
+      expect(seen).toEqual([prepared])
+    }
   }),
 )

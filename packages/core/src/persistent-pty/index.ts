@@ -16,6 +16,7 @@ import {
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { Bus } from "../bus.js"
+import { Detaching } from "../detaching.js"
 import { Pty } from "@opencode/schema/pty"
 import { Global } from "@opencode/util/global"
 import { ShellSelect } from "../shell/select.js"
@@ -199,6 +200,7 @@ const makeLayer = (options: Options = {}) =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const global = yield* Global.Service
+      const detaching = yield* Detaching.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       let binary: Promise<string> | undefined
@@ -367,7 +369,12 @@ const makeLayer = (options: Options = {}) =>
         if (response.type !== "ok") return yield* unexpected(response)
       })
 
-      const handoff = Effect.fn("PersistentPty.handoff")(() => daemon.handoff.pipe(Effect.mapError(unavailable)))
+      const handoff = Effect.fn("PersistentPty.handoff")(() =>
+        daemon.handoff.pipe(
+          Effect.tap((prepared) => (prepared ? detaching.handoffPrepared : Effect.void)),
+          Effect.mapError(unavailable),
+        ),
+      )
 
       const removeVisibleExit = (id: Pty.ID) => {
         if (removing.has(id)) return
@@ -528,7 +535,7 @@ export const configured = (options?: Options) =>
   makeGlobalNode({
     service: Service,
     layer: options === undefined ? layer : makeLayer(options),
-    deps: [Bus.node, Global.node],
+    deps: [Bus.node, Global.node, Detaching.node],
   })
 export const node = configured()
 

@@ -2,6 +2,7 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
+import { Detaching } from "@opencode/core/detaching"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Schedule } from "@opencode/core/schedule"
 import { InstallationEvent } from "@opencode/schema/installation-event"
@@ -88,6 +89,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
 
   const parentScope = yield* Scope.Scope
   const applicationScope = yield* Scope.fork(parentScope)
+  let detaching: Detaching.Interface | undefined
+  yield* enterDetachingOnShutdown(() => detaching)
   yield* Effect.addFinalizer(() =>
     status.beginStopping.pipe(
       Effect.andThen(Ref.set(application, Option.none())),
@@ -115,6 +118,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     }
     // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
     yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
+    detaching = Context.get(context, Detaching.Service)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
@@ -145,6 +149,14 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   if (!lifecycle) return yield* boot
   return yield* Effect.raceFirst(boot, shutdown.await.pipe(Effect.andThen(Effect.interrupt)))
 })
+
+/**
+ * Decides on shutdown whether this server is detaching (a daemon handoff was prepared), before anything
+ * is torn down. Must be added to the parent scope after the application scope was forked from it:
+ * finalizers run in reverse order, so it then runs before the application scope closes.
+ */
+export const enterDetachingOnShutdown = (detaching: () => Detaching.Interface | undefined) =>
+  Effect.addFinalizer(() => Effect.suspend(() => detaching()?.begin ?? Effect.void))
 
 function listen(options: { readonly hostname: string; readonly port: Option.Option<number> }) {
   if (Option.isSome(options.port)) return bind(options.hostname, options.port.value)
