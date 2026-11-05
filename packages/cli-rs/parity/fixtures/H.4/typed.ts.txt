@@ -1,0 +1,30 @@
+
+                                                   ┃                                             ┃
+                                                   ┃  Connect an integration to send prompts  x  ┃
+                                                   ┃                                             ┃
+
+
+
+
+
+                        Connect an integration                           esc
+
+                        Search
+
+                        Popular
+                    ┃   OpenCode Console
+             ┃          openai
+             ┃  hell    github-copilot
+             ┃
+             ┃  Buil    Services
+             ╹▀▀▀▀▀▀    amazon-bedrock                                          ▀▀▀▀▀▀▀▀
+             /…/open    azure                                                   commands
+                        …
+
+
+
+
+
+                                                                                             local
+
+ ✓ Server  ○ UI  Theme  Tools  Experiments

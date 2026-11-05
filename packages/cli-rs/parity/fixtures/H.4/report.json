@@ -1,0 +1,1676 @@
+{
+  "home": {
+    "size": [
+      100,
+      30,
+      100,
+      30
+    ],
+    "textCells": 76,
+    "styleCells": 155,
+    "rows": [
+      {
+        "y": 16,
+        "ts": "             ┃  Ask anything… \"Fix a TODO in the codebase\"",
+        "rs": "             ┃"
+      },
+      {
+        "y": 27,
+        "ts": "                                                                                             local",
+        "rs": ""
+      },
+      {
+        "y": 28,
+        "ts": "",
+        "rs": "                                                                                             local"
+      },
+      {
+        "y": 29,
+        "ts": " ✓ Server  ○ UI  Theme  Tools  Experiments",
+        "rs": ""
+      }
+    ]
+  },
+  "typed": {
+    "size": [
+      100,
+      30,
+      100,
+      30
+    ],
+    "textCells": 391,
+    "styleCells": 3000,
+    "rows": [
+      {
+        "y": 1,
+        "ts": "                                                   ┃                                             ┃",
+        "rs": ""
+      },
+      {
+        "y": 2,
+        "ts": "                                                   ┃  Connect an integration to send prompts  x  ┃",
+        "rs": ""
+      },
+      {
+        "y": 3,
+        "ts": "                                                   ┃                                             ┃",
+        "rs": ""
+      },
+      {
+        "y": 9,
+        "ts": "                        Connect an integration                           esc",
+        "rs": "                                                                ▄"
+      },
+      {
+        "y": 10,
+        "ts": "",
+        "rs": "                               █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█"
+      },
+      {
+        "y": 11,
+        "ts": "                        Search",
+        "rs": "                               █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀"
+      },
+      {
+        "y": 12,
+        "ts": "",
+        "rs": "                               ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
+      },
+      {
+        "y": 13,
+        "ts": "                        Popular",
+        "rs": ""
+      },
+      {
+        "y": 14,
+        "ts": "                    ┃   OpenCode Console",
+        "rs": ""
+      },
+      {
+        "y": 15,
+        "ts": "             ┃          openai",
+        "rs": "             ┃"
+      },
+      {
+        "y": 16,
+        "ts": "             ┃  hell    github-copilot",
+        "rs": "             ┃  hello drive"
+      },
+      {
+        "y": 18,
+        "ts": "             ┃  Buil    Services",
+        "rs": "             ┃  Build · No provider selected Connect a provider"
+      },
+      {
+        "y": 19,
+        "ts": "             ╹▀▀▀▀▀▀    amazon-bedrock                                          ▀▀▀▀▀▀▀▀",
+        "rs": "             ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      },
+      {
+        "y": 20,
+        "ts": "             /…/open    azure                                                   commands",
+        "rs": "             /…/opencode/opencode-parity-lrUaqd/work   shift+tab agents  ctrl+p commands"
+      },
+      {
+        "y": 21,
+        "ts": "                        …",
+        "rs": ""
+      },
+      {
+        "y": 27,
+        "ts": "                                                                                             local",
+        "rs": ""
+      },
+      {
+        "y": 28,
+        "ts": "",
+        "rs": "                                                                                             local"
+      },
+      {
+        "y": 29,
+        "ts": " ✓ Server  ○ UI  Theme  Tools  Experiments",
+        "rs": ""
+      }
+    ]
+  },
+  "edited-resized": {
+    "size": [
+      90,
+      28,
+      90,
+      28
+    ],
+    "textCells": 390,
+    "styleCells": 2520,
+    "rows": [
+      {
+        "y": 1,
+        "ts": "                                         ┃                                             ┃",
+        "rs": ""
+      },
+      {
+        "y": 2,
+        "ts": "                                         ┃  Connect an integration to send prompts  x  ┃",
+        "rs": ""
+      },
+      {
+        "y": 3,
+        "ts": "                                         ┃                                             ┃",
+        "rs": ""
+      },
+      {
+        "y": 8,
+        "ts": "                   Connect an integration                           esc",
+        "rs": "                                                           ▄"
+      },
+      {
+        "y": 9,
+        "ts": "",
+        "rs": "                          █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█"
+      },
+      {
+        "y": 10,
+        "ts": "                   Search",
+        "rs": "                          █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀"
+      },
+      {
+        "y": 11,
+        "ts": "",
+        "rs": "                          ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
+      },
+      {
+        "y": 12,
+        "ts": "                   Popular",
+        "rs": ""
+      },
+      {
+        "y": 13,
+        "ts": "               ┃   OpenCode Console",
+        "rs": ""
+      },
+      {
+        "y": 14,
+        "ts": "        ┃          openai",
+        "rs": "        ┃"
+      },
+      {
+        "y": 15,
+        "ts": "        ┃  hell    github-copilot",
+        "rs": "        ┃  hello driv"
+      },
+      {
+        "y": 17,
+        "ts": "        ┃  Buil    Services",
+        "rs": "        ┃  Build · No provider selected Connect a provider"
+      },
+      {
+        "y": 18,
+        "ts": "        ╹▀▀▀▀▀▀    amazon-bedrock                                          ▀▀▀▀▀▀▀▀",
+        "rs": "        ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      },
+      {
+        "y": 19,
+        "ts": "        /…/open    …                                                       commands",
+        "rs": "        /…/opencode/opencode-parity-lrUaqd/work   shift+tab agents  ctrl+p commands"
+      },
+      {
+        "y": 25,
+        "ts": "                                                                                   local",
+        "rs": ""
+      },
+      {
+        "y": 26,
+        "ts": "",
+        "rs": "                                                                                   local"
+      },
+      {
+        "y": 27,
+        "ts": " ✓ Server  ○ UI  Theme  Tools  Experiments",
+        "rs": ""
+      }
+    ]
+  },
+  "responses": [
+    {
+      "method": "simulation.handshake",
+      "ts": {
+        "capabilities": 15
+      },
+      "rs": {
+        "capabilities": 8
+      }
+    },
+    {
+      "method": "ui.matches",
+      "ts": true,
+      "rs": true
+    },
+    {
+      "method": "ui.capture",
+      "ts": "frame",
+      "rs": "frame"
+    },
+    {
+      "method": "ui.enter",
+      "ts": {
+        "focused": {
+          "renderable": 538,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "box-1",
+            "num": 2,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-2",
+            "num": 3,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 29,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "textarea-1",
+            "num": 538,
+            "x": 16,
+            "y": 16,
+            "width": 70,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": true,
+            "editor": true
+          },
+          {
+            "id": "prompt.footer.location",
+            "num": 548,
+            "x": 13,
+            "y": 20,
+            "width": 40,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-6",
+            "num": 13,
+            "x": 0,
+            "y": 29,
+            "width": 10,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-8",
+            "num": 21,
+            "x": 10,
+            "y": 29,
+            "width": 6,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-10",
+            "num": 29,
+            "x": 16,
+            "y": 29,
+            "width": 7,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-12",
+            "num": 34,
+            "x": 23,
+            "y": 29,
+            "width": 7,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-14",
+            "num": 39,
+            "x": 30,
+            "y": 29,
+            "width": 13,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.type",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 20,
+            "y": 8,
+            "width": 60,
+            "height": 16,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 73,
+            "y": 9,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 24,
+            "y": 11,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 20,
+            "y": 13,
+            "width": 60,
+            "height": 8,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 20,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 20,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 20,
+            "y": 16,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 20,
+            "y": 19,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-157",
+            "num": 1223,
+            "x": 20,
+            "y": 20,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.matches",
+      "ts": false,
+      "rs": true
+    },
+    {
+      "method": "ui.capture",
+      "ts": "frame",
+      "rs": "frame"
+    },
+    {
+      "method": "ui.press",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 20,
+            "y": 8,
+            "width": 60,
+            "height": 16,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 73,
+            "y": 9,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 24,
+            "y": 11,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 20,
+            "y": 13,
+            "width": 60,
+            "height": 8,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 20,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 20,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 20,
+            "y": 16,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 20,
+            "y": 19,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-157",
+            "num": 1223,
+            "x": 20,
+            "y": 20,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.press",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 20,
+            "y": 8,
+            "width": 60,
+            "height": 16,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 73,
+            "y": 9,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 24,
+            "y": 11,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 20,
+            "y": 13,
+            "width": 60,
+            "height": 8,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 20,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 20,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 20,
+            "y": 16,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 20,
+            "y": 19,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-157",
+            "num": 1223,
+            "x": 20,
+            "y": 20,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.arrow",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 20,
+            "y": 8,
+            "width": 60,
+            "height": 16,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 73,
+            "y": 9,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 24,
+            "y": 11,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 20,
+            "y": 13,
+            "width": 60,
+            "height": 8,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 20,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 20,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 20,
+            "y": 16,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 20,
+            "y": 19,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-157",
+            "num": 1223,
+            "x": 20,
+            "y": 20,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.mouse",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 20,
+            "y": 8,
+            "width": 60,
+            "height": 16,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 73,
+            "y": 9,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 24,
+            "y": 11,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 20,
+            "y": 13,
+            "width": 60,
+            "height": 8,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 20,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 20,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 20,
+            "y": 16,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 20,
+            "y": 19,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-157",
+            "num": 1223,
+            "x": 20,
+            "y": 20,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.mouse",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 13,
+            "y": 14,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 30,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 20,
+            "y": 8,
+            "width": 60,
+            "height": 16,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 73,
+            "y": 9,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 24,
+            "y": 11,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 20,
+            "y": 13,
+            "width": 60,
+            "height": 8,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 20,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 20,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 20,
+            "y": 16,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 20,
+            "y": 19,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-157",
+            "num": 1223,
+            "x": 20,
+            "y": 20,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.mouse",
+      "ts": {
+        "error": "mouse position must be within the terminal viewport"
+      },
+      "rs": {
+        "error": "mouse position must be within the terminal viewport"
+      }
+    },
+    {
+      "method": "ui.resize",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 8,
+            "y": 13,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 90,
+            "height": 28,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 15,
+            "y": 7,
+            "width": 60,
+            "height": 15,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 68,
+            "y": 8,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 19,
+            "y": 10,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 15,
+            "y": 12,
+            "width": 60,
+            "height": 7,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 15,
+            "y": 13,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 15,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 15,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 15,
+            "y": 18,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "focused": {
+          "editor": true
+        },
+        "elements": []
+      }
+    },
+    {
+      "method": "ui.capture",
+      "ts": "frame",
+      "rs": "frame"
+    },
+    {
+      "method": "ui.state",
+      "ts": {
+        "focused": {
+          "renderable": 1128,
+          "editor": true
+        },
+        "elements": [
+          {
+            "id": "scrollbox-1",
+            "num": 564,
+            "x": 8,
+            "y": 13,
+            "width": 0,
+            "height": 10,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-16",
+            "num": 53,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-135",
+            "num": 1113,
+            "x": 0,
+            "y": 0,
+            "width": 90,
+            "height": 28,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-136",
+            "num": 1114,
+            "x": 15,
+            "y": 7,
+            "width": 60,
+            "height": 15,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "text-287",
+            "num": 1119,
+            "x": 68,
+            "y": 8,
+            "width": 3,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "input-1",
+            "num": 1128,
+            "x": 19,
+            "y": 10,
+            "width": 52,
+            "height": 1,
+            "focusable": true,
+            "focused": true,
+            "clickable": false,
+            "editor": true
+          },
+          {
+            "id": "scrollbox-2",
+            "num": 1130,
+            "x": 15,
+            "y": 12,
+            "width": 60,
+            "height": 7,
+            "focusable": true,
+            "focused": false,
+            "clickable": false,
+            "editor": false
+          },
+          {
+            "id": "box-144",
+            "num": 1135,
+            "x": 15,
+            "y": 13,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-147",
+            "num": 1156,
+            "x": 15,
+            "y": 14,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-150",
+            "num": 1177,
+            "x": 15,
+            "y": 15,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          },
+          {
+            "id": "box-154",
+            "num": 1202,
+            "x": 15,
+            "y": 18,
+            "width": 60,
+            "height": 1,
+            "focusable": false,
+            "focused": false,
+            "clickable": true,
+            "editor": false
+          }
+        ]
+      },
+      "rs": {
+        "error": "ui.state is not supported by the Rust TUI: it has no renderable numbers; use ui.mouse with coordinates"
+      }
+    }
+  ]
+}
