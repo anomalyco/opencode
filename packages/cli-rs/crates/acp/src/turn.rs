@@ -418,12 +418,7 @@ impl Turns {
             return;
         }
         events.abort();
-        let abandoned = {
-            let mut state = lock(&turn.state);
-            let abandoned = translate::abandon(&state, &turn.ctx);
-            *state = abandoned.state.clone();
-            abandoned
-        };
+        let abandoned = translate::abandon(&mut lock(&turn.state), &turn.ctx);
         for output in abandoned.outputs {
             let _ = self.interpret(turn, output).await;
         }
@@ -512,28 +507,28 @@ impl Turns {
         )
     }
 
-    async fn advance(self: &Arc<Self>, turn: &Turn) -> Result<Folded, Failure> {
+    /// Folds the next event and interprets its outputs. Returns the terminal and whether children stay open.
+    async fn advance(self: &Arc<Self>, turn: &Turn) -> Result<(Option<Terminal>, bool), Failure> {
         let event = take(&turn.subscription).await?;
-        let folded = {
+        let (folded, children_open) = {
             let mut state = lock(&turn.state);
             let folded = if turn.background && !translate::from_tracked_child(&state, &event) {
-                Folded { state: state.clone(), outputs: Vec::new(), terminal: None }
+                Folded::default()
             } else {
-                translate::fold(&state, &event, &turn.ctx)
+                translate::fold(&mut state, &event, &turn.ctx)
             };
-            *state = folded.state.clone();
-            folded
+            (folded, !state.open_children.is_empty())
         };
-        for output in folded.outputs.iter().cloned() {
+        for output in folded.outputs {
             self.interpret(turn, output).await?;
         }
-        Ok(folded)
+        Ok((folded.terminal, children_open))
     }
 
     async fn consume(self: &Arc<Self>, turn: &Turn) -> Result<Terminal, Failure> {
         loop {
-            let folded = self.advance(turn).await?;
-            if let Some(terminal) = folded.terminal {
+            let (terminal, _) = self.advance(turn).await?;
+            if let Some(terminal) = terminal {
                 asks_settled(&turn.subscription).await;
                 return Ok(terminal);
             }
@@ -542,8 +537,8 @@ impl Turns {
 
     async fn follow_children(self: &Arc<Self>, turn: &Turn) -> Result<(), Failure> {
         loop {
-            let folded = self.advance(turn).await?;
-            if folded.state.open_children.is_empty() {
+            let (_, children_open) = self.advance(turn).await?;
+            if !children_open {
                 asks_settled(&turn.subscription).await;
                 return Ok(());
             }
