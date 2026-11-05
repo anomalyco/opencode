@@ -23,6 +23,7 @@ const MUTED = "#808080"
 const TEXT = "#eeeeee"
 const BACKDROP = "#0a0a0a"
 const ACCENT = "#fab283"
+const PAGE = "#1a1b26"
 const range = (end: number, step: number) => Array.from({ length: Math.floor(end / step) + 1 }, (_, i) => i * step)
 
 const scanner = { color: RGBA.fromHex(ACCENT), style: "blocks" as const, inactiveFactor: 0.6, minAlpha: 0.3 }
@@ -46,6 +47,17 @@ const cases: { name: string; width: number; instants: number[]; element: () => J
     width: 8,
     instants: range(56 * 40, 40),
     element: () => <spinner frames={createFrames(scanner)} color={createColors(scanner)} interval={40} />,
+  },
+  {
+    // The prompt footer's scanner over the page: an alpha glyph blends into the painted background.
+    name: "scanner-page",
+    width: 8,
+    instants: range(56 * 40, 40),
+    element: () => (
+      <box backgroundColor={PAGE}>
+        <spinner frames={createFrames(scanner)} color={createColors(scanner)} interval={40} />
+      </box>
+    ),
   },
   {
     name: "soft-slide",
