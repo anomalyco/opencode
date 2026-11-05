@@ -60,7 +60,13 @@ describe("cursor machine", () => {
     const seeking = replay([jump("msg_10")])
     const moved = transitionTimelineCursor(seeking, SCROLL_MOVED_EVENT)
 
-    expect(moved.state).toEqual({ status: "selected", messageID: "msg_10", fresh: false, attempt: seeking.attempt + 1 })
+    expect(moved.state).toEqual({
+      status: "selected",
+      messageID: "msg_10",
+      fresh: false,
+      attempt: seeking.attempt + 1,
+      echo: true,
+    })
     expect(moved.effects).toEqual([{ type: "seek.cancel" }])
     expectIgnored(moved.state, { type: "seek.missing", attempt: seeking.attempt })
     expectIgnored(moved.state, { type: "seek.landed", attempt: seeking.attempt })
@@ -88,11 +94,32 @@ describe("cursor machine", () => {
     expect(back.effects).toEqual([{ type: "follow.end" }])
   })
 
-  test("the router's echo of the cursor's own hash does not seek again", () => {
+  test("the router's echo of the cursor's own hash does not seek again, once", () => {
     const seeking = replay([jump("msg_5")])
 
-    expectIgnored(seeking, hash("#message-msg_5"))
-    expectIgnored(replay([SCROLL_MOVED_EVENT], seeking), hash("#message-msg_5"))
+    for (const state of [seeking, replay([SCROLL_MOVED_EVENT], seeking)]) {
+      const echoed = transitionTimelineCursor(state, hash("#message-msg_5"))
+
+      expect(echoed.state).toMatchObject({ status: "selected", messageID: "msg_5", echo: false })
+      expect(echoed.state.attempt).toBe(state.attempt)
+      expect(echoed.effects).toEqual([])
+      // Only the write echoes; the same hash applied again is a real navigation.
+      expect(transitionTimelineCursor(echoed.state, hash("#message-msg_5")).state.status).toBe("pending")
+    }
+  })
+
+  test("a link to the prompt undo, redo or rewind selected still navigates to it", () => {
+    const undone = replay([{ type: "message.select", messageID: "msg_3", following: false }])
+    const linked = transitionTimelineCursor(undone, hash("#message-msg_3"))
+
+    expect(pendingCursorMessageID(linked.state)).toBe("msg_3")
+    expect(linked.effects).toEqual([{ type: "follow.detach" }])
+
+    const loaded = transitionTimelineCursor(linked.state, { type: "target.loaded", messageID: "msg_3" })
+    expect(loaded.effects).toEqual([
+      { type: "follow.detach" },
+      { type: "seek.schedule", attempt: loaded.state.attempt, messageID: "msg_3", behavior: "auto" },
+    ])
   })
 
   test("a hash target waits until its prompt loads, then seeks to it", () => {
@@ -106,7 +133,6 @@ describe("cursor machine", () => {
     expect(freshCursorMessageID(loaded.state)).toBe("msg_1")
     expect(loaded.effects).toEqual([
       { type: "follow.detach" },
-      { type: "hash.set", messageID: "msg_1" },
       { type: "seek.schedule", attempt: loaded.state.attempt, messageID: "msg_1", behavior: "auto" },
     ])
   })
@@ -135,7 +161,13 @@ describe("cursor machine", () => {
     }, seeking)
 
     const settled = transitionTimelineCursor(retried, missing)
-    expect(settled.state).toEqual({ status: "selected", messageID: "msg_5", fresh: true, attempt: seeking.attempt })
+    expect(settled.state).toEqual({
+      status: "selected",
+      messageID: "msg_5",
+      fresh: true,
+      attempt: seeking.attempt,
+      echo: true,
+    })
     expect(settled.effects).toEqual([])
     expect(hasFreshCursorOrSeek(settled.state)).toBe(true)
     expect(landed(seeking)).toEqual(settled.state)

@@ -13,7 +13,8 @@ export type TimelineCursorState =
   | { readonly status: "pending"; readonly messageID: string; readonly attempt: number }
   /**
    * The active prompt. `fresh` until the reader scrolls, after which navigation steps from the prompt in view instead.
-   * `seek` while the view is still bringing the prompt in.
+   * `seek` while the view is still bringing the prompt in. `echo` after a jump wrote the prompt's hash, until the router
+   * repeats it once; any other `#message-<id>` for the prompt is a real navigation.
    */
   | {
       readonly status: "selected"
@@ -21,6 +22,7 @@ export type TimelineCursorState =
       readonly fresh: boolean
       readonly attempt: number
       readonly seek?: CursorSeek
+      readonly echo?: boolean
     }
 
 export type TimelineCursorEvent =
@@ -116,21 +118,18 @@ export function transitionTimelineCursor(
   if (event.type === "target.loaded") {
     if (state.status !== "pending" || state.messageID !== event.messageID) return unchanged(state)
 
-    return seek(
-      state,
-      event.messageID,
-      "auto",
-      [FOLLOW_DETACH, { type: "hash.set", messageID: event.messageID }],
-      false,
-    )
+    // The route already carries this hash, so nothing echoes.
+    return seek(state, event.messageID, "auto", [FOLLOW_DETACH], { now: false, echo: false })
   }
 
   if (event.type === "message.jump")
-    return seek(state, event.messageID, event.behavior, [
-      ...cancelSeek(state),
-      FOLLOW_DETACH,
-      { type: "hash.set", messageID: event.messageID },
-    ])
+    return seek(
+      state,
+      event.messageID,
+      event.behavior,
+      [...cancelSeek(state), FOLLOW_DETACH, { type: "hash.set", messageID: event.messageID }],
+      { now: true, echo: true },
+    )
 
   if (event.type === "message.select") {
     // A pinned view shows the newest prompt; a remembered one would only send navigation elsewhere.
@@ -149,7 +148,7 @@ export function transitionTimelineCursor(
     if (state.status !== "selected" || !hasFreshCursorOrSeek(state)) return unchanged(state)
 
     return changed(
-      { status: "selected", messageID: state.messageID, fresh: false, attempt: state.attempt + 1 },
+      { status: "selected", messageID: state.messageID, fresh: false, attempt: state.attempt + 1, echo: state.echo },
       cancelSeek(state),
     )
   }
@@ -196,8 +195,11 @@ function hashApplied(
   event: Extract<TimelineCursorEvent, { type: "hash.applied" }>,
 ): TimelineCursorTransition {
   if (event.messageID) {
-    // The hash this cursor set itself, echoed back by the router.
-    if (state.status !== "none" && state.messageID === event.messageID) return unchanged(state)
+    // The hash this cursor wrote, repeated by the router: consumed once, so a later link to the prompt still navigates.
+    if (state.status === "selected" && state.echo && state.messageID === event.messageID)
+      return changed({ ...state, echo: false })
+
+    if (state.status === "pending" && state.messageID === event.messageID) return unchanged(state)
 
     return changed({ status: "pending", messageID: event.messageID, attempt: state.attempt + 1 }, [
       ...cancelSeek(state),
@@ -225,18 +227,24 @@ function seek(
   messageID: string,
   behavior: ScrollBehavior,
   effects: readonly TimelineCursorEffect[],
-  now = true,
+  options: { now: boolean; echo: boolean },
 ): TimelineCursorTransition {
   const attempt = state.attempt + 1
 
-  return changed({ status: "selected", messageID, fresh: true, attempt, seek: { behavior, retries: 0 } }, [
-    ...effects,
-    { type: now ? "seek.start" : "seek.schedule", attempt, messageID, behavior },
-  ])
+  return changed(
+    { status: "selected", messageID, fresh: true, attempt, seek: { behavior, retries: 0 }, echo: options.echo },
+    [...effects, { type: options.now ? "seek.start" : "seek.schedule", attempt, messageID, behavior }],
+  )
 }
 
 function settled(state: Selected): TimelineCursorState {
-  return { status: "selected", messageID: state.messageID, fresh: state.fresh, attempt: state.attempt }
+  return {
+    status: "selected",
+    messageID: state.messageID,
+    fresh: state.fresh,
+    attempt: state.attempt,
+    echo: state.echo,
+  }
 }
 
 function clear(state: TimelineCursorState): TimelineCursorTransition {
