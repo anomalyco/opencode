@@ -7,7 +7,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { SessionHistory } from "@opencode/core/session/history"
 import { SessionProjector } from "@opencode/core/session/projector"
-import { SessionMessageTable, SessionPartTable } from "@opencode/core/session/sql"
+import { SessionMessageTable, SessionPartTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Agent } from "@opencode/schema/agent"
 import { Event } from "@opencode/schema/event"
@@ -27,7 +27,7 @@ const it = testEffect(
   ]),
 )
 
-const seedSessions = (rows: { id: string; updated: number }[]) =>
+const seedSessions = (rows: { id: string; updated: number; parentID?: Session.ID }[]) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service
@@ -39,6 +39,7 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
         yield* bus.publish(SessionEvent.Created, {
           sessionID,
           projectID: Project.ID.global,
+          parentID: row.parentID,
           location: { directory },
           slug: "store-test",
           version: "test",
@@ -57,6 +58,180 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
+  describe("held reports", () => {
+    it.effect("reads unknown and unheld sessions without inserting a missing hold", () =>
+      Effect.gen(function* () {
+        const sessionID = Session.ID.make("ses_unheld")
+        const missing = Session.ID.make("ses_missing")
+        yield* seedSessions([{ id: sessionID, updated: 10 }])
+        const store = yield* SessionStore.Service
+        expect(yield* store.heldReport(sessionID)).toBeUndefined()
+        expect(yield* store.heldReport(missing)).toBeUndefined()
+        expect(
+          yield* store.holdReport(missing, { notificationID: SessionMessage.ID.make("msg_missing"), since: undefined }),
+        ).toBeUndefined()
+        yield* store.releaseReport(missing)
+        expect(yield* store.get(missing)).toBeUndefined()
+        expect((yield* store.list()).map((session) => session.id)).toEqual([sessionID])
+        expect(yield* store.listHeldChildren()).toEqual([])
+      }),
+    )
+
+    it.effect("preserves the first bounded hold, clears all fields, and accepts a fresh hold", () =>
+      Effect.gen(function* () {
+        const sessionID = Session.ID.make("ses_bounded")
+        yield* seedSessions([{ id: sessionID, updated: 10 }])
+        const store = yield* SessionStore.Service
+        const database = yield* Database.Service
+        const first = {
+          notificationID: SessionMessage.ID.make("msg_first"),
+          since: { at: 100, answer: SessionMessage.ID.make("msg_answer") },
+        }
+        const later = {
+          notificationID: SessionMessage.ID.make("msg_later"),
+          since: { at: 200, answer: SessionMessage.ID.make("msg_new_answer") },
+        }
+        expect(yield* store.holdReport(sessionID, first)).toEqual(first)
+        expect(yield* store.holdReport(sessionID, later)).toEqual(first)
+        expect(yield* store.holdReport(sessionID, { ...later, since: undefined })).toEqual(first)
+        expect(yield* store.heldReport(sessionID)).toEqual(first)
+
+        yield* store.releaseReport(sessionID)
+        expect(yield* store.heldReport(sessionID)).toBeUndefined()
+        expect(
+          yield* database.db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get(),
+        ).toMatchObject({ held_report_id: null, held_report_at: null, held_report_answer: null })
+        expect(yield* store.holdReport(sessionID, later)).toEqual(later)
+        expect(yield* store.heldReport(sessionID)).toEqual(later)
+      }),
+    )
+
+    it.effect("keeps an unbounded first hold and round-trips a bounded hold without an answer", () =>
+      Effect.gen(function* () {
+        const sessionID = Session.ID.make("ses_unbounded")
+        yield* seedSessions([{ id: sessionID, updated: 10 }])
+        const store = yield* SessionStore.Service
+        const first = { notificationID: SessionMessage.ID.make("msg_first"), since: undefined }
+        const later = {
+          notificationID: SessionMessage.ID.make("msg_later"),
+          since: { at: 0, answer: undefined },
+        }
+        expect(yield* store.holdReport(sessionID, first)).toEqual(first)
+        expect(yield* store.holdReport(sessionID, later)).toEqual(first)
+        expect(yield* store.heldReport(sessionID)).toEqual(first)
+        yield* store.releaseReport(sessionID)
+        expect(yield* store.holdReport(sessionID, later)).toEqual(later)
+        expect(yield* store.heldReport(sessionID)).toEqual(later)
+      }),
+    )
+
+    it.effect("does not expose an answer cursor without a start timestamp", () =>
+      Effect.gen(function* () {
+        const parentID = Session.ID.make("ses_parent")
+        const sessionID = Session.ID.make("ses_child")
+        yield* seedSessions([
+          { id: parentID, updated: 20 },
+          { id: sessionID, updated: 10, parentID },
+        ])
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const report = { notificationID: SessionMessage.ID.make("msg_held"), since: undefined }
+        yield* database.db
+          .update(SessionTable)
+          .set({
+            held_report_id: report.notificationID,
+            held_report_at: null,
+            held_report_answer: SessionMessage.ID.make("msg_stray"),
+            time_updated: 10,
+          })
+          .where(eq(SessionTable.id, sessionID))
+          .run()
+        expect(yield* store.heldReport(sessionID)).toEqual(report)
+        expect(yield* store.holdReport(sessionID, report)).toEqual(report)
+        expect(yield* store.listHeldChildren()).toEqual([{ sessionID, parentID, report }])
+      }),
+    )
+
+    it.effect("keeps bookkeeping out of activity timestamps, list ordering and public Info", () =>
+      Effect.gen(function* () {
+        const sessionID = Session.ID.make("ses_older")
+        yield* seedSessions([
+          { id: sessionID, updated: 10 },
+          { id: "ses_newer", updated: 20 },
+        ])
+        const store = yield* SessionStore.Service
+        const database = yield* Database.Service
+        const before = yield* store.list()
+        const report = {
+          notificationID: SessionMessage.ID.make("msg_held"),
+          since: { at: 100, answer: SessionMessage.ID.make("msg_answer") },
+        }
+        yield* Effect.forEach(
+          [store.holdReport(sessionID, report), store.holdReport(sessionID, report), store.releaseReport(sessionID)],
+          (operation) =>
+            Effect.gen(function* () {
+              yield* operation
+              expect(
+                yield* database.db
+                  .select({ updated: SessionTable.time_updated })
+                  .from(SessionTable)
+                  .where(eq(SessionTable.id, sessionID))
+                  .get(),
+              ).toEqual({ updated: 10 })
+              expect(yield* store.list()).toEqual(before)
+              expect(yield* store.get(sessionID)).toEqual(before.find((session) => session.id === sessionID))
+              expect(
+                Object.keys((yield* store.get(sessionID)) ?? {}).filter((key) => /held|report/i.test(key)),
+              ).toEqual([])
+            }),
+        )
+      }),
+    )
+
+    it.effect("lists only held children by ID and preserves holds through both claim releases", () =>
+      Effect.gen(function* () {
+        const parentID = Session.ID.make("ses_parent")
+        const firstID = Session.ID.make("ses_a")
+        const lastID = Session.ID.make("ses_z")
+        yield* seedSessions([
+          { id: parentID, updated: 40 },
+          { id: lastID, updated: 30, parentID },
+          { id: "ses_unheld", updated: 20, parentID },
+          { id: firstID, updated: 10, parentID },
+        ])
+        const store = yield* SessionStore.Service
+        const database = yield* Database.Service
+        const first = { notificationID: SessionMessage.ID.make("msg_a"), since: undefined }
+        const last = {
+          notificationID: SessionMessage.ID.make("msg_z"),
+          since: { at: 100, answer: SessionMessage.ID.make("msg_answer") },
+        }
+        yield* store.holdReport(parentID, { notificationID: SessionMessage.ID.make("msg_parent"), since: undefined })
+        yield* store.holdReport(lastID, last)
+        yield* store.holdReport(firstID, first)
+        yield* store.claim(firstID)
+        yield* store.countResume(firstID)
+        yield* store.release(firstID)
+        expect(yield* store.heldReport(firstID)).toEqual(first)
+        yield* store.claim(firstID)
+        yield* store.claim(lastID)
+        yield* store.countResume(lastID)
+        yield* store.releaseChildClaims([])
+        expect(yield* store.listHeldChildren()).toEqual([
+          { sessionID: firstID, parentID, report: first },
+          { sessionID: lastID, parentID, report: last },
+        ])
+        expect(
+          yield* database.db
+            .select({ claim: SessionTable.time_suspended, attempts: SessionTable.resume_attempts })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, lastID))
+            .get(),
+        ).toEqual({ claim: null, attempts: 0 })
+      }),
+    )
+  })
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([

@@ -51,6 +51,16 @@ export type MessagesInput = {
   }
 }
 
+export type ReportStart = {
+  readonly at: number
+  readonly answer: SessionMessage.ID | undefined
+}
+
+export type HeldReport = {
+  readonly notificationID: SessionMessage.ID
+  readonly since: ReportStart | undefined
+}
+
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
@@ -89,6 +99,16 @@ export interface Interface {
    * total — or undefined when the Session no longer exists.
    */
   readonly countResume: (sessionID: Session.ID) => Effect.Effect<number | undefined>
+  /** Reads report bookkeeping, separate from public Session state and user activity. */
+  readonly heldReport: (sessionID: Session.ID) => Effect.Effect<HeldReport | undefined>
+  /** Atomically keeps the first hold and returns it; undefined only for a missing Session. Never updates activity. */
+  readonly holdReport: (sessionID: Session.ID, report: HeldReport) => Effect.Effect<HeldReport | undefined>
+  /** Unconditionally clears report bookkeeping without updating activity or execution claims. */
+  readonly releaseReport: (sessionID: Session.ID) => Effect.Effect<void>
+  /** Held children in ascending Session ID order; excludes top-level Sessions. */
+  readonly listHeldChildren: () => Effect.Effect<
+    ReadonlyArray<{ readonly sessionID: Session.ID; readonly parentID: Session.ID; readonly report: HeldReport }>
+  >
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -97,6 +117,11 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+    const heldColumns = {
+      held_report_id: SessionTable.held_report_id,
+      held_report_at: SessionTable.held_report_at,
+      held_report_answer: SessionTable.held_report_answer,
+    }
 
     /** One page of a session's message rows, oldest first within the page when paging backwards. */
     const messageRows = Effect.fnUntraced(function* (input: MessagesInput) {
@@ -204,6 +229,58 @@ const layer = Layer.effect(
         const [message] = yield* SessionHistory.decodeMessageRowsWithRefs(db, [row]).pipe(Effect.orDie)
         return message && { sessionID: row.session_id, message }
       }),
+      heldReport: Effect.fn("SessionStore.heldReport")(function* (sessionID) {
+        const row = yield* db
+          .select(heldColumns)
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        return row ? heldRow(row) : undefined
+      }),
+      holdReport: Effect.fn("SessionStore.holdReport")(function* (sessionID, report) {
+        // SQLite evaluates SET expressions against the old row. The ID guards
+        // all three fields, including an unbounded first hold (null start).
+        const row = yield* db
+          .update(SessionTable)
+          .set({
+            held_report_id: sql`coalesce(${SessionTable.held_report_id}, ${report.notificationID})`,
+            held_report_at: sql`case when ${SessionTable.held_report_id} is null then ${report.since?.at ?? null} else ${SessionTable.held_report_at} end`,
+            held_report_answer: sql`case when ${SessionTable.held_report_id} is null then ${report.since?.answer ?? null} else ${SessionTable.held_report_answer} end`,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(eq(SessionTable.id, sessionID))
+          .returning(heldColumns)
+          .get()
+          .pipe(Effect.orDie)
+        return row ? heldRow(row) : undefined
+      }),
+      releaseReport: Effect.fn("SessionStore.releaseReport")((sessionID) =>
+        db
+          .update(SessionTable)
+          .set({
+            held_report_id: null,
+            held_report_at: null,
+            held_report_answer: null,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(eq(SessionTable.id, sessionID))
+          .run()
+          .pipe(Effect.orDie, Effect.asVoid),
+      ),
+      listHeldChildren: Effect.fn("SessionStore.listHeldChildren")(function* () {
+        const rows = yield* db
+          .select({ sessionID: SessionTable.id, parentID: SessionTable.parent_id, ...heldColumns })
+          .from(SessionTable)
+          .where(and(isNotNull(SessionTable.held_report_id), isNotNull(SessionTable.parent_id)))
+          .orderBy(asc(SessionTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.flatMap((row) => {
+          const report = heldRow(row)
+          return row.parentID !== null && report ? [{ sessionID: row.sessionID, parentID: row.parentID, report }] : []
+        })
+      }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db
           .select({ sessionID: SessionTable.id })
@@ -267,3 +344,14 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+
+function heldRow(
+  row: Pick<typeof SessionTable.$inferSelect, "held_report_id" | "held_report_at" | "held_report_answer">,
+): HeldReport | undefined {
+  if (row.held_report_id === null) return undefined
+  return {
+    notificationID: row.held_report_id,
+    since:
+      row.held_report_at === null ? undefined : { at: row.held_report_at, answer: row.held_report_answer ?? undefined },
+  }
+}

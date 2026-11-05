@@ -72,6 +72,12 @@ export const SessionTable = sqliteTable(
     /** The execution claim timestamp (historical column name; see SessionStore.claim). */
     time_suspended: integer(),
     resume_attempts: integer().notNull().default(0),
+    /** A non-null notification ID marks a report still owed to the parent. */
+    held_report_id: text().$type<SessionMessage.ID>(),
+    /** Earliest owed busy-period start; null means an unbounded hold. */
+    held_report_at: integer(),
+    /** Last answer before the held period, meaningful only with a start timestamp. */
+    held_report_answer: text().$type<SessionMessage.ID>(),
   },
   (table) => [
     index("session_v2_project_idx").on(table.project_id),
@@ -80,6 +86,9 @@ export const SessionTable = sqliteTable(
     index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),
+    index("session_v2_held_report_idx")
+      .on(table.held_report_id)
+      .where(sql`${table.held_report_id} is not null`),
   ],
 )
 

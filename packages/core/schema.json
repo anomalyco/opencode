@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4f6e16c6-f070-4545-b9d0-19fcb6e5210c",
-  "prevIds": ["0ac88673-a402-45a0-b931-e694d59ccefa"],
+  "id": "da17acb7-efae-4660-850f-9d743f22f3cb",
+  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
       "name": "account_state",
@@ -1922,6 +1922,36 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "held_report_id",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "held_report_at",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "held_report_answer",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "id",
       "entityType": "columns",
       "table": "workspace"
@@ -2687,6 +2717,20 @@
       "where": "\"session_v2\".\"time_suspended\" is not null",
       "origin": "manual",
       "name": "session_v2_time_suspended_idx",
+      "entityType": "indexes",
+      "table": "session_v2"
+    },
+    {
+      "columns": [
+        {
+          "value": "held_report_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"session_v2\".\"held_report_id\" is not null",
+      "origin": "manual",
+      "name": "session_v2_held_report_idx",
       "entityType": "indexes",
       "table": "session_v2"
     }
