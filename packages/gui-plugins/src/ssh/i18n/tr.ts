@@ -3,6 +3,7 @@ export default {
   placeholder: "ssh user@example.com",
   add: "SSH sunucusu ekle",
   "server.menu.label": "SSH sunucusu",
+  "error.unavailable": "SSH kullanılamıyor",
   target: "Ana Bilgisayar veya SSH komutu",
   connect: "Bağlan",
   connectTo: "{{host}}'ye bağlanın",
