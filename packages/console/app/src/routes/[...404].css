@@ -115,14 +115,14 @@
     }
 
     [data-slot="action"] + [data-slot="action"] {
-      border-left: 1px solid var(--color-border);
+      border-inline-start: 1px solid var(--color-border);
     }
 
     @media (max-width: 40rem) {
       flex-direction: column;
 
       [data-slot="action"] + [data-slot="action"] {
-        border-left: none;
+        border-inline-start: none;
         border-top: 1px solid var(--color-border);
       }
     }

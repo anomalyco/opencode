@@ -1,5 +1,6 @@
 @import "./token/color.css";
 @import "./token/font.css";
+@import "./script-fonts.css";
 @import "./token/space.css";
 
 @import "./component/button.css";

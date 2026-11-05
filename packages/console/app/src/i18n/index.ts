@@ -1,45 +1,74 @@
+import { createSignal } from "solid-js"
 import type { Locale } from "~/lib/language"
 import { dict as en } from "~/i18n/en"
-import { dict as zh } from "~/i18n/zh"
-import { dict as zht } from "~/i18n/zht"
-import { dict as ko } from "~/i18n/ko"
-import { dict as de } from "~/i18n/de"
-import { dict as es } from "~/i18n/es"
-import { dict as fr } from "~/i18n/fr"
-import { dict as it } from "~/i18n/it"
-import { dict as da } from "~/i18n/da"
-import { dict as ja } from "~/i18n/ja"
-import { dict as pl } from "~/i18n/pl"
-import { dict as ru } from "~/i18n/ru"
-import { dict as uk } from "~/i18n/uk"
-import { dict as ar } from "~/i18n/ar"
-import { dict as no } from "~/i18n/no"
-import { dict as br } from "~/i18n/br"
-import { dict as th } from "~/i18n/th"
-import { dict as tr } from "~/i18n/tr"
 
 export type Key = keyof typeof en
 export type Dict = Record<Key, string>
 
 const base = en satisfies Dict
 
+// Only English ships with every page. The server registers every language at startup (i18n/server.ts);
+// the browser fetches the page's language before it hydrates (entry-client.tsx) and another one before
+// switching to it (loadLocale), so the other 17 dictionaries never load for a visitor who doesn't use them.
+const files: Record<Exclude<Locale, "en">, () => Promise<{ dict: Partial<Dict> }>> = {
+  zh: () => import("~/i18n/zh"),
+  zht: () => import("~/i18n/zht"),
+  ko: () => import("~/i18n/ko"),
+  de: () => import("~/i18n/de"),
+  es: () => import("~/i18n/es"),
+  fr: () => import("~/i18n/fr"),
+  it: () => import("~/i18n/it"),
+  da: () => import("~/i18n/da"),
+  ja: () => import("~/i18n/ja"),
+  pl: () => import("~/i18n/pl"),
+  ru: () => import("~/i18n/ru"),
+  uk: () => import("~/i18n/uk"),
+  ar: () => import("~/i18n/ar"),
+  no: () => import("~/i18n/no"),
+  br: () => import("~/i18n/br"),
+  th: () => import("~/i18n/th"),
+  tr: () => import("~/i18n/tr"),
+}
+const [loaded, setLoaded] = createSignal<Partial<Record<Locale, Partial<Dict>>>>({})
+const merged = new Map<Locale, Dict>()
+
 export function i18n(locale: Locale): Dict {
   if (locale === "en") return base
-  if (locale === "zh") return { ...base, ...zh }
-  if (locale === "zht") return { ...base, ...zht }
-  if (locale === "ko") return { ...base, ...ko }
-  if (locale === "de") return { ...base, ...de }
-  if (locale === "es") return { ...base, ...es }
-  if (locale === "fr") return { ...base, ...fr }
-  if (locale === "it") return { ...base, ...it }
-  if (locale === "da") return { ...base, ...da }
-  if (locale === "ja") return { ...base, ...ja }
-  if (locale === "pl") return { ...base, ...pl }
-  if (locale === "ru") return { ...base, ...ru }
-  if (locale === "uk") return { ...base, ...uk }
-  if (locale === "ar") return { ...base, ...ar }
-  if (locale === "no") return { ...base, ...no }
-  if (locale === "br") return { ...base, ...br }
-  if (locale === "th") return { ...base, ...th }
-  return { ...base, ...tr }
+  const cached = merged.get(locale)
+  if (cached) return cached
+  const overlay = loaded()[locale]
+  // Not fetched yet (only between a language switch and its file arriving): English meanwhile.
+  if (!overlay) return base
+  const dict = { ...base, ...overlay } as Dict
+  merged.set(locale, dict)
+  return dict
+}
+
+/** Fetches a language's dictionary once, so i18n(locale) returns it from then on. */
+export async function loadLocale(locale: Locale) {
+  if (locale === "en" || loaded()[locale]) return
+  const file = await files[locale]()
+  setLoaded((all) => ({ ...all, [locale]: file.dict }))
+}
+
+/** Every language at once: the server's copy (i18n/server.ts). */
+export function registerLocales(all: Partial<Record<Locale, Partial<Dict>>>) {
+  setLoaded(all)
+}
+
+export type Translate = (key: Key, params?: Record<string, string | number>) => string
+
+/** Translation outside the I18n context, for server routes that render page copy. */
+export function translator(locale: Locale): Translate {
+  const dict = i18n(locale)
+  return (key, params) => interpolate(dict[key], params)
+}
+
+export function interpolate(text: string, params?: Record<string, string | number>) {
+  if (!params) return text
+  return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
+    const value = params[key]
+    if (value === undefined || value === null) return raw
+    return String(value)
+  })
 }

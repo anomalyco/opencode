@@ -20,7 +20,8 @@
   display: flex;
   gap: 12px;
   width: 100%;
-  padding: 8px 16px 8px 8px;
+  padding-block: 8px;
+  padding-inline: 8px 16px;
   font-weight: 500;
   cursor: pointer;
   background: none;
@@ -28,7 +29,7 @@
   align-items: center;
   color: var(--color-text);
   font-size: var(--font-size-sm);
-  text-align: left;
+  text-align: start;
   border-radius: 2px;
   transition: background-color 0.2s ease;
 
@@ -45,9 +46,11 @@
     }
   }
 
-  &:hover {
-    background-color: var(--color-background-weak-hover);
-    color: var(--color-text-strong);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background-color: var(--color-background-weak-hover);
+      color: var(--color-text-strong);
+    }
   }
 
   img {

@@ -1,12 +1,20 @@
+import { config } from "~/config"
 import { query } from "@solidjs/router"
+import { githubSnapshot, type GithubRelease } from "~/lib/github-snapshot"
+import { staleValue } from "~/lib/edge-cache"
+import {
+  changelogEntryView,
+  changelogView,
+  parseReleaseNotes,
+  type ChangelogView,
+  type ReleaseNotes,
+} from "~/lib/changelog-notes"
 
-type Release = {
-  tag_name: string
-  name: string
-  body: string
-  published_at: string
-  html_url: string
-}
+type Release = GithubRelease
+
+// Loaded on first use, on the server: github-api reads the Worker's Resource (sst), which must not
+// be part of the browser's bundle, and pages import this module for its types and queries.
+const githubApi = () => import("~/lib/github-api")
 
 export type HighlightMedia =
   | { type: "video"; src: string }
@@ -31,51 +39,169 @@ export type ChangelogRelease = {
   url: string
   highlights: HighlightGroup[]
   sections: { title: string; items: string[] }[]
+  notes: ReleaseNotes
 }
 
 export type ChangelogData = {
   ok: boolean
+  /** Served from the last good response because GitHub failed just now. */
+  stale?: boolean
   releases: ChangelogRelease[]
 }
 
-export async function loadChangelog(): Promise<ChangelogData> {
-  const response = await fetch("https://api.github.com/repos/anomalyco/opencode/releases?per_page=20", {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "OpenCode-Console",
-    },
-    cf: {
-      // best-effort edge caching (ignored outside Cloudflare)
-      cacheTtl: 60 * 5,
-      cacheEverything: true,
-    },
-  } as RequestInit).catch(() => undefined)
+// The releases are reused for five minutes, which keeps the site well inside GitHub's rate limit,
+// and refreshed in the background (lib/edge-cache.ts). A page render waits at most 300 ms for
+// GitHub; without any good value yet (a new isolate at a new location, or GitHub failing) the
+// newest releases from the build-time snapshot stand in (marked stale), and with none of that the
+// changelog is empty and not ok. Dev also keeps the last good releases on disk (githubDevCache).
+const releases = staleValue<ChangelogRelease[]>({
+  key: "github/releases",
+  freshFor: 5 * 60_000,
+  wait: 300,
+  load: async () => {
+    const releases = await fetchReleases()
+    const { githubDevCache } = await githubApi()
+    if (releases) await githubDevCache.write("changelog", releases)
+    return releases
+  },
+  fallback: async () =>
+    (await (await githubApi()).githubDevCache.read<ChangelogRelease[]>("changelog")) ??
+    toReleases((await githubSnapshot()).releases ?? []),
+})
 
-  if (!response?.ok) return { ok: false, releases: [] }
+/**
+ * The newest releases, up to 300 (three pages of GitHub's API). Empty (and not ok) only when GitHub
+ * fails, nothing loaded before and there is no build-time snapshot. Pages use the default wait;
+ * feeds and JSON pass `feedWait`, a little longer, and answer from the snapshot (marked stale, so
+ * they are cached briefly) while a background refresh fetches the rest.
+ */
+/** How long feeds, JSON and the sitemap wait for GitHub before answering from the stale value or snapshot. */
+export const feedWait = 500
 
-  const data = await response.json().catch(() => undefined)
-  if (!Array.isArray(data)) return { ok: false, releases: [] }
-
-  const releases = (data as Release[]).map((release) => {
-    const parsed = parseMarkdown(release.body || "")
-    return {
-      tag: release.tag_name,
-      name: release.name,
-      date: release.published_at,
-      url: release.html_url,
-      highlights: parsed.highlights,
-      sections: parsed.sections,
-    }
-  })
-
-  return { ok: true, releases }
+export async function loadChangelog(wait?: number): Promise<ChangelogData> {
+  const result = await releases(wait)
+  if (!result.value?.length) return { ok: false, releases: [] }
+  return { ok: true, stale: result.standIn || undefined, releases: result.value }
 }
 
+/**
+ * Pages of 100 until one comes back short, one fails, or three have loaded. A failed page stops
+ * there and keeps the pages before it; a failed first page fails the fetch, so older pages never
+ * stand in for the newest releases.
+ */
+async function fetchReleases(): Promise<ChangelogRelease[] | undefined> {
+  const result = await [1, 2, 3].reduce<Promise<{ pages: Release[][]; done: boolean }>>(
+    async (previous, page) => {
+      const state = await previous
+      if (state.done) return state
+      const next = await fetchReleasePage(page)
+      if (!next) return { pages: state.pages, done: true }
+      return { pages: [...state.pages, next], done: next.length < 100 }
+    },
+    Promise.resolve({ pages: [], done: false }),
+  )
+  if (result.pages.length === 0) return
+  return toReleases(result.pages.flat())
+}
+
+// Drafts (listed when the token can see them) have no publish date yet. GitHub lists releases by
+// when their tag was created, so they are sorted by when they were published, newest first.
+function toReleases(releases: Release[]): ChangelogRelease[] {
+  return releases
+    .flatMap((release) => {
+      if (!release.published_at) return []
+      const parsed = parseMarkdown(release.body || "")
+      return {
+        tag: release.tag_name,
+        name: release.name,
+        date: release.published_at,
+        url: release.html_url,
+        highlights: parsed.highlights,
+        sections: parsed.sections,
+        notes: parseReleaseNotes(release.body || ""),
+      }
+    })
+    .toSorted((a, b) => b.date.localeCompare(a.date))
+}
+
+async function fetchReleasePage(page: number): Promise<Release[] | undefined> {
+  const { githubFetch } = await githubApi()
+  const response = await githubFetch(
+    `https://api.github.com/repos/anomalyco/opencode/releases?per_page=100&page=${page}`,
+    {
+      cf: {
+        // best-effort edge caching (ignored outside Cloudflare)
+        cacheTtl: 60 * 5,
+        cacheEverything: true,
+      },
+    } as RequestInit,
+  )
+
+  if (!response?.ok) return
+
+  const data = await response.json().catch(() => undefined)
+  if (!Array.isArray(data)) return
+
+  return data as Release[]
+}
+
+/** The latest 20 releases as they come from GitHub, for pages that read them directly (the press kit). */
 export const changelog = query(async () => {
   "use server"
   const result = await loadChangelog()
-  return result.releases
+  return result.releases.slice(0, 20)
 }, "changelog")
+
+/** One page of the changelog, filtered to the area keys in `filter`. */
+export const changelogPage = query(async (page: number, filter: string[]): Promise<ChangelogView> => {
+  "use server"
+  const result = await loadChangelog()
+  return changelogView(result.releases, { page, filter })
+}, "changelog-page")
+
+/** The entry for a release tag, with the entries before and after it. */
+export const changelogEntry = query(async (tag: string): Promise<ChangelogView> => {
+  "use server"
+  const result = await loadChangelog()
+  return changelogEntryView(result.releases, tag)
+}, "changelog-entry")
+
+/** The newest few entries with notes in one product's areas, for its product page. */
+export const productChangelog = query(async (filter: string[]): Promise<ChangelogView> => {
+  "use server"
+  const result = await loadChangelog()
+  return changelogView(result.releases, { filter, size: 3 })
+}, "product-changelog")
+
+/**
+ * `/changelog/<tag>.json`: one entry as JSON, for the apps' "What's new" (a stable URL per version)
+ * and anything else that wants one release.
+ */
+export async function changelogEntryJson(tag: string) {
+  const result = await loadChangelog(feedWait).catch((): ChangelogData => ({ ok: false, releases: [] }))
+  const view = changelogEntryView(result.releases, tag)
+  const entry = view.entries[0]
+  // A tag missing from a stale list may just be newer than it: a 404 then, cached for a minute only.
+  const status = entry ? 200 : result.ok ? 404 : 503
+  return new Response(
+    JSON.stringify(
+      entry
+        ? { entry, url: `${config.baseUrl}/changelog/${entry.releases[0].tag}`, newer: view.newer, older: view.older }
+        : { error: status === 404 ? "Unknown release" : "Changelog unavailable" },
+    ),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control":
+          entry && !result.stale
+            ? "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+            : "public, max-age=1, s-maxage=60",
+        "Access-Control-Allow-Origin": "*",
+      },
+    },
+  )
+}
 
 function parseHighlights(body: string): HighlightGroup[] {
   const groups = new Map<string, HighlightItem[]>()

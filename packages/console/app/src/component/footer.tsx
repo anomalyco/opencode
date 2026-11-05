@@ -4,6 +4,7 @@ import { github } from "~/lib/github"
 import { config } from "~/config"
 import { useLanguage } from "~/context/language"
 import { useI18n } from "~/context/i18n"
+import { docsUrl } from "~/lib/docs"
 
 export function Footer() {
   const language = useLanguage()
@@ -32,7 +33,7 @@ export function Footer() {
         </a>
       </div>
       <div data-slot="cell">
-        <a href="/v2/docs">{i18n.t("footer.docs")}</a>
+        <a href={language.route(docsUrl())}>{i18n.t("footer.docs")}</a>
       </div>
       <div data-slot="cell">
         <a href={language.route("/changelog")}>{i18n.t("footer.changelog")}</a>

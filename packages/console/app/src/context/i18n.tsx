@@ -1,27 +1,21 @@
-import { createMemo } from "solid-js"
-import { createSimpleContext } from "@opencode/ui/context"
-import { i18n, type Key } from "~/i18n"
+import { createMemo, useContext, type ParentProps } from "solid-js"
+import { i18n, interpolate, type Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
+import { I18nContext } from "~/context/i18n-context"
 
-function resolve(text: string, params?: Record<string, string | number>) {
-  if (!params) return text
-  return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
-    const value = params[key]
-    if (value === undefined || value === null) return raw
-    return String(value)
-  })
+export function I18nProvider(props: ParentProps) {
+  const language = useLanguage()
+  const dict = createMemo(() => i18n(language.locale()))
+  const value = {
+    t(key: Key, params?: Record<string, string | number>) {
+      return interpolate(dict()[key], params)
+    },
+  }
+  return <I18nContext.Provider value={value}>{props.children}</I18nContext.Provider>
 }
 
-export const { use: useI18n, provider: I18nProvider } = createSimpleContext({
-  name: "I18n",
-  init: () => {
-    const language = useLanguage()
-    const dict = createMemo(() => i18n(language.locale()))
-
-    return {
-      t(key: Key, params?: Record<string, string | number>) {
-        return resolve(dict()[key], params)
-      },
-    }
-  },
-})
+export function useI18n() {
+  const value = useContext(I18nContext)
+  if (!value) throw new Error("I18n context must be used within a context provider")
+  return value
+}

@@ -15,7 +15,7 @@ body {
   --font-size-9xl: 8rem;
 
   --font-mono:
-    "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+    "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-sans: var(--font-mono);
 }

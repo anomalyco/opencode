@@ -32,6 +32,9 @@ Thumbs.db
 # Written by script/build-stamp.ts (bun run build / dev)
 /src/lib/build-stamp.json
 
+# Written by script/github-snapshot.ts (bun run build)
+/src/lib/github-snapshot.json
+
 # Written by script/og.ts (bun run build / dev)
 /public/og
 /src/lib/og-images.json

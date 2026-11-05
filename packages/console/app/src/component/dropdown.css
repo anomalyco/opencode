@@ -16,13 +16,15 @@
     cursor: pointer;
     transition: all 0.15s ease;
 
-    &:hover {
-      background-color: var(--color-surface-hover);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background-color: var(--color-surface-hover);
+      }
     }
 
     span {
       flex: 1;
-      text-align: left;
+      text-align: start;
       font-weight: 500;
     }
   }
@@ -44,11 +46,11 @@
     min-width: 160px;
 
     &[data-align="left"] {
-      left: 0;
+      inset-inline-start: 0;
     }
 
     &[data-align="right"] {
-      right: 0;
+      inset-inline-end: 0;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -65,12 +67,14 @@
     color: var(--color-text);
     font-size: var(--font-size-sm);
     font-family: var(--font-sans);
-    text-align: left;
+    text-align: start;
     cursor: pointer;
     transition: background-color 0.15s ease;
 
-    &:hover {
-      background-color: var(--color-bg-surface);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background-color: var(--color-bg-surface);
+      }
     }
 
     &[data-selected="true"] {

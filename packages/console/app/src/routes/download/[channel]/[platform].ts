@@ -1,4 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
+import { androidSoon } from "~/component/site/product-data"
 import type { DownloadPlatform } from "../types"
 
 const assetNames: Record<string, string> = {
@@ -11,7 +12,9 @@ const assetNames: Record<string, string> = {
   "linux-x64-rpm": "opencode-desktop-linux-x86_64.rpm",
 } satisfies Record<DownloadPlatform, string>
 
-export async function GET({ params: { platform, channel } }: APIEvent) {
+export async function GET({ request, params: { platform, channel } }: APIEvent) {
+  // No Android build to serve while the app is coming soon: its page says so.
+  if (androidSoon && platform.startsWith("android")) return Response.redirect(new URL("/mobile", request.url), 302)
   const assetName = assetNames[platform]
   if (!assetName) return new Response(null, { status: 404 })
 

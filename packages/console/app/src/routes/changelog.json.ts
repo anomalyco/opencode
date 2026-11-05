@@ -1,4 +1,4 @@
-import { loadChangelog } from "~/lib/changelog"
+import { feedWait, loadChangelog, type ChangelogData } from "~/lib/changelog"
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -10,13 +10,16 @@ const ok = "public, max-age=1, s-maxage=300, stale-while-revalidate=86400, stale
 const error = "public, max-age=1, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400"
 
 export async function GET() {
-  const result = await loadChangelog().catch(() => ({ ok: false, releases: [] }))
+  const result = await loadChangelog(feedWait).catch((): ChangelogData => ({ ok: false, releases: [] }))
 
-  return new Response(JSON.stringify({ releases: result.releases }), {
+  // The latest 20, as before: the apps' "What's new" and site search read this; older releases
+  // are on the changelog pages, and one release is at /changelog/<tag>.json.
+  return new Response(JSON.stringify({ releases: result.releases.slice(0, 20) }), {
     status: result.ok ? 200 : 503,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": result.ok ? ok : error,
+      // Stale releases are cached as briefly as an error, so fresh ones replace them soon.
+      "Cache-Control": result.ok && !result.stale ? ok : error,
       ...cors,
     },
   })

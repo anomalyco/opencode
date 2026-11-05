@@ -30,9 +30,11 @@
     color: var(--color-primary-text);
     border-color: var(--color-primary);
 
-    &:hover:not(:disabled) {
-      background-color: var(--color-primary-hover);
-      border-color: var(--color-primary-hover);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background-color: var(--color-primary-hover);
+        border-color: var(--color-primary-hover);
+      }
     }
 
     &:active:not(:disabled) {
@@ -46,9 +48,11 @@
     color: var(--color-danger-text);
     border-color: var(--color-danger);
 
-    &:hover:not(:disabled) {
-      background-color: var(--color-danger-hover);
-      border-color: var(--color-danger-hover);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background-color: var(--color-danger-hover);
+        border-color: var(--color-danger-hover);
+      }
     }
 
     &:active:not(:disabled) {
@@ -66,9 +70,11 @@
     color: var(--color-warning-text);
     border-color: var(--color-warning);
 
-    &:hover:not(:disabled) {
-      background-color: var(--color-warning-hover);
-      border-color: var(--color-warning-hover);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background-color: var(--color-warning-hover);
+        border-color: var(--color-warning-hover);
+      }
     }
 
     &:active:not(:disabled) {

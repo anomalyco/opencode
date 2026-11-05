@@ -13,15 +13,15 @@ import copyLogoSvgLight from "../asset/lander/opencode-logo-light.svg"
 import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
 import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
 import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
-import { A, useLocation, useNavigate } from "@solidjs/router"
-import { Match, Show, Switch } from "solid-js"
+import { A, useNavigate } from "@solidjs/router"
+import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
-import { strip } from "~/lib/language"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import "./header-context-menu.css"
+import { docsUrl } from "~/lib/docs"
 
 const isDarkMode = () => window.matchMedia("(prefers-color-scheme: dark)").matches
 
@@ -36,29 +36,15 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header() {
+export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
   const i18n = useI18n()
   const language = useLanguage()
-  const location = useLocation()
-  const onDownload = () => strip(location.pathname) === "/download"
 
   const [store, setStore] = createStore({
     mobileMenuOpen: false,
     contextMenuOpen: false,
     contextMenuPosition: { x: 0, y: 0 },
-  })
-
-  let mobileToggle: HTMLButtonElement | undefined
-  createEffect(() => {
-    if (!store.mobileMenuOpen) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      setStore("mobileMenuOpen", false)
-      mobileToggle?.focus()
-    }
-    document.addEventListener("keydown", handleKeyDown)
-    onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
   })
 
   createEffect(() => {
@@ -163,35 +149,28 @@ export function Header() {
             </a>
           </li>
           <li>
-            <a href="/v2/docs">{i18n.t("nav.docs")}</a>
+            <a href={language.route(docsUrl())}>{i18n.t("nav.docs")}</a>
           </li>
           <li>
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
           </li>
-          {/* Console links use a full page load into its separate application. */}
           <li>
-            <a href="/console/models" target="_self">
-              {i18n.t("nav.models")}
-            </a>
+            <A href="/console/models">{i18n.t("nav.zen")}</A>
           </li>
           <li>
-            <a href="/console/go" target="_self">
-              {i18n.t("nav.subscription")}
-            </a>
+            <A href="/console/go">{i18n.t("nav.go")}</A>
           </li>
           <li>
-            <a href="/console/enterprise" target="_self">
-              {i18n.t("nav.enterprise")}
-            </a>
+            <A href="/console/enterprise">{i18n.t("nav.enterprise")}</A>
           </li>
-          <li>
-            <a href="/console" target="_self">
-              {i18n.t("nav.console")}
-            </a>
-          </li>
-          <Show when={!onDownload()}>
+          <Show when={props.zen || props.go}>
             <li>
-              <A href={language.route("/download")} data-slot="cta-button">
+              <a href="/auth">{i18n.t("nav.login")}</a>
+            </li>
+          </Show>
+          <Show when={!props.hideGetStarted}>
+            <li>
+              <A href={language.route("/product")} data-slot="cta-button">
                 <svg
                   width="18"
                   height="18"
@@ -215,10 +194,9 @@ export function Header() {
       </nav>
       <nav data-component="nav-mobile">
         <button
-          ref={mobileToggle}
           type="button"
           data-component="nav-mobile-toggle"
-          aria-expanded={store.mobileMenuOpen}
+          aria-expanded={store.mobileMenuOpen ? "true" : "false"}
           aria-controls="nav-mobile-menu"
           class="nav-toggle"
           onClick={() => setStore("mobileMenuOpen", !store.mobileMenuOpen)}
@@ -271,34 +249,32 @@ export function Header() {
                   </a>
                 </li>
                 <li>
-                  <a href="/v2/docs">{i18n.t("nav.docs")}</a>
+                  <a href={language.route(docsUrl())}>{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
                   <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
                 </li>
-                <li>
-                  <a href="/console/models" target="_self">
-                    {i18n.t("nav.models")}
-                  </a>
-                </li>
-                <li>
-                  <a href="/console/go" target="_self">
-                    {i18n.t("nav.subscription")}
-                  </a>
-                </li>
-                <li>
-                  <a href="/console/enterprise" target="_self">
-                    {i18n.t("nav.enterprise")}
-                  </a>
-                </li>
-                <li>
-                  <a href="/console" target="_self">
-                    {i18n.t("nav.console")}
-                  </a>
-                </li>
-                <Show when={!onDownload()}>
+                <Show when={!props.zen}>
                   <li>
-                    <A href={language.route("/download")} data-slot="cta-button">
+                    <A href="/console/models">{i18n.t("nav.zen")}</A>
+                  </li>
+                </Show>
+                <Show when={!props.go}>
+                  <li>
+                    <A href="/console/go">{i18n.t("nav.go")}</A>
+                  </li>
+                </Show>
+                <li>
+                  <A href="/console/enterprise">{i18n.t("nav.enterprise")}</A>
+                </li>
+                <Show when={props.zen || props.go}>
+                  <li>
+                    <a href="/auth">{i18n.t("nav.login")}</a>
+                  </li>
+                </Show>
+                <Show when={!props.hideGetStarted}>
+                  <li>
+                    <A href={language.route("/product")} data-slot="cta-button">
                       {i18n.t("nav.getStartedFree")}
                     </A>
                   </li>

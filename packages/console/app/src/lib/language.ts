@@ -50,6 +50,28 @@ const LABEL = {
   tr: "Türkçe",
 } satisfies Record<Locale, string>
 
+// The language's name in English, shown beside its own name for readers who can't read the page.
+const ENGLISH = {
+  en: "English",
+  zh: "Chinese, Simplified",
+  zht: "Chinese, Traditional",
+  ko: "Korean",
+  de: "German",
+  es: "Spanish",
+  fr: "French",
+  it: "Italian",
+  da: "Danish",
+  ja: "Japanese",
+  pl: "Polish",
+  ru: "Russian",
+  uk: "Ukrainian",
+  ar: "Arabic",
+  no: "Norwegian",
+  br: "Portuguese, Brazil",
+  th: "Thai",
+  tr: "Turkish",
+} satisfies Record<Locale, string>
+
 const TAG = {
   en: "en",
   zh: "zh-Hans",
@@ -84,8 +106,7 @@ const DOCS = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
-  // There are no Ukrainian docs, so Ukrainian visitors read the English docs.
-  uk: "root",
+  uk: "uk",
   ar: "ar",
   no: "nb",
   br: "pt-br",
@@ -207,11 +228,11 @@ export function strip(pathname: string) {
 
 export function route(locale: Locale, pathname: string) {
   const next = strip(pathname)
-  if (next.startsWith("/docs")) return docs(locale, next)
   if (next.startsWith("/auth")) return next
   if (next.startsWith("/workspace")) return next
-  // The changelog worker owns /changelog and only publishes English release notes.
-  if (next === "/changelog" || next.startsWith("/changelog/")) return next
+  // English-only pages (the changelog and the font) live at their unprefixed URLs; their locale
+  // URLs redirect there.
+  if (/^\/(changelog|font)(?=$|[/.?#])/.test(next)) return next
   if (locale === "en") return next
   if (next === "/") return `/${locale}`
   return `/${locale}${next}`
@@ -219,6 +240,19 @@ export function route(locale: Locale, pathname: string) {
 
 export function label(locale: Locale) {
   return LABEL[locale]
+}
+
+export function english(locale: Locale) {
+  return ENGLISH[locale]
+}
+
+/**
+ * A language's name in the page's language, shown beside its own name ("ドイツ語" beside "Deutsch" on
+ * /ja). English pages keep the names in ENGLISH, which match how the docs list them.
+ */
+export function displayName(locale: Locale, page: Locale) {
+  if (page === "en") return ENGLISH[locale]
+  return new Intl.DisplayNames([TAG[page]], { type: "language" }).of(TAG[locale]) ?? ENGLISH[locale]
 }
 
 export function tag(locale: Locale) {
@@ -325,7 +359,6 @@ export function localeFromRequest(request: Request) {
   )
 }
 
-// Pages take their language from the URL alone, so one URL serves the same language to people, crawlers and caches.
 export function pageLocale(request: Request) {
   const pathname = new URL(request.url).pathname
   return (
