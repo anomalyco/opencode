@@ -1,11 +1,12 @@
 import { ImageRenderable, InputRenderable, TextareaRenderable, VideoRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
-import { copyFile, rm } from "node:fs/promises"
+import { copyFile, rm, utimes } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { appendToSessionPrompt, takeDraft } from "../src/component/prompt/draft-stash"
 import { MAX_LOCAL_VIDEO_BYTES } from "../src/component/prompt/local-attachment"
 import type { Config } from "../src/config"
+import { promptMediaDirectory, prunePromptMedia } from "../src/prompt/history"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 import { descendants, imageFixture, videoFixture } from "./fixture/media"
@@ -270,6 +271,26 @@ test("a restored video reaches history as a file at once", async () => {
   app.mockInput.pressEnter()
   await app.until(() => app.prompts.length === 1)
   expect(app.prompts[0]?.files).toEqual(files)
+}, 20000)
+
+test("a stash pop keeps an old kept video its prompt names from being pruned", async () => {
+  await using temporary = await tmpdir()
+  const kept = path.join(promptMediaDirectory(temporary.path), "0c".repeat(32) + ".mp4")
+  await Bun.write(kept, Bun.file(videoFixture))
+  const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
+  await utimes(kept, day, day)
+  const files = [{ uri: pathToFileURL(kept).href, path: kept, mention: { start: 5, end: 14, text: "[Video 1]" } }]
+  const prompt = { text: "Look [Video 1]", files, agents: [], skills: [], pasted: [] }
+  const stash = path.join(temporary.path, "prompt-stash.jsonl")
+  await Bun.write(stash, JSON.stringify({ prompt, timestamp: 1 }) + "\n")
+  await using app = await openSession({}, { state: temporary.path })
+  await app.palette("Stash pop")
+  await app.waitForFrame(() => app.composer() === prompt.text)
+
+  // Once the stash no longer names it, only the draft holds it.
+  await app.until(() => Bun.file(stash).size === 0)
+  await prunePromptMedia(temporary.path)
+  expect(await Bun.file(kept).exists()).toBe(true)
 }, 20000)
 
 test("a local server's restored file video of any type gets its path at once, with the experiment off", async () => {

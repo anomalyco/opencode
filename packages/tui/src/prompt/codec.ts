@@ -10,13 +10,18 @@ export type ProjectedPrompt = Pick<Prompt, "text" | "agents"> & {
   readonly skills?: ReadonlyArray<{ readonly id: string; readonly mention?: PromptInput.SkillAttachment["mention"] }>
 }
 
-/** A projected prompt as composer input. Files the server kept as `media:<hash>` refs stay refs. */
-export function projectedPromptInput(input: ProjectedPrompt): EditablePromptInput {
+/**
+ * A projected prompt as composer input. Files the server kept as `media:<hash>` refs stay refs. A file keeps its source
+ * uri, except an unmentioned `file:` source with a remote server: that names a file on the server's machine, which this
+ * terminal cannot read again on send, so the stored copy stands in for it.
+ */
+export function projectedPromptInput(input: ProjectedPrompt, localServer: boolean): EditablePromptInput {
   return {
     text: input.text,
     files: input.files?.map((file) => ({
       uri:
-        file.source.type === "uri"
+        file.source.type === "uri" &&
+        (localServer || !file.source.uri.startsWith("file:") || file.mention?.text.startsWith("@"))
           ? file.source.uri
           : "uri" in file
             ? file.uri
@@ -45,8 +50,9 @@ export function projectedPromptInput(input: ProjectedPrompt): EditablePromptInpu
 export async function restoredPromptInput(
   input: ProjectedPrompt,
   read: (uri: string) => Promise<Uint8Array | undefined>,
+  localServer: boolean,
 ): Promise<EditablePromptInput> {
-  const output = projectedPromptInput(input)
+  const output = projectedPromptInput(input, localServer)
   if (!output.files?.some((file) => mediaHashFromUri(file.uri))) return output
   const files = await Promise.all(
     output.files.map(async (file, index) => {

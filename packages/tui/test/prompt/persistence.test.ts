@@ -39,3 +39,15 @@ test("a reader sees the old or the new text while it is rewritten, never part of
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test("an append made while the file is rewritten lands in the new file", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
+  try {
+    const file = path.join(root, "prompt-stash.jsonl")
+    await writeText(file, "A\n")
+    await Promise.all([writeText(file, ""), appendText(file, "B\n")])
+    expect(await readText(file)).toBe("B\n")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

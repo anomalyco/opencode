@@ -26,7 +26,7 @@ describe("prompt codec", () => {
     } satisfies Prompt
     const before = structuredClone(input)
 
-    const output = projectedPromptInput(input)
+    const output = projectedPromptInput(input, true)
 
     expect(output).toEqual({
       text: input.text,
@@ -51,8 +51,23 @@ describe("prompt codec", () => {
     expect(output.agents?.[0]?.mention).not.toBe(input.agents[0].mention)
   })
 
+  // A server-side `file:` source names a file only a local server's terminal can read again.
+  test.each([
+    { localServer: true, mention: "[Image 1]", uri: "file:///home/devbox/shot.png" },
+    { localServer: false, mention: "[Image 1]", uri: `media:${"d".repeat(64)}` },
+    { localServer: false, mention: "@shot.png", uri: "file:///home/devbox/shot.png" },
+  ])("with localServer $localServer, a $mention file stored from a file source restores as $uri", (row) => {
+    const file = {
+      uri: `media:${"d".repeat(64)}`,
+      mime: "image/png",
+      source: { type: "uri", uri: "file:///home/devbox/shot.png" },
+      mention: { start: 0, end: row.mention.length, text: row.mention },
+    } as const
+    expect(projectedPromptInput({ text: row.mention, files: [file] }, row.localServer).files?.[0]?.uri).toBe(row.uri)
+  })
+
   test("retains empty attachment keys for editable prompt replacement", () => {
-    expect(projectedPromptInput({ text: "plain" })).toEqual({
+    expect(projectedPromptInput({ text: "plain" }, true)).toEqual({
       text: "plain",
       files: undefined,
       agents: undefined,
@@ -83,7 +98,7 @@ describe("restored prompt input", () => {
   } satisfies Parameters<typeof restoredPromptInput>[0]
 
   test("keeps media refs as refs in the synchronous projection", () => {
-    expect(projectedPromptInput(message).files?.map((file) => file.uri)).toEqual([
+    expect(projectedPromptInput(message, true).files?.map((file) => file.uri)).toEqual([
       `media:${hash}`,
       "data:image/jpeg;base64,YWJj",
     ])
@@ -91,14 +106,18 @@ describe("restored prompt input", () => {
 
   test("reads media refs back into data URIs and leaves inline files alone", async () => {
     const reads: string[] = []
-    const output = await restoredPromptInput(message, async (uri) => {
-      reads.push(uri)
-      return new Uint8Array([137, 80, 78, 71])
-    })
+    const output = await restoredPromptInput(
+      message,
+      async (uri) => {
+        reads.push(uri)
+        return new Uint8Array([137, 80, 78, 71])
+      },
+      true,
+    )
 
     expect(reads).toEqual([`media:${hash}`])
     expect(output).toEqual({
-      ...projectedPromptInput(message),
+      ...projectedPromptInput(message, true),
       files: [
         {
           uri: `data:image/png;base64,${Buffer.from([137, 80, 78, 71]).toString("base64")}`,
@@ -118,17 +137,19 @@ describe("restored prompt input", () => {
 
   test("reads nothing for a prompt without media refs", async () => {
     const inline = { ...message, files: [message.files[1]] }
-    const output = await restoredPromptInput(inline, () => Promise.reject(new Error("unexpected read")))
+    const output = await restoredPromptInput(inline, () => Promise.reject(new Error("unexpected read")), true)
 
-    expect(output).toEqual(projectedPromptInput(inline))
+    expect(output).toEqual(projectedPromptInput(inline, true))
   })
 
   test("rejects when a media ref cannot be read, so callers keep the server copy", async () => {
-    await expect(restoredPromptInput(message, () => Promise.reject(new Error("offline")))).rejects.toThrow("offline")
+    await expect(restoredPromptInput(message, () => Promise.reject(new Error("offline")), true)).rejects.toThrow(
+      "offline",
+    )
   })
 
   test("leaves out a file whose read resolves undefined", async () => {
-    const output = await restoredPromptInput(message, async () => undefined)
+    const output = await restoredPromptInput(message, async () => undefined, true)
 
     expect(output.text).toBe(message.text)
     expect(output.files?.map((file) => file.uri)).toEqual(["data:image/jpeg;base64,YWJj"])

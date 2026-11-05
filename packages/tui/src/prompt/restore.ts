@@ -1,5 +1,6 @@
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
+import { useTuiTerminalEnvironment } from "../context/runtime"
 import { useToast } from "../ui/toast"
 import { isMissingMedia } from "../util/media"
 import { restoredPromptInput, type ProjectedPrompt } from "./codec"
@@ -17,14 +18,18 @@ export function usePromptRestore() {
   const client = useClient()
   const toast = useToast()
   const renderer = useRenderer()
+  const terminalEnvironment = useTuiTerminalEnvironment()
   return async (input: ProjectedPrompt, options?: { allowMissing?: false }): Promise<PromptInfo> => {
     let missing = 0
-    const prompt = await restoredPromptInput(input, (uri) =>
-      client.media.read(uri).catch((error) => {
-        if (options?.allowMissing === false || !isMissingMedia(error)) throw error
-        missing++
-        return undefined
-      }),
+    const prompt = await restoredPromptInput(
+      input,
+      (uri) =>
+        client.media.read(uri).catch((error) => {
+          if (options?.allowMissing === false || !isMissingMedia(error)) throw error
+          missing++
+          return undefined
+        }),
+      terminalEnvironment.localServer === true,
     )
     if (missing)
       toast.show({

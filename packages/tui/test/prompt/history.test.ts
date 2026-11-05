@@ -92,6 +92,19 @@ describe("prompt history", () => {
     expect((await readKeptAttachments(persisted.slice(2), true)).files.map((file) => file.uri)).toEqual(restored)
   })
 
+  test("persisting a kept video again restarts its grace window", async () => {
+    await using tmp = await tmpdir()
+    const prompt = entry("media", [{ uri: "data:video/mp4;base64,AAAA" }])
+    const file = persistablePrompt(prompt, tmp.path).files![0]!.path!
+    const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
+    await utimes(file, day, day)
+
+    // As a draft persisted again does before its entry is written.
+    expect(persistablePrompt(prompt, tmp.path).files![0]!.path).toBe(file)
+    await prunePromptMedia(tmp.path)
+    expect(await Bun.file(file).exists()).toBe(true)
+  })
+
   test("keeps a video's bytes and leaves no temporary file when its file cannot be written", async () => {
     await using tmp = await tmpdir()
     const uri = "data:video/mp4;base64,BBBB"

@@ -123,7 +123,8 @@ export async function readKeptAttachments<T extends KeptFile>(files: readonly T[
       const content = await readFileBounded(file.path, MAX_LOCAL_ATTACHMENT_BYTES).catch(() => undefined)
       if (!content) return name
       const extension = path.extname(file.path).toLowerCase()
-      const mime = mimeTypes[extension] ?? `video/${extension.slice(1)}`
+      const type = Bun.file(file.path).type
+      const mime = mimeTypes[extension] ?? (type.startsWith("video/") ? type : `video/${extension.slice(1)}`)
       return { ...file, uri: `data:${mime};base64,${content.toString("base64")}` }
     }),
   )

@@ -114,9 +114,10 @@ function init(directory: string) {
     measuring = false
     const now = renderer.clock.now()
     const seen = new Set<ScrollBoxRenderable>()
-    const near = [...tracked]
-      .map(([key, element]) => ({ key, ...measure(element, renderer, seen) }))
-      .filter((tile) => tile.near)
+    const tiles = [...tracked].map(([key, element]) => ({ key, ...measure(element, renderer, seen) }))
+    const near = tiles.filter((tile) => tile.near)
+    // Showing a hidden ancestor again moves nothing, so measure every frame while one hides a tile.
+    if (tiles.some((tile) => tile.hidden)) invalidate()
     // Fully visible tiles rank first, then those showing more of themselves. Tiles under the viewer do not rank.
     const ranked = viewer() ? [] : near.toSorted((a, b) => b.share - a.share).slice(0, POSTER_LIMIT)
     const kept = [...players]
@@ -229,13 +230,13 @@ export function useMedia() {
 }
 
 /**
- * The share of the tile inside the screen and every scroll box around it, and whether it is within half a scroll box
- * of them. Adds those scroll boxes to `boxes`.
+ * The share of the tile inside the screen and every scroll box around it, whether it is within half a scroll box of
+ * them, and whether a hidden ancestor hides it. Adds those scroll boxes to `boxes`.
  */
 function measure(element: Renderable, screen: { width: number; height: number }, boxes: Set<ScrollBoxRenderable>) {
   const clips = [{ x: 0, y: 0, width: screen.width, height: screen.height }]
   for (let node: Renderable | null = element; node; node = node.parent) {
-    if (!node.visible) return { share: 0, near: false }
+    if (!node.visible) return { share: 0, near: false, hidden: true }
     if (node === element || !(node instanceof ScrollBoxRenderable)) continue
     boxes.add(node)
     const viewport = node.viewport
@@ -249,7 +250,7 @@ function measure(element: Renderable, screen: { width: number; height: number },
     const bottom = Math.min(rect.y + rect.height, ...clips.map((clip) => clip.y + clip.height * (1 + grow)))
     return Math.max(0, right - left) * Math.max(0, bottom - top)
   }
-  return { share: area(0) / (rect.width * rect.height || 1), near: area(0.5) > 0 }
+  return { share: area(0) / (rect.width * rect.height || 1), near: area(0.5) > 0, hidden: false }
 }
 
 function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>) {
