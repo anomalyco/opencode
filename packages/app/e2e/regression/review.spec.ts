@@ -1786,6 +1786,29 @@ test("desktop review waits for the session's stored mode before it loads changes
   expect(working).toEqual([])
 })
 
+// A failed request used to settle like an empty one, so the review claimed the working tree was clean.
+test("a failed diff request offers a retry instead of a clean working tree", async ({ page }) => {
+  await openSession(page, { name: "ReviewDiffFailure", vcsDiff: [fileDiff("src/alpha.ts")] })
+  const changes = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    if (!changes.failing || new URL(route.request().url()).searchParams.get("untracked") !== "folders")
+      return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const failure = panel.getByRole("alert")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(failure.getByText("Couldn't load changes", { exact: true })).toBeVisible()
+  await expect(panel.locator('[data-slot="session-review-v2-empty-changes"]')).toHaveCount(0)
+  changes.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("alpha.ts")
+  await expect(failure).toHaveCount(0)
+})
+
 test("a chosen mode the session stops offering shows as Git, and comes back when it is offered again", async ({
   page,
 }) => {

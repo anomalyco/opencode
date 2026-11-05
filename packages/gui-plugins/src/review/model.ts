@@ -5,7 +5,7 @@ import { artifactMime } from "@opencode/util/artifact"
 import { bytesToBase64 } from "@opencode/util/base64"
 import { checksum } from "@opencode/util/encode"
 import { showToast } from "@opencode/ui/toast"
-import { createQuery, useQueries, useQueryClient } from "@tanstack/solid-query"
+import { createQuery, focusManager, useQueries, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -36,6 +36,21 @@ import {
   type ReviewScrollEvent,
   type ReviewScrollState,
 } from "./scroll-machine"
+import {
+  INITIAL_REVIEW_DIFF_STATE,
+  REVIEW_DIFF_TIMEOUT_MS,
+  reviewDiffReady,
+  reviewDiffView,
+  sameReviewDiffTarget,
+  transitionReviewDiff,
+  type ReviewDiffContext,
+  type ReviewDiffEffect,
+  type ReviewDiffEvent,
+  type ReviewDiffRows,
+  type ReviewDiffState,
+  type ReviewDiffTarget,
+  type ReviewDiffView,
+} from "./machine"
 
 export type ChangeMode = "git" | "branch" | "turn"
 
@@ -45,6 +60,9 @@ export type Demand = { tree: number; files: number; panel: number; details: numb
 
 /** The narrow review's list and the animation frame that scrolls it to a focused file. */
 type ScrollTarget = { element?: HTMLDivElement; frame?: number }
+
+/** The diff request the driver runs: its abort controller and its timeout. */
+type DiffRequest = { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
 
 const selectionFromLines = (range: LineRange): FileSelection => ({
   startLine: Math.min(range.start, range.end),
@@ -161,29 +179,122 @@ export function createReviewModel(input: {
 
   const turnKey = () => [ctx.id, view().server.id, "session-turn", view().id] as const
 
-  const diffQuery = createQuery(() => {
-    const value = mode()
-    const turn = value === "turn"
+  const diffContext = createMemo(
+    (): ReviewDiffContext => {
+      const project = view().project
 
-    return {
-      queryKey: turn ? turnKey() : ([...vcsKey(), value] as const),
+      if (project && !project.vcs) return { kind: "no-vcs" }
+
       // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
-      enabled: !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs,
-      refetchOnMount: "always" as const,
-      // A finished turn does not change on focus or filesystem events; refresh it when the session goes idle.
-      refetchOnWindowFocus: !turn,
-      queryFn: turn
-        ? () => view().server.client.session.diff({ sessionID: view().id })
-        : () =>
-            view()
-              .server.client.vcs.diff({
-                location: { directory: directory() },
-                mode: value === "git" ? "working" : value,
-                untracked: "folders",
-              })
-              .then((result) => result.data),
-    }
-  })
+      if (!stored()) return { kind: "waiting" }
+      const connected = view().server.connected
+
+      if (!project) return connected ? { kind: "waiting" } : { kind: "offline" }
+      const value = mode()
+      const serverID = view().server.id
+
+      const target: ReviewDiffTarget =
+        value === "turn"
+          ? { kind: "turn", serverID, sessionID: view().id }
+          : {
+              kind: "vcs",
+              serverID,
+              directory: directory(),
+              mode: value,
+              branch: vcs()?.branch.current ?? "",
+              defaultBranch: vcs()?.branch.default ?? "",
+            }
+
+      return { kind: "ready", target, connected, demanded: wantsReview() }
+    },
+    undefined,
+    { equals: sameDiffContext },
+  )
+
+  const [diffState, setDiffState] = createSignal<ReviewDiffState>(INITIAL_REVIEW_DIFF_STATE)
+  const diffRequest: DiffRequest = {}
+
+  // The diffs a target last loaded stay in the query cache, so returning to a mode or directory shows them at once.
+  const diffKey = (target: ReviewDiffTarget) =>
+    target.kind === "turn"
+      ? [ctx.id, target.serverID, "session-turn", target.sessionID]
+      : [ctx.id, target.serverID, "session-vcs", target.directory, target.branch, target.defaultBranch, target.mode]
+
+  const dispatchDiff = (event: ReviewDiffEvent) => {
+    const next = transitionReviewDiff(untrack(diffState), event)
+
+    setDiffState(next.state)
+    next.effects.forEach(runDiffEffect)
+  }
+
+  const runDiffEffect = (effect: ReviewDiffEffect) => {
+    clearTimeout(diffRequest.timer)
+    diffRequest.controller?.abort()
+
+    if (effect.type === "abort") return
+    const attempt = effect.attempt
+    const controller = new AbortController()
+
+    const timer = setTimeout(() => {
+      controller.abort()
+      dispatchDiff({ type: "fetch.timed-out", attempt })
+    }, REVIEW_DIFF_TIMEOUT_MS)
+
+    diffRequest.controller = controller
+    diffRequest.timer = timer
+    // The machine drops the answer of a request it no longer waits for, aborted or not.
+    void requestDiff(effect.target, AbortSignal.any([ctx.signal, controller.signal])).then(
+      (rows) => {
+        clearTimeout(timer)
+        const loaded: ReviewDiffRows = { rows, version: Date.now() }
+
+        queryClient.setQueryData(diffKey(effect.target), loaded)
+        dispatchDiff({ type: "fetch.succeeded", attempt, rows: loaded })
+      },
+      (cause: unknown) => {
+        clearTimeout(timer)
+        dispatchDiff({ type: "fetch.failed", attempt, message: cause instanceof Error ? cause.message : String(cause) })
+      },
+    )
+  }
+
+  const requestDiff = (target: ReviewDiffTarget, signal: AbortSignal) => {
+    const client = view().server.client
+
+    if (target.kind === "turn") return client.session.diff({ sessionID: target.sessionID }, { signal })
+
+    return client.vcs
+      .diff(
+        {
+          location: { directory: target.directory },
+          mode: target.mode === "git" ? "working" : target.mode,
+          untracked: "folders",
+        },
+        { signal },
+      )
+      .then((result) => result.data)
+  }
+
+  createKeyed(diffContext, (context) =>
+    dispatchDiff({
+      type: "context.changed",
+      context:
+        context.kind === "ready"
+          ? { ...context, cached: queryClient.getQueryData<ReviewDiffRows>(diffKey(context.target)) }
+          : context,
+    }),
+  )
+
+  // A finished turn does not change on focus or filesystem events; the machine refreshes only Git changes then.
+  onCleanup(
+    focusManager.subscribe((focused) => {
+      if (focused) dispatchDiff({ type: "window.focused" })
+    }),
+  )
+  onCleanup(() => dispatchDiff({ type: "disposed" }))
+
+  // A connection or demand change alone keeps the view, so the diffs it shows are not computed again.
+  const diffView = createMemo(() => reviewDiffView(diffState()), undefined, { equals: sameDiffView })
 
   // The session details' changes row: the session directory's working tree, loaded only while the details show.
   const detailsKey = () => [ctx.id, view().server.id, "session-details", view().directory] as const
@@ -203,6 +314,7 @@ export function createReviewModel(input: {
   }))
 
   const refresh = debounce(() => {
+    dispatchDiff({ type: "refresh", source: "vcs" })
     void queryClient.invalidateQueries({ queryKey: vcsKey() })
     void queryClient.invalidateQueries({ queryKey: detailsKey() })
   }, 100)
@@ -232,18 +344,22 @@ export function createReviewModel(input: {
   )
 
   createKeyed(opened, () => {
-    if (diffQuery.isFetching) return
-
     if (input.demand.tree > 0) {
       refresh()
 
       return
     }
 
-    if (view().server.connected && view().project?.vcs) void diffQuery.refetch()
+    dispatchDiff({ type: "side.opened" })
   })
 
-  const rows = (): FileDiffInfo[] => (diffQuery.isFetched ? (diffQuery.data ?? []) : [])
+  const noRows: readonly FileDiffInfo[] = []
+
+  const rows = () => {
+    const current = diffView()
+
+    return current.status === "ready" ? current.rows : noRows
+  }
 
   // Git lists an untracked folder as one row. Once the change tree opens it, the folder lists its entries one level
   // deep; they stay loaded while it is closed again, until the changes' source changes.
@@ -323,24 +439,9 @@ export function createReviewModel(input: {
   const count = () => rows().length
   const hasChanges = () => count() > 0
 
-  const ready = () => {
-    // A project without VCS never enables diffQuery, so its status stays "pending" forever.
-    const project = view().project
+  const ready = () => reviewDiffReady(diffState())
 
-    if (project && !project.vcs) return true
-
-    if (!stored()) return false
-
-    return !diffQuery.isPending
-  }
-
-  const lifetime = { disposed: false }
-
-  onCleanup(() => {
-    lifetime.disposed = true
-  })
-
-  const alive = () => !lifetime.disposed && !ctx.signal.aborted
+  const alive = () => untrack(diffState).status !== "disposed" && !ctx.signal.aborted
 
   // Initializes Git for the routed session. The request keeps that session's object, so its server and location stay
   // its own. Cache refresh follows the request's session; only error feedback depends on which session is routed.
@@ -641,6 +742,7 @@ export function createReviewModel(input: {
   // A session that goes idle has finished its turn, which may have changed files.
   createKeyed(idled, () => {
     refresh()
+    dispatchDiff({ type: "refresh", source: "turn" })
     void queryClient.invalidateQueries({ queryKey: turnKey() })
   })
 
@@ -675,7 +777,13 @@ export function createReviewModel(input: {
     count,
     deferRender,
     details: (): FileDiffInfo[] | undefined => (detailsQuery.isFetched ? (detailsQuery.data ?? []) : undefined),
-    diffVersion: () => diffQuery.dataUpdatedAt,
+    /** What the review shows: diffs, or why there are none yet. */
+    diff: diffView,
+    diffVersion: () => {
+      const current = diffView()
+
+      return current.status === "ready" ? current.version : 0
+    },
     diffs,
     folderLabels,
     renderable,
@@ -687,11 +795,6 @@ export function createReviewModel(input: {
     loadDiff,
     readFile,
     mode,
-    noGit: createMemo(() => {
-      const project = view().project
-
-      return !!project && !project.vcs
-    }),
     filter: () => state.filter,
     setFilter: (value: string) => setState("filter", value),
     open: () => stored()?.open ?? [],
@@ -706,6 +809,7 @@ export function createReviewModel(input: {
     options,
     panelRendered,
     ready,
+    retry: () => dispatchDiff({ type: "retry" }),
     setMode: (value: ChangeMode) =>
       update((draft) => {
         draft.mode = value
@@ -721,3 +825,22 @@ export function createReviewModel(input: {
 }
 
 export type ReviewModel = ReturnType<typeof createReviewModel>
+
+function sameDiffContext(previous: ReviewDiffContext, next: ReviewDiffContext) {
+  if (previous.kind !== "ready" || next.kind !== "ready") return previous.kind === next.kind
+
+  return (
+    previous.connected === next.connected &&
+    previous.demanded === next.demanded &&
+    sameReviewDiffTarget(previous.target, next.target)
+  )
+}
+
+function sameDiffView(previous: ReviewDiffView, next: ReviewDiffView) {
+  if (previous.status === "ready" && next.status === "ready")
+    return previous.rows === next.rows && previous.version === next.version
+
+  if (previous.status === "error" && next.status === "error") return previous.failure === next.failure
+
+  return previous.status === next.status
+}
