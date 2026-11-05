@@ -279,8 +279,9 @@ test("a session being created on an SSH host that turns out incompatible says so
   const preparing = page.locator('[data-component="session-preparing"]')
   await expect(preparing).toBeVisible()
 
+  // The SSH plugin covers a host that is not ready; the route stays mounted beneath its cover.
   await page.getByRole("button", { name: "Report incompatible SSH server" }).click()
-  await expect(page.getByText("This server version isn't supported", { exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "SSH connection inactive", exact: true })).toBeVisible()
+  await expect(page.getByText("This server version isn't supported", { exact: true })).toBeAttached()
   await expect(preparing).toHaveCount(0)
 })
