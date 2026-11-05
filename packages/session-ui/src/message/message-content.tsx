@@ -66,6 +66,15 @@ import {
   type AttachmentMediaEvent,
 } from "./attachment-media-machine"
 import {
+  createCompactionEntranceState,
+  DISPOSED_COMPACTION_ENTRANCE_EVENT,
+  GRACE_ELAPSED_EVENT,
+  selectCompactionEnter,
+  transitionCompactionEntrance,
+  type CompactionEntranceEffect,
+  type CompactionEntranceEvent,
+} from "./compaction-entrance-machine"
+import {
   createMessageActionState,
   transitionMessageAction,
   viewMessageActions,
@@ -1011,25 +1020,36 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 function QuietCompaction(props: { id: string; created: number; running: boolean; summary: string; usage: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  // A new one waits out the grace (400 ms, matched in session-compaction.css) before showing Compacting; one that
-  // ends inside it, as a precomputed summary does, only fades in as Compacted. One already running or finished when
-  // the history loads shows without an entrance.
-  const mounted = performance.now()
-  const age = Date.now() - props.created
+  // A new one waits out the grace before showing Compacting; one that ends inside it, as a precomputed summary does,
+  // only fades in as Compacted. One already running or finished when the history loads shows without an entrance.
+  const initial = createCompactionEntranceState({ ageMs: Date.now() - props.created, running: props.running })
+  const [entrance, setEntrance] = createSignal(initial.state)
+  const enter = createMemo(() => selectCompactionEnter(entrance()))
+  let graceTimer: ReturnType<typeof setTimeout> | undefined
 
-  const [enter, setEnter] = createSignal(
-    props.running ? (age < 400 ? "grace" : undefined) : age < 1_000 ? "now" : undefined,
-  )
+  const runEntrance = (effect: CompactionEntranceEffect) => {
+    clearTimeout(graceTimer)
+    graceTimer = undefined
+
+    if (effect.type === "schedule-grace")
+      graceTimer = setTimeout(() => dispatchEntrance(GRACE_ELAPSED_EVENT), effect.delayMs)
+  }
+
+  const dispatchEntrance = (event: CompactionEntranceEvent) => {
+    const result = transitionCompactionEntrance(untrack(entrance), event)
+    setEntrance(result.state)
+    result.effects.forEach(runEntrance)
+  }
+
+  initial.effects.forEach(runEntrance)
+  createEffect(() => dispatchEntrance({ type: "running.changed", running: props.running }))
+  onCleanup(() => dispatchEntrance(DISPOSED_COMPACTION_ENTRANCE_EVENT))
 
   const expandable = () => !props.running && !!props.summary.trim()
 
   const label = createMemo(() =>
     splitEnding(i18n.t("ui.messagePart.compaction.running"), i18n.t("ui.messagePart.compaction.done")),
   )
-
-  createEffect(() => {
-    if (!props.running && enter() === "grace" && performance.now() - mounted < 400) setEnter("now")
-  })
 
   return (
     <div data-component="session-compaction-message" data-quiet="" data-enter={enter()}>
