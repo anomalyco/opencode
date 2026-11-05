@@ -53,7 +53,7 @@ export function Contribution(props: { plugin: string; failed?: () => void; child
         <ErrorBoundary
           fallback={(error) => {
             onMount(() => {
-              host.fail(props.plugin, error, "render")
+              host.fail(props.plugin, error)
               props.failed?.()
             })
 
@@ -122,7 +122,7 @@ export function PluginThemes(props: { loaded: () => boolean }) {
       host.definitions().every((definition) => {
         if (!definition.windowEntry) return true
 
-        const status = host.state.status[definition.id]
+        const status = host.status(definition.id)
 
         return status === "active" || status === "failed" || status === "disabled"
       }),

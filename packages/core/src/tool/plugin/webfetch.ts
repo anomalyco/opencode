@@ -70,6 +70,8 @@ const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
+  // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
+  if (url.username || url.password) throw new Error("URL must not include credentials")
 }
 
 export const MAX_REDIRECTS = 10
@@ -95,6 +97,7 @@ const execute = (
           try: () => {
             const target = new URL(location, url)
             assertHttpUrl(target)
+            target.hash = ""
             return target.href
           },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -144,6 +147,8 @@ export const Plugin = {
                 try: () => {
                   const parsed = new URL(input.url)
                   assertHttpUrl(parsed)
+                  // The fragment is never sent, and would keep a rule for the exact URL from matching.
+                  parsed.hash = ""
                   return parsed.href
                 },
                 catch: (error) => error,

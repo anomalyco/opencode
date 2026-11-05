@@ -200,7 +200,7 @@ export const dict = {
     "OpenCode Models의 모든 모델은 미국과 EU에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "zen.privacy.exceptionsLink": "다음 예외",
 
-  "go.promo.kimiK31Pro": "이제 Go에서 Kimi K3.1 Pro를 이용할 수 있습니다.",
+  "go.promo.hy4": "이제 Go에서 Hy4를 이용할 수 있습니다.",
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",

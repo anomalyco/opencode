@@ -122,6 +122,45 @@ describe("command palette sessions", () => {
     expect(result).toMatchObject([{ sessionID: exact.id, title: exact.title }])
   })
 
+  test("the caller's abort cancels a search while it waits and while it fetches", async () => {
+    const signals: AbortSignal[] = []
+    const fetched = Promise.withResolvers<void>()
+
+    await createRoot(async (dispose) => {
+      try {
+        const sessions = createServerSessionEntries({
+          server: ServerConnection.Key.make("selected-server"),
+          projects: () => [project],
+          load: (_text, signal) => {
+            signals.push(signal)
+            fetched.resolve()
+
+            return new Promise(() => {})
+          },
+          get: async () => session,
+          untitled: () => "Untitled",
+          category: () => "Sessions",
+          recentCategory: () => "Recent sessions",
+        })
+
+        const waiting = new AbortController()
+        const first = sessions.search("palette", waiting.signal)
+        waiting.abort()
+        expect(await first).toEqual([])
+
+        const fetching = new AbortController()
+        const second = sessions.search("palette", fetching.signal)
+        await fetched.promise
+        fetching.abort()
+        expect(await second).toEqual([])
+        expect(signals).toHaveLength(1)
+        expect(signals[0]?.aborted).toBe(true)
+      } finally {
+        dispose()
+      }
+    })
+  })
+
   test("matches known and loaded sessions synchronously while remote search is pending", async () => {
     const server = ServerConnection.Key.make("selected-server")
 

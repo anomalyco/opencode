@@ -76,7 +76,6 @@ const modelSelection = {
   setVisibility() {},
   variant: {
     configured: () => STORY_MODEL.variant,
-    selected: () => STORY_MODEL.variant,
     current: () => STORY_MODEL.variant,
     list: () => [STORY_MODEL.variant],
     set() {},
@@ -236,6 +235,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
         loading: () => false,
         loadFailed: () => false,
         failed: () => false,
+        optionUnavailable: () => false,
         sending: () => false,
         connected: () => true,
         select: (value) => setState("searchProvider", value),

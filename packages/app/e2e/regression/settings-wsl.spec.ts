@@ -239,6 +239,8 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
       timeout: 20_000,
     })
     .toEqual([true])
+  // The session waits for a sign-in instead of showing what the disposed controller last loaded.
+  await expect(page.getByText("Signed out of this server", { exact: true })).toBeVisible()
 
   await page.getByRole("button", { name: "Drop SSH tunnel" }).click()
   await page.getByRole("button", { name: "Reconnect", exact: true }).click()

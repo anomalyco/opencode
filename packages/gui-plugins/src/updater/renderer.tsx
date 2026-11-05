@@ -4,13 +4,14 @@ import { Command, SettingsPage, TitlebarItem, type SetupContext, type Plugin } f
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Updater } from "@opencode/plugin/gui/updater"
 import { updaterAction } from "./action"
+import { webUpdates } from "./web"
 import type definition from "./index"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   whatsNew(ctx)
   betaNotes(ctx)
 
-  if (!ctx.desktop) return
+  if (!ctx.desktop) return webUpdates(ctx)
   const updater = ctx.main(Updater)
   // Undefined until main's updater is up and has sent its state, and again while it is gone.
   const state = () => updater.state()
@@ -57,7 +58,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     render: () => (
       <Suspense>
         <Section
-          state={state}
+          action={() => updaterAction(state())}
           run={() => {
             const run = updaterAction(state()).run
 
@@ -86,7 +87,7 @@ function betaNotes(ctx: SetupContext<typeof definition>) {
 
   ctx.add(SettingsPage, {
     id: "whats-new",
-    icon: "flask",
+    icon: "outline-list-changelog",
     group: "about",
     get title() {
       return ctx.t("beta.title")

@@ -1,4 +1,5 @@
-import { Show, createEffect, createMemo, createSignal } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -13,6 +14,12 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 import type { ComposerModelLabel } from "./model-label"
+import {
+  createModelChipState,
+  selectModelChipPending,
+  transitionModelChip,
+  type ModelChipEvent,
+} from "./model-chip-machine"
 
 export function Composer(props: {
   class?: string
@@ -103,16 +110,50 @@ function ComposerModelControl(props: {
     void dialog.show(() => <DialogSelectModel model={props.model} />, detail === 0 ? undefined : props.onClose)
   }
 
-  // A previewed chip is visible before the catalog loads, so a click on it opens the dialog once loading finishes.
-  const [deferred, setDeferred] = createSignal<number>()
+  // A previewed chip is visible before the catalog loads, so a click on it opens the dialog once loading finishes,
+  // unless the user moved on first.
+  const [chip, setChip] = createSignal(createModelChipState())
+  const pending = createMemo(() => selectModelChipPending(chip()))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let trigger: HTMLButtonElement | undefined
+
+  const dispatch = (event: ModelChipEvent) => {
+    const next = transitionModelChip(chip(), event)
+    setChip(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "open") return open(effect.detail)
+      clearTimeout(timer)
+
+      if (effect.type === "timer.start")
+        timer = setTimeout(() => dispatch({ type: "timed-out", attempt: effect.attempt }), effect.delayMs)
+    })
+  }
 
   createEffect(() => {
-    const detail = deferred()
-
-    if (props.loading || detail === undefined) return
-    setDeferred(undefined)
-    open(detail)
+    if (!props.loading) untrack(() => dispatch({ type: "loaded", mobile: mobile(), dialogOpen: !!dialog.active }))
   })
+
+  createEffect(() => {
+    if (mobile() || dialog.active) untrack(() => dispatch({ type: "cancelled" }))
+  })
+
+  // Any other press, key or window switch means the user moved on, so the late catalog must not pop the dialog.
+  createEffect(() => {
+    if (!pending()) return
+    const cancel = () => dispatch({ type: "cancelled" })
+    makeEventListener(
+      document,
+      "pointerdown",
+      (event) => {
+        if (!(event.target instanceof Node && trigger?.contains(event.target))) cancel()
+      },
+      { capture: true },
+    )
+    makeEventListener(document, "keydown", cancel, { capture: true })
+    makeEventListener(window, "blur", cancel)
+  })
+
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const content = () => (
     <>
@@ -151,6 +192,7 @@ function ComposerModelControl(props: {
           when={mobile() && !props.loading}
           fallback={
             <Button
+              ref={trigger}
               data-action="composer-model"
               data-control-type="dialog"
               variant="ghost-muted"
@@ -158,13 +200,17 @@ function ComposerModelControl(props: {
               class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
+              aria-busy={pending() || undefined}
               onMouseDown={(event: MouseEvent) => event.preventDefault()}
-              onClick={(event: MouseEvent) => {
-                if (!props.loading) return open(event.detail)
-
-                // On mobile this inert chip stands in for the drawer trigger, so a click there is dropped.
-                if (!mobile()) setDeferred(event.detail)
-              }}
+              onClick={(event: MouseEvent) =>
+                dispatch({
+                  type: "clicked",
+                  detail: event.detail,
+                  loading: props.loading,
+                  mobile: mobile(),
+                  dialogOpen: !!dialog.active,
+                })
+              }
             >
               {content()}
             </Button>

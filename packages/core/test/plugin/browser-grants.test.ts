@@ -53,19 +53,21 @@ it.live("starting another location leaves a live browser attachment's grants int
 it.live("a replaced attachment preserves its replacement's grants and ordered user permissions", () =>
   Effect.gen(function* () {
     const { host, rpc } = yield* setup()
-    yield* BrowserConnection.make(host)
     const baseline = [
-      ...access,
       { action: "browser", resource: "*", effect: "deny" },
       { action: "skill", resource: "browser", effect: "deny" },
       { action: "edit", resource: "*", effect: "ask" },
     ] as const
     const session = yield* host.session.create({ permissions: baseline })
-    const first = yield* attach(rpc, session.id)
-    const replacement = yield* attach(rpc, session.id)
-    expect(yield* Fiber.join(first)).toBe("replaced")
-    expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([...baseline, ...access])
-    yield* Fiber.interrupt(replacement)
+    yield* Effect.gen(function* () {
+      yield* BrowserConnection.make(host)
+      const first = yield* attach(rpc, session.id)
+      const replacement = yield* attach(rpc, session.id)
+      expect(yield* Fiber.join(first)).toBe("replaced")
+      expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([...baseline, ...access])
+      yield* Fiber.interrupt(replacement)
+      // The state machine revokes asynchronously; closing its scope drains permission syncs.
+    }).pipe(Effect.scoped)
     expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual(baseline)
   }),
 )

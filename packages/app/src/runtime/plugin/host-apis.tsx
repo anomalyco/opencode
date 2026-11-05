@@ -6,6 +6,7 @@ import {
   createSignal,
   getOwner,
   on,
+  onCleanup,
   runWithOwner,
   untrack,
   type Accessor,
@@ -40,9 +41,10 @@ import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
-import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
+import { findSessionTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import { openNotificationSession } from "@/shell/notifications/notification"
 import { playSoundById } from "@/shell/notifications/sound"
 import { showToast } from "@/shell/notifications/toast"
@@ -54,9 +56,30 @@ import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
+import {
+  createHostApiAttachState,
+  selectAttachAttempt,
+  selectAttached,
+  selectDraining,
+  transitionHostApiAttach,
+  type HostApiAttachEvent,
+} from "./attach-machine"
 import { closedEntry, createClosedTabs } from "./closed-tabs"
 import { panelsMoving } from "@/shell/panel-motion"
 import { createEmbeds } from "./embeds"
+import {
+  createMobileViewState,
+  createProjectRequestState,
+  createSideRegionState,
+  selectMobileView,
+  selectWaitingProjectServer,
+  transitionMobileView,
+  transitionProjectRequest,
+  transitionSideRegion,
+  type MobileViewEvent,
+  type ProjectRequestEvent,
+  type SideRegionEvent,
+} from "./host-layout-machine"
 import { usePluginHost, type HostApiFactories } from "./host"
 import { createLocatedWrites } from "./located"
 import { createSessionPanelMenu } from "./panel-menu"
@@ -113,36 +136,50 @@ export function createHostApis() {
   const desktop = createMediaQuery("(min-width: 768px)")
   const narrow = () => !desktop()
   const systemDark = createMediaQuery("(prefers-color-scheme: dark)")
-  const [attached, setAttached] = createSignal<Attached>()
+  // A plain signal: the interface holds live functions and SDK clients, which a store would wrap in proxies.
+  const [attachState, setAttachState] = createSignal(createHostApiAttachState<Attached>())
+  // A memo, so readers rerun when the interface mounts or detaches, not on every queued write.
+  const attached = createMemo(() => selectAttached(attachState()))
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, ReturnType<Storage["memory"]>>()
   const current = () => attached()
-  // Writes made while the app interface is not mounted, in call order.
-  const early: ((value: Attached) => void)[] = []
   // Removals of a session's store wait for its location, as layout writes do.
   const located = createLocatedWrites()
 
-  // Runs a write now when the interface is mounted and nothing waits before it; otherwise once it mounts.
-  const write = (run: (value: Attached) => void) => {
-    const value = untrack(attached)
+  const dispatchAttach = (event: HostApiAttachEvent<Attached>) => {
+    const next = transitionHostApiAttach(untrack(attachState), event)
 
-    if (value && early.length === 0) return run(value)
-    early.push(run)
+    setAttachState(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "schedule.drain") return queueMicrotask(() => drain(effect.attempt))
+
+      if (effect.type === "drop") return effect.items.forEach((item) => item.onDrop?.())
+
+      // Promise.try runs each write synchronously and isolates a throw, such as an unlisted server, from the later ones.
+      void Promise.try(() => effect.run(effect.attached)).catch((cause: unknown) => console.error("[plugin]", cause))
+    })
+
+    return next.queued
   }
 
-  // Promise.try runs each write synchronously and isolates a throw, such as an unlisted server, from the later ones.
-  const flush = () => {
-    const value = untrack(attached)
+  // Each step takes the next write off the queue before running it, so a throw cannot stall the writes behind it.
+  const drain = (attempt: number) =>
+    batch(() => {
+      while (selectDraining(untrack(attachState), attempt)) dispatchAttach({ type: "drain.next", attempt })
+    })
 
-    if (!value) return
-    batch(() =>
-      early
-        .splice(0)
-        .forEach(
-          (run) => void Promise.try(() => run(value)).catch((cause: unknown) => console.error("[plugin]", cause)),
-        ),
-    )
+  // Runs a write now when the interface is mounted and nothing waits before it; otherwise once it mounts. Returns a
+  // cancel for a write that waits; `onDrop` runs instead of the write when it is dropped.
+  const write = (run: (value: Attached) => void, onDrop?: () => void) => {
+    const id = dispatchAttach({ type: "write", run, onDrop })
+
+    return () => {
+      if (id !== undefined) dispatchAttach({ type: "cancel", id })
+    }
   }
+
+  // Writes still waiting when the plugin root goes away are dropped.
+  if (getOwner()) onCleanup(() => dispatchAttach({ type: "disposed" }))
 
   const embeds = createEmbeds({
     bridge: platform.plugins,
@@ -247,12 +284,13 @@ export function createHostApis() {
         const run = (connected: Attached) =>
           removePersisted(target(plugin, key, scope, options?.from, builtin, connected), platform)
 
-        // A session's store is found through its location: the removal waits for it, as layout writes do.
-        write((connected) =>
-          "session" in scope && !scope.session.location
-            ? located.hold(scope.session, () => write(run))
-            : run(connected),
-        )
+        // A session's store is found through its location: the removal waits for it, behind the session's earlier
+        // held removals, as layout writes do.
+        write((connected) => {
+          if (!("session" in scope) || (scope.session.location && !located.pending(scope.session.key)))
+            return run(connected)
+          located.hold(scope.session, () => write(run))
+        })
       },
     }),
     system: () => ({
@@ -380,15 +418,30 @@ export function createHostApis() {
         return { dismiss: runWithOwner(owner, () => register(dismiss)) ?? dismiss }
       },
     }),
-    // The user's notification settings live in the app interface, so a notification waits for it to mount.
+    // The user's notification settings live in the app interface, so a notification waits for it to mount. One that
+    // the plugin going away or the host dropping it ends first resolves as not shown.
     attention: (plugin, _owner, context) => ({
       notify: (options) =>
-        new Promise((resolve) =>
-          write((value) => {
-            if (context.signal.aborted) return resolve({ notification: false, sound: false })
+        new Promise((resolve) => {
+          const skip = () => {
+            context.signal.removeEventListener("abort", abort)
+            resolve({ notification: false, sound: false })
+          }
+
+          const abort = () => {
+            cancel()
+            skip()
+          }
+
+          if (context.signal.aborted) return skip()
+          context.signal.addEventListener("abort", abort, { once: true })
+
+          const cancel = write((value) => {
+            if (context.signal.aborted) return skip()
+            context.signal.removeEventListener("abort", abort)
             void value.notify(plugin, options).then(resolve)
-          }),
-        ),
+          }, skip)
+        }),
     }),
     // No command is registered before the interface mounts.
     commands: () => ({ run: (id) => untrack(attached)?.run(id) ?? false }),
@@ -436,25 +489,13 @@ export function createHostApis() {
      * Runs `run` now while the app interface is mounted and no write waits; otherwise after the interface's first
      * render, behind the writes made before it. The returned function cancels a run that still waits.
      */
-    whenMounted(run: () => void) {
-      const state = { cancelled: false }
-
-      write(() => {
-        if (!state.cancelled) run()
-      })
-
-      return () => {
-        state.cancelled = true
-      }
-    },
+    whenMounted: (run: () => void) => write(() => run()),
+    /** Writes that wait, and writes made during the interface's first render, run after that render in call order. */
     attach(value: Attached) {
-      setAttached(() => value)
-      // After the interface's first render, so the waiting writes find its layout, in call order.
-      queueMicrotask(flush)
+      dispatchAttach({ type: "attach", attached: value })
+      const attempt = selectAttachAttempt(untrack(attachState))
 
-      return () => {
-        if (attached() === value) setAttached(undefined)
-      }
+      return () => void dispatchAttach({ type: "detach", attempt })
     },
     workspaceRemoved(value: { server: string; directory: string }) {
       removed.forEach((handler) => handler(value))
@@ -497,27 +538,21 @@ export function createPluginAttachment(apis: HostApis) {
   const serverRefs = new Map<string, ServerRef>()
 
   const server = (id: string): ServerRef | undefined => {
-    const conn = connection(id)
-
-    if (!conn) return
+    if (!connection(id)) return
     const existing = serverRefs.get(id)
 
     if (existing) return existing
     const key = ServerConnection.Key.make(id)
-    // The controller starts on first use, not when the ref is made: reading `builtin` to find a server must not
-    // connect to every listed server, such as one the runtime holds back because it rejects its credentials.
-    let started: Accessor<ServerCtx> | undefined
+    const first = global.serverCtx(key)
 
-    const live = () => {
-      started ??= runWithOwner(owner, () =>
-        createMemo<ServerCtx>(
-          (previous) => global.serverCtx(key) ?? previous,
-          global.ensureServerCtx(connection(id) ?? conn),
-        ),
-      )!
+    // A server that rejected our credentials before this window used it has no controller to hand out yet.
+    if (!first) return
 
-      return started()
-    }
+    // The SDK types `client` and `data` as always present, so while the server signs in again the ref keeps the last
+    // controller; `connected` reads the live one.
+    const live = runWithOwner(owner, () =>
+      createMemo<ServerCtx>((previous) => global.serverCtx(key) ?? previous, first),
+    )!
 
     // What the app's server list already says, without a controller.
     const listed = () => connection(id) ?? live().sdk.server
@@ -531,7 +566,7 @@ export function createPluginAttachment(apis: HostApis) {
         return live().sdk.url
       },
       get password() {
-        return live().sdk.server.http.password
+        return live().sdk.http.password
       },
       get client() {
         return live().sdk.api
@@ -546,10 +581,10 @@ export function createPluginAttachment(apis: HostApis) {
         return ServerConnection.builtin(listed())
       },
       get compatible() {
-        return !global.servers.health[key]?.incompatible
+        return !isServerIncompatible(global.servers.health[key])
       },
       get connected() {
-        return live().sdk.connection.status() === "connected"
+        return global.serverCtx(key)?.sdk.connection.status() === "connected"
       },
     }
 
@@ -604,11 +639,9 @@ export function createPluginAttachment(apis: HostApis) {
   })
 
   const scope = (id: string) => {
-    const conn = connection(id)
+    if (!connection(id)) throw new Error(`Server ${id} is unavailable`)
 
-    if (!conn) throw new Error(`Server ${id} is unavailable`)
-
-    return global.ensureServerCtx(conn).sdk.scope
+    return servers.scope(ServerConnection.Key.make(id))
   }
 
   // The registry's scope is pure: an unlisted server's sessions (e.g. a stopped WSL server, whose tabs stay open) keep
@@ -677,20 +710,34 @@ export function createPluginAttachment(apis: HostApis) {
       true,
     )
 
-  // A token per session whose side region is open, new each time the region opens.
-  const sideVisits = createMemo<ReadonlyMap<string, object>>(
-    (previous) =>
-      new Map(
-        sessions().flatMap((session) =>
-          sideOpened(session) ? [[session.key, previous.get(session.key) ?? {}] as const] : [],
-        ),
-      ),
-    new Map(),
-  )
+  // The keys a session tab's sessions go by: the session it shows and the one it routes.
+  const tabSessions = (tab: Tab) =>
+    tab.type === "session"
+      ? [`${tab.server}\n${tab.sessionId}`, `${tab.server}\n${tab.routeSessionId ?? tab.sessionId}`]
+      : []
 
-  // The panel whose toggle opened a side region, by the region's token. However the region closes, it reopens with
-  // a new token, so a region reopened any other way belongs to the user.
-  const openedFor = new WeakMap<object, string>()
+  // Who each open side region belongs to: the panel whose `Layout.toggle` opened it, or the user. Read straight from
+  // the shell tabs, so a session missing from `sessions()` (e.g. while its server signs in again) keeps its owner.
+  const sideRegion = { state: createSideRegionState() }
+
+  const dispatchSide = (event: SideRegionEvent) => {
+    const next = transitionSideRegion(sideRegion.state, event)
+
+    sideRegion.state = next.state
+    next.effects.forEach((effect) =>
+      tabs.setRegion(
+        tabs.store.find((tab) => tabSessions(tab).includes(effect.session)),
+        "side",
+        false,
+      ),
+    )
+  }
+
+  createComputed(() => {
+    const opened = new Set(tabs.store.flatMap((tab) => (tabs.region(tab, "side") ? tabSessions(tab) : [])))
+
+    untrack(() => dispatchSide({ type: "sync", opened }))
+  })
 
   // Keys are `${plugin}:${tab id}`.
   const provider = (key: string) => {
@@ -705,24 +752,28 @@ export function createPluginAttachment(apis: HostApis) {
     return view?.key === session.key ? view : undefined
   }
 
-  // Counts routing visits: each change of the routed session, including to none (e.g. Home), starts the next one.
-  const visit = createMemo(on(routed, (_key, _previous, count: number = 0) => count + 1))
+  // The narrow-screen view belongs to the routed, mounted session for one routing visit, and reads as the conversation
+  // once another visit starts. A view selected for a session that is not routed (e.g. a file link that opens Files on
+  // another session) belongs to the next visit only when the navigation that follows routes that session.
+  const [mobileState, setMobileState] = createSignal(createMobileViewState())
+  let mobileTimer: ReturnType<typeof setTimeout> | undefined
 
-  // The narrow-screen view belongs to the routed, mounted session for one visit, and reads as the conversation once
-  // another visit starts. A view selected for a session that is not routed (e.g. a file link that opens Files on
-  // another session) belongs to the next visit, which the navigation that follows starts.
-  const [mobile, setMobile] = createStore<{ session: string | undefined; view: string; visit: number }>({
-    session: undefined,
-    view: "session",
-    visit: 0,
-  })
+  const dispatchMobile = (event: MobileViewEvent) => {
+    const next = transitionMobileView(untrack(mobileState), event)
 
-  const mobileView = createMemo(() =>
-    mobile.session === current()?.key && mobile.visit === visit() ? mobile.view : "session",
-  )
+    setMobileState(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "cancel.expire") return clearTimeout(mobileTimer)
+      mobileTimer = setTimeout(() => dispatchMobile({ type: "expire", attempt: effect.attempt }), effect.timeoutMs)
+    })
+  }
+
+  createComputed(on(routed, (key) => dispatchMobile({ type: "route.changed", routed: key }), { defer: true }))
+
+  const mobileView = createMemo(() => selectMobileView(mobileState(), current()?.key))
 
   const selectMobile = (session: SessionRef, view: string) =>
-    setMobile({ session: session.key, view, visit: session.key === routed() ? visit() : visit() + 1 })
+    dispatchMobile({ type: "select", session: session.key, view, routed: untrack(routed) })
 
   // The side tabs a mounted session lists right now, plus `adding` as if it were stored; unmounted sessions have none.
   const listed = (session: SessionRef, value: string, adding?: string) => {
@@ -754,8 +805,16 @@ export function createPluginAttachment(apis: HostApis) {
     )
   }
 
-  // Writes made before a session's location is known wait for it rather than being dropped.
+  // Writes made before a session's location is known wait for it rather than being dropped. A session's writes run in
+  // call order: one made while earlier ones wait, or by one of them, joins the end.
   const located = createLocatedWrites()
+
+  const withLocated = (session: SessionRef, run: (value: string) => void) =>
+    located.hold(session, () => {
+      const value = stateKey(session)
+
+      if (value) run(value)
+    })
 
   // Kept per session beside its strip, so the new tab view still lists them after a reload.
   const closed = createClosedTabs({
@@ -771,12 +830,32 @@ export function createPluginAttachment(apis: HostApis) {
     },
   })
 
-  const open = (key: string, session: SessionRef, options?: OpenOptions) => {
+  // Opens a tab in the session's located strip `value`, and records whether that opened the side region for it.
+  const openAt = (
+    key: string,
+    session: SessionRef,
+    value: string,
+    options: OpenOptions | undefined,
+    via: "open" | "toggle",
+  ) => {
+    const wasOpen = sideOpened(session)
+
+    batch(() => {
+      place(key, session, value, options)
+      dispatchSide({
+        type: "panel.opened",
+        session: session.key,
+        key,
+        via,
+        placement: options?.tab ?? "open",
+        wasOpen,
+        nowOpen: sideOpened(session),
+      })
+    })
+  }
+
+  const place = (key: string, session: SessionRef, value: string, options: OpenOptions | undefined) => {
     const item = provider(key)
-
-    const value = stateKey(session)
-
-    if (!value) return located.hold(session, () => open(key, session, options))
     const placement = options?.tab ?? "open"
 
     // An append adds the tab quietly: no selection, no region change, no preview replacement.
@@ -811,13 +890,11 @@ export function createPluginAttachment(apis: HostApis) {
     })
   }
 
-  const close = (key: string, session: SessionRef) => {
+  const open = (key: string, session: SessionRef, options?: OpenOptions) =>
+    withLocated(session, (value) => openAt(key, session, value, options, "open"))
+
+  const closeAt = (key: string, session: SessionRef, value: string) => {
     const item = provider(key)
-
-    const value = stateKey(session)
-
-    if (!value) return located.hold(session, () => close(key, session))
-
     const tab = listed(session, value).find((entry) => entry.key === key)?.tab
     const all = layout.panel.state(value).all
     const view = mountedSession(session)
@@ -840,6 +917,8 @@ export function createPluginAttachment(apis: HostApis) {
 
     if (view && tab && currentScreen) item?.value.close?.({ tab, session: view, screen: currentScreen })
   }
+
+  const close = (key: string, session: SessionRef) => withLocated(session, (value) => closeAt(key, session, value))
 
   // The routed session's side region, which knows the fallback selection the stored state lacks.
   const [region, setRegion] = createSignal<Region>()
@@ -866,80 +945,82 @@ export function createPluginAttachment(apis: HostApis) {
     return paneOpened(session, pane) ? "visible" : "active"
   }
 
-  const hide = (key: string, session: SessionRef) => {
-    const value = stateKey(session)
-
-    if (!value) return located.hold(session, () => hide(key, session))
-
-    if (state(key, session) !== "visible") return
-    const pane = mountedSession(session) ? region()?.paneOf(key) : sessionTabPane(layout.panel.state(value), key)
-    tabs.setRegion(shellTab(session), pane === "bottom" ? "bottom" : "side", false)
-  }
-
-  // Open-project requests wait until their server is listed (e.g. an SSH server that just connected).
-  const picker = useDirectoryPicker()
-  const [projects, setProjects] = createSignal<readonly { server: string; title: string }[]>([])
-  createEffect(() => {
-    const pending = projects()
-
-    const ready = pending.flatMap((request) => {
-      const server = servers.list.find((conn) => ServerConnection.key(conn) === request.server)
-
-      return server ? [{ request, server }] : []
+  const hide = (key: string, session: SessionRef) =>
+    withLocated(session, (value) => {
+      if (state(key, session) !== "visible") return
+      const pane = mountedSession(session) ? region()?.paneOf(key) : sessionTabPane(layout.panel.state(value), key)
+      tabs.setRegion(shellTab(session), pane === "bottom" ? "bottom" : "side", false)
     })
 
-    if (ready.length === 0) return
-    setProjects(pending.filter((request) => !ready.some((item) => item.request === request)))
-    untrack(() =>
-      ready.forEach(({ request, server }) =>
+  // An open-project request waits until its server is listed (e.g. an SSH server that just connected), for at most
+  // `PROJECT_REQUEST_TTL_MS`; a newer request replaces it.
+  const picker = useDirectoryPicker()
+  const [projectState, setProjectState] = createSignal(createProjectRequestState())
+  let projectTimer: ReturnType<typeof setTimeout> | undefined
+
+  const listedServer = (id: string) => servers.list.find((conn) => ServerConnection.key(conn) === id)
+
+  const dispatchProject = (event: ProjectRequestEvent) => {
+    const next = transitionProjectRequest(untrack(projectState), event)
+
+    setProjectState(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "cancel.expire") return clearTimeout(projectTimer)
+
+      if (effect.type === "schedule.expire")
+        return void (projectTimer = setTimeout(
+          () => dispatchProject({ type: "expire", attempt: effect.attempt }),
+          effect.timeoutMs,
+        ))
+      const server = untrack(() => listedServer(effect.server))
+
+      if (!server) return
+      untrack(() =>
         picker({
           server,
-          title: request.title,
+          title: effect.title,
           onSelect: (value) => {
             const directory = Array.isArray(value) ? value[0] : value
 
             if (!directory) return
             const key = ServerConnection.key(server)
-            void global.ensureServerCtx(server).projects.add(directory)
+            void global.serverCtx(key)?.projects.add(directory)
             void tabs.newDraft({ server: key, directory })
           },
         }),
-      ),
-    )
+      )
+    })
+  }
+
+  createEffect(() => {
+    const server = selectWaitingProjectServer(projectState())
+
+    if (server && listedServer(server)) untrack(() => dispatchProject({ type: "server.listed", server }))
   })
 
-  const toggle = (key: string, session: SessionRef) => {
-    const value = stateKey(session)
+  if (owner)
+    onCleanup(() => {
+      dispatchMobile({ type: "disposed" })
+      dispatchProject({ type: "disposed" })
+    })
 
-    if (!value) return located.hold(session, () => toggle(key, session))
-    const region = sideVisits().get(session.key)
+  const toggle = (key: string, session: SessionRef) =>
+    withLocated(session, (value) => {
+      if (state(key, session) !== "visible") return openAt(key, session, value, undefined, "toggle")
 
-    if (state(key, session) === "visible") {
       batch(() => {
-        close(key, session)
-
-        // Closing the last panel the region was opened for also closes the region.
-        if (region && openedFor.get(region) === key && layout.panel.state(value).all.length === 0)
-          tabs.setRegion(shellTab(session), "side", false)
+        closeAt(key, session, value)
+        dispatchSide({
+          type: "panel.closed",
+          session: session.key,
+          key,
+          empty: layout.panel.state(value).all.length === 0,
+        })
       })
+    })
 
-      return
-    }
-
-    // A panel opened into an open region makes the region the user's.
-    if (region) openedFor.delete(region)
-    open(key, session)
-    const opened = sideVisits().get(session.key)
-
-    if (!region && opened) openedFor.set(opened, key)
-  }
-
-  const setScroll = (session: SessionRef, key: string, next: { readonly x: number; readonly y: number }) => {
-    const value = stateKey(session)
-
-    if (!value) return located.hold(session, () => setScroll(session, key, next))
-    layout.panel.setScroll(value, key, next)
-  }
+  const setScroll = (session: SessionRef, key: string, next: { readonly x: number; readonly y: number }) =>
+    withLocated(session, (value) => layout.panel.setScroll(value, key, next))
 
   // The tab the route shows: a session's, a draft's, or none (Home, Settings).
   const routedTab = () => {
@@ -1064,7 +1145,8 @@ export function createPluginAttachment(apis: HostApis) {
     screen,
     scope,
     scoped: layout.sessionState.track,
-    project: (server, title) => setProjects((pending) => [...pending, { server, title }]),
+    project: (server, title) =>
+      dispatchProject({ type: "request", server, title, listed: !!untrack(() => listedServer(server)) }),
     draft: (input) => {
       const server = servers.list.find((conn) => ServerConnection.key(conn) === input.server)
 

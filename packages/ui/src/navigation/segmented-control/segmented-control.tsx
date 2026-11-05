@@ -9,6 +9,7 @@ import {
   onMount,
   Show,
   splitProps,
+  untrack,
   useContext,
   type Accessor,
   type ComponentProps,
@@ -17,6 +18,12 @@ import {
 } from "solid-js"
 import "./segmented-control.css"
 import { prefersReducedMotion } from "../../motion"
+import {
+  HIDDEN_INDICATOR,
+  selectIndicatorReady,
+  transitionSegmentedIndicator,
+  type SegmentedIndicatorEvent,
+} from "./machine"
 
 type OnChange = (value: string | null) => void
 
@@ -104,8 +111,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
   ])
 
   const [internal, setInternal] = createSignal<string | null>(local.defaultValue ?? null)
-  const [layoutVersion, setLayoutVersion] = createSignal(0)
-  const [ready, setReady] = createSignal(false)
+  const [indicator, setIndicator] = createSignal(HIDDEN_INDICATOR)
 
   const selected = createMemo(() => (isControlled() ? (local.value ?? null) : internal()))
 
@@ -115,68 +121,62 @@ export function SegmentedControl(props: SegmentedControlProps) {
   let rootEl: HTMLDivElement | undefined
   let observer: ResizeObserver | undefined
   const items = new Map<string, HTMLButtonElement>()
-  let target = { x: 0, width: 0 }
-  let lastSelected: string | null = null
 
-  const syncIndicator = (shouldAnimate: boolean) => {
-    const current = selected()
+  const dispatch = (event: SegmentedIndicatorEvent) => {
+    const transition = transitionSegmentedIndicator(untrack(indicator), event)
+    setIndicator(transition.state)
+    const effect = transition.effect
+
+    if (effect?.type === "stop") {
+      x.stop()
+      width.stop()
+
+      return
+    }
+
+    if (effect?.type === "jump") {
+      x.jump(effect.box.x)
+      width.jump(effect.box.width)
+
+      return
+    }
+
+    if (effect?.type !== "animate") return
+    const spring = local.transition ?? SEGMENTED_CONTROL_SPRING
+    animate(x, effect.box.x, spring)
+    animate(width, effect.box.width, spring)
+  }
+
+  const sync = () => {
+    const current = untrack(selected)
     const button = current !== null ? items.get(current) : undefined
 
-    if (!rootEl || !button) {
-      setReady(false)
-
-      return
-    }
-
-    const next = measureOffset(rootEl, button)
-
-    if (next.width === 0) return
-
-    target = next
-
-    if (!ready() || !shouldAnimate || prefersReducedMotion()) {
-      x.jump(next.x)
-      width.jump(next.width)
-      setReady(true)
-
-      return
-    }
-
-    const transition = local.transition ?? SEGMENTED_CONTROL_SPRING
-    animate(x, next.x, transition)
-    animate(width, next.width, transition)
+    dispatch({
+      type: "measured",
+      value: current,
+      box: rootEl && button ? measureOffset(rootEl, button) : null,
+      reducedMotion: prefersReducedMotion(),
+    })
   }
 
   onMount(() => {
     if (!("ResizeObserver" in globalThis)) return
 
-    observer = new ResizeObserver(() => {
-      const current = selected()
-      const button = current !== null ? items.get(current) : undefined
-
-      if (!rootEl || !button) return
-
-      const next = measureOffset(rootEl, button)
-
-      if (next.width === 0) return
-
-      if (ready() && next.x === target.x && next.width === target.width) return
-
-      syncIndicator(false)
-    })
+    observer = new ResizeObserver(sync)
 
     if (rootEl) observer.observe(rootEl)
 
     items.forEach((button) => observer?.observe(button))
-    onCleanup(() => observer?.disconnect())
+  })
+
+  onCleanup(() => {
+    observer?.disconnect()
+    dispatch({ type: "disposed" })
   })
 
   createEffect(() => {
-    const current = selected()
-    layoutVersion()
-    const shouldAnimate = ready() && lastSelected !== null && current !== null && current !== lastSelected
-    lastSelected = current
-    syncIndicator(shouldAnimate)
+    selected()
+    sync()
   })
 
   const setSelected = (next: string | null) => {
@@ -210,12 +210,12 @@ export function SegmentedControl(props: SegmentedControlProps) {
   const registerItem = (value: string, el: HTMLButtonElement) => {
     items.set(value, el)
     observer?.observe(el)
-    setLayoutVersion((v) => v + 1)
+    sync()
 
     return () => {
       if (items.get(value) === el) items.delete(value)
       observer?.unobserve(el)
-      setLayoutVersion((v) => v + 1)
+      sync()
     }
   }
 
@@ -243,13 +243,13 @@ export function SegmentedControl(props: SegmentedControlProps) {
         role="group"
         data-component="segmented-control-v2"
         data-slot="segmented-control-v2"
-        data-ready={ready() ? "" : undefined}
+        data-ready={selectIndicatorReady(indicator()) ? "" : undefined}
         classList={{
           ...local.classList,
           [local.class ?? ""]: !!local.class,
         }}
       >
-        <Show when={ready() && selected() !== null}>
+        <Show when={selectIndicatorReady(indicator())}>
           <motion.span data-slot="segmented-control-v2-indicator" aria-hidden="true" style={{ x, width }} />
         </Show>
         {local.children}

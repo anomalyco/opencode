@@ -4,7 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { Show } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
-import { isSshConnecting, sshName } from "./name"
+import { sshName } from "./name"
 import type { SshController } from "./state"
 
 /** The visit to a routed tab in which authentication was offered. Shared by the window's covers. */
@@ -36,7 +36,7 @@ export function SshCover(props: { id: string; visit: object; ssh: SshController;
   return (
     <Show when={item()}>
       {(item) => {
-        const connecting = () => props.ssh.pending(props.id) || isSshConnecting(item().stage)
+        const connecting = () => props.ssh.pending(props.id)
 
         return (
           <section

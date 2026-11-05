@@ -65,6 +65,16 @@ const cases = {
   "switch tab": warm,
   // The review pane open on 72 changed files beside both timelines.
   "switch tab with review open": warm,
+  // Away from the session with the review open, to one with nothing beside it, and back: both directions a person
+  // pays when switching between them.
+  "switch away and back with review open": {
+    ...warm,
+    async run({ page, prepared }) {
+      await page.click(tab(prepared.target), { until: prepared.targetReady })
+      await page.click(tab(prepared.source), { until: prepared.sourceReady })
+    },
+    reset: ({ page }) => page.idle(),
+  },
   // The destination was laid out before the review pane narrowed the timeline, so it lays out again.
   "switch tab after review resized it": {
     ...warm,
@@ -87,6 +97,7 @@ const cases = {
 export default bench({
   targets: {
     web: web({
+      expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
       async prepare({ case: name, playwright, mock, url }) {
         const server = new URL(url).origin
