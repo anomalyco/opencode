@@ -1,3 +1,4 @@
+import { appendFileSync, writeFileSync } from "node:fs"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
@@ -109,11 +110,12 @@ type Process = {
   started_at: number
   exited_at: number | null
   pty?: { title: string; user_title: string | null; foreground_process: string | null; cols: number; rows: number }
-  pipe?: { output_path: string; output_lines: number; metadata: Record<string, unknown> }
+  pipe?: { output_path: string; output_lines: number; output_error?: string; metadata: Record<string, unknown> }
 }
 
 // An in-process opencode-pty that a server adopts through a handoff, so no daemon is spawned. Pipe processes
-// run nothing: they stay running until `exit` or a signal ends them.
+// run nothing: they stay running until `exit` or a signal ends them (SIGTERM spares those in `trap`), and
+// write only what `output` gives them.
 export const fakeDaemon = Effect.fn(function* () {
   const base = yield* temporaryDirectory()
   const root = path.join(base, "root")
@@ -122,6 +124,8 @@ export const fakeDaemon = Effect.fn(function* () {
   const processes: Process[] = []
   const waiters = new Map<number, net.Socket[]>()
   const failTerminate = new Set<string>()
+  const trap = new Set<number>()
+  const failCreate = { message: undefined as string | undefined }
   const ops: string[] = []
   const requests: Record<string, unknown>[] = []
   let nextID = 1
@@ -135,6 +139,21 @@ export const fakeDaemon = Effect.fn(function* () {
     const reply = exited(found)
     waiters.get(id)?.forEach((connection) => connection.end(frame(reply)))
     waiters.delete(id)
+  }
+
+  // Appends to the output file and counts it, as the daemon's reader does; after `fail`, the file stops growing.
+  const output = (id: number, text: string) => {
+    const found = find(id)
+    if (!found?.pipe) return
+    if (found.pipe.output_error === undefined) {
+      appendFileSync(found.pipe.output_path, text)
+      found.pipe.output_lines += text.split("\n").length - 1
+    }
+    found.output_tail += Buffer.byteLength(text)
+  }
+  const fail = (id: number, message: string) => {
+    const found = find(id)
+    if (found?.pipe) found.pipe.output_error = message
   }
 
   yield* listen(socket, (connection, request) => {
@@ -156,7 +175,9 @@ export const fakeDaemon = Effect.fn(function* () {
     if (request.op === "create_pipe") {
       if (typeof request.cwd !== "string" || !path.isAbsolute(request.cwd))
         return { type: "error", message: "cwd must be absolute" }
+      if (failCreate.message !== undefined) return { type: "error", message: failCreate.message }
       const created = pipe(nextID++, request)
+      writeFileSync(String(request.output_path), "")
       processes.push(created)
       return { type: "created", process: created }
     }
@@ -173,12 +194,18 @@ export const fakeDaemon = Effect.fn(function* () {
       if (!found?.pipe) return { type: "error", message: `terminal ${String(request.id)} not found` }
       if (found.lifecycle.status !== "running") return exited(found)
       waiters.set(found.id, [...(waiters.get(found.id) ?? []), connection])
+      connection.once("close", () =>
+        waiters.set(
+          found.id,
+          (waiters.get(found.id) ?? []).filter((waiter) => waiter !== connection),
+        ),
+      )
       return undefined
     }
     if (request.op === "signal") {
       const found = find(request.id)
       if (!found?.pipe) return { type: "error", message: `terminal ${String(request.id)} not found` }
-      exit(found.id, null, String(request.signal))
+      if (request.signal !== "SIGTERM" || !trap.has(found.id)) exit(found.id, null, String(request.signal))
       return { type: "ok" }
     }
     if (request.op === "set_metadata") {
@@ -205,9 +232,14 @@ export const fakeDaemon = Effect.fn(function* () {
   })
   return {
     failTerminate,
+    failCreate,
+    trap,
     ops,
     requests,
     exit,
+    output,
+    fail,
+    processes,
     waiters: (id: number) => waiters.get(id)?.length ?? 0,
     options: {
       root,
@@ -261,6 +293,7 @@ function exited(process: Process) {
     signal: process.lifecycle.signal,
     final_offset: process.output_tail,
     output_lines: process.pipe?.output_lines,
+    output_error: process.pipe?.output_error,
     exited_at: process.exited_at ?? Date.now(),
   }
 }

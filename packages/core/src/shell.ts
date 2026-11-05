@@ -626,6 +626,8 @@ const layer = () =>
         const command = daemonCommand(
           produce(info, (draft) => {
             if (created.pid !== undefined) draft.pid = created.pid
+            // The daemon's clock, so the command reports the same start after a restart.
+            draft.time.started = created.startedAt
           }),
           daemon,
         )
