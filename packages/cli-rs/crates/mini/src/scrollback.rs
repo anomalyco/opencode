@@ -396,6 +396,8 @@ pub struct Writer {
     theme: RunTheme,
     mono: bool,
     shell_output: bool,
+    /// `session.image_preview`: image commits draw the picture under their caption.
+    image_preview: bool,
     /// Something was written above the transcript, so its first entry starts one row lower.
     wrote: bool,
     tail: Option<Commit>,
@@ -405,7 +407,18 @@ pub struct Writer {
 
 impl Writer {
     pub fn new(footer: SplitFooter, scrollback: Scrollback, theme: RunTheme, mono: bool, wrote: bool) -> Self {
-        Self { footer, scrollback, theme, mono, shell_output: false, wrote, tail: None, rendered: None, active: None }
+        Self {
+            footer,
+            scrollback,
+            theme,
+            mono,
+            shell_output: false,
+            image_preview: false,
+            wrote,
+            tail: None,
+            rendered: None,
+            active: None,
+        }
     }
 
     pub fn footer(&self) -> &SplitFooter {
@@ -440,6 +453,10 @@ impl Writer {
 
     pub fn set_shell_output(&mut self, show: bool) {
         self.shell_output = show;
+    }
+
+    pub fn set_image_preview(&mut self, show: bool) {
+        self.image_preview = show;
     }
 
     /// Writes a snapshot, painted monochrome in mono mode (Core's `EXTERNAL_OUTPUT` hook).
@@ -490,6 +507,11 @@ impl Writer {
             self.tail = Some(commit);
             return Ok(());
         }
+        if commit.image.is_some() && self.image_preview && !self.mono {
+            self.write_image(&commit)?;
+            self.tail = Some(commit);
+            return Ok(());
+        }
         let body = entry_body(&commit, BodyOptions { shell_output: self.shell_output, mono: self.mono });
         if body == Body::None {
             if entry_done(&commit) {
@@ -530,6 +552,50 @@ impl Writer {
     /// Whether an entry is still streaming.
     pub fn streaming(&self) -> bool {
         self.active.is_some()
+    }
+
+    /// `writeImage`: the caption, then the picture fitted to the terminal's width and the rows above the footer,
+    /// or `No preview` when it does not decode.
+    fn write_image(&mut self, commit: &Commit) -> Result<()> {
+        let body = entry_body(commit, BodyOptions { shell_output: self.shell_output, mono: self.mono });
+        let Body::Text(caption) = &body else { return Ok(()) };
+        let app = self.scrollback.app().clone();
+        let image = commit
+            .image
+            .as_deref()
+            .and_then(crate::prompt::images::data_uri)
+            .and_then(|bytes| opentui::native::Image::decode(app.session().context(), &bytes).ok());
+        let text = if image.is_some() { caption.clone() } else { format!("{caption}\nNo preview") };
+        let (fg, attributes) = entry_look(commit, &self.theme);
+        let (width, rows) = self.footer.terminal_size();
+        let caption_rows: u32 = text
+            .split('\n')
+            .map(|line| (unicode_width::UnicodeWidthStr::width(line) as u32).div_ceil(u32::from(width).max(1)).max(1))
+            .sum();
+        let column = View::new(&app)
+            .column()
+            .width(Length::Percent(100.0))
+            .child(&Text::new(&app, text).wrap(WrapMode::Word).fg(fg).attributes(attributes).shrink(0.0));
+        if let Some(image) = image
+            && let Ok(info) = image.info()
+        {
+            let available = u32::from(rows).saturating_sub(u32::from(self.footer.renderer_size().1) + caption_rows);
+            let (cells, lines) = fit_image(info.width, info.height, u32::from(width), available);
+            if cells > 0 && lines > 0 {
+                let view = opentui::widget::ImageView::new(&app)
+                    .image(Some(image))
+                    .protocol(opentui::native::ImageProtocol::Blocks)
+                    .width(cells)
+                    .height(lines)
+                    .shrink(0.0);
+                column.add(&view);
+            }
+        }
+        let rows = separator_rows(self.rendered.as_ref(), commit, &body);
+        self.write_spacer(if rows > 0 { rows } else { u32::from(self.rendered.is_none() && self.wrote) })?;
+        self.write_widget(&column, entry_flags(commit))?;
+        self.rendered = Some(commit.clone());
+        Ok(())
     }
 
     fn write_spacer(&mut self, rows: u32) -> Result<()> {
@@ -749,6 +815,21 @@ fn recolor(mut syntax: SyntaxTheme, color: Color) -> SyntaxTheme {
     syntax
 }
 
+/// `getFittedSize`: the largest cell rectangle of the image's aspect within `width` by `height`, with cells twice
+/// as tall as wide.
+pub fn fit_image(pixels_wide: u32, pixels_high: u32, width: u32, height: u32) -> (u32, u32) {
+    if pixels_wide == 0 || pixels_high == 0 || width == 0 || height == 0 {
+        return (0, 0);
+    }
+    let aspect = f64::from(pixels_high) / f64::from(pixels_wide) / 2.0;
+    let lines = (f64::from(width) * aspect).round().max(1.0);
+    if lines <= f64::from(height) {
+        return (width, lines as u32);
+    }
+    let cells = (f64::from(height) / aspect).round().clamp(1.0, f64::from(width));
+    (cells as u32, height)
+}
+
 /// `staticBody`: a completed tool's output already spaced from its title drops its leading newline.
 fn static_body(commit: &Commit, body: Body, spaced: u32) -> Body {
     match body {
@@ -833,6 +914,13 @@ mod tests {
         assert_eq!(separator_rows(Some(&progress), &assistant("b", Phase::Progress), &Body::None), 0);
         assert!(same_group(Some(&progress), &assistant("b", Phase::Final)));
         assert!(!same_group(Some(&user), &user));
+    }
+
+    #[test]
+    fn images_fit_the_width_or_the_rows_left() {
+        assert_eq!(fit_image(200, 100, 40, 30), (40, 10));
+        assert_eq!(fit_image(100, 400, 40, 30), (15, 30));
+        assert_eq!(fit_image(0, 10, 40, 30), (0, 0));
     }
 
     #[test]
