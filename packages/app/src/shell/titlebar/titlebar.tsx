@@ -1,5 +1,4 @@
-import { createEffect, createMemo, Match, onCleanup, Show, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useLocation } from "@solidjs/router"
 import { uuid } from "@opencode/util/uuid"
@@ -37,6 +36,12 @@ import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
+import {
+  INITIAL_MOBILE_TABS_STATE,
+  selectMobileTabsOpen,
+  transitionMobileTabs,
+  type MobileTabsEvent,
+} from "./mobile-tabs-machine"
 
 export const newTabCommand = { id: "tab.new", keybind: "mod+t,mod+n" }
 
@@ -486,7 +491,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               },
             ])
 
-            const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
+            const [mobileTabsState, setMobileTabsState] = createSignal(INITIAL_MOBILE_TABS_STATE)
+            let closeTimer: ReturnType<typeof setTimeout> | undefined
+
+            const dispatchMobileTabs = (event: MobileTabsEvent) => {
+              const previous = untrack(mobileTabsState)
+              const next = transitionMobileTabs(previous, event)
+
+              if (next.state !== previous) setMobileTabsState(next.state)
+              next.effects.forEach((effect) => {
+                if (effect.type === "settings.open") return openSettings()
+                clearTimeout(closeTimer)
+                closeTimer = undefined
+
+                if (effect.type === "timer.clear") return
+                const attempt = effect.attempt
+                closeTimer = setTimeout(() => dispatchMobileTabs({ type: "close.timed-out", attempt }), effect.timeoutMs)
+              })
+            }
+
+            const closeMobileTabs = () => dispatchMobileTabs({ type: "close" })
 
             // The current tab's project avatar stays put; while it works, its activity ring shows beside the tab count.
             const currentStatus = useSessionTabAvatarState(
@@ -518,11 +542,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               )
             }
 
-            createEffect(() => {
-              path()
-              mobile()
-              setMobileTabs("open", false)
-            })
+            createEffect(on(path, () => dispatchMobileTabs({ type: "route.changed" }), { defer: true }))
+            createEffect(
+              on(mobile, (value) => dispatchMobileTabs({ type: "viewport.changed", mobile: value }), { defer: true }),
+            )
+            onCleanup(() => dispatchMobileTabs({ type: "disposed" }))
 
             return (
               <div
@@ -555,13 +579,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   when={!mobile()}
                   fallback={
                     <MobileDrawer
-                      open={mobileTabs.open}
-                      onOpenChange={(open) => setMobileTabs("open", open)}
-                      onContentPresentChange={(present) => {
-                        if (present || !mobileTabs.settings) return
-                        setMobileTabs("settings", false)
-                        openSettings()
-                      }}
+                      open={selectMobileTabsOpen(mobileTabsState())}
+                      onOpenChange={(open) => dispatchMobileTabs({ type: "drawer.changed", open })}
+                      onContentPresentChange={(present) => dispatchMobileTabs({ type: "content.present", present })}
                     >
                       <MobileDrawerTrigger
                         data-slot="mobile-tabs-trigger"
@@ -616,7 +636,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               currentTab={currentTab()}
                               onNavigate={(tab) => {
                                 tabs.select(tab)
-                                setMobileTabs("open", false)
+                                closeMobileTabs()
                               }}
                               onClose={(tab) => {
                                 const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
@@ -633,7 +653,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
                             onClick={() => {
                               openNewTab()
-                              setMobileTabs("open", false)
+                              closeMobileTabs()
                             }}
                           >
                             <Icon name="plus" />
@@ -648,7 +668,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
                               onClick={() => {
                                 if (layout.route().type !== "home") toggleHome()
-                                setMobileTabs("open", false)
+                                closeMobileTabs()
                               }}
                             >
                               <Icon name="grid-plus" />
@@ -659,7 +679,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 type="button"
                                 data-action="mobile-tabs-settings"
                                 class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
-                                onClick={() => setMobileTabs({ open: false, settings: true })}
+                                onClick={() => dispatchMobileTabs({ type: "settings.requested" })}
                               >
                                 <Icon name="settings-gear" size="small" />
                                 {language.t("sidebar.settings")}
@@ -669,7 +689,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 data-action="mobile-tabs-help"
                                 class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
                                 onClick={() => {
-                                  setMobileTabs("open", false)
+                                  closeMobileTabs()
                                   platform.openExternal("https://opencode.ai/desktop-feedback")
                                 }}
                               >
