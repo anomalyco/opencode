@@ -13,6 +13,7 @@ import {
   seed,
   session,
   sessionHref,
+  tabKey,
 } from "../utils/app"
 import { openFileLauncher, reviewTabs } from "../utils/side-panel"
 import { mockServers } from "../utils/mock-server"
@@ -741,8 +742,89 @@ test("recent sessions caps each project at five and can reveal a selected overfl
   await home.getByRole("option").click()
   await expectPath(page, sessionHref(large[9]!.id))
   await expect(sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(large[9]!.id)}"]`)).toBeVisible()
-  await expect(titles).toHaveCount(8)
+  await expect(titles).toHaveText(names([large[9]!, ...large.slice(1, 5), ...small]))
   await expect(sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(large[0]!.id)}"]`)).toHaveCount(0)
+})
+
+test("project activity takes priority and completed sessions keep their saved positions", async ({ page }) => {
+  const sessions = Array.from({ length: 7 }, (_, index) => ({
+    id: `ses_project_active_${index}`,
+    title: `Task ${index}`,
+  }))
+  const first = sessions[0]!
+  const older = sessions[5]!
+  const current = sessions[6]!
+  const workspace = await mockWorkspace(page, {
+    name: "Activity priority",
+    sessions,
+    seed: {
+      tabs: [first.id],
+      settings: { appearance: { tabLayout: "sidebar", tabGrouping: "project" } },
+      storage: { "opencode.window.browser.dat:sidebar.order": sessions.map((row) => tabKey(row.id)) },
+    },
+  })
+
+  const execution = (
+    type: "session.execution.started" | "session.execution.succeeded",
+    sessionID: string,
+  ): OpenCodeEvent => ({
+    id: `evt_${sessionID}_${type}`,
+    created: T0 + 1,
+    type,
+    durable: { aggregateID: sessionID, seq: type === "session.execution.started" ? 1 : 2, version: 1 },
+    data: { sessionID },
+  })
+
+  await page.goto(sessionHref(first.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  const row = (id: string) => sidebar.locator(`a[data-titlebar-tab-link][href="${sessionHref(id)}"]`)
+  await expect(titles).toHaveText(sessions.slice(0, 5).map((item) => item.title))
+
+  await workspace.push([
+    execution("session.execution.started", older.id),
+    execution("session.execution.started", current.id),
+  ])
+  await expect(titles).toHaveText([older.title, current.title, "Task 0", "Task 1", "Task 2"])
+  await row(current.id).click()
+  await expectSessionTitle(page, current.title)
+  await expect(titles).toHaveText([current.title, older.title, "Task 0", "Task 1", "Task 2"])
+
+  const source = await row(sessions[2]!.id).boundingBox()
+  const target = await row(sessions[1]!.id).boundingBox()
+  if (!source || !target) throw new Error("history row has no bounding box")
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2 - 8, { steps: 2 })
+  await expect(
+    sidebar
+      .getByRole("link")
+      .filter({ has: page.locator(`a[data-titlebar-tab-link][href="${sessionHref(sessions[2]!.id)}"]`) })
+      .locator("[data-titlebar-tab]"),
+  ).toHaveAttribute("data-dragging", "true")
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 })
+  await page.mouse.up()
+  await expect(titles).toHaveText([older.title, current.title, "Task 0", "Task 2", "Task 1"])
+  await row(current.id).click()
+  await expectSessionTitle(page, current.title)
+  await expect(titles).toHaveText([current.title, older.title, "Task 0", "Task 2", "Task 1"])
+
+  await workspace.push([execution("session.execution.succeeded", current.id)])
+  const completed = [older.title, current.title, "Task 0", "Task 2", "Task 1"]
+  await expect(titles).toHaveText(completed)
+  await row(first.id).click()
+  await expectSessionTitle(page, first.title)
+  await expect(titles).toHaveText(completed)
+
+  await workspace.push([execution("session.execution.succeeded", older.id)])
+  await expect(
+    sidebar
+      .getByRole("region", { name: "Running sessions", exact: true })
+      .getByText("No running sessions", { exact: true }),
+  ).toBeVisible()
+  await expect(titles).toHaveText(completed)
+  await page.reload()
+  await expect(titles).toHaveText(completed)
 })
 
 test("recent sessions follow last activity and preview the previous run completion", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createComputed, createEffect, createMemo, createResource, For, on, onCleanup, onMount, Show } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -52,6 +52,7 @@ function SessionTabSlot(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   sortGroup?: string
+  sortDisabled?: boolean
   closable?: boolean
   closeLabel?: string
   session: SessionInfo | undefined
@@ -74,6 +75,9 @@ function SessionTabSlot(props: {
     },
     get index() {
       return props.index
+    },
+    get disabled() {
+      return props.sortDisabled ?? false
     },
     get type() {
       return props.sortGroup
@@ -137,6 +141,7 @@ function SessionTabEntry(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   sortGroup?: string
+  sortDisabled?: boolean
   indexed?: SessionInfo
   opened?: boolean
   dismissible?: boolean
@@ -333,6 +338,7 @@ function SessionTabEntry(props: {
         active={props.active}
         orientation={props.orientation}
         sortGroup={props.sortGroup}
+        sortDisabled={props.sortDisabled}
         closable={props.opened !== false || props.dismissible}
         closeLabel={props.opened === false ? language.t("sidebar.recent.hide") : undefined}
         session={session()}
@@ -364,6 +370,7 @@ function DraftTabSlot(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   sortGroup?: string
+  sortDisabled?: boolean
   title: string
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
@@ -374,6 +381,9 @@ function DraftTabSlot(props: {
     },
     get index() {
       return props.index
+    },
+    get disabled() {
+      return props.sortDisabled ?? false
     },
     get type() {
       return props.sortGroup
@@ -632,17 +642,63 @@ export function SidebarMode(props: {
       .filter((group) => pinned?.[0].includes(group.key))
       .map((group) => group.key),
   )
+  const currentKey = createMemo(() => props.currentTab && tabKey(props.currentTab))
+  const projectActivity = createMemo(
+    () =>
+      new Map(
+        groups().map((group) => {
+          const activity = group.tabs.flatMap((tab) => {
+            const key = tabKey(tab)
+            const state = status[key]
+            if (!state?.attention && !state?.loading) return []
+            return [{ tab, priority: key === currentKey() ? 2 : state.attention ? 1 : 0 }]
+          })
+          return [group.key, activity.toSorted((a, b) => b.priority - a.priority).map((item) => item.tab)] as const
+        }),
+      ),
+  )
+
+  // Save completed rows before the preview renders their history order.
+  createComputed(
+    on(projectActivity, (activity, previous) => {
+      if (!previous || !sidebarOrder?.[3]() || !sidebarOrder[0].length) return
+      const saved = sidebarOrder[0]
+      const recorded = new Set(saved)
+      const next = groups().reduce((order, group) => {
+        const before = previous.get(group.key)
+        if (!before?.length) return order
+        const keys = group.tabs.map(tabKey)
+        if (!keys.some((key) => recorded.has(key))) return order
+        const present = new Set(keys)
+        const stillActive = new Set(activity.get(group.key)?.map(tabKey))
+        const ended = before.map(tabKey).filter((key) => present.has(key) && status[key] && !stillActive.has(key))
+        if (!ended.length) return order
+        const completed = new Set(ended)
+        return mergeVisibleTabOrder([...new Set([...order, ...keys])], keys, [
+          ...ended,
+          ...keys.filter((key) => !completed.has(key)),
+        ])
+      }, saved)
+      if (next.length !== saved.length || next.some((key, index) => key !== saved[index])) sidebarOrder[1](() => next)
+    }),
+  )
+
   const projectTabs = createMemo(
     () =>
       new Map(
         groups().map((group) => {
-          if (collapsed?.[0].includes(group.key)) return [group.key, [] as Tab[]] as const
-          if (expanded[group.key]) return [group.key, group.tabs] as const
-          const current = props.currentTab
-          const active = current && group.tabs.find((tab) => tabKey(tab) === tabKey(current))
-          const first = group.tabs.slice(0, PROJECT_SESSION_LIMIT)
-          // Keep the selected session in view without letting a large project expand the sidebar automatically.
-          return [group.key, active && !first.includes(active) ? [...first.slice(0, -1), active] : first] as const
+          const activity = projectActivity().get(group.key) ?? []
+          const promoted = new Set(activity.map(tabKey))
+          if (collapsed?.[0].includes(group.key)) return [group.key, { rows: [] as Tab[], promoted }] as const
+          const ordered = [...activity, ...group.tabs.filter((tab) => !promoted.has(tabKey(tab)))]
+          if (expanded[group.key]) return [group.key, { rows: ordered, promoted }] as const
+          const rows = ordered.slice(0, PROJECT_SESSION_LIMIT)
+          const selected = group.tabs.find((tab) => tabKey(tab) === currentKey())
+          if (!selected || rows.includes(selected)) return [group.key, { rows, promoted }] as const
+          // Keep an otherwise hidden selection after the activity, within the preview limit.
+          const index = Math.min(activity.length, PROJECT_SESSION_LIMIT - 1)
+          promoted.add(tabKey(selected))
+          return [group.key, { rows: [...rows.slice(0, index), selected, ...rows.slice(index, -1)], promoted }] as const
         }),
       ),
   )
@@ -650,7 +706,9 @@ export function SidebarMode(props: {
     () => new Map(groups().flatMap((group) => group.tabs.map((tab) => [tabKey(tab), group] as const))),
   )
 
-  const orderedTabs = createMemo(() => (grouped() ? [...projectTabs().values()].flat() : displayedTabs()))
+  const orderedTabs = createMemo(() =>
+    grouped() ? [...projectTabs().values()].flatMap((item) => item.rows) : displayedTabs(),
+  )
   const visibleTabs = createMemo(() => orderedTabs().filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
@@ -747,8 +805,9 @@ export function SidebarMode(props: {
     // Live metadata refreshes must not reset the sortable's in-flight index when the row order is unchanged.
     const visibleIndex = createMemo(() => visibleTabs().findIndex((item) => tabKey(item) === id))
     // Hover reads this outside rendering, so own its computation with the row.
-    const active = createMemo(() => !!props.currentTab && tabKey(props.currentTab) === id)
+    const active = createMemo(() => currentKey() === id)
     const group = () => tabGroups().get(id)
+    const sortDisabled = () => projectTabs().get(group()?.key ?? "")?.promoted.has(id)
 
     const element = () => ref
     tabRefs.set(id, element)
@@ -773,6 +832,7 @@ export function SidebarMode(props: {
             active={active()}
             orientation={vertical() ? "vertical" : "horizontal"}
             sortGroup={group()?.key}
+            sortDisabled={sortDisabled()}
             serverCtx={serverCtx()}
             status={status[id]}
             indexed={indexed().get(id)?.session}
@@ -801,6 +861,7 @@ export function SidebarMode(props: {
           active={active()}
           orientation={vertical() ? "vertical" : "horizontal"}
           sortGroup={group()?.key}
+          sortDisabled={sortDisabled()}
           title={language.t("sidebar.draft.unsent")}
           onNavigate={(element) => {
             ref = element
@@ -827,7 +888,7 @@ export function SidebarMode(props: {
                 shown:
                   projectTabs()
                     .get(key)
-                    ?.filter((tab) => tab.type === "session").length ?? 0,
+                    ?.rows.filter((tab) => tab.type === "session").length ?? 0,
               }),
             ]
               .filter(Boolean)
@@ -915,7 +976,7 @@ export function SidebarMode(props: {
       </Show>
       <Show when={grouped()} fallback={<For each={displayedTabs()}>{renderTab}</For>}>
         <div class="flex min-w-0 flex-col gap-1 ps-2">
-          <For each={projectTabs().get(key)}>{renderTab}</For>
+          <For each={projectTabs().get(key)?.rows}>{renderTab}</For>
         </div>
       </Show>
       <Show when={grouped() && groupsByKey().get(key)}>
@@ -1015,8 +1076,11 @@ export function SidebarMode(props: {
 
           if (event.canceled || !isSortable(source)) return
           const group = tabGroups().get(source.id.toString())
+          const promoted = group && projectTabs().get(group.key)?.promoted
           const visible = visibleTabIds()
-          const current = group ? visible.filter((key) => tabGroups().get(key) === group) : visible
+          const current = group
+            ? visible.filter((key) => tabGroups().get(key) === group && !promoted?.has(key))
+            : visible
           const from = group ? current.indexOf(source.id.toString()) : source.initialIndex
           const to = group ? current.indexOf(visible[source.index]) : source.index
 
