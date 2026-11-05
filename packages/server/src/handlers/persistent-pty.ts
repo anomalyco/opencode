@@ -3,7 +3,6 @@ import { PtyTicket } from "@opencode/core/pty/ticket"
 import {
   ForbiddenError,
   InvalidRequestError,
-  PtyFeatureUnsupportedError,
   PtyNotFoundError,
   ServiceUnavailableError,
 } from "@opencode/protocol/errors"
@@ -113,19 +112,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
               .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
               .pipe(mapTerminalError)
           if (ctx.payload.title === undefined) return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
-          return {
-            data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(
-              Effect.catchTags({
-                "PersistentPty.NotFoundError": notFound,
-                "PersistentPty.UnsupportedError": (error) =>
-                  new PtyFeatureUnsupportedError({
-                    feature: error.feature,
-                    message: "Terminal renaming will be available after OpenCode's terminal service restarts",
-                  }),
-                "PersistentPty.UnavailableError": unavailable,
-              }),
-            ),
-          }
+          return { data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(mapTerminalError) }
         }),
       )
       .handle(

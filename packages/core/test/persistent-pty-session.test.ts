@@ -17,6 +17,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { SessionEnvironment } from "@opencode/core/session/environment"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Removed, Updated } from "@opencode/schema/persistent-pty"
+import { Pty } from "@opencode/schema/pty"
 import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
@@ -89,7 +90,7 @@ describe("PersistentPty session cleanup", () => {
 describe("PersistentPty rename", () => {
   it.live("renames a terminal, publishes the update and clears the user title", () =>
     Effect.gen(function* () {
-      const daemon = yield* fakeDaemon(["rename"])
+      const daemon = yield* fakeDaemon()
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
         const bus = yield* Bus.Service
@@ -107,30 +108,114 @@ describe("PersistentPty rename", () => {
       }).pipe(Effect.provide(layer(daemon)))
     }),
   )
+})
 
-  it.live("refuses to rename on a daemon without the rename feature and never sends it", () =>
+describe("PersistentPty pipe processes", () => {
+  const input = {
+    program: "/bin/sh",
+    args: ["-c", "echo hi"],
+    cwd: "/tmp",
+    env: { PATH: "/usr/bin" },
+    groupID: "proj_test",
+    outputPath: "/tmp/sh_test.out",
+    metadata: { id: "sh_test", command: "echo hi" },
+  }
+
+  it.live("creates, inspects, signals and waits for a pipe process", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon()
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        const created = yield* pty.createPipe(input)
+        expect(daemon.requests.at(-1)).toEqual({
+          op: "create_pipe",
+          program: "/bin/sh",
+          args: ["-c", "echo hi"],
+          cwd: "/tmp",
+          env: { PATH: "/usr/bin" },
+          group_id: "proj_test",
+          output_path: "/tmp/sh_test.out",
+          metadata: { id: "sh_test", command: "echo hi" },
+        })
+        expect(created).toMatchObject({
+          groupID: "proj_test",
+          outputPath: "/tmp/sh_test.out",
+          lifecycle: { status: "running" },
+          metadata: input.metadata,
+          exitedAt: undefined,
+        })
+
+        yield* pty.setPipeMetadata(created.id, { id: "sh_test", status: "killed" })
+        expect((yield* pty.getPipe(created.id)).metadata).toEqual({ id: "sh_test", status: "killed" })
+        expect((yield* pty.listPipes()).map((item) => item.id)).toEqual([created.id])
+
+        const waiting = yield* pty.waitPipe(created.id).pipe(Effect.forkScoped({ startImmediately: true }))
+        yield* pty.signalPipe(created.id, "SIGTERM")
+        expect(yield* Fiber.join(waiting)).toMatchObject({ exitCode: undefined, signal: "SIGTERM", outputLines: 0 })
+        // A finished process answers a later wait at once and keeps its record until it is terminated.
+        expect((yield* pty.waitPipe(created.id)).signal).toBe("SIGTERM")
+        expect((yield* pty.getPipe(created.id)).lifecycle).toEqual({
+          status: "exited",
+          exitCode: undefined,
+          signal: "SIGTERM",
+        })
+
+        yield* pty.terminatePipe(created.id)
+        expect(yield* Effect.flip(pty.getPipe(created.id))).toEqual(
+          new PersistentPty.ProcessNotFoundError({ processID: created.id }),
+        )
+        expect(yield* pty.listPipes()).toEqual([])
+      }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
+
+  it.live("keeps pipe processes and terminals apart", () =>
     Effect.gen(function* () {
       const daemon = yield* fakeDaemon()
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
         const directory = yield* tmpdirScoped()
-        const terminal = yield* pty.create(Session.ID.make("ses_rename"), {
+        const terminal = yield* pty.create(Session.ID.make("ses_pipe"), {
           args: [],
           cwd: directory.path,
           title: "test",
           env: {},
         })
-        expect(terminal.userTitle).toBeNull()
+        const pipe = yield* pty.createPipe(input)
 
-        const error = yield* Effect.flip(pty.rename(terminal.id, "build"))
+        expect((yield* pty.list()).map((item) => item.id)).toEqual([terminal.id])
+        expect((yield* pty.listPipes()).map((item) => item.id)).toEqual([pipe.id])
+        const ptyID = Pty.ID.make(`pty_persistent_${pipe.id}`)
+        expect(yield* Effect.flip(pty.get(ptyID))).toEqual(new PersistentPty.NotFoundError({ ptyID }))
+      }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
 
-        expect(error).toEqual(new PersistentPty.UnsupportedError({ feature: "rename" }))
-        expect(daemon.ops).not.toContain("rename")
-        expect((yield* pty.get(terminal.id)).title).toBe("test")
+  it.live("reports daemon rejections as request errors and a terminated wait as one", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon()
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        expect(yield* Effect.flip(pty.createPipe({ ...input, cwd: "relative" }))).toEqual(
+          new PersistentPty.RequestError({ message: "cwd must be absolute" }),
+        )
+        const created = yield* pty.createPipe(input)
+        const waiting = yield* pty.waitPipe(created.id).pipe(Effect.forkScoped({ startImmediately: true }))
+        yield* poll(() => daemon.waiters(created.id) === 1)
+        yield* pty.terminatePipe(created.id)
+        expect(yield* Fiber.join(waiting).pipe(Effect.flip)).toEqual(
+          new PersistentPty.RequestError({ message: "terminated" }),
+        )
       }).pipe(Effect.provide(layer(daemon)))
     }),
   )
 })
+
+const poll = (ready: () => boolean) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 200 && !ready(); attempt++) yield* Effect.sleep(10)
+    expect(ready()).toBeTrue()
+  })
 
 const nextUpdated = (bus: Bus.Interface) =>
   bus

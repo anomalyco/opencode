@@ -1,36 +1,59 @@
 import { spawn } from "node:child_process"
-import { mkdir, readFile, rename } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
 import type { Handoff } from "@opencode/schema/persistent-pty"
-import { Session } from "@opencode/schema/session"
 
-const ProtocolVersion = 7
+const ProtocolVersion = 8
 const MaxFrameBytes = 8 * 1024 * 1024
 
 const Lifecycle = Schema.Union([
   Schema.Struct({ status: Schema.Literal("running") }),
-  Schema.Struct({ status: Schema.Literal("exited"), exit_code: Schema.NullOr(Schema.Number) }),
+  Schema.Struct({
+    status: Schema.Literal("exited"),
+    exit_code: Schema.NullOr(Schema.Number),
+    signal: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
   Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String }),
 ])
 
-export const WireTerminal = Schema.Struct({
-  id: Schema.Number,
-  pid: Schema.NullOr(Schema.Number),
+const PtyInfo = Schema.Struct({
   title: Schema.String,
-  user_title: Schema.optional(Schema.NullOr(Schema.String)),
+  user_title: Schema.NullOr(Schema.String),
   foreground_process: Schema.NullOr(Schema.String),
-  group_id: Session.ID,
-  command: Schema.Array(Schema.String),
-  cwd: Schema.String,
   cols: Schema.Number,
   rows: Schema.Number,
+})
+
+export const Metadata = Schema.Record(Schema.String, Schema.Unknown)
+export type Metadata = typeof Metadata.Type
+
+const PipeInfo = Schema.Struct({
+  output_path: Schema.String,
+  output_lines: Schema.Number,
+  output_error: Schema.optional(Schema.NullOr(Schema.String)),
+  metadata: Metadata,
+})
+
+export const ProcessInfo = Schema.Struct({
+  id: Schema.Number,
+  mode: Schema.Literals(["pty", "pipe"]),
+  pid: Schema.NullOr(Schema.Number),
+  command: Schema.Array(Schema.String),
+  cwd: Schema.String,
+  group_id: Schema.String,
   lifecycle: Lifecycle,
   output_head: Schema.Number,
   output_tail: Schema.Number,
+  started_at: Schema.Number,
+  exited_at: Schema.optional(Schema.NullOr(Schema.Number)),
+  pty: Schema.optional(Schema.NullOr(PtyInfo)),
+  pipe: Schema.optional(Schema.NullOr(PipeInfo)),
 })
-export type WireTerminal = typeof WireTerminal.Type
+export type ProcessInfo = typeof ProcessInfo.Type
+
+export type Signal = "SIGTERM" | "SIGINT" | "SIGKILL"
 
 const Registration = Schema.Struct({
   instance_id: Schema.String,
@@ -38,7 +61,7 @@ const Registration = Schema.Struct({
   protocol: Schema.Number,
   socket: Schema.String,
   token: Schema.String,
-  features: Schema.optional(Schema.Array(Schema.String)),
+  features: Schema.Array(Schema.String),
 })
 type Registration = typeof Registration.Type
 
@@ -48,16 +71,17 @@ export const WireResponse = Schema.Union([
     instance_id: Schema.String,
     pid: Schema.Number,
     protocol: Schema.Number,
-    features: Schema.optional(Schema.Array(Schema.String)),
+    features: Schema.Array(Schema.String),
   }),
-  Schema.Struct({ type: Schema.Literal("created"), terminal: WireTerminal }),
-  Schema.Struct({ type: Schema.Literal("terminals"), terminals: Schema.Array(WireTerminal) }),
+  Schema.Struct({ type: Schema.Literal("created"), process: ProcessInfo }),
+  Schema.Struct({ type: Schema.Literal("processes"), processes: Schema.Array(ProcessInfo) }),
+  Schema.Struct({ type: Schema.Literal("process"), process: ProcessInfo }),
   Schema.Struct({ type: Schema.Literal("ok") }),
   Schema.Struct({ type: Schema.Literal("owned") }),
   Schema.Struct({ type: Schema.Literal("handoff"), ticket: Schema.String, expires_at: Schema.Number }),
   Schema.Struct({
     type: Schema.Literal("snapshot"),
-    terminal: WireTerminal,
+    process: ProcessInfo,
     text: Schema.String,
     checkpoint_base64: Schema.String,
     cursor_x: Schema.Number,
@@ -65,14 +89,14 @@ export const WireResponse = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("rows"),
-    terminal: WireTerminal,
+    process: ProcessInfo,
     lines: Schema.Array(Schema.String),
     cursor_x: Schema.Number,
     cursor_y: Schema.Number,
   }),
   Schema.Struct({
     type: Schema.Literal("attached"),
-    terminal: WireTerminal,
+    process: ProcessInfo,
     role: Schema.Literals(["controller", "observer"]),
     generation: Schema.Number,
     requested_offset: Schema.Number,
@@ -91,7 +115,12 @@ export const WireResponse = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("exited"),
     exit_code: Schema.NullOr(Schema.Number),
+    signal: Schema.optional(Schema.NullOr(Schema.String)),
     final_offset: Schema.Number,
+    // Pipe processes only.
+    output_lines: Schema.optional(Schema.Number),
+    output_error: Schema.optional(Schema.NullOr(Schema.String)),
+    exited_at: Schema.Number,
   }),
   Schema.Struct({
     type: Schema.Literal("controller_changed"),
@@ -103,6 +132,7 @@ export const WireResponse = Schema.Union([
   Schema.Struct({ type: Schema.Literal("error"), message: Schema.String }),
 ])
 export type WireResponse = typeof WireResponse.Type
+export type Exited = Extract<WireResponse, { type: "exited" }>
 
 export type Role = "controller" | "observer"
 
@@ -130,7 +160,7 @@ export type SubscribeInput = {
 }
 
 export type DaemonAttachment = {
-  readonly terminal: WireTerminal
+  readonly terminal: ProcessInfo
   readonly role: Role
   readonly generation: number
   readonly replay: {
@@ -144,8 +174,13 @@ export type DaemonAttachment = {
   readonly detach: () => void
 }
 
+/**
+ * `connect`, `spawn`, `registration` and `protocol` mean the daemon could not be reached or started and the
+ * request never ran. `response` means the request was sent but its reply was lost. `request` is the daemon's
+ * own `error` reply.
+ */
 export class DaemonError extends Data.TaggedError("PersistentPty.DaemonError")<{
-  readonly kind: "connect" | "response" | "registration" | "protocol" | "spawn"
+  readonly kind: "connect" | "response" | "registration" | "protocol" | "spawn" | "request"
   readonly message: string
   readonly pid?: number
 }> {}
@@ -153,7 +188,8 @@ export class DaemonError extends Data.TaggedError("PersistentPty.DaemonError")<{
 export interface DaemonTransport {
   readonly request: (value: object, start?: boolean) => Effect.Effect<WireResponse, DaemonError>
   readonly requestIfRunning: (value: object) => Effect.Effect<WireResponse | undefined, DaemonError>
-  readonly supports: (feature: string) => Effect.Effect<boolean, DaemonError>
+  /** Waits on its own connection, with no timeout, until the pipe process exits. Never starts the daemon. */
+  readonly wait: (id: number) => Effect.Effect<Exited, DaemonError>
   readonly shutdown: Effect.Effect<WireResponse | undefined, DaemonError>
   readonly handoff: Effect.Effect<Handoff | null, DaemonError>
   readonly subscribe: (
@@ -229,8 +265,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       response.protocol !== ProtocolVersion
     )
       return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "opencode-pty registration mismatch" }))
-    // Daemons older than the features list omit it; trust the live daemon's answer over the file.
-    return { ...decoded, features: response.features ?? [] }
+    return decoded
   })
 
   const spawnDaemon = Effect.fn("PersistentPty.daemon.spawn")(function* () {
@@ -351,9 +386,14 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       Effect.catch((error) => (error.kind === "connect" ? Effect.succeed(undefined) : Effect.fail(error))),
     )
 
-  const supports = Effect.fn("PersistentPty.daemon.supports")(function* (feature: string) {
-    const current = yield* connect(false)
-    return current.features?.includes(feature) ?? false
+  const wait = Effect.fn("PersistentPty.daemon.wait")(function* (processID: number) {
+    const attempt = withRegistration(false, (current) =>
+      Effect.tryPromise({
+        try: (signal) => waitPromise(current, processID, signal),
+        catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
+      }),
+    )
+    return yield* attempt.pipe(Effect.catch((error) => (error.kind === "registration" ? attempt : Effect.fail(error))))
   })
 
   const shutdown = Effect.gen(function* () {
@@ -418,13 +458,10 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     yield* Effect.gen(function* () {
       if (inherited.expiresAt <= Date.now())
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
-      // Older releases put the daemon directory outside the root; its directory name is still the ID.
       id = path.basename(inherited.directory)
       found = yield* discover(inherited.directory)
       if (found.instance_id !== inherited.instanceID)
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
-      if (path.resolve(inherited.directory) !== path.resolve(root, id))
-        yield* migrate(inherited.directory, path.join(root, id))
       yield* claim(found, inherited.ticket)
     }).pipe(
       Effect.catchCause((cause) =>
@@ -440,20 +477,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
   }
 
-  return { request, requestIfRunning, supports, shutdown, handoff, subscribe } satisfies DaemonTransport
-})
-
-// Older releases kept registrations in purgeable temp directories. Renaming keeps the lock file's
-// inode, so the still-running daemon keeps holding its lock in the new location.
-const migrate = Effect.fn("PersistentPty.daemon.migrate")(function* (directory: string, target: string) {
-  yield* Effect.tryPromise({
-    try: async () => {
-      await mkdir(target, { recursive: true, mode: 0o700 })
-      await rename(path.join(directory, "service.lock"), path.join(target, "service.lock"))
-      await rename(path.join(directory, "service.json"), path.join(target, "service.json"))
-    },
-    catch: (cause) => failure("registration", cause),
-  })
+  return { request, requestIfRunning, wait, shutdown, handoff, subscribe } satisfies DaemonTransport
 })
 
 async function openOwner(registration: Registration, ticket: string | undefined, signal: AbortSignal) {
@@ -535,7 +559,7 @@ const oneShot = Effect.fn("PersistentPty.daemon.oneShot")(function* (registratio
         })
         const response = yield* Effect.try({
           try: () => decode(first),
-          catch: (cause) => failure("protocol", cause),
+          catch: (cause) => failure("response", cause),
         })
         if (response.type === "error") return yield* Effect.fail(responseError(response.message))
         return response
@@ -632,7 +656,7 @@ async function subscribePromise(
     }
     let activated = false
     return {
-      terminal: response.terminal,
+      terminal: response.process,
       role: response.role,
       generation: response.generation,
       replay: {
@@ -656,6 +680,29 @@ async function subscribePromise(
   } catch (error) {
     socket.destroy()
     throw error
+  }
+}
+
+async function waitPromise(registration: Registration, id: number, signal: AbortSignal): Promise<Exited> {
+  const socket = net.createConnection({ path: registration.socket })
+  const abort = () => socket.destroy()
+  signal.addEventListener("abort", abort, { once: true })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.once("connect", resolve)
+      socket.once("error", reject)
+    })
+    socket.write(encode({ token: registration.token, request: { op: "wait", id } }))
+    const frame = await decoder(socket).next()
+    // The connection was open, so a missing reply means the daemon went away while the process ran.
+    if (frame.done) throw failure("connect", "opencode-pty closed before the process exited")
+    const response = decode(frame.value)
+    if (response.type === "error") throw responseError(response.message)
+    if (response.type !== "exited") throw failure("response", `unexpected opencode-pty response: ${response.type}`)
+    return response
+  } finally {
+    signal.removeEventListener("abort", abort)
+    socket.destroy()
   }
 }
 
@@ -691,7 +738,7 @@ function decode(payload: Uint8Array) {
 }
 
 function responseError(message: string) {
-  return new DaemonError({ kind: message === "authentication failed" ? "registration" : "protocol", message })
+  return new DaemonError({ kind: message === "authentication failed" ? "registration" : "request", message })
 }
 
 function failure(kind: DaemonError["kind"], cause: unknown) {

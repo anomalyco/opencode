@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
 
-export const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 7 }
+export const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 8, features: [] }
 
 export function temporaryDirectory() {
   return Effect.acquireRelease(
@@ -81,7 +81,7 @@ function readRequest(socket: net.Socket) {
   })
 }
 
-function frame(value: object) {
+export function frame(value: object) {
   const payload = Buffer.from(JSON.stringify(value))
   const output = Buffer.allocUnsafe(payload.length + 4)
   output.writeUInt32BE(payload.length)
@@ -89,70 +89,126 @@ function frame(value: object) {
   return output
 }
 
-export function writeRegistration(
-  directory: string,
-  socket: string,
-  instance = "test",
-  token = "test",
-  features?: string[],
-) {
+export function writeRegistration(directory: string, socket: string, instance = "test", token = "test") {
   return writeFile(
     path.join(directory, "service.json"),
-    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 7, socket, token, features }),
+    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 8, socket, token, features: [] }),
   )
 }
 
-// An in-process opencode-pty that a server adopts through a handoff, so no daemon is spawned. Without
-// features it answers like a daemon that predates the features list.
-export const fakeDaemon = Effect.fn(function* (features?: string[]) {
+type Process = {
+  id: number
+  mode: "pty" | "pipe"
+  pid: number | null
+  command: string[]
+  cwd: string
+  group_id: string
+  lifecycle: { status: "running" | "exited"; exit_code?: number | null; signal?: string }
+  output_head: number
+  output_tail: number
+  started_at: number
+  exited_at: number | null
+  pty?: { title: string; user_title: string | null; foreground_process: string | null; cols: number; rows: number }
+  pipe?: { output_path: string; output_lines: number; metadata: Record<string, unknown> }
+}
+
+// An in-process opencode-pty that a server adopts through a handoff, so no daemon is spawned. Pipe processes
+// run nothing: they stay running until `exit` or a signal ends them.
+export const fakeDaemon = Effect.fn(function* () {
   const base = yield* temporaryDirectory()
   const root = path.join(base, "root")
   const directory = path.join(root, "inherited")
   const socket = path.join(base, "daemon.sock")
-  const terminals: Array<ReturnType<typeof terminal> & { user_title?: string | null }> = []
+  const processes: Process[] = []
+  const waiters = new Map<number, net.Socket[]>()
   const failTerminate = new Set<string>()
   const ops: string[] = []
+  const requests: Record<string, unknown>[] = []
   let nextID = 1
+
+  const find = (id: unknown) => processes.find((item) => item.id === id)
+  const exit = (id: number, exitCode: number | null, signal?: string) => {
+    const found = find(id)
+    if (!found || found.lifecycle.status !== "running") return
+    found.lifecycle = { status: "exited", exit_code: exitCode, signal }
+    found.exited_at = Date.now()
+    const reply = exited(found)
+    waiters.get(id)?.forEach((connection) => connection.end(frame(reply)))
+    waiters.delete(id)
+  }
+
   yield* listen(socket, (connection, request) => {
     ops.push(String(request.op))
-    if (request.op === "ping") return features ? { ...pong, features } : pong
-    if (request.op === "list") return { type: "terminals", terminals }
-    if (request.op === "create") {
-      const base = terminal(nextID++, String(request.group_id))
-      // A daemon that advertises features always serializes user_title.
-      const created = features ? { ...base, user_title: null } : base
-      terminals.push(created)
-      return { type: "created", terminal: created }
+    requests.push(request)
+    if (request.op === "ping") return pong
+    if (request.op === "list")
+      return { type: "processes", processes: processes.filter((item) => item.mode === request.mode) }
+    if (request.op === "get") {
+      const found = find(request.id)
+      if (!found) return { type: "error", message: `terminal ${String(request.id)} not found` }
+      return { type: "process", process: found }
+    }
+    if (request.op === "create_pty") {
+      const created = terminal(nextID++, String(request.group_id))
+      processes.push(created)
+      return { type: "created", process: created }
+    }
+    if (request.op === "create_pipe") {
+      if (typeof request.cwd !== "string" || !path.isAbsolute(request.cwd))
+        return { type: "error", message: "cwd must be absolute" }
+      const created = pipe(nextID++, request)
+      processes.push(created)
+      return { type: "created", process: created }
     }
     if (request.op === "control") return { type: "ok" }
-    if (request.op === "terminate") {
-      if (failTerminate.has(`pty_persistent_${request.id}`)) return { type: "error", message: "terminate failed" }
-      const index = terminals.findIndex((item) => item.id === request.id)
-      if (index === -1) return { type: "error", message: `terminal not found: ${String(request.id)}` }
-      terminals.splice(index, 1)
-      return { type: "ok" }
-    }
-    if (request.op === "rename" && features?.includes("rename")) {
-      const found = terminals.find((item) => item.id === request.id)
-      if (!found) return { type: "error", message: "terminal not found" }
-      found.user_title = typeof request.title === "string" && request.title !== "" ? request.title : null
-      found.title = found.user_title ?? "test"
-      return { type: "ok" }
-    }
-    // Old daemons cannot parse unknown requests and drop the connection.
     if (request.op === "rename") {
-      connection.destroy()
+      const found = find(request.id)
+      if (!found?.pty) return { type: "error", message: "terminal not found" }
+      found.pty.user_title = typeof request.title === "string" && request.title !== "" ? request.title : null
+      found.pty.title = found.pty.user_title ?? "test"
+      return { type: "ok" }
+    }
+    if (request.op === "wait") {
+      const found = find(request.id)
+      if (!found?.pipe) return { type: "error", message: `terminal ${String(request.id)} not found` }
+      if (found.lifecycle.status !== "running") return exited(found)
+      waiters.set(found.id, [...(waiters.get(found.id) ?? []), connection])
       return undefined
     }
-    return { type: "error", message: `unexpected request: ${String(request.op)}` }
+    if (request.op === "signal") {
+      const found = find(request.id)
+      if (!found?.pipe) return { type: "error", message: `terminal ${String(request.id)} not found` }
+      exit(found.id, null, String(request.signal))
+      return { type: "ok" }
+    }
+    if (request.op === "set_metadata") {
+      const found = find(request.id)
+      if (!found?.pipe || !isRecord(request.metadata))
+        return { type: "error", message: `terminal ${String(request.id)} not found` }
+      found.pipe.metadata = request.metadata
+      return { type: "ok" }
+    }
+    if (request.op === "terminate") {
+      if (failTerminate.has(`pty_persistent_${request.id}`)) return { type: "error", message: "terminate failed" }
+      const index = processes.findIndex((item) => item.id === request.id)
+      if (index === -1) return { type: "error", message: `terminal ${String(request.id)} not found` }
+      const [removed] = processes.splice(index, 1)
+      waiters.get(removed.id)?.forEach((waiter) => waiter.end(frame({ type: "error", message: "terminated" })))
+      waiters.delete(removed.id)
+      return { type: "ok" }
+    }
+    return { type: "error", message: `unsupported request: ${String(request.op)}` }
   })
   yield* Effect.promise(async () => {
     await mkdir(directory, { recursive: true })
-    await writeRegistration(directory, socket, "test", "test", features)
+    await writeRegistration(directory, socket)
   })
   return {
     failTerminate,
     ops,
+    requests,
+    exit,
+    waiters: (id: number) => waiters.get(id)?.length ?? 0,
     options: {
       root,
       handoff: { directory, instanceID: "test", ticket: "ticket", expiresAt: Date.now() + 60_000 },
@@ -160,20 +216,52 @@ export const fakeDaemon = Effect.fn(function* (features?: string[]) {
   }
 })
 
-export function terminal(id: number, groupID = "ses_test") {
+export function terminal(id: number, groupID = "ses_test"): Process {
   return {
     id,
+    mode: "pty",
     pid: null,
-    title: "test",
-    foreground_process: null,
-    group_id: groupID,
     command: ["test"],
     cwd: "/tmp",
-    cols: 80,
-    rows: 24,
+    group_id: groupID,
     lifecycle: { status: "running" },
     output_head: 0,
     output_tail: 0,
+    started_at: Date.now(),
+    exited_at: null,
+    pty: { title: "test", user_title: null, foreground_process: null, cols: 80, rows: 24 },
+  }
+}
+
+function pipe(id: number, request: Record<string, unknown>): Process {
+  return {
+    id,
+    mode: "pipe",
+    pid: 1_000 + id,
+    command: [String(request.program), ...(Array.isArray(request.args) ? request.args.map(String) : [])],
+    cwd: String(request.cwd),
+    group_id: String(request.group_id),
+    lifecycle: { status: "running" },
+    output_head: 0,
+    output_tail: 0,
+    started_at: Date.now(),
+    exited_at: null,
+    pipe: {
+      output_path: String(request.output_path),
+      output_lines: 0,
+      metadata: isRecord(request.metadata) ? request.metadata : {},
+    },
+  }
+}
+
+function exited(process: Process) {
+  return {
+    type: "exited",
+    exit_code: process.lifecycle.exit_code ?? null,
+    signal: process.lifecycle.signal,
+    final_offset: process.output_tail,
+    output_lines: process.pipe?.output_lines,
+    exited_at: process.exited_at ?? Date.now(),
   }
 }
 
