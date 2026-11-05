@@ -46,12 +46,9 @@ const key = (
 })
 
 function run(events: LocationDialogEvent[], state: LocationDialogState = createLocationDialogState()) {
-  return events.reduce((acc, event) => transitionLocationDialog(acc.state, event), {
-    state,
-    effects: [],
-    handled: false,
-    stop: false,
-  } as LocationDialogTransition)
+  const initial: LocationDialogTransition = { state, effects: [], handled: false, stop: false }
+
+  return events.reduce((acc, event) => transitionLocationDialog(acc.state, event), initial)
 }
 
 const back: LocationDialogEvent = { type: "back" }
@@ -86,6 +83,7 @@ describe("location dialog steps", () => {
       query("sst"),
       openProject(projectEntryID(sst)),
     ])
+
     expect(servers.state.type).toBe("servers")
 
     const others = transitionLocationDialog(servers.state, back)
@@ -130,12 +128,12 @@ describe("location dialog steps", () => {
       createLocationDialogState(),
       key(forward, { direction, active, drillable: true }),
     )
+
     expect(drilled).toMatchObject({ state: { type: "worktrees", project: sst }, handled: true, stop: false })
 
     // The opposite arrow is the input's to move the caret.
-    expect(transitionLocationDialog(createLocationDialogState(), key(backward, { direction, active })).handled).toBe(
-      false,
-    )
+    const caret = transitionLocationDialog(createLocationDialogState(), key(backward, { direction, active }))
+    expect(caret.handled).toBe(false)
 
     const back = transitionLocationDialog(drilled.state, key(backward, { direction }))
     expect(back).toMatchObject({ state: { type: "projects" }, handled: true, stop: true })
@@ -143,6 +141,7 @@ describe("location dialog steps", () => {
 
   test("the projects step leaves Escape and plain keys to the dialog and the list", () => {
     const state = createLocationDialogState()
+
     for (const name of ["Escape", "Backspace", "ArrowDown", "Enter"])
       expect(transitionLocationDialog(state, key(name))).toEqual({ state, effects: [], handled: false, stop: false })
   })

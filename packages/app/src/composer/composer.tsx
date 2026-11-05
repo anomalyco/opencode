@@ -123,6 +123,7 @@ function ComposerModelControl(props: {
     next.effects.forEach((effect) => {
       if (effect.type === "open") return open(effect.detail)
       clearTimeout(timer)
+
       if (effect.type === "timer.start")
         timer = setTimeout(() => dispatch({ type: "timed-out", attempt: effect.attempt }), effect.delayMs)
     })

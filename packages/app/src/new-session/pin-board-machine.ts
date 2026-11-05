@@ -124,18 +124,21 @@ export function boardCloseAge(state: PinBoardState, now: number) {
 }
 
 /**
- * Moves every socket to the new grid after a resize without changing any pin's phase, so a game, a pile or the
- * closing wave survives it. Socketed pins follow their socket; piled pins drop and pile again on the new surfaces.
+ * Moves every socket to the new grid after a resize, so a game, the closing wave or loose pins survive it. Socketed
+ * pins follow their socket, flying, returning and knocked-out pins keep their phase, and piled pins drop to pile
+ * again on the new surfaces, since the piles are counted per bucket of the old grid.
  */
 export function relayoutPins(pins: Pin[], x0: number, y0: number, pitch: number) {
   for (const p of pins) {
     p.hx = x0 + (p.c + 0.5) * pitch
     p.hy = y0 + (p.r + 0.5) * pitch
+
     if (p.phase === "home") {
       p.x = p.hx
       p.y = p.hy
       continue
     }
+
     if (p.phase !== "rest") continue
     p.phase = "air"
     p.vx = 0
@@ -145,7 +148,9 @@ export function relayoutPins(pins: Pin[], x0: number, y0: number, pitch: number)
 
 export function countHomePins(pins: readonly Pin[]) {
   let n = 0
+
   for (const p of pins) if (p.phase === "home") n++
+
   return n
 }
 

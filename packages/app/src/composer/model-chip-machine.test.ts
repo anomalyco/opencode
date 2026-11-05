@@ -20,13 +20,13 @@ const click = (detail = 1, loading = true): Extract<ModelChipEvent, { type: "cli
 const loaded: ModelChipEvent = { type: "loaded", mobile: false, dialogOpen: false }
 
 function run(events: ModelChipEvent[], state: ModelChipState = createModelChipState()) {
-  return events.reduce(
-    (acc, event) => {
-      const next = transitionModelChip(acc.state, event)
-      return { state: next.state, effects: [...acc.effects, ...next.effects] }
-    },
-    { state, effects: [] as ModelChipEffect[] },
-  )
+  const initial: { state: ModelChipState; effects: ModelChipEffect[] } = { state, effects: [] }
+
+  return events.reduce((acc, event) => {
+    const next = transitionModelChip(acc.state, event)
+
+    return { state: next.state, effects: [...acc.effects, ...next.effects] }
+  }, initial)
 }
 
 const opens = (effects: readonly ModelChipEffect[]) => effects.filter((effect) => effect.type === "open")
@@ -79,6 +79,7 @@ describe("model chip deferred open", () => {
 
   test("idle ignores loads, cancels and timers", () => {
     const state = createModelChipState()
+
     for (const event of [loaded, { type: "cancelled" }, { type: "timed-out", attempt: 0 }] satisfies ModelChipEvent[])
       expect(transitionModelChip(state, event)).toEqual({ state, effects: [] })
   })

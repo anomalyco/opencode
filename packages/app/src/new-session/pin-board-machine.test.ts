@@ -75,6 +75,7 @@ describe("pin board", () => {
       { type: "pointer.down", x: 0, y: 0 },
       { type: "close", now: 1 },
     ])
+
     expect(dragKnockDue(state, 100, 100, 7)).toBe(false)
   })
 
@@ -108,6 +109,7 @@ describe("pin board", () => {
 
     const disposed = transitionPinBoard(idle, { type: "dispose" })
     expect(disposed).toEqual({ status: "disposed" })
+
     for (const event of [{ type: "play" }, { type: "close", now: 1 }, { type: "dispose" }] satisfies PinBoardEvent[])
       expect(transitionPinBoard(disposed, event)).toBe(disposed)
   })

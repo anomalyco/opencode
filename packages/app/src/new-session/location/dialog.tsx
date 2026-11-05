@@ -270,6 +270,7 @@ function NewSessionLocationDialog(props: {
         if (!props.project.isSelected(effect.project)) props.project.select(effect.project, effect.value)
         props.onWorkspace?.(effect.value)
       }
+
       dialog.close()
     })
 
@@ -289,6 +290,7 @@ function NewSessionLocationDialog(props: {
     // SAFETY: this handler is only attached to the search TextInput's <input>, so currentTarget is that element.
     const target = event.currentTarget as HTMLInputElement
     const active = activeEntry()
+
     const next = dispatch({
       type: "key.down",
       key: event.key,
