@@ -127,6 +127,44 @@ export function followAnchor(state: FollowState) {
   return state.type === "anchored" ? state.anchor : undefined
 }
 
+/** History entries whose route reveal was attempted, kept so going Back to one does not reveal it again. */
+export const ROUTE_REVEAL_HISTORY_LIMIT = 32
+
+/**
+ * The tool call a route asks the timeline to open on, attempted once per history entry whether or not it was found.
+ * Kept apart from `FollowState`: it changes only on navigation and when the timeline attaches, never while scrolling.
+ */
+export type RouteRevealState =
+  | { readonly status: "idle"; readonly consumed: readonly string[] }
+  | { readonly status: "pending"; readonly entryKey: string; readonly target: string; readonly consumed: readonly string[] }
+
+export type RouteRevealEvent =
+  | { readonly type: "route.synced"; readonly entryKey: string; readonly target: string | undefined }
+  | { readonly type: "reveal.attempted"; readonly entryKey: string }
+
+export function createRouteRevealState(): RouteRevealState {
+  return { status: "idle", consumed: [] }
+}
+
+export function transitionRouteReveal(state: RouteRevealState, event: RouteRevealEvent): RouteRevealState {
+  if (event.type === "reveal.attempted") {
+    if (state.status !== "pending" || state.entryKey !== event.entryKey) return state
+
+    return { status: "idle", consumed: [...state.consumed, event.entryKey].slice(-ROUTE_REVEAL_HISTORY_LIMIT) }
+  }
+
+  if (!event.target || state.consumed.includes(event.entryKey))
+    return state.status === "idle" ? state : { status: "idle", consumed: state.consumed }
+
+  if (state.status === "pending" && state.entryKey === event.entryKey && state.target === event.target) return state
+
+  return { status: "pending", entryKey: event.entryKey, target: event.target, consumed: state.consumed }
+}
+
+export function routeRevealTarget(state: RouteRevealState) {
+  return state.status === "pending" ? state : undefined
+}
+
 // iOS defers native scroll writes until momentum ends, so a detached touch scroll keeps its visual anchor by deferring
 // size compensation until then.
 export function defersAdjustments(state: FollowState) {

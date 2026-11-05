@@ -112,8 +112,13 @@ type Input = {
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
-  /** A tool call the route asks this timeline to open on; `done` clears it once revealed. */
-  reveal?: { target: () => string | undefined; done: () => void }
+  reveal?: TimelineRouteReveal
+}
+
+/** A tool call the route asks this timeline to open on; `consume` marks its history entry attempted. */
+export type TimelineRouteReveal = {
+  pending: () => { readonly entryKey: string; readonly target: string } | undefined
+  consume: (entryKey: string) => void
 }
 
 type ViewProps = {
@@ -154,7 +159,10 @@ export function createTimelineVirtualizer(input: Input) {
   createEffect(
     on(
       () => input.presentationKey?.(),
-      () => setToolOpen(reconcile({})),
+      () => {
+        patchGroupKeys.clear()
+        setToolOpen(reconcile({}))
+      },
       { defer: true },
     ),
   )
@@ -516,11 +524,20 @@ export function createTimelineVirtualizer(input: Input) {
     const anchor = input.follow.anchor()
     const root = listRoot()
 
-    if (!anchor || !root) return
+    if (!anchor || !root || !active()) return
 
-    const element = virtualContent?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`)
+    if (!rowByKey().has(anchor.key)) return input.follow.dispatch({ type: "release" })
+    const row = virtualContent?.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(anchor.key)}"]`)
 
-    if (!element || !active()) return input.follow.dispatch({ type: "release" })
+    // A row that has not mounted yet pins once its first measurement lands.
+    if (!row) return
+    // A tool inside a group of several names them all on the group; pin the group, or else the row.
+    const element =
+      row.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`) ??
+      [...row.querySelectorAll<HTMLElement>("[data-timeline-part-ids]")].find((group) =>
+        group.dataset.timelinePartIds!.split(",").includes(anchor.partID),
+      ) ??
+      row
 
     const offset = Math.min(
       root.scrollHeight - root.clientHeight,
@@ -537,6 +554,13 @@ export function createTimelineVirtualizer(input: Input) {
     // scroll is within a pixel of it, which would undo a compensation for a row above that resized since.
     virtualizer.scrollToOffset(offset)
   }
+
+  // An anchored row that leaves the list lets its anchor go. Reads the rows only while anchored, never while scrolling.
+  createEffect(() => {
+    const anchor = input.follow.anchor()
+
+    if (anchor && active() && !rowByKey().has(anchor.key)) input.follow.dispatch({ type: "release" })
+  })
 
   function prepareNavigation() {
     input.follow.dispatch({ type: "release" })
@@ -576,10 +600,13 @@ export function createTimelineVirtualizer(input: Input) {
       reportRect?.({ width: root.offsetWidth, height: root.offsetHeight })
 
       // A route can open this timeline on a tool call, e.g. a shell picked from inside a subagent, instead of its end.
-      const target = input.reveal?.target()
+      // It is attempted once per history entry: a call that is not in the list is not looked for again on reattach.
+      const reveal = input.reveal?.pending()
+      const revealed = !!reveal && revealPart(reveal.target)
 
-      if (target && revealPart(target)) input.reveal?.done()
-      else if (input.follow.following()) virtualizer.scrollToEnd()
+      if (reveal) input.reveal?.consume(reveal.entryKey)
+
+      if (!revealed && input.follow.following()) virtualizer.scrollToEnd()
 
       reportOffset?.(root.scrollTop, false)
       dispatchCold(CHECK_REQUESTED)

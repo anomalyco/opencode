@@ -41,7 +41,10 @@ function setup() {
     stops,
     ends,
     panel: createShellPanel({
+      enabled: () => true,
+      subagents: () => [],
       shells,
+      focus: { back: () => {}, row: () => {}, empty: () => {}, ended: () => {} },
       stop: (item) => {
         const result = deferred<boolean>()
         stops.push({ item, result })
@@ -58,6 +61,9 @@ function setup() {
   }))
 }
 
+// Settles the request and the driver's hop through Promise.try.
+const flush = () => new Promise((resolve) => setTimeout(resolve))
+
 afterEach(() => {
   setSystemTime()
 })
@@ -66,13 +72,13 @@ describe("createShellPanel", () => {
   test("opens one shell from the list and goes back", () => {
     const view = setup()
 
-    expect(view.panel.state.shell).toBeUndefined()
+    expect(view.panel.view().shell).toBeUndefined()
     view.panel.open(watcher)
-    expect(view.panel.state.shell?.key).toBe("sh_test")
-    expect(view.panel.state.end).toBeUndefined()
+    expect(view.panel.view().shell?.key).toBe("sh_test")
+    expect(view.panel.view().end).toBeUndefined()
 
     view.panel.back()
-    expect(view.panel.state.shell).toBeUndefined()
+    expect(view.panel.view().shell).toBeUndefined()
     view.dispose()
   })
 
@@ -83,18 +89,18 @@ describe("createShellPanel", () => {
     view.panel.stop()
 
     expect(view.stops.map((stop) => stop.item.key)).toEqual(["sh_dev"])
-    expect(view.panel.state.stopping).toBe(true)
+    expect(view.panel.view().stopping).toBe(true)
 
     // The removal reaches the running list before the request settles.
     view.setShells([watcher])
     setSystemTime(new Date(9_000))
     view.stops[0].result.resolve(true)
-    await Promise.resolve()
+    await flush()
 
     expect(view.ends).toEqual([])
-    expect(view.panel.state.stopping).toBe(false)
-    expect(view.panel.state.end).toEqual({ status: "killed", completed: 9_000 })
-    expect(view.panel.state.shell?.key).toBe("sh_dev")
+    expect(view.panel.view().stopping).toBe(false)
+    expect(view.panel.view().end).toEqual({ status: "killed", completed: 9_000 })
+    expect(view.panel.view().shell?.key).toBe("sh_dev")
     view.dispose()
   })
 
@@ -103,10 +109,10 @@ describe("createShellPanel", () => {
     view.panel.open(server)
     view.panel.stop()
     view.stops[0].result.resolve(false)
-    await Promise.resolve()
+    await flush()
 
-    expect(view.panel.state.stopping).toBe(false)
-    expect(view.panel.state.end).toBeUndefined()
+    expect(view.panel.view().stopping).toBe(false)
+    expect(view.panel.view().end).toBeUndefined()
     view.dispose()
   })
 
@@ -117,10 +123,10 @@ describe("createShellPanel", () => {
 
     expect(view.ends.map((end) => end.id)).toEqual(["sh_test"])
     view.ends[0].result.resolve({ status: "exited", exit: 1, completed: 7_000 })
-    await Promise.resolve()
+    await flush()
 
-    expect(view.panel.state.shell?.key).toBe("sh_test")
-    expect(view.panel.state.end).toEqual({ status: "exited", exit: 1, completed: 7_000 })
+    expect(view.panel.view().shell?.key).toBe("sh_test")
+    expect(view.panel.view().end).toEqual({ status: "exited", exit: 1, completed: 7_000 })
     view.dispose()
   })
 
@@ -130,9 +136,9 @@ describe("createShellPanel", () => {
     setSystemTime(new Date(8_000))
     view.setShells([server])
     view.ends[0].result.resolve(undefined)
-    await Promise.resolve()
+    await flush()
 
-    expect(view.panel.state.end).toEqual({ status: "killed", exit: undefined, completed: 8_000 })
+    expect(view.panel.view().end).toEqual({ status: "killed", exit: undefined, completed: 8_000 })
     view.dispose()
   })
 
@@ -142,10 +148,10 @@ describe("createShellPanel", () => {
     view.setShells([server])
     view.panel.back()
     view.ends[0].result.resolve({ status: "exited", exit: 0, completed: 7_000 })
-    await Promise.resolve()
+    await flush()
 
-    expect(view.panel.state.shell).toBeUndefined()
-    expect(view.panel.state.end).toBeUndefined()
+    expect(view.panel.view().shell).toBeUndefined()
+    expect(view.panel.view().end).toBeUndefined()
     view.dispose()
   })
 
@@ -157,7 +163,7 @@ describe("createShellPanel", () => {
     view.setShells([server])
 
     expect(view.ends.map((end) => end.id)).toEqual(["sh_test"])
-    expect(view.panel.state.ending).toBe(true)
+    expect(view.panel.view().ending).toBe(true)
     view.dispose()
   })
 
@@ -169,16 +175,16 @@ describe("createShellPanel", () => {
 
     expect(view.stops).toEqual([])
     view.ends[0].result.resolve({ status: "exited", exit: 1, completed: 7_000 })
-    await Promise.resolve()
+    await flush()
 
-    expect(view.panel.state.end).toEqual({ status: "exited", exit: 1, completed: 7_000 })
-    expect(view.panel.state.ending).toBe(false)
+    expect(view.panel.view().end).toEqual({ status: "exited", exit: 1, completed: 7_000 })
+    expect(view.panel.view().ending).toBe(false)
     view.dispose()
   })
 })
 
 describe("createShellTail", () => {
-  test("a first read still in flight when the shell ends still lands", async () => {
+  test("a first read still in flight when the shell ends still lands, without a second read from the start", async () => {
     const [running, setRunning] = createSignal(true)
     const reads: { input: ShellOutputInput; result: ReturnType<typeof deferred<ShellOutputOutput>> }[] = []
 
@@ -199,14 +205,13 @@ describe("createShellTail", () => {
 
     expect(reads.map((read) => read.input.cursor)).toEqual([0])
     setRunning(false)
-    // The final snapshot starts over, but Stop already deleted the output.
-    expect(reads.map((read) => read.input.cursor)).toEqual([0, 0])
+    // Stop already deleted the output, so a fresh read from the start would find nothing.
+    expect(reads.map((read) => read.input.cursor)).toEqual([0])
     reads[0].result.resolve({
       location: { directory: "/repo" },
       data: { output: "$ bun test\nReady.\n", cursor: 18, size: 18, truncated: false },
     })
-    await Promise.resolve()
-    await Promise.resolve()
+    await flush()
 
     expect(view.output()).toBe("$ bun test\nReady.\n")
     view.dispose()

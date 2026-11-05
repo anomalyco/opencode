@@ -23,6 +23,7 @@ import {
   type TimelineHistoryEffect,
   type TimelineHistoryEvent,
 } from "./history-machine"
+import { createRouteRevealState, routeRevealTarget, transitionRouteReveal } from "./machine"
 import { createTimelineModel } from "./model"
 
 /** `visible`: the conversation is on screen, not behind another narrow-screen view. */
@@ -58,8 +59,11 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   const detach = () => follow.dispatch({ type: "detach" })
 
   let scroller: HTMLDivElement | undefined
-  // The history entry whose tool call was already revealed.
-  let revealed: string | undefined
+  const [revealState, setRevealState] = createSignal(createRouteRevealState())
+  createEffect(() => {
+    const event = { type: "route.synced", entryKey: location.key, target: location.state?.reveal } as const
+    setRevealState((current) => transitionRouteReveal(current, event))
+  })
 
   // The active timeline's navigation, registered by its virtualizer.
   let revealMessage = (_id: string, _partID?: string) => {}
@@ -172,6 +176,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       if (scroller) scheduleScrollState(scroller)
     },
     seekHistory: () => dispatchHistory(SEEK_REQUESTED_EVENT),
+    // A route reveal, still waiting or holding its tool call in place, keeps the session off its end.
+    revealing: () => !!follow.anchor() || !!routeRevealTarget(revealState()),
   })
 
   let resumeFrame: (() => void) | undefined
@@ -457,12 +463,11 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       setRevealPart: (reveal: (target: string) => boolean) => {
         revealPart = reveal
       },
-      // The tool call the route opened the session on, revealed once per history entry.
+      // The tool call the route opened the session on, attempted once per history entry.
       reveal: {
-        target: () => (revealed === location.key ? undefined : location.state?.reveal),
-        done: () => {
-          revealed = location.key
-        },
+        pending: () => routeRevealTarget(untrack(revealState)),
+        consume: (entryKey: string) =>
+          setRevealState((current) => transitionRouteReveal(current, { type: "reveal.attempted", entryKey })),
       },
       setScrollRef,
       setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
