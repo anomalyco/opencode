@@ -35,7 +35,6 @@ const selection = {
   setVisibility() {},
   variant: {
     configured: () => undefined,
-    selected: () => "balanced",
     current: () => "balanced",
     list: () => ["balanced"],
     set() {},

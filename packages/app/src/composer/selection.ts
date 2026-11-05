@@ -7,7 +7,15 @@ import { useProviders } from "@/providers/catalog/providers"
 import { useData } from "@/runtime/server/current"
 import { normalizeAgentList, normalizeProviderList } from "@/runtime/server/global-sync/utils"
 import { useModels } from "@/providers/models/models"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/providers/models/variant"
+import {
+  cycleModelVariant,
+  durableVariantSelection,
+  getConfiguredAgentVariant,
+  INHERIT_VARIANT,
+  resolveModelVariant,
+  variantSelectionFrom,
+} from "@/providers/models/variant"
+import type { AgentChoices } from "@/providers/models/selection-machine"
 import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -191,7 +199,12 @@ export function createComposerModelSelection(input: {
 
   const selection = {
     trackSessionCommit: local.model.trackSessionCommit,
-    remembered: () => Object.fromEntries(Object.entries(remembered).map(([name, model]) => [name, { model }])),
+    remembered: (): AgentChoices =>
+      Object.fromEntries(
+        Object.entries(remembered).flatMap(([name, model]) =>
+          model ? [[name, { providerID: model.providerID, modelID: model.modelID, variant: INHERIT_VARIANT }]] : [],
+        ),
+      ),
     ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
     key,
     current,
@@ -247,18 +260,15 @@ export function createComposerModelSelection(input: {
           })
         )
       },
-      selected() {
-        const model = prompt.model.current()
-
-        return model && valid(model) ? model.variant : undefined
-      },
       current(item?: ModelKey) {
         const model = item ? models.find(item) : current()
         const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
+        const prompted = prompt.model.current()
 
         return resolveModelVariant({
           variants: Object.keys(model?.variants ?? {}),
-          selected: same ? this.selected() : undefined,
+          selected:
+            same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
           configured: this.configured(model),
           preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
         })
@@ -282,7 +292,7 @@ export function createComposerModelSelection(input: {
         this.set(
           cycleModelVariant({
             variants,
-            selected: this.current() ?? null,
+            selected: durableVariantSelection(this.current()),
             configured: undefined,
           }),
         )

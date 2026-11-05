@@ -181,7 +181,7 @@ export function createNewSessionComposerAdapter(props: {
                 local.session.promote(effect.directory, effect.sessionID, {
                   agent: selection.agent,
                   model: selection.model,
-                  variant: selection.variant ?? null,
+                  variant: selection.variant,
                   choices: model.remembered(),
                 })
                 submission.retarget(
