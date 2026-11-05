@@ -499,7 +499,7 @@ function SessionScreenContent(props: {
 
             {/* Hidden rather than unmounted: removing it makes the transcript frame the last child, and structural
                 selectors in the transcript then restyle every element in it as the side panel starts to close. */}
-            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={() => screen.size.start()}>
+            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-end-1"
                 direction="horizontal"
@@ -560,7 +560,7 @@ function SessionScreenContent(props: {
             classList={{ hidden: !bottomOpen() }}
             style={{ height: `${session.layout.view().bottom.height()}px` }}
           >
-            <div onPointerDown={() => screen.size.start()}>
+            <div onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-top-1"
                 direction="vertical"
