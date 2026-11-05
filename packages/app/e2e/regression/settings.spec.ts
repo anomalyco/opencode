@@ -1084,6 +1084,57 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toHaveCount(0)
 })
 
+test("a failed worktree delete restores its row, and the next confirmation still deletes it", async ({ page }) => {
+  const inventory: WorktreeDirectory[] = [
+    { directory },
+    ...sandboxes.map((item) => ({ directory: item, strategy: "git" })),
+  ]
+
+  const removals = { failing: true, requests: 0 }
+
+  const { settings } = await open(page, {
+    worktrees: () => inventory,
+    onWorktreeRemove: (body) => {
+      inventory.splice(
+        inventory.findIndex((item) => item.directory === body.directory),
+        1,
+      )
+    },
+  })
+
+  // The first removal fails at once, so its dialog is still closing when the row comes back.
+  await page.route(/\/api\/worktree(?:\?|$)/, (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback()
+    removals.requests += 1
+
+    if (!removals.failing) return route.fallback()
+    removals.failing = false
+
+    return route.fulfill({ status: 500, json: { name: "UnknownError", data: { message: "worktree is locked" } } })
+  })
+
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText("12 worktrees", { exact: true })).toBeVisible()
+  const trash = settings.getByRole("button", { name: "Delete “workspace-1”?", exact: true })
+
+  const confirm = page
+    .getByRole("dialog", { name: "Delete “workspace-1”?", exact: true })
+    .getByRole("button", { name: "Delete worktree", exact: true })
+
+  await trash.click()
+  await confirm.click()
+  await expect(page.getByText("Failed to delete worktree", { exact: true })).toBeVisible()
+  await expect(trash).toBeEnabled()
+  await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toBeVisible()
+  expect(removals.requests).toBe(1)
+
+  await trash.click()
+  await confirm.click()
+  await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
+  await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toHaveCount(0)
+  expect(removals.requests).toBe(2)
+})
+
 test.describe("worktrees prefetch", () => {
   const other = project({ id: "proj_other", directory: "/repo/other", name: "Other project" })
 

@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
-import { useMcpToggle, type McpControls } from "@/providers/connect/mcp"
+import { type McpControls, useMcpController, useMcpPool } from "@/providers/connect/mcp"
+import { isMcpToggling, type McpServerStatus } from "@/providers/connect/mcp-machine"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { useServer } from "@/runtime/server/current"
@@ -14,10 +14,6 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
   const server = useServer()
   const sdk = useServerSDK()
   const language = useLanguage()
-
-  const [store, setStore] = createStore<{
-    pending: Record<string, Promise<boolean> | undefined>
-  }>({ pending: {} })
 
   const key = (worktree: string) => JSON.stringify([server.key, location().directory, worktree])
   const target = createMemo(() => key(input.worktree()))
@@ -35,7 +31,16 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     return draft?.type === "draft" && draft.mcp?.target === target() ? draft.mcp.states : {}
   })
 
-  const toggle = useMcpToggle(directory)
+  // The selected directory's controller, shared with the MCPs dialog and Settings, so their toggles show here too.
+  const mcp = useMcpController(directory)
+  const pool = useMcpPool()
+
+  // Toggles a directory's server and resolves whether it succeeded, holding that directory's controller meanwhile.
+  const toggle = (current: string, name: string, enabled: boolean, status: McpServerStatus["status"] | undefined) => {
+    const controller = pool.acquire(current)
+
+    return controller.toggle(name, enabled, status).finally(() => controller.dispatch({ type: "unmounted" }))
+  }
 
   const controls: McpControls = {
     get preview() {
@@ -45,29 +50,21 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
       return states()
     },
     get pending() {
-      return input.preparing() || (!preview() && store.pending[directory()] !== undefined)
+      return input.preparing() || (!preview() && isMcpToggling(mcp.state()))
     },
     change(name, enabled) {
       if (controls.pending) return
       tabs.updateDraft(input.draftID, { mcp: { target: target(), states: { ...states(), [name]: enabled } } })
 
       if (preview()) return
-      const current = directory()
-
-      const request = toggle.mutateAsync({ name, enabled, directory: current }).then(
-        () => true,
-        () => false,
-      )
-
-      setStore("pending", current, request)
-      void request.finally(() => setStore("pending", current, undefined))
+      void toggle(directory(), name, enabled, undefined)
     },
   }
 
   const apply = async (directory: string, states: Readonly<Record<string, boolean>>) => {
-    const pending = store.pending[directory]
+    const settled = pool.peek(directory)?.settle()
 
-    if (pending && !(await pending)) return false
+    if (settled && !(await settled)) return false
     const entries = Object.entries(states)
 
     if (entries.length === 0) return true
@@ -77,18 +74,13 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     if (missing) throw new Error(language.t("session.summary.mcp.unavailable", { name: missing[0] }))
 
     const results = await Promise.all(
-      entries
-        .filter(([name, enabled]) => {
-          const server = catalog.data.find((server) => server.name === name)
+      entries.flatMap(([name, enabled]) => {
+        const status = catalog.data.find((server) => server.name === name)?.status.status
 
-          return server && (enabled ? server.status.status !== "connected" : server.status.status !== "disabled")
-        })
-        .map(([name, enabled]) =>
-          toggle.mutateAsync({ name, enabled, directory }).then(
-            () => true,
-            () => false,
-          ),
-        ),
+        if (!status || (enabled ? status === "connected" : status === "disabled")) return []
+
+        return [toggle(directory, name, enabled, status)]
+      }),
     )
 
     if (results.some((success) => !success)) return false
@@ -113,7 +105,11 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     controls,
     directory,
     capture: () => ({ ...states() }),
-    toggling: (directory: string) => store.pending[directory] !== undefined,
+    toggling: (directory: string) => {
+      const controller = pool.peek(directory)
+
+      return !!controller && isMcpToggling(controller.state())
+    },
     remember(directory: string, states: Readonly<Record<string, boolean>>) {
       tabs.updateDraft(input.draftID, { mcp: { target: key(directory), states: { ...states } } })
     },
