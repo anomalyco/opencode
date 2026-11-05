@@ -918,7 +918,7 @@ impl Mini {
         };
         self.trace("send.interrupt", json!({ "sessionID": session.id }));
         let client = self.client.clone();
-        self.app.spawn(async move { replay::interrupt(&client, &session.id).await }, |_, result| {
+        self.app.spawn(async move { replay::interrupt(&client, &session.id, Some(true)).await }, |_, result| {
             if let Err(error) = result {
                 log::warn!("mini interrupt failed: {error}");
             }
