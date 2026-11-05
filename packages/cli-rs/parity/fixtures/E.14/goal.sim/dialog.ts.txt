@@ -1,0 +1,30 @@
+ ⠋ Ship the sidebar with every b +
+
+     ◎ Goal: Ship the sidebar with every built-in section
+
+     Working on it.
+
+
+
+
+                       Goal                                               esc
+
+                       Ship the sidebar with every built-in section
+
+                       ◎ Active
+
+
+                                                            pause p   clear x
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   [⋯] esc interrupt                                                       ◎ goal  ctrl+p commands
+

@@ -1,0 +1,30 @@
+ ⠋ Simulated session             +
+
+  ┃
+  ┃  Run the shell command `echo hello` and then reply done
+  ┃
+
+     ⋯ Thinking: Planning the command
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   [⋯] esc interrupt                                             shift+tab agents  ctrl+p commands
+

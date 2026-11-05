@@ -1,0 +1,30 @@
+ • Fix the parser                +
+
+  ┃
+  ┃  Why does the parser fail?
+  ┃
+
+     The parser drops the last token.
+
+     Build · Simulated Model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+

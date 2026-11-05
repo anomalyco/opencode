@@ -4,8 +4,9 @@ import { Schema } from "effect"
 import { Backend, JsonRpc } from "@opencode/protocol/simulation"
 
 // The items stream in order. At `{ hold: name }` the reply waits, its step still running, until the scenario's
-// `{ release: name }` step; the items before it are sent first.
-export type Reply = { items: (Backend.Item | { hold: string })[]; finish?: Backend.FinishReason }
+// `{ release: name }` step; the items before it are sent first. `finish: false` sends no `llm.finish`, for a reply
+// whose items already end the call (a provider error).
+export type Reply = { items: (Backend.Item | { hold: string })[]; finish?: Backend.FinishReason | false }
 
 export type Invocation = { id: string; url: string; body: unknown }
 
@@ -48,6 +49,7 @@ export async function startBackend(url: string, answer: (invocation: Invocation)
       await hold(item.hold).promise
     }
     await flush()
+    if (reply.finish === false) return
     await call("llm.finish", { id: invocation.id, reason: reply.finish ?? "stop" })
   }
   socket.onmessage = (event) => {

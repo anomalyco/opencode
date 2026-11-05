@@ -1,0 +1,30 @@
+ ⠋ Simulated session             +
+
+  ┃
+  ┃  Read the parser
+  ┃
+
+     Reading the parser.
+
+  ┃
+  ┃  Steer this         Message Actions                                  esc
+  ┃
+                    ┃   Jump to view message in session
+                        Revert undo messages and file changes
+                        Copy message text to clipboard
+                        Fork create a new session
+
+
+
+
+  ┃
+  ┃  2 queued · First queued
+  ┃
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   [⋯] esc interrupt                                             shift+tab agents  ctrl+p commands
+

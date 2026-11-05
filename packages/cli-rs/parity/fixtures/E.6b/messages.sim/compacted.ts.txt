@@ -1,0 +1,40 @@
+   Fix the parser                +
+
+  ┃
+  ┃  Why does the parser fail?
+  ┃
+
+     Reading the parser.
+
+     Build · Simulated Model
+
+  ────────────────────────────────────────── Compaction ──────────────────────────────────────────
+
+     Objective
+
+     - Fix the parser.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+
