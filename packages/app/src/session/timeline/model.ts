@@ -54,25 +54,11 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
     return id ? data.session.message.more(id) : false
   }
 
-  const loading = () => {
-    const id = input.session.identity.sessionID()
-
-    return id ? data.session.message.loading(id) : false
-  }
-
-  const loadOlder = async (options?: { before?: () => void; after?: (done: boolean) => void }) => {
-    return loadOlderTimeline({
-      sessionID: input.session.identity.sessionID,
-      more,
-      loading,
-      loadMore: (id) => data.session.message.loadMore(id),
-      before: options?.before,
-      after: options?.after,
-    })
-  }
-
   return {
-    history: { loadOlder, loading, more },
+    history: {
+      loadMore: (id: string, signal: AbortSignal) => data.session.message.loadMore(id, { signal }),
+      more,
+    },
     lastUserMessage: input.session.history.lastUserMessage,
     messages: input.session.history.messages,
     ready,
@@ -127,26 +113,4 @@ function leadingTurnNeedsParent(messages: SessionMessageInfo[], id: string) {
   const boundary = messages.findIndex((message) => message.type === "user" || message.type === "shell")
 
   return boundary === -1 || assistant < boundary
-}
-
-export async function loadOlderTimeline(input: {
-  sessionID: Accessor<string | undefined>
-  more: Accessor<boolean>
-  loading: Accessor<boolean>
-  loadMore: (sessionID: string) => Promise<void>
-  before?: () => void
-  after?: (done: boolean) => void
-}) {
-  const id = input.sessionID()
-
-  if (!id || !input.more() || input.loading()) return
-
-  input.before?.()
-  await input.loadMore(id).catch((error) => {
-    if (input.sessionID() === id) input.after?.(true)
-    throw error
-  })
-
-  if (input.sessionID() !== id) return
-  input.after?.(true)
 }

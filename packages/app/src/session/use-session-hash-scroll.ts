@@ -8,9 +8,8 @@ export const useSessionHashScroll = (input: {
   sessionID: () => string | undefined
   messagesReady: () => boolean
   visibleUserMessages: () => SessionMessageUser[]
-  historyMore: () => boolean
-  historyLoading: () => boolean
-  loadMore: (sessionID: string) => Promise<void>
+  historySeekable: () => boolean
+  seekHistory: () => void
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
@@ -207,24 +206,16 @@ export const useSessionHashScroll = (input: {
     queue(() => scrollToMessage(msg, "auto"))
   })
 
+  // Pages toward a target that is not loaded yet. History paging stops it once a page fails or history runs out.
   createEffect(() => {
-    const sessionID = input.sessionID()
-
-    if (!sessionID || !input.messagesReady()) return
-
-    visibleUserMessages()
+    if (!input.sessionID() || !input.messagesReady()) return
 
     let targetId = input.pendingMessage()
 
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
 
-    if (!targetId) return
-
-    if (messageById().has(targetId)) return
-
-    if (!input.historyMore() || input.historyLoading()) return
-
-    void input.loadMore(sessionID)
+    if (!targetId || messageById().has(targetId) || !input.historySeekable()) return
+    input.seekHistory()
   })
 
   onMount(() => {
