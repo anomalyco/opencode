@@ -4,6 +4,11 @@ export const MCP_SIGN_IN_POLL_MS = 1_000
 /** How long the MCP server and resource sync after a sign-in may run before it shows a retryable error. */
 export const MCP_SIGN_IN_SYNC_TIMEOUT_MS = 30_000
 
+/** The server's answer to a status poll of the sign-in attempt. */
+export type McpSignInAttemptStatus =
+  | { readonly status: "pending" | "complete" | "expired" }
+  | { readonly status: "failed"; readonly message: string }
+
 export type McpSignInPollOutcome =
   | { readonly status: "pending" }
   | { readonly status: "complete" }

@@ -4,6 +4,7 @@ import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui
 import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
+import { createMcpSignIn, type McpSignInFailure } from "@opencode/ui/mcp-sign-in"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
@@ -60,14 +61,6 @@ import {
   type McpServerStatus,
   type McpState,
 } from "./mcp-machine"
-import {
-  selectMcpSignInView,
-  startMcpSignIn,
-  transitionMcpSignIn,
-  type McpSignInEffect,
-  type McpSignInEvent,
-  type McpSignInFailure,
-} from "./mcp-sign-in-machine"
 import {
   initialServiceLoadState,
   serviceLoadView,
@@ -1559,138 +1552,23 @@ function McpSignInDialog(props: {
     location: { directory: props.directory },
   })
 
-  const initial = startMcpSignIn({ url: props.url, lifetimeMs: props.lifetime })
-  const [signInState, setSignInState] = createSignal(initial.state)
-  const view = createMemo(() => selectMcpSignInView(signInState()))
+  // Reads the server's client on every call, so a restarted server's new client answers.
+  const signIn = createMcpSignIn({
+    url: props.url,
+    lifetime: props.lifetime,
+    status: (signal) =>
+      props.server.client.integration.oauth.status(attempt(), { signal }).then((response) => response.data),
+    complete: (code, signal) => props.server.client.integration.oauth.complete({ ...attempt(), code }, { signal }),
+    cancel: () => props.server.client.integration.oauth.cancel(attempt()),
+    sync: props.onSync,
+    openExternal: (url) => ctx.system.openExternal(url),
+    close: props.onClose,
+    message: (error) => (error instanceof Error ? error.message : String(error)),
+  })
 
+  const view = signIn.view
+  const dispatch = signIn.dispatch
   let input: HTMLInputElement | undefined
-  // The machine decides when each of these starts and stops; the driver only holds them.
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined
-  let pollTimer: ReturnType<typeof setTimeout> | undefined
-  let syncTimer: ReturnType<typeof setTimeout> | undefined
-  let pollController: AbortController | undefined
-  let submitController: AbortController | undefined
-
-  const dispatch = (event: McpSignInEvent) => {
-    const previous = untrack(signInState)
-    const next = transitionMcpSignIn(previous, event)
-
-    if (next.state !== previous) setSignInState(next.state)
-    next.effects.forEach((effect) => void Promise.try(() => run(effect)).catch((cause) => console.error(cause)))
-  }
-
-  const run = (effect: McpSignInEffect) => {
-    if (effect.type === "deadline.start") {
-      clearTimeout(deadlineTimer)
-      deadlineTimer = setTimeout(() => dispatch({ type: "waiting.timed-out" }), effect.delayMs)
-
-      return
-    }
-
-    if (effect.type === "deadline.clear") return clearTimeout(deadlineTimer)
-
-    if (effect.type === "poll") {
-      abortPoll()
-
-      if (effect.delayMs <= 0) return poll(effect.pollAttempt)
-      pollTimer = setTimeout(() => poll(effect.pollAttempt), effect.delayMs)
-
-      return
-    }
-
-    if (effect.type === "poll.abort") return abortPoll()
-
-    if (effect.type === "submit") {
-      submitController?.abort()
-      const controller = new AbortController()
-      submitController = controller
-      void props.server.client.integration.oauth
-        .complete({ ...attempt(), code: effect.code }, { signal: controller.signal })
-        .then(
-          () => {
-            if (!controller.signal.aborted) dispatch({ type: "submit.succeeded", submitAttempt: effect.submitAttempt })
-          },
-          (error) => {
-            if (controller.signal.aborted) return
-            dispatch({
-              type: "submit.failed",
-              submitAttempt: effect.submitAttempt,
-              message: error instanceof Error ? error.message : String(error),
-            })
-          },
-        )
-
-      return
-    }
-
-    if (effect.type === "submit.abort") {
-      submitController?.abort()
-      submitController = undefined
-
-      return
-    }
-
-    if (effect.type === "sync") {
-      clearTimeout(syncTimer)
-      syncTimer = setTimeout(
-        () => dispatch({ type: "sync.timed-out", syncAttempt: effect.syncAttempt }),
-        effect.timeoutMs,
-      )
-      void Promise.try(props.onSync).then(
-        () => dispatch({ type: "sync.succeeded", syncAttempt: effect.syncAttempt }),
-        (error) =>
-          dispatch({
-            type: "sync.failed",
-            syncAttempt: effect.syncAttempt,
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      )
-
-      return
-    }
-
-    if (effect.type === "sync.clear") return clearTimeout(syncTimer)
-
-    if (effect.type === "refresh") return void Promise.try(props.onSync).catch(() => undefined)
-
-    if (effect.type === "open-external") return ctx.system.openExternal(effect.url)
-
-    if (effect.type === "cancel")
-      return void props.server.client.integration.oauth.cancel(attempt()).catch(() => undefined)
-
-    props.onClose()
-  }
-
-  const poll = (pollAttempt: number) => {
-    const controller = new AbortController()
-    pollController = controller
-    void props.server.client.integration.oauth.status(attempt(), { signal: controller.signal }).then(
-      (response) => {
-        if (controller.signal.aborted) return
-        const status = response.data
-        dispatch({
-          type: "polled",
-          pollAttempt,
-          outcome:
-            status.status === "failed" ? { status: "failed", message: status.message } : { status: status.status },
-        })
-      },
-      (error) => {
-        if (controller.signal.aborted) return
-        dispatch({
-          type: "polled",
-          pollAttempt,
-          outcome: { status: "unreachable", message: error instanceof Error ? error.message : String(error) },
-        })
-      },
-    )
-  }
-
-  const abortPoll = () => {
-    clearTimeout(pollTimer)
-    pollController?.abort()
-    pollController = undefined
-  }
 
   const failure = (value: McpSignInFailure) => {
     if (value.type === "auth-expired") return ctx.t("mcp.signIn.failed", { error: ctx.t("mcp.signIn.expired") })
@@ -1710,11 +1588,7 @@ function McpSignInDialog(props: {
     return error.type === "rejected" ? error.message : ctx.t("mcp.signIn.paste.required")
   }
 
-  onMount(() => {
-    input?.focus({ preventScroll: true })
-    initial.effects.forEach(run)
-  })
-  onCleanup(() => dispatch({ type: "disposed" }))
+  onMount(() => input?.focus({ preventScroll: true }))
 
   return (
     <Dialog>
