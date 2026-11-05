@@ -11,16 +11,16 @@ export type ErrorMap = Readonly<Record<string, Tool.ValueSchema>> & {
 }
 
 export interface Method {
-  readonly input: Tool.ValueSchema
-  readonly output: Tool.ValueSchema
+  readonly input?: Tool.ValueSchema
+  readonly output?: Tool.ValueSchema
   readonly errors?: ErrorMap
 }
 
 export type PortableValueSchema = StandardSchemaV1<unknown, unknown> | JsonSchema.JsonSchema
 
 export interface PortableMethod extends Method {
-  readonly input: PortableValueSchema
-  readonly output: PortableValueSchema
+  readonly input?: PortableValueSchema
+  readonly output?: PortableValueSchema
   readonly errors?: Readonly<Record<string, PortableValueSchema>> & {
     readonly [Name in `rpc.${string}`]?: never
   }
@@ -43,12 +43,12 @@ export type PortableEventDefinition = EventDefinition & { readonly schema: Porta
 export interface Definition {
   readonly id: string
   readonly methods: Readonly<Record<string, Method>> & { readonly events?: never }
-  readonly events: Readonly<Record<string, EventDefinition>>
+  readonly events?: Readonly<Record<string, EventDefinition>>
 }
 
 export interface PortableDefinition extends Definition {
   readonly methods: Readonly<Record<string, PortableMethod>> & { readonly events?: never }
-  readonly events: Readonly<Record<string, PortableEventDefinition>>
+  readonly events?: Readonly<Record<string, PortableEventDefinition>>
 }
 
 export function define<const D extends Definition>(definition: D) {
@@ -73,6 +73,24 @@ export type Output<S extends Tool.ValueSchema> = S extends Schema.Top
 
 // Effect codecs encode handler results; Standard Schema parses them forward.
 export type HandlerOutput<S extends Tool.ValueSchema> = S extends Schema.Top ? Output<S> : Input<S>
+
+type PresentProperty<T, K extends PropertyKey> = K extends keyof T ? Exclude<T[K], undefined> : never
+export type InputSchema<M extends Method> = Extract<PresentProperty<M, "input">, Tool.ValueSchema>
+export type OutputSchema<M extends Method> = Extract<PresentProperty<M, "output">, Tool.ValueSchema>
+
+export type MethodInput<M extends Method> = [InputSchema<M>] extends [never] ? undefined : Input<InputSchema<M>>
+export type HandlerInput<M extends Method> = [InputSchema<M>] extends [never] ? undefined : Output<InputSchema<M>>
+export type MethodOutput<M extends Method> = [OutputSchema<M>] extends [never] ? void : Output<OutputSchema<M>>
+export type MethodHandlerOutput<M extends Method> = [OutputSchema<M>] extends [never]
+  ? void
+  : HandlerOutput<OutputSchema<M>>
+
+export type Events<D extends Definition> = Extract<
+  PresentProperty<D, "events">,
+  Readonly<Record<string, EventDefinition>>
+>
+export type EventName<D extends Definition> = [Events<D>] extends [never] ? never : keyof Events<D> & string
+export type EventSchema<D extends Definition, Name extends EventName<D>> = Events<D>[Name]["schema"]
 
 type MethodErrors<M extends Method> = M extends {
   readonly errors: infer Errors extends ErrorMap
@@ -150,18 +168,18 @@ export type EventData<S extends EventValueSchema> = S extends JsonSchema.JsonSch
 
 // Keep the event name correlated with its payload even when callers use unions.
 export type EventInput<D extends Definition> = {
-  [Name in keyof D["events"] & string]: [name: Name, data: EventInputData<D["events"][Name]["schema"]>]
-}[keyof D["events"] & string]
+  [Name in EventName<D>]: [name: Name, data: EventInputData<EventSchema<D, Name>>]
+}[EventName<D>]
 
 type EventPayloadFor<
   D extends Definition,
-  Name extends keyof D["events"] & string,
+  Name extends EventName<D>,
 > = Omit<Event.Payload<Event.EphemeralDefinition>, "type" | "data" | "durable" | "location"> & {
   readonly type: `rpc.${D["id"]}.${Name}`
-  readonly data: EventData<D["events"][Name]["schema"]>
+  readonly data: EventData<EventSchema<D, Name>>
   readonly location: Location.Ref
 }
 
-export type EventPayload<D extends Definition, Name extends keyof D["events"] & string = keyof D["events"] & string> = {
+export type EventPayload<D extends Definition, Name extends EventName<D> = EventName<D>> = {
   readonly [K in Name]: EventPayloadFor<D, K>
 }[Name]

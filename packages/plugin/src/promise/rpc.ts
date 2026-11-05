@@ -11,9 +11,9 @@ export interface RpcCallContext<M extends Rpc.Method> {
 
 export type RpcHandlers<D extends Rpc.PortableDefinition> = {
   readonly [Name in keyof D["methods"]]: (
-    input: Rpc.Output<D["methods"][Name]["input"]>,
+    input: Rpc.HandlerInput<D["methods"][Name]>,
     context: RpcCallContext<D["methods"][Name]>,
-  ) => Promise<Rpc.HandlerOutput<D["methods"][Name]["output"]> | Rpc.HandlerError<D["methods"][Name]>>
+  ) => Promise<Rpc.MethodHandlerOutput<D["methods"][Name]> | Rpc.HandlerError<D["methods"][Name]>>
 }
 
 export interface RpcRegistration<D extends Rpc.PortableDefinition> extends Registration {

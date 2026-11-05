@@ -1,5 +1,6 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { OpenCode as EffectOpenCode, type AppApi as EffectApi } from "../src/effect"
+import { Rpc } from "@opencode/schema/rpc"
 import type { Session } from "@opencode/schema/session"
 import type { DiscoverOptions } from "../src/service"
 
@@ -46,6 +47,28 @@ const promiseRemove: Promise<void> = promiseClient.experimental.session.instruct
   key: "review-notes",
 })
 
+const OneSidedRpc = Rpc.define({
+  id: "one-sided",
+  methods: {
+    status: { output: Schema.toStandardSchemaV1(Schema.Struct({ ok: Schema.Boolean })) },
+    reset: {},
+  },
+})
+
+const effectRpcStatus: Effect.Effect<{ readonly ok: boolean }, unknown> = effectClient.rpc(OneSidedRpc).status()
+const effectRpcReset: Effect.Effect<void, unknown> = effectClient.rpc(OneSidedRpc).reset()
+const promiseRpcStatus: Promise<{ readonly ok: boolean }> = promiseClient.rpc(OneSidedRpc).status()
+const promiseRpcReset: Promise<void> = promiseClient.rpc(OneSidedRpc).reset()
+
+// @ts-expect-error Input-less RPC methods reject arguments on Effect clients.
+effectClient.rpc(OneSidedRpc).status({})
+// @ts-expect-error Input-less RPC methods reject arguments on Promise clients.
+void promiseClient.rpc(OneSidedRpc).status({})
+// @ts-expect-error RPC definitions without events reject subscriptions.
+effectClient.rpc(OneSidedRpc).events.subscribe("updated")
+// @ts-expect-error RPC definitions without events reject listeners.
+promiseClient.rpc(OneSidedRpc).events.on("updated", () => {})
+
 void [
   effectSession,
   effectList,
@@ -54,6 +77,10 @@ void [
   promiseList,
   promisePut,
   promiseRemove,
+  effectRpcStatus,
+  effectRpcReset,
+  promiseRpcStatus,
+  promiseRpcReset,
   exactVersion,
   compatibleVersion,
 ]
