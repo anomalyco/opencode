@@ -1,11 +1,9 @@
 import type { Accessor, Component, JSX, Setter } from "solid-js"
-import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, splitProps, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, splitProps, Show, untrack } from "solid-js"
 import {
   chooseFallbackIconName,
   FILE_ICON_LOAD_TIMEOUT_MS,
-  FILE_ICON_RELEASED,
-  FILE_ICON_RETAINED,
-  FILE_ICON_RETRY_DELAY_MS,
+  FILE_ICON_REQUESTED,
   INITIAL_FILE_ICON_SYMBOL_STATE,
   READY_FILE_ICON_SYMBOL_STATE,
   selectFileIconSymbol,
@@ -29,10 +27,8 @@ export const FileIcon: Component<FileIconProps> = (props) => {
   const shown = createMemo(() => selectFileIconSymbol(symbol(name()).state(), name(), fallback()))
   const id = `file-icon-mono-${createUniqueId()}`
   createEffect(() => {
-    const icon = name()
     sprite()
-    dispatchSymbol(icon, FILE_ICON_RETAINED)
-    onCleanup(() => dispatchSymbol(icon, FILE_ICON_RELEASED))
+    dispatchSymbol(name(), FILE_ICON_REQUESTED)
   })
 
   return (
@@ -99,18 +95,8 @@ function dispatchSymbol(name: IconName, event: FileIconSymbolEvent) {
 
 function runSymbolEffect(name: IconName, entry: SymbolEntry, effect: FileIconSymbolEffect) {
   if (effect.type === "insert-symbol") return insertSymbol(name, effect.svg)
-  clearTimeout(entry.timer)
-  entry.timer = undefined
 
-  if (effect.type === "cancel-timers") return
-
-  if (effect.type === "schedule-retry") {
-    entry.timer = setTimeout(
-      () => dispatchSymbol(name, { type: "retry.due", attempt: effect.attempt }),
-      FILE_ICON_RETRY_DELAY_MS,
-    )
-    return
-  }
+  if (effect.type === "cancel-timeout") return clearTimeout(entry.timer)
 
   // The fallbacks are bundled, so they never load lazily.
   sources ??= Object.fromEntries(
@@ -128,15 +114,12 @@ function runSymbolEffect(name: IconName, entry: SymbolEntry, effect: FileIconSym
   )
   const load = sources[name]
 
-  if (!load) return dispatchSymbol(name, { type: "load.failed", attempt: effect.attempt })
+  if (!load) return dispatchSymbol(name, { type: "load.failed" })
   // A dynamic import has no timeout of its own and can stall on a slow or dropped connection.
-  entry.timer = setTimeout(
-    () => dispatchSymbol(name, { type: "load.timed-out", attempt: effect.attempt }),
-    FILE_ICON_LOAD_TIMEOUT_MS,
-  )
+  entry.timer = setTimeout(() => dispatchSymbol(name, { type: "load.timed-out" }), FILE_ICON_LOAD_TIMEOUT_MS)
   load().then(
-    (svg) => dispatchSymbol(name, { type: "load.succeeded", attempt: effect.attempt, svg }),
-    () => dispatchSymbol(name, { type: "load.failed", attempt: effect.attempt }),
+    (svg) => dispatchSymbol(name, { type: "load.succeeded", svg }),
+    () => dispatchSymbol(name, { type: "load.failed" }),
   )
 }
 
