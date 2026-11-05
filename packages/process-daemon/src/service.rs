@@ -1568,10 +1568,14 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             }
             Ok(ActorMessage::ReaderFailed(message)) if mode == ProcessMode::Pipe => {
                 // The pipe reader has stopped and closed the output file, so
-                // nothing more can arrive: let the exit still be published.
+                // nothing more can arrive: let the exit still be published,
+                // and report the failure where the exit carries it.
                 reader_eof = true;
-                if let Ok(mut value) = info.write() {
-                    value.lifecycle = TerminalLifecycle::Failed { message };
+                if let Ok(mut value) = info.write()
+                    && let Some(pipe) = value.pipe.as_mut()
+                {
+                    pipe.output_error
+                        .get_or_insert_with(|| format!("failed to read process output: {message}"));
                 }
             }
             Ok(ActorMessage::ReaderFailed(message)) | Ok(ActorMessage::WriterFailed(message)) => {
@@ -2203,6 +2207,11 @@ mod tests {
     // Real actor/parser and bounded channels, without OS pipe capacity or a
     // large output flood. Native child/handle coverage lives in tests/runtime.rs.
     fn test_actor() -> (TerminalHandle, Receiver<WriterMessage>) {
+        test_actor_in(ProcessMode::Pty)
+    }
+
+    /// A pipe-mode actor has no terminal and a `pipe` info group.
+    fn test_actor_in(mode: ProcessMode) -> (TerminalHandle, Receiver<WriterMessage>) {
         let (actor_tx, messages) = bounded(ACTOR_QUEUE_CAPACITY);
         let (writes, writer_rx) = bounded(1);
         let (shutdown_tx, shutdown) = bounded(0);
@@ -2215,15 +2224,31 @@ mod tests {
             }
         });
         let (init_tx, init_rx) = std_mpsc::sync_channel(1);
-        let info = Arc::new(RwLock::new(test_info()));
+        let info = match mode {
+            ProcessMode::Pty => test_info(),
+            ProcessMode::Pipe => ProcessInfo {
+                mode,
+                pty: None,
+                pipe: Some(PipeInfo {
+                    output_path: PathBuf::from("/out"),
+                    output_lines: 0,
+                    output_error: None,
+                    metadata: PipeMetadata::new(),
+                }),
+                ..test_info()
+            },
+        };
+        let info = Arc::new(RwLock::new(info));
         let actor_info = Arc::clone(&info);
         let (actor_done_tx, actor_done) = bounded::<()>(0);
         let actor = thread::spawn(move || {
             let _actor_done = actor_done_tx;
             run_actor(ActorConfig {
-                mode: ProcessMode::Pty,
+                mode,
                 master: ActorMaster {
-                    pty: Some(Box::new(TestMaster)),
+                    pty: mode
+                        .is_pty()
+                        .then(|| Box::new(TestMaster) as Box<dyn MasterPty + Send>),
                     #[cfg(windows)]
                     close_tx,
                 },
@@ -2242,7 +2267,7 @@ mod tests {
         (
             TerminalHandle {
                 order: 0,
-                mode: ProcessMode::Pty,
+                mode,
                 actor_tx,
                 actor_done,
                 shutdown_tx: Mutex::new(Some(shutdown_tx)),
@@ -2333,6 +2358,88 @@ mod tests {
             actor.shutdown().unwrap();
             actor.shutdown().unwrap();
         }
+    }
+
+    #[test]
+    fn a_failed_pipe_reader_still_publishes_the_exit_with_the_error() {
+        for failed_first in [true, false] {
+            let (actor, _writer) = test_actor_in(ProcessMode::Pipe);
+            let wait = {
+                let (reply, exit) = bounded(1);
+                actor.actor_tx.send(ActorMessage::Wait { reply }).unwrap();
+                exit
+            };
+            actor
+                .actor_tx
+                .send(ActorMessage::Output {
+                    bytes: b"a\n".to_vec(),
+                    newlines: 1,
+                })
+                .unwrap();
+            let exited = || ActorMessage::ChildExited(Ok(Some(1)));
+            if failed_first {
+                actor
+                    .actor_tx
+                    .send(ActorMessage::ReaderFailed("boom".into()))
+                    .unwrap();
+                // A round trip, so the failure has been handled.
+                actor
+                    .request(|reply| ActorMessage::Replay { offset: 0, reply })
+                    .unwrap();
+                // Not exited yet: no `Failed` lifecycle in the meantime.
+                let info = actor.info();
+                assert_eq!(info.lifecycle, TerminalLifecycle::Running);
+                assert_eq!(info.exited_at, None);
+                assert!(wait.try_recv().is_err());
+                actor.actor_tx.send(exited()).unwrap();
+            } else {
+                actor.actor_tx.send(exited()).unwrap();
+                actor
+                    .request(|reply| ActorMessage::Replay { offset: 0, reply })
+                    .unwrap();
+                assert!(wait.try_recv().is_err());
+                actor
+                    .actor_tx
+                    .send(ActorMessage::ReaderFailed("boom".into()))
+                    .unwrap();
+            }
+            let exit = wait.recv_timeout(Duration::from_secs(5)).unwrap();
+            let error = "failed to read process output: boom".to_string();
+            assert_eq!(exit.output_error.as_ref(), Some(&error));
+            assert_eq!((exit.exit_code, exit.output_lines), (Some(1), Some(1)));
+            let info = actor.info();
+            assert_eq!(
+                info.lifecycle,
+                TerminalLifecycle::Exited {
+                    exit_code: Some(1),
+                    signal: None
+                }
+            );
+            assert_eq!(info.exited_at, Some(exit.exited_at));
+            assert_eq!(info.pipe.unwrap().output_error, Some(error));
+            actor.shutdown().unwrap();
+        }
+    }
+
+    #[test]
+    fn a_failed_pipe_reader_keeps_an_earlier_output_file_error() {
+        let (actor, _writer) = test_actor_in(ProcessMode::Pipe);
+        let (reply, wait) = bounded(1);
+        for message in [
+            ActorMessage::Wait { reply },
+            ActorMessage::ChildExited(Ok(Some(0))),
+            #[cfg(unix)]
+            ActorMessage::OutputFileFailed("disk full".into()),
+            ActorMessage::ReaderFailed("boom".into()),
+        ] {
+            actor.actor_tx.send(message).unwrap();
+        }
+        let exit = wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        #[cfg(unix)]
+        assert_eq!(exit.output_error.as_deref(), Some("disk full"));
+        #[cfg(not(unix))]
+        assert!(exit.output_error.is_some());
+        actor.shutdown().unwrap();
     }
 
     #[test]
