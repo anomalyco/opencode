@@ -154,7 +154,11 @@ impl Spinner {
         let _ = threads.input_thread.join();
         let mut shared = lock(&self.shared);
         let output = Output::Stdout;
-        clear_previous(&shared, output, std::env::var("CI").as_deref() == Ok("true"));
+        clear_previous(
+            &shared,
+            output,
+            std::env::var("CI").as_deref() == Ok("true"),
+        );
         let step = match code {
             0 => green(S_STEP_SUBMIT()),
             1 => red(S_STEP_CANCEL()),
