@@ -1,7 +1,9 @@
 // One long session (120 turns of markdown, code fences, tool calls and diffs) at normal speed.
 import { bench, web } from "@hona/strobe"
-import { editTools } from "./fixtures/diffs"
+import { editTools, reviewDiffs } from "./fixtures/diffs"
+import { dragDivider, measureDivider, type Divider } from "./fixtures/drag"
 import { cached } from "./fixtures/mock"
+import { openReview } from "./fixtures/review"
 import { composer, mockTimelineSession, oldestPrompt, timeline } from "./fixtures/timeline"
 
 const find = '[data-component="timeline-search-bar"] input'
@@ -13,25 +15,47 @@ const edit = '[data-scope="apply-patch"] [data-slot="accordion-trigger"]'
 
 const diff = '[data-component="apply-patch-file-diff"] diffs-container >>> [data-line]'
 
+const drag = "drag the review's edge"
+
+// The divider between the session and the side panel, read once the review is open. The session panel keeps at least
+// 400px, the side panel 320px and the 8px gap.
+let divider: Divider | undefined
+
 export default bench({
   targets: {
     web: web({
       viewport: { width: 1366, height: 768 },
-      prepare: async ({ case: name, playwright, mock, url }) =>
-        mockTimelineSession(cached(playwright.page, mock), {
+      prepare: async ({ case: name, playwright, mock, url }) => ({
+        ...(await mockTimelineSession(cached(playwright.page, mock), {
           server: new URL(url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
           historyTurns: name === "expand an edit" ? 0 : 120,
           collapsedEdits: name === "expand an edit",
           tools: name === "expand an edit" ? await editTools() : undefined,
-        }),
+          vcsDiff: name === drag ? reviewDiffs() : undefined,
+        })),
+        mouse: playwright.page.mouse,
+      }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ page }) {
+  async setup({ case: name, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
     await page.waitFor(composer)
+
+    if (name === drag) {
+      await openReview(page)
+      await page.idle()
+      divider = await page.eval(measureDivider, {
+        selector: '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]',
+        panel: '[data-slot="session-chat-panel"]',
+        row: "[data-pane-row]",
+        min: 400,
+        rest: 328,
+      })
+    }
+
     await page.idle()
   },
 
@@ -84,6 +108,17 @@ export default bench({
         await page.click(edit)
         await page.idle()
       },
+    },
+
+    // The divider beside the review (72 changed files) held for five seconds and dragged as a hand does, a pointer
+    // move every display frame: a slow stretch toward the session, jiggles, a fast throw toward the review and a slow
+    // pull back (fixtures/drag.ts). The timeline narrows and widens on every frame, so the rows in view rewrap; each
+    // frame should keep up with the display.
+    [drag]: {
+      primary: "frames.dropped.pct",
+      metrics: ["main.work", "main.layout", "main.style", "main.script", "frames.interval.p95"],
+      run: ({ prepared }) => dragDivider(prepared.mouse, divider!),
+      reset: ({ page }) => page.idle(),
     },
   },
 })

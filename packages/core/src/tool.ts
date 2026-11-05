@@ -361,7 +361,9 @@ const layer = Layer.effect(
 )
 
 /** Store a valid tool under its effective name, or record why it was skipped. */
-function commit(editor: Data, id: string, tool: Tool.Info & { readonly id: string }) {
+function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
+  // JavaScript plugins may leave out `input` for a tool that takes none.
+  const tool = input.input === undefined || input.input === null ? { ...input, input: {} } : input
   const registered = register(tool)
   if (Result.isFailure(registered)) {
     editor.errors.push({
@@ -400,6 +402,11 @@ function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationEr
   const id = effectiveName(tool)
   if (tool.options?.codemode === false && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  // Standard Schema libraries such as ArkType make schemas that are functions.
+  if (typeof tool.input !== "object" && typeof tool.input !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+    )
   return Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>

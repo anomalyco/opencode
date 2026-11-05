@@ -43,6 +43,7 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   const clean = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
+    .slice(0, 250)
     .replace(/^-+|-+$/g, "")
 
   return `${clean || session.id}.json`

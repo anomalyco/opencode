@@ -128,5 +128,5 @@ async function preferFirst(
   const http = { url: first, password: pairing.password }
   const health = await checkServerHealth(http, globalThis.fetch, { signal: AbortSignal.timeout(5_000), retryCount: 0 })
 
-  return health.healthy ? http : pairing
+  return health.type === "healthy" ? http : pairing
 }

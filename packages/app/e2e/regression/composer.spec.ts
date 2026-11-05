@@ -892,6 +892,68 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
     .toBe(0)
 })
 
+test("Enter that confirms an IME candidate never sends, even after Safari's early compositionend", async ({ page }) => {
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+  const view = await openSession(page, { name: "ComposerImeEnter", onPrompt: (input) => void prompts.push(input.body) })
+
+  const enter = (keyCode: number) =>
+    view.editor.evaluate(
+      (element, keyCode) =>
+        element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode, bubbles: true, cancelable: true })),
+      keyCode,
+    )
+
+  await view.editor.fill("にほん")
+  // Safari delivers the confirming Enter after compositionend, so isComposing is false and only keyCode marks it.
+  await enter(229)
+  await expect(view.editor).toHaveText("にほん")
+  await enter(13)
+  await expect.poll(() => prompts.map((body) => body.text)).toEqual(["にほん"])
+})
+
+test.describe("touch keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("Return only adds a line, even over suggestions; the touch bar and Cmd+Return send", async ({ page }) => {
+    const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
+    const view = await openSession(page, {
+      name: "ComposerTouchReturn",
+      onPrompt: (input) => void prompts.push(input.body),
+    })
+
+    const bar = page.locator('[data-slot="composer-touch-bar"]')
+
+    await expect(bar).toBeVisible()
+    await expect(page.locator('[data-action="composer-attach"]')).toHaveCount(0)
+    await expect(view.editor).toHaveAttribute("enterkeyhint", "enter")
+
+    await view.editor.fill("/model")
+    await expect(page.locator('[data-suggestion-id="model.choose"]')).toHaveAttribute("data-active", "")
+    await view.editor.press("Enter")
+    await expect(page.locator('[data-component="composer-suggestions"]')).toBeHidden()
+    await expect.poll(() => view.editor.innerText()).toMatch(/^\/model\n/)
+    await expect(page.getByRole("dialog", { name: "Select model", exact: true })).toBeHidden()
+
+    await view.editor.fill("first line")
+    await view.editor.press("Enter")
+    await view.editor.pressSequentially("second line")
+    await expect.poll(() => view.editor.innerText()).toBe("first line\nsecond line")
+    expect(prompts).toEqual([])
+
+    await bar.getByRole("button", { name: "Send", exact: true }).tap()
+    await expect.poll(() => prompts.map((body) => body.text)).toEqual(["first line\nsecond line"])
+    await expect(view.editor).toBeEmpty()
+
+    // A hardware keyboard, as on an iPad, still sends with Cmd+Return.
+    await view.editor.fill("from the iPad keyboard")
+    await view.editor.press("ControlOrMeta+Enter")
+    await expect
+      .poll(() => prompts.map((body) => body.text))
+      .toEqual(["first line\nsecond line", "from the iPad keyboard"])
+  })
+})
+
 test("a key-up never moves the caret back after later navigation", async ({ page }) => {
   const input = await draft(page)
   await input.pressSequentially("first line")

@@ -12,6 +12,23 @@ export interface Adapter {
   readonly getShell: (shellID: SessionMessage.Shell["shellID"]) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
+  readonly appendAssistantPart: (
+    messageID: SessionMessage.ID,
+    part: SessionMessage.AssistantContent,
+  ) => Effect.Effect<void>
+  readonly updateAssistantPart: <T extends SessionMessage.AssistantContent["type"]>(
+    messageID: SessionMessage.ID,
+    match: {
+      readonly type: T
+      readonly callID?: string
+      readonly incompleteReasoning?: boolean
+    },
+    recipe: (draft: WritableDraft<Extract<SessionMessage.AssistantContent, { readonly type: T }>>) => void,
+  ) => Effect.Effect<void>
+  readonly replaceAssistantParts: (
+    messageID: SessionMessage.ID,
+    parts: ReadonlyArray<SessionMessage.AssistantContent>,
+  ) => Effect.Effect<void>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
   readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void>
@@ -31,19 +48,7 @@ const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step
 }
 
 export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
-  type DraftTool = WritableDraft<SessionMessage.AssistantTool>
-  type DraftText = WritableDraft<SessionMessage.AssistantText>
-  type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
   const created = DateTime.makeUnsafe(event.created)
-
-  const latestTool = (assistant: DraftAssistant, id: string) =>
-    assistant.content.findLast((item): item is DraftTool => item.type === "tool" && item.id === id)
-
-  const latestText = (assistant: DraftAssistant) =>
-    assistant.content.findLast((item): item is DraftText => item.type === "text")
-
-  const latestReasoning = (assistant: DraftAssistant) =>
-    assistant.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && !item.time?.completed)
 
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
     Effect.gen(function* () {
@@ -86,9 +91,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.archived": () => Effect.void,
       "session.unarchived": () => Effect.void,
       "session.message.content.updated": (event) =>
-        updateOwnedAssistant(event.data.messageID, (draft) => {
-          draft.content = castDraft(decodeAssistantContent(event.data.content))
-        }),
+        adapter.replaceAssistantParts(event.data.messageID, decodeAssistantContent(event.data.content)),
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) =>
         Effect.gen(function* () {
@@ -289,44 +292,43 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
         })
       },
       "session.text.started": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(castDraft(SessionMessage.AssistantText.make({ type: "text", text: "" })))
-        })
+        return adapter.appendAssistantPart(
+          event.data.assistantMessageID,
+          SessionMessage.AssistantText.make({ type: "text", text: "" }),
+        )
       },
       "session.text.ended": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestText(draft)
-          if (match) {
-            match.text = event.data.text
-            match.native = castDraft(event.data.native)
-          }
+        return adapter.updateAssistantPart(event.data.assistantMessageID, { type: "text" }, (match) => {
+          match.text = event.data.text
+          match.native = castDraft(event.data.native)
         })
       },
       "session.tool.input.started": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(
-            castDraft(
-              SessionMessage.AssistantTool.make({
-                type: "tool",
-                id: event.data.id,
-                name: event.data.name,
-                time: { created },
-                state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input: "" }),
-              }),
-            ),
-          )
-        })
+        return adapter.appendAssistantPart(
+          event.data.assistantMessageID,
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: event.data.id,
+            name: event.data.name,
+            time: { created },
+            state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input: "" }),
+          }),
+        )
       },
       "session.tool.input.ended": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.id)
-          if (match && match.state.status === "streaming") match.state.input = event.data.text
-        })
+        return adapter.updateAssistantPart(
+          event.data.assistantMessageID,
+          { type: "tool", callID: event.data.id },
+          (match) => {
+            if (match.state.status === "streaming") match.state.input = event.data.text
+          },
+        )
       },
       "session.tool.called": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.id)
-          if (match) {
+        return adapter.updateAssistantPart(
+          event.data.assistantMessageID,
+          { type: "tool", callID: event.data.id },
+          (match) => {
             match.executed = event.data.executed
             match.native = event.data.native
             match.time.ran = created
@@ -337,71 +339,75 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 metadata: {},
               }),
             )
-          }
-        })
+          },
+        )
       },
       // Terminal tool events are self-contained; projection is a direct copy and
       // never reaches into ephemeral progress history.
       "session.tool.success": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.id)
-          if (match && match.state.status === "running") {
-            match.executed = event.data.executed || match.executed === true
-            if (event.data.native) match.native = { ...match.native, ...event.data.native }
-            match.time.completed = created
-            match.state = castDraft(
-              SessionMessage.ToolStateCompleted.make({
-                status: "completed",
-                input: match.state.input,
-                content: event.data.content,
-                ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
-              }),
-            )
-          }
-        })
+        return adapter.updateAssistantPart(
+          event.data.assistantMessageID,
+          { type: "tool", callID: event.data.id },
+          (match) => {
+            if (match.state.status === "running") {
+              match.executed = event.data.executed || match.executed === true
+              if (event.data.native) match.native = { ...match.native, ...event.data.native }
+              match.time.completed = created
+              match.state = castDraft(
+                SessionMessage.ToolStateCompleted.make({
+                  status: "completed",
+                  input: match.state.input,
+                  content: event.data.content,
+                  ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
+                }),
+              )
+            }
+          },
+        )
       },
       "session.tool.failed": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.id)
-          if (match && (match.state.status === "streaming" || match.state.status === "running")) {
-            match.executed = event.data.executed || match.executed === true
-            if (event.data.native) match.native = { ...match.native, ...event.data.native }
-            match.time.completed = created
-            match.state = castDraft(
-              SessionMessage.ToolStateError.make({
-                status: "error",
-                error: event.data.error,
-                input: typeof match.state.input === "string" ? {} : match.state.input,
-                ...(event.data.content === undefined ? {} : { content: event.data.content }),
-                ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
-              }),
-            )
-          }
-        })
+        return adapter.updateAssistantPart(
+          event.data.assistantMessageID,
+          { type: "tool", callID: event.data.id },
+          (match) => {
+            if (match.state.status === "streaming" || match.state.status === "running") {
+              match.executed = event.data.executed || match.executed === true
+              if (event.data.native) match.native = { ...match.native, ...event.data.native }
+              match.time.completed = created
+              match.state = castDraft(
+                SessionMessage.ToolStateError.make({
+                  status: "error",
+                  error: event.data.error,
+                  input: typeof match.state.input === "string" ? {} : match.state.input,
+                  ...(event.data.content === undefined ? {} : { content: event.data.content }),
+                  ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
+                }),
+              )
+            }
+          },
+        )
       },
       "session.reasoning.started": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(
-            castDraft(
-              SessionMessage.AssistantReasoning.make({
-                type: "reasoning",
-                text: "",
-                native: event.data.native,
-                time: { created },
-              }),
-            ),
-          )
-        })
+        return adapter.appendAssistantPart(
+          event.data.assistantMessageID,
+          SessionMessage.AssistantReasoning.make({
+            type: "reasoning",
+            text: "",
+            native: event.data.native,
+            time: { created },
+          }),
+        )
       },
       "session.reasoning.ended": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestReasoning(draft)
-          if (match) {
+        return adapter.updateAssistantPart(
+          event.data.assistantMessageID,
+          { type: "reasoning", incompleteReasoning: true },
+          (match) => {
             match.text = event.data.text
             match.time = { created: match.time?.created ?? created, completed: created }
             if (event.data.native !== undefined) match.native = event.data.native
-          }
-        })
+          },
+        )
       },
       "session.retry.scheduled": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
