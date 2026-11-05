@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { Moonshot } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
@@ -39,12 +39,12 @@ for (const api of ["chat", "messages", "responses"] as const) {
       () =>
         Effect.gen(function* () {
           const generate = LLMClient.generate(
-            LLM.request({
+            ai.request({
               model,
               prompt: "Use get_weather to look up the current weather in Paris.",
               tools: [weather],
               toolChoice,
-              generation: { maxTokens: 4096 },
+              maxTokens: 4096,
             }),
           )
           if (api === "responses") {
@@ -80,7 +80,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
           Bun.file(new URL("../fixtures/media/restroom.png", import.meta.url)).bytes(),
         )
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model,
             messages: [
               Message.user([
@@ -88,7 +88,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
                 { type: "media", media: Media.bytes(image, "image/png") },
               ]),
             ],
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
           }),
         )
         expect(response.text.toLowerCase()).toContain("jiggling restroom prison")
@@ -105,10 +105,10 @@ for (const api of ["chat", "messages", "responses"] as const) {
       Effect.gen(function* () {
         const format = { type: "json_schema", name: "location", schema, strict: true }
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model,
             prompt: "Return a JSON object containing the capital city of France.",
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
             http: {
               body:
                 api === "chat"

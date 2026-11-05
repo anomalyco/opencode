@@ -91,24 +91,40 @@ describe("persisted consumer schemas", () => {
     expect(decode({ session: {}, pick: { session1: { agent: "plan" } } })).toEqual({ session: {} })
   })
 
-  test("model selection validates nested model keys and preserves explicit null variants", () => {
-    const state = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
+  test("model selection reads saved model and variant pairs as choices and drops a variant without a model", () => {
+    const codec = Persistence.withInitial(ModelSelectionSchema, { session: {} })
+    const decode = Schema.decodeUnknownSync(codec)
+    const model = { providerID: "provider", modelID: "model" }
+
+    const state = decode({
       session: {
-        good: { agent: "build", model: { providerID: "provider", modelID: "model", variant: "high" }, variant: null },
+        named: { agent: "build", model: { ...model, variant: "low" }, variant: "high" },
+        explicitDefault: { agent: "build", model, variant: null, choices: { plan: { model, variant: null } } },
+        inherited: { model, choices: { plan: { variant: "high" }, build: { model } } },
+        orphan: { agent: "build", variant: null },
         partial: { agent: "plan", model: { providerID: "provider", modelID: 42 }, variant: false },
+        current: { agent: "plan", choice: { ...model, variant: { type: "named", value: "high" } } },
         invalid: "build",
       },
     })
 
-    expect(state.session.good).toEqual({
-      agent: "build",
-      model: { providerID: "provider", modelID: "model", variant: "high" },
-      variant: null,
+    expect(state.session).toEqual({
+      named: { agent: "build", choice: { ...model, variant: { type: "named", value: "high" } } },
+      explicitDefault: {
+        agent: "build",
+        choice: { ...model, variant: { type: "default" } },
+        choices: { plan: { ...model, variant: { type: "default" } } },
+      },
+      inherited: {
+        choice: { ...model, variant: { type: "inherit" } },
+        choices: { plan: undefined, build: { ...model, variant: { type: "inherit" } } },
+      },
+      orphan: { agent: "build" },
+      partial: { agent: "plan" },
+      current: { agent: "plan", choice: { ...model, variant: { type: "named", value: "high" } } },
+      invalid: undefined,
     })
-    expect(state.session.partial?.agent).toBe("plan")
-    expect(state.session.partial?.model).toBeUndefined()
-    expect(state.session.partial?.variant).toBeUndefined()
-    expect(state.session.invalid).toBeUndefined()
+    expect(decode(Schema.encodeUnknownSync(codec)(state))).toEqual(state)
   })
 
   test("file views validate scroll positions and line sides independently", () => {

@@ -6,7 +6,7 @@ import { useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, on, untrack } from "solid-js"
 import { createComposerModel } from "@/composer/model"
 import { useComposerCommands } from "@/composer/commands"
-import { createNewSessionComposerAdapter } from "./composer-adapter"
+import { createNewSessionComposerAdapter, createNewSessionStartStore } from "./composer-adapter"
 import { NewSessionView } from "./view"
 import { createNewSessionWorkspaceController } from "./workspace/controller"
 import { useNewSessionCommands } from "./commands"
@@ -33,7 +33,13 @@ export default function NewSessionPage(props: { draftId: string }) {
     },
   })
 
-  const mcp = createDraftMcpControls({ draftID: props.draftId, worktree: workspace.selection.value })
+  const start = tabs.state(tabs.draft(props.draftId), "new-session-start", createNewSessionStartStore)
+
+  const mcp = createDraftMcpControls({
+    draftID: props.draftId,
+    worktree: workspace.selection.value,
+    preparing: () => start.view().preparingMcp,
+  })
 
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
@@ -41,6 +47,7 @@ export default function NewSessionPage(props: { draftId: string }) {
     branch: workspace.bar.branch,
     submitted: workspace.selection.remember,
     mcp,
+    start,
   })
 
   const model = createComposerModel(composer.adapter)
@@ -53,7 +60,7 @@ export default function NewSessionPage(props: { draftId: string }) {
     restoreFocus: model.restoreFocus,
     project: {
       empty: project.empty,
-      open: () => location({ projectsOnly: true }),
+      open: () => location(),
     },
     workspace: {
       enabled: workspace.bar.visible,
@@ -67,7 +74,7 @@ export default function NewSessionPage(props: { draftId: string }) {
       if (!ready) return
 
       // Search projects opened this draft; the picker returns focus to the composer when it closes.
-      if (layout.draft.projectSearch.take()) location({ projectsOnly: true })
+      if (layout.draft.projectSearch.take(props.draftId)) location()
       else model.restoreFocus()
     }),
   )

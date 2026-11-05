@@ -5,12 +5,17 @@ import { trackPageErrors } from "../utils/errors"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 import {
   assistantMessage,
+  historyMessages,
   messageUpdated,
+  partUpdated,
+  session,
   sessionID,
   setupTimeline,
   status,
   textPart,
+  userID,
   userMessage,
+  validateTimelineMessages,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { openSession } from "../utils/workspace"
@@ -413,6 +418,167 @@ test.describe("timeline history", () => {
       }
     })
   }
+
+  test("pages the timeline from the composer, resuming follow at the end and loading history at the top", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(30),
+      userMessage(),
+      assistantMessage([textPart("prt_page_keys_text", "Paging from the composer")], { completed: false }),
+    ])
+
+    const older: string[] = []
+
+    const timeline = await setupTimeline(page, {
+      reducedMotion: true,
+      message: (_, id) => messages.find((message) => message.id === id),
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - limit)
+
+        return { items: messages.slice(start, end), cursor: start > 0 ? messages[start]!.id : undefined }
+      },
+      onMessages: (request) => {
+        if (request.before && request.phase === "start") older.push(request.before)
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    const editor = page.locator('[data-component="composer-editor"]')
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    const top = () => scroller.evaluate((element) => element.scrollTop)
+
+    const fromEnd = () =>
+      scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+    const caret = () =>
+      editor.evaluate((element) => {
+        const selection = window.getSelection()!
+        const range = document.createRange()
+        range.setStart(element, 0)
+        range.setEnd(selection.anchorNode!, selection.anchorOffset)
+
+        return range.toString().length
+      })
+
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await editor.click()
+
+    // An open popup keeps the page keys: the timeline stays put and the query stays open.
+    await page.keyboard.type("/")
+    await expect(suggestions).toBeVisible()
+    const resting = await top()
+    await editor.press("PageUp")
+    expect(await top()).toBe(resting)
+    await expect(suggestions).toBeVisible()
+    await expect(editor).toHaveText("/")
+    await editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    await editor.press("Backspace")
+
+    await page.keyboard.type("keep this draft")
+
+    const pageHeight = await page
+      .locator('[data-slot="session-timeline-visible"]')
+      .evaluate((element) => element.clientHeight)
+
+    await editor.press("PageUp")
+    await expect.poll(top).toBeLessThan(resting - pageHeight * 0.6)
+    expect(resting - (await top())).toBeLessThan(pageHeight)
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("keep this draft")
+    expect(await caret()).toBe("keep this draft".length)
+
+    // Paging back to the end follows new content again, as a wheel scroll there does.
+    for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await timeline.send(partUpdated(textPart("prt_page_keys_tail", "Arrived after paging down.\n\n".repeat(20))))
+    await timeline.waitForPart("prt_page_keys_tail")
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+    // Paging to the top loads the older page, as scrolling there does.
+    for (let index = 0; index < 30 && (await top()) > 1; index++) await editor.press("PageUp")
+    await expect.poll(() => older[0]).toBe(messages[messages.length - 40]!.id)
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("keep this draft")
+  })
+
+  test("a message hash and message navigation keep the prompt in view and the hash in step", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      assistantMessage([textPart("prt_cursor_tail", "Latest answer")]),
+    ])
+
+    const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
+    const row = (index: number) => page.locator(`[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`)
+    const hash = () => page.evaluate(() => location.hash)
+
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+    await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(10))
+    await expect(row(10)).toBeInViewport()
+
+    await page.keyboard.press("Control+Alt+BracketLeft")
+    await expect.poll(hash).toBe(`#message-${prompt(9)}`)
+    await expect(row(9)).toBeInViewport()
+    await page.keyboard.press("Control+Alt+BracketRight")
+    await expect.poll(hash).toBe(`#message-${prompt(10)}`)
+    await expect(row(10)).toBeInViewport()
+
+    await page.getByRole("button", { name: "Jump to latest" }).click()
+    await expect.poll(hash).toBe("")
+    const latest = page.getByText("Latest answer", { exact: true })
+    await expect(latest).toBeInViewport()
+
+    // Browser Back off a page anchor returns to the latest message, as Back off a prompt does.
+    await page.evaluate(() => (location.hash = "#notes"))
+    await expect.poll(hash).toBe("#notes")
+    await timelineScroller(page).hover()
+    await page.mouse.wheel(0, -5_000)
+    await expect(latest).not.toBeInViewport()
+    await page.evaluate(() => history.back())
+    await expect.poll(hash).toBe("")
+    await expect(latest).toBeInViewport()
+  })
+
+  test("a hash for a prompt the revert hides, or one that does not exist, clears without paging history", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(30),
+      userMessage(),
+      assistantMessage([textPart("prt_hash_missing_tail", "Reverted answer")]),
+    ])
+
+    const older: string[] = []
+    const hash = () => page.evaluate(() => location.hash)
+
+    await setupTimeline(page, {
+      sessions: [session({ revert: { messageID: userID } })],
+      message: (_, id) => messages.find((message) => message.id === id),
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - limit)
+
+        return { items: messages.slice(start, end), cursor: start > 0 ? messages[start]!.id : undefined }
+      },
+      onMessages: (request) => {
+        if (request.before && request.phase === "start") older.push(request.before)
+      },
+    })
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    const loaded = [...older]
+
+    // The revert hides this prompt, and older pages hold only older messages, so neither link can ever load.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+    await expect.poll(hash).toBe("")
+    await page.evaluate(() => (location.hash = "#message-msg_9999_missing"))
+    await expect.poll(hash).toBe("")
+    expect(older).toEqual(loaded)
+  })
 })
 
 declare global {

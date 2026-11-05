@@ -1,7 +1,8 @@
 import { Dialog as Kobalte, useDialogContext } from "@kobalte/core/dialog"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useDialogLayer } from "../context/dialog"
 import { useI18n } from "../context/i18n"
 import { Button } from "@opencode/ui/button"
@@ -19,6 +20,20 @@ import {
   type FlightFrame,
 } from "./image-flight"
 import {
+  DECODE_TIMEOUT_MS,
+  INITIAL_PREVIEW_FLIGHT_STATE,
+  selectAwaitingReveal,
+  selectDecodeCurrent,
+  selectFlightFading,
+  selectFlightInteractive,
+  selectFlightStage,
+  selectVideoAtRest,
+  transitionPreviewFlight,
+  type PreviewFlightEffect,
+  type PreviewFlightEvent,
+} from "./image-flight-machine"
+import {
+  clampAxis,
   clampView,
   detailScale,
   FIT_VIEW,
@@ -29,6 +44,15 @@ import {
   zoomAt,
   type ZoomView,
 } from "./image-zoom"
+import {
+  INITIAL_PREVIEW_ZOOM_STATE,
+  selectDragging,
+  selectPanPointer,
+  transitionPreviewZoom,
+  type PanTarget,
+  type PreviewZoomEffect,
+  type PreviewZoomEvent,
+} from "./image-zoom-machine"
 
 export interface ImagePreviewProps {
   src: string
@@ -52,13 +76,19 @@ const fade = { duration: 0.15, bounce: 0 }
 
 // How long the dialog stays mounted after a close starts, in milliseconds: the flight lands and hands the image back
 // to the page well within this.
-const exitDuration = Math.max(FLIGHT_SPRING.duration, fade.duration) * 3200
+const EXIT_DURATION_MS = Math.max(FLIGHT_SPRING.duration, fade.duration) * 3200
 
 const CENTER = { x: 0, y: 0 }
+
+const SETTLED: PreviewFlightEvent = Object.freeze({ type: "motion.settled" })
+
+// Previews closing at once, such as one still flying home under the next, share the body's closing mark.
+let closingPreviews = 0
 
 export function ImagePreview(props: ImagePreviewProps) {
   const i18n = useI18n()
   const dialog = useDialogContext()
+  const layer = useDialogLayer()
   let root!: HTMLDivElement
   let scrim!: HTMLDivElement
   let content!: HTMLDivElement
@@ -71,13 +101,18 @@ export function ImagePreview(props: ImagePreviewProps) {
   let surface!: HTMLDivElement
   let edge!: HTMLDivElement
   let close: HTMLButtonElement | undefined
+
   // Nothing shows until the image has loaded and the preview knows where it lands; while flying, a stand-in image and
   // its shadow travel above the dialog in place of the real one.
-  const [stage, setStage] = createSignal<"pending" | "flying" | "rest">("pending")
+  const [flight, setFlight] = createSignal(INITIAL_PREVIEW_FLIGHT_STATE)
+  const [zoom, setZoom] = createSignal(INITIAL_PREVIEW_ZOOM_STATE)
+  // What the view shows the controls and the stylesheet, written only when it changes rather than on every frame.
+  const [shown, setShown] = createStore({ zoomed: false, ownsEscape: false, level: 100 })
 
-  // The flight under way: where the stand-in is laid out (the flight only transforms and clips it), the springs, and
-  // what happens when it lands.
-  let course: { at: Box; flight: ReturnType<typeof createFlight>; landed: () => void } | undefined
+  // The flight under way: where the stand-in is laid out (the flight only transforms and clips it) and the springs.
+  let course: { at: Box; flight: ReturnType<typeof createFlight> } | undefined
+  let flightJob: (() => void) | undefined
+  let decodeTimer: ReturnType<typeof setTimeout> | undefined
 
   const dim = Spring.fromDuration(0, FLIGHT_SPRING)
   // Once a close lands, the stand-in fades out over the image the page shows again, so whatever the page draws over
@@ -86,162 +121,230 @@ export function ImagePreview(props: ImagePreviewProps) {
 
   // How far the flight has lifted off the page, as last painted: the origin's outline fades out as it rises.
   let lift = 0
-  // Without a flight (reduced motion, or nothing on the page to fly to) the preview only fades with the backdrop.
-  let plain = false
-  let stop: (() => void) | undefined
-  const [view, setView] = createSignal(FIT_VIEW)
-  const [fitRatio, setFitRatio] = createSignal(1)
-  const [drag, setDrag] = createSignal<{ id: number; x: number; y: number }>()
-  // Whether the press that ends in a click began on the backdrop around the image and stayed put. A pan captures the
-  // pointer, so its click lands on the backdrop wherever it began.
-  let backdrop = false
-  // Whether the pan under way has moved, so the click that ends it neither closes the preview nor plays the video.
-  let panned = false
-  // Where an eased zoom is heading, so repeated steps build on the destination rather than the frame in flight.
-  const [goal, setGoal] = createSignal(FIT_VIEW)
-  const glide = [1, 0, 0].map((value) => Spring.fromDuration(value, FLIGHT_SPRING))
-  let gliding: (() => void) | undefined
+
+  // The view: each spring's value is what shows, and its target is where an eased zoom is heading, so repeated steps
+  // build on the destination rather than the frame in flight. Scale and offsets ride springs of one shape, so the point
+  // under the pointer stays put; a new target mid-glide keeps the velocity it has.
+  const scaleSpring = Spring.fromDuration(1, FLIGHT_SPRING)
+  const xSpring = Spring.fromDuration(0, FLIGHT_SPRING)
+  const ySpring = Spring.fromDuration(0, FLIGHT_SPRING)
+  let glideJob: (() => void) | undefined
+  // Where the pan under way last saw its pointer.
+  const cursor = { x: 0, y: 0 }
+
+  // Measured when the preview lays out rather than on every move or frame. A video zooms inside its own frame, so its
+  // controls stay where they are; an image zooms out across the window.
+  const natural = { width: 0, height: 0 }
+  const bounds = { width: 0, height: 0, viewportWidth: 0, viewportHeight: 0, maxScale: 1 }
+  let fitRatio = 1
+
+  // Reused on every pointer move of a pan.
+  const followEvent = { type: "follow" as const, zoomed: false }
+  const movedEvent = { type: "pointer.moved" as const, pointerId: 0 }
 
   const percent = createMemo(() => new Intl.NumberFormat(i18n.locale(), { style: "percent", maximumFractionDigits: 0 }))
 
-  const natural = () =>
-    image instanceof HTMLImageElement
-      ? { width: image.naturalWidth, height: image.naturalHeight }
-      : { width: image.width, height: image.height }
+  const dispatchFlight = (event: PreviewFlightEvent) => {
+    const prev = untrack(flight)
+    const next = transitionPreviewFlight(prev, event)
 
-  // A video zooms inside its own frame, so its controls stay where they are; an image zooms out across the window.
-  const bounds = () => ({
-    width: image.offsetWidth,
-    height: image.offsetHeight,
-    viewportWidth: props.video ? image.offsetWidth : viewport.clientWidth,
-    viewportHeight: props.video ? image.offsetHeight : viewport.clientHeight,
-    maxScale: maxScale(fitRatio()),
-  })
+    if (next.state !== prev) setFlight(next.state)
+    next.effects.forEach(runFlight)
+  }
 
-  // The fitted size, read when the preview lays out rather than on every frame of a glide.
-  let size = { width: 0, height: 0 }
+  const runFlight = (effect: PreviewFlightEffect) => {
+    if (effect.type === "decode.start") return decode(effect.attempt)
 
-  const show = (next: ZoomView) => {
-    setView(next)
+    if (effect.type === "decode.cancel") return clearTimeout(decodeTimer)
 
-    if (props.video) {
-      props.video.style.setProperty("object-view-box", viewBox(next, size, natural()))
+    if (effect.type === "video.borrow") return borrow()
+
+    if (effect.type === "video.return") return giveBack()
+
+    if (effect.type === "origin.hide") return home()?.setAttribute("data-image-preview-origin", "")
+
+    if (effect.type === "origin.show") return home()?.removeAttribute("data-image-preview-origin")
+
+    if (effect.type === "open.flight") {
+      dimTo(1, FLIGHT_SPRING)
+      const next = createFlight(effect.from)
+      next.to(restFrame(), KICK.open, FLIGHT_SPRING)
+      course = { at: place(fitted()), flight: next }
+      paint()
+
+      return run()
+    }
+
+    if (effect.type === "open.fade") {
+      dimTo(1, fade)
+
+      if (props.video) place(fitted())
+      paint()
+
+      return run()
+    }
+
+    if (effect.type === "close.flight") {
+      dimTo(0, FLIGHT_SPRING)
+
+      if (!effect.turn) course = { at: place(fitted()), flight: createFlight(restFrame()) }
+      course?.flight.to(effect.to, KICK.close, FLIGHT_SPRING)
+      paint()
+
+      return run()
+    }
+
+    if (effect.type === "close.veil") {
+      veil.omega = (2 * Math.PI) / (FLIGHT_SPRING.duration * 0.75)
+      veil.set(0)
 
       return
     }
 
-    image.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`
+    if (effect.type === "close.fade") {
+      course = undefined
+      dimTo(0, fade)
+
+      return run()
+    }
+
+    if (effect.type === "zoom.fit") return ease(FIT_VIEW)
+
+    if (effect.type === "zoom.settle") return follow(scaleSpring.value, xSpring.value, ySpring.value)
+
+    // See image-preview.css: the body takes clicks again while the closing flight holds the dialog mounted.
+    if (effect.type === "body.closing.acquire") {
+      closingPreviews++
+      document.body.setAttribute("data-image-preview-closing", "")
+
+      return
+    }
+
+    if (effect.type === "body.closing.release") {
+      closingPreviews--
+
+      if (!closingPreviews) document.body.removeAttribute("data-image-preview-closing")
+
+      return
+    }
+
+    flightJob?.()
+    flightJob = undefined
   }
 
-  const settle = () => {
-    gliding?.()
-    gliding = undefined
+  const dispatchZoom = (event: PreviewZoomEvent) => {
+    const prev = untrack(zoom)
+    const next = transitionPreviewZoom(prev, event)
+
+    if (next.state !== prev) setZoom(next.state)
+    next.effects.forEach(runZoom)
+  }
+
+  const runZoom = (effect: PreviewZoomEffect) => {
+    if (effect.type === "pointer.capture") return panElement(effect.target).setPointerCapture(effect.pointerId)
+
+    if (effect.type === "pointer.release") {
+      const element = panElement(effect.target)
+
+      if (element.hasPointerCapture(effect.pointerId)) element.releasePointerCapture(effect.pointerId)
+
+      return
+    }
+
+    if (effect.type === "glide.loop.start") {
+      glideJob = frameLoop.add((dt) => {
+        scaleSpring.step(dt)
+        xSpring.step(dt)
+        ySpring.step(dt)
+        paintZoom()
+
+        if (!scaleSpring.resting || !xSpring.resting || !ySpring.resting) return true
+        dispatchZoom({ type: "glide.settled", zoomed: scaleSpring.value > 1 })
+
+        return false
+      })
+
+      return
+    }
+
+    if (effect.type === "glide.loop.stop") {
+      glideJob?.()
+      glideJob = undefined
+
+      return
+    }
+
+    if (effect.type === "video.suppress-click") return suppressVideoClick()
+
+    dialog.close()
+  }
+
+  // Writes the view to the DOM. A frame allocates nothing but the style string, and touches Solid state only when
+  // the zoom level's rounded percent or whether the image is zoomed changes.
+  const paintZoom = () => {
+    const scale = scaleSpring.value
+
+    if (props.video) {
+      props.video.style.setProperty("object-view-box", viewBox(scale, xSpring.value, ySpring.value, bounds, natural))
+    }
+
+    if (!props.video) image.style.transform = `translate(${xSpring.value}px, ${ySpring.value}px) scale(${scale})`
+    const level = Math.round(scale * fitRatio * 100)
+
+    if (shown.zoomed !== scale > 1) setShown("zoomed", scale > 1)
+
+    if (shown.level !== level) setShown("level", level)
+  }
+
+  const view = (): ZoomView => ({ scale: scaleSpring.value, x: xSpring.value, y: ySpring.value })
+  const goal = (): ZoomView => ({ scale: scaleSpring.target, x: xSpring.target, y: ySpring.target })
+
+  const own = (scale: number) => {
+    if (shown.ownsEscape !== scale > 1) setShown("ownsEscape", scale > 1)
   }
 
   // Pinch, wheel and drag follow the hand directly and take over from an eased zoom mid-flight.
-  const follow = (next: ZoomView) => {
-    settle()
-    setGoal(next)
-    show(next)
+  const follow = (scale: number, x: number, y: number) => {
+    followEvent.zoomed = scale > 1
+    dispatchZoom(followEvent)
+    scaleSpring.snap(scale)
+    xSpring.snap(x)
+    ySpring.snap(y)
+    own(scale)
+    paintZoom()
   }
 
-  // Scale and offsets ride springs of one shape, so the point under the pointer stays put; a new target mid-glide
-  // keeps the velocity it has.
   const ease = (target: ZoomView) => {
-    setGoal(target)
-
-    if (prefersReducedMotion()) return follow(target)
-
-    if (!gliding) [view().scale, view().x, view().y].forEach((value, index) => glide[index].snap(value))
-    ;[target.scale, target.x, target.y].forEach((value, index) => glide[index].set(value))
-    gliding ??= frameLoop.add((dt) => {
-      const [scale, x, y] = glide.map((spring) => spring.step(dt))
-      show({ scale, x, y })
-
-      if (!glide.every((spring) => spring.resting)) return true
-      gliding = undefined
-
-      return false
-    })
+    if (prefersReducedMotion()) return follow(target.scale, target.x, target.y)
+    scaleSpring.set(target.scale)
+    xSpring.set(target.x)
+    ySpring.set(target.y)
+    own(target.scale)
+    dispatchZoom({ type: "glide.start" })
   }
 
-  const step = (factor: number) => ease(zoomAt(goal(), goal().scale * factor, CENTER, bounds()))
+  const step = (factor: number) => {
+    const target = goal()
+    ease(zoomAt(target, target.scale * factor, CENTER, bounds))
+  }
 
   // Kobalte keeps the content mounted while an exit animation runs; the dialog stack waits for the flight too.
-  const layer = useDialogLayer()
-  const [exit, setExit] = createSignal(0)
+  layer?.setExitDuration(EXIT_DURATION_MS)
 
-  const holdExit = () => {
-    setExit(exitDuration)
-    layer?.setExitDuration(exit())
+  const decode = (attempt: number) => {
+    clearTimeout(decodeTimer)
+    decodeTimer = setTimeout(() => decoded(attempt), DECODE_TIMEOUT_MS)
+
+    if (!(image instanceof HTMLImageElement)) return
+    void Promise.all([image.decode(), standIn?.decode()])
+      .catch(() => undefined)
+      .then(() => decoded(attempt))
   }
 
-  holdExit()
-
-  const reveal = async () => {
-    if (image instanceof HTMLImageElement) await Promise.all([image.decode(), standIn?.decode()]).catch(() => undefined)
-
-    if (stage() !== "pending" || !dialog.isOpen()) return
-    const from = prefersReducedMotion() ? undefined : originFrame()
-
-    if (props.video) borrow(props.video)
-    holdExit()
-    dimTo(1, from ? FLIGHT_SPRING : fade)
-
-    if (!from) {
-      plain = true
-
-      if (props.video) place(fitted())
-      paint()
-      setStage("rest")
-
-      return run()
-    }
-
-    const flight = createFlight(from)
-    const rest = restFrame()
-    flight.to(rest, KICK.open, FLIGHT_SPRING)
-    course = { at: place(fitted()), flight, landed: () => setStage("rest") }
-    hideOrigin()
-    paint()
-    setStage("flying")
-    run()
-  }
-
-  const dismiss = () => {
-    // A video eases back to its whole frame on the way home; an image flies as it is shown.
-    if (props.video) ease(FIT_VIEW)
-    else settle()
-
-    if (stage() === "pending") return
-    const to = prefersReducedMotion() ? undefined : originFrame()
-    dimTo(0, to ? FLIGHT_SPRING : fade)
-
-    if (!to) {
-      plain = true
-
-      return run()
-    }
-
-    // A close mid-open turns the flight around where it is, keeping its velocity.
-    if (!course) {
-      const rest = restFrame()
-      course = { at: place(fitted()), flight: createFlight(rest), landed: showOrigin }
-    }
-
-    course.flight.to(to, KICK.close, FLIGHT_SPRING)
-    course.landed = () => {
-      showOrigin()
-
-      if (props.video) return giveBack()
-      veil.omega = (2 * Math.PI) / (FLIGHT_SPRING.duration * 0.75)
-      veil.set(0)
-    }
-
-    hideOrigin()
-    paint()
-    setStage("flying")
-    run()
+  // Measuring where the origin shows is not free, so a decode the preview no longer waits for skips it.
+  const decoded = (attempt: number) => {
+    if (!selectDecodeCurrent(untrack(flight), attempt)) return
+    dispatchFlight({ type: "decode.ready", attempt, origin: originFrame() })
   }
 
   const dimTo = (target: number, spring: DurationOptions) => {
@@ -252,7 +355,7 @@ export function ImagePreview(props: ImagePreviewProps) {
 
   // One job on the shared frame loop steps the flight and the backdrop together and writes them straight to the DOM.
   const run = () => {
-    stop ??= frameLoop.add((dt) => {
+    flightJob ??= frameLoop.add((dt) => {
       const flying = course?.flight.step(dt)
       dim.step(dt)
       veil.step(dt)
@@ -260,16 +363,13 @@ export function ImagePreview(props: ImagePreviewProps) {
 
       // The real image takes over only once the panel holding it is fully opaque, so its brightness doesn't step.
       if (course && !flying && dim.resting) {
-        const landed = course.landed
         course = undefined
-        landed()
+        dispatchFlight(SETTLED)
       }
 
       if (course || !dim.resting || !veil.resting) return true
-      stop = undefined
-
-      // A video that faded out rather than flying home goes back once it has.
-      if (!dialog.isOpen()) giveBack()
+      flightJob = undefined
+      dispatchFlight(SETTLED)
 
       return false
     })
@@ -280,6 +380,8 @@ export function ImagePreview(props: ImagePreviewProps) {
 
   const paint = () => {
     const flying = flyer()
+    // Without a flight (reduced motion, or nothing on the page to fly to) the preview only fades with the backdrop.
+    const plain = selectFlightFading(untrack(flight))
     scrim.style.opacity = String(dim.value)
     surface.style.opacity = course ? "1" : "0"
 
@@ -310,19 +412,20 @@ export function ImagePreview(props: ImagePreviewProps) {
   const place = (box: Box) => {
     const flying = flyer()
 
-    if (flying)
-      Object.assign(flying.style, {
-        left: `${box.x}px`,
-        top: `${box.y}px`,
-        width: `${box.width}px`,
-        height: `${box.height}px`,
-      })
+    if (!flying) return box
+    flying.style.left = `${box.x}px`
+    flying.style.top = `${box.y}px`
+    flying.style.width = `${box.width}px`
+    flying.style.height = `${box.height}px`
 
     return box
   }
 
   // Moves the video into the preview, leaving a box of its size in its place to fly back to.
-  const borrow = (video: HTMLVideoElement) => {
+  const borrow = () => {
+    const video = props.video
+
+    if (!video) return
     const rect = video.getBoundingClientRect()
     holder = document.createElement("div")
     Object.assign(holder.style, {
@@ -352,19 +455,23 @@ export function ImagePreview(props: ImagePreviewProps) {
 
   // The image as shown now, zoomed and panned and cropped to the viewport. There is no panel: the image is the surface.
   const restFrame = (): FlightFrame => {
-    const shown = image.getBoundingClientRect()
-    const clip = intersect(shown, viewport.getBoundingClientRect())
-    const cropped = clip.width < shown.width - 0.5 || clip.height < shown.height - 0.5
-    const radius = cropped ? 0 : parseFloat(getComputedStyle(image).borderTopLeftRadius) * scale()
+    const shownBox = image.getBoundingClientRect()
+    const clip = intersect(shownBox, viewport.getBoundingClientRect())
+    const cropped = clip.width < shownBox.width - 0.5 || clip.height < shownBox.height - 0.5
 
-    return { image: shown, clip, radius, surface: clip, surfaceRadius: radius, lift: 1 }
+    const radius = cropped
+      ? 0
+      : parseFloat(getComputedStyle(image).borderTopLeftRadius) * (props.video ? 1 : scaleSpring.value)
+
+    return { image: shownBox, clip, radius, surface: clip, surfaceRadius: radius, lift: 1 }
   }
 
-  // The origin's frame, cropped to the part the page shows, or nothing when it is gone or out of sight.
+  // The origin's frame, cropped to the part the page shows, or nothing when it is gone, out of sight, or motion is
+  // reduced.
   const originFrame = () => {
     const origin = home()
 
-    if (!origin?.isConnected || !natural().width) return
+    if (prefersReducedMotion() || !origin?.isConnected || !natural.width) return
     const rect = origin.getBoundingClientRect()
 
     if (!rect.width || !rect.height) return
@@ -379,42 +486,52 @@ export function ImagePreview(props: ImagePreviewProps) {
       ? "none"
       : ([style.boxShadow, getComputedStyle(origin, "::after").boxShadow].find((shadow) => shadow !== "none") ?? "none")
 
-    return elementFrame(rect, natural(), style.objectFit, parseFloat(style.borderTopLeftRadius) || 0, visible)
+    return elementFrame(rect, natural, style.objectFit, parseFloat(style.borderTopLeftRadius) || 0, visible)
   }
 
   // The image's fitted layout box, wherever zoom has moved it. A video zooms inside its box, which stays put.
   const fitted = (): Box => {
-    const shown = image.getBoundingClientRect()
-    const offset = props.video ? CENTER : view()
+    const shownBox = image.getBoundingClientRect()
+    const x = props.video ? 0 : xSpring.value
+    const y = props.video ? 0 : ySpring.value
 
     return {
-      x: shown.x + shown.width / 2 - offset.x - image.offsetWidth / 2,
-      y: shown.y + shown.height / 2 - offset.y - image.offsetHeight / 2,
+      x: shownBox.x + shownBox.width / 2 - x - image.offsetWidth / 2,
+      y: shownBox.y + shownBox.height / 2 - y - image.offsetHeight / 2,
       width: image.offsetWidth,
       height: image.offsetHeight,
     }
   }
 
-  const scale = () => (props.video ? 1 : view().scale)
   const home = () => holder ?? props.origin ?? props.video
-  const hideOrigin = () => home()?.setAttribute("data-image-preview-origin", "")
-  const showOrigin = () => home()?.removeAttribute("data-image-preview-origin")
+  const panElement = (target: PanTarget) => (target === "video" && props.video ? props.video : viewport)
+
+  const suppressVideoClick = () => {
+    const video = props.video
+
+    if (!video) return
+
+    const swallow = (event: MouseEvent) => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+
+    // The click follows its pointerup in the same task; one that never comes must not swallow a later one.
+    video.addEventListener("click", swallow, { capture: true, once: true })
+    setTimeout(() => video.removeEventListener("click", swallow, { capture: true }))
+  }
 
   onCleanup(() => {
-    stop?.()
-    settle()
-    showOrigin()
-    giveBack()
+    dispatchFlight({ type: "disposed" })
+    dispatchZoom({ type: "disposed" })
   })
 
+  const closing = () => (layer ? layer.closing() : !dialog.isOpen())
+
   createEffect(
-    on(
-      () => dialog.isOpen(),
-      (open) => {
-        if (!open) dismiss()
-      },
-      { defer: true },
-    ),
+    on(closing, (value) => {
+      if (value) dispatchFlight({ type: "close.started", origin: originFrame() })
+    }),
   )
 
   // From the center of the box zoom is measured in: the window's for an image, the frame's for a video.
@@ -425,17 +542,25 @@ export function ImagePreview(props: ImagePreviewProps) {
   }
 
   const measure = () => {
-    if (!natural().width || !image.offsetWidth) return
-    size = { width: image.offsetWidth, height: image.offsetHeight }
-    setFitRatio(size.width / natural().width)
-    follow(clampView(view(), bounds()))
+    natural.width = image instanceof HTMLImageElement ? image.naturalWidth : image.width
+    natural.height = image instanceof HTMLImageElement ? image.naturalHeight : image.height
+
+    if (!natural.width || !image.offsetWidth) return
+    bounds.width = image.offsetWidth
+    bounds.height = image.offsetHeight
+    bounds.viewportWidth = props.video ? image.offsetWidth : viewport.clientWidth
+    bounds.viewportHeight = props.video ? image.offsetHeight : viewport.clientHeight
+    fitRatio = bounds.width / natural.width
+    bounds.maxScale = maxScale(fitRatio)
+    const next = clampView(view(), bounds)
+    follow(next.scale, next.x, next.y)
 
     if (!props.video) return
 
     // A video is ready as soon as the preview has laid out its box.
-    if (stage() === "pending") return void reveal()
+    if (selectAwaitingReveal(untrack(flight))) return dispatchFlight({ type: "video.ready", origin: originFrame() })
 
-    if (holder && !course) place(fitted())
+    if (selectVideoAtRest(untrack(flight))) place(fitted())
   }
 
   createResizeObserver(() => [viewport, image], measure)
@@ -443,59 +568,75 @@ export function ImagePreview(props: ImagePreviewProps) {
   createEffect(
     on(
       () => props.src,
-      () => follow(FIT_VIEW),
+      () => {
+        dispatchFlight({ type: "src.changed" })
+        follow(FIT_VIEW.scale, FIT_VIEW.x, FIT_VIEW.y)
+      },
       { defer: true },
     ),
   )
 
+  const interactive = () => selectFlightInteractive(untrack(flight))
+
   const detail = (event: MouseEvent) => {
-    if (goal().scale > 1) return ease(FIT_VIEW)
-    ease(zoomAt(goal(), detailScale(fitRatio()), point(event), bounds()))
+    if (!interactive()) return
+
+    if (scaleSpring.target > 1) return ease(FIT_VIEW)
+    ease(zoomAt(goal(), detailScale(fitRatio), point(event), bounds))
   }
 
-  const grab = (event: PointerEvent, target: HTMLElement) => {
-    if (event.button !== 0 || view().scale <= 1) return
+  const press = (event: PointerEvent, target: PanTarget | "content", onBackdrop: boolean) => {
+    if (!interactive()) return
+    dispatchZoom({
+      type: "pointer.down",
+      pointerId: event.pointerId,
+      button: event.button,
+      target,
+      onBackdrop,
+      zoomed: scaleSpring.value > 1,
+    })
+
+    if (!selectPanPointer(untrack(zoom), event.pointerId)) return
     event.preventDefault()
-    target.setPointerCapture(event.pointerId)
-    setDrag({ id: event.pointerId, x: event.clientX, y: event.clientY })
+    cursor.x = event.clientX
+    cursor.y = event.clientY
   }
 
+  // The hot path of a pan: no layout reads, and no Solid writes once the pan has moved.
   const pan = (event: PointerEvent) => {
-    const current = drag()
+    if (!selectPanPointer(untrack(zoom), event.pointerId)) return
 
-    if (current?.id !== event.pointerId) return
-    backdrop = false
-    panned = true
-    setDrag({ id: current.id, x: event.clientX, y: event.clientY })
-    follow(panBy(view(), { x: event.clientX - current.x, y: event.clientY - current.y }, bounds()))
+    // The button came up without a pointerup reaching the preview, so this is a hover, not a drag.
+    if ((event.buttons & 1) === 0) return dispatchZoom({ type: "pointer.cancel", pointerId: event.pointerId })
+    const dx = event.clientX - cursor.x
+    const dy = event.clientY - cursor.y
+
+    if (dx === 0 && dy === 0) return
+    cursor.x = event.clientX
+    cursor.y = event.clientY
+    movedEvent.pointerId = event.pointerId
+    dispatchZoom(movedEvent)
+    const scale = scaleSpring.value
+    follow(
+      scale,
+      clampAxis(xSpring.value + dx, bounds.width * scale, bounds.viewportWidth),
+      clampAxis(ySpring.value + dy, bounds.height * scale, bounds.viewportHeight),
+    )
   }
 
-  const release = (event: PointerEvent) => {
-    if (drag()?.id === event.pointerId) setDrag(undefined)
-  }
+  const release = (event: PointerEvent) => dispatchZoom({ type: "pointer.up", pointerId: event.pointerId })
+  const cancel = (event: PointerEvent) => dispatchZoom({ type: "pointer.cancel", pointerId: event.pointerId })
 
   if (props.video) {
     const video = props.video
     makeEventListener(video, "pointerdown", (event: PointerEvent) => {
-      panned = false
-
-      if (holder && event.clientY < video.getBoundingClientRect().bottom - CONTROLS) grab(event, video)
+      if (event.clientY < video.getBoundingClientRect().bottom - CONTROLS) press(event, "video", false)
     })
     makeEventListener(video, "pointermove", pan)
     makeEventListener(video, "pointerup", release)
-    makeEventListener(video, "pointercancel", release)
-    makeEventListener(video, "dblclick", (event: MouseEvent) => holder && detail(event))
-    makeEventListener(
-      video,
-      "click",
-      (event: MouseEvent) => {
-        if (!panned) return
-        panned = false
-        event.preventDefault()
-        event.stopImmediatePropagation()
-      },
-      { capture: true },
-    )
+    makeEventListener(video, "pointercancel", cancel)
+    makeEventListener(video, "lostpointercapture", cancel)
+    makeEventListener(video, "dblclick", detail)
   }
 
   // The preview owns zoom gestures while it is open: the page behind must neither scroll nor zoom the whole window.
@@ -503,35 +644,23 @@ export function ImagePreview(props: ImagePreviewProps) {
     window,
     "wheel",
     (event: WheelEvent) => {
-      const inside =
-        event.target instanceof Node && (viewport.contains(event.target) || (!!holder && event.target === props.video))
+      if (!interactive()) return
+      const inside = event.target instanceof Node && (viewport.contains(event.target) || event.target === props.video)
 
-      const zoom = event.ctrlKey || event.metaKey
+      const pinch = event.ctrlKey || event.metaKey
 
-      if (!inside && !zoom) return
+      if (!inside && !pinch) return
       event.preventDefault()
       event.stopPropagation()
 
       if (!inside) return
       const current = view()
 
-      if (zoom) {
-        follow(zoomAt(current, current.scale * wheelZoomFactor(pixels(event, event.deltaY)), point(event), bounds()))
+      const next = pinch
+        ? zoomAt(current, current.scale * wheelZoomFactor(pixels(event, event.deltaY)), point(event), bounds)
+        : panBy(current, wheelPan(event), bounds)
 
-        return
-      }
-
-      const horizontal = event.shiftKey && event.deltaX === 0
-      follow(
-        panBy(
-          current,
-          {
-            x: -pixels(event, horizontal ? event.deltaY : event.deltaX),
-            y: horizontal ? 0 : -pixels(event, event.deltaY),
-          },
-          bounds(),
-        ),
-      )
+      follow(next.scale, next.x, next.y)
     },
     { passive: false, capture: true },
   )
@@ -541,9 +670,10 @@ export function ImagePreview(props: ImagePreviewProps) {
     window,
     "keydown",
     (event: KeyboardEvent) => {
+      if (!interactive()) return
       const bare = !event.metaKey && !event.ctrlKey && !event.altKey
 
-      if (bare && event.key === " " && props.video && holder) {
+      if (bare && event.key === " " && props.video) {
         event.preventDefault()
         event.stopPropagation()
 
@@ -568,10 +698,10 @@ export function ImagePreview(props: ImagePreviewProps) {
     <div
       ref={root}
       data-component="image-preview"
-      data-stage={stage()}
+      data-stage={selectFlightStage(flight())}
       // Zoomed in, the first Escape zooms back out; the dialog stack leaves it to the preview.
-      data-owns-escape={goal().scale > 1 ? "" : undefined}
-      style={{ "--image-preview-exit": `${exit()}ms` }}
+      data-owns-escape={shown.ownsEscape ? "" : undefined}
+      style={{ "--image-preview-exit": `${EXIT_DURATION_MS}ms` }}
     >
       <div ref={scrim} data-slot="image-preview-scrim" />
       <Kobalte.Content
@@ -583,7 +713,7 @@ export function ImagePreview(props: ImagePreviewProps) {
           close?.focus()
         }}
         onEscapeKeyDown={(event) => {
-          if (goal().scale <= 1) return
+          if (scaleSpring.target <= 1) return
           event.preventDefault()
           ease(FIT_VIEW)
         }}
@@ -592,24 +722,28 @@ export function ImagePreview(props: ImagePreviewProps) {
           if (props.video && event.target === props.video) event.preventDefault()
         }}
         onPointerDown={(event: PointerEvent) => {
-          backdrop = event.target === content || event.target === viewport
+          const target = event.target
+          const body = target instanceof Node && viewport.contains(target)
+          press(event, body ? "viewport" : "content", target === content || target === viewport)
         }}
-        onClick={(event: MouseEvent) => {
-          // The preview fills the window, so a click on the backdrop around the image lands here rather than outside.
-          if (!backdrop || (event.target !== content && event.target !== viewport)) return
-          dialog.close()
-        }}
+        // The preview fills the window, so a click on the backdrop around the image lands here rather than outside.
+        onClick={(event: MouseEvent) =>
+          dispatchZoom({
+            type: "backdrop.click",
+            onBackdrop: event.target === content || event.target === viewport,
+          })
+        }
       >
         <div
           ref={viewport}
           data-slot="image-preview-body"
-          data-zoomed={view().scale > 1 ? "" : undefined}
-          data-dragging={drag() ? "" : undefined}
+          data-zoomed={shown.zoomed ? "" : undefined}
+          data-dragging={selectDragging(zoom()) ? "" : undefined}
           onDblClick={detail}
-          onPointerDown={(event) => grab(event, viewport)}
           onPointerMove={pan}
           onPointerUp={release}
-          onPointerCancel={release}
+          onPointerCancel={cancel}
+          onLostPointerCapture={cancel}
         >
           <Show
             when={props.video}
@@ -622,9 +756,9 @@ export function ImagePreview(props: ImagePreviewProps) {
                 draggable={false}
                 onLoad={() => {
                   measure()
-                  void reveal()
+                  dispatchFlight({ type: "image.loaded" })
                 }}
-                onError={() => void reveal()}
+                onError={() => dispatchFlight({ type: "image.failed" })}
               />
             }
           >
@@ -654,7 +788,7 @@ export function ImagePreview(props: ImagePreviewProps) {
             title={i18n.t("ui.imagePreview.zoomToFit")}
             onClick={() => ease(FIT_VIEW)}
           >
-            {percent().format(view().scale * fitRatio())}
+            {percent().format(shown.level / 100)}
           </Button>
           <IconButton
             data-slot="image-preview-zoom-in"
@@ -754,13 +888,11 @@ function dispose(video: HTMLVideoElement) {
 }
 
 function layout(element: HTMLElement, frame: Box, radius: number) {
-  Object.assign(element.style, {
-    left: `${frame.x}px`,
-    top: `${frame.y}px`,
-    width: `${frame.width}px`,
-    height: `${frame.height}px`,
-    borderRadius: `${radius}px`,
-  })
+  element.style.left = `${frame.x}px`
+  element.style.top = `${frame.y}px`
+  element.style.width = `${frame.width}px`
+  element.style.height = `${frame.height}px`
+  element.style.borderRadius = `${radius}px`
 }
 
 function shortcut(key: string) {
@@ -769,6 +901,16 @@ function shortcut(key: string) {
   if (key === "-" || key === "_") return "out"
 
   if (key === "0") return "fit"
+}
+
+// A plain wheel pans; Shift turns a vertical wheel sideways.
+function wheelPan(event: WheelEvent) {
+  const horizontal = event.shiftKey && event.deltaX === 0
+
+  return {
+    x: -pixels(event, horizontal ? event.deltaY : event.deltaX),
+    y: horizontal ? 0 : -pixels(event, event.deltaY),
+  }
 }
 
 function pixels(event: WheelEvent, delta: number) {

@@ -2,7 +2,8 @@ import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Deferred, Effect, Exit, PlatformError, Stream } from "effect"
+import { inspect } from "node:util"
+import { Cause, Deferred, Effect, Exit, PlatformError, Redacted, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -402,6 +403,58 @@ describe("cross-spawn spawner", () => {
           }),
         )
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
+      }),
+    )
+
+    fx.effect(
+      "rejects NUL characters without exposing Redacted values",
+      Effect.gen(function* () {
+        const secret = Redacted.make("hunter2\0")
+        const commands = [
+          () => ChildProcess.make("echo", [secret]),
+          () => ChildProcess.make`echo ${secret}`,
+          () => ChildProcess.make("echo", [], { env: { SECRET: secret } }),
+        ]
+        for (const command of commands) {
+          const exit = yield* Effect.exit(Effect.scoped(Effect.flatMap(command(), (handle) => handle.exitCode)))
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) continue
+          expect(Cause.hasDies(exit.cause)).toBe(false)
+          const error = Cause.squash(exit.cause)
+          expect(PlatformError.isPlatformError(error) && error.reason._tag).toBe("BadArgument")
+          expect(inspect(exit, { depth: Infinity })).not.toContain("hunter2")
+        }
+      }),
+    )
+
+    fx.live(
+      "reports a duplex write failure to a later reader without an uncaught error",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const uncaught: Array<unknown> = []
+        const onUncaught = (error: unknown) => uncaught.push(error)
+        yield* Effect.acquireRelease(
+          Effect.sync(() => process.on("uncaughtException", onUncaught)),
+          () => Effect.sync(() => process.off("uncaughtException", onUncaught)),
+        )
+        // Under `bun test` (1.4.4) the process's first child with an extra fd never emits "spawn", so spawn one without.
+        yield* Effect.scoped(Effect.flatMap(ChildProcess.make("true"), (warmUp) => warmUp.exitCode))
+
+        // The child closes fd3 before signalling readiness on stdout.
+        const handle = yield* ChildProcess.make("sh", ["-c", "exec 3>&-; echo ready; exec sleep 10"], {
+          additionalFds: { fd3: { type: "duplex" } },
+        })
+        yield* Stream.runDrain(Stream.take(handle.stdout, 1))
+
+        // Write before anyone reads fd3, and start reading only after the write has failed.
+        const writeError = yield* Effect.flip(
+          Stream.run(Stream.make(new TextEncoder().encode("request")), handle.getInputFd(3)),
+        )
+        const readError = yield* Effect.flip(Stream.runDrain(handle.getOutputFd(3)).pipe(Effect.timeout("2 seconds")))
+
+        expect(writeError._tag).toBe("PlatformError")
+        expect(uncaught).toEqual([])
+        expect(readError._tag).toBe("PlatformError")
       }),
     )
   })

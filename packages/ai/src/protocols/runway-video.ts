@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
+import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalArray, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "runway-video", name: "Runway", provider: "runway" })
@@ -33,7 +33,7 @@ export type RunwayVideoOptions = {
   readonly outputFormat?: OpenString<"mp4" | "prores" | "png_sequence">
 } & Record<string, unknown>
 
-export type Request = VideoRequestFor<RunwayVideoOptions>
+export type Request = VideoRequest<VideoModel<RunwayVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -121,7 +121,7 @@ const decodeStatus = Effect.fn("RunwayVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeTask(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.taskID, status, progress: output.value.progress ?? undefined }
 })
 
@@ -131,7 +131,7 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeTask(response)
   const task = output.value
-  const status = yield* MediaProtocol.status(STATUS, task.status, output)
+  const status = MediaProtocol.status(STATUS, task.status)
   if (status === "failed") {
     const code = task.failureCode ?? undefined
     const message = `${route.name} task failed${code === undefined ? "" : ` (${code})`}${task.failure ? `: ${task.failure}` : ""}`

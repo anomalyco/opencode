@@ -67,7 +67,7 @@ export const resolveModel = (ctx: Context, event: SessionHooks["context"]) =>
   Effect.gen(function* () {
     const cached = models.get(event)
     if (cached?.providerID === event.model.providerID && cached.id === event.model.id) return cached
-    const model =
+    const model: Model.Info =
       (yield* ctx.model.list()).data.find(
         (model) => model.providerID === event.model.providerID && model.id === event.model.id,
       ) ?? Model.Info.default(event.model.providerID, event.model.id)

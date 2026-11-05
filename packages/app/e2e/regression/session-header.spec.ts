@@ -2,6 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
+import { reviewTabs } from "../utils/side-panel"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -213,7 +214,9 @@ test.describe("location", () => {
     sessions: [{ id: "ses_location", title: "Location session", directory: worktree }],
   }
 
-  test("collapses the worktree name before the project and only then truncates the title", async ({ page }) => {
+  test("collapses the worktree name, then the project, then the usage details, and only then truncates the title", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.clock.install()
     await openSession(page, {
@@ -227,22 +230,27 @@ test.describe("location", () => {
     const row = header.locator(".session-header-layout")
     const review = page.getByRole("button", { name: "Toggle review", exact: true })
     const tooltip = page.getByRole("tooltip")
+    const usage = header.getByRole("button", { name: "Toggle session context", exact: true })
+    const usageMenu = header.getByRole("button", { name: "View context usage", exact: true })
     await expect(header.getByRole("button", { name: "More options", exact: true })).toBeVisible()
     await expect(project).toHaveText("Location")
     await expect(worktreeName).toHaveText("quiet-falcon")
 
     // Keep the viewport fixed: a pane can narrow a session independently of the window.
     for (const state of [
-      { width: 1000, project: true, worktree: true, truncated: false },
-      { width: 680, project: true, worktree: false, truncated: false },
-      { width: 600, project: false, worktree: false, truncated: false },
-      { width: 490, project: false, worktree: false, truncated: true },
-      { width: 680, project: true, worktree: false, truncated: false },
-      { width: 1000, project: true, worktree: true, truncated: false },
+      { width: 1000, project: true, worktree: true, usage: true, truncated: false },
+      { width: 680, project: true, worktree: false, usage: true, truncated: false },
+      { width: 600, project: false, worktree: false, usage: true, truncated: false },
+      { width: 550, project: false, worktree: false, usage: false, truncated: false },
+      { width: 490, project: false, worktree: false, usage: false, truncated: true },
+      { width: 680, project: true, worktree: false, usage: true, truncated: false },
+      { width: 1000, project: true, worktree: true, usage: true, truncated: false },
     ]) {
       await row.evaluate((element, width) => (element.style.inlineSize = `${width}px`), state.width)
       await expect(project).toBeVisible({ visible: state.project })
       await expect(worktreeName).toBeVisible({ visible: state.worktree })
+      await expect(usage).toBeVisible({ visible: state.usage })
+      await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
         .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
@@ -282,6 +290,20 @@ test.describe("location", () => {
       await header.screenshot({ path: test.info().outputPath(`location-${state.width}.png`) })
     }
 
+    // Find takes room from the title, so the usage details give way, and come back once Find closes.
+    const search = header.locator('[data-component="timeline-search-bar"] input')
+    await row.evaluate((element) => (element.style.inlineSize = "680px"))
+    await expect(usage).toBeVisible()
+    await page.keyboard.press("ControlOrMeta+f")
+    await expect(search).toBeFocused()
+    await expect(usageMenu).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-open.png") })
+    await search.press("Escape")
+    await expect(search).toHaveCount(0)
+    await expect(project).toBeVisible()
+    await expect(usage).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-closed.png") })
+
     await row.evaluate((element) => element.style.removeProperty("inline-size"))
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
@@ -306,6 +328,20 @@ test.describe("location", () => {
     await location.click()
     await expect(page.locator('[data-slot="session-location-card"]')).toBeVisible()
     await expect(tooltip).toBeHidden()
+    await page.keyboard.press("Escape")
+    await expect(page.locator('[data-slot="session-location-card"]')).toBeHidden()
+
+    // The compact usage opens its details in a menu, which also opens the context panel.
+    await row.evaluate((element) => (element.style.inlineSize = "490px"))
+    await usageMenu.click()
+    const details = page.getByRole("menu", { name: "View context usage", exact: true })
+    await expect(details).toContainText("Tokens0")
+    await expect(details).toContainText("Cost$0.00")
+    await expect(details).toContainText("Context0%")
+    await page.screenshot({ path: test.info().outputPath("usage-menu.png") })
+    await details.getByRole("menuitem", { name: "View context usage", exact: true }).click()
+    await expect(details).toBeHidden()
+    await expect(page.getByRole("tab", { name: "Context", exact: true })).toHaveAttribute("aria-selected", "true")
   })
 
   test("collapses to the project avatar when there is no worktree", async ({ page }) => {
@@ -333,7 +369,7 @@ test.describe("location", () => {
 
   test("names the project and worktree, and the card copies the full path", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"])
-    await openSession(page, workspace)
+    await openSession(page, { ...workspace, vcs: { current: "", default: "main" } })
     await expect(trigger(page).locator('[data-slot="session-location-project"]')).toHaveText("Location")
     await expect(trigger(page).locator('[data-slot="session-location-worktree"]')).toHaveText("quiet-falcon")
     await expect(trigger(page)).not.toContainText("/")
@@ -341,6 +377,8 @@ test.describe("location", () => {
     await trigger(page).click()
     const card = page.locator('[data-slot="session-location-card"]')
     const path = card.getByRole("menuitem", { name: worktree, exact: true })
+    await expect(card.getByText("No branch", { exact: true })).toBeVisible()
+    await expect(card.getByRole("menuitem", { name: "No branch", exact: true })).toHaveCount(0)
     await expect(path).toHaveText(worktree)
     await expect(card.getByRole("menuitem", { name: "Copy path", exact: true })).toHaveCount(0)
     // Select actual text on the first line, not the empty half of a wrapped path's bounding box.
@@ -377,6 +415,132 @@ test.describe("location", () => {
     await expect(trigger(page)).not.toContainText("apollo")
     await trigger(page).click()
     await expect(page.locator('[data-slot="session-location-card"]').getByText("apollo", { exact: true })).toBeVisible()
+  })
+
+  test("copies the branch name and opens its worktree in the right-panel terminal", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await page.setViewportSize({ width: 1440, height: 900 })
+
+    const { persistentPty } = await openSession(page, {
+      ...workspace,
+      vcs: (directory) => ({ current: directory === worktree ? "feature/branch-menu" : "main", default: "main" }),
+      persistentPty: {},
+    })
+
+    await expect(page.getByRole("button", { name: "More options", exact: true })).toBeVisible()
+    await trigger(page).click()
+    const card = page.locator('[data-slot="session-location-card"]')
+    const branch = card.getByRole("menuitem", { name: "feature/branch-menu", exact: true })
+    await page.screenshot({ path: test.info().outputPath("branch-card.png"), animations: "disabled" })
+    await branch.press("Enter")
+    const actions = page.getByRole("menu", { name: "feature/branch-menu", exact: true })
+    await expect(actions.getByRole("menuitem")).toHaveText(["Copy branch name", "Open in terminal"])
+    await page.screenshot({ path: test.info().outputPath("branch-actions.png"), animations: "disabled" })
+    await actions.getByRole("menuitem", { name: "Copy branch name", exact: true }).click()
+    await expect(card).toBeHidden()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("feature/branch-menu")
+
+    await trigger(page).click()
+    await branch.click()
+    await actions.getByRole("menuitem", { name: "Open in terminal", exact: true }).click()
+    await expect(card).toBeHidden()
+    await expect.poll(() => persistentPty.created.map((item) => item.cwd)).toEqual([worktree])
+    await expect.poll(() => persistentPty.sockets.length).toBe(1)
+    persistentPty.output(persistentPty.created[0]!.id, "$ pwd\r\n" + worktree + "\r\n")
+    const terminal = page.locator('[data-component="terminal"]')
+    await expect(terminal).toHaveCSS("opacity", "1")
+    await expect(terminal.locator("textarea")).toBeFocused()
+    await expect
+      .poll(async () => {
+        const box = await terminal.boundingBox()
+        const header = await page.locator("[data-session-title]").boundingBox()
+
+        return !!box && !!header && box.x >= header.x + header.width
+      })
+      .toBe(true)
+    await page.screenshot({ path: test.info().outputPath("branch-terminal.png"), animations: "disabled" })
+  })
+
+  for (const app of [
+    { id: "vscode", label: "VS Code" },
+    { id: "finder", label: "Finder" },
+  ]) {
+    test(`uses the selected ${app.label} app in the path submenu`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 })
+
+      const mock = await mockWorkspace(page, {
+        ...workspace,
+        seed: {
+          storage: {
+            ...reviewTabs(worktree, "ses_location"),
+            "opencode.global.dat:plugin.file.app": { app: app.id },
+          },
+        },
+      })
+
+      await page.goto(
+        `/e2e/utils/windows-menu.html?${new URLSearchParams({
+          server: mock.server,
+          path: sessionHref("ses_location", "sidecar"),
+          os: "macos",
+          openApps: "1",
+        })}`,
+      )
+      await expectSessionTitle(page, "Location session")
+      await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+      // Opening review hands focus to the panel after its motion; let that finish before opening another menu.
+      await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+      await expect(page.getByRole("button", { name: `Open in ${app.label}`, exact: true })).toBeVisible()
+      await trigger(page).click()
+      await page.getByRole("menuitem", { name: worktree, exact: true }).click()
+      const actions = page.getByRole("menu", { name: worktree, exact: true })
+
+      if (app.id === "finder") {
+        await expect(actions.getByRole("menuitem")).toHaveText(["Copy path", "Reveal in Finder"])
+
+        return
+      }
+
+      await page.screenshot({ path: test.info().outputPath("path-open-app.png"), animations: "disabled" })
+      await actions.getByRole("menuitem", { name: "Open in VS Code", exact: true }).click()
+      await expect(page.getByLabel("Opened paths")).toHaveText(
+        JSON.stringify([{ path: worktree, app: "Visual Studio Code" }]),
+      )
+    })
+  }
+
+  test("an app launch that never answers releases the Open in controls", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.clock.install()
+
+    const mock = await mockWorkspace(page, {
+      ...workspace,
+      seed: {
+        storage: { ...reviewTabs(worktree, "ses_location"), "opencode.global.dat:plugin.file.app": { app: "vscode" } },
+      },
+    })
+
+    // An editor that does not detach keeps its launch running until the user closes it.
+    await page.goto(
+      `/e2e/utils/windows-menu.html?${new URLSearchParams({
+        server: mock.server,
+        path: sessionHref("ses_location", "sidecar"),
+        os: "macos",
+        openApps: "1",
+        holdOpen: "1",
+      })}`,
+    )
+    await expectSessionTitle(page, "Location session")
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
+    await open.click()
+    await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")
+    await expect(open).toBeDisabled()
+
+    await page.clock.fastForward(10_000)
+    await expect(open).toBeEnabled()
+    await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
   })
 
   test.describe("touch", () => {
@@ -597,6 +761,46 @@ test.describe("revert", () => {
     await page.getByRole("button", { name: "Undo", exact: true }).click()
     await cleared
     await expect(prompt).toHaveText("Unsent draft")
+  })
+
+  test("a second /undo before the staged event rewinds one prompt further, and /redo retires the toast", async ({
+    page,
+  }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+    const { session, editor } = await openSession(page, { ...workspace, onRevertStage: (input) => staged.push(input) })
+    const prompt = page.getByRole("textbox", { name: "Prompt" })
+    const undoToast = page.getByRole("button", { name: "Undo", exact: true })
+
+    const slash = async (command: string) => {
+      await editor.press("ControlOrMeta+a")
+      await editor.press("Backspace")
+      await editor.pressSequentially(`/${command}`)
+      await expect(
+        page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]'),
+      ).toContainText(`/${command}`)
+      await editor.press("Enter")
+    }
+
+    // The mock server never sends session.revert.staged, so each step must build on the last request's result.
+    await slash("undo")
+    await expect(prompt).toHaveText("Second prompt")
+    await expect(undoToast).toBeVisible()
+    await slash("undo")
+    await expect(prompt).toHaveText("First prompt")
+    expect(staged).toEqual([
+      { sessionID: session.id, messageID: "msg_second" },
+      { sessionID: session.id, messageID: "msg_first" },
+    ])
+
+    const cleared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === `/api/session/${session.id}/revert`,
+    )
+
+    await slash("redo")
+    expect((await cleared).ok()).toBe(true)
+    await expect(undoToast).toHaveCount(0)
   })
 
   test("Undo after switching tabs restages the earlier revert in the Session it came from", async ({ page }) => {

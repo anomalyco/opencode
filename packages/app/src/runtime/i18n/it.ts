@@ -37,6 +37,7 @@ export const dict = {
   "dialog.server.menu.remove": "Rimuovi",
   "home.workspaceTip": "Inizia la sessione successiva in una nuova area di lavoro per mantenere isolate le modifiche",
   "session.tab.add": "Aggiungi scheda",
+  "session.tab.closeOthers": "Chiudi le altre schede",
   "session.queue.attachments.one": "Inoltre attacco {{count}}",
   "session.queue.attachments.other": "Inoltre accessori {{count}}",
   "settings.backToSettings": "Torna alle impostazioni",

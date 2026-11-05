@@ -6,56 +6,35 @@ import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Loader } from "@opencode/ui/loader"
 import { TextField } from "@opencode/ui/text-field"
-import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
+import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { TextInput } from "@opencode/ui/text-input"
-import { showToast } from "@/shell/notifications/toast"
-import {
-  type Component,
-  createEffect,
-  createMemo,
-  createUniqueId,
-  For,
-  type JSX,
-  Match,
-  onMount,
-  Show,
-  Switch,
-} from "solid-js"
+import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
-import { useGlobal } from "@/runtime/server/runtime"
-import { ServerConnection } from "@/runtime/server/registry"
-import { useProviders } from "@/providers/catalog/providers"
-import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
+import { consoleProviderName } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
-import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
 import type { FormAnswer, FormField, FormValue, IntegrationInfo } from "@opencode/client/promise"
-import {
-  CONSOLE_INTEGRATION,
-  connectMethods,
-  createProviderConnectionController,
-  providerFormDefaults,
-  type ProviderConnectMethod,
-} from "./controller"
+import { createProviderDialogController, modelKey } from "./controller"
+import { CONSOLE_INTEGRATION, type ProviderDialogBody, type ProviderDialogFrame } from "./dialog-machine"
+import { connectMethods, providerFormDefaults, selectProviderConnectView, type ProviderConnectMethod } from "./machine"
 import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
-import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
+import { providerAccounts } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
-import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import "@/shell/search-list.css"
 import "./models.css"
 
 export function useProviderConnectController() {
@@ -69,6 +48,19 @@ export function useProviderConnectController() {
   }
 }
 
+type ProviderDialogController = ReturnType<typeof createProviderDialogController>
+
+// What a step without a sign-in reads, so the sign-in views never branch on a missing one.
+const NO_CONNECT = selectProviderConnectView({ status: "disposed" })
+
+// A provider step fits its content; the list and the models keep a fixed height.
+const FRAME_HEIGHT = {
+  picker: "!h-[min(calc(100vh_-_16px),512px)]",
+  models: "!h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]",
+  accounts: "!h-auto !max-h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]",
+  provider: "!h-auto !max-h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]",
+} satisfies Record<ProviderDialogFrame, string>
+
 export const DialogConnectProvider: Component<{
   directory?: string
   /** Connects at the server's default Location instead of the current route's directory. */
@@ -81,27 +73,10 @@ export const DialogConnectProvider: Component<{
   onConnected?: (provider: string) => void
 }> = (props) => {
   const fallback = useProviderConnectController()
-  const controller = props.controller ?? fallback
-
-  const [state, setState] = createStore<{
-    completed: boolean
-    modelProvider?: { id: string; name: string }
-    authorization: boolean
-    chatgptWelcome: boolean
-    picked: boolean
-    stepBack: boolean
-    title: string
-  }>({
-    completed: false,
-    authorization: false,
-    chatgptWelcome: false,
-    picked: false,
-    stepBack: false,
-    title: "",
-  })
-
+  const external = props.controller ?? fallback
   const language = useLanguage()
   const dialog = useDialog()
+  const params = useParams()
 
   const [welcome, setWelcome, , welcomeReady] = persisted(
     Persist.global("chatgpt-plan-welcome.v1"),
@@ -109,126 +84,152 @@ export const DialogConnectProvider: Component<{
     { seen: false },
   )
 
-  const reset = controller.reset
-  const back = { current: reset }
-  const consoleSelected = () => controller.selected() === CONSOLE_INTEGRATION
+  const controller = createProviderDialogController({
+    // A sign-in belongs to the Location where it began, even if the route changes underneath it.
+    directory: props.defaultLocation ? undefined : (props.directory ?? decode64(params.dir)),
+    standalone: !!props.standalone,
+    selected: external.selected,
+    onSelect: external.select,
+    selection: props.selection,
+    onConnected: (provider) => props.onConnected?.(provider),
+  })
+
+  const view = controller.view
+  const frame = () => view().frame
+  const consoleSelected = () => view().provider === CONSOLE_INTEGRATION
   let focusHost: HTMLDivElement | undefined
   const holdFocus = () => focusHost?.focus({ preventScroll: true })
 
-  const select = (provider?: string) => {
-    back.current = reset
-    setState("picked", true)
-    controller.select(provider)
-  }
+  const title = () => {
+    const name = controller.providerName()
+    const kind = view().title
 
-  function Content() {
-    return (
-      <Switch>
-        <Match keyed when={controller.selected()}>
-          {(provider) => (
-            <ProviderConnection
-              provider={provider}
-              accounts={state.picked}
-              directory={props.directory}
-              defaultLocation={props.defaultLocation}
-              onBack={reset}
-              setBack={(handler) => (back.current = handler)}
-              selection={props.selection}
-              onDone={props.onDone ? () => setState("completed", true) : undefined}
-              onConnected={(methodID) => {
-                props.onConnected?.(provider)
+    if (kind === "console-error") return language.t("provider.connect.opencode.errorTitle")
 
-                if (provider === "openai" && methodID === "chatgpt-token-sharing") setState("chatgptWelcome", true)
-              }}
-              onFirstConnection={(provider) => setState("modelProvider", provider)}
-              onAuthorization={(authorization) => setState("authorization", authorization)}
-              onStepBack={(stepBack) => setState("stepBack", stepBack)}
-              onTitle={(title) => setState("title", title)}
-            />
-          )}
-        </Match>
-        <Match when={true}>
-          <ProviderPicker directory={props.directory} onSelect={select} onPrepare={holdFocus} />
-        </Match>
-      </Switch>
-    )
+    if (kind === "console-sign-in")
+      return language.t(
+        view().provider === "opencode-go" ? "provider.connect.console.titleGo" : "provider.connect.console.title",
+      )
+
+    if (kind === "anthropic-max") return language.t("provider.connect.title.anthropicProMax")
+
+    return language.t("provider.connect.title", {
+      provider: consoleSelected() ? language.t("provider.connect.opencode.name") : name,
+    })
   }
 
   return (
     <Dialog
-      preventBackdropDismiss={state.authorization}
+      preventBackdropDismiss={view().preventBackdropDismiss}
       // The top edge stays where the provider list puts it, so a step that fits its content only moves the bottom edge.
-      containerClass={`!self-start [--connect-top:max(8px,calc((100vh_-_512px)/2))] !mt-[var(--connect-top)] !w-[min(calc(100vw_-_16px),640px)] ${
-        state.modelProvider
-          ? "!h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]"
-          : controller.selected()
-            ? "!h-auto !max-h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]"
-            : "!h-[min(calc(100vh_-_16px),512px)]"
+      containerClass={`!self-start !rounded-[12px] !bg-v2-background-bg-base [--connect-top:max(8px,calc((100vh_-_512px)/2))] !mt-[var(--connect-top)] !w-[min(calc(100vw_-_16px),640px)] ${
+        FRAME_HEIGHT[frame()]
       }`}
       onCloseAutoFocus={(event) => {
-        if (state.completed && props.onDone) {
+        if (view().completed && props.selection && props.onDone) {
           event.preventDefault()
           props.onDone()
         }
 
-        if (!state.chatgptWelcome) return
+        if (!view().chatgptWelcome) return
         void Promise.resolve(welcomeReady.promise).then(() => {
           if (welcome.seen) return
           setWelcome("seen", true)
           void dialog.show(() => <DialogChatGPTPlanWelcome />)
         })
       }}
-      class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
-      classList={{ "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider }}
+      class="[font-family:var(--v2-font-family-sans)]"
+      classList={{
+        "[&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]":
+          frame() === "provider" || frame() === "models",
+        "[&_[data-slot=dialog-header]]:!pt-5": frame() === "models",
+        "search-dialog": frame() === "picker" || frame() === "accounts",
+      }}
     >
       <DialogHeader closeLabel={language.t("common.close")}>
         <Switch>
-          <Match when={state.modelProvider}>
+          <Match when={frame() === "models" && view().provider}>
             {(provider) => (
               <div class="flex items-center gap-2">
-                <ProviderModelIcon provider={provider()} class="shrink-0" />
-                <DialogTitle>{language.t("provider.connect.models.title", { provider: provider().name })}</DialogTitle>
+                <ProviderModelIcon provider={{ id: provider(), name: controller.providerName() }} class="shrink-0" />
+                <DialogTitle>
+                  {language.t("provider.connect.models.title", { provider: controller.providerName() })}
+                </DialogTitle>
               </div>
             )}
           </Match>
-          <Match when={controller.selected()}>
+          <Match when={frame() === "accounts"}>
+            <div class="flex min-w-0 flex-1 items-center gap-0.5">
+              <Show when={view().canBack}>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                  onClick={controller.back}
+                >
+                  {language.t("dialog.provider.title")}
+                </button>
+                <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              </Show>
+              <DialogTitle>{controller.providerName()}</DialogTitle>
+            </div>
+          </Match>
+          <Match when={view().provider}>
             {(provider) => (
               <div class="flex min-w-0 flex-1 items-center gap-2">
-                <Show when={!props.standalone || state.stepBack}>
+                <Show when={view().canBack}>
                   <button
                     type="button"
                     class="-my-0.5 -ms-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                    onClick={() => back.current()}
+                    onClick={controller.back}
                     aria-label={language.t("common.goBack")}
                   >
                     <Icon name="arrow-left" size="small" />
                   </button>
                 </Show>
                 <ProviderModelIcon
-                  provider={{ id: provider(), name: state.title }}
+                  provider={{ id: provider(), name: title() }}
                   class="shrink-0 text-v2-icon-icon-base"
                 />
-                <DialogTitle>{state.title}</DialogTitle>
+                <DialogTitle>{title()}</DialogTitle>
               </div>
             )}
           </Match>
           <Match when={true}>
-            <DialogTitle>{language.t("command.provider.connect")}</DialogTitle>
+            <DialogTitleGroup
+              title={language.t("dialog.provider.title")}
+              description={language.t("dialog.provider.description")}
+            />
           </Match>
         </Switch>
       </DialogHeader>
       <DialogBody
-        class={`min-h-0 flex-1 overflow-hidden px-2 ${state.modelProvider || consoleSelected() ? "pb-0" : "pb-2"}`}
+        class={`min-h-0 flex-1 overflow-hidden ${
+          frame() === "provider" || frame() === "models"
+            ? `px-2 ${frame() === "models" || consoleSelected() ? "pb-0" : "pb-2"}`
+            : "px-1.5 pb-1.5"
+        }`}
       >
+        {/* Outside the scrolling content, so it can reach across the body's padding without scrolling sideways. */}
+        <Show when={frame() === "accounts"}>
+          <div data-slot="search-dialog-divider" />
+        </Show>
         <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
-          <Content />
+          <Show
+            keyed
+            when={view().provider}
+            fallback={<ProviderPicker directory={props.directory} onSelect={controller.select} onPrepare={holdFocus} />}
+          >
+            {(provider) => <ProviderSteps provider={provider} controller={controller} />}
+          </Show>
         </div>
       </DialogBody>
     </Dialog>
   )
 }
 
-// Same groups and order as the TUI's integration list.
+const CLAUDE_CODE_SETUP_URL = "https://code.claude.com/docs/en/setup"
+
+// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
 const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
@@ -242,34 +243,38 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
+  // MCP servers are connected and managed from the MCP dialog, not here.
   const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
-    if (!query) return integrations.list()
-
-    return integrations.list().filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
+    return integrations
+      .list()
+      .filter((row) => row.metadata?.source !== "mcp")
+      .filter((row) => !query || `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
-  const mcp = createMemo(() =>
+  const connected = createMemo(() =>
     all()
-      .filter((row) => row.metadata?.source === "mcp")
+      .filter((row) => row.connections.length > 0)
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
+  const unconnected = createMemo(() => all().filter((row) => row.connections.length === 0))
+
   const popular = createMemo(() =>
-    all()
-      .filter((row) => row.metadata?.source !== "mcp" && POPULAR.includes(row.id))
+    unconnected()
+      .filter((row) => POPULAR.includes(row.id))
       .toSorted((a, b) => POPULAR.indexOf(a.id) - POPULAR.indexOf(b.id)),
   )
 
   const services = createMemo(() =>
-    all()
-      .filter((row) => row.metadata?.source !== "mcp" && !POPULAR.includes(row.id))
+    unconnected()
+      .filter((row) => !POPULAR.includes(row.id))
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
   const groups = () => [
-    { title: language.t("dialog.provider.group.mcp"), items: mcp },
+    { title: language.t("dialog.provider.connected"), items: connected },
     { title: language.t("dialog.provider.group.popular"), items: popular },
     { title: language.t("dialog.provider.group.services"), items: services },
   ]
@@ -277,7 +282,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   // An integration that only reads environment variables has nothing to connect from here.
   const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
-  const rows = createMemo(() => [...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)))
+  const rows = createMemo(() => [...connected(), ...popular(), ...services()].filter((row) => !disabled(row)))
 
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
@@ -313,14 +318,15 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   }
 
   return (
-    <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-4" onKeyDown={handleKeyDown}>
-      <div class="shrink-0 px-1 pt-px">
+    <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-0.5" onKeyDown={handleKeyDown}>
+      <div class="search-dialog-search shrink-0">
         <TextInput
           ref={search}
           type="search"
           class="!w-full [font-family:var(--v2-font-family-sans)]"
-          leadingIcon={<Icon name="magnifying-glass" size="small" />}
-          placeholder={language.t("dialog.provider.search.placeholder")}
+          leadingIcon={<Icon name="magnifying-glass" />}
+          placeholder={language.t("common.search.placeholder")}
+          aria-label={language.t("dialog.provider.search.placeholder")}
           value={store.filter}
           onInput={(event) => {
             setStore({ filter: event.currentTarget.value, active: undefined })
@@ -328,38 +334,32 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         />
       </div>
       <div class="relative min-h-0 flex-1">
-        <div class="flex size-full min-h-0 flex-col gap-4 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div class="flex size-full min-h-0 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <For each={groups()}>
             {(group) => (
               <Show when={group.items().length > 0}>
-                <section class="flex flex-col">
-                  <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
+                <section class="flex flex-col gap-0.5">
+                  <div class="px-2 pt-2.5 pb-0.5 text-[12px] font-[440] leading-[18px] tracking-[0.05px] text-v2-text-text-faint">
                     {group.title}
                   </div>
                   <For each={group.items()}>
                     {(provider) => {
-                      const connections = () => provider.connections
-                      const status = () => connections()[0]?.status
+                      const connection = () => provider.connections[0]
 
-                      const summary = () => {
-                        const list = connections()
+                      // The server lists the active account first.
+                      const account = () => {
+                        const current = connection()
 
-                        if (list.length > 1)
-                          return language.plural("dialog.provider.connections.count", list.length, {
-                            count: list.length,
-                          })
-                        const connection = list[0]
+                        if (!current) return
 
-                        if (!connection) return ""
-
-                        return connection.type === "credential" ? connection.label : `$${connection.name}`
+                        return current.type === "credential" ? current.label : `$${current.name}`
                       }
 
                       return (
                         <button
                           type="button"
                           data-provider-id={provider.id}
-                          class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
+                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-1.5 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
                           classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                           onMouseEnter={() => setStore("active", provider.id)}
                           disabled={disabled(provider)}
@@ -370,7 +370,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                             class={`shrink-0 text-v2-icon-icon-base ${disabled(provider) ? "opacity-50" : ""}`}
                           />
                           <span
-                            class="min-w-0 truncate font-[530]"
+                            class="min-w-0 truncate font-[440]"
                             classList={{
                               "text-v2-text-text-base": !disabled(provider),
                               "text-v2-text-text-faint": disabled(provider),
@@ -383,30 +383,21 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                               {language.t("dialog.provider.environmentOnly")}
                             </span>
                           </Show>
-                          <Switch>
-                            <Match when={status()}>
-                              <span
-                                data-slot="provider-status"
-                                class="ml-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
-                              >
-                                {language.t("dialog.provider.signInRequired")}
-                              </span>
-                            </Match>
-                            <Match when={connections().length > 0}>
-                              <span
-                                data-slot="provider-connected"
-                                class="ml-auto flex min-w-0 items-center gap-1.5 font-[440] text-v2-text-text-muted"
-                              >
-                                <span class="min-w-0 truncate">{summary()}</span>
-                                <Icon
-                                  name="check"
-                                  size="small"
-                                  class="shrink-0 text-[var(--v2-state-fg-success)]"
-                                  aria-label={language.t("dialog.provider.connected")}
-                                />
-                              </span>
-                            </Match>
-                          </Switch>
+                          <Show when={account()}>
+                            {(label) => (
+                              <Badge data-slot="provider-connected" class="min-w-0 shrink truncate">
+                                {label()}
+                              </Badge>
+                            )}
+                          </Show>
+                          <Show when={!!connection()?.status}>
+                            <span
+                              data-slot="provider-status"
+                              class="ms-auto shrink-0 pe-1 font-[440] text-[var(--v2-state-fg-warning)]"
+                            >
+                              {language.t("dialog.provider.needsSignIn")}
+                            </span>
+                          </Show>
                         </button>
                       )
                     }}
@@ -423,233 +414,29 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         </div>
         <div
           class="pointer-events-none absolute inset-x-0 bottom-0 h-10"
-          style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-layer-01))" }}
+          style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-base))" }}
         />
       </div>
     </div>
   )
 }
 
-function ProviderConnection(props: {
-  provider: string
-  directory?: string
-  defaultLocation?: boolean
-  onBack: () => void
-  setBack: (handler: () => void) => void
-  selection?: ModelSelection
-  onDone?: () => void
-  onConnected?: (methodID?: string) => void
-  onFirstConnection: (provider: { id: string; name: string }) => void
-  onAuthorization: (authorization: boolean) => void
-  onStepBack: (stepBack: boolean) => void
-  onTitle: (title: string) => void
-  accounts?: boolean
-}) {
-  const dialog = useDialog()
-  const params = useParams()
+function ProviderSteps(props: { provider: string; controller: ProviderDialogController }) {
   const language = useLanguage()
   const platform = usePlatform()
   const sdk = useServerSDK()
-  const data = useData()
-  const global = useGlobal()
-  const tabs = useTabs()
-  // A sign-in belongs to the Location where it began, even if the route changes underneath it.
-  const initialDirectory = props.defaultLocation ? undefined : (props.directory ?? decode64(params.dir))
-  const directory = () => initialDirectory
-  const location = () => (initialDirectory ? { directory: initialDirectory } : undefined)
-  const providers = useProviders(directory)
-  const integrations = useIntegrations(directory)
-  const accountActions = useProviderAccountActions(directory)
-  const integrationID = props.provider
   const isConsole = props.provider === CONSOLE_INTEGRATION
   const remote = isConsole && authServerName(sdk.server) !== undefined
-
-  const [state, setState] = createStore<{
-    copied: boolean
-    copyFailed: boolean
-    models: boolean
-    noModels: boolean
-    catalogPending: boolean
-    selectedModel: string
-    collapsed: Record<string, boolean>
-    adding: boolean
-    direct: boolean
-    confirming?: string
-    switching?: string
-    activating?: string
-    renaming?: string
-  }>({
-    adding: false,
-    direct: false,
-    copied: false,
-    copyFailed: false,
-    models: false,
-    noModels: false,
-    // The workspace providers had not loaded when the wait ran out.
-    catalogPending: false,
-    selectedModel: "",
-    collapsed: {},
-  })
-
-  // Sorted by name so rows stay put when the server moves the active account first.
-  const serverAccounts = () =>
-    providerAccounts(integrations.list().find((integration) => integration.id === props.provider))
-
-  const accounts = () => serverAccounts().toSorted((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
-
-  const activeAccount = () => state.activating ?? serverAccounts()[0]?.id
-
-  const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
-
-  const mcp = () =>
-    integrations.list().find((integration) => integration.id === props.provider)?.metadata?.source === "mcp"
-
-  const controller = createProviderConnectionController({
-    provider: () => integrationID,
-    directory,
-    manual: () => !!props.accounts && accounts().length > 0,
-    prepare: isConsole ? prepareConsoleCatalog : undefined,
-    pollInterval: isConsole ? 500 : undefined,
-    onComplete: () => {
-      const method = controller.currentMethod()
-      props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
-      // The picker only lists the newest model per family by default, which hides most of
-      // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
-
-      if (state.catalogPending) {
-        setState("noModels", true)
-
-        return
-      }
-
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-        description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
-      })
-
-      // Like the TUI, every connection continues to that provider's models, not just the first.
-      // MCP servers have no models, so they close instead.
-      const first = mcp() ? undefined : connectionGroups()[0]?.models[0]
-
-      if (first) {
-        setState({ models: true, selectedModel: modelKey(first) })
-        props.onFirstConnection({ id: props.provider, name: provider().name })
-
-        return
-      }
-
-      // Keep the "connected, but no models" state visible so the workspace can be fixed.
-      if (isConsole) {
-        setState("noModels", true)
-
-        return
-      }
-
-      dialog.close()
-    },
-  })
-
-  const connectionProviders = createMemo(() =>
-    (data.location.provider.list(location()) ?? []).filter(
-      (provider) => provider.id === props.provider || provider.integrationID === integrationID,
-    ),
-  )
-
-  const connectionModels = createMemo(() => {
-    const ids = new Set(connectionProviders().map((provider) => provider.id))
-
-    return (data.location.model.list(location()) ?? []).filter(
-      (model) => ids.has(model.providerID) && model.enabled && model.status !== "deprecated",
-    )
-  })
-
-  const connectionGroups = createMemo(() => {
-    const models = connectionModels()
-
-    return connectionProviders()
-      .map((provider) => ({ provider, models: models.filter((model) => model.providerID === provider.id) }))
-      .filter((group) => group.models.length > 0)
-  })
-
-  const managedProviders = createMemo(() => (isConsole ? consoleProviderGroup(connectionProviders()) : undefined))
-
-  // The server loads the Console workspace's providers after the grant lands, so the first refresh
-  // can still show only the free catalog. Poll briefly for the workspace providers before moving on.
-  async function prepareConsoleCatalog(active: () => boolean) {
-    if (controller.currentMethod()?.type === "key") return active()
-
-    const loaded = () =>
-      managedProviders() !== undefined || connectionProviders().some((provider) => provider.id !== "opencode")
-
-    const deadline = Date.now() + 10_000
-
-    while (!loaded() && active() && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 250))
-
-      if (!active()) return false
-      data.location.provider.invalidate(location())
-      data.location.model.invalidate(location())
-      await Promise.all([data.location.provider.sync(location()), data.location.model.sync(location())]).catch(
-        () => undefined,
-      )
-    }
-
-    setState("catalogPending", !loaded())
-
-    return active()
-  }
-
-  const connectionGroupName = (name: string) => {
-    const managed = managedProviders()
-
-    return managed ? consoleProviderName(managed, name) : name
-  }
-
-  const modelKey = (model: { providerID: string; id: string }) => `${model.providerID}:${model.id}`
-  const selectedModel = () => connectionModels().find((model) => modelKey(model) === state.selectedModel)
-
-  const copyLink = async () => {
-    const url = controller.authorization()?.url
-
-    if (!url) return
-
-    const copied = await Promise.resolve()
-      .then(() => (platform.writeClipboardText ? platform.writeClipboardText(url) : navigator.clipboard.writeText(url)))
-      .then(() => true)
-      .catch(() => false)
-
-    if (controller.authorization()?.url !== url) return
-    setState({ copied, copyFailed: !copied })
-  }
-
-  createEffect(() => {
-    controller.authorization()?.attemptID
-    setState({ copied: false, copyFailed: false })
-  })
-  createEffect(() => {
-    const current = controller.auth.state()
-    props.onAuthorization(
-      controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"),
-    )
-  })
-
-  const provider = createMemo(() => ({
-    id: props.provider,
-    name:
-      integrations.list().find((item) => item.id === props.provider)?.name ??
-      providers.all().get(props.provider)?.name ??
-      controller.integration()?.name ??
-      props.provider,
-  }))
+  const view = props.controller.view
+  const connect = () => view().connect ?? NO_CONNECT
+  const body = createMemo(() => view().body)
+  const name = props.controller.providerName
 
   const methodLabel = (value: ProviderConnectMethod) =>
     value.type === "key" ? (value.label ?? language.t("provider.connect.method.apiKey")) : value.label
 
   const code = createMemo(() => {
-    const authorization = controller.authorization()
+    const authorization = connect().authorization
 
     if (!authorization) return
     const userCode = new URL(authorization.url).searchParams.get("user_code")
@@ -662,39 +449,9 @@ function ProviderConnection(props: {
     return instructions
   })
 
-  const consoleSignIn = () =>
-    isConsole &&
-    !state.noModels &&
-    controller.currentMethod()?.type === "oauth" &&
-    controller.auth.state() !== "error" &&
-    controller.authorization()?.mode === "auto"
-
-  createEffect(() => {
-    if (showAccounts()) return props.onTitle(provider().name)
-
-    if (isConsole && controller.auth.state() === "error")
-      return props.onTitle(language.t("provider.connect.opencode.errorTitle"))
-
-    if (consoleSignIn())
-      return props.onTitle(
-        language.t(
-          props.provider === "opencode-go" ? "provider.connect.console.titleGo" : "provider.connect.console.title",
-        ),
-      )
-
-    if (props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max"))
-      return props.onTitle(language.t("provider.connect.title.anthropicProMax"))
-
-    props.onTitle(
-      language.t("provider.connect.title", {
-        provider: props.provider === "opencode" ? language.t("provider.connect.opencode.name") : provider().name,
-      }),
-    )
-  })
-
   // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
   function AuthFormView() {
-    const method = controller.currentMethod()
+    const method = connect().method
     const fields = method && method.type !== "command" ? (method.form ?? []) : []
     const hidden = providerFormDefaults(fields)
 
@@ -757,7 +514,7 @@ function ProviderConnection(props: {
       const index = fields.findIndex((item, i) => i > formStore.index && asked(item) && active(item, merged))
 
       if (index === -1) {
-        void controller.auth.select(controller.methodIndex()!, answer)
+        props.controller.input({ type: "form.submitted", answer })
 
         return
       }
@@ -1078,45 +835,16 @@ function ProviderConnection(props: {
     )
   }
 
-  const backToAccounts = () =>
-    !!props.accounts &&
-    state.adding &&
-    accounts().length > 0 &&
-    (state.direct || controller.methodIndex() === undefined)
-
-  const backToMethods = () => (isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined
-
-  createEffect(() => props.onStepBack(backToAccounts() || backToMethods()))
-
-  function goBack() {
-    if (backToAccounts()) {
-      controller.auth.reset()
-      setState({ adding: false, direct: false })
-
-      return
-    }
-
-    if (backToMethods()) {
-      controller.auth.reset()
-
-      return
-    }
-
-    props.onBack()
-  }
-
-  props.setBack(goBack)
-
   function MethodSelection() {
     return (
       <div class="flex flex-col">
-        <For each={controller.methods()}>
+        <For each={connect().methods}>
           {(item, index) => (
             <button
               type="button"
               data-action="provider-connect-method"
               class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-              onClick={() => void controller.auth.select(index())}
+              onClick={() => props.controller.input({ type: "method.selected", index: index() })}
             >
               <span class="font-[530] text-v2-text-text-base">{methodLabel(item)}</span>
             </button>
@@ -1129,7 +857,7 @@ function ProviderConnection(props: {
   function CommandView() {
     return (
       <div class="flex flex-col gap-4 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <Show when={controller.command()?.output.trim()}>
+        <Show when={connect().commandOutput.trim()}>
           {(output) => (
             <pre
               data-component="provider-connect-command-output"
@@ -1160,48 +888,44 @@ function ProviderConnection(props: {
           <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
           <span role="alert">
             {isConsole
-              ? controller.auth.error()
-              : language.t("provider.connect.status.failed", { error: controller.auth.error() ?? "" })}
+              ? connect().error
+              : language.t("provider.connect.status.failed", { error: connect().error ?? "" })}
           </span>
         </div>
-        <Button variant={isConsole ? undefined : "neutral"} onClick={() => void controller.auth.retry()}>
+        <Button variant={isConsole ? undefined : "neutral"} onClick={() => props.controller.input({ type: "retry" })}>
           {language.t(isConsole ? "provider.connect.console.retry" : "common.retry")}
         </Button>
       </div>
     )
   }
 
+  const entryError = () => {
+    const error = connect().entryError
+
+    if (error?.type === "rejected") return error.message
+
+    if (!error) return
+
+    return language.t(
+      connect().screen === "code" ? "provider.connect.oauth.code.required" : "provider.connect.apiKey.required",
+    )
+  }
+
+  const submitEntry = (event: SubmitEvent, name: string) => {
+    event.preventDefault()
+
+    if (!(event.currentTarget instanceof HTMLFormElement)) return
+    const value = new FormData(event.currentTarget).get(name)
+    props.controller.input({ type: "entry.submitted", value: value instanceof File || value === null ? "" : value })
+  }
+
   function ApiAuthView() {
     let apiKey: HTMLInputElement | undefined
     const errorID = createUniqueId()
 
-    const [formStore, setFormStore] = createStore<{
-      value: string
-      error?: string
-    }>({
-      value: "",
-    })
-
     onMount(() => {
       apiKey?.focus({ preventScroll: true })
     })
-
-    async function handleSubmit(e: SubmitEvent) {
-      e.preventDefault()
-
-      if (!(e.currentTarget instanceof HTMLFormElement)) return
-      const value = new FormData(e.currentTarget).get("apiKey")
-      const key = value instanceof File || value === null ? "" : value
-
-      if (!key.trim()) {
-        setFormStore("error", language.t("provider.connect.apiKey.required"))
-
-        return
-      }
-
-      setFormStore("error", undefined)
-      await controller.auth.connectKey(key)
-    }
 
     return (
       <div
@@ -1211,26 +935,25 @@ function ProviderConnection(props: {
         <p>
           {isConsole
             ? language.t("provider.connect.console.serviceKeyDescription")
-            : language.t("provider.connect.apiKey.description", { provider: provider().name })}
+            : language.t("provider.connect.apiKey.description", { provider: name() })}
         </p>
-        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
+        <form onSubmit={(event) => submitEntry(event, "apiKey")} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-            {language.t("provider.connect.apiKey.label", { provider: provider().name })}
+            {language.t("provider.connect.apiKey.label", { provider: name() })}
             <TextInput
               ref={apiKey}
               class="!w-full"
               name="apiKey"
               data-input="provider-api-key"
               placeholder={language.t("provider.connect.apiKey.placeholder")}
-              value={formStore.value}
-              invalid={formStore.error !== undefined}
-              aria-describedby={formStore.error ? errorID : undefined}
+              readOnly={connect().submitting}
+              invalid={entryError() !== undefined}
+              aria-describedby={entryError() ? errorID : undefined}
               autocomplete="off"
               spellcheck={false}
-              onInput={(event) => setFormStore("value", event.currentTarget.value)}
             />
           </label>
-          <Show when={formStore.error}>
+          <Show when={entryError()}>
             {(error) => (
               <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
                 {error()}
@@ -1242,6 +965,8 @@ function ProviderConnection(props: {
             variant="contrast"
             class={isConsole ? "!px-3" : undefined}
             data-action="provider-connect-submit"
+            disabled={connect().submitting}
+            aria-busy={connect().submitting}
           >
             {language.t("common.continue")}
           </Button>
@@ -1254,64 +979,43 @@ function ProviderConnection(props: {
     let codeInput: HTMLInputElement | undefined
     const errorID = createUniqueId()
 
-    const [formStore, setFormStore] = createStore<{
-      value: string
-      error?: string
-    }>({
-      value: "",
-    })
-
     onMount(() => {
       codeInput?.focus({ preventScroll: true })
     })
 
-    async function handleSubmit(e: SubmitEvent) {
-      e.preventDefault()
-
-      if (!(e.currentTarget instanceof HTMLFormElement)) return
-      const value = new FormData(e.currentTarget).get("code")
-      const code = value instanceof File || value === null ? "" : value
-
-      if (!code.trim()) {
-        setFormStore("error", language.t("provider.connect.oauth.code.required"))
-
-        return
-      }
-
-      setFormStore("error", undefined)
-      setFormStore("error", await controller.auth.completeCode(code))
-    }
-
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <div>{language.t("provider.connect.oauth.code.description", { provider: provider().name })}</div>
-        <Button variant="neutral" icon="arrow-up-right" onClick={() => void controller.auth.open()}>
+        <div>{language.t("provider.connect.oauth.code.description", { provider: name() })}</div>
+        <Button
+          variant="neutral"
+          icon="arrow-up-right"
+          onClick={() => props.controller.input({ type: "browser.open" })}
+        >
           {language.t("provider.connect.oauth.openBrowser")}
         </Button>
-        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
+        <form onSubmit={(event) => submitEntry(event, "code")} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-            {language.t("provider.connect.oauth.code.label", { method: controller.currentMethod()?.label ?? "" })}
+            {language.t("provider.connect.oauth.code.label", { method: connect().method?.label ?? "" })}
             <TextInput
               ref={codeInput}
               class="!w-full"
               name="code"
               placeholder={language.t("provider.connect.oauth.code.placeholder")}
-              value={formStore.value}
-              invalid={formStore.error !== undefined}
-              aria-describedby={formStore.error ? errorID : undefined}
+              readOnly={connect().submitting}
+              invalid={entryError() !== undefined}
+              aria-describedby={entryError() ? errorID : undefined}
               autocomplete="off"
               spellcheck={false}
-              onInput={(event) => setFormStore("value", event.currentTarget.value)}
             />
           </label>
-          <Show when={formStore.error}>
+          <Show when={entryError()}>
             {(error) => (
               <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
                 {error()}
               </div>
             )}
           </Show>
-          <Button type="submit" variant="contrast">
+          <Button type="submit" variant="contrast" disabled={connect().submitting} aria-busy={connect().submitting}>
             {language.t("common.continue")}
           </Button>
         </form>
@@ -1322,10 +1026,14 @@ function ProviderConnection(props: {
   function OAuthAutoView() {
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <div>{language.t("provider.connect.oauth.auto.description", { provider: provider().name })}</div>
+        <div>{language.t("provider.connect.oauth.auto.description", { provider: name() })}</div>
         <StatusRow>{language.t("provider.connect.status.waiting")}</StatusRow>
         <div class="flex flex-wrap items-center gap-2">
-          <Button variant="neutral" icon="arrow-up-right" onClick={() => void controller.auth.open()}>
+          <Button
+            variant="neutral"
+            icon="arrow-up-right"
+            onClick={() => props.controller.input({ type: "browser.open" })}
+          >
             {language.t("provider.connect.oauth.openBrowser")}
           </Button>
         </div>
@@ -1345,79 +1053,58 @@ function ProviderConnection(props: {
     )
   }
 
-  const addAccount = () => {
-    setState({ adding: true, direct: false, confirming: undefined })
+  function AccountsView(input: { body: Extract<ProviderDialogBody, { kind: "accounts" }> }) {
+    const action = () => input.body.action
 
-    // Like the TUI: a lone method starts directly, several show the method list.
-    if (controller.methods().length !== 1) return
-    setState("direct", true)
-    void controller.auth.select(0)
-  }
+    const marked = (type: "confirming" | "renaming", id: string) => {
+      const current = action()
 
-  const activateAccount = async (account: ProviderAccount) => {
-    if (activeAccount() === account.id || state.switching) return
-    setState({ switching: account.id, activating: account.id, confirming: undefined })
-    await accountActions.activate({ integrationID: props.provider, provider: provider().name, account })
-    setState({ switching: undefined, activating: undefined })
-  }
+      return current.type === type && current.accountID === id
+    }
 
-  const removeAccount = async (account: ProviderAccount) => {
-    const final = accounts().length === 1
-    setState({ switching: account.id, confirming: undefined })
-    await accountActions.remove({
-      integrationID: props.provider,
-      provider: provider().name,
-      account,
-      final,
-    })
-    setState("switching", undefined)
-
-    // Removing the last account disconnects the integration, so the dialog is done, as in the TUI.
-    if (final && accounts().length === 0) dialog.close()
-  }
-
-  // A connection that needs a fresh sign-in either has its own link or signs in again.
-  const selectAccount = (account: ProviderAccount) => {
-    const url = account.status?.url
-
-    if (url) return void platform.openExternal(url)
-
-    if (account.status) return addAccount()
-    void activateAccount(account)
-  }
-
-  function AccountsView() {
     return (
-      <div data-component="provider-accounts" class="flex flex-col">
-        <div role="radiogroup" aria-label={language.t("dialog.provider.accounts.connected")} class="flex flex-col">
-          <For each={accounts()}>
+      <div data-component="provider-accounts" class="flex flex-col gap-0.5">
+        <div
+          role="radiogroup"
+          aria-label={language.t("dialog.provider.accounts.connected")}
+          class="flex flex-col gap-0.5"
+        >
+          <For each={props.controller.accounts()}>
             {(account) => (
               <Show
-                when={state.confirming !== account.id}
+                when={!marked("confirming", account.id)}
                 fallback={
-                  <div class="flex min-h-9 items-center gap-2 rounded-md px-3 text-[13px] leading-5 tracking-[-0.04px]">
+                  <div class="flex min-h-7 items-center gap-1.5 rounded-md ps-7 pe-0.5 text-[13px] leading-5 tracking-[-0.04px]">
                     <span role="alert" class="min-w-0 flex-1 truncate font-[440] text-v2-text-text-base">
                       {language.t("dialog.provider.accounts.removeConfirm", { account: account.label })}
                     </span>
-                    <Button variant="ghost-muted" onClick={() => setState("confirming", undefined)}>
+                    <Button
+                      variant="ghost-muted"
+                      onClick={() => props.controller.dispatch({ type: "account.remove.cancelled" })}
+                    >
                       {language.t("common.cancel")}
                     </Button>
-                    <Button variant="neutral" onClick={() => void removeAccount(account)}>
+                    <Button
+                      variant="neutral"
+                      onClick={() =>
+                        props.controller.dispatch({ type: "account.remove.confirmed", accountID: account.id })
+                      }
+                    >
                       {language.t("dialog.provider.accounts.remove")}
                     </Button>
                   </div>
                 }
               >
-                <div class="group relative flex min-h-9 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover has-[[data-expanded]]:bg-v2-overlay-simple-overlay-hover">
+                <div class="group relative flex min-h-7 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover has-[[data-expanded]]:bg-v2-overlay-simple-overlay-hover">
                   <Show
-                    when={state.renaming !== account.id}
+                    when={!marked("renaming", account.id)}
                     fallback={
-                      <div class="flex min-h-9 min-w-0 flex-1 items-center ps-9 pe-3">
+                      <div class="flex min-h-7 min-w-0 flex-1 items-center ps-7 pe-2">
                         <AccountNameInput
                           value={account.label}
                           class="-ms-1 max-w-full text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
-                          onSave={(label) => accountActions.rename(account, label)}
-                          onClose={() => setState("renaming", undefined)}
+                          onSave={(label) => props.controller.rename(account, label)}
+                          onClose={() => props.controller.dispatch({ type: "account.rename.closed" })}
                         />
                       </div>
                     }
@@ -1425,13 +1112,13 @@ function ProviderConnection(props: {
                     <button
                       type="button"
                       role="radio"
-                      aria-checked={activeAccount() === account.id}
-                      class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
-                      disabled={state.switching !== undefined}
-                      onClick={() => selectAccount(account)}
+                      aria-checked={input.body.activeID === account.id}
+                      class="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 ps-1.5 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                      disabled={input.body.busy}
+                      onClick={() => props.controller.chooseAccount(account)}
                     >
                       <span class="flex size-4 shrink-0 items-center justify-center">
-                        <Show when={activeAccount() === account.id}>
+                        <Show when={input.body.activeID === account.id}>
                           <Icon name="check" size="small" class="text-v2-icon-icon-base" />
                         </Show>
                       </span>
@@ -1443,20 +1130,20 @@ function ProviderConnection(props: {
                             title={status().message}
                             class="ms-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
                           >
-                            {language.t("dialog.provider.signInRequired")}
+                            {language.t("dialog.provider.needsSignIn")}
                           </span>
                         )}
                       </Show>
                     </button>
                   </Show>
-                  <div class="hover-reveal flex shrink-0 items-center pe-1.5 group-hover:opacity-100 focus-within:opacity-100 has-[[data-expanded]]:opacity-100">
+                  <div class="hover-reveal flex shrink-0 items-center pe-1 group-hover:opacity-100 focus-within:opacity-100 has-[[data-expanded]]:opacity-100">
                     <Menu gutter={4} modal={false} placement="bottom-end">
                       <Menu.Trigger
                         as={IconButton}
                         variant="ghost-muted"
                         size="small"
                         icon={<Icon name="outline-dots" />}
-                        disabled={state.switching !== undefined}
+                        disabled={input.body.busy}
                         aria-label={language.t("dialog.provider.accounts.options", { account: account.label })}
                       />
                       {/* The modal dialog aria-hides anything added outside it, this portal included, a frame
@@ -1466,11 +1153,21 @@ function ProviderConnection(props: {
                           el.dataset.reactAriaTopLayer = "true"
                         }}
                       >
-                        <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
-                          <Menu.Item onSelect={() => setState({ renaming: account.id, confirming: undefined })}>
+                        <Menu.Content
+                          onCloseAutoFocus={(event) => action().type === "renaming" && event.preventDefault()}
+                        >
+                          <Menu.Item
+                            onSelect={() =>
+                              props.controller.dispatch({ type: "account.rename.started", accountID: account.id })
+                            }
+                          >
                             {language.t("common.rename")}
                           </Menu.Item>
-                          <Menu.Item onSelect={() => setState({ confirming: account.id, renaming: undefined })}>
+                          <Menu.Item
+                            onSelect={() =>
+                              props.controller.dispatch({ type: "account.remove.prompted", accountID: account.id })
+                            }
+                          >
                             {language.t("dialog.provider.accounts.remove")}
                           </Menu.Item>
                         </Menu.Content>
@@ -1485,12 +1182,12 @@ function ProviderConnection(props: {
         <button
           type="button"
           data-action="provider-account-add"
-          class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
-          disabled={state.switching !== undefined || controller.methods().length === 0}
-          onClick={addAccount}
+          class="flex h-7 w-full items-center gap-1.5 rounded-md ps-1.5 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
+          disabled={!input.body.canAdd}
+          onClick={() => props.controller.dispatch({ type: "account.add" })}
         >
           <span class="flex size-4 shrink-0 items-center justify-center">
-            <Icon name="plus" size="small" class="text-v2-icon-icon-muted" />
+            <Icon name="plus" class="text-v2-icon-icon-muted" />
           </span>
           {language.t("dialog.provider.accounts.add")}
         </button>
@@ -1498,7 +1195,64 @@ function ProviderConnection(props: {
     )
   }
 
-  function ConsoleNoModels() {
+  function ClaudeAgentSetup(input: { body: Extract<ProviderDialogBody, { kind: "claude" }> }) {
+    const problem = () =>
+      props.controller.claudeProblem()?.message ??
+      (input.body.timedOut ? language.t("provider.connect.claudeAgent.timeout") : undefined)
+
+    return (
+      <div
+        data-component="claude-agent-setup"
+        class="flex flex-col items-start gap-5 px-3 pb-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+      >
+        <p>{language.t("provider.connect.claudeAgent.description")}</p>
+        <Show when={problem()}>
+          {(message) => (
+            <div class="flex items-start gap-2 text-v2-text-text-base">
+              <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
+              <span role="alert">{message()}</span>
+            </div>
+          )}
+        </Show>
+        <TextField
+          label={language.t("provider.connect.claudeAgent.signIn.command")}
+          hideLabel
+          class="font-mono"
+          value="claude auth login"
+          readOnly
+          copyable
+        />
+        <Show
+          when={!input.body.checking}
+          fallback={<StatusRow>{language.t("provider.connect.claudeAgent.checking")}</StatusRow>}
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              variant="contrast"
+              data-action="provider-connect-submit"
+              disabled={!input.body.canCheck}
+              onClick={props.controller.checkClaude}
+            >
+              {language.t(
+                props.controller.accounts().length > 0
+                  ? "provider.connect.claudeAgent.checkAgain"
+                  : "provider.connect.claudeAgent.connect",
+              )}
+            </Button>
+            <Button
+              variant="neutral"
+              icon="arrow-up-right"
+              onClick={() => platform.openExternal(props.controller.claudeProblem()?.url ?? CLAUDE_CODE_SETUP_URL)}
+            >
+              {language.t("provider.connect.claudeAgent.install")}
+            </Button>
+          </div>
+        </Show>
+      </div>
+    )
+  }
+
+  function ConsoleNoModels(input: { body: Extract<ProviderDialogBody, { kind: "no-models" }> }) {
     return (
       <div role="status" class="flex flex-col items-start gap-5 px-3 text-[13px] leading-5 text-v2-text-text-muted">
         <div>
@@ -1508,20 +1262,22 @@ function ProviderConnection(props: {
           </p>
           <p>
             {language.t(
-              state.catalogPending ? "provider.connect.console.modelsLoading" : "provider.connect.console.noModels",
+              input.body.catalogPending
+                ? "provider.connect.console.modelsLoading"
+                : "provider.connect.console.noModels",
             )}
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Show when={!state.catalogPending}>
+          <Show when={!input.body.catalogPending}>
             <Button onClick={() => platform.openExternal("https://opencode.ai/console")}>
               {language.t("provider.connect.console.openAgain")}
             </Button>
           </Show>
           <Button
-            disabled={controller.auth.state() === "refreshing"}
-            aria-busy={controller.auth.state() === "refreshing"}
-            onClick={() => void controller.auth.refresh()}
+            disabled={input.body.refreshing}
+            aria-busy={input.body.refreshing}
+            onClick={() => props.controller.input({ type: "refresh" })}
           >
             {language.t("provider.connect.console.refresh")}
           </Button>
@@ -1530,70 +1286,64 @@ function ProviderConnection(props: {
     )
   }
 
-  const startWithModel = async () => {
-    const model = selectedModel()
+  function FirstConnectionModels(input: { body: Extract<ProviderDialogBody, { kind: "models" }> }) {
+    const managed = props.controller.managedProviders
+    const groups = props.controller.connectionGroups
 
-    if (!model) return
-    const selection = { providerID: model.providerID, modelID: model.id }
+    const selected = () =>
+      props.controller.connectionModels().find((model) => modelKey(model) === input.body.selectedModel)
 
-    if (props.selection) {
-      props.selection.set(selection)
-      props.onDone?.()
-      dialog.close()
+    const collapse = (providerID: string, collapsed: boolean) =>
+      props.controller.dispatch({ type: "group.collapsed", providerID, collapsed })
 
-      return
+    const confirm = () => {
+      const model = selected()
+
+      if (model)
+        props.controller.dispatch({
+          type: "model.confirmed",
+          selection: { providerID: model.providerID, modelID: model.id },
+        })
     }
 
-    dialog.close()
-    await tabs.newDraft(
-      {
-        server: ServerConnection.key(sdk.server),
-        directory: initialDirectory ?? data.location.default().directory,
-      },
-      undefined,
-      selection,
-    )
-  }
+    function ConnectionModelList(listProps: { items: ReturnType<ProviderDialogController["connectionModels"]> }) {
+      return (
+        <SettingsList>
+          <For each={listProps.items}>
+            {(model) => {
+              const checked = () => input.body.selectedModel === modelKey(model)
 
-  function ConnectionModelList(listProps: { items: ReturnType<typeof connectionModels> }) {
-    return (
-      <SettingsList>
-        <For each={listProps.items}>
-          {(model) => {
-            const selected = () => state.selectedModel === modelKey(model)
-
-            return (
-              <div data-component="connected-model-row-shell" class="connected-model-row-shell">
-                <button
-                  type="button"
-                  role="radio"
-                  data-component="settings-row"
-                  data-first-provider-model=""
-                  data-selected={selected() ? "" : undefined}
-                  aria-checked={selected()}
-                  class="connected-model-row text-start focus-visible:outline-none"
-                  onClick={() => setState("selectedModel", modelKey(model))}
-                >
-                  <div data-slot="settings-row-copy">
-                    <div data-slot="settings-row-title">
-                      <span class="min-w-0 truncate">{model.name}</span>
+              return (
+                <div data-component="connected-model-row-shell" class="connected-model-row-shell">
+                  <button
+                    type="button"
+                    role="radio"
+                    data-component="settings-row"
+                    data-first-provider-model=""
+                    data-selected={checked() ? "" : undefined}
+                    aria-checked={checked()}
+                    class="connected-model-row text-start focus-visible:outline-none"
+                    onClick={() => props.controller.dispatch({ type: "model.selected", modelKey: modelKey(model) })}
+                  >
+                    <div data-slot="settings-row-copy">
+                      <div data-slot="settings-row-title">
+                        <span class="min-w-0 truncate">{model.name}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div data-slot="settings-row-control" class="size-4">
-                    <Show when={selected()}>
-                      <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-                    </Show>
-                  </div>
-                </button>
-              </div>
-            )
-          }}
-        </For>
-      </SettingsList>
-    )
-  }
+                    <div data-slot="settings-row-control" class="size-4">
+                      <Show when={checked()}>
+                        <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                      </Show>
+                    </div>
+                  </button>
+                </div>
+              )
+            }}
+          </For>
+        </SettingsList>
+      )
+    }
 
-  function FirstConnectionModels() {
     return (
       <div data-component="first-provider-models" class="flex min-h-0 flex-1 flex-col px-3">
         <p class="shrink-0 pb-5 text-[13px] leading-5 text-v2-text-text-muted">
@@ -1607,28 +1357,25 @@ function ProviderConnection(props: {
             <span class="text-[13px] font-[530] leading-4 text-v2-text-text-base">
               {language.t("provider.connect.models.available")}
             </span>
-            <Show when={managedProviders()}>{(managed) => <Badge>{managed().workspace}</Badge>}</Show>
+            <Show when={managed()}>{(group) => <Badge>{group().workspace}</Badge>}</Show>
           </div>
-          <div role="radiogroup" aria-label={language.t("provider.connect.models.list", { provider: provider().name })}>
+          <div role="radiogroup" aria-label={language.t("provider.connect.models.list", { provider: name() })}>
             <Show
-              when={managedProviders()}
+              when={managed()}
               fallback={
-                <Show
-                  when={connectionGroups().length > 1}
-                  fallback={<ConnectionModelList items={connectionGroups()[0]?.models ?? []} />}
-                >
-                  <For each={connectionGroups()}>
+                <Show when={groups().length > 1} fallback={<ConnectionModelList items={groups()[0]?.models ?? []} />}>
+                  <For each={groups()}>
                     {(group) => {
-                      const expanded = () => !state.collapsed[group.provider.id]
+                      const expanded = () => !input.body.collapsed[group.provider.id]
 
                       return (
                         <section class="settings-section" data-expanded={expanded() ? "" : undefined}>
-                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-layer-01">
+                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-base">
                             <button
                               type="button"
                               class="settings-models-group-trigger"
                               aria-expanded={expanded()}
-                              onClick={() => setState("collapsed", group.provider.id, expanded())}
+                              onClick={() => collapse(group.provider.id, expanded())}
                             >
                               <span class="settings-models-group-chevron">
                                 <Icon name="chevron-down" size="small" classList={{ collapsed: !expanded() }} />
@@ -1649,20 +1396,22 @@ function ProviderConnection(props: {
                 </Show>
               }
             >
-              <div class="provider-model-groups provider-model-groups--dialog">
-                <For each={connectionGroups()}>
-                  {(group) => (
-                    <ProviderModelGroup
-                      provider={group.provider}
-                      name={connectionGroupName(group.provider.name)}
-                      expanded={!state.collapsed[group.provider.id]}
-                      onExpandedChange={(value) => setState("collapsed", group.provider.id, !value)}
-                    >
-                      <ConnectionModelList items={group.models} />
-                    </ProviderModelGroup>
-                  )}
-                </For>
-              </div>
+              {(group) => (
+                <div class="provider-model-groups provider-model-groups--dialog">
+                  <For each={groups()}>
+                    {(item) => (
+                      <ProviderModelGroup
+                        provider={item.provider}
+                        name={consoleProviderName(group(), item.provider.name)}
+                        expanded={!input.body.collapsed[item.provider.id]}
+                        onExpandedChange={(value) => collapse(item.provider.id, !value)}
+                      >
+                        <ConnectionModelList items={item.models} />
+                      </ProviderModelGroup>
+                    )}
+                  </For>
+                </div>
+              )}
             </Show>
           </div>
         </div>
@@ -1670,7 +1419,7 @@ function ProviderConnection(props: {
           data-component="first-provider-model-footer"
           class="-mx-5 flex h-15 shrink-0 items-center justify-end border-t border-v2-border-border-muted px-4"
         >
-          <Button variant="contrast" disabled={!selectedModel()} onClick={() => void startWithModel()}>
+          <Button variant="contrast" disabled={!selected()} onClick={confirm}>
             {language.t("common.continue")}
           </Button>
         </div>
@@ -1678,13 +1427,22 @@ function ProviderConnection(props: {
     )
   }
 
-  return (
-    <Show when={!state.models} fallback={<FirstConnectionModels />}>
+  const kind = (value: ProviderDialogBody["kind"]) => body().kind === value
+
+  function narrow<K extends ProviderDialogBody["kind"]>(value: K) {
+    const current = body()
+    const matches = (item: ProviderDialogBody): item is Extract<ProviderDialogBody, { kind: K }> => item.kind === value
+
+    return matches(current) ? current : undefined
+  }
+
+  function StepContent() {
+    return (
       <div
         data-component="provider-connect-content"
         class={
           isConsole
-            ? `flex min-h-0 flex-1 flex-col overflow-y-auto ${showAccounts() ? "pb-2" : "pb-4"}`
+            ? `flex min-h-0 flex-1 flex-col overflow-y-auto ${view().frame === "accounts" ? "" : "pb-4"}`
             : "flex min-h-0 flex-1 flex-col"
         }
       >
@@ -1694,59 +1452,64 @@ function ProviderConnection(props: {
           </div>
         </Show>
         <Switch>
-          <Match when={state.noModels && controller.auth.state() !== "error"}>
-            <ConsoleNoModels />
+          <Match when={narrow("no-models")}>{(current) => <ConsoleNoModels body={current()} />}</Match>
+          <Match when={narrow("console-sign-in")}>
+            {(current) => (
+              <div class="px-3">
+                <ConsoleAuthorization
+                  code={code()}
+                  browserFailed={connect().browserFailed}
+                  copied={current().copy === "copied"}
+                  copyFailed={current().copy === "failed"}
+                  onCopy={() => void props.controller.copyLink()}
+                  onOpen={() => props.controller.input({ type: "browser.open" })}
+                />
+              </div>
+            )}
           </Match>
-          <Match when={consoleSignIn()}>
-            <div class="px-3">
-              <ConsoleAuthorization
-                code={code()}
-                browserFailed={controller.browserFailed()}
-                copied={state.copied}
-                copyFailed={state.copyFailed}
-                onCopy={() => void copyLink()}
-                onOpen={() => void controller.auth.open()}
-              />
-            </div>
-          </Match>
-          <Match when={showAccounts() && controller.methodIndex() === undefined}>
-            <AccountsView />
-          </Match>
-          <Match when={controller.busy()}>
+          <Match when={narrow("claude")}>{(current) => <ClaudeAgentSetup body={current()} />}</Match>
+          <Match when={narrow("accounts")}>{(current) => <AccountsView body={current()} />}</Match>
+          <Match when={kind("busy")}>
             <div class="px-3">
               <StatusRow>{language.t("provider.connect.status.inProgress")}</StatusRow>
             </div>
           </Match>
-          <Match when={controller.methodIndex() === undefined && controller.methods().length === 0}>
+          <Match when={kind("environment-only")}>
             <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
               {language.t("dialog.provider.environmentOnly")}
             </div>
           </Match>
-          <Match when={controller.methodIndex() === undefined}>
+          <Match when={kind("methods")}>
             <MethodSelection />
           </Match>
-          <Match when={controller.auth.state() === "form"}>
+          <Match when={kind("form")}>
             <AuthFormView />
           </Match>
-          <Match when={controller.auth.state() === "error"}>
+          <Match when={kind("failed")}>
             <div class="px-3">
               <ErrorRow />
             </div>
           </Match>
-          <Match when={controller.currentMethod()?.type === "command"}>
+          <Match when={kind("command")}>
             <CommandView />
           </Match>
-          <Match when={controller.currentMethod()?.type === "key"}>
+          <Match when={kind("key")}>
             <ApiAuthView />
           </Match>
-          <Match when={controller.authorization()?.mode === "code"}>
+          <Match when={kind("code")}>
             <OAuthCodeView />
           </Match>
-          <Match when={controller.authorization()?.mode === "auto"}>
+          <Match when={kind("browser")}>
             <OAuthAutoView />
           </Match>
         </Switch>
       </div>
+    )
+  }
+
+  return (
+    <Show when={narrow("models")} fallback={<StepContent />}>
+      {(models) => <FirstConnectionModels body={models()} />}
     </Show>
   )
 }

@@ -5,13 +5,13 @@ import {
   DecisionModel,
   DecisionModelCompatibility,
   DecisionModelSchema,
-  HttpOptions,
   ImageModel,
   ImageModelSchema,
   LanguageModel,
   ProviderConfigurationError,
+  type ProviderPackage,
 } from "@opencode/ai/effect"
-import { Auth, mergeHttpOptions } from "@opencode/ai/route"
+import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
@@ -175,7 +175,11 @@ export const withVariant = (
     variant
       ? {
           ...model,
-          settings: Provider.mergeOverlay(model.settings, Provider.modelSettings(variant.settings)),
+          // Config accepts unknown variant keys, so drop `cache` here too; a variant can't change the prompt cache.
+          settings: Provider.mergeOverlay(
+            model.settings,
+            Provider.modelSettings(variant.settings && Struct.omit(variant.settings, ["cache"])),
+          ),
           headers: Provider.mergeHeaders(model.headers, variant.headers),
           body: Provider.mergeOverlay(model.body, variant.body),
         }
@@ -184,7 +188,7 @@ export const withVariant = (
 }
 
 export interface Dependencies {
-  readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
+  readonly loadPackage?: (specifier: string) => Effect.Effect<ProviderPackage.Definition, Provider.LoadError>
   readonly loadAISDK?: (model: RuntimeInfo) => Effect.Effect<LanguageModel, AISDK.InitError>
 }
 
@@ -227,10 +231,10 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     if (!loadAISDK) return yield* unsupported(resolved)
     const settings = yield* prepareProviderSettings(
       resolved,
-      Provider.mergeOverlay(resolved.settings, {
-        ...nativeCredentialSettings(resolved, resolved.package ?? "", credential),
-        ...credential?.metadata,
-      }) ?? {},
+      Provider.mergeOverlay(
+        resolved.settings,
+        nativeCredentialSettings(resolved, resolved.package ?? "", credential),
+      ) ?? {},
     )
     return yield* loadAISDK({ ...resolved, settings }).pipe(
       Effect.mapError((error) => initialization(resolved, "init", error.cause)),
@@ -240,6 +244,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const timeouts = Provider.timeouts(configured)
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
         compatibility: resolved.compatibility
@@ -248,10 +253,10 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         // Timeouts and body encoding are transport policy, so they land on the route's HTTP defaults instead of package settings.
         defaults: {
           ...runtime.defaults,
-          http: mergeHttpOptions(
-            runtime.defaults?.http,
-            new HttpOptions({ ...Provider.timeouts(configured), encoding: Provider.encoding(configured) }),
-          ),
+          ...mergeTransport(runtime.defaults, {
+            timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+            http: { encoding: Provider.encoding(configured) },
+          }),
         },
       })
     },
@@ -266,7 +271,7 @@ const loadCatalogPackage = Effect.fn("ModelResolver.loadCatalogPackage")(functio
   dependencies?: Dependencies,
 ) {
   const resolved = prepareRuntimeModel(model)
-  const configured = { ...resolved.settings, ...credential?.metadata }
+  const configured = resolved.settings ?? {}
   const specifier = Provider.packageName(resolved.package)
   if (!specifier || Provider.isAISDK(specifier)) return yield* unsupported(resolved)
   const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(configured))
@@ -380,7 +385,7 @@ const nativeCredentialSettings = (model: RuntimeInfo, specifier: string, credent
   if (!credential) return {}
   if (credential.type === "key") return { apiKey: credential.key }
   if (credential.type === "oauth") return tokenSettings(specifier, credential.access)
-  // The saved profile reaches the package through metadata; SigV4 keeps an ambient bearer token from taking over.
+  // The Bedrock plugin projects the saved profile into settings; SigV4 keeps an ambient bearer token from taking over.
   if (specifier.startsWith("@opencode/ai/providers/amazon-bedrock")) return { auth: "sigv4" }
   // The Azure plugin's request hooks replace this with an Entra ID token from the Azure CLI; it only gets the
   // request past the package's own credential check.
@@ -532,43 +537,48 @@ function hasConfiguredAuth(model: RuntimeInfo) {
   )
 }
 
+const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
+  "@ai-sdk/openai",
+  "@ai-sdk/anthropic",
+  "@ai-sdk/cerebras",
+  "@ai-sdk/deepinfra",
+  "@ai-sdk/openai-compatible",
+  "@ai-sdk/google",
+  "@ai-sdk/groq",
+  "@ai-sdk/mistral",
+  "@ai-sdk/togetherai",
+  "@ai-sdk/xai",
+  "@openrouter/ai-sdk-provider",
+  "@ai-sdk/azure",
+  "@opencode/ai/providers/openai",
+  "@opencode/ai/providers/anthropic",
+  "@opencode/ai/providers/anthropic-compatible",
+  "@opencode/ai/providers/baseten",
+  "@opencode/ai/providers/cerebras",
+  "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/cloudflare-workers-ai",
+  "@opencode/ai/providers/deepinfra",
+  "@opencode/ai/providers/deepseek",
+  "@opencode/ai/providers/fireworks",
+  "@opencode/ai/providers/openai-compatible",
+  "@opencode/ai/providers/google",
+  "@opencode/ai/providers/google/interactions",
+  "@opencode/ai/providers/groq",
+  "@opencode/ai/providers/mistral",
+  "@opencode/ai/providers/togetherai",
+  "@opencode/ai/providers/vercel-ai-gateway",
+  "@opencode/ai/providers/xai",
+  "@opencode/ai/providers/openrouter",
+  "@opencode/ai/providers/azure",
+])
+
 function usesAPIKeyAuth(packageName: string | undefined) {
   const name = Provider.packageName(packageName)
+  if (name === undefined) return false
   return (
-    name === "@ai-sdk/openai" ||
-    name === "@ai-sdk/anthropic" ||
-    name === "@ai-sdk/cerebras" ||
-    name === "@ai-sdk/deepinfra" ||
-    name === "@ai-sdk/openai-compatible" ||
-    name === "@ai-sdk/google" ||
-    name === "@ai-sdk/groq" ||
-    name === "@ai-sdk/mistral" ||
-    name === "@ai-sdk/togetherai" ||
-    name === "@ai-sdk/xai" ||
-    name === "@openrouter/ai-sdk-provider" ||
-    name === "@ai-sdk/azure" ||
-    name === "@opencode/ai/providers/openai" ||
-    name?.startsWith("@opencode/ai/providers/openai/") === true ||
-    name === "@opencode/ai/providers/anthropic" ||
-    name === "@opencode/ai/providers/anthropic-compatible" ||
-    name === "@opencode/ai/providers/baseten" ||
-    name === "@opencode/ai/providers/cerebras" ||
-    name === "@opencode/ai/providers/cloudflare-ai-gateway" ||
-    name === "@opencode/ai/providers/cloudflare-workers-ai" ||
-    name === "@opencode/ai/providers/deepinfra" ||
-    name === "@opencode/ai/providers/deepseek" ||
-    name === "@opencode/ai/providers/fireworks" ||
-    name === "@opencode/ai/providers/openai-compatible" ||
-    name === "@opencode/ai/providers/google" ||
-    name === "@opencode/ai/providers/google/interactions" ||
-    name === "@opencode/ai/providers/groq" ||
-    name === "@opencode/ai/providers/mistral" ||
-    name === "@opencode/ai/providers/togetherai" ||
-    name === "@opencode/ai/providers/vercel-ai-gateway" ||
-    name === "@opencode/ai/providers/xai" ||
-    name === "@opencode/ai/providers/openrouter" ||
-    name === "@opencode/ai/providers/azure" ||
-    name?.startsWith("@opencode/ai/providers/azure/") === true
+    API_KEY_AUTH_PACKAGES.has(name) ||
+    name.startsWith("@opencode/ai/providers/openai/") ||
+    name.startsWith("@opencode/ai/providers/azure/")
   )
 }
 

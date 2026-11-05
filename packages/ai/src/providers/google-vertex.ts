@@ -136,14 +136,14 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, GeminiProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
-export const imageModel = (modelID: string, settings: Settings) => {
+export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
 
-function config({ accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings) {
+function config({ accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings = {}) {
   if (apiKey !== undefined && accessToken !== undefined)
     throw new ProviderConfigurationError({
       provider: id,

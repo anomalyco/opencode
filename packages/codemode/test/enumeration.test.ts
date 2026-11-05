@@ -176,4 +176,52 @@ describe("for...in", () => {
       "un-awaited Promise",
     )
   })
+
+  const forIn = (target: string, setup = "") =>
+    value(`${setup}; const out = []; for (const key in ${target}) out.push(key); return out`)
+
+  test("visits inherited enumerable keys after own keys", async () => {
+    expect(await forIn("o", "const p = { inh: 1 }; const o = Object.create(p); o.own = 2")).toEqual(["own", "inh"])
+  })
+
+  test("walks every level, skipping keys a nearer level already has", async () => {
+    expect(
+      await forIn(
+        "o",
+        `const top = { a: 1, top: 1 }
+        const mid = Object.create(top); mid.a = 2; mid.mid = 2
+        const o = Object.create(mid); o.own = 3; o.mid = 3`,
+      ),
+    ).toEqual(["own", "mid", "a", "top"])
+  })
+
+  test("orders integer-like keys first on each level", async () => {
+    expect(
+      await forIn("o", `const p = { b: 1, 10: 1, 2: 1 }; const o = Object.create(p); o.z = 1; o[5] = 1; o[1] = 1`),
+    ).toEqual(["1", "5", "z", "2", "10", "b"])
+  })
+
+  test("a non-enumerable nearer property shadows an enumerable inherited one", async () => {
+    // An array's own length and Array.prototype.push are non-enumerable.
+    const setup = "Object.prototype.length = 1; Object.prototype.push = 2; Object.prototype.extra = 3"
+    expect(await forIn("[5]", setup)).toEqual(["0", "extra"])
+    expect(await forIn("Object.create([5])", setup)).toEqual(["0", "extra"])
+  })
+
+  test("a null prototype ends the walk", async () => {
+    expect(await forIn("o", "const o = Object.create(null); o.a = 1")).toEqual(["a"])
+    expect(await forIn("Object.create(null)")).toEqual([])
+  })
+
+  test("arrays and strings only visit their indexes, since built-in methods are non-enumerable", async () => {
+    expect(await forIn("[7, 8]")).toEqual(["0", "1"])
+    expect(await forIn(`"ab"`)).toEqual(["0", "1"])
+  })
+
+  test("visits enumerable properties a program adds to a built-in prototype", async () => {
+    expect(await forIn("[7, 8]", "Array.prototype.extra = 1")).toEqual(["0", "1", "extra"])
+    expect(await forIn(`"ab"`, "Array.prototype.extra = 1")).toEqual(["0", "1"])
+    expect(await forIn(`"ab"`, "String.prototype.extra = 1")).toEqual(["0", "1", "extra"])
+    expect(await forIn("5", "Number.prototype.extra = 1")).toEqual(["extra"])
+  })
 })

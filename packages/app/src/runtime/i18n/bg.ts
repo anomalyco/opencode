@@ -748,6 +748,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Мигриране на данни {{current}}/{{total}}",
   "home.workspaceTip": "Започнете следващата сесия в ново работно пространство, за да запазите промените изолирани",
   "session.tab.add": "Добавяне на раздел",
+  "session.tab.closeOthers": "Затваряне на другите раздели",
   "session.queue.attachments.one": "Плюс {{count}} прикачен файл",
   "session.queue.attachments.other": "Плюс {{count}} прикачени файла",
   "settings.backToSettings": "Назад към настройките",

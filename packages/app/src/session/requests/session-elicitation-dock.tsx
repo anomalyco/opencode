@@ -9,6 +9,7 @@ import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
+import { LinkedText } from "@opencode/session-ui/linked-text"
 import { showToast } from "@/shell/notifications/toast"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -136,7 +137,9 @@ export function SessionElicitationDock(props: {
               {(text) => (
                 <div data-slot="question-details">
                   <div data-slot="question-text">
-                    <bdi>{text()}</bdi>
+                    <bdi>
+                      <LinkedText text={text()} />
+                    </bdi>
                   </div>
                 </div>
               )}
@@ -276,7 +279,11 @@ function Label(props: { field: Field }) {
           <span data-slot="elicitation-title">{props.field.title}</span>
         </Show>
         <Show when={props.field.description}>
-          <span data-slot="elicitation-description">{props.field.description}</span>
+          {(description) => (
+            <span data-slot="elicitation-description">
+              <LinkedText text={description()} />
+            </span>
+          )}
         </Show>
       </div>
     </Show>

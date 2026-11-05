@@ -88,6 +88,49 @@ afterEach(() => {
   globalThis.requestAnimationFrame = original.requestAnimationFrame
   globalThis.cancelAnimationFrame = original.cancelAnimationFrame
   document.body.replaceChildren()
+  document.documentElement.removeAttribute("data-motion")
+  pageHidden(false)
+})
+
+function pageHidden(value: boolean) {
+  Object.defineProperty(document, "hidden", { value, configurable: true })
+}
+
+test("the app's Reduce Motion setting stops the loop and draws one still frame", async () => {
+  prefersReducedMotion(false)
+  const { canvas, count } = hero()
+
+  const dispose = mountGoUpsellHero(canvas)
+  expect(frames.size).toBe(1)
+  expect(count.frames).toBe(0)
+
+  document.documentElement.setAttribute("data-motion", "reduce")
+  // MutationObserver callbacks run as a microtask.
+  await Promise.resolve()
+  expect(frames.size).toBe(0)
+  expect(count.frames).toBe(1)
+  dispose()
+})
+
+test("a hidden page draws nothing when its size or theme changes", async () => {
+  prefersReducedMotion(true)
+  pageHidden(true)
+  const { canvas, count } = hero()
+
+  const dispose = mountGoUpsellHero(canvas)
+  expect(count.frames).toBe(0)
+
+  document.documentElement.setAttribute("data-theme", "other")
+  await Promise.resolve()
+  pixelRatio(2)
+  queries.find((query) => query.media === "(resolution: 1dppx)")!.dispatchEvent(new Event("change"))
+  expect(count.frames).toBe(0)
+
+  pageHidden(false)
+  document.dispatchEvent(new Event("visibilitychange"))
+  expect(count.frames).toBe(1)
+  expect(canvas.width).toBe(960)
+  dispose()
 })
 
 test("draws one still frame and runs no loop under reduced motion", () => {

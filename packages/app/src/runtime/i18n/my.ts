@@ -757,6 +757,7 @@ export const dict = {
   "home.workspaceTip":
     "ပြင်ဆင်မှုများကို ထိန်းသိမ်းထားရန် အလုပ်အပ်ရန် အသစ်သော အလုပ်ဌာနတွင် နောက်ဆုံးအစည်းအဝေးကို စတင်ပါ",
   "session.tab.add": "တက်ထည့်ရန်",
+  "session.tab.closeOthers": "အခြားတဘ်များကို ပိတ်ပါ။",
   "session.queue.attachments.one": "နောက်ထပ် ပူးတွဲဖိုင် {{count}} ခု",
   "session.queue.attachments.other": "နောက်ထပ် ပူးတွဲဖိုင် {{count}} ခု",
   "settings.backToSettings": "ဆက်တင်များသို့ ပြန်သွားရန်",

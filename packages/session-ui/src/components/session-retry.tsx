@@ -66,7 +66,12 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
           <div class="flex w-full items-start gap-2">
             <Icon name="outline-hexagonal-warning" class="shrink-0 text-v2-state-fg-danger" />
             <div class="min-w-0 flex-1">
-              <Tooltip appearance="standard" value={retry()?.message ?? ""} placement="top">
+              <Tooltip
+                appearance="large"
+                contentClass="max-w-80 break-words"
+                value={retry()?.message ?? ""}
+                placement="top"
+              >
                 <div data-slot="session-turn-retry-message" class="cursor-help truncate">
                   <SessionErrorMessage message={message()} />
                 </div>
