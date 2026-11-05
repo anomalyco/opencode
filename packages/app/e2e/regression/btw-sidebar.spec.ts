@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import type { Schema } from "effect"
 import { sessionHref } from "../utils/app"
 import { openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
@@ -288,4 +289,70 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   )
   await expect(panel.getByText("exponential backoff", { exact: false })).toBeVisible()
   expect(ownerWarnings).toEqual([])
+})
+
+test("with side_chat, follow-ups build on the thread and share it with the agent", async ({ page }) => {
+  const generations: { sessionID: string; prompt: string }[] = []
+  const synthetics: { sessionID: string; body: Schema.JsonObject }[] = []
+  const prompts: unknown[] = []
+
+  const { editor, session } = await openSession(page, {
+    name: "BtwSideChat",
+    flags: ["side_chat"],
+    onPrompt: (input) => prompts.push(input),
+    onSynthetic: (input) => synthetics.push(input),
+    generate: (input) => {
+      generations.push(input)
+
+      if (input.prompt.endsWith("User: tell the agent to keep the fake clock"))
+        return { text: "I'll pass that on.\n\n<to-agent>\nKeep the fake clock; don't raise the timeout.\n</to-agent>" }
+
+      return { text: input.prompt.endsWith("User: follow-up question") ? "Follow-up answer" : "First answer" }
+    },
+  })
+
+  const panel = page.locator('[data-slot="session-btw-panel"]')
+  await editor.fill("/btw first question")
+  await editor.press("Enter")
+  await expect(panel.getByText("First answer", { exact: true })).toBeVisible()
+
+  const followUp = panel.getByRole("textbox", { name: "Ask a follow-up…" })
+  await followUp.fill("follow-up question")
+  await followUp.press("Enter")
+  await expect(panel.getByText("Follow-up answer", { exact: true })).toBeVisible()
+  await expect(page.getByRole("tab", { name: "first question", exact: true })).toHaveAttribute("data-selected", "")
+  expect(generations).toHaveLength(2)
+  expect(generations[1]?.prompt).toContain("User: first question\n\nYou: First answer")
+
+  const share = panel.getByRole("button", { name: "Share with agent" })
+  await share.click()
+  await expect(panel.getByText("Shared with the agent")).toBeVisible()
+  await expect(share).toBeDisabled()
+  expect(synthetics).toHaveLength(1)
+  expect(synthetics[0]?.sessionID).toBe(session.id)
+  expect(synthetics[0]?.body).toMatchObject({
+    description: "/btw · first question",
+    metadata: { source: "btw", turns: 2 },
+    delivery: "steer",
+    resume: false,
+  })
+  expect(String(synthetics[0]?.body.text)).toContain("User: follow-up question\n\nAnswer: Follow-up answer")
+
+  // Asked to pass something on, the side model's note reaches the agent without a click, and only the answer shows.
+  await followUp.fill("tell the agent to keep the fake clock")
+  await followUp.press("Enter")
+  await expect(panel.getByText("I'll pass that on.", { exact: true })).toBeVisible()
+  const note = panel.locator('[data-slot="btw-note"]')
+  await expect(note).toContainText("Keep the fake clock; don't raise the timeout.")
+  await expect(note).toContainText("Sent to the agent")
+  await expect(panel.getByText("<to-agent>")).toHaveCount(0)
+  expect(synthetics).toHaveLength(2)
+  expect(synthetics[1]?.body).toMatchObject({
+    description: "/btw · Keep the fake clock; don't raise the timeout.",
+    metadata: { source: "btw", relayed: true },
+    delivery: "steer",
+    resume: false,
+  })
+  expect(String(synthetics[1]?.body.text)).toContain("<note>\nKeep the fake clock; don't raise the timeout.\n</note>")
+  expect(prompts).toEqual([])
 })

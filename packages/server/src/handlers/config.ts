@@ -1,4 +1,5 @@
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
@@ -7,6 +8,7 @@ import { Api } from "../api"
 export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handlers) =>
   handlers
     .handle("config.get", () => Config.Service.use((config) => config.entries()))
+    .handle("config.flags", () => Flag.all.pipe(Effect.map((data) => ({ data }))))
     .handle(
       "config.update",
       Effect.fn(function* (ctx) {

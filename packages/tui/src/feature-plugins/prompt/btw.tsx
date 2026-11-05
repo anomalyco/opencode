@@ -1,7 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -11,32 +11,61 @@ import { usePlugin } from "../../plugin/context"
 import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { getScrollAcceleration } from "../../util/scroll"
-
-// session.generate exposes the session's tools but runs no tool loop, so a
-// tool call would surface as an empty answer.
-const instructions = [
-  "The user is asking a quick side question about the conversation so far.",
-  "Answer directly and concisely in markdown from what you already know.",
-  "Do not call any tools and do not take any actions.",
-].join(" ")
+import { sideQuestionPrompt } from "@opencode/util/side-chat"
+import { createSideChat, SIDE_CHAT_PANEL, SideChatPanel } from "./btw-side-chat"
 
 export default Plugin.define({
   id: "opencode.btw",
   setup(context) {
     const [pending, setPending] = createSignal(0)
+    const chat = createSideChat(context)
+    // The side_chat feature flag as the server resolves it, undefined until a read succeeds: setup can run before the
+    // client connects. A server without the endpoint keeps the one-shot dialog.
+    const [sideChat, setSideChat] = createSignal<boolean>()
+    const readFlag = () =>
+      context.client.experimental.config
+        .flags({ location: context.location })
+        .then((flags) => setSideChat(flags.side_chat.enabled))
+        .catch(() => false)
+    void readFlag()
+    const stopFlag = context.data.on("config.updated", () => void readFlag())
 
     context.ui.slot({
       append: "prompt.footer.status",
-      render: () => {
+      render: (input) => {
         const theme = useTheme()
+        const busy = () => pending() > 0 || (sideChat() && !!input.sessionID && chat.busy(input.sessionID))
+        // A closed side chat with threads stays one click away.
+        const parked = () => {
+          if (!sideChat() || !input.sessionID || busy()) return 0
+          const open = context.ui.panel.current()
+          if (open?.name === SIDE_CHAT_PANEL && open.sessionID === input.sessionID) return 0
+          return chat.threads(input.sessionID).length
+        }
         return (
-          <Show when={pending() > 0}>
-            <box flexShrink={0}>
-              <Spinner color={theme.hue.interactive[200]}>/btw</Spinner>
-            </box>
-          </Show>
+          <Switch>
+            <Match when={busy()}>
+              <box flexShrink={0}>
+                <Spinner color={theme.hue.interactive[200]}>/btw</Spinner>
+              </box>
+            </Match>
+            <Match when={parked() > 0}>
+              <box flexShrink={0} onMouseUp={() => context.ui.panel.open(SIDE_CHAT_PANEL)}>
+                <text fg={theme.text.muted}>{`/btw ${parked()}`}</text>
+              </box>
+            </Match>
+          </Switch>
         )
       },
+    })
+
+    context.ui.slot({
+      append: "session.panel",
+      render: (panel) => (
+        <Show when={panel.name === SIDE_CHAT_PANEL}>
+          <SideChatPanel chat={chat} context={context} panel={panel} />
+        </Show>
+      ),
     })
 
     context.ui.slot({
@@ -61,12 +90,19 @@ export default Plugin.define({
                   toast.show({ message: "Open a session first", variant: "warning" })
                   return
                 }
+                if (sideChat() ?? (await readFlag())) {
+                  const question = input?.trim()
+                  if (question) chat.start(route.sessionID, question)
+                  context.ui.panel.open(SIDE_CHAT_PANEL)
+                  chat.requestFocus()
+                  return
+                }
                 const question =
                   input?.trim() || (await context.ui.dialog.prompt({ title: "/btw", placeholder: "Ask anything" }))
                 if (!question) return
                 setPending((count) => count + 1)
                 await context.client.session
-                  .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
+                  .generate({ sessionID: route.sessionID, prompt: sideQuestionPrompt(question) })
                   .then((result) => {
                     context.ui.dialog.show(() => (
                       <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
@@ -82,6 +118,8 @@ export default Plugin.define({
         return null
       },
     })
+
+    return stopFlag
   },
 })
 

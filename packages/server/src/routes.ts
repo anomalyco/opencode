@@ -55,6 +55,8 @@ import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
+  // Handlers resolve feature flags from the build channel, so they need the configured app metadata.
+  App.node,
   Global.node,
   FSUtil.node,
   Database.node,

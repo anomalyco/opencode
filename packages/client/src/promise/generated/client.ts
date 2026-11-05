@@ -318,6 +318,8 @@ import type {
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
+  ExperimentalConfigFlagsInput,
+  ExperimentalConfigFlagsOutput,
   ExperimentalConfigUpdateInput,
   ExperimentalConfigUpdateOutput,
 } from "./types.js"
@@ -1732,6 +1734,18 @@ export function make(options: ClientOptions) {
           ),
       },
       config: {
+        flags: (input?: ExperimentalConfigFlagsInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalConfigFlagsOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/config/flag`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
         update: (input: ExperimentalConfigUpdateInput, requestOptions?: RequestOptions) =>
           request<ExperimentalConfigUpdateOutput>(
             {
@@ -2782,6 +2796,8 @@ export function make(options: ClientOptions) {
     },
     config: {
       ...client.config,
+      /** @deprecated Use `client.experimental.config.flags`. Removed in the next minor. */
+      flags: client.experimental.config.flags,
       /** @deprecated Use `client.experimental.config.update`. Removed in the next minor. */
       update: client.experimental.config.update,
     },

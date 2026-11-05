@@ -1,4 +1,5 @@
 import { Config } from "@opencode/schema/config"
+import { ConfigFlag } from "@opencode/schema/config/flag"
 import { ConfigShell } from "@opencode/schema/config/shell"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
@@ -30,6 +31,21 @@ export const ConfigGroup = HttpApiGroup.make("server.config")
         description: "Return shells available to terminal and agent execution.",
       }),
     ),
+  )
+  .add(
+    HttpApiEndpoint.get("config.flags", "/api/experimental/config/flag", {
+      query: LocationQuery,
+      success: Schema.Struct({ data: ConfigFlag.Resolved }),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.config.flags",
+          summary: "List feature flags",
+          description:
+            "Experimental: may change without compatibility guarantees. Return every feature flag resolved for the requested location, with where its value came from.",
+        }),
+      ),
   )
   .add(
     HttpApiEndpoint.patch("config.update", "/api/experimental/config", {
