@@ -8,8 +8,9 @@ type Agent = {
   variant?: string
 }
 
+// Only the presence of variants matters here.
 type Model = AgentModel & {
-  variants?: Record<string, unknown>
+  variants?: object
 }
 
 /** What a selection says about the variant: follow preferences and configuration, the explicit Default, or a name. */
