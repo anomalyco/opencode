@@ -47,8 +47,12 @@ notify = "8"
 percent-encoding = "2"
 rand = "0.10"
 regex = "1"
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "http2"] }
+# TLS is rustls on ring with the platform's roots, configured once in `opencode_api::transport`, for HTTP/1.1 only, as
+# Bun's fetch speaks.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "stream"] }
 rustix = { version = "1", features = ["fs", "process"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 sha1 = "0.11"
@@ -57,7 +61,7 @@ similar = "3"
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "process", "fs", "net", "signal"] }
-tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 tokio-util = { version = "0.7", features = ["io", "codec"] }
 unicode-width = "0.2"
 url = "2"

@@ -1348,7 +1348,7 @@ mod tests {
         }
         let url = format!("{}/api/event", server.trim_end_matches('/'));
         let (connection, mut batches) =
-            connect(Live { client: reqwest::Client::new(), url, password }, Options::default());
+            connect(Live { client: crate::transport::http_client(), url, password }, Options::default());
         let mut kinds = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(20);
         while kinds.len() < 5 {

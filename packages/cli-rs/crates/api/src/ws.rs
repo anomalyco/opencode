@@ -63,7 +63,8 @@ pub async fn connect(url: &Url, headers: &[(String, String)]) -> Result<Socket, 
         let value = HeaderValue::from_str(value).map_err(|error| Error::HttpFormat(error.into()))?;
         request.headers_mut().insert(name, value);
     }
-    let (socket, _) = tokio_tungstenite::connect_async(request).await?;
+    let connector = tokio_tungstenite::Connector::Rustls(crate::transport::tls_config());
+    let (socket, _) = tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector)).await?;
     Ok(socket)
 }
 

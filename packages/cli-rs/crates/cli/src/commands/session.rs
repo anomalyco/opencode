@@ -248,7 +248,7 @@ async fn read(file: &str) -> anyhow::Result<String> {
             _ => error.into(),
         });
     }
-    let response = reqwest::get(file).await?;
+    let response = opencode_api::transport::http_client().get(file).send().await?;
     if !response.status().is_success() {
         anyhow::bail!("Failed to fetch session data: {}", response.status().canonical_reason().unwrap_or_default());
     }
