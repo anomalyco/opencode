@@ -1,5 +1,5 @@
 import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
-import { DialogProvider } from "@opencode/ui/context/dialog"
+import { DialogProvider, useDialog } from "@opencode/ui/context/dialog"
 import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
 import {
@@ -82,7 +82,7 @@ type Captured = { apis?: ReturnType<typeof createHostApis> }
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
-export { createComponent, createMemo, createRoot, createSignal, getOwner, onCleanup, runWithOwner }
+export { createComponent, createMemo, createRoot, createSignal, getOwner, onCleanup, runWithOwner, useDialog }
 
 const layout: BuiltinLayout = {
   narrow: () => false,
