@@ -261,8 +261,9 @@ impl Setup {
             .wait_until(WAIT, || self.requests(method, suffix).len() >= count);
         assert!(
             found,
-            "no {method} …{suffix}: {:?}",
-            self.seen.lock().unwrap()
+            "no {method} …{suffix}: {:?}\n{}",
+            self.seen.lock().unwrap(),
+            self.app.text()
         );
         self.requests(method, suffix)
     }
@@ -275,7 +276,12 @@ impl Setup {
         let found = self
             .app
             .wait_until(WAIT, || self.state_file(name).contains(text));
-        assert!(found, "{name} has {:?}", self.state_file(name));
+        assert!(
+            found,
+            "{name} has {:?}\n{}",
+            self.state_file(name),
+            self.app.text()
+        );
         self.state_file(name)
     }
 }
