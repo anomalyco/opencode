@@ -38,6 +38,23 @@ function setup(input?: {
 }
 
 describe("createRequestQueue", () => {
+  test("MCP discovery cannot consume the slots reserved for session reads", async () => {
+    const input = setup({ limit: 4, slowLimit: 2 })
+    const paths = ["/api/command", "/api/mcp/nested", "/api/mcp", "/api/session/ses_1"]
+    const responses = paths.map((path) => input.queue.fetch(`http://server${path}`))
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual([
+      "/api/command",
+      "/api/mcp/nested",
+      "/api/session/ses_1",
+    ])
+    expect(input.queue.queued()).toBe(1)
+    input.pending[0]!.resolve()
+    await input.settle()
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toContain("/api/mcp")
+    input.pending.forEach((item) => item.resolve())
+    await Promise.all(responses)
+  })
+
   test("starts a free slot before the caller continues its synchronous work", async () => {
     const input = setup()
     const response = input.queue.fetch("http://server/api/session")
