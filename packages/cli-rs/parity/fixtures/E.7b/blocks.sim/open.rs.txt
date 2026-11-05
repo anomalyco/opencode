@@ -1,0 +1,60 @@
+   Simulated session             +
+
+  ┃
+  ┃  Fix the lexer and track it
+  ┃
+
+  ┃
+  ┃  ← Patched src/lexer.rs
+  ┃
+  ┃    1   fn peek(&self) -> Option<char> {
+  ┃    2 -     self.chars.get(self.pos + 1)
+  ┃    2 +     self.chars.get(self.pos)
+  ┃    3   }
+  ┃
+
+  ┃
+  ┃  # Deleted src/old.rs
+  ┃
+  ┃  -1 line
+  ┃
+
+  ┃
+  ┃  # Created docs/lexer.md
+  ┃
+  ┃    1 + # Lexer
+  ┃
+
+  ┃
+  ┃  # Patch failed src/a.rs
+  ┃
+  ┃  patch verification failed: Failed to find expected lines in src/a.rs:
+  ┃  fn missing() {}
+  ┃
+
+     ✗ execute
+     ↳ Error: boom
+
+     ✱ Glob "src/*.rs" (2 matches)
+     ✱ Grep "fn peek" (1 match)
+
+     Fixed the lexer.
+
+     Build · Simulated Model
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+
