@@ -124,7 +124,7 @@ function session(input: {
     id: "session-1",
     background: input.background,
     directory: "C:/repo",
-    handoff: input.handoff ?? { set() {}, clear() {} },
+    handoff: input.handoff ?? { set() {}, settle() {}, clear() {} },
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
@@ -234,7 +234,10 @@ describe("Composer submission", () => {
     const calls: string[] = []
 
     const submission = submitInput({
-      ...active(state, session({ calls, handoff: { set: (handoff) => handoffs.push(handoff), clear() {} } })),
+      ...active(
+        state,
+        session({ calls, handoff: { set: (handoff) => handoffs.push(handoff), settle() {}, clear() {} } }),
+      ),
       beforeSubmit: () => calls.push("keep-preview"),
     })
 
@@ -473,7 +476,7 @@ describe("Composer submission", () => {
 
     const target = session({
       calls,
-      handoff: { set: (value) => handoffs.push(value), clear() {} },
+      handoff: { set: (value) => handoffs.push(value), settle() {}, clear() {} },
       prompt: async (value) => admitted.resolve(value),
     })
 
@@ -504,7 +507,7 @@ describe("Composer submission", () => {
       const target = session({
         calls: [],
         statuses,
-        handoff: { set: (handoff) => handoffs.push(handoff), clear() {} },
+        handoff: { set: (handoff) => handoffs.push(handoff), settle() {}, clear() {} },
         switchModel: async () => committed.promise,
       })
 
@@ -1018,7 +1021,7 @@ describe("Composer submission", () => {
 
     const target = session({
       calls: [],
-      handoff: { set: handedOff.resolve, clear() {} },
+      handoff: { set: handedOff.resolve, settle() {}, clear() {} },
       prompt: async () => admitted.resolve(),
     })
 
@@ -1044,6 +1047,41 @@ describe("Composer submission", () => {
         },
       ],
     })
+  })
+
+  test.each([
+    { case: "is admitted", fails: false, admitted: false, result: "settle" },
+    { case: "loses its response after admission", fails: true, admitted: true, result: "settle" },
+    { case: "fails", fails: true, admitted: false, result: "clear" },
+  ])("a steer's handoff waits for its echo or ends when its send $case", async (row) => {
+    const state = createMemoryComposerState({ prompt: "steer" }).capture()
+    const handoff: string[] = []
+    const ended = Promise.withResolvers<void>()
+
+    const target = session({
+      calls: [],
+      admitted: () => row.admitted,
+      handoff: {
+        set: (value) => handoff.push(`set:${value.message.id}`),
+        settle: (id) => {
+          handoff.push(`settle:${id}`)
+          ended.resolve()
+        },
+        clear: (id) => {
+          handoff.push(`clear:${id}`)
+          ended.resolve()
+        },
+      },
+      prompt: async () => {
+        if (row.fails) throw new Error("response lost")
+      },
+    })
+
+    await submitInput(active(state, target)).submit(new Event("submit"))
+    await ended.promise
+
+    expect(handoff).toHaveLength(2)
+    expect(handoff[1]).toBe(handoff[0]!.replace("set:", `${row.result}:`))
   })
 
   test("forwards structured mentions to custom commands", async () => {

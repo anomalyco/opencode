@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import {
@@ -928,6 +929,47 @@ test("keeps the draft on the main checkout when session creation fails, then ret
   await expect.poll(() => creates.length).toBe(2)
   await expectPath(page, sessionHref(creates[1]!))
   await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
+})
+
+test("a new session's first prompt stays once its missed admission echo resyncs the session", async ({ page }) => {
+  const messages: SessionMessageInfo[] = []
+  const created: string[] = []
+
+  // The mock admits the prompt without its session.inbox.enqueued echo.
+  const view = await openDraft(page, {
+    ...pendingDraft,
+    pageMessages: () => ({ items: messages }),
+    onSessionCreate: (body) => void created.push(String(body.id)),
+    seed: { settings: { general: { timelineDetail: timelinePresets[0].value } } },
+  })
+
+  await view.editor.fill(text)
+  await submit(page).click()
+  await expect.poll(() => created).toHaveLength(1)
+  const sessionID = created[0]!
+  await expectPath(page, sessionHref(sessionID))
+  const prompt = page.locator('[data-component="user-message"] [data-slot="user-message-text"]')
+  await expect(prompt).toHaveText([text])
+
+  // Another client switches the agent. Only its own notice shows: the admitted prompt no longer projects one.
+  messages.push({
+    id: "msg_first_agent_plan",
+    type: "agent-switched",
+    agent: "plan",
+    previous: "build",
+    time: { created: T0 },
+  })
+  await view.push([
+    {
+      id: "evt_first_agent_plan",
+      type: "session.agent.selected",
+      created: T0,
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: { sessionID, agent: "plan" },
+    },
+  ])
+  await expect(page.locator('[data-slot="session-timeline-notice"]')).toHaveText([/^Agent changed\s*Build → Plan$/])
+  await expect(prompt).toHaveText([text])
 })
 
 test("restores the draft after closing and revisiting a pending session that fails", async ({ page }) => {

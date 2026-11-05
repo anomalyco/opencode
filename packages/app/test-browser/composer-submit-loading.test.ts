@@ -44,7 +44,7 @@ test.each([
   const session: ComposerSession = {
     id: "session-1",
     directory: "/repo",
-    handoff: { set() {}, clear() {} },
+    handoff: { set() {}, settle() {}, clear() {} },
     current: () => undefined,
     admitted: () => true,
     api: {

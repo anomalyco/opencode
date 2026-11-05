@@ -14,8 +14,6 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createWorktree } from "@/workspaces/create"
 import { showToast } from "@/shell/notifications/toast"
-import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
-import { createSessionMessageHandoff } from "@/session/handoff"
 import type { DraftMcpControls } from "./mcp"
 import {
   createNewSessionStartState,
@@ -233,11 +231,7 @@ export function createNewSessionComposerAdapter(props: {
   const createdSession = (id: Session.ID, directory: string): ComposerSession => ({
     id,
     directory,
-    handoff: createSessionMessageHandoff(
-      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(base64Encode(directory), id)),
-      id,
-      serverSDK.event,
-    ),
+    handoff: server.ctx.handoff.forSession(id),
     api: serverSDK.api.session,
     data,
     current: () => data.session.get(id),

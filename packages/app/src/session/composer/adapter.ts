@@ -1,9 +1,8 @@
 import type { Accessor } from "solid-js"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
-import { createSessionMessageHandoff } from "@/session/handoff"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useTabs } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -22,6 +21,7 @@ export function createActiveComposerAdapter(input: {
   prompt.current()
   const state = prompt.capture()
   const data = useData()
+  const handoff = useServer().ctx.handoff.forSession(id)
   const server = useServerSDK()
   const location = useWorkspaceLocation()
 
@@ -45,7 +45,7 @@ export function createActiveComposerAdapter(input: {
     session: () => ({
       id,
       directory: location().directory,
-      handoff: createSessionMessageHandoff(input.sessionKey(), id, server.event),
+      handoff,
       api: server.api.session,
       data,
       current: () => data.session.get(id),
