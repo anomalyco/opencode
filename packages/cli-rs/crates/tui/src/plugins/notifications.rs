@@ -4,7 +4,6 @@
 
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::rc::Rc;
 
 use opencode_api::generated::{SessionID, V2Event};
 use opencode_local::cli_config::AttentionSoundName;
@@ -20,43 +19,20 @@ use crate::routes::Route;
 
 pub const ID: &str = "opencode.notifications";
 
-/// One store event, posted to the UI thread.
-struct Signal(V2Event);
-
 pub fn plugin() -> Definition<Tui> {
     Definition::new(ID, |setup: &mut Setup<'_, Tui>| {
         let tui = setup.host();
-        let tracker = Rc::new(RefCell::new(Tracker::default()));
-        let handler = tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
-            // The actions are built under the store's read guard and carried out after it.
+        let tracker = RefCell::new(Tracker::default());
+        let subscription = crate::features::events::subscribe(tui, move |tui, event| {
+            if !follows(event) {
+                return;
+            }
             let actions = tui.data.read(|state| tracker.borrow_mut().event(event, &Snapshot(state)));
             for action in actions {
-                run(&tui, action);
-            }
-        }));
-        let mut signals = tui.data.signals();
-        let proxy = tui.app.proxy();
-        let task = tui.app.runtime().spawn(async move {
-            loop {
-                match signals.recv().await {
-                    Ok(event) if follows(&event) => {
-                        if proxy.send(Signal(event)).is_err() {
-                            return;
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                        log::warn!("{ID} skipped {skipped} server events");
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
-                }
+                run(tui, action);
             }
         });
-        let app = tui.app.clone();
-        setup.on_dispose(move || {
-            task.abort();
-            app.remove_handler(handler);
-        });
+        setup.on_dispose(move || drop(subscription));
     })
 }
 

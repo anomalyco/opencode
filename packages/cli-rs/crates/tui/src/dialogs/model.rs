@@ -24,7 +24,7 @@ use opencode_api::js::locale_compare;
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
-use opencode_store::location::{Catalog, Location};
+use opencode_store::location::{Catalog, Location, LocationData};
 use opencode_store::{Changes, Data};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, Dialogs};
@@ -57,12 +57,6 @@ pub struct Routed {
     pub session: Option<SessionInfo>,
 }
 
-/// Where the TUI is: the routed session, or `None` on home.
-pub type RouteFn = Rc<dyn Fn() -> Option<Routed>>;
-
-/// The location the TUI works in (`location.ref ?? data.location.default()`).
-pub type LocationFn = Rc<dyn Fn() -> Location>;
-
 /// The store catalogs [`Local`] reads.
 const CATALOGS: [Catalog; 5] =
     [Catalog::Model, Catalog::Provider, Catalog::Agent, Catalog::Integration, Catalog::Config];
@@ -87,8 +81,8 @@ pub struct Local {
     data: Data,
     pub dialogs: Dialogs,
     pub toasts: Toasts,
-    route: RouteFn,
-    location: LocationFn,
+    /// The TUI whose route and location this follows; without it, home at the store's default location.
+    tui: Weak<Tui>,
     preferences: Option<ModelPreferences>,
     pub(crate) storage: Option<Storage>,
     writer: Option<mpsc::Sender<Job>>,
@@ -116,13 +110,8 @@ pub struct Local {
 
 #[derive(Default)]
 struct State {
-    /// Where the catalog below is read from.
+    /// Where the catalog is read from in the store.
     location: Option<Location>,
-    models: Option<Vec<ModelInfo>>,
-    providers: Option<Vec<ProviderInfo>>,
-    agents: Option<Vec<AgentInfo>>,
-    integrations: Option<Vec<IntegrationInfo>>,
-    configured: Option<Selection>,
     /// The usage limits by the key of the location the server answered for (`data.location.usage`): absent until
     /// loaded, `None` when the location is not signed in to OpenCode Console.
     usage: HashMap<String, Option<UsageLimitsInfo>>,
@@ -150,8 +139,7 @@ impl Local {
         dialogs: Dialogs,
         toasts: Toasts,
         files: Option<Files>,
-        route: RouteFn,
-        location: LocationFn,
+        tui: Weak<Tui>,
     ) -> Rc<Self> {
         let (preferences, storage) = match files {
             Some(files) => (Some(ModelPreferences::new(&files.state)), files.storage),
@@ -172,8 +160,7 @@ impl Local {
             data,
             dialogs,
             toasts,
-            route,
-            location,
+            tui,
             preferences,
             storage,
             writer,
@@ -195,7 +182,7 @@ impl Local {
 
     /// Reads the location's catalog, loads `model.json`, and watches `model.json`.
     pub fn load(&self) {
-        self.relocate((self.location)());
+        self.relocate(self.tui_location());
         self.load_preferences();
         let Some(preferences) = &self.preferences else {
             self.state.borrow_mut().ready = true;
@@ -221,11 +208,11 @@ impl Local {
     /// Follows the store (`Tui::sync`): the catalog of the location the TUI moved to or whose catalog
     /// changed, and the drafts of sessions that changed.
     pub fn sync(&self, changes: &Changes) {
-        let location = (self.location)();
+        let location = self.tui_location();
         if self.state.borrow().location.as_ref() != Some(&location) {
             self.relocate(location);
         } else if changes.all || changes.location(&location) {
-            self.read_catalog();
+            self.notify();
         }
         let sessions: Vec<String> = if changes.all {
             self.state
@@ -243,10 +230,10 @@ impl Local {
         }
     }
 
-    // Takes the catalog of `location` from the store, and asks the store to read what it lacks.
+    // Reads the catalog of `location` from the store, and asks the store to read what it lacks.
     fn relocate(&self, location: Location) {
         self.state.borrow_mut().location = Some(location.clone());
-        self.read_catalog();
+        self.notify();
         for catalog in CATALOGS {
             self.read(catalog, &location);
         }
@@ -259,62 +246,53 @@ impl Local {
             task,
             bind!(weak, |local, _, result| {
                 match result {
-                    Ok(()) => local.read_catalog(),
+                    Ok(()) => local.notify(),
                     Err(error) => log::warn!("model catalog: {error}"),
                 }
             }),
         );
     }
 
-    fn read_catalog(&self) {
-        let Some(location) = self.state.borrow().location.clone() else {
-            return;
-        };
-        let read = self.data.read(|state| {
-            let data = state.location(Some(&location))?;
-            Some((
-                data.model.clone(),
-                data.provider.clone(),
-                data.agent.clone(),
-                data.integration.clone(),
-                data.config.as_deref().and_then(crate::prompt::metadata::configured),
-            ))
-        });
-        {
-            let mut state = self.state.borrow_mut();
-            let (models, providers, agents, integrations, configured) = read.unwrap_or_default();
-            state.models = models;
-            state.providers = providers;
-            state.agents = agents;
-            state.integrations = integrations;
-            state.configured = configured.map(|choice| Selection {
-                model: Model::new(&choice.provider_id, &choice.model_id),
-                variant: choice.variant,
-            });
+    /// Reads `catalog` again into the store when polled, as a connect does.
+    pub(crate) fn reload(
+        &self,
+        catalog: Catalog,
+    ) -> impl Future<Output = Result<(), opencode_store::Error>> + Send + use<> {
+        let data = self.data.clone();
+        let location = self.catalog_location();
+        async move {
+            data.catalog_invalidate(catalog, Some(&location));
+            data.catalog_sync(catalog, Some(&location)).await
         }
-        self.notify();
     }
 
-    /// Replaces the integrations, models, and providers that a connect reloaded.
-    pub(crate) fn set_catalog(
-        &self,
-        integrations: Vec<IntegrationInfo>,
-        models: Vec<ModelInfo>,
-        providers: Vec<ProviderInfo>,
-    ) {
-        {
-            let mut state = self.state.borrow_mut();
-            state.integrations = Some(integrations);
-            state.models = Some(models);
-            state.providers = Some(providers);
-        }
-        self.notify();
+    /// Runs `f` on the store's data of the catalog's location, `None` until the store holds some.
+    fn catalog<R>(&self, f: impl FnOnce(Option<&LocationData>) -> R) -> R {
+        let location = self.catalog_location();
+        self.data.read(|state| f(state.location(Some(&location))))
+    }
+
+    /// Where the TUI works (`location.ref ?? data.location.default()`).
+    fn tui_location(&self) -> Location {
+        self.tui
+            .upgrade()
+            .and_then(|tui| crate::features::location::current(&tui))
+            .unwrap_or_else(|| self.data.read(|state| state.default_location().clone()))
+    }
+
+    /// The routed session, or `None` on home.
+    fn route(&self) -> Option<Routed> {
+        let Route::Session { id } = self.tui.upgrade()?.route() else {
+            return None;
+        };
+        let session = self.data.read(|state| state.session(&id).cloned());
+        Some(Routed { id, session })
     }
 
     /// `useUsageLimits().load`: loads the current location's limits once, or again with `refresh`, keeping the
     /// loaded ones meanwhile.
     pub fn load_usage(&self, refresh: bool) {
-        let key = self.usage_location().key();
+        let key = self.catalog_location().key();
         if self.usage_loading.borrow().contains(&key) || (!refresh && self.state.borrow().usage.contains_key(&key)) {
             return;
         }
@@ -338,10 +316,10 @@ impl Local {
         );
     }
 
-    /// The location the usage limits are read for (`location.ref ?? data.location.default()`).
-    fn usage_location(&self) -> Location {
+    /// The location the catalog and the usage limits are read for (`location.ref ?? data.location.default()`).
+    fn catalog_location(&self) -> Location {
         let location = self.state.borrow().location.clone();
-        location.unwrap_or_else(|| (self.location)())
+        location.unwrap_or_else(|| self.tui_location())
     }
 
     /// Calls `listener` after the catalog, the preferences, or a selection change.
@@ -364,7 +342,7 @@ impl Local {
     /// The location the catalog is read from, as a request names it.
     pub(crate) fn location(&self) -> Option<LocationQueryInput> {
         let location = self.state.borrow().location.clone();
-        let location = location.unwrap_or_else(|| (self.location)());
+        let location = location.unwrap_or_else(|| self.tui_location());
         Some(LocationQueryInput { directory: Some(location.directory) })
     }
 
@@ -434,34 +412,41 @@ impl Local {
 
     /// Whether the model list has loaded (`catalogReady`).
     pub fn catalog_ready(&self) -> bool {
-        self.state.borrow().models.is_some()
+        self.catalog(|data| data.is_some_and(|data| data.model.is_some()))
     }
 
-    pub fn models(&self) -> Vec<ModelInfo> {
-        self.state.borrow().models.clone().unwrap_or_default()
+    /// Runs `f` on the models (empty until loaded).
+    pub fn models<R>(&self, f: impl FnOnce(&[ModelInfo]) -> R) -> R {
+        self.catalog(|data| f(data.and_then(|data| data.model.as_deref()).unwrap_or_default()))
     }
 
     pub fn model_info(&self, model: &Model) -> Option<ModelInfo> {
-        self.state.borrow().models.as_ref()?.iter().find(|item| is(item, model)).cloned()
+        self.models(|models| models.iter().find(|item| is(item, model)).cloned())
     }
 
-    pub fn providers(&self) -> Vec<ProviderInfo> {
-        self.state.borrow().providers.clone().unwrap_or_default()
+    /// Runs `f` on the providers (empty until loaded).
+    pub fn providers<R>(&self, f: impl FnOnce(&[ProviderInfo]) -> R) -> R {
+        self.catalog(|data| f(data.and_then(|data| data.provider.as_deref()).unwrap_or_default()))
     }
 
     pub fn provider(&self, id: &str) -> Option<ProviderInfo> {
-        self.state.borrow().providers.as_ref()?.iter().find(|item| item.id.0 == id).cloned()
+        self.providers(|providers| providers.iter().find(|item| item.id.0 == id).cloned())
     }
 
     pub fn integrations(&self) -> Option<Vec<IntegrationInfo>> {
-        self.state.borrow().integrations.clone()
+        self.catalog(|data| data?.integration.clone())
+    }
+
+    /// The integration `id`, once the integrations have loaded.
+    pub fn integration(&self, id: &str) -> Option<IntegrationInfo> {
+        self.catalog(|data| data?.integration.as_ref()?.iter().find(|item| item.id.0 == id).cloned())
     }
 
     /// `useUsageLimits().info`: `None` until loaded, `Some(None)` when not signed in.
     /// The current location's usage limits: `None` until loaded, `Some(None)` when it is not signed in to
     /// OpenCode Console.
     pub fn usage(&self) -> Option<Option<UsageLimitsInfo>> {
-        let key = self.usage_location().key();
+        let key = self.catalog_location().key();
         self.state.borrow().usage.get(&key).cloned()
     }
 
@@ -499,11 +484,10 @@ impl Local {
 
     /// `useConnected`: some integration has a connection.
     pub fn connected(&self) -> bool {
-        self.state
-            .borrow()
-            .integrations
-            .as_ref()
-            .is_some_and(|list| list.iter().any(|item| !item.connections.is_empty()))
+        self.catalog(|data| {
+            data.and_then(|data| data.integration.as_ref())
+                .is_some_and(|list| list.iter().any(|item| !item.connections.is_empty()))
+        })
     }
 
     pub fn recent(&self) -> Vec<Model> {
@@ -515,28 +499,28 @@ impl Local {
     }
 
     fn is_valid(&self, model: &Model) -> bool {
-        self.state.borrow().models.as_ref().is_some_and(|models| models.iter().any(|item| is(item, model)))
+        self.models(|models| models.iter().any(|item| is(item, model)))
     }
 
     // Agents.
 
     /// The agents a user can pick: not subagents, not hidden.
     pub fn agents(&self) -> Vec<AgentInfo> {
-        self.state
-            .borrow()
-            .agents
-            .iter()
-            .flatten()
-            .filter(|agent| !matches!(agent.mode, AgentInfoMode::Subagent) && !agent.hidden)
-            .cloned()
-            .collect()
+        self.catalog(|data| {
+            data.and_then(|data| data.agent.as_ref())
+                .into_iter()
+                .flatten()
+                .filter(|agent| !matches!(agent.mode, AgentInfoMode::Subagent) && !agent.hidden)
+                .cloned()
+                .collect()
+        })
     }
 
     pub fn agent(&self) -> Option<AgentInfo> {
         let agents = self.agents();
         let selected = {
             let state = self.state.borrow();
-            match (self.route)() {
+            match self.route() {
                 // An acknowledged draft (`Some(None)`) gives way to the session's agent.
                 Some(routed) => state
                     .agent_drafts
@@ -569,7 +553,7 @@ impl Local {
         if changed {
             self.remember();
         }
-        let routed = (self.route)();
+        let routed = self.route();
         {
             let mut state = self.state.borrow_mut();
             state.agent = Some(id.to_owned());
@@ -609,7 +593,8 @@ impl Local {
 
     // `configuredModel`.
     fn configured(&self) -> Option<Selection> {
-        self.state.borrow().configured.clone()
+        let choice = self.catalog(|data| data?.config.as_deref().and_then(crate::prompt::metadata::configured))?;
+        Some(Selection { model: Model::new(&choice.provider_id, &choice.model_id), variant: choice.variant })
     }
 
     // `fallbackModel`. `--model` is E.1's.
@@ -621,9 +606,7 @@ impl Local {
         if let Some(model) = recent.into_iter().find(|item| self.is_valid(item)) {
             return Some(model);
         }
-        let state = self.state.borrow();
-        let first = state.models.as_ref()?.first()?;
-        Some(Model::new(&first.provider_id.0, &first.id))
+        self.models(|models| models.first().map(|first| Model::new(&first.provider_id.0, &first.id)))
     }
 
     // `newSessionModel`.
@@ -692,7 +675,7 @@ impl Local {
 
     /// The model and variant the next prompt uses (`model.selection`).
     pub fn selection(&self) -> Option<Selection> {
-        match (self.route)() {
+        match self.route() {
             Some(routed) => self.session_selection(&routed),
             None => self.new_session_model().map(|model| self.preferred(&model)),
         }
@@ -733,7 +716,7 @@ impl Local {
 
     // `selectModel`.
     fn select_model(&self, model: &Model) -> bool {
-        if let Some(routed) = (self.route)() {
+        if let Some(routed) = self.route() {
             let current = self.session_selection(&routed);
             let selection = match current {
                 Some(current) if current.model == *model => current,
@@ -753,7 +736,7 @@ impl Local {
     // `locationAgentKey`: a model chosen for a new session belongs to the location and the agent.
     fn location_agent_key(&self, agent: &str) -> String {
         let location = self.state.borrow().location.clone();
-        format!("{}:{agent}", location.unwrap_or_else(|| (self.location)()).key())
+        format!("{}:{agent}", location.unwrap_or_else(|| self.tui_location()).key())
     }
 
     /// `trackSessionCommit`: a submit is committing `model` and `agent` to `session`; once the session
@@ -793,7 +776,7 @@ impl Local {
         }
         self.state.borrow_mut().commits.remove(&id.0);
         // Inactive agents keep their remembered choices after another agent commits.
-        let here = (self.route)().is_some_and(|routed| routed.id == *id);
+        let here = self.route().is_some_and(|routed| routed.id == *id);
         if !here || self.agent().is_none_or(|agent| agent.id.0 != expected_agent) {
             return;
         }
@@ -817,7 +800,7 @@ impl Local {
 
     /// `model.remember`: keeps the current selection for the current agent in this session.
     fn remember(&self) {
-        let (Some(routed), Some(agent), Some(selection)) = ((self.route)(), self.agent(), self.selection()) else {
+        let (Some(routed), Some(agent), Some(selection)) = (self.route(), self.agent(), self.selection()) else {
             return;
         };
         self.state.borrow_mut().selections.entry(routed.id.0).or_default().insert(agent.id.0, selection);
@@ -937,7 +920,7 @@ impl Local {
         let Some(current) = self.selection() else {
             return;
         };
-        if let Some(routed) = (self.route)() {
+        if let Some(routed) = self.route() {
             self.set_session_draft(
                 &routed,
                 Selection { variant: model_pref::normalize_variant(value).map(str::to_owned), ..current.clone() },
@@ -1150,6 +1133,22 @@ fn options(
     favorites_at_open: &[Model],
     marker: Color,
 ) -> Vec<SelectOption<Model>> {
+    local.models(|models| {
+        local.providers(|providers| {
+            catalog_options(local, models, providers, provider, query, favorites_at_open, marker)
+        })
+    })
+}
+
+fn catalog_options(
+    local: &Local,
+    models: &[ModelInfo],
+    providers: &[ProviderInfo],
+    provider: Option<&str>,
+    query: &str,
+    favorites_at_open: &[Model],
+    marker: Color,
+) -> Vec<SelectOption<Model>> {
     let needle = query.trim();
     let connected = local.connected();
     let show_sections = connected && provider.is_none() && needle.is_empty();
@@ -1157,8 +1156,6 @@ fn options(
     let favorite_now = local.favorite();
     let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
     let recents = local.recent();
-    let models = local.models();
-    let providers = local.providers();
     let provider_name = |id: &str| {
         providers.iter().find(|item| item.id.0 == id).map_or(id.to_owned(), |provider| provider.name.clone())
     };
@@ -1460,7 +1457,7 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
 /// as it reaches its limit.
 pub fn usage_alerts(local: &Local) {
     use crate::dialogs::usage::{Level, format_dollars, format_reset, level};
-    if (local.route)().is_none() {
+    if local.route().is_none() {
         return;
     }
     let Some((model, usage)) = local.current_usage() else {
@@ -1512,25 +1509,4 @@ pub fn prompt_selection(
         })
         .or_else(|| base.and_then(|base| base.model));
     Some(crate::prompt::metadata::Selection { agent, model })
-}
-
-/// The [`LocationFn`] of the TUI: the current location, else the default one.
-pub fn location_fn(tui: Weak<Tui>) -> LocationFn {
-    Rc::new(bind!(tui, |tui| {
-        crate::features::location::current(&tui)
-            .unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
-    }, else Location::default()))
-}
-
-/// The [`RouteFn`] of the TUI: the routed session and what the store held of it at the last sync. It does not
-/// lock the store, as `Local` is read from keymap conditions.
-pub fn route_fn(tui: Weak<Tui>) -> RouteFn {
-    Rc::new(move || {
-        let tui = tui.upgrade()?;
-        let Route::Session { id } = tui.route() else {
-            return None;
-        };
-        let session = tui.routed();
-        Some(Routed { id, session })
-    })
 }

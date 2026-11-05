@@ -346,6 +346,16 @@ fn redo_clears_a_staged_revert_and_is_off_without_one() {
 }
 
 #[test]
+fn keymap_conditions_read_the_store_under_a_store_read() {
+    // Rows render under `tui.data.read`; a keymap query from a row runs conditions that read the store again.
+    let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
+    kit.wait_for("1 message reverted");
+    let commands = kit.tui.data.read(|_| kit.tui.keymap.commands());
+    let redo = commands.iter().find(|command| command.id == "session.redo").map(|command| command.enabled);
+    assert_eq!(redo, Some(true));
+}
+
+#[test]
 fn a_prompt_commits_a_staged_revert_before_it_is_sent() {
     let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
     kit.wait_for("1 message reverted");

@@ -454,7 +454,6 @@ impl Open {
         let width = u32::from(tui.app.size().0).saturating_sub(2).min(DialogSize::Large.width());
         let content = select::content_width(width) as i64;
         let now = now_ms();
-        // Read before the store lock: the tabs read the store themselves.
         let tabs: HashSet<String> = tui.tabs.open_ids(&tui).into_iter().collect();
         let current = tui.tabs.current(&tui);
         let mut options: Vec<SelectOption<Target>> = tui.data.read(|store| {

@@ -9,8 +9,8 @@ use std::time::Duration;
 use opencode_api::client::{Call, RequestOptions};
 use opencode_api::generated::{
     ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID, SessionInboxCancelInput, SessionInboxInfo,
-    SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction, SessionMessageInfo,
-    SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
+    SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction,
+    SessionMessageInfo, SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
 };
 use opencode_store::{MessageExt, State};
 use opencode_ui::bind;
@@ -78,19 +78,20 @@ impl Inner {
             .bind(Bind::Off)
         };
         let slash = |name: &str, arguments: bool| Slash { arguments, ..Slash::new(name) };
-        // Keymap conditions read the routed session as the last sync left it: they must not lock the store.
+        let routed = |tui: &Tui, session: &SessionID, check: fn(&SessionInfo) -> bool| {
+            tui.route() == (Route::Session { id: session.clone() })
+                && tui.data.read(|state| state.session(session).is_some_and(check))
+        };
         let reverted = {
             let (weak, session) = (tui.weak(), self.session.clone());
             Condition::when(move || {
-                weak.upgrade()
-                    .is_some_and(|tui| tui.routed().is_some_and(|info| info.id == session && info.revert.is_some()))
+                weak.upgrade().is_some_and(|tui| routed(&tui, &session, |info| info.revert.is_some()))
             })
         };
         let child = {
             let (weak, session) = (tui.weak(), self.session.clone());
             Condition::when(move || {
-                weak.upgrade()
-                    .is_some_and(|tui| tui.routed().is_some_and(|info| info.id == session && info.parent_id.is_some()))
+                weak.upgrade().is_some_and(|tui| routed(&tui, &session, |info| info.parent_id.is_some()))
             })
         };
         let commands = vec![
