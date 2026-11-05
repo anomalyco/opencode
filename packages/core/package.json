@@ -94,7 +94,6 @@
   },
   "dependencies": {
     "@ai-sdk/provider": "3.0.19",
-    "@ai-sdk/provider-utils": "4.0.62",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",

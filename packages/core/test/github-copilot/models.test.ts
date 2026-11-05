@@ -102,8 +102,8 @@ test("defensively syncs advertised Copilot models", async () => {
     const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
-    expect(model?.package).toBe(Provider.aisdk("@ai-sdk/github-copilot"))
-    expect(model?.settings).toMatchObject({ baseURL: server.url.origin, endpoint: "responses" })
+    expect(model?.package).toBe("@opencode/ai/providers/openai-compatible-responses")
+    expect(model?.settings).toEqual({ baseURL: server.url.origin })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })
     expect(model?.variants.map((variant) => variant.id)).toEqual([
       Model.VariantID.make("low"),
@@ -111,10 +111,7 @@ test("defensively syncs advertised Copilot models", async () => {
     ])
     expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
     expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe("@opencode/ai/providers/anthropic")
-    expect(models.get(Model.ID.make("claude-sonnet"))?.settings).toMatchObject({
-      baseURL: `${server.url.origin}/v1`,
-      endpoint: "messages",
-    })
+    expect(models.get(Model.ID.make("claude-sonnet"))?.settings).toEqual({ baseURL: `${server.url.origin}/v1` })
     expect(models.get(Model.ID.make("vision-only"))?.capabilities.input).toEqual(["text", "image"])
     expect(models.get(Model.ID.make("utility"))?.enabled).toBe(false)
     expect(models.has(Model.ID.make("stale"))).toBe(false)

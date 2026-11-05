@@ -223,20 +223,21 @@ export const GithubCopilotPlugin = define({
         return
       }
       // Without the live model list, the models.dev package says which Copilot API serves
-      // each model: Anthropic Messages stays native, OpenAI means Responses, and anything
-      // else goes through the bundled Copilot SDK's model ID fallback.
+      // each model: Anthropic means Messages, OpenAI means Responses, and anything else
+      // falls back to the model ID.
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
-          if (model.package === "@opencode/ai/providers/anthropic") {
-            if (loaded.baseURL)
-              model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL}/v1` })
-            return
-          }
-          const responses = model.package === "@opencode/ai/providers/openai"
-          model.package = Provider.aisdk("@ai-sdk/github-copilot")
+          const route = CopilotModels.routeFor(
+            model.modelID ?? model.id,
+            model.package === "@opencode/ai/providers/anthropic"
+              ? "messages"
+              : model.package === "@opencode/ai/providers/openai"
+                ? "responses"
+                : undefined,
+          )
+          model.package = route.package
           model.settings = Provider.mergeOverlay(model.settings, {
-            ...(loaded.baseURL ? { baseURL: loaded.baseURL } : {}),
-            ...(responses ? { endpoint: "responses" } : {}),
+            baseURL: route.baseURL(loaded.baseURL ?? baseURL()),
           })
         })
       }
@@ -250,20 +251,6 @@ export const GithubCopilotPlugin = define({
         })
       }
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/github-copilot") return
-        evt.options.fetch = copilotFetch(
-          typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
-          evt.options.fetch,
-          ctx.app,
-        )
-        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider.js"))
-        evt.sdk = mod.createOpenaiCompatible(evt.options)
-      }),
-      { providerID: Provider.ID.githubCopilot },
-    )
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
@@ -307,40 +294,15 @@ export const GithubCopilotPlugin = define({
       "http.request",
       (evt) =>
         Effect.gen(function* () {
-          const token = evt.request.headers.get("x-api-key")
+          // The Messages route sends the token as `x-api-key`, the OpenAI routes as a bearer token.
+          const token =
+            evt.request.headers.get("x-api-key") ??
+            evt.request.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
           const body = Option.getOrUndefined(decodeBody(text))
           applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body))
         }),
-      { providerID: Provider.ID.githubCopilot },
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
-          evt.language = evt.sdk.languageModel(evt.model.modelID ?? evt.model.id)
-          return
-        }
-        if (evt.options.endpoint === "responses" && evt.sdk.responses) {
-          evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
-          return
-        }
-        if (evt.options.endpoint === "chat" && evt.sdk.chat) {
-          evt.language = evt.sdk.chat(evt.model.modelID ?? evt.model.id)
-          return
-        }
-        const id = evt.model.modelID ?? evt.model.id
-        // Copilot serves Grok and MAI Code only on /responses, and Gemini only on
-        // /chat/completions; advertised endpoint metadata above wins whenever the
-        // live model list provides it.
-        const gpt = /^gpt-(\d+)/.exec(id)
-        const responses =
-          (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
-          id.startsWith("grok-") ||
-          id.startsWith("mai-code-")
-        evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
-      }),
       { providerID: Provider.ID.githubCopilot },
     )
   }),
@@ -469,17 +431,6 @@ export function utilityTitle(
       return title ? Effect.succeed(title) : Effect.fail(new Error("Utility title response was empty"))
     }),
   )
-}
-
-export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, app: App.Info): Fetch {
-  const send = upstream ?? fetch
-  return async (input, init) => {
-    const requestHeaders = new Headers(init?.headers)
-    const url = input instanceof URL ? input.href : typeof input === "string" ? input : input.url
-    const body = typeof init?.body === "string" ? Option.getOrUndefined(decodeBody(init.body)) : undefined
-    applyHeaders(requestHeaders, token, app, requestMetadata(url, body))
-    return send(input, { ...init, headers: requestHeaders })
-  }
 }
 
 function applyHeaders(headers: Headers, token: string | undefined, app: App.Info, metadata: RequestMetadata) {
