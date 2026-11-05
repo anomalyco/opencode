@@ -88,6 +88,8 @@ story("keeps the dropzone mounted while its fade-out transition plays", async ({
     setPresence({ active: true })
   }, fixture)
   await expect(dropzone).toHaveAttribute("data-visible", "true")
+  // Once the enter animation has finished; hiding from its first frame at opacity 0 has nothing to fade.
+  await expect(dropzone).toHaveCSS("opacity", "1")
 
   const leaving = await page.evaluate(async (fixture) => {
     const { setPresence } = await import(fixture)
