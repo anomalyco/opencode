@@ -98,29 +98,31 @@ impl Output {
 }
 
 /// Raw mode on stdin while alive, when stdin is a terminal. The flags are libuv's
-/// `UV_TTY_MODE_RAW`, which keeps `ONLCR`, so `\n` still starts a new line.
+/// `UV_TTY_MODE_RAW`, which keeps `ONLCR`, so `\n` still starts a new line. `output` is where the
+/// holder draws and hides the cursor.
 pub struct Raw {
     fd: BorrowedFd<'static>,
     saved: Option<(u64, Termios)>,
 }
 
-/// The modes saved by each live [`Raw`], oldest first, so [`restore`] can put the terminal back from a signal
-/// handler's thread while a prompt still holds raw mode.
-static ACTIVE: std::sync::Mutex<Vec<(u64, BorrowedFd<'static>, Termios)>> =
-    std::sync::Mutex::new(Vec::new());
+/// The modes saved by each live [`Raw`], oldest first, with the output it draws on, so [`restore`] can put
+/// the terminal back from a signal handler's thread while a prompt still holds raw mode.
+type Active = Vec<(u64, BorrowedFd<'static>, Termios, Output)>;
 
-fn active() -> std::sync::MutexGuard<'static, Vec<(u64, BorrowedFd<'static>, Termios)>> {
+static ACTIVE: std::sync::Mutex<Active> = std::sync::Mutex::new(Vec::new());
+
+fn active() -> std::sync::MutexGuard<'static, Active> {
     ACTIVE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Raw {
-    pub fn enable() -> Raw {
-        Raw::enable_on(stdin())
+    pub fn enable(output: Output) -> Raw {
+        Raw::enable_on(stdin(), output)
     }
 
-    fn enable_on(fd: BorrowedFd<'static>) -> Raw {
+    fn enable_on(fd: BorrowedFd<'static>, output: Output) -> Raw {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let saved = isatty(fd)
             .then(|| tcgetattr(fd).ok())
@@ -139,7 +141,7 @@ impl Raw {
                 LocalModes::ECHO | LocalModes::ICANON | LocalModes::IEXTEN | LocalModes::ISIG;
             raw.special_codes[SpecialCodeIndex::VMIN] = 1;
             raw.special_codes[SpecialCodeIndex::VTIME] = 0;
-            active().push((*id, fd, saved.clone()));
+            active().push((*id, fd, saved.clone(), output));
             let _ = tcsetattr(fd, OptionalActions::Now, &raw);
         }
         Raw { fd, saved }
@@ -149,22 +151,27 @@ impl Raw {
 impl Drop for Raw {
     fn drop(&mut self) {
         if let Some((id, saved)) = &self.saved {
-            active().retain(|(other, _, _)| other != id);
+            active().retain(|(other, _, _, _)| other != id);
             let _ = tcsetattr(self.fd, OptionalActions::Now, saved);
         }
     }
 }
 
 /// Puts the terminal back as it was before the first live prompt took raw mode, and shows the cursor that
-/// prompts hide. A shutdown step: the process exits right after, without running the prompt's own drop.
-/// Does nothing while no prompt holds raw mode.
+/// prompts hide on each output they draw on that is a terminal, never into a redirected file. A shutdown
+/// step: the process exits right after, without running the prompt's own drop. Does nothing while no
+/// prompt holds raw mode.
 pub fn restore() {
     let active = active();
-    let Some((_, fd, saved)) = active.first() else {
+    let Some((_, fd, saved, _)) = active.first() else {
         return;
     };
     let _ = tcsetattr(*fd, OptionalActions::Now, saved);
-    Output::Stdout.write("\x1b[?25h");
+    for output in [Output::Stdout, Output::Stderr] {
+        if active.iter().any(|entry| entry.3 == output) && output.is_terminal() {
+            output.write("\x1b[?25h");
+        }
+    }
 }
 
 /// A key as `emitKeypressEvents` reports it. `name` is `None` for unnamed characters and
@@ -571,7 +578,7 @@ mod tests {
         let fd = slave.as_fd();
         let cooked = tcgetattr(fd).unwrap().local_modes;
         assert!(cooked.contains(LocalModes::ICANON));
-        let raw = Raw::enable_on(fd);
+        let raw = Raw::enable_on(fd, Output::Stdout);
         assert!(
             !tcgetattr(fd)
                 .unwrap()
