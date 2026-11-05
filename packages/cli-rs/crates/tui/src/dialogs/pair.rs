@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{PairingCode, ServerInfo};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, header, layout};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opentui::keymap::Disposer;
@@ -17,17 +18,12 @@ use crate::app::Tui;
 
 /// Registers `server.pair` ("Pair device", `/pair` and `/web`) as `app.tsx:1074-1081` does.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    let command = TuiCommand::new("server.pair", move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            show(&tui);
-        }
-    })
-    .bind(Bind::Off)
-    .title("Pair device")
-    .group("System")
-    .palette()
-    .slash(Slash { name: "pair".to_owned(), aliases: vec!["web".to_owned()], arguments: false });
+    let command = TuiCommand::new("server.pair", bind!(tui, |tui, _, _| show(&tui)))
+        .bind(Bind::Off)
+        .title("Pair device")
+        .group("System")
+        .palette()
+        .slash(Slash { name: "pair".to_owned(), aliases: vec!["web".to_owned()], arguments: false });
     let layers = [
         KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: the configured keybind (`none` by default).
@@ -96,8 +92,7 @@ fn load(tui: &Tui, cx: &Rc<DialogCx>, body: &View) {
                 futures_util::future::join(client.server_info(&options), client.server_pair(&options)).await;
             Ok::<_, opencode_api::error::Error>(pairing(&server?, &code?))
         },
-        move |_, result| {
-            let Some(cx) = cx.upgrade() else { return };
+        bind!(cx, |cx, _, result| {
             body.clear();
             match result {
                 Ok(value) => {
@@ -115,7 +110,7 @@ fn load(tui: &Tui, cx: &Rc<DialogCx>, body: &View) {
                 }
             }
             cx.app.request_redraw();
-        },
+        }),
     );
 }
 

@@ -13,6 +13,7 @@ use opencode_api::generated::{
     SessionMessageID,
 };
 use opencode_store::{Changes, State};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
@@ -167,12 +168,7 @@ impl Queued {
             prompt,
             layers: RefCell::default(),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.root.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.open();
-            }
-        });
+        inner.root.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| inner.open()));
         inner.register(tui);
         inner.update(tui);
         Self(inner)
@@ -209,17 +205,12 @@ impl Inner {
             let weak = Rc::downgrade(self);
             Condition::when(move || weak.upgrade().is_some_and(|inner| inner.count.get() > 0))
         };
-        let weak = Rc::downgrade(self);
-        let command = TuiCommand::new("session.queued_prompts", move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.open();
-            }
-        })
-        .title("View queued prompts")
-        .group("Prompt")
-        .bind(Bind::Off)
-        .palette()
-        .enabled(queued);
+        let command = TuiCommand::new("session.queued_prompts", bind!(self, |inner, _, _| inner.open()))
+            .title("View queued prompts")
+            .group("Prompt")
+            .bind(Bind::Off)
+            .palette()
+            .enabled(queued);
         for layer in [
             KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
             KeymapLayer { bindings: vec!["session.queued_prompts".to_owned()], ..KeymapLayer::default() },

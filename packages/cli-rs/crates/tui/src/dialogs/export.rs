@@ -5,6 +5,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout_with};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::select::{self, ActionRun, FooterHint, Group, SelectAction, SelectOption, SelectProps};
@@ -66,12 +67,7 @@ enum Row {
 /// `DialogExportOptions.show` (`DialogExportOptionsList`): one row per value. Up and Down move; Left, Right, and
 /// Space change the value; Enter saves to a file and `c` copies.
 pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
-    let weak = tui.weak();
-    let confirm: Rc<dyn Fn(Choice)> = Rc::new(move |choice| {
-        if let Some(tui) = weak.upgrade() {
-            on_confirm(&tui, choice);
-        }
-    });
+    let confirm: Rc<dyn Fn(Choice)> = Rc::new(bind!(tui, |tui, choice| on_confirm(&tui, choice)));
     tui.dialogs.replace(
         move |cx| {
             let state = Rc::new(State {
@@ -202,14 +198,13 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
             };
             let copy: Rc<dyn Fn()> = {
                 let path = path.clone();
-                Rc::new(move || {
-                    let Some(tui) = weak.upgrade() else { return };
+                Rc::new(bind!(weak, |tui| {
                     if tui.app.copy_to_clipboard(&path) {
                         result_with(&tui, path.clone(), true);
                     } else {
                         tui.toasts.error("Failed to copy to clipboard");
                     }
-                })
+                }))
             };
             cx.layer(KeymapLayer {
                 commands: vec![

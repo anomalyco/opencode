@@ -20,6 +20,7 @@ use opencode_api::generated::{
 use opencode_local::cli_config::{DiffSource, DiffView as PreferredView};
 use opencode_plugin::{Definition, Setup, Slotted};
 use opencode_store::Location;
+use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opentui::keymap::{Condition, Disposer};
 use opentui::native::ImageFit;
@@ -185,12 +186,7 @@ pub fn plugin() -> Definition<Tui> {
         });
         let open = shared.clone();
         setup.layer(keys::open_layer(&tui, Rc::new(move |tui| self::open(tui, &open))));
-        let weak = tui.weak();
-        setup.on_dispose(move || {
-            if let Some(tui) = weak.upgrade() {
-                tui.panels.release(&tui, ID);
-            }
-        });
+        setup.on_dispose(bind!(tui, |tui| tui.panels.release(&tui, ID)));
     })
 }
 
@@ -374,11 +370,7 @@ impl Viewer {
         let (target, enabled) = match &self.place {
             Place::Panel { host, .. } => {
                 let weak = self.this.clone();
-                host.on_focus(move |_, _| {
-                    if let Some(viewer) = weak.upgrade() {
-                        viewer.refresh();
-                    }
-                });
+                host.on_focus(bind!(weak, |viewer, _, _| viewer.refresh()));
                 (Some(host.id()), Condition::Always)
             }
             Place::Route { .. } => {
@@ -395,14 +387,13 @@ impl Viewer {
             Err(error) => log::error!("{ID} keymap layer: {error}"),
         }
         let weak = self.this.clone();
-        self.root.on_resize(move |_, rect| {
-            let Some(viewer) = weak.upgrade() else { return };
+        self.root.on_resize(bind!(weak, |viewer, _, rect| {
             let width = rect.width as i64;
             if viewer.state.borrow().width != width {
                 viewer.state.borrow_mut().width = width;
                 viewer.refresh();
             }
-        });
+        }));
     }
 
     pub(super) fn session(&self) -> Option<&SessionID> {
@@ -653,8 +644,7 @@ impl Viewer {
                 let files = client.vcs_diff(&input, &options).await?.data;
                 Ok::<_, opencode_api::error::Error>((reported, base, files))
             },
-            move |_, result| {
-                let Some(viewer) = weak.upgrade() else { return };
+            bind!(weak, |viewer, _, result| {
                 {
                     let mut state = viewer.state.borrow_mut();
                     if state.generation != generation {
@@ -675,7 +665,7 @@ impl Viewer {
                 }
                 viewer.reset();
                 viewer.refresh();
-            },
+            }),
         );
     }
 
@@ -1021,10 +1011,7 @@ impl Viewer {
             return;
         }
         let weak = self.this.clone();
-        tui.app.animate(move |_, _| {
-            let Some(viewer) = weak.upgrade() else {
-                return false;
-            };
+        tui.app.animate(bind!(weak, |viewer, _, _| {
             viewer.pass();
             let left = viewer.passes.get().saturating_sub(1);
             viewer.passes.set(left);
@@ -1032,7 +1019,7 @@ impl Viewer {
                 viewer.state.borrow_mut().pending = None;
             }
             left > 0
-        });
+        }));
     }
 
     /// The work TS does in lifecycle passes: the pending scroll, the sticky headers, and the top edge's color.
@@ -1448,31 +1435,33 @@ impl Viewer {
         let client = tui.data.client().clone();
         let input = FileReadInput { location: self.location(), path: file.to_owned() };
         let (weak, file, generation) = (self.this.clone(), file.to_owned(), self.state.borrow().generation);
-        tui.app.spawn(async move { client.file_read(&input, &RequestOptions::default()).await }, move |_, result| {
-            let Some(viewer) = weak.upgrade() else { return };
-            let Some(tui) = viewer.tui.upgrade() else {
-                return;
-            };
-            if viewer.state.borrow().generation != generation {
-                return;
-            }
-            let preview = match result {
-                Ok(bytes) => Preview::Ready(Rc::new(bytes.to_vec())),
-                Err(error) => {
-                    log::warn!("{ID}: {file}: {error}");
-                    Preview::Failed
+        tui.app.spawn(
+            async move { client.file_read(&input, &RequestOptions::default()).await },
+            bind!(weak, |viewer, _, result| {
+                let Some(tui) = viewer.tui.upgrade() else {
+                    return;
+                };
+                if viewer.state.borrow().generation != generation {
+                    return;
                 }
-            };
-            viewer.previews.borrow_mut().insert(file.clone(), preview.clone());
-            let slot =
-                viewer.parts.borrow().images.iter().find(|(shown, _)| *shown == file).map(|(_, slot)| slot.clone());
-            if let Some(slot) = slot {
-                let theme = tui.page();
-                let height = (tui.app.size().1 / 4).clamp(3, 8);
-                fill_image(&tui, &theme, &slot, &file, height, &preview);
-                tui.app.request_redraw();
-            }
-        });
+                let preview = match result {
+                    Ok(bytes) => Preview::Ready(Rc::new(bytes.to_vec())),
+                    Err(error) => {
+                        log::warn!("{ID}: {file}: {error}");
+                        Preview::Failed
+                    }
+                };
+                viewer.previews.borrow_mut().insert(file.clone(), preview.clone());
+                let slot =
+                    viewer.parts.borrow().images.iter().find(|(shown, _)| *shown == file).map(|(_, slot)| slot.clone());
+                if let Some(slot) = slot {
+                    let theme = tui.page();
+                    let height = (tui.app.size().1 / 4).clamp(3, 8);
+                    fill_image(&tui, &theme, &slot, &file, height, &preview);
+                    tui.app.request_redraw();
+                }
+            }),
+        );
     }
 
     /// The footer of the compact layout: how to leave, and the shortcuts.
@@ -1504,8 +1493,7 @@ impl Viewer {
                 .basis(Length::Auto)
                 .min_width(0);
         let weak = self.this.clone();
-        leave.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            let Some(viewer) = weak.upgrade() else { return };
+        leave.mouse_pointer(MousePointer::POINTER).on_click(bind!(weak, |viewer, _, _| {
             if !viewer.docked() {
                 viewer.run(Action::Close);
                 return;
@@ -1513,7 +1501,7 @@ impl Viewer {
             if let (Some(tui), Place::Panel { host, .. }) = (viewer.tui.upgrade(), &viewer.place) {
                 tui.app.focus(host);
             }
-        });
+        }));
         let row = View::new(app)
             .row()
             .height(1)
@@ -1565,8 +1553,7 @@ impl Viewer {
         let detail = self.source_detail();
         let is_reviewed = |file: usize| files.get(file).is_some_and(|file| reviewed.contains(&file.file));
         let weak = self.this.clone();
-        let on_row: tree::OnRow = Rc::new(move |row| {
-            let Some(viewer) = weak.upgrade() else { return };
+        let on_row: tree::OnRow = Rc::new(bind!(weak, |viewer, row| {
             match row.file {
                 Some(file) => {
                     viewer.state.borrow_mut().selected_hunk = None;
@@ -1583,19 +1570,11 @@ impl Viewer {
                     viewer.refresh();
                 }
             }
-        });
+        }));
         let weak = self.this.clone();
-        let on_source = Rc::new(move || {
-            if let Some(viewer) = weak.upgrade() {
-                super::sources::open(&viewer);
-            }
-        });
+        let on_source = Rc::new(bind!(weak, |viewer| super::sources::open(&viewer)));
         let weak = self.this.clone();
-        let on_menu: tree::OnMenu = Rc::new(move |file, x, y| {
-            if let Some(viewer) = weak.upgrade() {
-                viewer.open_menu(file, x, y);
-            }
-        });
+        let on_menu: tree::OnMenu = Rc::new(bind!(weak, |viewer, file, x, y| viewer.open_menu(file, x, y)));
         let pane = tree::pane(
             &tui.app,
             &theme,

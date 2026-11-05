@@ -27,6 +27,7 @@ use opencode_local::jsonl::{self, Frecency};
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_store::location::{Catalog, Location};
+use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{fuzzy, move_wrap, truncate, truncate_middle};
@@ -561,8 +562,7 @@ impl State {
         let home = home();
         let width = self.content_width(tui);
         let weak = self.prompt.clone();
-        let finish = move |results: Option<Results>| {
-            let Some(prompt) = weak.upgrade() else { return };
+        let finish = bind!(weak, |prompt, results: Option<Results>| {
             let Some(complete) = prompt.autocomplete.get() else {
                 return;
             };
@@ -584,7 +584,7 @@ impl State {
             };
             state.results.replace(next);
             state.refresh();
-        };
+        });
         let request_location = Some(LocationQueryInput { directory: Some(directory.clone()) });
         let query_for_results = search.to_owned();
         if mode == Mode::Directory {
@@ -927,8 +927,7 @@ impl State {
                 }
             }
             let weak = self.prompt.clone();
-            row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-                let Some(prompt) = weak.upgrade() else { return };
+            row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(weak, |prompt, _, event| {
                 let Some(complete) = prompt.autocomplete.get() else {
                     return;
                 };
@@ -943,7 +942,7 @@ impl State {
                     MouseEventKind::ScrollDown => complete.0.scroll(1),
                     _ => {}
                 }
-            });
+            }));
             let color = if confirm {
                 Some(theme.text.feedback.error.base)
             } else if active {

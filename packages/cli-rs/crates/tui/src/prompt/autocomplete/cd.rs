@@ -6,6 +6,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
@@ -65,8 +66,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
         let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
         tui.app.spawn(
             async move { client.location_get(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(prompt) = weak.upgrade() else { return };
+            bind!(weak, |prompt, _, result| {
                 let Some(tui) = prompt.tui.upgrade() else {
                     return;
                 };
@@ -80,24 +80,26 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
                         prompt.relocate(&tui);
                     }
                 }
-            },
+            }),
         );
         return;
     };
     // TS sends the argument as typed; the server resolves it against the session.
     let request = SessionMoveInput { session_id: session, directory: AbsolutePath(input.to_owned()), delivery: None };
-    tui.app.spawn(async move { client.session_move(&request, &RequestOptions::default()).await }, move |_, result| {
-        let Some(prompt) = weak.upgrade() else { return };
-        let Some(tui) = prompt.tui.upgrade() else {
-            return;
-        };
-        match result {
-            Err(error) => failed(&tui, error.to_string()),
-            Ok(()) => {
-                if let Some(project) = &project {
-                    tui.prompt.complete.touch(&tui, project, &directory);
+    tui.app.spawn(
+        async move { client.session_move(&request, &RequestOptions::default()).await },
+        bind!(weak, |prompt, _, result| {
+            let Some(tui) = prompt.tui.upgrade() else {
+                return;
+            };
+            match result {
+                Err(error) => failed(&tui, error.to_string()),
+                Ok(()) => {
+                    if let Some(project) = &project {
+                        tui.prompt.complete.touch(&tui, project, &directory);
+                    }
                 }
             }
-        }
-    });
+        }),
+    );
 }

@@ -14,6 +14,7 @@ use std::rc::{Rc, Weak};
 use opencode_local::jsonl::{self, MAX_STASH_ENTRIES};
 use opencode_local::lock;
 use opencode_local::serial::Serial;
+use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
@@ -157,11 +158,7 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
                 let weak: Weak<Inner> = Rc::downgrade(prompt);
                 crate::dialogs::stash::show(
                     tui,
-                    Rc::new(move |entry: &Value| {
-                        if let Some(prompt) = weak.upgrade() {
-                            show(&prompt, entry["prompt"].clone());
-                        }
-                    }),
+                    Rc::new(bind!(weak, |prompt, entry: &Value| show(&prompt, entry["prompt"].clone()))),
                 );
             })
             .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),

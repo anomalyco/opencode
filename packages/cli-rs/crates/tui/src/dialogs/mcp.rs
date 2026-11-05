@@ -14,6 +14,7 @@ use opencode_api::generated::{
     ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
 };
 use opencode_store::{Catalog, Location};
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
@@ -28,17 +29,12 @@ use crate::routes::Route;
 
 /// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    let command = TuiCommand::new("mcp.list", move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            show(&tui);
-        }
-    })
-    .bind(Bind::Off)
-    .title("MCP servers")
-    .group("Agent")
-    .palette()
-    .slash(Slash { name: "mcps".to_owned(), aliases: Vec::new(), arguments: false });
+    let command = TuiCommand::new("mcp.list", bind!(tui, |tui, _, _| show(&tui)))
+        .bind(Bind::Off)
+        .title("MCP servers")
+        .group("Agent")
+        .palette()
+        .slash(Slash { name: "mcps".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
         KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appGlobalBindingCommands`.
@@ -87,14 +83,8 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
             props.search_in_title = true;
             props.title_placeholder = Some("Search MCP servers".to_owned());
             props.preserve_selection = true;
-            props.on_select = Some(Rc::new({
-                let weak = weak.clone();
-                move |option: &SelectOption<String>| {
-                    if let Some(mcp) = weak.upgrade() {
-                        mcp.select(&option.value);
-                    }
-                }
-            }));
+            props.on_select =
+                Some(Rc::new(bind!(weak, |mcp, option: &SelectOption<String>| mcp.select(&option.value))));
             props.actions = vec![SelectAction {
                 title: Rc::new({
                     let weak = weak.clone();
@@ -103,27 +93,18 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
                         toggle_title(server.as_ref()).to_owned()
                     }
                 }),
-                ..SelectAction::new("dialog.mcp.toggle", "connect", {
-                    let weak = weak.clone();
-                    move |option: &SelectOption<String>| {
-                        if let Some(mcp) = weak.upgrade() {
-                            mcp.toggle(&option.value);
-                        }
-                    }
-                })
+                ..SelectAction::new(
+                    "dialog.mcp.toggle",
+                    "connect",
+                    bind!(weak, |mcp, option: &SelectOption<String>| mcp.toggle(&option.value)),
+                )
             }];
-            props.dynamic_hints = Some(Rc::new({
-                let weak = weak.clone();
-                move || {
-                    let Some(mcp) = weak.upgrade() else {
-                        return Vec::new();
-                    };
-                    if !mcp.focused().is_some_and(|server| focused_error(&server).is_some()) {
-                        return Vec::new();
-                    }
-                    vec![FooterHint { title: "view error".into(), label: "enter".into(), group: Some(Group::Primary) }]
+            props.dynamic_hints = Some(Rc::new(bind!(weak, |mcp| {
+                if !mcp.focused().is_some_and(|server| focused_error(&server).is_some()) {
+                    return Vec::new();
                 }
-            }));
+                vec![FooterHint { title: "view error".into(), label: "enter".into(), group: Some(Group::Primary) }]
+            })));
             let (view, handle) = select::select(cx, props);
             if let Some(name) = &initial {
                 handle.move_to(name);
@@ -253,11 +234,7 @@ impl Mcp {
         {
             let weak = self.tui.clone();
             if let Some(tui) = self.tui.upgrade() {
-                tui.app.defer(move |_| {
-                    if let Some(tui) = weak.upgrade() {
-                        super::integration::show_auto_connect(&tui, &integration);
-                    }
-                });
+                tui.app.defer(bind!(weak, |tui, _| super::integration::show_auto_connect(&tui, &integration)));
             }
             return;
         }
@@ -339,22 +316,17 @@ impl Mcp {
             diagnostic_ref: None,
             on_back: Rc::new({
                 let name = server.name.clone();
-                move || {
-                    let Some(tui) = weak.upgrade() else { return };
+                bind!(weak, |tui| {
                     let (weak, name) = (tui.weak(), name.clone());
-                    tui.app.defer(move |_| {
-                        if let Some(tui) = weak.upgrade() {
-                            show_server(&tui, Some(name), false);
-                        }
-                    });
-                }
+                    tui.app.defer(bind!(weak, |tui, _| show_server(&tui, Some(name), false)));
+                })
             }),
         };
-        let open = tui.weak();
-        tui.app.defer(move |_| {
-            let Some(tui) = open.upgrade() else { return };
-            tui.dialogs.replace(|cx| error_details::view(&tui, cx, props), None, DialogOptions::default());
-        });
+        tui.app.defer(bind!(tui, |tui, _| tui.dialogs.replace(
+            |cx| error_details::view(&tui, cx, props),
+            None,
+            DialogOptions::default()
+        )));
     }
 }
 

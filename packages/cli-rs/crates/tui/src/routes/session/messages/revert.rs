@@ -9,6 +9,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     FileDiffInfo, FileDiffInfoStatus, SessionID, SessionMessageInfo, SessionRevertClearInput,
 };
+use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -66,19 +67,12 @@ impl Banner {
             session: RefCell::default(),
             hover: Cell::new(false),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.root.on_hover(bind!(inner, |inner, _, hovered| {
             inner.hover.set(hovered);
             let raised = inner.theme.background.raised.base;
             inner.body.bg(if hovered { inner.theme.decrease(&raised, 1) } else { raised });
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.root.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.clear();
-            }
-        });
+        }));
+        inner.root.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| inner.clear()));
         Self(inner)
     }
 

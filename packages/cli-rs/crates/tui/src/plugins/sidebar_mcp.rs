@@ -7,6 +7,7 @@ use std::rc::Rc;
 use opencode_api::generated::{McpServer, SessionID};
 use opencode_plugin::{Definition, Placement, slot};
 use opencode_store::{Catalog, Location};
+use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
@@ -114,12 +115,7 @@ fn row(tui: &Tui, theme: &Theme, item: McpServer) -> View {
                 .wrap(WrapMode::None)
                 .shrink(0.0),
         );
-    let weak = tui.weak();
     let failed = status == "failed";
-    on_click(&row, false, move || {
-        if let Some(tui) = weak.upgrade() {
-            crate::dialogs::mcp::show_server(&tui, Some(item.name.clone()), failed);
-        }
-    });
+    on_click(&row, false, bind!(tui, |tui| crate::dialogs::mcp::show_server(&tui, Some(item.name.clone()), failed)));
     row
 }

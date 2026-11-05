@@ -11,6 +11,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{ExperimentalMediaGetInput, MediaHash};
+use opencode_ui::bind;
 use opencode_ui::dialog::{
     DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, header, layout,
 };
@@ -42,12 +43,7 @@ pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
             cx.dialogs.set_centered(true);
             *viewer.cx.borrow_mut() = Rc::downgrade(cx);
             let step = |direction: isize| {
-                let weak = Rc::downgrade(&viewer);
-                move |_: Option<&str>, _: Option<&KeyEvent>| {
-                    if let Some(viewer) = weak.upgrade() {
-                        viewer.step(direction);
-                    }
-                }
+                bind!(viewer, |viewer, _: Option<&str>, _: Option<&KeyEvent>| viewer.step(direction))
             };
             cx.layer(KeymapLayer {
                 commands: vec![
@@ -87,12 +83,7 @@ impl Viewer {
         self.index.set(next as usize);
         // A footer action runs inside the footer this replaces, so the redraw waits.
         if let Some(tui) = self.tui.upgrade() {
-            let weak = Rc::downgrade(self);
-            tui.app.defer(move |_| {
-                if let Some(viewer) = weak.upgrade() {
-                    viewer.draw();
-                }
-            });
+            tui.app.defer(bind!(self, |viewer, _| viewer.draw()));
         }
     }
 
@@ -132,12 +123,7 @@ impl Viewer {
         let mut primary = Vec::new();
         if self.images.len() > 1 {
             let action = |title: &str, key: &str, direction: isize| {
-                let weak = Rc::downgrade(self);
-                FooterAction::new(title).key(key).on_trigger(move || {
-                    if let Some(viewer) = weak.upgrade() {
-                        viewer.step(direction);
-                    }
-                })
+                FooterAction::new(title).key(key).on_trigger(bind!(self, |viewer| viewer.step(direction)))
             };
             primary = vec![action("previous", "←", -1), action("next", "→", 1)];
         }
@@ -168,11 +154,10 @@ impl Viewer {
         let (weak, uri) = (Rc::downgrade(self), uri.to_owned());
         tui.app.spawn(
             async move { client.experimental_media_get(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(viewer) = weak.upgrade() else { return };
+            bind!(weak, |viewer, _, result| {
                 viewer.media.borrow_mut().insert(uri, result.ok().map(|bytes| bytes.to_vec()));
                 viewer.draw();
-            },
+            }),
         );
         Load::Pending
     }

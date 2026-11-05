@@ -8,6 +8,7 @@
 
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use serde_json::{Value, json};
 
 use crate::app::Tui;
@@ -37,11 +38,10 @@ pub fn install(tui: &Rc<Tui>, continue_: bool) {
 pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
     if !release.items.is_empty() {
         let (weak, shown) = (tui.weak(), release.clone());
-        let command = TuiCommand::new("opencode.highlights", move |_, _| {
-            if let Some(tui) = weak.upgrade() {
-                highlights::show(&tui, &shown.version, &shown.items);
-            }
-        })
+        let command = TuiCommand::new(
+            "opencode.highlights",
+            bind!(weak, |tui, _, _| highlights::show(&tui, &shown.version, &shown.items)),
+        )
         .bind(Bind::Off)
         .title("Show release highlights")
         .group("System")
@@ -104,14 +104,13 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
                 .map_err(|error| error.to_string())
                 .and_then(|result| result)
         },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(weak, |tui, _, result| {
             match result {
                 Ok(true) if !tui.dialogs.is_open() => highlights::show(&tui, &release.version, &release.items),
                 Ok(_) => {}
                 Err(error) => tui.toasts.error(error),
             }
-        },
+        }),
     );
 }
 

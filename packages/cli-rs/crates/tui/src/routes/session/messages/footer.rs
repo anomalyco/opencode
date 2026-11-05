@@ -9,6 +9,7 @@ use opencode_api::generated::{
     ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
     SessionMessageInfo,
 };
+use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
@@ -126,20 +127,14 @@ impl TurnUsage {
             hover: Cell::new(false),
             verbose: Cell::new(false),
         });
-        let weak = Rc::downgrade(&inner);
-        header.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.expanded.set(!inner.expanded.get());
-                inner.render();
-            }
-        });
-        let weak = Rc::downgrade(&inner);
-        header.on_hover(move |_, hovered| {
-            if let Some(inner) = weak.upgrade() {
-                inner.hover.set(hovered);
-                inner.render();
-            }
-        });
+        header.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| {
+            inner.expanded.set(!inner.expanded.get());
+            inner.render();
+        }));
+        header.on_hover(bind!(inner, |inner, _, hovered| {
+            inner.hover.set(hovered);
+            inner.render();
+        }));
         inner.render();
         Self(inner)
     }

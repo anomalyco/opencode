@@ -14,6 +14,7 @@ use opencode_api::generated::{
     SessionID, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput, WorktreeListInput,
     WorktreeRefreshInput,
 };
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
@@ -154,16 +155,10 @@ impl Open {
                         Some(id) => format!("{} / Worktrees", open.project_title(id)),
                         None => "Open".into(),
                     },
-                    Rc::new({
-                        let weak = weak.clone();
-                        move |filter: &str| {
-                            let Some(open) = weak.upgrade() else {
-                                return Vec::new();
-                            };
-                            open.state.borrow_mut().filter = filter.to_owned();
-                            open.options()
-                        }
-                    }),
+                    Rc::new(bind!(weak, |open, filter: &str| {
+                        open.state.borrow_mut().filter = filter.to_owned();
+                        open.options()
+                    })),
                 );
                 props.placeholder = Some(
                     if worktrees.is_some() { "Search worktrees…" } else { "Search sessions and projects…" }.into(),
@@ -171,67 +166,27 @@ impl Open {
                 props.current = current;
                 props.focus_current = selection.selected.is_some();
                 props.section_navigation = true;
-                props.on_move = Some(Rc::new({
-                    let weak = weak.clone();
-                    move |_: &SelectOption<Target>| {
-                        if let Some(open) = weak.upgrade() {
-                            open.state.borrow_mut().moved = true;
-                        }
-                    }
-                }));
-                props.on_filter = Some(Rc::new({
-                    let weak = weak.clone();
-                    move |filter: &str| {
-                        if let Some(open) = weak.upgrade() {
-                            open.find_exact(filter.trim());
-                        }
-                    }
-                }));
-                props.on_select = Some(Rc::new({
-                    let weak = weak.clone();
-                    move |option: &SelectOption<Target>| {
-                        if let Some(open) = weak.upgrade() {
-                            open.choose(option.value.clone());
-                        }
-                    }
-                }));
-                let back = {
-                    let weak = weak.clone();
-                    move || {
-                        if let Some(open) = weak.upgrade() {
-                            open.back();
-                        }
-                    }
-                };
+                props.on_move =
+                    Some(Rc::new(bind!(weak, |open, _: &SelectOption<Target>| open.state.borrow_mut().moved = true)));
+                props.on_filter = Some(Rc::new(bind!(weak, |open, filter: &str| open.find_exact(filter.trim()))));
+                props.on_select =
+                    Some(Rc::new(bind!(weak, |open, option: &SelectOption<Target>| open.choose(option.value.clone()))));
+                let back = bind!(weak, |open| open.back());
                 if worktrees.is_some() {
                     props.on_cancel = Some(Rc::new(back.clone()));
                     props.bindings = vec![
                         TuiCommand::inline("left", move |_, _| back()).title("Return to projects").group("Dialog"),
-                        TuiCommand::inline("ctrl+n", {
-                            let weak = weak.clone();
-                            move |_, _| {
-                                if let Some(open) = weak.upgrade() {
-                                    open.new_worktree();
-                                }
-                            }
-                        })
-                        .title("New worktree")
-                        .group("Dialog"),
+                        TuiCommand::inline("ctrl+n", bind!(weak, |open, _, _| open.new_worktree()))
+                            .title("New worktree")
+                            .group("Dialog"),
                     ];
                     props.footer_hints =
                         vec![FooterHint { title: "new worktree".into(), label: "ctrl+n".into(), group: None }];
                 } else {
                     props.bindings = vec![
-                        TuiCommand::inline("right", {
-                            let weak = weak.clone();
-                            move |_, _| {
-                                if let Some(open) = weak.upgrade() {
-                                    open.show_worktrees();
-                                }
-                            }
-                        })
-                        .title("Show project worktrees")
-                        .group("Dialog"),
+                        TuiCommand::inline("right", bind!(weak, |open, _, _| open.show_worktrees()))
+                            .title("Show project worktrees")
+                            .group("Dialog"),
                     ];
                 }
                 let app = cx.app.clone();
@@ -303,7 +258,6 @@ impl Open {
         let Some(tui) = self.tui() else { return };
         let client = tui.data.client().clone();
         let directory = tui.directory.clone();
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
                 let options = RequestOptions::default();
@@ -322,8 +276,7 @@ impl Open {
                 )
                 .await
             },
-            move |_, (recent, projects, location)| {
-                let Some(open) = weak.upgrade() else { return };
+            bind!(self, |open, _, (recent, projects, location)| {
                 let Some(tui) = open.tui() else { return };
                 {
                     let mut state = open.state.borrow_mut();
@@ -343,7 +296,7 @@ impl Open {
                     state.location = location.ok();
                 }
                 open.refresh();
-            },
+            }),
         );
     }
 
@@ -358,7 +311,6 @@ impl Open {
         }
         let client = tui.data.client().clone();
         let id = SessionID(value.to_owned());
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
                 client
@@ -367,11 +319,10 @@ impl Open {
                     .ok()
                     .filter(|session| session.id == id)
             },
-            move |_, session| {
-                let Some(open) = weak.upgrade() else { return };
+            bind!(self, |open, _, session| {
                 open.state.borrow_mut().matched = session;
                 open.refresh();
-            },
+            }),
         );
     }
 
@@ -379,12 +330,10 @@ impl Open {
         let Some(tui) = self.tui() else { return };
         self.state.borrow_mut().worktrees = None;
         let client = tui.data.client().clone();
-        let weak = Rc::downgrade(self);
         let input = WorktreeListInput { project_id: id.clone() };
         tui.app.spawn(
             async move { client.worktree_list(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(open) = weak.upgrade() else { return };
+            bind!(self, |open, _, result| {
                 let Some(tui) = open.tui() else { return };
                 if open.worktree_project().as_ref() != Some(&id) {
                     return;
@@ -412,7 +361,7 @@ impl Open {
                     });
                 }
                 open.refresh();
-            },
+            }),
         );
     }
 
@@ -725,15 +674,12 @@ impl Open {
             let Some(tui) = open.tui() else { return };
             let weak = Rc::downgrade(&open);
             let cancel = {
-                let weak = weak.clone();
                 let previous = previous.clone();
-                move || {
-                    if let Some(open) = weak.upgrade() {
-                        let previous = previous.clone();
-                        let reopen = open.clone();
-                        open.defer(move || reopen.build(previous));
-                    }
-                }
+                bind!(weak, |open| {
+                    let previous = previous.clone();
+                    let reopen = open.clone();
+                    open.defer(move || reopen.build(previous));
+                })
             };
             let built = open.clone();
             tui.dialogs.replace(
@@ -749,11 +695,8 @@ impl Open {
                             })),
                             busy_text: Some("Creating worktree…".into()),
                             on_cancel: Some(Rc::new(cancel)),
-                            on_confirm: Some(Rc::new(move |value: &str| {
-                                if let Some(open) = weak.upgrade() {
-                                    open.create_worktree(id.clone(), value.trim().to_owned());
-                                }
-                            })),
+                            on_confirm: Some(Rc::new(bind!(weak, |open, value: &str| open
+                                .create_worktree(id.clone(), value.trim().to_owned())))),
                             ..PromptProps::default()
                         },
                     );
@@ -782,11 +725,9 @@ impl Open {
             name: (!name.is_empty()).then_some(name),
             ..WorktreeCreateInput::default()
         };
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move { client.worktree_create(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(open) = weak.upgrade() else { return };
+            bind!(self, |open, _, result| {
                 let Some(tui) = open.tui() else { return };
                 // The prompt closed or was replaced while the request ran.
                 let Some(current) = open.prompt.borrow().clone() else {
@@ -807,15 +748,13 @@ impl Open {
                         );
                     }
                 }
-            },
+            }),
         );
     }
 
     fn choose(self: &Rc<Self>, target: Target) {
         let Some(tui) = self.tui() else { return };
-        let weak = tui.weak();
-        tui.app.defer(move |_| {
-            let Some(tui) = weak.upgrade() else { return };
+        tui.app.defer(bind!(tui, |tui, _| {
             tui.dialogs.clear();
             match target {
                 Target::Session(id) => tui.navigate(Route::Session { id }),
@@ -823,7 +762,7 @@ impl Open {
                     crate::features::location::navigate_home(&tui, Some(opencode_store::Location::new(directory)))
                 }
             }
-        });
+        }));
     }
 
     /// Runs `run` after the current key or select handler returns.

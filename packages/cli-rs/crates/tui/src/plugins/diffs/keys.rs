@@ -5,6 +5,7 @@
 
 use std::rc::{Rc, Weak};
 
+use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
 use opencode_ui::keymap::{GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opentui::keymap::Condition;
@@ -69,13 +70,7 @@ pub fn layer(viewer: &Rc<Viewer>, target: Option<FocusId>, enabled: Condition) -
         .iter()
         .map(|&(id, title, action)| {
             let weak = Rc::downgrade(viewer);
-            let command = TuiCommand::new(id, move |_, _| {
-                if let Some(viewer) = weak.upgrade() {
-                    viewer.run(action);
-                }
-            })
-            .title(title)
-            .group("VCS");
+            let command = TuiCommand::new(id, bind!(weak, |viewer, _, _| viewer.run(action))).title(title).group("VCS");
             let when = |test: fn(&Viewer) -> bool| {
                 let weak: Weak<Viewer> = Rc::downgrade(viewer);
                 Condition::when(move || weak.upgrade().is_some_and(|viewer| test(&viewer)))
@@ -92,19 +87,14 @@ pub fn layer(viewer: &Rc<Viewer>, target: Option<FocusId>, enabled: Condition) -
 
 /// `diff.open` (`/diff`, in the palette): toggles the session's panel, or opens the full-screen route elsewhere.
 pub fn open_layer(tui: &Rc<Tui>, open: Rc<dyn Fn(&Tui)>) -> KeymapLayer<FocusId> {
-    let weak = tui.weak();
     KeymapLayer {
         mode: Some(GLOBAL_MODE.to_owned()),
         commands: vec![
-            TuiCommand::new("diff.open", move |_, _| {
-                if let Some(tui) = weak.upgrade() {
-                    open(&tui);
-                }
-            })
-            .title("Open diff viewer")
-            .group("VCS")
-            .palette()
-            .slash(Slash { name: "diff".to_owned(), aliases: Vec::new(), arguments: false }),
+            TuiCommand::new("diff.open", bind!(tui, |tui, _, _| open(&tui)))
+                .title("Open diff viewer")
+                .group("VCS")
+                .palette()
+                .slash(Slash { name: "diff".to_owned(), aliases: Vec::new(), arguments: false }),
         ],
         ..KeymapLayer::default()
     }

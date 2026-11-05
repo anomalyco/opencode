@@ -12,6 +12,7 @@ use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSession
 use opencode_plugin::{Definition, Slotted};
 use opencode_store::Changes;
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
@@ -32,16 +33,18 @@ pub fn plugin() -> Definition<Tui> {
         cx.layer(KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),
             commands: vec![
-                TuiCommand::new("stats.open", move |_, _| {
-                    let Some(tui) = weak.upgrade() else { return };
-                    let current = tui.route();
-                    if matches!(&current, Route::Plugin { name, .. } if name == ROUTE) {
-                        return;
-                    }
-                    *previous.borrow_mut() = current;
-                    tui.dialogs.clear();
-                    tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
-                })
+                TuiCommand::new(
+                    "stats.open",
+                    bind!(weak, |tui, _, _| {
+                        let current = tui.route();
+                        if matches!(&current, Route::Plugin { name, .. } if name == ROUTE) {
+                            return;
+                        }
+                        *previous.borrow_mut() = current;
+                        tui.dialogs.clear();
+                        tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
+                    }),
+                )
                 .title("Usage statistics")
                 .group("System")
                 .slash(opencode_ui::keymap::Slash { name: "stats".to_owned(), aliases: Vec::new(), arguments: false })
@@ -73,17 +76,17 @@ impl Page {
             .height(Length::percent(100.0))
             .bg(theme.background.base)
             .child(&scroll);
-        let weak = tui.weak();
         let layer = tui
             .keymap
             .layer(KeymapLayer {
                 commands: vec![
-                    TuiCommand::inline("escape", move |_, _| {
-                        if let Some(tui) = weak.upgrade() {
+                    TuiCommand::inline(
+                        "escape",
+                        bind!(tui, |tui, _, _| {
                             let route = previous.borrow().clone();
                             tui.navigate(route);
-                        }
-                    })
+                        }),
+                    )
                     .title("back"),
                 ],
                 ..KeymapLayer::default()
@@ -123,12 +126,10 @@ fn load(tui: &Tui, content: &View) {
         ..ExperimentalSessionStatsInput::default()
     };
     let client = tui.data.client().clone();
-    let weak = tui.weak();
     let content = content.clone();
     tui.app.spawn(
         async move { client.experimental_session_stats(&input, &RequestOptions::default()).await },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, result| {
             let theme = tui.page();
             content.clear();
             match result {
@@ -146,7 +147,7 @@ fn load(tui: &Tui, content: &View) {
                 }
             }
             tui.app.request_redraw();
-        },
+        }),
     );
 }
 

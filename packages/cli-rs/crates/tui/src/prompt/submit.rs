@@ -15,6 +15,7 @@ use opencode_api::generated::{
 };
 use opencode_store::inbox::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
+use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
 use serde_json::Value;
 
@@ -328,12 +329,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     if created {
         prompt.staging.finish(prompt);
         // Navigating replaces this prompt, so it runs after the key that submitted.
-        let weak = tui.weak();
-        tui.app.defer(move |_| {
-            if let Some(tui) = weak.upgrade() {
-                tui.navigate(Route::Session { id: target });
-            }
-        });
+        tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id: target })));
     }
     true
 }

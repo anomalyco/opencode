@@ -4,14 +4,14 @@
 
 use std::rc::Rc;
 
+use opencode_ui::bind;
+
 use crate::app::Tui;
 
 /// Registers the Ctrl+Y handler. `app::install_keys` calls it before the selection keys, which would clear the
 /// selection first.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    tui.app.on_key_capture(move |cx, key| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_key_capture(bind!(tui, |tui, cx, key| {
         if !key.matches("ctrl+y") || !tui.app.console().is_visible() {
             return;
         }
@@ -22,5 +22,5 @@ pub fn install(tui: &Rc<Tui>) {
         tui.app.clear_selection();
         cx.prevent_default();
         cx.stop_propagation();
-    });
+    }));
 }

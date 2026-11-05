@@ -13,6 +13,7 @@ use opencode_api::generated::{
     SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
 };
 use opencode_store::{MessageExt, State};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
@@ -63,14 +64,15 @@ impl Drop for Actions {
 impl Inner {
     fn register(&self, tui: &Tui, this: &Rc<Inner>) {
         let command = |id: &str, title: &str, run: Run| {
-            let weak = Rc::downgrade(this);
-            TuiCommand::new(id, move |input, _| {
-                let Some(inner) = weak.upgrade() else { return };
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
-                run(&inner, &tui, input);
-            })
+            TuiCommand::new(
+                id,
+                bind!(this, |inner, input, _| {
+                    let Some(tui) = inner.tui.upgrade() else {
+                        return;
+                    };
+                    run(&inner, &tui, input);
+                }),
+            )
             .title(title)
             .group("Session")
             .bind(Bind::Off)
@@ -162,15 +164,7 @@ impl Inner {
     /// `session.timeline`: moving through it jumps the transcript.
     fn timeline(&self, tui: &Tui, _: Option<&str>) {
         let scroll = self.scroll.clone();
-        timeline::show(
-            tui,
-            self.session.clone(),
-            Rc::new(move |tui, id| {
-                if let Some(scroll) = scroll.upgrade() {
-                    scroll.jump(tui, id);
-                }
-            }),
-        );
+        timeline::show(tui, self.session.clone(), Rc::new(bind!(scroll, |scroll, tui, id| scroll.jump(tui, id))));
     }
 
     fn fork(&self, tui: &Tui, _: Option<&str>) {
@@ -226,7 +220,6 @@ impl Inner {
         let client = tui.data.client().clone();
         let session = self.session.clone();
         let target = self.session.clone();
-        let weak = tui.weak();
         let SessionMessageUser { id, text, .. } = message;
         if pending {
             tui.app.spawn(
@@ -234,8 +227,7 @@ impl Inner {
                     let input = SessionInboxCancelInput { session_id: session, inbox_id: id };
                     client.session_inbox_cancel(&input, &RequestOptions::default()).await
                 },
-                move |_, result| {
-                    let Some(tui) = weak.upgrade() else { return };
+                bind!(tui, |tui, _, result| {
                     match result {
                         Ok(()) => append_prompt(&tui, &target, &text),
                         Err(error) => tui.toasts.show(
@@ -243,7 +235,7 @@ impl Inner {
                                 .title("Failed to delete pending prompt"),
                         ),
                     }
-                },
+                }),
             );
             return;
         }
@@ -263,15 +255,14 @@ impl Inner {
                     )
                     .await
             },
-            move |_, result| {
-                let Some(tui) = weak.upgrade() else { return };
+            bind!(tui, |tui, _, result| {
                 match result {
                     Ok(_) => append_prompt(&tui, &target, &text),
                     Err(error) => tui.toasts.show(
                         ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
                     ),
                 }
-            },
+            }),
         );
     }
 
@@ -279,18 +270,16 @@ impl Inner {
     fn redo(&self, tui: &Tui, _: Option<&str>) {
         let client = tui.data.client().clone();
         let input = SessionRevertClearInput { session_id: self.session.clone() };
-        let weak = tui.weak();
         tui.app.spawn(
             async move { client.session_revert_clear(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(tui) = weak.upgrade() else { return };
+            bind!(tui, |tui, _, result| {
                 if let Err(error) = result {
                     tui.toasts.show(
                         ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
                     );
                 }
                 tui.dialogs.clear();
-            },
+            }),
         );
     }
 
@@ -322,11 +311,9 @@ impl Inner {
         if !self.known(tui) {
             return;
         }
-        let weak = tui.weak();
         tui.app.spawn(
             transcript(tui, &self.session, None),
-            move |_, result: Result<Value, opencode_api::error::Error>| {
-                let Some(tui) = weak.upgrade() else { return };
+            bind!(tui, |tui, _, result: Result<Value, opencode_api::error::Error>| {
                 let copied =
                     result.ok().is_some_and(|transcript| tui.app.copy_to_clipboard(&markdown(&transcript, true, true)));
                 toast(
@@ -338,7 +325,7 @@ impl Inner {
                     },
                 );
                 tui.dialogs.clear();
-            },
+            }),
         );
     }
 
@@ -354,34 +341,37 @@ impl Inner {
             true,
             Rc::new(move |tui, choice| {
                 let json = choice.format == export::Format::Json;
-                let weak = tui.weak();
-                tui.app.spawn(transcript(tui, &session, json.then_some(choice.sanitize)), move |_, result| {
-                    let Some(tui) = weak.upgrade() else { return };
-                    let content = result.ok().and_then(|transcript| match choice.format {
-                        export::Format::Markdown => Some(markdown(&transcript, choice.thinking, choice.tools)),
-                        export::Format::Json => serde_json::to_string_pretty(&transcript).ok().map(|text| text + "\n"),
-                    });
-                    let outcome = content.ok_or(()).and_then(|content| match choice.action {
-                        export::Action::Copy => tui.app.copy_to_clipboard(&content).then_some(None).ok_or(()),
-                        export::Action::Export => {
-                            let extension = if json { "json" } else { "md" };
-                            let path =
-                                std::env::temp_dir().join(format!("session-{}.{extension}", uuid::Uuid::new_v4()));
-                            std::fs::write(&path, content).map(|_| Some(path.display().to_string())).map_err(drop)
+                tui.app.spawn(
+                    transcript(tui, &session, json.then_some(choice.sanitize)),
+                    bind!(tui, |tui, _, result| {
+                        let content = result.ok().and_then(|transcript| match choice.format {
+                            export::Format::Markdown => Some(markdown(&transcript, choice.thinking, choice.tools)),
+                            export::Format::Json => {
+                                serde_json::to_string_pretty(&transcript).ok().map(|text| text + "\n")
+                            }
+                        });
+                        let outcome = content.ok_or(()).and_then(|content| match choice.action {
+                            export::Action::Copy => tui.app.copy_to_clipboard(&content).then_some(None).ok_or(()),
+                            export::Action::Export => {
+                                let extension = if json { "json" } else { "md" };
+                                let path =
+                                    std::env::temp_dir().join(format!("session-{}.{extension}", uuid::Uuid::new_v4()));
+                                std::fs::write(&path, content).map(|_| Some(path.display().to_string())).map_err(drop)
+                            }
+                        });
+                        match outcome {
+                            Ok(Some(path)) => export::result(&tui, path),
+                            Ok(None) => {
+                                tui.dialogs.clear();
+                                toast(&tui, Ok("Copied to clipboard"));
+                            }
+                            Err(()) => {
+                                toast(&tui, Err("Failed to export session"));
+                                tui.dialogs.clear();
+                            }
                         }
-                    });
-                    match outcome {
-                        Ok(Some(path)) => export::result(&tui, path),
-                        Ok(None) => {
-                            tui.dialogs.clear();
-                            toast(&tui, Ok("Copied to clipboard"));
-                        }
-                        Err(()) => {
-                            toast(&tui, Err("Failed to export session"));
-                            tui.dialogs.clear();
-                        }
-                    }
-                });
+                    }),
+                );
             }),
         );
     }

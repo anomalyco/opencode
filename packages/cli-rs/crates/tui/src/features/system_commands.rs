@@ -16,6 +16,7 @@ use std::rc::Rc;
 
 use opencode_api::client::RequestOptions;
 use opencode_local::cli_config::{CursorStyle, DiffWrap, Info, PromptPaste, Resolved};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
@@ -31,15 +32,7 @@ const DOCS: &str = "https://opencode.ai/v2/docs";
 pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
     let info = tui.settings.info();
     let command = |id: &str, title: &str, run: fn(&Tui)| {
-        let weak = tui.weak();
-        TuiCommand::new(id, move |_, _| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui);
-            }
-        })
-        .bind(Bind::Off)
-        .title(title)
-        .group("System")
+        TuiCommand::new(id, bind!(tui, |tui, _, _| run(&tui))).bind(Bind::Off).title(title).group("System")
     };
     let commands = vec![
         command("location.reload", "Reload configuration", reload).palette().slash(Slash {
@@ -153,16 +146,14 @@ fn reload(tui: &Tui) {
         ToastOptions::new(Variant::Info, "Reloading configuration…").duration(std::time::Duration::from_secs(30)),
     );
     let client = tui.data.client().clone();
-    let weak = tui.weak();
     tui.app.spawn(
         async move { client.location_reload(&RequestOptions::default()).await.map_err(|error| error.to_string()) },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, result| {
             match result {
                 Ok(()) => tui.toasts.show(ToastOptions::new(Variant::Success, "Configuration reloaded")),
                 Err(error) => tui.toasts.error(error),
             }
-        },
+        }),
     );
 }
 

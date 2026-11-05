@@ -1,6 +1,7 @@
 //! The missing plugin route screen (E.1, row T26, `component/plugin-route-missing.tsx`): the route's name in
 //! the warning color and a "go home" button, centered.
 
+use opencode_ui::bind;
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -17,13 +18,8 @@ pub fn mount(tui: &Tui, id: &str, name: &str) -> View {
         .child(&Text::new(app, "go home").fg(theme.text.action.primary.hovered))
         .mouse_pointer(MousePointer::POINTER)
         .on_click(move |cx, _| {
-            let weak = weak.clone();
             // Navigating replaces this view; do it after the click handler returns.
-            cx.defer(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    tui.navigate(Route::Home);
-                }
-            });
+            cx.defer(bind!(weak, |tui, _| tui.navigate(Route::Home)));
         });
     View::new(app)
         .column()

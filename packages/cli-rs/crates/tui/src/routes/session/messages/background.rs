@@ -9,6 +9,7 @@ use std::time::Duration;
 use opencode_api::generated::{
     SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo,
 };
+use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::canonical_tool_name;
 use opentui::prelude::*;
@@ -76,12 +77,14 @@ impl Hint {
                 self.0.shown.set(true);
             } else {
                 let weak = self.0.this.clone();
-                let timer = self.0.app.set_timeout(Duration::from_millis(remaining as u64), move |_| {
-                    let Some(inner) = weak.upgrade() else { return };
-                    inner.timer.set(None);
-                    inner.shown.set(true);
-                    inner.paint();
-                });
+                let timer = self.0.app.set_timeout(
+                    Duration::from_millis(remaining as u64),
+                    bind!(weak, |inner, _| {
+                        inner.timer.set(None);
+                        inner.shown.set(true);
+                        inner.paint();
+                    }),
+                );
                 self.0.timer.set(Some(timer));
             }
         }

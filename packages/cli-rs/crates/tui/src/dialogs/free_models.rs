@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use opencode_api::generated::ModelInfoStatus;
 use opencode_local::model_pref::Model;
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps, fuzzy};
 use opentui::prelude::*;
@@ -14,10 +15,7 @@ use crate::dialogs::model::{self, Local, is_free};
 pub fn show(local: &Rc<Local>) {
     let weak = Rc::downgrade(local);
     local.dialogs.replace(
-        move |cx| {
-            let Some(local) = weak.upgrade() else {
-                return View::new(&cx.app);
-            };
+        bind!(weak, |local, cx| {
             // Favoriting does not reorder the list until the dialog is reopened.
             let favorites: Vec<String> = local.favorite().iter().map(Model::key).collect();
             let recent: Vec<String> = local.recent().iter().map(Model::key).collect();
@@ -34,18 +32,9 @@ pub fn show(local: &Rc<Local>) {
             props.skip_filter = true;
             props.current = local.current();
             let weak = Rc::downgrade(&local);
-            props.on_select = Some(Rc::new(move |option: &SelectOption<Model>| {
-                if let Some(local) = weak.upgrade() {
-                    model::choose(&local, &option.value);
-                }
-            }));
+            props.on_select = Some(Rc::new(bind!(weak, |local, option: &SelectOption<Model>| model::choose(&local, &option.value))));
             let connect = {
-                let weak = Rc::downgrade(&local);
-                Rc::new(move || {
-                    if let Some(local) = weak.upgrade() {
-                        model::connect(&local);
-                    }
-                })
+                Rc::new(bind!(local, |local| model::connect(&local)))
             };
             let favorite_title = {
                 let weak = Rc::downgrade(&local);
@@ -64,19 +53,14 @@ pub fn show(local: &Rc<Local>) {
                 SelectAction {
                     title: Rc::new(favorite_title),
                     ..SelectAction::new("model.dialog.favorite", "favorite", {
-                        let weak = Rc::downgrade(&local);
-                        move |option| {
-                            if let Some(local) = weak.upgrade() {
-                                local.toggle_favorite(&option.value);
-                            }
-                        }
+                        bind!(local, |local, option| local.toggle_favorite(&option.value))
                     })
                 },
             ];
             let (view, handle) = select::select(cx, props);
             cx.on_close(local.subscribe(move || handle.set_options(options(&handle.filter()))));
             view
-        },
+        }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );

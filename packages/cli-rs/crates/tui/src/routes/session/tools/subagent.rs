@@ -6,6 +6,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::generated::{ModelInfo, SessionID};
 use opencode_store::SessionStatus;
+use opencode_ui::bind;
 use opencode_ui::confirm::titlecase;
 use opentui::prelude::*;
 use serde_json::{Map, Value};
@@ -33,12 +34,7 @@ impl Subagent {
             };
             let Some(tui) = tui.upgrade() else { return };
             // The click runs inside the transcript the navigation replaces.
-            let weak = tui.weak();
-            tui.app.defer(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    tui.navigate(Route::Session { id: SessionID(id) });
-                }
-            });
+            tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id: SessionID(id) })));
         });
         Self { inline, session }
     }

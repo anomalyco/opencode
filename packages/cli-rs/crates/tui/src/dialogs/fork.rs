@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionForkInput, SessionID, SessionMessageID, SessionMessageInfo};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize, HeaderProps, header, layout_with};
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{self, SelectOption, SelectProps};
@@ -27,13 +28,8 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
         return;
     }
     let pick = |message: Option<String>| {
-        let weak = tui.weak();
         let session = session.clone();
-        move |_: &opencode_ui::dialog::Dialogs| {
-            if let Some(tui) = weak.upgrade() {
-                fork(&tui, session.clone(), message.clone());
-            }
-        }
+        bind!(tui, |tui, _: &opencode_ui::dialog::Dialogs| fork(&tui, session.clone(), message.clone()))
     };
     let options: Vec<_> = std::iter::once(SelectOption::new("Full session", None).on_select(pick(None)))
         .chain(tui.data.read(|state| prompts(state.messages(&session))).into_iter().rev().map(
@@ -48,11 +44,10 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
             let mut props = SelectProps::new("Fork session", options);
             // TS passes no `current`, and `undefined === undefined` marks "Full session" with `●`.
             props.current = Some(None);
-            props.on_move = Some(Rc::new(move |option: &SelectOption<Option<String>>| {
-                if let Some(tui) = weak.upgrade() {
-                    on_move(&tui, option.value.clone());
-                }
-            }));
+            props.on_move = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<Option<String>>| on_move(
+                &tui,
+                option.value.clone()
+            ))));
             select::select(cx, props).0
         },
         None,
@@ -71,24 +66,27 @@ fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
     });
     let client = tui.data.client().clone();
     let input = SessionForkInput { session_id: session, before: message.map(SessionMessageID) };
-    let weak = tui.weak();
-    tui.app.spawn(async move { client.session_fork(&input, &RequestOptions::default()).await }, move |_, result| {
-        let Some(tui) = weak.upgrade() else { return };
-        tui.dialogs.clear();
-        let info = match result {
-            Ok(info) => info,
-            Err(error) => {
-                tui.toasts
-                    .show(ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)));
-                return;
+    tui.app.spawn(
+        async move { client.session_fork(&input, &RequestOptions::default()).await },
+        bind!(tui, |tui, _, result| {
+            tui.dialogs.clear();
+            let info = match result {
+                Ok(info) => info,
+                Err(error) => {
+                    tui.toasts.show(
+                        ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
+                    );
+                    return;
+                }
+            };
+            if let Some(prompt) = prompt {
+                tui.prompt.drafts.save(Some(&info.id), Draft { prompt, cursor: u32::MAX });
             }
-        };
-        if let Some(prompt) = prompt {
-            tui.prompt.drafts.save(Some(&info.id), Draft { prompt, cursor: u32::MAX });
-        }
-        tui.navigate(Route::Session { id: info.id });
-        tui.toasts.show(ToastOptions::new(Variant::Success, "Forked session").duration(Duration::from_millis(4000)));
-    });
+            tui.navigate(Route::Session { id: info.id });
+            tui.toasts
+                .show(ToastOptions::new(Variant::Success, "Forked session").duration(Duration::from_millis(4000)));
+        }),
+    );
 }
 
 /// The pending view: the header and a spinner, at the list inset.

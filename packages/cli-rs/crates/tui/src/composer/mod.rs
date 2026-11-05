@@ -14,6 +14,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_api::generated::SessionID;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::keymap::{Condition, Disposer};
@@ -131,18 +132,8 @@ impl Composer {
             layers: RefCell::default(),
         });
         inner.register(tui);
-        let weak = Rc::downgrade(&inner);
-        tui.terminals.set_picker(Some(Rc::new(move |tui| {
-            if let Some(inner) = weak.upgrade() {
-                inner.show(tui, Some(Tab::Terminals));
-            }
-        })));
-        let weak = Rc::downgrade(&inner);
-        tui.terminals.set_listener(Some(Rc::new(move |tui| {
-            if let Some(inner) = weak.upgrade() {
-                inner.refresh(tui);
-            }
-        })));
+        tui.terminals.set_picker(Some(Rc::new(bind!(inner, |inner, tui| inner.show(tui, Some(Tab::Terminals))))));
+        tui.terminals.set_listener(Some(Rc::new(bind!(inner, |inner, tui| inner.refresh(tui)))));
         Self(inner)
     }
 
@@ -187,14 +178,12 @@ impl Inner {
     fn register(self: &Rc<Self>, tui: &Tui) {
         let open = self.condition(|inner| inner.open.get());
         let run = |action: fn(&Rc<Inner>, &Tui)| {
-            let weak = Rc::downgrade(self);
-            move |_: Option<&str>, _: Option<&KeyEvent>| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 action(&inner, &tui);
-            }
+            })
         };
         let tab = |tab: Tab, commands: Vec<TuiCommand>| KeymapLayer {
             mode: Some(MODE.to_owned()),
@@ -327,23 +316,16 @@ impl Inner {
         }
         (self.on_toggle)(tui, open);
         // The session view hides the queued dock while the composer shows; a key that toggled it changed no store state.
-        let weak = tui.weak();
-        tui.app.defer(move |_| {
-            if let Some(tui) = weak.upgrade() {
-                tui.sync_view();
-            }
-        });
+        tui.app.defer(bind!(tui, |tui, _| tui.sync_view()));
     }
 
     /// Redraws on the next turn, outside the mouse handler of a row it replaces.
     fn redraw_later(self: &Rc<Self>, tui: &Tui) {
-        let weak = Rc::downgrade(self);
-        tui.app.defer(move |_| {
-            let Some(inner) = weak.upgrade() else { return };
+        tui.app.defer(bind!(self, |inner, _| {
             if let Some(tui) = inner.tui.upgrade() {
                 inner.refresh(&tui);
             }
-        });
+        }));
     }
 
     fn draw(self: &Rc<Self>, tui: &Tui) {
@@ -376,13 +358,11 @@ impl Inner {
             let Some(tui) = inner.tui.upgrade() else {
                 return;
             };
-            let weak = Rc::downgrade(&inner);
-            tui.app.defer(move |_| {
-                let Some(inner) = weak.upgrade() else { return };
+            tui.app.defer(bind!(inner, |inner, _| {
                 if let Some(tui) = inner.tui.upgrade() {
                     inner.close(&tui);
                 }
-            });
+            }));
         });
         self.header.add(&esc);
 
