@@ -8,6 +8,16 @@ import { VoiceFailure, VoiceTransport } from "./transport"
 import { delegatorInstructions } from "./spec"
 import type { VoiceEvent } from "./protocol"
 import {
+  isConnected,
+  isConnecting,
+  isMuted,
+  viewedSession,
+  type VoiceCallEvent,
+  type VoiceCallState,
+  type VoiceFailureReason,
+  type VoiceViewedSession,
+} from "./call-machine"
+import {
   createVoiceDelegationState,
   delegating,
   hasDelegation,
@@ -17,167 +27,103 @@ import {
   type VoiceDelegationEvent,
 } from "./machine"
 
-export type CallState = {
-  status: "idle" | "connecting" | "connected" | "dropped"
-  failure?: "unavailable" | "microphone" | "dropped" | "connection"
-  muted: boolean
-  level: number
-  caption: string
-  speaker: "user" | "assistant"
-  utterance?: number
-  title: string
-}
-
-type CallRuntime = {
-  transport?: VoiceTransport
-  viewing: SessionInfo
-  muted: boolean
-  ended: boolean
-  watching: boolean
-  ready: boolean
-  joining: boolean
-}
-
+/** Runs one call's transports, tools and delegations for the call machine in `context.tsx`. */
 export function createVoiceCall(input: {
   ctx: ServerCtx
-  session: SessionInfo
   platform: Platform
   /** Shows the session on screen; rejects unless the route really changed. */
   open: (session: SessionInfo, signal: AbortSignal) => Promise<void>
   /** Session IDs with an open tab. */
   tabs: () => string[]
-  change: (state: Partial<CallState>) => void
+  call: () => VoiceCallState<ServerCtx>
+  dispatch: (event: VoiceCallEvent<ServerCtx>) => void
 }) {
   const tail = new TranscriptTail()
   let gates = new VoiceGates()
+  const tools = new VoiceTools(input.ctx, { open: input.open, tabs: input.tabs })
 
-  const tools = new VoiceTools(input.ctx, {
-    open: async (session, signal) => {
-      await input.open(session, signal)
-      // A call that ended or dropped mid-open must not take over the view.
-      signal.throwIfAborted()
-      view(session)
-    },
-    tabs: input.tabs,
-  })
-
-  const state: CallRuntime = {
-    viewing: input.session,
-    muted: false,
-    ended: false,
-    watching: false,
-    ready: false,
-    joining: false,
-  }
-
+  // The attempt's transport, from the start of its join until it drops or the call ends.
+  let connection: { attempt: number; transport: VoiceTransport } | undefined
   let delegations = createVoiceDelegationState()
   // Timers and tool aborts of open delegations; the machine decides when each ends.
   const handles = new Map<string, { timer?: ReturnType<typeof setTimeout>; abort?: AbortController }>()
   const dirty = new Set<string>()
+  let watching = false
   const unlisten = input.ctx.sdk.event.on("session.idle", (event) => dirty.add(event.data.sessionID))
 
   const timer = setInterval(() => {
     void watch()
   }, 1000)
 
-  let updates = Promise.resolve()
-
-  function view(session: SessionInfo) {
-    state.viewing = session
-    input.change({ title: session.title ?? session.id })
-    const transport = state.transport
-
-    if (!state.ready || !transport) return
-    updates = updates
-      .then(async () => {
-        if (transport !== state.transport || transport.abort.signal.aborted) return
-        await transport.instructions(delegatorInstructions(state.viewing, tail.lines))
-      })
-      .catch(() => {
-        if (transport === state.transport && !transport.abort.signal.aborted) drop("connection")
-      })
-  }
-
-  function drop(failure: CallState["failure"] = "dropped") {
-    if (state.ended) return
-    state.ready = false
-    dispatch({ type: "call.reset" })
-    input.change({ status: "dropped", failure, level: 0 })
-    void state.transport?.close()
-    void input.platform.setVoiceCallActive?.(false).catch(() => undefined)
-  }
-
-  async function join() {
-    if (state.ended || state.joining || state.ready) return
-    state.joining = true
-    input.change({ status: "connecting", failure: undefined })
-    await connect()
-      .catch((error) => {
-        if (!state.ended) drop(error instanceof VoiceFailure ? error.reason : "connection")
-      })
-      .finally(() => {
-        state.joining = false
-      })
-  }
-
-  async function connect() {
-    await state.transport?.close()
-
-    if (state.ended) return
-
+  async function join(attempt: number, viewing: VoiceViewedSession, muted: boolean) {
+    // The call may have dropped or ended while the previous transport closed.
+    if (!isConnecting(input.call(), attempt)) throw new VoiceFailure("connection")
     gates = new VoiceGates()
 
     const transport = new VoiceTransport({
       api: input.ctx.sdk.api,
       event: (event) => {
-        if (state.transport === transport && !transport.abort.signal.aborted) eventReceived(event)
+        if (connection?.transport === transport && !transport.abort.signal.aborted) eventReceived(attempt, event)
       },
       levels: (mic, speaker) => {
-        gates.user(!state.muted && mic > 0.015)
+        if (connection?.transport !== transport) return
+        gates.user(!isMuted(input.call()) && mic > 0.015)
         gates.assistant(speaker > 0.005)
-        input.change({ level: Math.min(1, (state.muted ? speaker : Math.max(mic, speaker)) * 5) })
+        input.dispatch({ type: "level.updated", attempt, mic, speaker })
       },
       dropped: () => {
-        if (state.transport === transport) drop()
+        if (connection?.transport === transport) input.dispatch({ type: "call.dropped", attempt, failure: "dropped" })
       },
     })
 
-    state.transport = transport
+    connection = { attempt, transport }
 
     if (input.platform.requestMicrophone && !(await input.platform.requestMicrophone()))
       throw new VoiceFailure("microphone")
     transport.abort.signal.throwIfAborted()
     await input.platform.setVoiceCallActive?.(true)
     transport.abort.signal.throwIfAborted()
-    await transport.join(state.viewing, tail.lines)
+    await transport.join(viewing, tail.lines)
     transport.abort.signal.throwIfAborted()
-    state.ready = true
-    transport.mute(state.muted)
-    // Navigation while connecting must reach the newly ready backend too.
-    view(state.viewing)
-    tools.replies.sessions.forEach((id) => dirty.add(id))
-    input.change({ status: "connected", muted: state.muted })
+    transport.mute(muted)
   }
 
-  function eventReceived(event: VoiceEvent) {
+  /** Sends on the attempt's transport; a send that fails drops that attempt. */
+  function send(attempt: number, failure: VoiceFailureReason, write: (transport: VoiceTransport) => void) {
+    const transport = connection?.attempt === attempt ? connection.transport : undefined
+
+    if (!transport) return
+    void Promise.resolve()
+      .then(() => write(transport))
+      .catch(() => input.dispatch({ type: "call.dropped", attempt, failure }))
+  }
+
+  function instructions(attempt: number, viewing: VoiceViewedSession) {
+    send(attempt, "connection", (transport) => transport.instructions(delegatorInstructions(viewing, tail.lines)))
+  }
+
+  function eventReceived(attempt: number, event: VoiceEvent) {
     if (event.type === "session.input_transcript.delta" || event.type === "session.output_transcript.delta") {
       const speaker = event.type === "session.input_transcript.delta" ? "user" : "assistant"
-      const caption = tail.append(speaker, event.delta ?? "")
+      const text = tail.append(speaker, event.delta ?? "")
+      const utterance = tail.latest
 
       if (speaker === "user") gates.user(true)
 
       if (speaker === "assistant") gates.assistant(true)
-      input.change({ caption, speaker, utterance: tail.latest })
+
+      if (utterance !== undefined) input.dispatch({ type: "caption.updated", attempt, utterance, speaker, text })
 
       return
     }
 
     if (event.type === "session.delegation.created" && event.delegation) {
       const id = event.delegation.id
+      const viewing = viewedSession(input.call())
 
       // A repeated event must not capture the transcript again: that would clear this delegation's reservation.
-      if (hasDelegation(delegations, id)) return
-      dispatch({ type: "delegation.created", id, sessionID: state.viewing.id, transcript: tail.capture(id) })
+      if (!viewing || hasDelegation(delegations, id)) return
+      dispatch({ type: "delegation.created", id, sessionID: viewing.id, transcript: tail.capture(id) })
 
       return
     }
@@ -204,7 +150,7 @@ export function createVoiceCall(input: {
             id: effect.id,
             attempt: effect.attempt,
             // The transport aborts as soon as its data channel closes.
-            channelOpen: !!state.transport && !state.transport.abort.signal.aborted,
+            channelOpen: !!connection && !connection.transport.abort.signal.aborted,
           }),
         effect.ms,
       )
@@ -214,7 +160,7 @@ export function createVoiceCall(input: {
     }
 
     if (effect.type === "round") {
-      const transport = state.transport
+      const transport = connection?.transport
 
       if (!transport) return
       const abort = new AbortController()
@@ -231,20 +177,14 @@ export function createVoiceCall(input: {
     }
 
     if (effect.type === "outputs") {
-      const transport = state.transport
-
-      if (!transport) return
-      void Promise.resolve()
-        .then(() => {
-          effect.outputs.forEach((output) =>
-            transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
-          )
-          transport.send({ type: "response.create" })
-          tools.replies.sessions.forEach((id) => dirty.add(id))
-        })
-        .catch(() => {
-          if (state.transport === transport && !transport.abort.signal.aborted) drop("connection")
-        })
+      if (!connection) return
+      send(connection.attempt, "connection", (transport) => {
+        effect.outputs.forEach((output) =>
+          transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
+        )
+        transport.send({ type: "response.create" })
+        tools.replies.sessions.forEach((id) => dirty.add(id))
+      })
 
       return
     }
@@ -285,10 +225,10 @@ export function createVoiceCall(input: {
   }
 
   async function watch() {
-    const transport = state.transport
+    const transport = connection?.transport
 
-    if (!state.ready || !transport || state.watching || delegating(delegations) || !dirty.size) return
-    state.watching = true
+    if (!transport || !isConnected(input.call()) || watching || delegating(delegations) || !dirty.size) return
+    watching = true
     await Promise.resolve()
       .then(async () => {
         for (const sessionID of dirty) {
@@ -307,7 +247,7 @@ export function createVoiceCall(input: {
             if (
               delegating(delegations) ||
               gates.delay() ||
-              transport !== state.transport ||
+              transport !== connection?.transport ||
               transport.abort.signal.aborted
             ) {
               dirty.add(sessionID)
@@ -333,26 +273,54 @@ export function createVoiceCall(input: {
         tools.replies.sessions.forEach((id) => dirty.add(id))
       })
       .finally(() => {
-        state.watching = false
+        watching = false
       })
   }
 
+  /** Closes the transport and releases the active-call IPC; delegations cannot outlive their transport. */
+  function release() {
+    const transport = connection?.transport
+    connection = undefined
+    dispatch({ type: "call.reset" })
+
+    if (!transport) return Promise.resolve()
+
+    return Promise.all([transport.close(), input.platform.setVoiceCallActive?.(false).catch(() => undefined)]).then(
+      () => undefined,
+    )
+  }
+
   return {
-    join,
-    view,
-    mute() {
-      if (!state.ready) return
-      state.muted = !state.muted
-      state.transport?.mute(state.muted)
-      input.change({ muted: state.muted })
+    /** Settles once the attempt's result is dispatched. */
+    connect(attempt: number, viewing: VoiceViewedSession, muted: boolean) {
+      return join(attempt, viewing, muted).then(
+        () => input.dispatch({ type: "connect.succeeded", attempt }),
+        (error) =>
+          input.dispatch({
+            type: "connect.failed",
+            attempt,
+            failure: error instanceof VoiceFailure ? error.reason : "connection",
+          }),
+      )
     },
-    async end() {
-      state.ended = true
-      state.ready = false
+    activate(attempt: number, sync?: VoiceViewedSession) {
+      if (sync) instructions(attempt, sync)
+      tools.replies.sessions.forEach((id) => dirty.add(id))
+    },
+    instructions,
+    mute(attempt: number, muted: boolean) {
+      send(attempt, "dropped", (transport) => transport.mute(muted))
+    },
+    disconnect(attempt: number) {
+      if (connection?.attempt !== attempt) return Promise.resolve()
+
+      return release()
+    },
+    dispose() {
       unlisten()
       clearInterval(timer)
-      dispatch({ type: "call.reset" })
-      await Promise.all([state.transport?.close(), input.platform.setVoiceCallActive?.(false).catch(() => undefined)])
+
+      return release()
     },
   }
 }
