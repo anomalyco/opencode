@@ -45,8 +45,11 @@ pub fn toggle_title(animations: Option<bool>) -> &'static str {
 /// with a new clock, stops the driver at its next tick.
 type Clock = Rc<Cell<Duration>>;
 
-/// Advances `clock` by `interval` on every tick of an app interval timer.
-fn tick_every(app: &App, interval: Duration, clock: &Clock) {
+/// Advances `clock` by `interval` on every tick of an app interval timer. A tick asks for a frame only if the widget
+/// painted since the last one: the widget sets `painted` in its paint, and a hidden widget is not painted. Showing
+/// it again asks for a frame, whose paint resumes the ticks' frames.
+fn tick_every(app: &App, interval: Duration, clock: &Clock, painted: &Rc<Cell<bool>>) {
+    let painted = Rc::clone(painted);
     let weak = Rc::downgrade(clock);
     let id = Rc::new(Cell::new(None));
     let own = Rc::clone(&id);
@@ -58,7 +61,9 @@ fn tick_every(app: &App, interval: Duration, clock: &Clock) {
             return;
         };
         clock.set(clock.get() + interval);
-        cx.request_redraw();
+        if painted.replace(false) {
+            cx.request_redraw();
+        }
     })));
 }
 
