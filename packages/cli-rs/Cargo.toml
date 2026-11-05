@@ -52,7 +52,6 @@ rustix = { version = "1", features = ["fs", "process"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
-serde_path_to_error = "0.1"
 sha1 = "0.11"
 sha2 = "0.11"
 similar = "3"
