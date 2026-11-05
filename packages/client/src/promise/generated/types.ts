@@ -4709,6 +4709,21 @@ export type ExperimentalJobListInput = {
 
 export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 
+export type ExperimentalPluginWebListOutput = Array<{
+  id: PluginID
+  revision: string
+  options: { [x: string]: JsonValue }
+  ticket: string
+}>
+
+export type ExperimentalPluginWebModuleInput = {
+  readonly id: string
+  readonly revision: string
+  readonly ticket: string
+}
+
+export type ExperimentalPluginWebModuleOutput = globalThis.Uint8Array
+
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type ShellListOutput = { location: LocationPublicRef; data: Array<ShellInfo1> }

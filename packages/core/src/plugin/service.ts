@@ -9,6 +9,10 @@ import { Context, type Effect, type Exit } from "effect"
 export interface Interface {
   readonly activate: (plugins: readonly Generation[], failures?: readonly Failure[]) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
+  /** Active configured GUI bundles, without reading their JavaScript files. */
+  readonly guis: () => Effect.Effect<
+    ReadonlyArray<{ id: Plugin.ID; revision: string; options: Plugin.GuiBundle["options"] }>
+  >
   /** An active plugin's prebuilt `./gui-experimental` bundle, or undefined when it exports none. */
   readonly gui: (id: Plugin.ID) => Effect.Effect<Plugin.GuiBundle | undefined>
   readonly close: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>

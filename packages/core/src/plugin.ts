@@ -265,6 +265,15 @@ const layer = Layer.effect(
       awaitActivation: ready.await,
       hold,
       list,
+      guis: () =>
+        Effect.sync(() =>
+          Array.from(active.values()).flatMap((slot) => {
+            const gui = slot.plugin.gui
+            const info = slotInfo(slot)
+            if (!gui || info.source.type === "builtin" || info.state.status !== "active") return []
+            return [{ id: slot.plugin.id, revision: gui.revision, options: gui.options }]
+          }),
+        ),
       gui,
     })
   }),

@@ -1,5 +1,10 @@
 import type { PluginOptions } from "@opencode/plugin/gui"
-import type { BridgePluginGui, BridgePluginGuis, Entry } from "@opencode/plugin/gui/host"
+import type { BridgePluginGui, Entry } from "@opencode/plugin/gui/host"
+import type { ExperimentalPluginWebListOutput } from "@opencode/client/promise"
+
+export type GuiSource = BridgePluginGui | ExperimentalPluginWebListOutput[number]
+
+type Listing = { readonly plugins: readonly GuiSource[]; readonly reserved: readonly string[] }
 
 /** How long main may take to answer the first request before the window settles with no plugin GUIs. */
 export const PLUGIN_GUI_INITIAL_TIMEOUT_MS = 10_000
@@ -29,7 +34,7 @@ export type PluginGuiState =
       readonly attempt: number
       /** An earlier list or failure already published, so the window has settled. */
       readonly settled: boolean
-      readonly target: BridgePluginGuis
+      readonly target: Listing
       readonly cache: Cache
     }
   /** Published; `cache` holds each running plugin at its revision, so an unchanged one keeps its definition. */
@@ -39,10 +44,10 @@ export type PluginGuiState =
   | { readonly status: "disposed" }
 
 export type PluginGuiEvent =
-  | { readonly type: "initial.resolved"; readonly attempt: number; readonly guis: BridgePluginGuis }
+  | { readonly type: "initial.resolved"; readonly attempt: number; readonly guis: Listing }
   | { readonly type: "initial.failed"; readonly attempt: number; readonly cause: unknown }
   | { readonly type: "timeout"; readonly attempt: number }
-  | { readonly type: "pushed"; readonly guis: BridgePluginGuis }
+  | { readonly type: "pushed"; readonly guis: Listing }
   | { readonly type: "evaluated"; readonly attempt: number; readonly loaded: readonly LoadedPluginGui[] }
   | { readonly type: "evaluate.failed"; readonly attempt: number; readonly cause: unknown }
   | { readonly type: "disposed" }
@@ -51,7 +56,7 @@ export type PluginGuiEffect =
   | { readonly type: "fetch.initial"; readonly attempt: number }
   | { readonly type: "timer.start"; readonly attempt: number }
   | { readonly type: "timer.stop" }
-  | { readonly type: "evaluate"; readonly attempt: number; readonly plugins: readonly BridgePluginGui[] }
+  | { readonly type: "evaluate"; readonly attempt: number; readonly plugins: readonly GuiSource[] }
   | { readonly type: "publish"; readonly plugins: readonly LoadedPluginGui[]; readonly reserved: readonly string[] }
   | { readonly type: "log"; readonly cause: unknown }
 
@@ -149,7 +154,7 @@ function receive(
   attempt: number,
   settled: boolean,
   cache: Cache,
-  guis: BridgePluginGuis,
+  guis: Listing,
   stopTimer: boolean,
 ): PluginGuiTransition {
   const stop = stopTimer ? [TIMER_STOP] : []

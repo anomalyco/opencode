@@ -1,7 +1,10 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
+import path from "node:path"
+import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
+import { eventually } from "../../core/test/lib/eventually"
 import { ServerProcess } from "../src/process"
 
 it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
@@ -226,6 +229,61 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     ).toBe(200)
     expect((yield* request(`/auth/connect/${client.code}`)).status).toBe(401)
     expect((yield* request("/auth/connect/unknown")).status).toBe(401)
+  }),
+)
+
+it.live("web plugin imports consume one ticket for one revision, issued after password or pairing login", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped()).path
+    const plugin = path.join(dir, "sample")
+    const code = "module.exports = { setup() {} }"
+    yield* Effect.promise(() => Bun.write(path.join(plugin, "gui-experimental.cjs"), code))
+    const server = yield* ServerProcess.start<never, never>({
+      app: { channel: "latest" },
+      hostname: "127.0.0.1",
+      port: 0,
+      password: "secret",
+      database: { path: ":memory:" },
+      config: {
+        directory: dir,
+        project: false,
+        content: JSON.stringify({ plugins: [plugin] }),
+      },
+      models: { fetch: false },
+    })
+    const origin = HttpServer.formatAddress(server.address)
+    const request = (pathname: string, init?: RequestInit) =>
+      fetch(new URL(pathname, origin), { redirect: "manual", ...init })
+    const basic = { authorization: `Basic ${btoa("opencode:secret")}` }
+    const cookie = yield* Effect.promise(async () => {
+      const pair = await (await request("/api/pair", { method: "POST", headers: basic })).json()
+      const redirect = await request(`/auth/connect/${pair.code}`, { headers: { accept: "text/html" } })
+      return (redirect.headers.get("set-cookie") ?? "").split(";")[0]
+    })
+    const list = "/api/experimental/plugin/web-list"
+    expect((yield* Effect.promise(() => request(list, { method: "POST" }))).status).toBe(401)
+    for (const headers of [new Headers(basic), new Headers({ cookie })]) {
+      const [gui] = yield* eventually(
+        Effect.promise(async () => {
+          const listing = await request(list, { method: "POST", headers })
+          expect(listing.status).toBe(200)
+          return listing.json() as Promise<{ id: string; revision: string; ticket: string }[]>
+        }),
+        (plugins) => plugins.length > 0,
+      )
+      expect(gui.id).toBe("sample")
+      yield* Effect.promise(async () => {
+        const module = (revision: string) =>
+          `/api/experimental/plugin/web-module?${new URLSearchParams({ id: gui.id, revision, ticket: gui.ticket })}`
+        expect((await request(`/api/info?ticket=${gui.ticket}`)).status).toBe(401)
+        expect((await request(module("different"))).status).toBe(403)
+        const response = await request(module(gui.revision))
+        expect(response.status).toBe(200)
+        expect(response.headers.get("content-type")).toContain("text/javascript")
+        expect(await response.text()).toContain(code)
+        expect((await request(module(gui.revision))).status).toBe(403)
+      })
+    }
   }),
 )
 

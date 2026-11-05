@@ -3,6 +3,7 @@ import {
   inertModule,
   mainOnlyModule,
   type PluginModule,
+  type PluginFactory,
   type Entry,
 } from "@opencode/plugin/gui/host"
 
@@ -32,7 +33,7 @@ const modules = {
  * takes the server plugin's id. A bundle that fails to evaluate becomes an entry that fails, so Extensions › Plugins
  * reports it.
  */
-export async function pluginDefinition(id: string, code: string): Promise<Entry> {
+export async function pluginDefinition(id: string, code: string | PluginFactory): Promise<Entry> {
   const loaded = new Map<string, object>(
     await Promise.all(Object.entries(modules).map(async ([name, load]) => [name, await load()] as const)),
   )

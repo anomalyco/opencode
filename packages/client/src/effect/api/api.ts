@@ -2513,6 +2513,24 @@ export type ExperimentalJobListOperation<E = never> = (
   input?: ExperimentalJobListInput,
 ) => Effect.Effect<ExperimentalJobListOutput, E>
 
+export type ExperimentalPluginWebListOutput = ReadonlyArray<{
+  readonly id: Plugin.ID
+  readonly revision: string
+  readonly options: { readonly [x: string]: Schema.Json }
+  readonly ticket: string
+}>
+export type ExperimentalPluginWebListOperation<E = never> = () => Effect.Effect<ExperimentalPluginWebListOutput, E>
+
+export type ExperimentalPluginWebModuleInput = {
+  readonly id: Plugin.ID
+  readonly revision: string
+  readonly ticket: string
+}
+export type ExperimentalPluginWebModuleOutput = globalThis.Uint8Array
+export type ExperimentalPluginWebModuleOperation<E = never> = (
+  input: ExperimentalPluginWebModuleInput,
+) => Effect.Effect<ExperimentalPluginWebModuleOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2543,6 +2561,10 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E> }
+  readonly plugin: {
+    readonly webList: ExperimentalPluginWebListOperation<E>
+    readonly webModule: ExperimentalPluginWebModuleOperation<E>
+  }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
