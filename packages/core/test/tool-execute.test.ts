@@ -107,6 +107,26 @@ describe("fetch permissions", () => {
     expect(hits).toEqual(["GET /redirect"])
   })
 
+  test("fetch matches rules without the fragment and rejects credentials in the URL", async () => {
+    hits.length = 0
+    const asked: Array<ReadonlyArray<string>> = []
+    const result = await Effect.runPromise(
+      createCodeMode(
+        new Map(),
+        permissionService({ assert: (input) => Effect.sync(() => void asked.push(input.resources)) }),
+      ).execute(
+        {
+          code: `await fetch("${server.url.origin}/allowed#top"); try { await fetch("${server.url.protocol}//user@${server.url.host}/") } catch (e) { return e.message }`,
+        },
+        context,
+      ),
+    )
+
+    expect(result.output.output).toBe("fetch cannot be used with credentials in the URL.")
+    expect(asked).toEqual([[`${server.url.origin}/allowed`]])
+    expect(hits).toEqual(["GET /allowed"])
+  })
+
   test("a rejection with feedback reaches the program as the error message", async () => {
     hits.length = 0
     const url = `${server.url.origin}/corrected`

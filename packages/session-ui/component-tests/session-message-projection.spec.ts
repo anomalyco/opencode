@@ -1,5 +1,51 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("reveals turn speed only while hovering the response metadata", async ({ mount, page }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
+
+  const footer = timeline.locator('[data-slot="text-part-copy-wrapper"]').last()
+
+  const meta = footer.locator('[data-slot="text-part-meta"]')
+
+  const speed = meta.locator('[data-slot="text-part-meta-speed"]')
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(meta.locator('[data-slot="text-part-meta-item"]').last()).toHaveText("5m 2s")
+  await expect(speed).toHaveText("·60.0 tok/s")
+  await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+  await expect(footer).toHaveCSS("opacity", "1")
+  await expect(speed).toBeHidden()
+
+  for (const width of [1000, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+    await meta.hover()
+    await expect(speed).toBeVisible()
+    expect(
+      await speed.evaluate((element) => {
+        const box = element.getBoundingClientRect()
+
+        const parent = element.parentElement!.getBoundingClientRect()
+
+        return box.left >= parent.left && box.right <= parent.right + 1
+      }),
+    ).toBe(true)
+    await footer.getByRole("button", { name: "Copy response", exact: true }).hover()
+    await expect(speed).toBeHidden()
+  }
+})
+
+story("omits turn speed when a model step has no streaming time", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { measured: false } })
+
+  const meta = timeline.locator('[data-slot="text-part-meta"]')
+
+  await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+  await meta.hover()
+  await expect(meta).toContainText("5m 2s")
+  await expect(meta.locator('[data-slot="text-part-meta-speed"]')).toHaveCount(0)
+})
+
 story("keeps quote attachment icons fixed while long text truncates", async ({ mount, page }) => {
   const gallery = await mount("current-session-timeline-rows--quote-attachments")
 
@@ -75,6 +121,23 @@ story.describe("message actions menu", () => {
       expect(Math.abs(trigger.y + trigger.height / 2 - footer.y - footer.height / 2)).toBeLessThan(1)
     }
   })
+})
+
+story("keeps pending steer actions usable after a request fails", async ({ mount }) => {
+  const timeline = await mount("current-prompt-message--pending")
+  const queue = timeline.getByRole("button", { name: "Move to queue", exact: true })
+  const remove = timeline.getByRole("button", { name: "Delete", exact: true })
+  const failures = timeline.getByLabel("Failed actions")
+
+  await timeline.getByLabel("Actions fail").check()
+  await timeline.locator('[data-component="user-message"]').hover()
+  await queue.click()
+  await expect(failures).toHaveText("1")
+  await expect(queue).toBeEnabled()
+  await expect(remove).toBeEnabled()
+  await remove.click()
+  await expect(failures).toHaveText("2")
+  await expect(remove).toBeEnabled()
 })
 
 story("drops a pending footer at once on delivery with and without hover", async ({ mount, page }) => {

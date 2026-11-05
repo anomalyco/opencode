@@ -25,7 +25,7 @@ for (const model of [
   Azure.responsesModel("fixture", { resourceName: "test" }),
   XAI.model("fixture", {}),
   openai.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
-  LanguageModel.update(openai, { defaults: { generation: { maxTokens: 100 } } }),
+  LanguageModel.update(openai, { defaults: { maxTokens: 100 } }),
   LanguageModel.make(LanguageModel.input(openai)),
 ]) {
   ai.compact(ai.request({ model, prompt: "hello" }))

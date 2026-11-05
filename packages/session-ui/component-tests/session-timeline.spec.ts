@@ -16,7 +16,7 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
   await expect(notice).toContainText("Instructions updated")
   const expandedBox = (await updates.boundingBox())!
   expect((await notice.boundingBox())!.y - (expandedBox.y + expandedBox.height)).toBe(0)
-  expect((await notice.boundingBox())!.x - expandedBox.x).toBe(12)
+  expect((await notice.boundingBox())!.x - expandedBox.x).toBe(24)
   expect(expandedBox.height).toBe(28)
 })
 

@@ -293,6 +293,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
   const probes = useWslAddServerProbes({
     state: current,
     api,
+    available: () => !!props.api,
     view: () => store.view,
     adding: () => store.adding,
     busy: () => baseModel().busy,
@@ -486,6 +487,7 @@ function unavailable(error: string): WslServersState {
     opencodeChecks: {},
     pendingRestart: false,
     servers: [],
-    job: null,
+    hostJob: "idle",
+    distroJobs: {},
   }
 }

@@ -3,6 +3,7 @@ import { startTransition } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createKnownServerSessions, createServerSessionEntries, type CommandPaletteEntry } from "./palette"
 import { CommandPaletteView } from "./dialog"
@@ -18,19 +19,19 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
   const tabs = useTabs()
   const registry = useServers()
 
-  const servers = registry.visible.filter(
-    (conn) => global.servers.health[ServerConnection.key(conn)]?.healthy !== false,
-  )
+  const servers = registry.visible.filter((conn) => !isServerFailed(global.servers.health[ServerConnection.key(conn)]))
 
-  const loaders = servers.map((conn) => {
-    const ctx = global.ensureServerCtx(conn)
+  const loaders = servers.flatMap((conn) => {
+    const ctx = global.serverCtx(ServerConnection.key(conn))
+
+    if (!ctx) return []
 
     const load = createServerSessionEntries({
       server: ServerConnection.key(conn),
       archived: props.archived,
       known: props.archived
         ? () => ctx.data.session.list().filter((session) => !session.parentID)
-        : createKnownServerSessions(ctx),
+        : createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
       load: (search, signal) =>
@@ -53,23 +54,17 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
             description: language.t("palette.session.location", { project: entry.description ?? "", server: tag }),
           }))
 
-    return {
-      items: (query: string) => format(load.items(query)),
-      search: (query: string) => load.search(query).then(format),
-    }
+    return [
+      {
+        items: (query: string) => format(load.items(query)),
+        search: (query: string, signal: AbortSignal) => load.search(query, signal).then(format),
+      },
+    ]
   })
 
   const items = (query: string) => {
     const entries = loaders
       .flatMap((loader) => loader.items(query))
-      .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
-
-    return query ? entries : entries.slice(0, RECENT_LIMIT)
-  }
-
-  const sessions = async (query: string) => {
-    const entries = (await Promise.all(loaders.map((loader) => loader.search(query))))
-      .flat()
       .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
 
     return query ? entries : entries.slice(0, RECENT_LIMIT)
@@ -85,15 +80,15 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     const open = () => {
       dialog.close()
 
-      if (conn && directory) global.ensureServerCtx(conn).projects.touch(directory)
+      if (conn && directory) global.serverCtx(server)?.projects.touch(directory)
       void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId })))
     }
 
     if (!props.archived) return open()
 
-    if (!conn) return
+    const ctx = conn ? global.serverCtx(server) : undefined
 
-    const ctx = global.ensureServerCtx(conn)
+    if (!ctx) return
 
     void ctx.sdk.api.session
       .update({ sessionID: sessionId, archived: false })
@@ -109,11 +104,12 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       )
   }
 
+  // Each server is its own source, so a slow or failing server never holds back or hides another's sessions.
   return (
     <CommandPaletteView
       placeholder={language.t("home.sessions.search.placeholder")}
       items={items}
-      sources={[sessions]}
+      sources={loaders.map((loader) => loader.search)}
       highlight={() => {}}
       select={select}
       close={() => dialog.close()}

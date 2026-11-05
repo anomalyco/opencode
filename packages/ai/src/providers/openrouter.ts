@@ -147,7 +147,7 @@ export const protocol = Protocol.make({
             reasoning_details: reasoningDetails,
           }
         },
-      }).pipe(Effect.map((body) => bodyOptions(body, request.providerOptions, request.generation?.maxTokens))),
+      }).pipe(Effect.map((body) => bodyOptions(body, request.providerOptions, request.maxTokens))),
   },
   stream: OpenAIChat.protocol.stream,
 })

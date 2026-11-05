@@ -1155,7 +1155,7 @@ test.describe("background shortcut", () => {
       const capsule = page.getByRole("button", { name: "1 shell", exact: true, includeHidden: true })
       const list = page.getByRole("menu", { name: "1 shell", exact: true })
       const closed = (await capsule.boundingBox())!
-      const inset = (await capsule.locator("svg").boundingBox())!.x - closed.x
+      const inset = (await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox())!.x - closed.x
 
       await capsule.click()
       // Right placement shares the capsule's end edge and mirrors its inset there; centre placement shares its centre.
@@ -1336,7 +1336,7 @@ test.describe("background shortcut", () => {
     // The open menu hides the rest of the page from the accessibility tree, the capsule included.
     const capsule = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true, includeHidden: true })
     const label = capsule.getByText("2 subagents · 1 shell", { exact: true })
-    const glyph = await capsule.locator("svg").boundingBox()
+    const glyph = await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox()
     const text = await label.boundingBox()
     const inset = glyph!.x - (await capsule.boundingBox())!.x
 
@@ -1357,7 +1357,7 @@ test.describe("background shortcut", () => {
             const content = item.querySelector('[data-slot="menu-v2-item-content"]')
 
             return [
-              content?.querySelector(":scope > svg")?.getBoundingClientRect().left ?? NaN,
+              content?.querySelector(":scope > :first-child")?.getBoundingClientRect().left ?? NaN,
               content?.querySelector(":scope > span:not([data-slot])")?.getBoundingClientRect().left ?? NaN,
               item.querySelector('[data-slot="session-activity-elapsed"]')?.getBoundingClientRect().right ?? NaN,
             ]
@@ -3317,6 +3317,16 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await expect(more).not.toBeFocused()
   expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
   await expect(composer).toHaveCount(1)
+
+  // A press that turns into a native drag of the selection ends with dragend, and no pointerup follows.
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await expect(toolbar).toHaveCount(0)
+  await short.hover()
+  await page.mouse.down()
+  await page.evaluate(() => document.dispatchEvent(new Event("dragend")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
 })
 
 function pauseExitAnimations(locator: Locator) {
