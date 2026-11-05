@@ -5,12 +5,6 @@ import type { LineRange, Live, MountedSession, OpenOptions } from "@opencode/plu
 import type { OpenApp } from "./apps"
 import type { PickerView } from "./picker-machine"
 
-/** An open-in-app request in flight: the app it opens, or undefined while none is. */
-export interface OpenRequest {
-  app(): OpenApp | undefined
-  set(app: OpenApp | undefined): void
-}
-
 /** Per-window file state that setup owns and its lazily loaded views share. */
 export interface FileShared {
   readonly changes: Accessor<Live<Changes>>
@@ -26,12 +20,22 @@ export interface FileShared {
     /** The filter input took the request's focus. */
     focused(request: number): void
   }
-  /** Open-in-app availability checks, one per app for the window's lifetime. */
-  readonly installed: Map<string, Promise<boolean>>
   /** The open-in-app choice. Desktop only. */
   readonly app?: { current(): OpenApp; set(app: OpenApp): void }
-  /** The "Open in" buttons' request in flight, shared so the tab strip's and a panel header's agree across tab switches. */
-  readonly request: OpenRequest
+  /**
+   * The window's open-in-app checks and launch, shared so every "Open in" control agrees: the header buttons, the path
+   * menu, file trees and artifact toolbars.
+   */
+  readonly openInApp: {
+    /** Checks the apps not checked yet, by the names the desktop opens them with. */
+    check(openWith: readonly string[]): void
+    /** The app answered that it is installed. */
+    installed(openWith: string): boolean
+    /** A launch is running. */
+    opening(): boolean
+    /** Opens or reveals `target`; ignored while another launch runs. */
+    launch(input: { app: OpenApp; target: string; openWith?: string; reveal: boolean }): void
+  }
   /** The last selection of each file tab, readable before a session's file view state loads. */
   readonly handoff: {
     get(session: string, path: string): LineRange | null | undefined

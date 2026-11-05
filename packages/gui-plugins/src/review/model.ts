@@ -4,11 +4,9 @@ import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-brid
 import { artifactMime } from "@opencode/util/artifact"
 import { bytesToBase64 } from "@opencode/util/base64"
 import { checksum } from "@opencode/util/encode"
-import { showToast } from "@opencode/ui/toast"
 import { createQuery, focusManager, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
-import { createStore } from "solid-js/store"
 import {
   createKeyed,
   type LineRange,
@@ -39,6 +37,13 @@ import {
   type ReviewFolderSource,
   type ReviewFolderState,
 } from "./folder-machine"
+import {
+  createReviewInitGitState,
+  isInitializingGit,
+  transitionReviewInitGit,
+  type ReviewInitGitEffect,
+  type ReviewInitGitEvent,
+} from "./init-git-machine"
 import {
   INITIAL_REVIEW_RENDER_STATE,
   reviewMobileReady,
@@ -114,10 +119,7 @@ export function createReviewModel(input: {
   const directory = () => screen.file.root
 
   // The filter is transient by design: a persisted filter would silently hide files after a reload.
-  const [state, setState] = createStore<{ filter: string; initializingGit: Record<string, true | undefined> }>({
-    filter: "",
-    initializingGit: {},
-  })
+  const [filter, setFilter] = createSignal("")
 
   // The machines keep numbers, not the visit objects that tell routing visits apart.
   const visits = { ids: new WeakMap<MountedSession["visit"], number>(), last: 0 }
@@ -555,56 +557,115 @@ export function createReviewModel(input: {
 
   const ready = () => reviewDiffReady(diffState())
 
-  const alive = () => untrack(diffState).status !== "disposed" && !ctx.signal.aborted
+  // Git initialization per session. Each request keeps its session's object, so its server and location stay its own;
+  // only error feedback depends on which session is routed when it fails.
+  const [initGitState, setInitGitState] = createSignal(createReviewInitGitState())
+  const initGitRequests = new Map<number, DiffRequest>()
+  const initGitSessions = new Map<string, MountedSession>()
 
-  // Initializes Git for the routed session. The request keeps that session's object, so its server and location stay
-  // its own. Cache refresh follows the request's session; only error feedback depends on which session is routed.
-  const initializeGit = () => {
-    const session = view()
+  const dispatchInitGit = (event: ReviewInitGitEvent) => {
+    const next = transitionReviewInitGit(untrack(initGitState), event)
 
-    if (state.initializingGit[session.key]) return
-    const location = session.location
+    setInitGitState(next.state)
 
-    if (!location || !session.server.connected) {
-      showToast({ variant: "error", title: ctx.t("common.requestFailed") })
+    // The machine releases a session's button; the driver forgets the session object with it.
+    if (event.type === "disposed") initGitSessions.clear()
+
+    if (event.type !== "disposed" && !isInitializingGit(next.state, event.sessionKey))
+      initGitSessions.delete(event.sessionKey)
+    next.effects.forEach(runInitGitEffect)
+  }
+
+  const runInitGitEffect = (effect: ReviewInitGitEffect) => {
+    if (effect.type === "attempt.abort") {
+      const request = initGitRequests.get(effect.attempt)
+
+      initGitRequests.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller?.abort()
 
       return
     }
 
-    const current = () => alive() && view().key === session.key
-
-    setState("initializingGit", session.key, true)
-    void session.server.client.vcs
-      .init({ location, provider: "git" })
-      .then(async () => {
-        if (!alive()) return
-
-        const data = session.server.data
-
-        data.project.invalidate()
-        data.session.invalidate(session.id)
-        data.location.invalidate(location)
-        data.location.vcs.invalidate(location)
-        await data.project.sync()
-
-        if (!alive()) return
-        await data.session.sync(session.id)
-
-        if (!alive()) return
-        await Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)])
+    if (effect.type === "toast.failed") {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: effect.reason === "timeout" ? ctx.t("load.timeout") : effect.message,
       })
-      .catch((error) => {
-        if (!current()) return
 
-        showToast({
-          variant: "error",
-          title: ctx.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : undefined,
-        })
+      return
+    }
+
+    const session = initGitSessions.get(effect.sessionKey)
+    const location = session?.location
+    const sessionKey = effect.sessionKey
+    const attempt = effect.attempt
+    const controller = new AbortController()
+    const signal = AbortSignal.any([ctx.signal, controller.signal])
+
+    if (effect.type === "vcs.init") {
+      initGitRequests.set(attempt, {
+        controller,
+        timer: setTimeout(
+          () =>
+            dispatchInitGit({ type: "init.timed-out", sessionKey, attempt, routedSessionKey: untrack(view).key }),
+          effect.timeoutMs,
+        ),
       })
-      .finally(() => {
-        if (alive()) setState("initializingGit", session.key, undefined)
-      })
+      void Promise.try(() => {
+        if (!session || !location) throw new Error(ctx.t("common.requestFailed"))
+
+        return session.server.client.vcs.init({ location, provider: "git" }, { signal })
+      }).then(
+        () => dispatchInitGit({ type: "init.succeeded", sessionKey, attempt }),
+        (cause: unknown) =>
+          dispatchInitGit({
+            type: "init.failed",
+            sessionKey,
+            attempt,
+            routedSessionKey: untrack(view).key,
+            message: cause instanceof Error ? cause.message : undefined,
+          }),
+      )
+
+      return
+    }
+
+    initGitRequests.set(attempt, {
+      controller,
+      timer: setTimeout(() => dispatchInitGit({ type: "sync.timed-out", sessionKey, attempt }), effect.timeoutMs),
+    })
+    // Each refresh runs even when an earlier one fails: the repository exists either way.
+    void Promise.try(async () => {
+      if (!session || !location) return
+      const data = session.server.data
+
+      data.project.invalidate()
+      data.session.invalidate(session.id)
+      data.location.invalidate(location)
+      data.location.vcs.invalidate(location)
+      await data.project.sync().catch(() => undefined)
+
+      if (signal.aborted) return
+      await data.session.sync(session.id).catch(() => undefined)
+
+      if (signal.aborted) return
+      await Promise.allSettled([data.location.syncInfo(location), data.location.vcs.sync(location)])
+    })
+      .catch(() => undefined)
+      .then(() => dispatchInitGit({ type: "sync.settled", sessionKey, attempt }))
+  }
+
+  onCleanup(() => dispatchInitGit({ type: "disposed" }))
+
+  // Initializes Git for the routed session.
+  const initializeGit = () => {
+    const session = view()
+    const ready = Boolean(session.location && session.server.connected)
+
+    if (ready && !isInitializingGit(untrack(initGitState), session.key)) initGitSessions.set(session.key, session)
+    dispatchInitGit({ type: "init.requested", sessionKey: session.key, ready })
   }
 
   const loadDiff = async (path: string, version?: number): Promise<FileDiffInfo | undefined> => {
@@ -923,12 +984,12 @@ export function createReviewModel(input: {
     focusFile,
     hasChanges,
     initializeGit,
-    initializingGit: () => !!state.initializingGit[view().key],
+    initializingGit: () => isInitializingGit(initGitState(), view().key),
     loadDiff,
     readFile,
     mode,
-    filter: () => state.filter,
-    setFilter: (value: string) => setState("filter", value),
+    filter,
+    setFilter: (value: string) => void setFilter(value),
     open: () => stored()?.open ?? [],
     setOpen: (next: string[]) =>
       update((draft) => {
