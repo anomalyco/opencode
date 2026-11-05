@@ -77,10 +77,10 @@ export interface OpenInAppProps {
   readonly session: MountedSession
 }
 
-/** The desktop "Open in" button, for a panel header that shows it in place of the tab strip's. */
+/** The desktop "Open in" button, for a panel header such as the review's. */
 export interface OpenInApp {
   /**
-   * Renders nothing on the web or for a remote server. While it is mounted, the tab strip leaves out its own.
+   * Renders nothing on the web or for a remote server.
    *
    * @param props - The workspace to open.
    * @returns The button.
