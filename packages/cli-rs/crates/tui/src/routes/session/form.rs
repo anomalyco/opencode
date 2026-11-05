@@ -13,9 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
 
 use indexmap::IndexMap;
-use opencode_api::generated::{
-    FormField, FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID,
-};
+use opencode_api::generated::{FormField, FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID};
 use opencode_store::forms::{Form, GLOBAL};
 use opencode_store::location::Location;
 use opencode_store::{Changes, State};
@@ -57,11 +55,7 @@ pub struct Host {
 
 impl Host {
     pub fn new(tui: &Tui, region: View) -> Self {
-        Self {
-            tui: tui.weak(),
-            region,
-            current: RefCell::default(),
-        }
+        Self { tui: tui.weak(), region, current: RefCell::default() }
     }
 
     pub fn region(&self) -> &View {
@@ -74,11 +68,7 @@ impl Host {
 
     /// Shows `form`, or nothing.
     pub fn show(&self, form: Option<&Form>) {
-        let current = self
-            .current
-            .borrow()
-            .as_ref()
-            .map(|prompt| prompt.0.form.info.id.clone());
+        let current = self.current.borrow().as_ref().map(|prompt| prompt.0.form.info.id.clone());
         if current.as_ref() == form.map(|form| &form.info.id) {
             return;
         }
@@ -108,11 +98,7 @@ pub struct SessionForms {
 impl SessionForms {
     pub fn new(tui: &Tui, session: &SessionID) -> Self {
         let region = View::new(&tui.app).column().shrink(0.0).visible(false);
-        Self {
-            host: Host::new(tui, region),
-            session: session.clone(),
-            synced: RefCell::default(),
-        }
+        Self { host: Host::new(tui, region), session: session.clone(), synced: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -132,12 +118,7 @@ impl SessionForms {
                 Vec::new()
             } else {
                 std::iter::once(&self.session)
-                    .chain(
-                        state
-                            .family(&self.session)
-                            .iter()
-                            .filter(|id| **id != self.session),
-                    )
+                    .chain(state.family(&self.session).iter().filter(|id| **id != self.session))
                     .map(|id| id.0.clone())
                     .collect()
             };
@@ -154,10 +135,7 @@ impl SessionForms {
             }
         }
         if let Some(location) = &location
-            && self
-                .synced
-                .borrow_mut()
-                .insert(format!("{GLOBAL}:{}", location.key()))
+            && self.synced.borrow_mut().insert(format!("{GLOBAL}:{}", location.key()))
         {
             quiet(tui, tui.data.form_sync(GLOBAL, Some(location)));
         }
@@ -169,11 +147,7 @@ fn first_form(state: &State, owners: &[String], location: Option<&Location>) -> 
     owners
         .iter()
         .flat_map(|owner| state.forms(owner, None).unwrap_or_default())
-        .chain(
-            location
-                .and_then(|location| state.forms(GLOBAL, Some(location)))
-                .unwrap_or_default(),
-        )
+        .chain(location.and_then(|location| state.forms(GLOBAL, Some(location))).unwrap_or_default())
         .next()
         .cloned()
 }
@@ -231,19 +205,12 @@ struct Inner {
 
 impl FormPrompt {
     pub fn new(tui: &Tui, form: Form) -> Self {
-        let draft = DRAFTS
-            .with(|drafts| drafts.borrow_mut().remove(&form.info.id))
-            .unwrap_or_else(|| {
-                let (answers, custom) = initial_values(&form.info.fields);
-                let first = form.info.fields.iter().find(|field| is_answer(field));
-                let selected = selected_row(first, first.and_then(|field| answers.get(key(field))));
-                Draft {
-                    answers,
-                    custom,
-                    selected,
-                    ..Draft::default()
-                }
-            });
+        let draft = DRAFTS.with(|drafts| drafts.borrow_mut().remove(&form.info.id)).unwrap_or_else(|| {
+            let (answers, custom) = initial_values(&form.info.fields);
+            let first = form.info.fields.iter().find(|field| is_answer(field));
+            let selected = selected_row(first, first.and_then(|field| answers.get(key(field))));
+            Draft { answers, custom, selected, ..Draft::default() }
+        });
         let inner = Rc::new(Inner {
             tui: tui.weak(),
             form,
@@ -277,13 +244,8 @@ impl FormPrompt {
 impl Drop for FormPrompt {
     fn drop(&mut self) {
         let inner = &self.0;
-        let keys: Vec<Disposer> = inner
-            .layers
-            .take()
-            .into_iter()
-            .chain(inner.intercept.take())
-            .chain(inner.mode.take())
-            .collect();
+        let keys: Vec<Disposer> =
+            inner.layers.take().into_iter().chain(inner.intercept.take()).chain(inner.mode.take()).collect();
         let Some(tui) = inner.tui.upgrade() else {
             return;
         };
@@ -333,11 +295,7 @@ impl Inner {
     }
 
     fn tabs(&self) -> usize {
-        if self.single() {
-            1
-        } else {
-            self.fields().len() + 1
-        }
+        if self.single() { 1 } else { self.fields().len() + 1 }
     }
 
     fn field(&self) -> Option<FormField> {
@@ -365,23 +323,15 @@ impl Inner {
         };
         let mut configured = rows(Some(&field));
         let draft = self.draft.borrow();
-        if let (FormField::Multiselect(_), Some(FormValue::Array(items))) =
-            (&field, draft.answers.get(key(&field)))
-        {
+        if let (FormField::Multiselect(_), Some(FormValue::Array(items))) = (&field, draft.answers.get(key(&field))) {
             let custom = draft.custom.get(key(&field));
             let extra: Vec<Row> = items
                 .iter()
                 .filter(|item| {
-                    !configured
-                        .iter()
-                        .any(|row| row.value == FormValue::String((*item).clone()))
+                    !configured.iter().any(|row| row.value == FormValue::String((*item).clone()))
                         && Some(*item) != custom
                 })
-                .map(|item| Row {
-                    value: FormValue::String(item.clone()),
-                    label: item.clone(),
-                    description: None,
-                })
+                .map(|item| Row { value: FormValue::String(item.clone()), label: item.clone(), description: None })
                 .collect();
             configured.extend(extra);
         }
@@ -405,16 +355,8 @@ impl Inner {
     }
 
     fn input(&self) -> String {
-        let key = self
-            .answer_field()
-            .map(|field| key(&field).to_owned())
-            .unwrap_or_default();
-        self.draft
-            .borrow()
-            .custom
-            .get(&key)
-            .cloned()
-            .unwrap_or_default()
+        let key = self.answer_field().map(|field| key(&field).to_owned()).unwrap_or_default();
+        self.draft.borrow().custom.get(&key).cloned().unwrap_or_default()
     }
 
     fn custom_picked(&self) -> bool {
@@ -422,10 +364,7 @@ impl Inner {
         if value.is_empty() {
             return false;
         }
-        let key = self
-            .answer_field()
-            .map(|field| key(&field).to_owned())
-            .unwrap_or_default();
+        let key = self.answer_field().map(|field| key(&field).to_owned()).unwrap_or_default();
         match self.draft.borrow().answers.get(&key) {
             Some(FormValue::Array(items)) => items.contains(&value),
             Some(FormValue::String(text)) => *text == value,
@@ -436,9 +375,7 @@ impl Inner {
     fn placeholder(&self) -> String {
         use opencode_api::generated::FormStringFieldFormat as Format;
         let range = |minimum: Option<f64>, maximum: Option<f64>| match (minimum, maximum) {
-            (Some(minimum), Some(maximum)) => {
-                Some(format!("{}-{}", js_number(minimum), js_number(maximum)))
-            }
+            (Some(minimum), Some(maximum)) => Some(format!("{}-{}", js_number(minimum), js_number(maximum))),
             (Some(minimum), None) => Some(format!("at least {}", js_number(minimum))),
             (None, Some(maximum)) => Some(format!("at most {}", js_number(maximum))),
             (None, None) => None,
@@ -455,9 +392,7 @@ impl Inner {
                 .map(str::to_owned)
             }),
             Some(FormField::Number(field)) => range(number(&field.minimum), number(&field.maximum)),
-            Some(FormField::Integer(field)) => {
-                range(number(&field.minimum), number(&field.maximum))
-            }
+            Some(FormField::Integer(field)) => range(number(&field.minimum), number(&field.maximum)),
             _ => None,
         };
         text.unwrap_or_else(|| "Type your answer".to_owned())
@@ -472,11 +407,7 @@ impl Inner {
             if draft.answers.get(&key) == Some(&FormValue::Bool(true)) {
                 return "continue";
             }
-            return if draft.external_ready.contains(&key) {
-                "I finished"
-            } else {
-                "open link"
-            };
+            return if draft.external_ready.contains(&key) { "I finished" } else { "open link" };
         }
         if self.multi() {
             let editing = self.draft.borrow().editing;
@@ -506,22 +437,17 @@ impl Inner {
     }
 
     fn editor_text(&self) -> Option<String> {
-        self.editor
-            .borrow()
-            .as_ref()
-            .map(|(_, textarea)| textarea.text())
+        self.editor.borrow().as_ref().map(|(_, textarea)| textarea.text())
     }
 
     // Actions (the TS functions).
 
     fn answer(&self, key: &str, value: Option<FormValue>) {
-        let optional_multiselect = self.fields().iter().any(|field| {
-            matches!(field, FormField::Multiselect(_))
-                && self::key(field) == key
-                && !required(field)
-        });
-        let value =
-            value.filter(|value| !(optional_multiselect && *value == FormValue::Array(Vec::new())));
+        let optional_multiselect = self
+            .fields()
+            .iter()
+            .any(|field| matches!(field, FormField::Multiselect(_)) && self::key(field) == key && !required(field));
+        let value = value.filter(|value| !(optional_multiselect && *value == FormValue::Array(Vec::new())));
         let mut draft = self.draft.borrow_mut();
         match value {
             Some(value) => {
@@ -550,15 +476,12 @@ impl Inner {
             answer,
         };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { data.form_reply(input, location.as_ref()).await },
-            move |_, result| {
-                if let (Err(error), Some(inner)) = (result, weak.upgrade()) {
-                    inner.set_error(error.to_string());
-                    inner.render();
-                }
-            },
-        );
+        tui.app.spawn(async move { data.form_reply(input, location.as_ref()).await }, move |_, result| {
+            if let (Err(error), Some(inner)) = (result, weak.upgrade()) {
+                inner.set_error(error.to_string());
+                inner.render();
+            }
+        });
     }
 
     fn cancel(self: &Rc<Self>) {
@@ -573,15 +496,12 @@ impl Inner {
             message: None,
         };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { data.form_cancel(input, location.as_ref()).await },
-            move |_, result| {
-                if let (Err(error), Some(inner)) = (result, weak.upgrade()) {
-                    inner.set_error(error.to_string());
-                    inner.render();
-                }
-            },
-        );
+        tui.app.spawn(async move { data.form_cancel(input, location.as_ref()).await }, move |_, result| {
+            if let (Err(error), Some(inner)) = (result, weak.upgrade()) {
+                inner.set_error(error.to_string());
+                inner.render();
+            }
+        });
     }
 
     fn pick(self: &Rc<Self>, value: FormValue) {
@@ -615,17 +535,10 @@ impl Inner {
         if previous.as_deref() == Some(value) {
             return;
         }
-        self.draft
-            .borrow_mut()
-            .custom
-            .insert(key.to_owned(), value.to_owned());
+        self.draft.borrow_mut().custom.insert(key.to_owned(), value.to_owned());
         let next = if matches!(field, FormField::Multiselect(_)) {
             let answers = self.draft.borrow().answers.get(key).cloned();
-            Some(FormValue::Array(set_multiselect_custom(
-                answers.as_ref(),
-                previous.as_deref(),
-                value,
-            )))
+            Some(FormValue::Array(set_multiselect_custom(answers.as_ref(), previous.as_deref(), value)))
         } else {
             (!value.is_empty()).then(|| FormValue::String(value.to_owned()))
         };
@@ -635,9 +548,7 @@ impl Inner {
     fn select_tab(&self, index: usize) {
         let next = self.fields().into_iter().nth(index).filter(is_answer);
         let mut draft = self.draft.borrow_mut();
-        let selected = next.as_ref().map_or(0, |field| {
-            selected_row(Some(field), draft.answers.get(key(field)))
-        });
+        let selected = next.as_ref().map_or(0, |field| selected_row(Some(field), draft.answers.get(key(field))));
         draft.tab = index;
         draft.selected = selected;
         draft.editing = false;
@@ -730,16 +641,11 @@ impl Inner {
                 // `Number(text)`: anything that does not parse is NaN, which fails as "Expected a number".
                 Some(FormValue::Number(text.parse().unwrap_or(f64::NAN)))
             }
-            (FormField::String(_), true, _) | (_, false, false) => {
-                Some(FormValue::String(text.to_owned()))
-            }
+            (FormField::String(_), true, _) | (_, false, false) => Some(FormValue::String(text.to_owned())),
             (_, false, true) => {
                 let draft = self.draft.borrow();
-                let next = set_multiselect_custom(
-                    draft.answers.get(key),
-                    draft.custom.get(key).map(String::as_str),
-                    text,
-                );
+                let next =
+                    set_multiselect_custom(draft.answers.get(key), draft.custom.get(key).map(String::as_str), text);
                 drop(draft);
                 self.answer(key, Some(FormValue::Array(next)));
                 None
@@ -756,14 +662,7 @@ impl Inner {
         let configured = matches!(&field, FormField::String(field)
             if field.options.as_ref().is_some_and(|options| options.iter().any(|option| option.value == text)));
         let mut draft = self.draft.borrow_mut();
-        draft.custom.insert(
-            key.to_owned(),
-            if configured {
-                String::new()
-            } else {
-                text.to_owned()
-            },
-        );
+        draft.custom.insert(key.to_owned(), if configured { String::new() } else { text.to_owned() });
         draft.editing = false;
         true
     }
@@ -807,23 +706,13 @@ impl Inner {
         };
         let url = field.url.clone();
         tui.app.spawn(
-            async move {
-                tokio::task::spawn_blocking(move || open_url(&url))
-                    .await
-                    .unwrap_or(false)
-            },
+            async move { tokio::task::spawn_blocking(move || open_url(&url)).await.unwrap_or(false) },
             move |_, opened| {
                 let Some(inner) = weak.upgrade() else { return };
                 if opened {
-                    inner
-                        .draft
-                        .borrow_mut()
-                        .external_ready
-                        .insert(field.key.clone());
+                    inner.draft.borrow_mut().external_ready.insert(field.key.clone());
                 } else {
-                    inner.set_error(
-                        "Could not open the browser. Copy the URL and continue manually.",
-                    );
+                    inner.set_error("Could not open the browser. Copy the URL and continue manually.");
                 }
                 inner.changed();
             },
@@ -831,20 +720,15 @@ impl Inner {
     }
 
     fn copy_external(self: &Rc<Self>) {
-        let (Some(FormField::External(field)), Some(tui)) = (self.field(), self.tui.upgrade())
-        else {
+        let (Some(FormField::External(field)), Some(tui)) = (self.field(), self.tui.upgrade()) else {
             return;
         };
         if !tui.app.copy_to_clipboard(&field.url) {
             tui.toasts.error("Failed to copy to clipboard");
             return;
         }
-        self.draft
-            .borrow_mut()
-            .external_ready
-            .insert(field.key.clone());
-        tui.toasts
-            .show(ToastOptions::new(Variant::Info, "Copied URL to clipboard"));
+        self.draft.borrow_mut().external_ready.insert(field.key.clone());
+        tui.toasts.show(ToastOptions::new(Variant::Info, "Copied URL to clipboard"));
     }
 
     fn acknowledge_external(self: &Rc<Self>) {
@@ -868,13 +752,9 @@ impl Inner {
         let fields = self.fields();
         let draft = self.draft.borrow().clone();
         if let Some(field) = fields.iter().find(|field| {
-            matches!(field, FormField::External(_))
-                && draft.answers.get(key(field)) != Some(&FormValue::Bool(true))
+            matches!(field, FormField::External(_)) && draft.answers.get(key(field)) != Some(&FormValue::Bool(true))
         }) {
-            self.set_error(format!(
-                "External action must be acknowledged: {}",
-                label(field)
-            ));
+            self.set_error(format!("External action must be acknowledged: {}", label(field)));
             return;
         }
         if let Some(invalid) = fields
@@ -888,12 +768,7 @@ impl Inner {
         self.reply(
             fields
                 .iter()
-                .filter_map(|field| {
-                    Some((
-                        key(field).to_owned(),
-                        draft.answers.get(key(field))?.clone(),
-                    ))
-                })
+                .filter_map(|field| Some((key(field).to_owned(), draft.answers.get(key(field))?.clone())))
                 .collect(),
         );
     }
@@ -925,42 +800,31 @@ impl Inner {
     fn install(self: &Rc<Self>, tui: &Tui) {
         // Typing on the custom row opens its editor with the key (`keymap.intercept`).
         let weak = Rc::downgrade(self);
-        *self.intercept.borrow_mut() =
-            Some(tui.keymap.keymap().intercept_key(0, false, move |context| {
-                let Some(inner) = weak.upgrade() else { return };
-                if !inner.is_live() || inner.is_textual() || !inner.other() {
-                    return;
-                }
-                let editing = inner.draft.borrow().editing;
-                if editing && inner.editor_focused() {
-                    return;
-                }
-                let event = &context.event;
-                let modified = [
-                    Modifiers::CTRL,
-                    Modifiers::ALT,
-                    Modifiers::SUPER,
-                    Modifiers::HYPER,
-                    Modifiers::META,
-                ]
+        *self.intercept.borrow_mut() = Some(tui.keymap.keymap().intercept_key(0, false, move |context| {
+            let Some(inner) = weak.upgrade() else { return };
+            if !inner.is_live() || inner.is_textual() || !inner.other() {
+                return;
+            }
+            let editing = inner.draft.borrow().editing;
+            if editing && inner.editor_focused() {
+                return;
+            }
+            let event = &context.event;
+            let modified = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SUPER, Modifiers::HYPER, Modifiers::META]
                 .iter()
                 .any(|modifier| event.modifiers.contains(*modifier));
-                let KeyCode::Char(c) = event.code else { return };
-                if modified
-                    || (!editing && c == ' ')
-                    || c.is_control()
-                    || matches!(c, '\u{2028}' | '\u{2029}')
-                {
-                    return;
-                }
-                let Some(field) = inner.answer_field() else {
-                    return;
-                };
-                inner.update_custom(&field, &format!("{}{c}", inner.input()));
-                inner.draft.borrow_mut().editing = true;
-                context.consume();
-                inner.changed();
-            }));
+            let KeyCode::Char(c) = event.code else { return };
+            if modified || (!editing && c == ' ') || c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
+                return;
+            }
+            let Some(field) = inner.answer_field() else {
+                return;
+            };
+            inner.update_custom(&field, &format!("{}{c}", inner.input()));
+            inner.draft.borrow_mut().editing = true;
+            context.consume();
+            inner.changed();
+        }));
         let weak = Rc::downgrade(self);
         let paste = tui.app.on_paste(move |_, text| {
             let Some(inner) = weak.upgrade() else { return };
@@ -983,9 +847,7 @@ impl Inner {
 
     /// Whether the prompt takes input: no dialog is open and the form mode is current.
     fn is_live(&self) -> bool {
-        self.tui
-            .upgrade()
-            .is_some_and(|tui| !tui.dialogs.is_open() && tui.keymap.mode() == FORM_MODE)
+        self.tui.upgrade().is_some_and(|tui| !tui.dialogs.is_open() && tui.keymap.mode() == FORM_MODE)
     }
 
     fn editor_focused(&self) -> bool {
@@ -993,10 +855,7 @@ impl Inner {
             return false;
         };
         let focused = tui.app.focused().map(|widget| widget.id());
-        self.editor
-            .borrow()
-            .as_ref()
-            .is_some_and(|(_, textarea)| Some(textarea.id()) == focused)
+        self.editor.borrow().as_ref().is_some_and(|(_, textarea)| Some(textarea.id()) == focused)
     }
 
     /// State changed: redraw and rebuild the layers.
@@ -1045,11 +904,7 @@ impl Inner {
         if (editing || textual) && !confirm {
             let clear = Rc::downgrade(self);
             let up = Rc::downgrade(self);
-            let dismiss = if textual {
-                "Dismiss form"
-            } else {
-                "Close answer edit"
-            };
+            let dismiss = if textual { "Dismiss form" } else { "Close answer edit" };
             layers.push(layer(
                 1,
                 vec![
@@ -1090,11 +945,7 @@ impl Inner {
                         let Some(inner) = up.upgrade() else {
                             return false;
                         };
-                        let top = inner
-                            .editor
-                            .borrow()
-                            .as_ref()
-                            .is_some_and(|(_, textarea)| textarea.cursor().0 == 0);
+                        let top = inner.editor.borrow().as_ref().is_some_and(|(_, textarea)| textarea.cursor().0 == 0);
                         if inner.is_textual() || !top || inner.draft.borrow().selected == 0 {
                             return false;
                         }
@@ -1122,10 +973,7 @@ impl Inner {
                             return;
                         }
                         if inner.single() {
-                            inner.reply(IndexMap::from([(
-                                key(&field).to_owned(),
-                                FormValue::String(text.to_owned()),
-                            )]));
+                            inner.reply(IndexMap::from([(key(&field).to_owned(), FormValue::String(text.to_owned()))]));
                             return;
                         }
                         let tab = inner.draft.borrow().tab;
@@ -1243,11 +1091,7 @@ impl Inner {
         self.root.clear();
         self.review.take();
         let editor = self.wanted_editor();
-        let keep = self
-            .editor
-            .borrow()
-            .as_ref()
-            .is_some_and(|(current, _)| Some(current) == editor.as_ref());
+        let keep = self.editor.borrow().as_ref().is_some_and(|(current, _)| Some(current) == editor.as_ref());
         if !keep {
             self.editor.take();
         }
@@ -1271,8 +1115,7 @@ impl Inner {
         if self.is_textual() {
             return Some(Editor::Answer(key(&field).to_owned()));
         }
-        (self.has_custom() && self.draft.borrow().editing)
-            .then(|| Editor::Custom(key(&field).to_owned()))
+        (self.has_custom() && self.draft.borrow().editing).then(|| Editor::Custom(key(&field).to_owned()))
     }
 
     /// The editor for `kind`, kept across redraws.
@@ -1296,11 +1139,7 @@ impl Inner {
                 };
                 (initial, self.placeholder(), theme.text.base)
             }
-            Editor::Custom(_) => (
-                self.input(),
-                "Type your own answer".to_owned(),
-                theme.text.formfield.focused,
-            ),
+            Editor::Custom(_) => (self.input(), "Type your own answer".to_owned(), theme.text.formfield.focused),
         };
         let textarea = Textarea::new(app)
             .mouse_pointer(MousePointer::DEFAULT)
@@ -1343,23 +1182,12 @@ impl Inner {
             .padding_edge(Edge::Right, 3)
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
-            .child(
-                &pad(app, 1)
-                    .child(&Text::new(app, self.form.info.title.clone()).fg(theme.text.muted)),
-            );
-        let message = self
-            .form
-            .info
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.get("message"));
+            .child(&pad(app, 1).child(&Text::new(app, self.form.info.title.clone()).fg(theme.text.muted)));
+        let message = self.form.info.metadata.as_ref().and_then(|metadata| metadata.get("message"));
         if let Some(message) = message.and_then(serde_json::Value::as_str) {
             body.add(&pad(app, 1).child(&Text::new(app, message.to_owned()).fg(theme.text.base)));
         }
-        let tabbed = fields
-            .iter()
-            .map(|field| truncate(&label(field), 24).chars().count() + 3)
-            .sum::<usize>()
+        let tabbed = fields.iter().map(|field| truncate(&label(field), 24).chars().count() + 3).sum::<usize>()
             + "Submit".len()
             + 3
             <= usize::from(width).saturating_sub(8);
@@ -1368,19 +1196,12 @@ impl Inner {
             let position = if confirm {
                 "Review".to_owned()
             } else {
-                format!(
-                    "Field {} of {}",
-                    draft.tab.min(fields.len().saturating_sub(1)) + 1,
-                    fields.len()
-                )
+                format!("Field {} of {}", draft.tab.min(fields.len().saturating_sub(1)) + 1, fields.len())
             };
             progress.add(&Text::new(app, position).fg(theme.text.muted));
             if !fields.is_empty() {
                 let answered = fields.iter().filter(|field| self.completed(field)).count();
-                progress.add(
-                    &Text::new(app, format!("· {answered}/{} completed", fields.len()))
-                        .fg(theme.text.muted),
-                );
+                progress.add(&Text::new(app, format!("· {answered}/{} completed", fields.len())).fg(theme.text.muted));
             }
             body.add(&progress);
         }
@@ -1435,14 +1256,7 @@ impl Inner {
             .child(&self.footer(app, theme, &draft, single, confirm, height))
     }
 
-    fn tabs_view(
-        self: &Rc<Self>,
-        app: &App,
-        theme: &Theme,
-        fields: &[FormField],
-        tab: usize,
-        confirm: bool,
-    ) -> View {
+    fn tabs_view(self: &Rc<Self>, app: &App, theme: &Theme, fields: &[FormField], tab: usize, confirm: bool) -> View {
         let row = View::new(app).row().padding_edge(Edge::Left, 1);
         let hover = self.tab_hover.get();
         let entries = fields
@@ -1486,13 +1300,7 @@ impl Inner {
         row
     }
 
-    fn field_view(
-        self: &Rc<Self>,
-        tui: &Tui,
-        theme: &Theme,
-        field: &FormField,
-        draft: &Draft,
-    ) -> View {
+    fn field_view(self: &Rc<Self>, tui: &Tui, theme: &Theme, field: &FormField, draft: &Draft) -> View {
         let app = &tui.app;
         let view = View::new(app).column().gap(1).padding_edge(Edge::Left, 1);
         let question = description(field).map_or_else(|| label(field), str::to_owned);
@@ -1514,9 +1322,7 @@ impl Inner {
         for (index, row) in rows.iter().enumerate() {
             let active = index == draft.selected;
             let picked = picked(&row.value);
-            let line = View::new(app)
-                .row()
-                .child(&number_cell(app, theme, index + 1, active));
+            let line = View::new(app).row().child(&number_cell(app, theme, index + 1, active));
             let choice = View::new(app).row().bg(theme.background.raised.base);
             if multi {
                 choice.add(&checkbox(app, theme, picked, active));
@@ -1543,13 +1349,8 @@ impl Inner {
         if self.has_custom() {
             let other = self.other();
             let checked = self.custom_picked() || (multi && other && draft.editing);
-            let line = View::new(app)
-                .row()
-                .child(&number_cell(app, theme, rows.len() + 1, other));
-            let choice = View::new(app)
-                .row()
-                .grow(1.0)
-                .bg(theme.background.raised.base);
+            let line = View::new(app).row().child(&number_cell(app, theme, rows.len() + 1, other));
+            let choice = View::new(app).row().grow(1.0).bg(theme.background.raised.base);
             if multi {
                 choice.add(&checkbox(app, theme, checked, other));
             }
@@ -1559,11 +1360,7 @@ impl Inner {
                 choice.add(&textarea.grow(1.0));
             } else {
                 let input = self.input();
-                let text = if input.is_empty() {
-                    "Type your own answer".to_owned()
-                } else {
-                    input
-                };
+                let text = if input.is_empty() { "Type your own answer".to_owned() } else { input };
                 choice.add(&Text::new(app, text).fg(if other {
                     theme.text.formfield.focused
                 } else {
@@ -1623,29 +1420,19 @@ impl Inner {
                 if acknowledged {
                     ("Acknowledged".to_owned(), theme.text.feedback.success.base)
                 } else {
-                    (
-                        "(acknowledgement required)".to_owned(),
-                        theme.text.feedback.error.base,
-                    )
+                    ("(acknowledgement required)".to_owned(), theme.text.feedback.error.base)
                 }
             } else {
                 let answer = draft.answers.get(key(field));
                 let missing = answer.is_none() && required(field);
                 match (validate(field, answer), answer) {
                     (Some(invalid), _) => (invalid, theme.text.feedback.error.base),
-                    (None, Some(answer)) => (
-                        display_value(field, Some(answer), "(none)"),
-                        theme.text.base,
-                    ),
-                    (None, None) if missing => {
-                        ("(required)".to_owned(), theme.text.feedback.error.base)
-                    }
+                    (None, Some(answer)) => (display_value(field, Some(answer), "(none)"), theme.text.base),
+                    (None, None) if missing => ("(required)".to_owned(), theme.text.feedback.error.base),
                     (None, None) => ("(not answered)".to_owned(), theme.text.muted),
                 }
             };
-            lines += (name.chars().count() + 1 + value.chars().count())
-                .div_ceil(available)
-                .max(1);
+            lines += (name.chars().count() + 1 + value.chars().count()).div_ceil(available).max(1);
             let text = Text::new(
                 app,
                 vec![
@@ -1722,14 +1509,7 @@ impl Inner {
             });
             hints.add(&copy);
         }
-        let dismiss = hint(
-            "esc",
-            if draft.editing && !textual {
-                "close"
-            } else {
-                "dismiss"
-            },
-        );
+        let dismiss = hint("esc", if draft.editing && !textual { "close" } else { "dismiss" });
         let weak = Rc::downgrade(self);
         dismiss.on_click(move |_, _| {
             if let Some(inner) = weak.upgrade() {
@@ -1770,27 +1550,19 @@ fn pad(app: &App, left: u32) -> View {
 }
 
 fn number_cell(app: &App, theme: &Theme, number: usize, active: bool) -> View {
-    View::new(app)
-        .bg(theme.background.raised.base)
-        .padding_edge(Edge::Right, 1)
-        .child(&Text::new(app, format!("{number}.")).fg(if active {
-            theme.text.formfield.focused
-        } else {
-            theme.text.muted
-        }))
+    View::new(app).bg(theme.background.raised.base).padding_edge(Edge::Right, 1).child(
+        &Text::new(app, format!("{number}.")).fg(if active { theme.text.formfield.focused } else { theme.text.muted }),
+    )
 }
 
 fn checkbox(app: &App, theme: &Theme, checked: bool, active: bool) -> Text {
-    Text::new(app, if checked { "[✓]" } else { "[ ]" })
-        .width(4)
-        .shrink(0.0)
-        .fg(if active {
-            theme.text.formfield.focused
-        } else if checked {
-            theme.text.formfield.selected
-        } else {
-            theme.text.muted
-        })
+    Text::new(app, if checked { "[✓]" } else { "[ ]" }).width(4).shrink(0.0).fg(if active {
+        theme.text.formfield.focused
+    } else if checked {
+        theme.text.formfield.selected
+    } else {
+        theme.text.muted
+    })
 }
 
 /// Replaces the browser launch; for tests, which must not open one.

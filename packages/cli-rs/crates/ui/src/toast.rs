@@ -41,11 +41,7 @@ pub struct ToastOptions {
 
 impl ToastOptions {
     pub fn new(variant: Variant, message: impl Into<String>) -> Self {
-        Self {
-            variant,
-            message: message.into(),
-            ..Self::default()
-        }
+        Self { variant, message: message.into(), ..Self::default() }
     }
 
     pub fn title(mut self, title: impl Into<String>) -> Self {
@@ -59,10 +55,7 @@ impl ToastOptions {
     }
 
     pub fn action(mut self, label: impl Into<String>, run: impl Fn() + 'static) -> Self {
-        self.action = Some(ToastAction {
-            label: label.into(),
-            run: Rc::new(run),
-        });
+        self.action = Some(ToastAction { label: label.into(), run: Rc::new(run) });
         self
     }
 
@@ -115,8 +108,7 @@ impl Toasts {
 
     /// Shows a toast now, or queues it while one is paused or others wait.
     pub fn show(&self, options: ToastOptions) {
-        let busy = self.0.current.borrow().is_some()
-            && (self.0.paused.get() || !self.0.queue.borrow().is_empty());
+        let busy = self.0.current.borrow().is_some() && (self.0.paused.get() || !self.0.queue.borrow().is_empty());
         if busy {
             self.0.queue.borrow_mut().push_back(options);
             self.paint();
@@ -136,8 +128,7 @@ impl Toasts {
     /// The theme error toast: `Failed to load theme: {name}`.
     pub fn theme_error(&self, error: ThemeError) {
         self.show(
-            ToastOptions::new(Variant::Error, error.message)
-                .title(format!("Failed to load theme: {}", error.name)),
+            ToastOptions::new(Variant::Error, error.message).title(format!("Failed to load theme: {}", error.name)),
         );
     }
 
@@ -165,14 +156,8 @@ impl Toasts {
             return;
         }
         self.0.paused.set(true);
-        let elapsed = self
-            .0
-            .app
-            .now()
-            .saturating_duration_since(self.0.started.get());
-        self.0
-            .remaining
-            .set(self.0.remaining.get().saturating_sub(elapsed));
+        let elapsed = self.0.app.now().saturating_duration_since(self.0.started.get());
+        self.0.remaining.set(self.0.remaining.get().saturating_sub(elapsed));
         self.clear_timer();
     }
 
@@ -186,12 +171,7 @@ impl Toasts {
 
     /// Dismisses the toast and runs its action, as a click does.
     pub fn activate(&self) {
-        let action = self
-            .0
-            .current
-            .borrow()
-            .as_ref()
-            .and_then(|toast| toast.action.clone());
+        let action = self.0.current.borrow().as_ref().and_then(|toast| toast.action.clone());
         self.dismiss();
         if let Some(action) = action {
             (action.run)();
@@ -265,23 +245,11 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
     let has_action = toast.action.is_some();
     let restyle = move |affordance: &Text, theme: &Theme, hovered: bool| {
         affordance
-            .fg(if hovered {
-                theme.text.action.primary.base
-            } else {
-                theme.text.muted
-            })
-            .attributes(if hovered && has_action {
-                Attributes::BOLD
-            } else {
-                Attributes::NONE
-            });
+            .fg(if hovered { theme.text.action.primary.base } else { theme.text.muted })
+            .attributes(if hovered && has_action { Attributes::BOLD } else { Attributes::NONE });
     };
     restyle(&affordance, &theme, hovered);
-    let body = View::new(app)
-        .width(Length::percent(100.0))
-        .padding_x(2)
-        .padding_y(1)
-        .bg(theme.background.raised.high);
+    let body = View::new(app).width(Length::percent(100.0)).padding_x(2).padding_y(1).bg(theme.background.raised.high);
     match &toast.title {
         None => {
             body.add(
@@ -317,11 +285,7 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
         }
     }
     if pending > 0 {
-        body.add(
-            &Text::new(app, format!("+{pending} more"))
-                .fg(theme.text.muted)
-                .margin_edge(Edge::Top, 1),
-        );
+        body.add(&Text::new(app, format!("+{pending} more")).fg(theme.text.muted).margin_edge(Edge::Top, 1));
     }
     let surface = View::new(app)
         .absolute()
@@ -353,11 +317,7 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
             return;
         }
         let Some(inner) = weak.upgrade() else { return };
-        if inner
-            .app
-            .selected_text()
-            .is_some_and(|text| !text.is_empty())
-        {
+        if inner.app.selected_text().is_some_and(|text| !text.is_empty()) {
             return;
         }
         let app = inner.app.clone();

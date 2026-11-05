@@ -55,59 +55,28 @@ pub enum Action {
 /// `PromptOption`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Choice {
-    Mention {
-        display: String,
-        value: String,
-        description: Option<String>,
-        part: Part,
-        directory: bool,
-    },
-    Slash {
-        name: String,
-        display: String,
-        description: Option<String>,
-        action: Option<Action>,
-    },
+    Mention { display: String, value: String, description: Option<String>, part: Part, directory: bool },
+    Slash { name: String, display: String, description: Option<String>, action: Option<Action> },
 }
 
 impl Choice {
     pub fn item(&self) -> Item {
         let (display, description) = match self {
-            Choice::Mention {
-                display,
-                description,
-                ..
+            Choice::Mention { display, description, .. } | Choice::Slash { display, description, .. } => {
+                (display, description)
             }
-            | Choice::Slash {
-                display,
-                description,
-                ..
-            } => (display, description),
         };
-        Item {
-            display: display.clone(),
-            description: description.clone(),
-        }
+        Item { display: display.clone(), description: description.clone() }
     }
 
     fn keys(&self) -> [Option<&str>; 3] {
         match self {
-            Choice::Mention {
-                display,
-                value,
-                description,
-                ..
-            } => [
-                Some(value.trim_end()),
-                Some(display),
-                description.as_deref(),
-            ],
-            Choice::Slash {
-                name,
-                display,
-                description,
-                ..
-            } => [Some(name.trim_end()), Some(display), description.as_deref()],
+            Choice::Mention { display, value, description, .. } => {
+                [Some(value.trim_end()), Some(display), description.as_deref()]
+            }
+            Choice::Slash { name, display, description, .. } => {
+                [Some(name.trim_end()), Some(display), description.as_deref()]
+            }
         }
     }
 }
@@ -121,33 +90,14 @@ pub fn slash(catalog: &Catalog) -> Vec<Choice> {
         action,
     };
     let mut builtins = vec![
-        builtin(
-            "editor",
-            "compose in your external editor",
-            Some(Action::Editor),
-        ),
-        builtin(
-            "settings",
-            "configure Mini transcript output",
-            Some(Action::Settings),
-        ),
+        builtin("editor", "compose in your external editor", Some(Action::Editor)),
+        builtin("settings", "configure Mini transcript output", Some(Action::Settings)),
         builtin("new", "start a new session", None),
-        builtin(
-            "compact",
-            "compact older session context to free space",
-            None,
-        ),
+        builtin("compact", "compact older session context to free space", None),
     ];
-    builtins.extend(
-        EXIT_COMMANDS
-            .iter()
-            .map(|name| builtin(name, "close OpenCode", None)),
-    );
-    let hidden = |name: &str| {
-        builtins
-            .iter()
-            .any(|item| matches!(item, Choice::Slash { name: other, .. } if other == name))
-    };
+    builtins.extend(EXIT_COMMANDS.iter().map(|name| builtin(name, "close OpenCode", None)));
+    let hidden =
+        |name: &str| builtins.iter().any(|item| matches!(item, Choice::Slash { name: other, .. } if other == name));
     let mut all: Vec<Choice> = catalog
         .commands
         .iter()
@@ -155,15 +105,7 @@ pub fn slash(catalog: &Catalog) -> Vec<Choice> {
         .filter(|command| !hidden(&command.name))
         .map(|command| Choice::Slash {
             name: command.name.clone(),
-            display: format!(
-                "/{}{}",
-                command.name,
-                if command.source.as_deref() == Some("mcp") {
-                    ":mcp"
-                } else {
-                    ""
-                }
-            ),
+            display: format!("/{}{}", command.name, if command.source.as_deref() == Some("mcp") { ":mcp" } else { "" }),
             description: command.description.clone(),
             action: None,
         })
@@ -183,10 +125,7 @@ pub fn agents(catalog: &Catalog) -> Vec<Choice> {
             display: format!("@{}", agent.name),
             value: agent.id.clone(),
             description: None,
-            part: Part::Agent {
-                name: agent.id.clone(),
-                mention: None,
-            },
+            part: Part::Agent { name: agent.id.clone(), mention: None },
             directory: false,
         })
         .collect()
@@ -213,12 +152,7 @@ pub fn references(catalog: &Catalog) -> Vec<Choice> {
 
 /// The file search's results for a query with an optional `#12-20` range, shown by their shortest path suffix
 /// that fits `width`.
-pub fn files(
-    results: &[String],
-    range: Option<LineRange>,
-    directory: &str,
-    width: usize,
-) -> Vec<Choice> {
+pub fn files(results: &[String], range: Option<LineRange>, directory: &str, width: usize) -> Vec<Choice> {
     results
         .iter()
         .map(|item| {
@@ -236,14 +170,8 @@ pub fn files(
                 }
             }
             let segments: Vec<&str> = filename.split('/').collect();
-            let shown = if is_directory {
-                segments.len() - 1
-            } else {
-                segments.len()
-            };
-            let paths: Vec<String> = (0..shown)
-                .map(|index| format!("@{}", segments[index..].join("/")))
-                .collect();
+            let shown = if is_directory { segments.len() - 1 } else { segments.len() };
+            let paths: Vec<String> = (0..shown).map(|index| format!("@{}", segments[index..].join("/"))).collect();
             let display = paths
                 .iter()
                 .find(|path| path.width() <= width)
@@ -256,14 +184,7 @@ pub fn files(
                 description: None,
                 part: Part::File(File {
                     url,
-                    mime: Some(
-                        if is_directory {
-                            "application/x-directory"
-                        } else {
-                            "text/plain"
-                        }
-                        .into(),
-                    ),
+                    mime: Some(if is_directory { "application/x-directory" } else { "text/plain" }.into()),
                     filename: Some(filename),
                     ..File::default()
                 }),
@@ -288,33 +209,20 @@ pub fn filter(slash_mode: bool, query: &str, catalog: &Catalog, files: Vec<Choic
         return agents.into_iter().chain(files).chain(references).collect();
     }
     let search = parse::file_line_range(query).0;
-    go(search, agents)
-        .into_iter()
-        .chain(files)
-        .chain(go(search, references))
-        .collect()
+    go(search, agents).into_iter().chain(files).chain(go(search, references)).collect()
 }
 
 /// `fuzzysort.go(search, items, { keys })`: best first, every match.
 fn go(search: &str, items: Vec<Choice>) -> Vec<Choice> {
-    fuzzy::go_scored(
-        search,
-        &items,
-        Choice::keys,
-        |_, score, _| score,
-        0.0,
-        usize::MAX,
-    )
-    .into_iter()
-    .map(|index| items[index].clone())
-    .collect()
+    fuzzy::go_scored(search, &items, Choice::keys, |_, score, _| score, 0.0, usize::MAX)
+        .into_iter()
+        .map(|index| items[index].clone())
+        .collect()
 }
 
 /// `localeCompare` for option labels: case-insensitive, lowercase first on a tie.
 fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
-    a.to_lowercase()
-        .cmp(&b.to_lowercase())
-        .then_with(|| b.cmp(a))
+    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| b.cmp(a))
 }
 
 #[cfg(test)]
@@ -335,11 +243,7 @@ mod tests {
             source: Some("command".into()),
         };
         Catalog {
-            agents: vec![
-                agent("build", "primary"),
-                agent("general", "subagent"),
-                agent("explore", "subagent"),
-            ],
+            agents: vec![agent("build", "primary"), agent("general", "subagent"), agent("explore", "subagent")],
             references: Vec::new(),
             commands: Some(vec![
                 command("review", "Review the working tree"),
@@ -358,28 +262,11 @@ mod tests {
         // The order TS mini shows (`parity/scenarios/M.2/slash.pty.ts`).
         assert_eq!(
             shown(&filter(true, "", &catalog(), Vec::new())),
-            [
-                "/compact",
-                "/editor",
-                "/exit",
-                "/init",
-                "/new",
-                "/q",
-                "/quit",
-                "/review",
-                "/settings"
-            ]
+            ["/compact", "/editor", "/exit", "/init", "/new", "/q", "/quit", "/review", "/settings"]
         );
         assert_eq!(
             shown(&filter(true, "re", &catalog(), Vec::new())),
-            [
-                "/review",
-                "/init",
-                "/settings",
-                "/new",
-                "/compact",
-                "/editor"
-            ]
+            ["/review", "/init", "/settings", "/new", "/compact", "/editor"]
         );
     }
 
@@ -388,32 +275,13 @@ mod tests {
         let found = files(&["src/general.ts".into(), "src/".into()], None, "/w", 56);
         let choices = filter(false, "gen", &catalog(), found);
         assert_eq!(shown(&choices), ["@general", "@src/general.ts", "@src/"]);
-        let Choice::Mention {
-            part: Part::File(file),
-            directory,
-            ..
-        } = &choices[2]
-        else {
+        let Choice::Mention { part: Part::File(file), directory, .. } = &choices[2] else {
             panic!("a file");
         };
         assert!(*directory);
         assert_eq!(file.mime.as_deref(), Some("application/x-directory"));
-        let ranged = files(
-            &["src/a.ts".into()],
-            Some(LineRange {
-                start: 3,
-                end: Some(9),
-            }),
-            "/w",
-            8,
-        );
-        let Choice::Mention {
-            display,
-            value,
-            part: Part::File(file),
-            ..
-        } = &ranged[0]
-        else {
+        let ranged = files(&["src/a.ts".into()], Some(LineRange { start: 3, end: Some(9) }), "/w", 8);
+        let Choice::Mention { display, value, part: Part::File(file), .. } = &ranged[0] else {
             panic!("a file");
         };
         assert_eq!(value, "src/a.ts#3-9");

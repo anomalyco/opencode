@@ -17,10 +17,7 @@ use super::Context;
 
 /// Runs `future` to completion on a runtime of its own; handlers are synchronous.
 pub fn block_on<F: Future>(future: F) -> anyhow::Result<F::Output> {
-    Ok(tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
-        .block_on(future))
+    Ok(tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(future))
 }
 
 /// A client and the connection it uses. The connection is private so that a caller cannot drop
@@ -77,26 +74,17 @@ async fn connect_in(
         },
     )
     .await?;
-    Ok(Connected {
-        client: connection.endpoint.client(transport)?,
-        _connection: connection,
-    })
+    Ok(Connected { client: connection.endpoint.client(transport)?, _connection: connection })
 }
 
 /// `{ location: { directory: process.cwd() } }`, the location every read command sends.
 pub fn here() -> anyhow::Result<LocationQueryInput> {
-    Ok(LocationQueryInput {
-        directory: Some(std::env::current_dir()?.to_string_lossy().into_owned()),
-    })
+    Ok(LocationQueryInput { directory: Some(std::env::current_dir()?.to_string_lossy().into_owned()) })
 }
 
 /// `GET path?location[directory]=<cwd>` as JSON, undecoded. The TypeScript Promise client returns
 /// the wire JSON, and `debug agents` and `debug config` print it as it came, unknown fields included.
-pub async fn get_located(
-    client: &Client,
-    path: &str,
-    declared: &'static [u16],
-) -> anyhow::Result<Value> {
+pub async fn get_located(client: &Client, path: &str, declared: &'static [u16]) -> anyhow::Result<Value> {
     let mut call = Call::new("GET", path.to_owned(), 200, declared);
     call.query("location", &here()?)?;
     Ok(client.json(call, &RequestOptions::default()).await?)
@@ -113,10 +101,7 @@ pub fn pretty(value: &Value) -> anyhow::Result<String> {
 pub fn locale_compare(a: &str, b: &str) -> Ordering {
     let primary = |s: &str| s.chars().map(primary).collect::<Vec<_>>();
     let tertiary = |s: &str| s.chars().map(|c| c.is_uppercase()).collect::<Vec<_>>();
-    primary(a)
-        .cmp(&primary(b))
-        .then_with(|| tertiary(a).cmp(&tertiary(b)))
-        .then_with(|| a.cmp(b))
+    primary(a).cmp(&primary(b)).then_with(|| tertiary(a).cmp(&tertiary(b))).then_with(|| a.cmp(b))
 }
 
 // ICU's root order of the ASCII punctuation and symbols, checked against Bun.
@@ -151,11 +136,7 @@ process.exit(0)
 
     #[tokio::test]
     async fn a_standalone_server_lives_as_long_as_the_connection() {
-        if std::process::Command::new("bun")
-            .arg("--version")
-            .output()
-            .is_err()
-        {
+        if std::process::Command::new("bun").arg("--version").output().is_err() {
             eprintln!("skipped: bun is not on PATH");
             return;
         }
@@ -164,16 +145,8 @@ process.exit(0)
         std::fs::write(&script, STANDALONE).unwrap();
         // `OPENCODE_TS_BIN` names one executable.
         let program = dir.path().join("opencode-ts");
-        std::fs::write(
-            &program,
-            format!("#!/bin/sh\nexec bun {}\n", script.display()),
-        )
-        .unwrap();
-        std::fs::set_permissions(
-            &program,
-            std::os::unix::fs::PermissionsExt::from_mode(0o755),
-        )
-        .unwrap();
+        std::fs::write(&program, format!("#!/bin/sh\nexec bun {}\n", script.display())).unwrap();
+        std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         let root = dir.path().to_owned();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(root.clone().into()),
@@ -184,16 +157,8 @@ process.exit(0)
             _ => None,
         })
         .unwrap();
-        let env = Env {
-            ts_bin: Some(program.to_string_lossy().into_owned()),
-            ..Env::default()
-        };
-        let context = Context {
-            server: ServerFlags {
-                standalone: true,
-                server: None,
-            },
-        };
+        let env = Env { ts_bin: Some(program.to_string_lossy().into_owned()), ..Env::default() };
+        let context = Context { server: ServerFlags { standalone: true, server: None } };
         // The commands bind the result as these lines do; `let (_, client)` stopped the server here.
         let server = connect_in(&context, &paths, &env, false).await.unwrap();
         let info = server.client.server_info(&RequestOptions::default()).await;

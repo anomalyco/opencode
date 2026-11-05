@@ -7,10 +7,10 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::wire::{
-    Hook, PromptCall, Wire, WireOptions, assert_matches, delivered, durable_event, ephemeral_event,
-    events, failed, file_diff, interrupted, lock, make_session, reasoning_delta, review_command,
-    start_session, start_wire, step_ended, succeeded, text_delta, tokens, tool_called, tool_failed,
-    tool_progress, tool_started, tool_succeeded, trimmed, turn, usage,
+    Hook, PromptCall, Wire, WireOptions, assert_matches, delivered, durable_event, ephemeral_event, events, failed,
+    file_diff, interrupted, lock, make_session, reasoning_delta, review_command, start_session, start_wire, step_ended,
+    succeeded, text_delta, tokens, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, trimmed,
+    turn, usage,
 };
 
 fn lost() -> Value {
@@ -38,9 +38,7 @@ fn held() -> WireOptions {
                 ),
             ]
         })),
-        on_interrupt: Some(Arc::new(|session: String| {
-            Box::pin(async move { vec![interrupted(&session)] })
-        })),
+        on_interrupt: Some(Arc::new(|session: String| Box::pin(async move { vec![interrupted(&session)] }))),
         ..WireOptions::default()
     }
 }
@@ -48,25 +46,15 @@ fn held() -> WireOptions {
 // The server answered admission before streaming the chunk, and this request round-trips through the
 // server after it, so the agent has observed admission before the test cancels.
 async fn admitted(acp: &Wire) {
-    acp.wait_for_update("agent_message_chunk", |item| {
-        item["update"]["sessionUpdate"] == "agent_message_chunk"
-    })
-    .await;
-    acp.request(
-        "session/set_mode",
-        json!({ "sessionId": acp.session_id, "modeId": "build" }),
-    )
-    .await
-    .unwrap();
+    acp.wait_for_update("agent_message_chunk", |item| item["update"]["sessionUpdate"] == "agent_message_chunk").await;
+    acp.request("session/set_mode", json!({ "sessionId": acp.session_id, "modeId": "build" })).await.unwrap();
 }
 
 /// Session updates the client received before the cancelled prompt response.
 fn received_before_response(acp: &Wire) -> Vec<Value> {
     let received = lock(&acp.received).clone();
-    let response = received
-        .iter()
-        .position(|message| message["result"]["stopReason"] == "cancelled")
-        .expect("cancelled response");
+    let response =
+        received.iter().position(|message| message["result"]["stopReason"] == "cancelled").expect("cancelled response");
     received[..response]
         .iter()
         .filter(|message| message["method"] == "session/update")
@@ -76,16 +64,8 @@ fn received_before_response(acp: &Wire) -> Vec<Value> {
 
 fn summary(update: &Value) -> Value {
     let update = &update["update"];
-    let id = update
-        .get("toolCallId")
-        .or_else(|| update.get("messageId"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    json!([
-        update["sessionUpdate"],
-        id,
-        update.get("status").cloned().unwrap_or(Value::Null)
-    ])
+    let id = update.get("toolCallId").or_else(|| update.get("messageId")).cloned().unwrap_or(Value::Null);
+    json!([update["sessionUpdate"], id, update.get("status").cloned().unwrap_or(Value::Null)])
 }
 
 #[tokio::test]
@@ -99,14 +79,7 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
             Vec::new()
         })
     });
-    let acp = start_session(
-        WireOptions {
-            on_prompt: Some(hook),
-            ..WireOptions::default()
-        },
-        json!({}),
-    )
-    .await;
+    let acp = start_session(WireOptions { on_prompt: Some(hook), ..WireOptions::default() }, json!({})).await;
     acp.request(
         "session/set_config_option",
         json!({ "sessionId": acp.session_id, "configId": "model", "value": "test/second-model" }),
@@ -116,18 +89,11 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
     {
         let mut session = make_session(&acp.session_id, "/workspace");
         session["cost"] = json!(3.5);
-        acp.server
-            .state()
-            .sessions
-            .insert(acp.session_id.clone(), session);
+        acp.server.state().sessions.insert(acp.session_id.clone(), session);
     }
 
     let prompt = tokio::spawn(acp.begin_prompt("hi"));
-    let submitted = acp
-        .until("prompt submission", || {
-            acp.server.state().prompts().first().cloned()
-        })
-        .await;
+    let submitted = acp.until("prompt submission", || acp.server.state().prompts().first().cloned()).await;
     let session = acp.session_id.as_str();
     acp.server.send(&turn(
         session,
@@ -138,31 +104,16 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
             text_delta(session, "msg_assistant", "hello", 1),
             reasoning_delta(session, "msg_assistant", "think-2", 1),
             tool_started(session, "call_ok", "shell"),
-            tool_called(
-                session,
-                "call_ok",
-                json!({ "command": "printf done", "workdir": "sub" }),
-            ),
+            tool_called(session, "call_ok", json!({ "command": "printf done", "workdir": "sub" })),
             tool_progress(session, "call_ok", json!({ "phase": 1 })),
             tool_succeeded(session, "call_ok", json!({ "exit": 0 }), "done"),
             tool_started(session, "call_fail", "read"),
-            tool_called(
-                session,
-                "call_fail",
-                json!({ "path": "/workspace/missing.ts" }),
-            ),
-            tool_failed(
-                session,
-                "call_fail",
-                json!({ "error": { "type": "tool.error", "message": "not found" } }),
-            ),
+            tool_called(session, "call_fail", json!({ "path": "/workspace/missing.ts" })),
+            tool_failed(session, "call_fail", json!({ "error": { "type": "tool.error", "message": "not found" } })),
             step_ended(session, "msg_assistant", "stop", usage(100, 40, 7, 11, 13)),
         ],
     ));
-    acp.until("streamed updates", || {
-        (acp.turn_updates().len() == 11).then_some(())
-    })
-    .await;
+    acp.until("streamed updates", || (acp.turn_updates().len() == 11).then_some(())).await;
     assert!(!prompt.is_finished());
     release.cancel();
 
@@ -221,9 +172,7 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
         &json!({ "content": [{ "type": "content", "content": { "type": "text", "text": "not found" } }], "rawOutput": { "error": "not found" } }),
     );
     assert_eq!(
-        acp.wait_for_update("usage_update", |item| item["update"]["sessionUpdate"]
-            == "usage_update")
-            .await,
+        acp.wait_for_update("usage_update", |item| item["update"]["sessionUpdate"] == "usage_update").await,
         json!({
             "sessionId": session,
             "update": { "sessionUpdate": "usage_update", "used": 171, "size": 200_000, "cost": { "amount": 3.5, "currency": "USD" } },
@@ -234,10 +183,7 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
 #[tokio::test]
 async fn routes_slash_commands_and_compact_through_their_session_endpoints() {
     let acp = start_wire(WireOptions::default()).await;
-    acp.server.state().commands = vec![
-        review_command(),
-        json!({ "name": "compact", "description": "Server compact" }),
-    ];
+    acp.server.state().commands = vec![review_command(), json!({ "name": "compact", "description": "Server compact" })];
     acp.initialize(json!({})).await;
     let session = acp.new_session("/workspace", json!([])).await.unwrap();
     let id = session["sessionId"].as_str().unwrap();
@@ -252,10 +198,7 @@ async fn routes_slash_commands_and_compact_through_their_session_endpoints() {
         submissions[0],
         json!({ "kind": "command", "sessionID": id, "name": "review", "text": "now", "files": [], "delivery": "steer" })
     );
-    assert_matches(
-        &submissions[1],
-        &json!({ "kind": "compact", "sessionID": id }),
-    );
+    assert_matches(&submissions[1], &json!({ "kind": "compact", "sessionID": id }));
     assert!(submissions[1]["id"].as_str().unwrap().starts_with("msg_"));
     assert_eq!(submissions.len(), 2);
     assert_eq!(
@@ -347,12 +290,7 @@ async fn maps_failures_to_acp_errors() {
     let rows: Vec<(&str, Failure, Value)> = vec![
         (
             "an execution auth failure",
-            |session| {
-                failed(
-                    session,
-                    json!({ "type": "provider.auth", "message": "missing key" }),
-                )
-            },
+            |session| failed(session, json!({ "type": "provider.auth", "message": "missing key" })),
             json!({ "code": -32000 }),
         ),
         (
@@ -367,12 +305,7 @@ async fn maps_failures_to_acp_errors() {
         ),
         (
             "another execution failure",
-            |session| {
-                failed(
-                    session,
-                    json!({ "type": "provider.rate-limit", "message": "slow down" }),
-                )
-            },
+            |session| failed(session, json!({ "type": "provider.rate-limit", "message": "slow down" })),
             json!({ "code": -32603, "message": "Internal error: slow down" }),
         ),
     ];
@@ -393,11 +326,7 @@ async fn maps_failures_to_acp_errors() {
         )
         .await;
         let error = acp.prompt(&acp.session_id, "hello").await.unwrap_err();
-        assert!(
-            crate::wire::matches(&error.json(), &expected),
-            "{name}: {}",
-            error.json()
-        );
+        assert!(crate::wire::matches(&error.json(), &expected), "{name}: {}", error.json());
     }
 }
 
@@ -420,14 +349,7 @@ async fn session_cancel_during_setup_or_before_admission_returns_cancelled() {
             Vec::new()
         })
     });
-    let acp = start_session(
-        WireOptions {
-            on_prompt: Some(hook),
-            ..WireOptions::default()
-        },
-        json!({}),
-    )
-    .await;
+    let acp = start_session(WireOptions { on_prompt: Some(hook), ..WireOptions::default() }, json!({})).await;
 
     // The linked file's readability check holds the prompt in setup, before it submits.
     let link = file_url(&dir.path().join("notes.md"));
@@ -438,26 +360,15 @@ async fn session_cancel_during_setup_or_before_admission_returns_cancelled() {
     ));
     acp.notify("session/cancel", json!({ "sessionId": acp.session_id }));
 
-    assert_eq!(
-        preparing.await.unwrap().unwrap(),
-        json!({ "stopReason": "cancelled", "_meta": {} })
-    );
+    assert_eq!(preparing.await.unwrap().unwrap(), json!({ "stopReason": "cancelled", "_meta": {} }));
     assert!(acp.server.state().submissions.is_empty());
 
     let prompt = tokio::spawn(acp.begin_prompt("hello"));
-    acp.until("prompt submission", || {
-        (acp.server.state().submissions.len() == 1).then_some(())
-    })
-    .await;
+    acp.until("prompt submission", || (acp.server.state().submissions.len() == 1).then_some(())).await;
     acp.notify("session/cancel", json!({ "sessionId": acp.session_id }));
 
-    assert_eq!(
-        prompt.await.unwrap().unwrap(),
-        json!({ "stopReason": "cancelled", "_meta": {} })
-    );
-    tokio::time::timeout(Duration::from_secs(5), aborted.cancelled())
-        .await
-        .expect("the submission was abandoned");
+    assert_eq!(prompt.await.unwrap().unwrap(), json!({ "stopReason": "cancelled", "_meta": {} }));
+    tokio::time::timeout(Duration::from_secs(5), aborted.cancelled()).await.expect("the submission was abandoned");
     assert_eq!(acp.server.state().interrupts, vec![acp.session_id.clone()]);
 }
 
@@ -534,24 +445,19 @@ async fn session_cancel_forwards_the_servers_wind_down_before_resolving_cancelle
         update,
         &json!({ "sessionUpdate": "tool_call_update", "toolCallId": "call_sleep", "status": "failed" })
     )));
-    assert!(before.iter().any(|update| crate::wire::matches(
-        update,
-        &json!({ "sessionUpdate": "usage_update", "used": 33 })
-    )));
-    let compactions: Vec<Value> = before
-        .iter()
-        .filter(|update| update["sessionUpdate"] == "compaction_update")
-        .cloned()
-        .collect();
+    assert!(
+        before
+            .iter()
+            .any(|update| crate::wire::matches(update, &json!({ "sessionUpdate": "usage_update", "used": 33 })))
+    );
+    let compactions: Vec<Value> =
+        before.iter().filter(|update| update["sessionUpdate"] == "compaction_update").cloned().collect();
     assert_matches(
         &json!(compactions),
         &json!([{ "status": "in_progress" }, { "status": "cancelled", "summary": null }]),
     );
     assert_eq!(acp.server.state().interrupts, vec![acp.session_id.clone()]);
-    assert_eq!(
-        acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"], "end_turn");
 }
 
 #[tokio::test]
@@ -569,10 +475,7 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
                         "session.compaction.started",
                         json!({ "sessionID": session, "reason": "manual", "inputID": call.id }),
                     ),
-                    ephemeral_event(
-                        "session.compaction.delta",
-                        json!({ "sessionID": session, "text": "partial" }),
-                    ),
+                    ephemeral_event("session.compaction.delta", json!({ "sessionID": session, "text": "partial" })),
                     text_delta(session, "msg_held", "working", 0),
                 ]
             })),
@@ -586,10 +489,7 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
     admitted(&acp).await;
     acp.notify("session/cancel", json!({ "sessionId": acp.session_id }));
 
-    assert_eq!(
-        prompt.await.unwrap().unwrap(),
-        json!({ "stopReason": "cancelled", "_meta": {} })
-    );
+    assert_eq!(prompt.await.unwrap().unwrap(), json!({ "stopReason": "cancelled", "_meta": {} }));
     let before = received_before_response(&acp);
     assert!(before.iter().any(|update| crate::wire::matches(
         update,
@@ -601,11 +501,7 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
     let compaction_id = acp.server.state().prompts()[0]["id"].clone();
     let compactions: Vec<Value> = before
         .into_iter()
-        .filter(|update| {
-            update["sessionUpdate"]
-                .as_str()
-                .is_some_and(|kind| kind.starts_with("compaction_"))
-        })
+        .filter(|update| update["sessionUpdate"].as_str().is_some_and(|kind| kind.starts_with("compaction_")))
         .collect();
     assert_eq!(
         compactions,
@@ -626,12 +522,9 @@ async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
     let indented = "  const x = 1\n  const y = 3\n";
     let formatted = "keep\nnew\n// formatted\n";
     let added = "two\n";
-    for (name, text) in [
-        ("edited.ts", edited),
-        ("indented.ts", indented),
-        ("formatted.ts", formatted),
-        ("added.ts", added),
-    ] {
+    for (name, text) in
+        [("edited.ts", edited), ("indented.ts", indented), ("formatted.ts", formatted), ("added.ts", added)]
+    {
         std::fs::write(file(name), text).unwrap();
     }
     let patch = [
@@ -701,9 +594,7 @@ async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
     acp.initialize(json!({})).await;
     let session = acp.new_session(&root, json!([])).await.unwrap();
 
-    acp.prompt(session["sessionId"].as_str().unwrap(), "edit the files")
-        .await
-        .unwrap();
+    acp.prompt(session["sessionId"].as_str().unwrap(), "edit the files").await.unwrap();
 
     let completed = |id: &str| {
         acp.updates()
@@ -716,8 +607,7 @@ async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
             })
             .unwrap()
     };
-    let text =
-        |text: &str| json!({ "type": "content", "content": { "type": "text", "text": text } });
+    let text = |text: &str| json!({ "type": "content", "content": { "type": "text", "text": text } });
     let diff = |name: &str, old: Value, new: &str| json!({ "type": "diff", "path": file(name), "oldText": old, "newText": new });
     assert_matches(
         &completed("call_edit"),
@@ -733,10 +623,7 @@ async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
             diff("gone.ts", json!("gone\n"), ""),
         ] }),
     );
-    assert_matches(
-        &completed("call_snippet"),
-        &json!({ "content": [text("edited")] }),
-    );
+    assert_matches(&completed("call_snippet"), &json!({ "content": [text("edited")] }));
 }
 
 #[tokio::test]
@@ -752,15 +639,9 @@ async fn cancel_request_on_the_prompt_cancels_the_turn_like_session_cancel() {
     admitted(&acp).await;
     cancel.cancel();
 
-    assert_matches(
-        &prompt.await.unwrap().unwrap(),
-        &json!({ "stopReason": "cancelled" }),
-    );
+    assert_matches(&prompt.await.unwrap().unwrap(), &json!({ "stopReason": "cancelled" }));
     assert_eq!(acp.server.state().interrupts, vec![acp.session_id.clone()]);
-    assert_eq!(
-        acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"], "end_turn");
 }
 
 async fn close_or_delete(method: &str) {
@@ -777,45 +658,22 @@ async fn close_or_delete(method: &str) {
         result
     });
     admitted(&acp).await;
-    let response = acp
-        .request(method, json!({ "sessionId": acp.session_id }))
-        .await
-        .unwrap();
+    let response = acp.request(method, json!({ "sessionId": acp.session_id })).await.unwrap();
     lock(&order).push(method.to_owned());
 
     assert_eq!(response, json!({}));
-    assert_matches(
-        &prompt.await.unwrap().unwrap(),
-        &json!({ "stopReason": "cancelled" }),
-    );
+    assert_matches(&prompt.await.unwrap().unwrap(), &json!({ "stopReason": "cancelled" }));
     assert_eq!(*lock(&order), vec!["prompt".to_owned(), method.to_owned()]);
     assert_eq!(acp.server.state().interrupts, vec![acp.session_id.clone()]);
-    assert_eq!(
-        acp.server.state().sessions.contains_key(&acp.session_id),
-        method == "session/close"
-    );
+    assert_eq!(acp.server.state().sessions.contains_key(&acp.session_id), method == "session/close");
     assert_matches(
-        &acp.prompt(&acp.session_id, "again")
-            .await
-            .unwrap_err()
-            .json(),
+        &acp.prompt(&acp.session_id, "again").await.unwrap_err().json(),
         &json!({ "code": -32602, "data": { "sessionId": acp.session_id } }),
     );
-    assert_eq!(
-        acp.prompt(&other, "still here").await.unwrap()["stopReason"],
-        "end_turn"
-    );
-    assert_eq!(
-        acp.prompt(&other, "/review now").await.unwrap()["stopReason"],
-        "end_turn"
-    );
-    acp.request("session/close", json!({ "sessionId": other }))
-        .await
-        .unwrap();
-    assert_eq!(
-        acp.server.state().interrupts,
-        vec![acp.session_id.clone(), other]
-    );
+    assert_eq!(acp.prompt(&other, "still here").await.unwrap()["stopReason"], "end_turn");
+    assert_eq!(acp.prompt(&other, "/review now").await.unwrap()["stopReason"], "end_turn");
+    acp.request("session/close", json!({ "sessionId": other })).await.unwrap();
+    assert_eq!(acp.server.state().interrupts, vec![acp.session_id.clone(), other]);
 }
 
 #[tokio::test]

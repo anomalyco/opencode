@@ -17,19 +17,9 @@ pub fn parse(client: Option<&Value>) -> Capabilities {
         return Capabilities::default();
     };
     Capabilities {
-        child_session_updates: client
-            .get("_meta")
-            .and_then(|meta| meta.get(CHILD_SESSION_UPDATES))
+        child_session_updates: client.get("_meta").and_then(|meta| meta.get(CHILD_SESSION_UPDATES))
             == Some(&Value::Bool(true)),
-        form_elicitation: present(
-            client
-                .get("elicitation")
-                .and_then(|elicitation| elicitation.get("form")),
-        ),
-        compaction: present(
-            client
-                .get("session")
-                .and_then(|session| session.get("compaction")),
-        ),
+        form_elicitation: present(client.get("elicitation").and_then(|elicitation| elicitation.get("form"))),
+        compaction: present(client.get("session").and_then(|session| session.get("compaction"))),
     }
 }

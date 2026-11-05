@@ -7,10 +7,7 @@ use opentui::testing::TestApp;
 
 fn load(name: &str) -> (Fixture, String) {
     let path = fixtures_dir().join(format!("{name}.json"));
-    (
-        Fixture::load(&path).unwrap(),
-        std::fs::read_to_string(&path).unwrap(),
-    )
+    (Fixture::load(&path).unwrap(), std::fs::read_to_string(&path).unwrap())
 }
 
 #[test]
@@ -52,42 +49,21 @@ fn the_summary_counts_cells_that_differ_in_color_only() {
     actual.cell_mut(0, 0).unwrap().bg = Color::RED;
     actual.cell_mut(9, 6).unwrap().symbol = "E".to_owned();
     let report = compare(&expected, &actual).to_string();
-    assert_eq!(
-        report.lines().next(),
-        Some("3 of 720 cells differ (60x12), 2 in color only")
-    );
+    assert_eq!(report.lines().next(), Some("3 of 720 cells differ (60x12), 2 in color only"));
 }
 
 #[test]
 fn a_size_change_is_reported() {
     let (expected, _) = load("H.1/box");
-    let actual = Fixture {
-        width: 1,
-        height: 1,
-        cells: expected.cells[..1].to_vec(),
-    };
-    assert_eq!(
-        compare(&expected, &actual).to_string(),
-        "size 24x5 expected, 1x1 actual"
-    );
+    let actual = Fixture { width: 1, height: 1, cells: expected.cells[..1].to_vec() };
+    assert_eq!(compare(&expected, &actual).to_string(), "size 24x5 expected, 1x1 actual");
 }
 
 // The same tree as parity/component/H.1-box.tsx. The TypeScript screen is transparent outside the box, while an
 // opentui-rust app clears the screen with its theme background, so that background is transparent here.
 fn box_app(word: &str) -> TestApp {
-    let theme = Theme {
-        background: Color::TRANSPARENT,
-        ..Theme::default()
-    };
-    let app = TestApp::with_options(
-        24,
-        5,
-        AppOptions {
-            theme,
-            light_theme: None,
-            ..AppOptions::default()
-        },
-    );
+    let theme = Theme { background: Color::TRANSPARENT, ..Theme::default() };
+    let app = TestApp::with_options(24, 5, AppOptions { theme, light_theme: None, ..AppOptions::default() });
     let panel = View::new(&app)
         .size(20, 4)
         .border(BorderStyle::Rounded)
@@ -96,10 +72,7 @@ fn box_app(word: &str) -> TestApp {
         .title(" Hi ")
         .padding_edge(Edge::Left, 1);
     let fg = Color::hex(0xeeeeee);
-    panel.add(&Text::new(
-        &app,
-        vec![word.to_owned().fg(fg).bold(), " 界".fg(fg)],
-    ));
+    panel.add(&Text::new(&app, vec![word.to_owned().fg(fg).bold(), " 界".fg(fg)]));
     app.root().add(&panel);
     app
 }

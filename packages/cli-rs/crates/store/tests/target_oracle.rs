@@ -12,8 +12,7 @@ use common::*;
 use opencode_api::client::Client;
 use opencode_api::generated::*;
 use opencode_store::target::{
-    Prepared, TargetError, TargetInput, create_worktree_location, parse_model,
-    resolve_session_target,
+    Prepared, TargetError, TargetInput, create_worktree_location, parse_model, resolve_session_target,
 };
 use serde_json::{Value, json};
 
@@ -35,11 +34,9 @@ fn serve(routes: &Value, requests: &Log<Value>) -> Client {
         let found = routes.iter().position(|route| {
             route["method"] == req.method.as_str()
                 && route["path"] == req.path.as_str()
-                && route["query"].as_object().is_none_or(|query| {
-                    query
-                        .iter()
-                        .all(|(key, value)| req.param(key) == value.as_str())
-                })
+                && route["query"]
+                    .as_object()
+                    .is_none_or(|query| query.iter().all(|(key, value)| req.param(key) == value.as_str()))
         });
         let reply = found.map(|at| {
             let mut used = used.lock().unwrap();
@@ -106,10 +103,7 @@ async fn session_targets_match_the_typescript_resolver() {
                     "model": preparation.model,
                     "agent": preparation.agent,
                 });
-                Ok(Prepared {
-                    model: preparation.model,
-                    agent: agent.or(preparation.agent),
-                })
+                Ok(Prepared { model: preparation.model, agent: agent.or(preparation.agent) })
             },
         )
         .await;
@@ -121,16 +115,8 @@ async fn session_targets_match_the_typescript_resolver() {
             Err(error) => failure(&error),
         };
         let expected = &case["expected"];
-        assert_eq!(
-            Value::Array(requests.get()),
-            expected["requests"],
-            "{name}: requests"
-        );
-        assert_eq!(
-            *prepared.lock().unwrap(),
-            expected["prepared"],
-            "{name}: prepare"
-        );
+        assert_eq!(Value::Array(requests.get()), expected["requests"], "{name}: requests");
+        assert_eq!(*prepared.lock().unwrap(), expected["prepared"], "{name}: prepare");
         assert_eq!(outcome, expected["outcome"], "{name}: outcome");
     }
 }
@@ -142,12 +128,9 @@ async fn worktree_locations_match_the_typescript_resolver() {
         let name = case["name"].as_str().unwrap();
         let requests = Log::<Value>::default();
         let client = serve(&case["routes"], &requests);
-        let outcome = create_worktree_location(
-            &client,
-            optional(&case["input"]["directory"]),
-            optional(&case["input"]["name"]),
-        )
-        .await;
+        let outcome =
+            create_worktree_location(&client, optional(&case["input"]["directory"]), optional(&case["input"]["name"]))
+                .await;
         let outcome = match outcome {
             Ok(location) => {
                 json!({ "ok": { "root": location.root, "directory": location.directory } })
@@ -155,11 +138,7 @@ async fn worktree_locations_match_the_typescript_resolver() {
             Err(error) => failure(&error),
         };
         let expected = &case["expected"];
-        assert_eq!(
-            Value::Array(requests.get()),
-            expected["requests"],
-            "{name}: requests"
-        );
+        assert_eq!(Value::Array(requests.get()), expected["requests"], "{name}: requests");
         assert_eq!(outcome, expected["outcome"], "{name}: outcome");
     }
 }

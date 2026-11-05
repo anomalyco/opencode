@@ -6,10 +6,7 @@ use std::io::{ErrorKind, Write};
 /// `packages/cli/src/node/index.ts:4-7`; `print!` would panic instead.
 pub fn print(text: &str) -> anyhow::Result<()> {
     let mut stdout = std::io::stdout().lock();
-    match stdout
-        .write_all(text.as_bytes())
-        .and_then(|()| stdout.flush())
-    {
+    match stdout.write_all(text.as_bytes()).and_then(|()| stdout.flush()) {
         Err(error) if error.kind() != ErrorKind::BrokenPipe => Err(error.into()),
         _ => Ok(()),
     }

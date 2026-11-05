@@ -8,8 +8,8 @@ use serde_json::{Map, Value, json};
 use super::color::{Oklch, from_hex, hex, oklch_to_hex, to_oklch, unit};
 use super::document::STEPS;
 use super::v1::{
-    V1, dialog_background, feedback_background, feedback_text, infer_hues, migrate_with,
-    palette_tokens, reference_hues, scale_value, selected_foreground, splice_palette, with_alpha,
+    V1, dialog_background, feedback_background, feedback_text, infer_hues, migrate_with, palette_tokens,
+    reference_hues, scale_value, selected_foreground, splice_palette, with_alpha,
 };
 
 /// `migrateV1NewDesigns`.
@@ -47,10 +47,7 @@ fn migrate_mode(theme: &V1, mode: ThemeMode) -> Map<String, Value> {
     let mut hue = Map::new();
     hue.insert("gray".to_owned(), scale_value(&neutral.scale));
     for (name, matched) in hues.chromatic() {
-        hue.insert(
-            name.to_owned(),
-            scale_value(&hue_scale(matched, mode, &neutral)),
-        );
+        hue.insert(name.to_owned(), scale_value(&hue_scale(matched, mode, &neutral)));
     }
     hue.insert("accent".to_owned(), json!(hues.alias("accent")));
     hue.insert("interactive".to_owned(), json!(hues.alias("primary")));
@@ -147,11 +144,7 @@ const LIGHT: Profile = Profile {
 
 impl Profile {
     fn for_mode(mode: ThemeMode) -> &'static Profile {
-        if mode == ThemeMode::Dark {
-            &DARK
-        } else {
-            &LIGHT
-        }
+        if mode == ThemeMode::Dark { &DARK } else { &LIGHT }
     }
 
     /// Surface offset of a step from 900 down to 400.
@@ -190,56 +183,27 @@ impl Neutral {
         let profile = Profile::for_mode(mode);
         let opaque = |color: Color| color.a > 0;
         let (background, panel) = (theme.get("background"), theme.get("backgroundPanel"));
-        let element = [theme.get("backgroundElement"), theme.get("backgroundMenu")]
-            .into_iter()
-            .find(|c| opaque(*c));
+        let element = [theme.get("backgroundElement"), theme.get("backgroundMenu")].into_iter().find(|c| opaque(*c));
         let sources = [(900, Some(background)), (700, Some(panel)), (600, element)];
-        let reference = sources
-            .iter()
-            .find_map(|(step, color)| color.filter(|c| opaque(*c)).map(|c| (*step, c)));
-        let fallback = if mode == ThemeMode::Dark {
-            Color::rgb(0, 0, 0)
-        } else {
-            Color::rgb(255, 255, 255)
-        };
+        let reference = sources.iter().find_map(|(step, color)| color.filter(|c| opaque(*c)).map(|c| (*step, c)));
+        let fallback = if mode == ThemeMode::Dark { Color::rgb(0, 0, 0) } else { Color::rgb(255, 255, 255) };
         let page = to_oklch(reference.map_or(fallback, |(_, color)| color));
         let page_lightness = page.l - reference.map_or(0.0, |(step, _)| profile.surface(step));
-        let tint = |colors: [Option<Color>; 3]| {
-            colors
-                .into_iter()
-                .flatten()
-                .find(|c| opaque(*c))
-                .map_or(page, to_oklch)
-        };
+        let tint =
+            |colors: [Option<Color>; 3]| colors.into_iter().flatten().find(|c| opaque(*c)).map_or(page, to_oklch);
         let surface_tint = |step: u16| match step {
             900 => tint([Some(background), Some(panel), element]),
             800 | 700 => tint([Some(panel), Some(background), element]),
             _ => tint([element, Some(panel), Some(background)]),
         };
         let text = theme.get("text");
-        let page = Oklch {
-            l: page_lightness,
-            ..surface_tint(900)
-        };
+        let page = Oklch { l: page_lightness, ..surface_tint(900) };
         let page_contrast = contrast(text, from_hex(&oklch_to_hex(page)));
-        let mut neutral = Neutral {
-            scale: vec![String::new(); 9],
-            lightness: [0.0; 9],
-            text,
-            page,
-            page_contrast,
-        };
+        let mut neutral = Neutral { scale: vec![String::new(); 9], lightness: [0.0; 9], text, page, page_contrast };
         let mut planned = [None; 9];
         for step in [800, 700, 600, 500, 400] {
-            let generated = Oklch {
-                l: page_lightness + profile.surface(step),
-                ..surface_tint(step)
-            };
-            let color = if step == 400 {
-                generated
-            } else {
-                neutral.readable(generated, profile.readable(step))
-            };
+            let generated = Oklch { l: page_lightness + profile.surface(step), ..surface_tint(step) };
+            let color = if step == 400 { generated } else { neutral.readable(generated, profile.readable(step)) };
             planned[index(step)] = Some(generated.l);
             neutral.lightness[index(step)] = color.l;
             neutral.scale[index(step)] = oklch_to_hex(color);
@@ -247,11 +211,7 @@ impl Neutral {
         neutral.lightness[index(900)] = page_lightness;
         neutral.scale[index(900)] = hex(background);
         // Transparent V1 surfaces stay transparent so the terminal shows through, as they did before.
-        for (step, color) in [
-            (800, panel),
-            (700, panel),
-            (600, theme.get("backgroundElement")),
-        ] {
+        for (step, color) in [(800, panel), (700, panel), (600, theme.get("backgroundElement"))] {
             if !opaque(color) {
                 neutral.scale[index(step)] = hex(color);
             }
@@ -267,11 +227,7 @@ impl Neutral {
         // Keep the theme's own muted text on whichever text step it is closest to.
         let muted = to_oklch(theme.get("textMuted"));
         let (l200, l300) = (neutral.lightness[index(200)], neutral.lightness[index(300)]);
-        let muted_step = if (muted.l - l200).abs() <= (muted.l - l300).abs() {
-            200
-        } else {
-            300
-        };
+        let muted_step = if (muted.l - l200).abs() <= (muted.l - l300).abs() { 200 } else { 300 };
         neutral.lightness[index(muted_step)] = muted.l;
         neutral.scale[index(muted_step)] = hex(theme.get("textMuted"));
         for (slot, planned) in neutral.lightness.iter_mut().zip(planned) {
@@ -284,14 +240,9 @@ impl Neutral {
 
     /// Pulls a generated background back toward the page until text on it keeps enough contrast.
     fn readable(&self, color: Oklch, share: f64) -> Oklch {
-        let target = (self.page_contrast * share)
-            .max(MINIMUM_SURFACE_CONTRAST.min(self.page_contrast * 0.95));
-        let passes = |amount: f64| {
-            contrast(
-                self.text,
-                from_hex(&oklch_to_hex(mix(color, self.page, amount))),
-            ) >= target
-        };
+        let target = (self.page_contrast * share).max(MINIMUM_SURFACE_CONTRAST.min(self.page_contrast * 0.95));
+        let passes =
+            |amount: f64| contrast(self.text, from_hex(&oklch_to_hex(mix(color, self.page, amount)))) >= target;
         if passes(0.0) {
             return color;
         }
@@ -323,21 +274,11 @@ fn hue_scale(color: Color, mode: ThemeMode, neutral: &Neutral) -> Vec<String> {
             if step == 400 {
                 return hex(color);
             }
-            let l = if step == 500 {
-                anchor.l + (lightness(600) - anchor.l) * profile.hue_mid
-            } else {
-                lightness(step)
-            };
-            let generated = Oklch {
-                l,
-                c: anchor.c * profile.hue_chroma[index(step)],
-                h: anchor.h,
-            };
-            let generated = if step >= 600 {
-                neutral.readable(generated, profile.readable_hue(step))
-            } else {
-                generated
-            };
+            let l =
+                if step == 500 { anchor.l + (lightness(600) - anchor.l) * profile.hue_mid } else { lightness(step) };
+            let generated = Oklch { l, c: anchor.c * profile.hue_chroma[index(step)], h: anchor.h };
+            let generated =
+                if step >= 600 { neutral.readable(generated, profile.readable_hue(step)) } else { generated };
             with_alpha(oklch_to_hex(generated), color.a)
         })
         .collect()
@@ -347,11 +288,7 @@ fn hue_scale(color: Color, mode: ThemeMode, neutral: &Neutral) -> Vec<String> {
 fn contrast(first: Color, second: Color) -> f64 {
     let luminance = |color: Color| {
         let channel = |value: u8| {
-            if unit(value) <= 0.04045 {
-                unit(value) / 12.92
-            } else {
-                ((unit(value) + 0.055) / 1.055).powf(2.4)
-            }
+            if unit(value) <= 0.04045 { unit(value) / 12.92 } else { ((unit(value) + 0.055) / 1.055).powf(2.4) }
         };
         0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
     };

@@ -45,11 +45,7 @@ fn connected() -> V2Event {
 }
 
 fn state(status: Status) -> events::State {
-    events::State {
-        status,
-        attempt: 0,
-        error: None,
-    }
+    events::State { status, attempt: 0, error: None }
 }
 
 /// Counts requests by path; message lists answer empty, sessions with their info.
@@ -92,11 +88,7 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     let (data, paths) = counting();
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
-    let driver = tokio::spawn(opencode_store::connection::run(
-        data.clone(),
-        watcher,
-        receiver,
-    ));
+    let driver = tokio::spawn(opencode_store::connection::run(data.clone(), watcher, receiver));
     batches.send(vec![connected()]).await.unwrap();
     settle().await;
     let path = "/api/session/ses_a/message";
@@ -110,11 +102,7 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     let (_, changes) = data.changes_since(seen);
     assert!(changes.all, "a reconnect wakes every view");
     data.message_sync(&id("ses_a")).await.unwrap();
-    assert_eq!(
-        reads(&paths, path),
-        2,
-        "a reconnect invalidates cached reads"
-    );
+    assert_eq!(reads(&paths, path), 2, "a reconnect invalidates cached reads");
     drop((status, batches));
     driver.await.unwrap();
 }
@@ -126,11 +114,7 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     let (data, paths) = counting();
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
-    let driver = tokio::spawn(opencode_store::connection::run(
-        data.clone(),
-        watcher,
-        receiver,
-    ));
+    let driver = tokio::spawn(opencode_store::connection::run(data.clone(), watcher, receiver));
     batches.send(vec![connected()]).await.unwrap();
     settle().await;
 
@@ -165,23 +149,13 @@ async fn deleted_before_first_poll(read: &str) {
         "permission" => data.permission_sync(&target),
         _ => data.form_sync("ses_gone", None),
     };
-    emit(
-        &data,
-        durable(
-            "session.deleted",
-            "evt_deleted",
-            json!({ "sessionID": "ses_gone" }),
-        ),
-    );
+    emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_gone" })));
     task.await.unwrap();
     data.read(|state| {
         assert!(state.is_missing(&target), "{read}: still missing");
         assert!(state.session(&target).is_none(), "{read}: no info");
         assert!(state.transcript(&target).is_none(), "{read}: no transcript");
-        assert!(
-            state.permissions(&target).is_none(),
-            "{read}: no permissions"
-        );
+        assert!(state.permissions(&target).is_none(), "{read}: no permissions");
         assert!(state.forms("ses_gone", None).is_none(), "{read}: no forms");
     });
 }
@@ -237,13 +211,7 @@ async fn overtaking_enqueues_keep_their_order() {
     }
     release.resolve(());
     reading.await.unwrap();
-    let order: Vec<String> = data.read(|state| {
-        state
-            .inputs(&target)
-            .iter()
-            .map(|id| (*id).to_owned())
-            .collect()
-    });
+    let order: Vec<String> = data.read(|state| state.inputs(&target).iter().map(|id| (*id).to_owned()).collect());
     assert_eq!(order, ids);
 }
 
@@ -290,10 +258,7 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
         let (revision, changes) = data.changes_since(seen);
         (revision, changes)
     };
-    assert!(
-        changes.session(&root),
-        "joining the family changes the root"
-    );
+    assert!(changes.session(&root), "joining the family changes the root");
     assert_eq!(data.read(|state| state.cost(&root)), 1.5);
 
     emit(
@@ -305,24 +270,11 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
         ),
     );
     let (seen, changes) = data.changes_since(seen);
-    assert!(
-        changes.session(&root),
-        "child usage changes the root's cost"
-    );
+    assert!(changes.session(&root), "child usage changes the root's cost");
 
-    emit(
-        &data,
-        durable(
-            "session.deleted",
-            "evt_deleted",
-            json!({ "sessionID": "ses_child" }),
-        ),
-    );
+    emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_child" })));
     let (_, changes) = data.changes_since(seen);
-    assert!(
-        changes.session(&root),
-        "removing a child changes the root's family"
-    );
+    assert!(changes.session(&root), "removing a child changes the root's family");
     assert_eq!(data.read(|state| state.family(&root).len()), 1);
 }
 
@@ -344,10 +296,7 @@ async fn a_failed_create_after_its_echo_flushes_the_end_of_creating() {
         Options::default(),
     );
     let made = id("ses_made");
-    let (_, request) = data.session_create(CreateSession {
-        id: Some(made.clone()),
-        ..Default::default()
-    });
+    let (_, request) = data.session_create(CreateSession { id: Some(made.clone()), ..Default::default() });
     emit(
         &data,
         durable(
@@ -383,11 +332,7 @@ async fn views_read_changes_and_state_under_one_lock() {
 
 #[test]
 fn connect_works_from_a_thread_outside_the_runtime() {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_all()
-        .build()
-        .unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
     let opened = Arc::new(AtomicUsize::new(0));
     let count = opened.clone();
     let client = client(handler(move |_req: Req| {
@@ -396,11 +341,10 @@ fn connect_works_from_a_thread_outside_the_runtime() {
     }));
     let data = Data::with_runtime(client, Options::default(), runtime.handle().clone());
     // The UI thread has no runtime context.
-    let (connection, _task) = std::thread::spawn(move || {
-        opencode_store::connection::connect(&data, events::Options::default())
-    })
-    .join()
-    .expect("connect does not panic outside the runtime");
+    let (connection, _task) =
+        std::thread::spawn(move || opencode_store::connection::connect(&data, events::Options::default()))
+            .join()
+            .expect("connect does not panic outside the runtime");
     runtime.block_on(async {
         wait(|| opened.load(Ordering::SeqCst) > 0).await;
     });

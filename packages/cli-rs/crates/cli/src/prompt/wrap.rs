@@ -16,9 +16,8 @@ static ANSI: LazyLock<Regex> = LazyLock::new(|| {
     .expect("the ANSI pattern is valid")
 });
 
-static CODE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?:\[(?P<code>\d+)m|\]8;;(?P<uri>.*)\x07)").expect("the SGR pattern is valid")
-});
+static CODE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?:\[(?P<code>\d+)m|\]8;;(?P<uri>.*)\x07)").expect("the SGR pattern is valid"));
 
 pub fn strip(text: &str) -> std::borrow::Cow<'_, str> {
     ANSI.replace_all(text, "")
@@ -26,21 +25,14 @@ pub fn strip(text: &str) -> std::borrow::Cow<'_, str> {
 
 /// Terminal columns of `text` without its escape sequences. Control characters take none.
 pub fn width(text: &str) -> usize {
-    strip(text)
-        .chars()
-        .map(|char| char.width().unwrap_or(0))
-        .sum()
+    strip(text).chars().map(|char| char.width().unwrap_or(0)).sum()
 }
 
 /// Wraps every line of `text` to `columns` (unbounded when stdout is not a terminal), trimming
 /// whitespace at both ends of each row as `wrap-ansi` does by default.
 pub fn wrap(text: &str, columns: Option<usize>) -> String {
     let columns = columns.unwrap_or(usize::MAX);
-    text.replace("\r\n", "\n")
-        .split('\n')
-        .map(|line| exec(line, columns))
-        .collect::<Vec<_>>()
-        .join("\n")
+    text.replace("\r\n", "\n").split('\n').map(|line| exec(line, columns)).collect::<Vec<_>>().join("\n")
 }
 
 fn exec(line: &str, columns: usize) -> String {
@@ -73,13 +65,7 @@ fn exec(line: &str, columns: usize) -> String {
         }
         rows.last_mut().expect("rows is never empty").push_str(word);
     }
-    let pre: Vec<char> = rows
-        .iter()
-        .map(|row| trim_end(row))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .chars()
-        .collect();
+    let pre: Vec<char> = rows.iter().map(|row| trim_end(row)).collect::<Vec<_>>().join("\n").chars().collect();
     reopen_codes(&pre)
 }
 
@@ -98,10 +84,7 @@ fn wrap_word(rows: &mut Vec<String>, word: &str, columns: usize) {
         }
         if char == '\x1b' || char == '\u{9b}' {
             escape = true;
-            link = chars[index + 1..]
-                .iter()
-                .collect::<String>()
-                .starts_with("]8;;");
+            link = chars[index + 1..].iter().collect::<String>().starts_with("]8;;");
         }
         if escape {
             if link {
@@ -129,10 +112,7 @@ fn wrap_word(rows: &mut Vec<String>, word: &str, columns: usize) {
 /// `stringVisibleTrimSpacesRight`: drops trailing spaces but keeps trailing escape sequences.
 fn trim_end(row: &str) -> String {
     let words: Vec<&str> = row.split(' ').collect();
-    let last = words
-        .iter()
-        .rposition(|word| width(word) > 0)
-        .map_or(0, |index| index + 1);
+    let last = words.iter().rposition(|word| width(word) > 0).map_or(0, |index| index + 1);
     if last == words.len() {
         return row.to_string();
     }
@@ -209,11 +189,7 @@ mod tests {
             ("abcdefghij", Some(4), "abcd\nefgh\nij"),
             ("ab cdefghij", Some(4), "ab\ncdef\nghij"),
             ("\x1b[36m│\x1b[39m  ", None, "\x1b[36m│\x1b[39m"),
-            (
-                "\x1b[2mabcdef\x1b[22m",
-                Some(3),
-                "\x1b[2mabc\x1b[22m\n\x1b[2mdef\x1b[22m",
-            ),
+            ("\x1b[2mabcdef\x1b[22m", Some(3), "\x1b[2mabc\x1b[22m\n\x1b[2mdef\x1b[22m"),
             ("one\n  two", None, "one\ntwo"),
         ];
         for (text, columns, expected) in cases {

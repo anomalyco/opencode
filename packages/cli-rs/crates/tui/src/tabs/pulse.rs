@@ -39,11 +39,7 @@ fn smootherstep(value: f64) -> f64 {
 
 fn intensity_at(index: f64, front: f64, head: f64, tail: f64) -> f64 {
     let distance = front - index;
-    if distance < 0.0 {
-        smootherstep(clamp(1.0 + distance / head))
-    } else {
-        smootherstep(clamp(1.0 - distance / tail))
-    }
+    if distance < 0.0 { smootherstep(clamp(1.0 + distance / head)) } else { smootherstep(clamp(1.0 - distance / tail)) }
 }
 
 fn coast(value: f64) -> f64 {
@@ -94,9 +90,7 @@ impl Shape {
         match self {
             Shape::Smoother => smootherstep(progress),
             Shape::FadeOut => fade_out(progress),
-            Shape::Ignition => {
-                attack_decay(progress, GLOW_IGNITION_ATTACK, GLOW_IGNITION_PEAK, 1.0)
-            }
+            Shape::Ignition => attack_decay(progress, GLOW_IGNITION_ATTACK, GLOW_IGNITION_PEAK, 1.0),
             // The resting glow drains over the leading fraction of the release, the old 200 ms fade.
             Shape::Drain => fade_out(clamp(progress / (GLOW_FADE_OUT / GLOW_RELEASE_DURATION))),
             Shape::Completion => attack_decay(progress, COMPLETION_ATTACK, 1.0, 0.0),
@@ -116,12 +110,7 @@ struct Envelope {
 
 impl Envelope {
     fn new(duration: f64, shape: Shape) -> Self {
-        Self {
-            clock: None,
-            scale: 1.0,
-            duration,
-            shape,
-        }
+        Self { clock: None, scale: 1.0, duration, shape }
     }
 
     fn start(&mut self, scale: f64) {
@@ -145,9 +134,7 @@ impl Envelope {
     }
 
     fn level(&self) -> f64 {
-        self.clock.map_or(0.0, |clock| {
-            self.scale * self.shape.level(clock / self.duration)
-        })
+        self.clock.map_or(0.0, |clock| self.scale * self.shape.level(clock / self.duration))
     }
 }
 
@@ -207,11 +194,7 @@ impl Gate {
         };
         self.clock += delta;
         if self.clock >= duration {
-            self.phase = if self.phase == Phase::Attack {
-                Phase::Sustain
-            } else {
-                Phase::Idle
-            };
+            self.phase = if self.phase == Phase::Attack { Phase::Sustain } else { Phase::Idle };
             self.clock = 0.0;
         }
     }
@@ -221,9 +204,7 @@ impl Gate {
             Phase::Idle => 0.0,
             Phase::Sustain => 1.0,
             Phase::Attack => self.attack.1.level(self.clock / self.attack.0),
-            Phase::Release => {
-                self.release_scale * self.release.1.level(self.clock / self.release.0)
-            }
+            Phase::Release => self.release_scale * self.release.1.level(self.clock / self.release.0),
         }
     }
 
@@ -260,11 +241,7 @@ pub struct Pulse {
 
 impl Pulse {
     pub fn new(enabled: bool, input: Input) -> Self {
-        let mut run = Gate::new(
-            (RUN_ATTACK, Shape::Smoother),
-            (RUN_FADE_OUT, Shape::FadeOut),
-            false,
-        );
+        let mut run = Gate::new((RUN_ATTACK, Shape::Smoother), (RUN_FADE_OUT, Shape::FadeOut), false);
         if enabled && input.active {
             run.trigger();
         }
@@ -363,15 +340,8 @@ impl Pulse {
         let cycles = self.sweep / RUN_DURATION;
         let start = -RUN_HEAD;
         let end = width as f64 - 1.0 + RUN_TAIL;
-        let second = if cycles < 0.5 {
-            0.0
-        } else {
-            (cycles + 0.5) % 1.0
-        };
-        [
-            start + coast(cycles % 1.0) * (end - start),
-            start + coast(second) * (end - start),
-        ]
+        let second = if cycles < 0.5 { 0.0 } else { (cycles + 0.5) % 1.0 };
+        [start + coast(cycles % 1.0) * (end - start), start + coast(second) * (end - start)]
     }
 
     /// The sweep's level under the number cell (`onLevel`), quantized to 1/32.
@@ -381,9 +351,7 @@ impl Pulse {
             return 0.0;
         }
         let [a, b] = self.fronts(width);
-        let level = intensity_at(1.0, a, RUN_HEAD, RUN_TAIL)
-            .max(intensity_at(1.0, b, RUN_HEAD, RUN_TAIL))
-            * running;
+        let level = intensity_at(1.0, a, RUN_HEAD, RUN_TAIL).max(intensity_at(1.0, b, RUN_HEAD, RUN_TAIL)) * running;
         (level * 32.0).round() / 32.0
     }
 
@@ -407,12 +375,10 @@ impl Pulse {
         let glow_tail = clamp_tail(colors.glow_tail);
         let flash_tail = colors.flash_tail.map(clamp_tail);
         let swell = self.glow.release_progress().map_or(0.0, |progress| {
-            attack_decay(progress, GLOW_RELEASE_ATTACK, GLOW_RELEASE_PEAK, 0.0)
-                * self.glow.release_scale.max(1.0)
+            attack_decay(progress, GLOW_RELEASE_ATTACK, GLOW_RELEASE_PEAK, 0.0) * self.glow.release_scale.max(1.0)
         });
-        let spread = self.glow.release_progress().map_or(0.0, |progress| {
-            glow_tail + smootherstep(progress) * width as f64
-        });
+        let spread =
+            self.glow.release_progress().map_or(0.0, |progress| glow_tail + smootherstep(progress) * width as f64);
         (0..width)
             .map(|index| {
                 let sweep = if running == 0.0 {
@@ -426,16 +392,8 @@ impl Pulse {
                     )) * 0.14
                         * running
                 };
-                let glow = (if glow == 0.0 {
-                    0.0
-                } else {
-                    glow_intensity_at(index, glow_tail) * GLOW_OPACITY * glow
-                })
-                .max(if swell == 0.0 {
-                    0.0
-                } else {
-                    glow_intensity_at(index, spread) * GLOW_OPACITY * swell
-                });
+                let glow = (if glow == 0.0 { 0.0 } else { glow_intensity_at(index, glow_tail) * GLOW_OPACITY * glow })
+                    .max(if swell == 0.0 { 0.0 } else { glow_intensity_at(index, spread) * GLOW_OPACITY * swell });
                 let flash = flash_tail.map_or(flash, |tail| flash * glow_intensity_at(index, tail));
                 blend(colors, glow, sweep, flash, completion)
             })
@@ -457,29 +415,17 @@ pub struct Colors {
 
 /// `blendTabPulseColor`, in floats from the background, rounded once at the end as `RGBA` does when drawn.
 fn blend(colors: &Colors, glow: f64, running: f64, flash: f64, completion: f64) -> Color {
-    let unit = |color: Color| {
-        [
-            color.r as f64 / 255.0,
-            color.g as f64 / 255.0,
-            color.b as f64 / 255.0,
-        ]
-    };
+    let unit = |color: Color| [color.r as f64 / 255.0, color.g as f64 / 255.0, color.b as f64 / 255.0];
     let mut output = unit(colors.background);
-    for (color, amount) in [
-        (colors.glow, glow),
-        (colors.color, running),
-        (colors.flash, flash),
-        (colors.completion, completion),
-    ] {
+    for (color, amount) in
+        [(colors.glow, glow), (colors.color, running), (colors.flash, flash), (colors.completion, completion)]
+    {
         if amount == 0.0 {
             continue;
         }
         let target = unit(color);
         // The glow mixes from the background; the other stages from the running result.
-        output
-            .iter_mut()
-            .zip(target)
-            .for_each(|(value, target)| *value += (target - *value) * amount);
+        output.iter_mut().zip(target).for_each(|(value, target)| *value += (target - *value) * amount);
     }
     let byte = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
     Color::rgb(byte(output[0]), byte(output[1]), byte(output[2]))
@@ -503,13 +449,7 @@ pub fn paint(
     };
     let outer = outer.colors(width, colors);
     let glyph = if above { '▄' } else { '▀' };
-    Some(
-        cells
-            .into_iter()
-            .zip(outer)
-            .map(|(fg, bg)| (Some(glyph), fg, bg))
-            .collect(),
-    )
+    Some(cells.into_iter().zip(outer).map(|(fg, bg)| (Some(glyph), fg, bg)).collect())
 }
 
 #[cfg(test)]
@@ -530,25 +470,10 @@ mod tests {
 
     #[test]
     fn a_still_pulse_draws_only_its_glow() {
-        let idle = Pulse::new(
-            false,
-            Input {
-                active: true,
-                ..Input::default()
-            },
-        );
-        assert!(
-            paint(&idle, &colors(), None, 10).is_none(),
-            "no sweep without animations"
-        );
+        let idle = Pulse::new(false, Input { active: true, ..Input::default() });
+        assert!(paint(&idle, &colors(), None, 10).is_none(), "no sweep without animations");
         assert!(!idle.live());
-        let glow = Pulse::new(
-            false,
-            Input {
-                glow: true,
-                ..Input::default()
-            },
-        );
+        let glow = Pulse::new(false, Input { glow: true, ..Input::default() });
         let cells = paint(&glow, &colors(), None, 10).unwrap();
         // Full strength over the first two cells, fading along the tail.
         assert_eq!(cells[0].1, Color::rgb(41, 0, 0));
@@ -559,10 +484,7 @@ mod tests {
     #[test]
     fn a_glow_set_without_animations_holds_at_once() {
         let mut pulse = Pulse::new(false, Input::default());
-        pulse.set(Input {
-            glow: true,
-            ..Input::default()
-        });
+        pulse.set(Input { glow: true, ..Input::default() });
         assert!(paint(&pulse, &colors(), None, 4).is_some());
         pulse.set(Input::default());
         assert!(paint(&pulse, &colors(), None, 4).is_none());
@@ -570,20 +492,11 @@ mod tests {
 
     #[test]
     fn the_sweep_runs_while_active_and_fades_after() {
-        let mut pulse = Pulse::new(
-            true,
-            Input {
-                active: true,
-                ..Input::default()
-            },
-        );
+        let mut pulse = Pulse::new(true, Input { active: true, ..Input::default() });
         assert!(pulse.live());
         pulse.advance(Duration::from_millis(1_000));
         assert!(pulse.level(20) > 0.0 || paint(&pulse, &colors(), None, 20).is_some());
-        pulse.set(Input {
-            complete: true,
-            ..Input::default()
-        });
+        pulse.set(Input { complete: true, ..Input::default() });
         pulse.advance(Duration::from_millis(5_000));
         pulse.advance(Duration::from_millis(5_000));
         assert!(!pulse.live());

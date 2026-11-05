@@ -19,9 +19,7 @@ use opencode_local::jsonl::empty_prompt;
 use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::motion::{
-    ScannerOptions, ScannerStyle, Spinner, SpinnerColor, scanner_colors, scanner_frames,
-};
+use opencode_ui::motion::{ScannerOptions, ScannerStyle, Spinner, SpinnerColor, scanner_colors, scanner_frames};
 use opencode_ui::theme::Theme;
 use opentui::input::Keymap;
 use opentui::keymap::{Condition, Disposer};
@@ -114,10 +112,7 @@ pub struct Inner {
     location_box: View,
     /// The location box's width, which the location label shortens to (`truncateFilePath`, E.14).
     location_width: Cell<u16>,
-    footer_slots: RefCell<(
-        Option<opencode_plugin::SlotInput>,
-        Vec<opencode_plugin::SlotMount<Tui>>,
-    )>,
+    footer_slots: RefCell<(Option<opencode_plugin::SlotInput>, Vec<opencode_plugin::SlotMount<Tui>>)>,
     /// The pointer is over the footer's location (E.20).
     hovered: Cell<bool>,
     /// The running indicator: the spinner, one cell in from the footer's edge.
@@ -219,19 +214,10 @@ impl Drop for Prompt {
         if !text.is_empty() {
             let mut prompt = inner.prompt.borrow().clone();
             prompt["text"] = Value::String(text);
-            tui.prompt.drafts.save(
-                inner.session.as_ref(),
-                Draft {
-                    prompt,
-                    cursor: inner.textarea.cursor_offset(),
-                },
-            );
+            tui.prompt.drafts.save(inner.session.as_ref(), Draft { prompt, cursor: inner.textarea.cursor_offset() });
         }
         let mut slot = tui.textarea.borrow_mut();
-        if slot
-            .as_ref()
-            .is_some_and(|textarea| textarea.id() == inner.textarea.id())
-        {
+        if slot.as_ref().is_some_and(|textarea| textarea.id() == inner.textarea.id()) {
             *slot = None;
         }
         // A command may drop the prompt while the keymap runs it, so the layers go afterwards.
@@ -264,11 +250,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .basis(Length::Auto);
     let previews = super::attach::Previews::new(app);
     let metadata = Row::new(app);
-    let meta = View::new(app)
-        .row()
-        .shrink(0.0)
-        .padding_edge(Edge::Top, 1)
-        .child(metadata.root());
+    let meta = View::new(app).row().shrink(0.0).padding_edge(Edge::Top, 1).child(metadata.root());
     let body = View::new(app)
         .column()
         .grow(1.0)
@@ -309,20 +291,10 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .interval(Duration::from_millis(40))
         .still("[⋯]")
         .animations(opencode_ui::motion::enabled(tui.config().info.animations));
-    let running = View::new(app)
-        .margin_edge(Edge::Left, 1)
-        .shrink(0.0)
-        .child(&spinner)
-        .visible(false);
+    let running = View::new(app).margin_edge(Edge::Left, 1).shrink(0.0).child(&spinner).visible(false);
     let footer = Text::new(app, "").truncate(true).wrap(WrapMode::None);
-    let staging = super::r#move::Move::new(
-        app,
-        opencode_ui::motion::enabled(tui.config().info.animations),
-    );
-    let editor_file = Text::new(app, "")
-        .truncate(true)
-        .wrap(WrapMode::None)
-        .shrink(1.0);
+    let staging = super::r#move::Move::new(app, opencode_ui::motion::enabled(tui.config().info.animations));
+    let editor_file = Text::new(app, "").truncate(true).wrap(WrapMode::None).shrink(1.0);
     let location_box = View::new(app)
         .row()
         .grow(1.0)
@@ -334,18 +306,9 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .child(&footer);
     // `prompt/index.tsx:1900-1983`: the location inside `prompt.footer.status`, then `prompt.footer.file`, both
     // inside `prompt.footer`, whose plugins append their hints.
-    let footer_row = View::new(app)
-        .row()
-        .width(Length::percent(100.0))
-        .shrink(0.0)
-        .justify(Justify::SpaceBetween)
-        .gap(2);
-    let root = View::new(app)
-        .column()
-        .shrink(0.0)
-        .child(&frame)
-        .child(&bottom)
-        .child(&footer_row);
+    let footer_row =
+        View::new(app).row().width(Length::percent(100.0)).shrink(0.0).justify(Justify::SpaceBetween).gap(2);
+    let root = View::new(app).column().shrink(0.0).child(&frame).child(&bottom).child(&footer_row);
 
     let inner = Rc::new_cyclic(|this| Inner {
         tui: tui.weak(),
@@ -409,17 +372,13 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     install_layers(tui, &inner);
     // After the prompt's layers, as TS renders it after them: the newer layer runs first, so its
     // `prompt.clear` wins while the popup shows.
-    let _ = inner
-        .autocomplete
-        .set(autocomplete::mount(tui, &inner, &inner.root));
+    let _ = inner.autocomplete.set(autocomplete::mount(tui, &inner, &inner.root));
     *tui.textarea.borrow_mut() = Some(inner.textarea.clone());
     *tui.prompt.current.borrow_mut() = Rc::downgrade(&inner);
     if let Some(draft) = tui.prompt.drafts.take(session) {
         let cursor = draft.cursor;
         inner.restore(draft.prompt);
-        inner
-            .textarea
-            .set_cursor_offset(cursor.min(inner.text_end()));
+        inner.textarea.set_cursor_offset(cursor.min(inner.text_end()));
     }
     if let Some(text) = tui.startup.take_prompt(session) {
         let mut prompt = empty_prompt();
@@ -486,11 +445,7 @@ impl Inner {
 
     /// Shows `prompt` (a `PromptInfo`), with its mode, as `ref.set` and history do.
     pub(crate) fn restore(&self, prompt: Value) {
-        let text = prompt
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
+        let text = prompt.get("text").and_then(Value::as_str).unwrap_or_default().to_owned();
         let mode = match prompt.get("mode").and_then(Value::as_str) {
             Some("shell") => Mode::Shell,
             _ => Mode::Normal,
@@ -520,16 +475,10 @@ impl Inner {
     /// `clearPrompt`: long or rich prompts go to history first.
     pub(crate) fn clear(&self, tui: &Tui) {
         let prompt = self.snapshot();
-        let rich = ["pasted", "files", "agents"].iter().any(|key| {
-            prompt
-                .get(*key)
-                .and_then(Value::as_array)
-                .is_some_and(|items| !items.is_empty())
-        });
-        let text = prompt
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let rich = ["pasted", "files", "agents"]
+            .iter()
+            .any(|key| prompt.get(*key).and_then(Value::as_array).is_some_and(|items| !items.is_empty()));
+        let text = prompt.get("text").and_then(Value::as_str).unwrap_or_default();
         if text.trim().chars().count() >= CLEAR_RETENTION_CHARS || rich {
             tui.prompt.history.append(&tui.app, prompt);
         }
@@ -559,9 +508,7 @@ impl Inner {
     }
 
     pub(crate) fn focused(&self) -> bool {
-        self.app
-            .focused()
-            .is_some_and(|widget| widget.id() == self.textarea.id())
+        self.app.focused().is_some_and(|widget| widget.id() == self.textarea.id())
     }
 
     pub(crate) fn session_info(&self, tui: &Tui) -> Option<SessionInfo> {
@@ -576,22 +523,14 @@ impl Inner {
         }
         if let Some(info) = self.session_info(tui) {
             self.followed.set(true);
-            tui.prompt
-                .editor
-                .reconnect(tui, Some(&info.location.directory.0));
+            tui.prompt.editor.reconnect(tui, Some(&info.location.directory.0));
         }
     }
 
     /// The editor selection the prompt shows and sends: none when `prompt.editor` is off or this prompt
     /// dismissed it (`editorContext`).
     pub(crate) fn editor_context(&self, tui: &Tui) -> Option<Selection> {
-        let enabled = tui
-            .config()
-            .info
-            .prompt
-            .as_ref()
-            .and_then(|prompt| prompt.editor)
-            .unwrap_or(true);
+        let enabled = tui.config().info.prompt.as_ref().and_then(|prompt| prompt.editor).unwrap_or(true);
         let selection = tui.prompt.editor.selection().filter(|_| enabled)?;
         (self.dismissed.borrow().as_deref() != Some(&selection.key())).then_some(selection)
     }
@@ -603,9 +542,9 @@ impl Inner {
     }
 
     fn running(&self, tui: &Tui) -> bool {
-        self.session.as_ref().is_some_and(|session| {
-            tui.data.read(|state| state.status(session)) == SessionStatus::Running
-        })
+        self.session
+            .as_ref()
+            .is_some_and(|session| tui.data.read(|state| state.status(session)) == SessionStatus::Running)
     }
 
     /// The session's location; on home, the current one (`location.ref`: where home was opened, or where
@@ -631,9 +570,7 @@ impl Inner {
     /// Rebuilds the catalog from the store and repaints.
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
-        let catalog = tui
-            .data
-            .read(|state| Catalog::read(state, &location, &tui.prompt.preferences));
+        let catalog = tui.data.read(|state| Catalog::read(state, &location, &tui.prompt.preferences));
         if let Some(catalog) = catalog {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
@@ -673,24 +610,21 @@ impl Inner {
         let theme = tui.page();
         let catalog = self.catalog.borrow().clone();
         let session = self.session_info(tui);
-        let selection = catalog.as_ref().and_then(|catalog| {
-            crate::dialogs::model::prompt_selection(tui, catalog, session.as_ref())
-        });
-        let agent_color = selection
+        let selection = catalog
             .as_ref()
-            .and_then(|selection| catalog.as_ref()?.color(&theme, selection.agent.id.as_str()));
+            .and_then(|catalog| crate::dialogs::model::prompt_selection(tui, catalog, session.as_ref()));
+        let agent_color =
+            selection.as_ref().and_then(|selection| catalog.as_ref()?.color(&theme, selection.agent.id.as_str()));
         let mode = self.mode.get();
         let highlight = match mode {
             Mode::Shell => theme.text.action.primary.selected,
             Mode::Normal => agent_color.unwrap_or(theme.border.base),
         };
-        self.spinner.set_color(
-            if opencode_ui::motion::enabled(tui.config().info.animations) {
-                scanner_colors(&scanner(agent_color.unwrap_or(theme.border.base)))
-            } else {
-                SpinnerColor::from(theme.text.muted)
-            },
-        );
+        self.spinner.set_color(if opencode_ui::motion::enabled(tui.config().info.animations) {
+            scanner_colors(&scanner(agent_color.unwrap_or(theme.border.base)))
+        } else {
+            SpinnerColor::from(theme.text.muted)
+        });
 
         let display = match (&catalog, &selection) {
             (Some(catalog), Some(selection)) => {
@@ -700,33 +634,23 @@ impl Inner {
                     auto: tui.config().permissions == Permissions::Autoaccept,
                     model,
                     provider,
-                    variant: selection
-                        .model
-                        .as_ref()
-                        .and_then(|model| model.variant.clone()),
+                    variant: selection.model.as_ref().and_then(|model| model.variant.clone()),
                     limit: tui.local.limit_label(),
                 }
             }
             _ => Display::default(),
         };
         let display = match mode {
-            Mode::Shell => Display {
-                agent: Some("Shell".into()),
-                ..display
-            },
+            Mode::Shell => Display { agent: Some("Shell".into()), ..display },
             Mode::Normal => display,
         };
         // `borderHighlight` tints toward the highlight as the agent label fades in; `tint` returns an opaque
         // color, so a border token with alpha draws at full strength as in TS.
-        let border = opencode_ui::theme::tint(
-            theme.border.base,
-            highlight,
-            if display.agent.is_some() { 1.0 } else { 0.0 },
-        );
+        let border =
+            opencode_ui::theme::tint(theme.border.base, highlight, if display.agent.is_some() { 1.0 } else { 0.0 });
         self.frame.border_color(border);
         self.bottom.border_color(border);
-        self.metadata
-            .set(&theme, mode, &display, highlight, self.app.size().0);
+        self.metadata.set(&theme, mode, &display, highlight, self.app.size().0);
 
         let running = self.running(tui);
         self.busy.set(running);
@@ -736,40 +660,21 @@ impl Inner {
         let footer: Vec<Span> = if running {
             let armed = self.interrupt.get() > 0;
             let (key, label) = if armed {
-                (
-                    theme.text.feedback.warning.base,
-                    theme.text.feedback.warning.base,
-                )
+                (theme.text.feedback.warning.base, theme.text.feedback.warning.base)
             } else {
                 (theme.text.base, theme.text.muted)
             };
-            vec![
-                "esc ".fg(key),
-                (if armed {
-                    "again to interrupt"
-                } else {
-                    "interrupt"
-                })
-                .fg(label),
-            ]
+            vec!["esc ".fg(key), (if armed { "again to interrupt" } else { "interrupt" }).fg(label)]
         } else {
             let home = std::env::var("HOME").unwrap_or_default();
-            let directory =
-                opencode_ui::path::abbreviate_home(&self.location(tui).directory, &home);
+            let directory = opencode_ui::path::abbreviate_home(&self.location(tui).directory, &home);
             let branch = catalog.as_ref().and_then(|catalog| catalog.branch.as_ref());
             let label = match branch {
                 Some(branch) => format!("{directory}:{branch}"),
                 None => directory,
             };
-            let color = if self.hovered.get() {
-                theme.text.base
-            } else {
-                theme.text.muted
-            };
-            let label = crate::dialogs::open::truncate_file_path(
-                &label,
-                i64::from(self.location_width.get()),
-            );
+            let color = if self.hovered.get() { theme.text.base } else { theme.text.muted };
+            let label = crate::dialogs::open::truncate_file_path(&label, i64::from(self.location_width.get()));
             vec![label.fg(color)]
         };
         self.footer.set_text(footer);
@@ -783,11 +688,7 @@ impl Inner {
                 opencode_ui::select::truncate_middle(&selection.label(), width)
             })
             .unwrap_or_default();
-        let color = if state == LabelState::Pending {
-            theme.accent().step(500)
-        } else {
-            theme.text.muted
-        };
+        let color = if state == LabelState::Pending { theme.accent().step(500) } else { theme.text.muted };
         // `<Show>`: no file, no child, so the row keeps no gap for it.
         self.editor_file.visible(!file.is_empty());
         self.editor_file.set_text(vec![file.fg(color)]);
@@ -814,34 +715,17 @@ impl Inner {
         self.footer_row.clear();
         let row = &self.footer_row;
         let mut mounts = Vec::new();
-        let footer = crate::plugins::host::slot(
-            tui,
-            row,
-            opencode_plugin::slot::PROMPT_FOOTER,
-            &input,
-            |row| {
-                let status = crate::plugins::host::slot(
-                    tui,
-                    row,
-                    opencode_plugin::slot::PROMPT_FOOTER_STATUS,
-                    &input,
-                    |row| {
-                        row.add(&self.location_box);
-                    },
-                );
-                let file = crate::plugins::host::slot(
-                    tui,
-                    row,
-                    opencode_plugin::slot::PROMPT_FOOTER_FILE,
-                    &input,
-                    |row| {
-                        row.add(&self.editor_file);
-                    },
-                );
-                mounts.push(status);
-                mounts.push(file);
-            },
-        );
+        let footer = crate::plugins::host::slot(tui, row, opencode_plugin::slot::PROMPT_FOOTER, &input, |row| {
+            let status =
+                crate::plugins::host::slot(tui, row, opencode_plugin::slot::PROMPT_FOOTER_STATUS, &input, |row| {
+                    row.add(&self.location_box);
+                });
+            let file = crate::plugins::host::slot(tui, row, opencode_plugin::slot::PROMPT_FOOTER_FILE, &input, |row| {
+                row.add(&self.editor_file);
+            });
+            mounts.push(status);
+            mounts.push(file);
+        });
         mounts.push(footer);
         *slots = (Some(input), mounts);
     }
@@ -860,26 +744,17 @@ impl Inner {
             self.app.cancel_timer(timer);
         }
         let weak = self.this.clone();
-        self.interrupt_timer
-            .set(Some(self.app.set_timeout(INTERRUPT_WINDOW, move |_| {
-                if let (Some(prompt), Some(tui)) =
-                    (weak.upgrade(), weak.upgrade().and_then(|p| p.tui.upgrade()))
-                {
-                    prompt.interrupt.set(0);
-                    prompt.refresh(&tui);
-                }
-            })));
+        self.interrupt_timer.set(Some(self.app.set_timeout(INTERRUPT_WINDOW, move |_| {
+            if let (Some(prompt), Some(tui)) = (weak.upgrade(), weak.upgrade().and_then(|p| p.tui.upgrade())) {
+                prompt.interrupt.set(0);
+                prompt.refresh(&tui);
+            }
+        })));
         if self.interrupt.get() >= 2 {
             let client = tui.data.client().clone();
             tui.app.runtime().spawn(async move {
-                let input = SessionInterruptInput {
-                    session_id: session,
-                    resume: Some(true),
-                };
-                if let Err(error) = client
-                    .session_interrupt(&input, &RequestOptions::default())
-                    .await
-                {
+                let input = SessionInterruptInput { session_id: session, resume: Some(true) };
+                if let Err(error) = client.session_interrupt(&input, &RequestOptions::default()).await {
                     log::warn!("interrupt failed: {error}");
                 }
             });
@@ -896,13 +771,8 @@ impl Inner {
         };
         let client = tui.data.client().clone();
         tui.app.runtime().spawn(async move {
-            let input = SessionBackgroundInput {
-                session_id: session,
-            };
-            if let Err(error) = client
-                .session_background(&input, &RequestOptions::default())
-                .await
-            {
+            let input = SessionBackgroundInput { session_id: session };
+            if let Err(error) = client.session_background(&input, &RequestOptions::default()).await {
                 log::warn!("background failed: {error}");
             }
         });
@@ -918,19 +788,7 @@ fn prompt_background(theme: &Theme) -> Color {
 /// Eleven border glyphs (`BorderStyle::chars` order) with the given vertical, bottom-left corner,
 /// and horizontal.
 fn border_chars(vertical: char, bottom_left: char, horizontal: char) -> [char; 11] {
-    [
-        ' ',
-        ' ',
-        bottom_left,
-        ' ',
-        horizontal,
-        vertical,
-        ' ',
-        ' ',
-        ' ',
-        ' ',
-        ' ',
-    ]
+    [' ', ' ', bottom_left, ' ', horizontal, vertical, ' ', ' ', ' ', ' ', ' ']
 }
 
 /// Text changes update the prompt; Submit (from `input.submit`) submits.
@@ -1025,26 +883,17 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     let when = |check: fn(&Inner, &Tui) -> bool| {
         let weak = Rc::downgrade(inner);
         Condition::when(move || {
-            weak.upgrade()
-                .is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui)))
+            weak.upgrade().is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui)))
         })
     };
     let run = |action: fn(&Inner, &Tui) -> bool| {
         let weak = Rc::downgrade(inner);
         move |_: Option<&str>, _: Option<&KeyEvent>| {
-            weak.upgrade().is_some_and(|prompt| {
-                prompt
-                    .tui
-                    .upgrade()
-                    .is_some_and(|tui| action(&prompt, &tui))
-            })
+            weak.upgrade().is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| action(&prompt, &tui)))
         }
     };
     let command = |id: &str, title: &str, group: &str, action: fn(&Inner, &Tui) -> bool| {
-        TuiCommand::new(id, run(action))
-            .title(title)
-            .group(group)
-            .bind(Bind::Off)
+        TuiCommand::new(id, run(action)).title(title).group(group).bind(Bind::Off)
     };
     let bindings = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
 
@@ -1060,9 +909,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 }),
                 command("prompt.submit", "Submit prompt", "Prompt", |prompt, tui| {
                     if prompt.focused()
-                        && prompt.rc().is_some_and(|rc| {
-                            super::submit::submit(&rc, SessionInboxDelivery::Steer)
-                        })
+                        && prompt.rc().is_some_and(|rc| super::submit::submit(&rc, SessionInboxDelivery::Steer))
                     {
                         tui.dialogs.clear();
                     }
@@ -1071,68 +918,44 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 command("prompt.queue", "Queue prompt", "Prompt", |prompt, tui| {
                     // An open popup first completes a server command, else keeps the key.
                     if prompt.focused()
-                        && !prompt.autocomplete.get().is_some_and(|complete| {
-                            complete.visible().is_some() && !complete.complete_queueable()
-                        })
-                        && prompt.rc().is_some_and(|rc| {
-                            super::submit::submit(&rc, SessionInboxDelivery::Queue)
-                        })
+                        && !prompt
+                            .autocomplete
+                            .get()
+                            .is_some_and(|complete| complete.visible().is_some() && !complete.complete_queueable())
+                        && prompt.rc().is_some_and(|rc| super::submit::submit(&rc, SessionInboxDelivery::Queue))
                     {
                         tui.dialogs.clear();
                     }
                     true
                 })
                 .palette(),
-                command(
-                    "session.interrupt",
-                    "Interrupt session",
-                    "Session",
-                    |prompt, tui| {
-                        if prompt.focused() {
-                            prompt.interrupt(tui);
-                        }
-                        true
-                    },
-                )
+                command("session.interrupt", "Interrupt session", "Session", |prompt, tui| {
+                    if prompt.focused() {
+                        prompt.interrupt(tui);
+                    }
+                    true
+                })
                 .enabled(when(|prompt, _| prompt.busy.get())),
-                command(
-                    "session.background",
-                    "Background blocking tools",
-                    "Session",
-                    |prompt, tui| {
-                        if prompt.focused() {
-                            prompt.background(tui);
-                        }
-                        true
-                    },
-                )
+                command("session.background", "Background blocking tools", "Session", |prompt, tui| {
+                    if prompt.focused() {
+                        prompt.background(tui);
+                    }
+                    true
+                })
                 .enabled(when(|prompt, _| prompt.busy.get())),
                 command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
-                    crate::dialogs::skill::show(
-                        tui,
-                        Some(prompt.location(tui)),
-                        insert_skill(prompt.this.clone()),
-                    );
+                    crate::dialogs::skill::show(tui, Some(prompt.location(tui)), insert_skill(prompt.this.clone()));
                     true
                 })
                 .palette()
-                .slash(Slash {
-                    name: "skills".to_owned(),
-                    aliases: Vec::new(),
-                    arguments: false,
-                }),
+                .slash(Slash { name: "skills".to_owned(), aliases: Vec::new(), arguments: false }),
                 autocomplete::cd::command(inner.this.clone()),
                 super::r#move::command(inner.this.clone()),
-                command(
-                    "prompt.editor_context.clear",
-                    "Remove editor context",
-                    "Prompt",
-                    |prompt, tui| {
-                        prompt.dismiss_editor_context(tui);
-                        tui.dialogs.clear();
-                        true
-                    },
-                )
+                command("prompt.editor_context.clear", "Remove editor context", "Prompt", |prompt, tui| {
+                    prompt.dismiss_editor_context(tui);
+                    tui.dialogs.clear();
+                    true
+                })
                 .palette()
                 .enabled(when(|prompt, tui| prompt.editor_context(tui).is_some())),
                 command("prompt.editor", "Open editor", "Session", |prompt, tui| {
@@ -1142,37 +965,24 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     true
                 })
                 .palette()
-                .slash(Slash {
-                    name: "editor".to_owned(),
-                    aliases: Vec::new(),
-                    arguments: false,
-                }),
+                .slash(Slash { name: "editor".to_owned(), aliases: Vec::new(), arguments: false }),
                 command("prompt.paste", "Paste", "Prompt", |prompt, _| {
                     if let Some(prompt) = prompt.rc() {
                         super::paste::from_clipboard(&prompt);
                     }
                     true
                 }),
-                command(
-                    "prompt.images.view",
-                    "View image attachments",
-                    "Prompt",
-                    |prompt, tui| {
-                        super::attach::view(tui, prompt);
-                        true
-                    },
-                )
+                command("prompt.images.view", "View image attachments", "Prompt", |prompt, tui| {
+                    super::attach::view(tui, prompt);
+                    true
+                })
                 .palette()
                 .enabled(when(|prompt, _| super::attach::has_images(prompt))),
             ],
             ..KeymapLayer::default()
         },
         super::stash::layer(inner),
-        KeymapLayer {
-            priority: 1,
-            bindings: bindings(&["prompt.queue"]),
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { priority: 1, bindings: bindings(&["prompt.queue"]), ..KeymapLayer::default() },
         KeymapLayer {
             bindings: bindings(&[
                 "prompt.submit",
@@ -1189,11 +999,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
             ]),
             ..KeymapLayer::default()
         },
-        KeymapLayer {
-            target: Some(target),
-            bindings: bindings(&["prompt.paste"]),
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { target: Some(target), bindings: bindings(&["prompt.paste"]), ..KeymapLayer::default() },
         // Ctrl+C clears a prompt with text; on an empty one it reaches `app.exit`.
         KeymapLayer {
             target: Some(target),
@@ -1212,12 +1018,9 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 )
                 .title("Previous prompt history")
                 .group("Prompt"),
-                TuiCommand::new(
-                    "prompt.history.next",
-                    run(|prompt, tui| history::next(prompt, &tui.prompt.history)),
-                )
-                .title("Next prompt history")
-                .group("Prompt"),
+                TuiCommand::new("prompt.history.next", run(|prompt, tui| history::next(prompt, &tui.prompt.history)))
+                    .title("Next prompt history")
+                    .group("Prompt"),
             ],
             ..KeymapLayer::default()
         },
@@ -1234,10 +1037,5 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
 
 /// The prompt's scanner (`spinnerDef`, `component/prompt/index.tsx:1657-1676`).
 fn scanner(color: Color) -> ScannerOptions {
-    ScannerOptions {
-        style: ScannerStyle::Blocks,
-        inactive_factor: 0.6,
-        min_alpha: 0.3,
-        ..ScannerOptions::new(color)
-    }
+    ScannerOptions { style: ScannerStyle::Blocks, inactive_factor: 0.6, min_alpha: 0.3, ..ScannerOptions::new(color) }
 }

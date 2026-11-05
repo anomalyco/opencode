@@ -8,10 +8,9 @@ use std::time::Duration;
 
 use opencode_api::client::{Call, RequestOptions};
 use opencode_api::generated::{
-    ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID, SessionInboxCancelInput,
-    SessionInboxInfo, SessionInterruptInput, SessionMessageAssistantContentItem,
-    SessionMessageCompaction, SessionMessageInfo, SessionMessageUser, SessionRevertClearInput,
-    SessionRevertStageInput, SessionUpdateInput,
+    ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID, SessionInboxCancelInput, SessionInboxInfo,
+    SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction, SessionMessageInfo,
+    SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
 };
 use opencode_store::{MessageExt, State};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
@@ -76,83 +75,43 @@ impl Inner {
             .group("Session")
             .bind(Bind::Off)
         };
-        let slash = |name: &str, arguments: bool| Slash {
-            name: name.to_owned(),
-            aliases: Vec::new(),
-            arguments,
-        };
+        let slash = |name: &str, arguments: bool| Slash { name: name.to_owned(), aliases: Vec::new(), arguments };
         // Keymap conditions read the routed session as the last sync left it: they must not lock the store.
         let reverted = {
             let (weak, session) = (tui.weak(), self.session.clone());
             Condition::when(move || {
-                weak.upgrade().is_some_and(|tui| {
-                    tui.routed()
-                        .is_some_and(|info| info.id == session && info.revert.is_some())
-                })
+                weak.upgrade()
+                    .is_some_and(|tui| tui.routed().is_some_and(|info| info.id == session && info.revert.is_some()))
             })
         };
         let child = {
             let (weak, session) = (tui.weak(), self.session.clone());
             Condition::when(move || {
-                weak.upgrade().is_some_and(|tui| {
-                    tui.routed()
-                        .is_some_and(|info| info.id == session && info.parent_id.is_some())
-                })
+                weak.upgrade()
+                    .is_some_and(|tui| tui.routed().is_some_and(|info| info.id == session && info.parent_id.is_some()))
             })
         };
         let commands = vec![
-            command("session.rename", "Rename session", Inner::rename)
+            command("session.rename", "Rename session", Inner::rename).palette().slash(slash("rename", true)),
+            command("session.timeline", "Jump to message", Inner::timeline).palette().slash(slash("timeline", false)),
+            command("session.fork", "Fork session", Inner::fork).palette().slash(slash("fork", false)),
+            command("session.compact", "Compact session", Inner::compact).palette().slash(slash("compact", false)),
+            command("session.undo", "Undo previous message", Inner::undo).palette().slash(slash("undo", false)),
+            command("session.redo", "Redo", Inner::redo).palette().enabled(reverted).slash(slash("redo", false)),
+            command("messages.copy", "Copy last assistant message", Inner::copy_last)
                 .palette()
-                .slash(slash("rename", true)),
-            command("session.timeline", "Jump to message", Inner::timeline)
-                .palette()
-                .slash(slash("timeline", false)),
-            command("session.fork", "Fork session", Inner::fork)
-                .palette()
-                .slash(slash("fork", false)),
-            command("session.compact", "Compact session", Inner::compact)
-                .palette()
-                .slash(slash("compact", false)),
-            command("session.undo", "Undo previous message", Inner::undo)
-                .palette()
-                .slash(slash("undo", false)),
-            command("session.redo", "Redo", Inner::redo)
-                .palette()
-                .enabled(reverted)
-                .slash(slash("redo", false)),
-            command(
-                "messages.copy",
-                "Copy last assistant message",
-                Inner::copy_last,
-            )
-            .palette()
-            .slash(slash("copy", false)),
+                .slash(slash("copy", false)),
             command("session.copy.id", "Copy session ID", Inner::copy_id).palette(),
-            command(
-                "session.copy",
-                "Copy session transcript",
-                Inner::copy_transcript,
-            )
-            .palette(),
+            command("session.copy", "Copy session transcript", Inner::copy_transcript).palette(),
             command("session.export", "Export session transcript", Inner::export)
                 .palette()
                 .slash(slash("export", false)),
             command("session.parent", "Go to parent session", Inner::parent).enabled(child),
         ];
-        let bindings = commands
-            .iter()
-            .filter_map(|command| command.id.clone())
-            .collect();
+        let bindings = commands.iter().filter_map(|command| command.id.clone()).collect();
         for layer in [
-            KeymapLayer {
-                mode: Some(GLOBAL_MODE.to_owned()),
-                commands,
-                ..KeymapLayer::default()
-            },
-            KeymapLayer {
-                bindings,
-                ..KeymapLayer::default()
-            },
+            KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
+            KeymapLayer { bindings, ..KeymapLayer::default() },
         ] {
             match tui.keymap.layer(layer) {
                 Ok(disposer) => self.layers.borrow_mut().push(disposer),
@@ -165,11 +124,7 @@ impl Inner {
     /// `/rename` asks the server for a new title.
     fn rename(&self, tui: &Tui, input: Option<&str>) {
         let Some(input) = input else {
-            let title = tui.data.read(|state| {
-                state
-                    .session(&self.session)
-                    .and_then(|info| info.title.clone())
-            });
+            let title = tui.data.read(|state| state.session(&self.session).and_then(|info| info.title.clone()));
             rename::show(tui, self.session.clone(), title);
             return;
         };
@@ -192,9 +147,7 @@ impl Inner {
                 // The response can beat the renamed event; read the generated title back.
                 if generate {
                     data.session_invalidate(&session);
-                    data.session_sync(&session, false)
-                        .await
-                        .map_err(|error| error.to_string())?;
+                    data.session_sync(&session, false).await.map_err(|error| error.to_string())?;
                 }
                 Ok::<_, String>(())
             },
@@ -245,8 +198,7 @@ impl Inner {
         let weak = tui.weak();
         tui.app.spawn(task, move |_, result| {
             if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                tui.toasts
-                    .show(ToastOptions::new(Variant::Error, error.to_string()));
+                tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()));
             }
         });
         tui.dialogs.clear();
@@ -256,15 +208,10 @@ impl Inner {
     /// interrupted, waited for, and reverted to. Either way its text goes back into the composer.
     fn undo(&self, tui: &Tui, _: Option<&str>) {
         let found = tui.data.read(|state| {
-            let message = before_revert(state, &self.session)
-                .iter()
-                .rev()
-                .find_map(|message| match message {
-                    SessionMessageInfo::User(user) if !user.text.trim().is_empty() => {
-                        Some(user.clone())
-                    }
-                    _ => None,
-                })?;
+            let message = before_revert(state, &self.session).iter().rev().find_map(|message| match message {
+                SessionMessageInfo::User(user) if !user.text.trim().is_empty() => Some(user.clone()),
+                _ => None,
+            })?;
             let pending = state
                 .pending(&self.session)
                 .iter()
@@ -273,10 +220,7 @@ impl Inner {
         });
         tui.dialogs.clear();
         let Some((message, pending)) = found else {
-            tui.toasts.show(
-                ToastOptions::new(Variant::Error, "Nothing to undo")
-                    .duration(Duration::from_millis(3000)),
-            );
+            tui.toasts.show(ToastOptions::new(Variant::Error, "Nothing to undo").duration(Duration::from_millis(3000)));
             return;
         };
         let client = tui.data.client().clone();
@@ -287,13 +231,8 @@ impl Inner {
         if pending {
             tui.app.spawn(
                 async move {
-                    let input = SessionInboxCancelInput {
-                        session_id: session,
-                        inbox_id: id,
-                    };
-                    client
-                        .session_inbox_cancel(&input, &RequestOptions::default())
-                        .await
+                    let input = SessionInboxCancelInput { session_id: session, inbox_id: id };
+                    client.session_inbox_cancel(&input, &RequestOptions::default()).await
                 },
                 move |_, result| {
                     let Some(tui) = weak.upgrade() else { return };
@@ -312,29 +251,14 @@ impl Inner {
             async move {
                 let options = RequestOptions::default();
                 client
-                    .session_interrupt(
-                        &SessionInterruptInput {
-                            session_id: session.clone(),
-                            resume: None,
-                        },
-                        &options,
-                    )
+                    .session_interrupt(&SessionInterruptInput { session_id: session.clone(), resume: None }, &options)
                     .await?;
                 client
-                    .experimental_session_wait(
-                        &ExperimentalSessionWaitInput {
-                            session_id: session.clone(),
-                        },
-                        &options,
-                    )
+                    .experimental_session_wait(&ExperimentalSessionWaitInput { session_id: session.clone() }, &options)
                     .await?;
                 client
                     .session_revert_stage(
-                        &SessionRevertStageInput {
-                            session_id: session,
-                            message_id: id,
-                            files: None,
-                        },
+                        &SessionRevertStageInput { session_id: session, message_id: id, files: None },
                         &options,
                     )
                     .await
@@ -344,8 +268,7 @@ impl Inner {
                 match result {
                     Ok(_) => append_prompt(&tui, &target, &text),
                     Err(error) => tui.toasts.show(
-                        ToastOptions::new(Variant::Error, error.to_string())
-                            .duration(Duration::from_millis(5000)),
+                        ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
                     ),
                 }
             },
@@ -355,22 +278,15 @@ impl Inner {
     /// `session.redo`: clears the staged revert.
     fn redo(&self, tui: &Tui, _: Option<&str>) {
         let client = tui.data.client().clone();
-        let input = SessionRevertClearInput {
-            session_id: self.session.clone(),
-        };
+        let input = SessionRevertClearInput { session_id: self.session.clone() };
         let weak = tui.weak();
         tui.app.spawn(
-            async move {
-                client
-                    .session_revert_clear(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.session_revert_clear(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(tui) = weak.upgrade() else { return };
                 if let Err(error) = result {
                     tui.toasts.show(
-                        ToastOptions::new(Variant::Error, error.to_string())
-                            .duration(Duration::from_millis(5000)),
+                        ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
                     );
                 }
                 tui.dialogs.clear();
@@ -380,9 +296,7 @@ impl Inner {
 
     /// `messages.copy`: the last reply's text, or the last completed compaction's summary.
     fn copy_last(&self, tui: &Tui, _: Option<&str>) {
-        let text = tui
-            .data
-            .read(|state| last_reply(before_revert(state, &self.session)));
+        let text = tui.data.read(|state| last_reply(before_revert(state, &self.session)));
         tui.dialogs.clear();
         let message = match text {
             None => Err("No assistant messages found"),
@@ -413,10 +327,8 @@ impl Inner {
             transcript(tui, &self.session, None),
             move |_, result: Result<Value, opencode_api::error::Error>| {
                 let Some(tui) = weak.upgrade() else { return };
-                let copied = result.ok().is_some_and(|transcript| {
-                    tui.app
-                        .copy_to_clipboard(&markdown(&transcript, true, true))
-                });
+                let copied =
+                    result.ok().is_some_and(|transcript| tui.app.copy_to_clipboard(&markdown(&transcript, true, true)));
                 toast(
                     &tui,
                     if copied {
@@ -443,56 +355,39 @@ impl Inner {
             Rc::new(move |tui, choice| {
                 let json = choice.format == export::Format::Json;
                 let weak = tui.weak();
-                tui.app.spawn(
-                    transcript(tui, &session, json.then_some(choice.sanitize)),
-                    move |_, result| {
-                        let Some(tui) = weak.upgrade() else { return };
-                        let content = result.ok().and_then(|transcript| match choice.format {
-                            export::Format::Markdown => {
-                                Some(markdown(&transcript, choice.thinking, choice.tools))
-                            }
-                            export::Format::Json => serde_json::to_string_pretty(&transcript)
-                                .ok()
-                                .map(|text| text + "\n"),
-                        });
-                        let outcome = content.ok_or(()).and_then(|content| match choice.action {
-                            export::Action::Copy => tui
-                                .app
-                                .copy_to_clipboard(&content)
-                                .then_some(None)
-                                .ok_or(()),
-                            export::Action::Export => {
-                                let extension = if json { "json" } else { "md" };
-                                let path = std::env::temp_dir()
-                                    .join(format!("session-{}.{extension}", uuid::Uuid::new_v4()));
-                                std::fs::write(&path, content)
-                                    .map(|_| Some(path.display().to_string()))
-                                    .map_err(drop)
-                            }
-                        });
-                        match outcome {
-                            Ok(Some(path)) => export::result(&tui, path),
-                            Ok(None) => {
-                                tui.dialogs.clear();
-                                toast(&tui, Ok("Copied to clipboard"));
-                            }
-                            Err(()) => {
-                                toast(&tui, Err("Failed to export session"));
-                                tui.dialogs.clear();
-                            }
+                tui.app.spawn(transcript(tui, &session, json.then_some(choice.sanitize)), move |_, result| {
+                    let Some(tui) = weak.upgrade() else { return };
+                    let content = result.ok().and_then(|transcript| match choice.format {
+                        export::Format::Markdown => Some(markdown(&transcript, choice.thinking, choice.tools)),
+                        export::Format::Json => serde_json::to_string_pretty(&transcript).ok().map(|text| text + "\n"),
+                    });
+                    let outcome = content.ok_or(()).and_then(|content| match choice.action {
+                        export::Action::Copy => tui.app.copy_to_clipboard(&content).then_some(None).ok_or(()),
+                        export::Action::Export => {
+                            let extension = if json { "json" } else { "md" };
+                            let path =
+                                std::env::temp_dir().join(format!("session-{}.{extension}", uuid::Uuid::new_v4()));
+                            std::fs::write(&path, content).map(|_| Some(path.display().to_string())).map_err(drop)
                         }
-                    },
-                );
+                    });
+                    match outcome {
+                        Ok(Some(path)) => export::result(&tui, path),
+                        Ok(None) => {
+                            tui.dialogs.clear();
+                            toast(&tui, Ok("Copied to clipboard"));
+                        }
+                        Err(()) => {
+                            toast(&tui, Err("Failed to export session"));
+                            tui.dialogs.clear();
+                        }
+                    }
+                });
             }),
         );
     }
 
     fn parent(&self, tui: &Tui, _: Option<&str>) {
-        let parent = tui.data.read(|state| {
-            state
-                .session(&self.session)
-                .and_then(|info| info.parent_id.clone())
-        });
+        let parent = tui.data.read(|state| state.session(&self.session).and_then(|info| info.parent_id.clone()));
         tui.dialogs.clear();
         if let Some(parent) = parent {
             tui.navigate(Route::Session { id: parent });
@@ -501,8 +396,7 @@ impl Inner {
 
     /// TS returns before anything when the session is not loaded (`if (!sessionData) return`).
     fn known(&self, tui: &Tui) -> bool {
-        tui.data
-            .read(|state| state.session(&self.session).is_some())
+        tui.data.read(|state| state.session(&self.session).is_some())
     }
 }
 
@@ -512,10 +406,7 @@ fn before_revert<'a>(state: &'a State, session: &SessionID) -> &'a [SessionMessa
     let Some(revert) = state.session(session).and_then(|info| info.revert.as_ref()) else {
         return messages;
     };
-    match messages
-        .iter()
-        .position(|message| message.id() == revert.message_id.as_str())
-    {
+    match messages.iter().position(|message| message.id() == revert.message_id.as_str()) {
         Some(index) => &messages[..index],
         None => messages,
     }
@@ -550,37 +441,19 @@ fn last_reply(messages: &[SessionMessageInfo]) -> Option<String> {
 /// session's draft when its composer is not mounted. Only the text comes back (see `fork::restored`).
 pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, text: &str) {
     let join = |current: &str| {
-        if current.is_empty() {
-            text.to_owned()
-        } else {
-            format!("{current}\n\n{text}")
-        }
+        if current.is_empty() { text.to_owned() } else { format!("{current}\n\n{text}") }
     };
     let mounted = tui.textarea.borrow().clone();
-    if let Some(textarea) = mounted.filter(|_| {
-        tui.route()
-            == (Route::Session {
-                id: session.clone(),
-            })
-    }) {
+    if let Some(textarea) = mounted.filter(|_| tui.route() == (Route::Session { id: session.clone() })) {
         textarea.set_text(join(&textarea.text()));
         textarea.set_cursor_offset(u32::MAX);
         return;
     }
-    let mut prompt = tui
-        .prompt
-        .drafts
-        .take(Some(session))
-        .map_or_else(opencode_local::jsonl::empty_prompt, |draft| draft.prompt);
+    let mut prompt =
+        tui.prompt.drafts.take(Some(session)).map_or_else(opencode_local::jsonl::empty_prompt, |draft| draft.prompt);
     let current = prompt["text"].as_str().unwrap_or_default().to_owned();
     prompt["text"] = Value::String(join(&current));
-    tui.prompt.drafts.save(
-        Some(session),
-        Draft {
-            prompt,
-            cursor: u32::MAX,
-        },
-    );
+    tui.prompt.drafts.save(Some(session), Draft { prompt, cursor: u32::MAX });
 }
 
 /// `experimental.session.export`, read as the JSON the server sent, so a JSON export keeps its fields and order.
@@ -594,10 +467,7 @@ fn transcript(
     async move {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/export",
-                opencode_api::client::path_param(&session)?
-            ),
+            format!("/api/experimental/session/{}/export", opencode_api::client::path_param(&session)?),
             200,
             &[400, 401, 404, 500],
         );
@@ -618,9 +488,8 @@ fn markdown(transcript: &Value, thinking: bool, tools: bool) -> String {
         .filter_map(|message| message_markdown(message, thinking, tools))
         .collect();
     let info = &transcript["info"];
-    let title = serde_json::from_value(info.clone())
-        .map(|info| crate::dialogs::session_list::title(&info))
-        .unwrap_or_default();
+    let title =
+        serde_json::from_value(info.clone()).map(|info| crate::dialogs::session_list::title(&info)).unwrap_or_default();
     let time = |key: &str| locale_string(info["time"][key].as_f64().unwrap_or(f64::NAN));
     format!(
         "# {title}\n\n**Session ID:** {}\n**Created:** {}\n**Updated:** {}\n\n---\n\n{}\n",
@@ -647,9 +516,7 @@ fn message_markdown(message: &Value, thinking: bool, tools: bool) -> Option<Stri
                 .flatten()
                 .filter_map(|item| match item["type"].as_str() {
                     Some("text") => Some(text(&item["text"])),
-                    Some("reasoning") => {
-                        thinking.then(|| format!("_Thinking:_\n\n{}", text(&item["text"])))
-                    }
+                    Some("reasoning") => thinking.then(|| format!("_Thinking:_\n\n{}", text(&item["text"]))),
                     _ if !tools => None,
                     _ => Some(tool_markdown(item)),
                 })
@@ -669,10 +536,7 @@ fn tool_markdown(item: &Value) -> String {
         input => serde_json::to_string_pretty(input).unwrap_or_default(),
     };
     let output = match state["status"].as_str() {
-        Some("error") => state["error"]["message"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
+        Some("error") => state["error"]["message"].as_str().unwrap_or_default().to_owned(),
         Some("streaming" | "running") => String::new(),
         _ => state["content"]
             .as_array()
@@ -680,19 +544,12 @@ fn tool_markdown(item: &Value) -> String {
             .flatten()
             .map(|entry| match entry["type"].as_str() {
                 Some("text") => entry["text"].as_str().unwrap_or_default().to_owned(),
-                _ => entry["name"]
-                    .as_str()
-                    .or_else(|| entry["uri"].as_str())
-                    .unwrap_or_default()
-                    .to_owned(),
+                _ => entry["name"].as_str().or_else(|| entry["uri"].as_str()).unwrap_or_default().to_owned(),
             })
             .collect::<Vec<_>>()
             .join("\n"),
     };
-    format!(
-        "**Tool: {}**\n\n**Input:**\n```json\n{input}\n```\n\n{output}",
-        item["name"].as_str().unwrap_or_default()
-    )
+    format!("**Tool: {}**\n\n**Input:**\n```json\n{input}\n```\n\n{output}", item["name"].as_str().unwrap_or_default())
 }
 
 /// `new Date(ms).toLocaleString()` in en-US as Bun prints it: `3/3/2026, 12:00:00 PM`.
@@ -740,10 +597,7 @@ mod tests {
             { "type": "reasoning", "id": "b", "text": "hidden" },
             { "type": "text", "id": "c", "text": "Two  " },
         ]));
-        assert_eq!(
-            last_reply(&messages(json!([user, texts]))).as_deref(),
-            Some("One\nTwo")
-        );
+        assert_eq!(last_reply(&messages(json!([user, texts]))).as_deref(), Some("One\nTwo"));
         let empty = reply(json!([{ "type": "reasoning", "id": "b", "text": "only thoughts" }]));
         assert_eq!(last_reply(&messages(json!([empty]))).as_deref(), Some(""));
         // A completed compaction with a summary counts; a blank one is skipped.
@@ -753,11 +607,7 @@ mod tests {
                 "time": { "created": 3 },
             })
         };
-        let list = json!([
-            texts,
-            compaction("msg_3", " Summary "),
-            compaction("msg_4", "  ")
-        ]);
+        let list = json!([texts, compaction("msg_3", " Summary "), compaction("msg_4", "  ")]);
         assert_eq!(last_reply(&messages(list)).as_deref(), Some("Summary"));
     }
 
@@ -765,9 +615,7 @@ mod tests {
     fn tool_markdown_follows_the_state() {
         let tool = |state: Value| json!({ "type": "tool", "name": "bash", "state": state });
         assert_eq!(
-            tool_markdown(&tool(
-                json!({ "status": "error", "input": "ls", "error": { "message": "denied" } })
-            )),
+            tool_markdown(&tool(json!({ "status": "error", "input": "ls", "error": { "message": "denied" } }))),
             "**Tool: bash**\n\n**Input:**\n```json\nls\n```\n\ndenied"
         );
         assert_eq!(
@@ -805,13 +653,7 @@ mod tests {
         });
         let text = markdown(&transcript, false, false);
         let body = text.split_once("---\n\n").unwrap().1;
-        assert_eq!(
-            body,
-            "## User\n\nHi\n\n---\n\n## Shell\n\n```\n$ ls\na\nb\n```\n"
-        );
-        assert!(
-            text.starts_with("# Chat\n\n**Session ID:** ses_a\n**Created:** "),
-            "{text}"
-        );
+        assert_eq!(body, "## User\n\nHi\n\n---\n\n## Shell\n\n```\n$ ls\na\nb\n```\n");
+        assert!(text.starts_with("# Chat\n\n**Session ID:** ses_a\n**Created:** "), "{text}");
     }
 }

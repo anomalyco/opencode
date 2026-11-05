@@ -51,12 +51,8 @@ pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
             };
             cx.layer(KeymapLayer {
                 commands: vec![
-                    TuiCommand::inline("left", step(-1))
-                        .title("Previous image")
-                        .group("Dialog"),
-                    TuiCommand::inline("right", step(1))
-                        .title("Next image")
-                        .group("Dialog"),
+                    TuiCommand::inline("left", step(-1)).title("Previous image").group("Dialog"),
+                    TuiCommand::inline("right", step(1)).title("Next image").group("Dialog"),
                 ],
                 ..KeymapLayer::default()
             });
@@ -67,10 +63,7 @@ pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
             root
         },
         None,
-        DialogOptions {
-            size: DialogSize::XLarge,
-            key: Some("prompt-image-viewer".to_owned()),
-        },
+        DialogOptions { size: DialogSize::XLarge, key: Some("prompt-image-viewer".to_owned()) },
     );
 }
 
@@ -116,10 +109,7 @@ impl Viewer {
             Load::Pending => (None, false),
             Load::Failed => (None, true),
             Load::Ready(bytes) => {
-                let view = ImageView::new(app)
-                    .fit(ImageFit::Contain)
-                    .width(Length::Percent(100.0))
-                    .height(height);
+                let view = ImageView::new(app).fit(ImageFit::Contain).width(Length::Percent(100.0)).height(height);
                 match view.load(&bytes) {
                     Ok(view) => (Some(view), false),
                     Err(_) => (None, true),
@@ -133,16 +123,10 @@ impl Viewer {
         let name = if failed {
             "No preview".to_owned()
         } else {
-            label
-                .clone()
-                .unwrap_or_else(|| format!("Image {}", index + 1))
+            label.clone().unwrap_or_else(|| format!("Image {}", index + 1))
         };
         let footer_text = Text::new(app, name)
-            .fg(if failed {
-                theme.text.feedback.error.base
-            } else {
-                theme.text.muted
-            })
+            .fg(if failed { theme.text.feedback.error.base } else { theme.text.muted })
             .wrap(WrapMode::None)
             .truncate(true);
         let mut primary = Vec::new();
@@ -159,21 +143,14 @@ impl Viewer {
         }
         let head = header(
             &cx,
-            HeaderProps {
-                title: format!("Image {} of {}", index + 1, self.images.len()),
-                ..HeaderProps::default()
-            },
+            HeaderProps { title: format!("Image {} of {}", index + 1, self.images.len()), ..HeaderProps::default() },
         );
         self.root.clear();
         self.root.add(&layout(
             &cx,
             &head,
             &body,
-            Some(FooterProps {
-                primary,
-                children: vec![footer_text.as_any()],
-                ..FooterProps::default()
-            }),
+            Some(FooterProps { primary, children: vec![footer_text.as_any()], ..FooterProps::default() }),
         ));
         app.request_redraw();
     }
@@ -187,22 +164,13 @@ impl Viewer {
             return cached.clone().map_or(Load::Failed, Load::Ready);
         }
         let client = tui.data.client().clone();
-        let input = ExperimentalMediaGetInput {
-            hash: MediaHash(hash.to_owned()),
-        };
+        let input = ExperimentalMediaGetInput { hash: MediaHash(hash.to_owned()) };
         let (weak, uri) = (Rc::downgrade(self), uri.to_owned());
         tui.app.spawn(
-            async move {
-                client
-                    .experimental_media_get(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.experimental_media_get(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(viewer) = weak.upgrade() else { return };
-                viewer
-                    .media
-                    .borrow_mut()
-                    .insert(uri, result.ok().map(|bytes| bytes.to_vec()));
+                viewer.media.borrow_mut().insert(uri, result.ok().map(|bytes| bytes.to_vec()));
                 viewer.draw();
             },
         );

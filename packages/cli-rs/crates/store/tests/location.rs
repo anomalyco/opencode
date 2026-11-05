@@ -50,10 +50,7 @@ fn session(id: &str, project: &str, directory: &str) -> SessionInfo {
 type Requests = Log<(String, Option<String>)>;
 
 fn recorded(requests: &Requests, req: &Req) {
-    requests.push((
-        req.path.clone(),
-        req.param("location[directory]").map(str::to_owned),
-    ));
+    requests.push((req.path.clone(), req.param("location[directory]").map(str::to_owned)));
 }
 
 fn sorted(mut values: Vec<(String, Option<String>)>) -> Vec<(String, Option<String>)> {
@@ -82,18 +79,8 @@ async fn updates_authoritative_cached_project_metadata_from_live_events() {
         }
         value
     };
-    let original = project(
-        "project_renamed",
-        "/projects/original",
-        Some("Original custom name"),
-        1,
-    );
-    let unrelated = project(
-        "project_unrelated",
-        "/projects/unrelated",
-        Some("Unrelated project"),
-        1,
-    );
+    let original = project("project_renamed", "/projects/original", Some("Original custom name"), 1);
+    let unrelated = project("project_unrelated", "/projects/unrelated", Some("Unrelated project"), 1);
     let requests = Log::<String>::default();
     let (log, list) = (requests.clone(), json!([original, unrelated]));
     let data = data(
@@ -141,16 +128,11 @@ async fn adopts_cached_directory_project_sessions_when_their_repository_is_resol
     let data = data(
         handler(|req: Req| async move {
             assert_eq!(req.path, "/api/session/ses_uncached");
-            let mut refreshed =
-                serde_json::to_value(session("ses_uncached", "repository", "/unknown-alias"))
-                    .unwrap();
+            let mut refreshed = serde_json::to_value(session("ses_uncached", "repository", "/unknown-alias")).unwrap();
             refreshed["subpath"] = json!("app");
             ok(json!({ "data": refreshed }))
         }),
-        Options {
-            directory: "/repo".into(),
-            ..Default::default()
-        },
+        Options { directory: "/repo".into(), ..Default::default() },
     );
     for (id, project, directory) in [
         ("ses_root", "directory-root", "/repo"),
@@ -166,10 +148,7 @@ async fn adopts_cached_directory_project_sessions_when_their_repository_is_resol
     ] {
         data.remember(session(id, project, directory));
     }
-    for (id, canonical) in [
-        ("directory-root", "/repo"),
-        ("directory-nested", "/repo/app"),
-    ] {
+    for (id, canonical) in [("directory-root", "/repo"), ("directory-nested", "/repo/app")] {
         emit(
             &data,
             json!({
@@ -192,10 +171,7 @@ async fn adopts_cached_directory_project_sessions_when_their_repository_is_resol
     let get = |id: &str| {
         data.read(|state| {
             let info = state.session(&SessionID(id.into())).unwrap();
-            (
-                info.project_id.0.clone(),
-                info.subpath.as_ref().map(|path| path.0.clone()),
-            )
+            (info.project_id.0.clone(), info.subpath.as_ref().map(|path| path.0.clone()))
         })
     };
     let adopted = |subpath: Option<&str>| ("repository".to_owned(), subpath.map(str::to_owned));
@@ -219,43 +195,24 @@ async fn refreshes_global_credential_events_across_every_loaded_location() {
     let data = data(
         handler(move |req: Req| {
             recorded(&log, &req);
-            let directory = req
-                .param("location[directory]")
-                .unwrap_or("/project")
-                .to_owned();
+            let directory = req.param("location[directory]").unwrap_or("/project").to_owned();
             async move { ok(json!({ "location": public(&directory), "data": [] })) }
         }),
         Options::default(),
     );
     let locations = [at("/project"), at("/other")];
     for location in &locations {
-        for catalog in [
-            Catalog::Integration,
-            Catalog::Model,
-            Catalog::Provider,
-            Catalog::Reference,
-        ] {
+        for catalog in [Catalog::Integration, Catalog::Model, Catalog::Provider, Catalog::Reference] {
             data.catalog_sync(catalog, Some(location)).await.unwrap();
         }
     }
-    let references = |location: &Location| {
-        data.read(|state| state.location(Some(location)).unwrap().reference.clone())
-    };
+    let references = |location: &Location| data.read(|state| state.location(Some(location)).unwrap().reference.clone());
     let before: Vec<_> = locations.iter().map(references).collect();
     requests.0.lock().unwrap().clear();
 
-    emit(
-        &data,
-        json!({ "id": "evt_credential.updated", "created": 1, "type": "credential.updated", "data": {} }),
-    );
+    emit(&data, json!({ "id": "evt_credential.updated", "created": 1, "type": "credential.updated", "data": {} }));
     wait(|| requests.len() == 2).await;
-    assert_eq!(
-        sorted(requests.get()),
-        [
-            pair("/api/integration", "/other"),
-            pair("/api/integration", "/project")
-        ]
-    );
+    assert_eq!(sorted(requests.get()), [pair("/api/integration", "/other"), pair("/api/integration", "/project")]);
     requests.0.lock().unwrap().clear();
 
     for credential in [json!("credential"), Value::Null] {
@@ -289,10 +246,7 @@ async fn refreshes_only_the_named_location(resource: &str) {
     let data = data(
         handler(move |req: Req| {
             recorded(&log, &req);
-            let directory = req
-                .param("location[directory]")
-                .unwrap_or("/project")
-                .to_owned();
+            let directory = req.param("location[directory]").unwrap_or("/project").to_owned();
             let name = name_now.lock().unwrap().clone();
             async move {
                 let item = match req.path.as_str() {
@@ -307,12 +261,8 @@ async fn refreshes_only_the_named_location(resource: &str) {
     );
     let (project, other) = (at("/project"), at("/other"));
     for location in [&project, &other] {
-        data.catalog_sync(Catalog::Provider, Some(location))
-            .await
-            .unwrap();
-        data.catalog_sync(Catalog::Model, Some(location))
-            .await
-            .unwrap();
+        data.catalog_sync(Catalog::Provider, Some(location)).await.unwrap();
+        data.catalog_sync(Catalog::Model, Some(location)).await.unwrap();
     }
     let names = |location: &Location| {
         data.read(|state| {
@@ -331,10 +281,7 @@ async fn refreshes_only_the_named_location(resource: &str) {
         _ => (before.clone(), after),
     };
     wait(|| names(&project) == expected).await;
-    assert_eq!(
-        requests.get(),
-        [pair(&format!("/api/{resource}"), "/project")]
-    );
+    assert_eq!(requests.get(), [pair(&format!("/api/{resource}"), "/project")]);
     assert_eq!(names(&other), (before.clone(), before));
 }
 
@@ -356,10 +303,7 @@ async fn ignores_catalog_updates_for_unloaded_locations_while_refreshing_loaded_
     let data = data(
         handler(move |req: Req| {
             recorded(&log, &req);
-            let directory = req
-                .param("location[directory]")
-                .unwrap_or("/project")
-                .to_owned();
+            let directory = req.param("location[directory]").unwrap_or("/project").to_owned();
             let version = current.lock().unwrap().clone();
             async move {
                 let body = match req.path.as_str() {
@@ -381,26 +325,14 @@ async fn ignores_catalog_updates_for_unloaded_locations_while_refreshing_loaded_
         Options::default(),
     );
     let (loaded, vcs_only) = (at("/project"), at("/vcs-only"));
-    for catalog in [
-        Catalog::Provider,
-        Catalog::Model,
-        Catalog::Command,
-        Catalog::Agent,
-    ] {
+    for catalog in [Catalog::Provider, Catalog::Model, Catalog::Command, Catalog::Agent] {
         data.catalog_sync(catalog, Some(&loaded)).await.unwrap();
     }
-    data.catalog_sync(Catalog::Vcs, Some(&vcs_only))
-        .await
-        .unwrap();
+    data.catalog_sync(Catalog::Vcs, Some(&vcs_only)).await.unwrap();
     requests.0.lock().unwrap().clear();
     *version.lock().unwrap() = "v2".into();
 
-    let kinds = [
-        "provider.updated",
-        "model.updated",
-        "command.updated",
-        "agent.updated",
-    ];
+    let kinds = ["provider.updated", "model.updated", "command.updated", "agent.updated"];
     for directory in ["/vcs-only", "/unloaded"] {
         for kind in kinds {
             emit(&data, located(kind, directory));
@@ -450,11 +382,7 @@ async fn revalidates_model_discovery_when_an_update_overtakes_an_in_flight_model
                     signal.resolve(());
                     release.await;
                 }
-                let name = if initial {
-                    "Before discovery"
-                } else {
-                    "Discovered model"
-                };
+                let name = if initial { "Before discovery" } else { "Discovered model" };
                 ok(json!({ "location": { "directory": "/project" }, "data": [model(name)] }))
             }
         }),
@@ -466,11 +394,8 @@ async fn revalidates_model_discovery_when_an_update_overtakes_an_in_flight_model
     release.resolve(());
     initial.await.unwrap();
     wait(|| {
-        data.read(|state| {
-            state
-                .location(None)
-                .and_then(|data| name(data.model.as_ref()))
-        }) == Some("Discovered model".into())
+        data.read(|state| state.location(None).and_then(|data| name(data.model.as_ref())))
+            == Some("Discovered model".into())
     })
     .await;
     assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 2);
@@ -483,18 +408,13 @@ async fn refreshes_references_for_the_location_an_update_names() {
     let data = data(
         handler(move |req: Req| {
             recorded(&log, &req);
-            let directory = req
-                .param("location[directory]")
-                .unwrap_or("/project")
-                .to_owned();
+            let directory = req.param("location[directory]").unwrap_or("/project").to_owned();
             async move { ok(json!({ "location": public(&directory), "data": [] })) }
         }),
         Options::default(),
     );
     data.catalog_sync(Catalog::Reference, None).await.unwrap();
-    data.catalog_sync(Catalog::Reference, Some(&at("/other")))
-        .await
-        .unwrap();
+    data.catalog_sync(Catalog::Reference, Some(&at("/other"))).await.unwrap();
     requests.0.lock().unwrap().clear();
     emit(&data, located("reference.updated", "/other"));
     wait(|| requests.len() == 1).await;
@@ -513,17 +433,11 @@ async fn reloads_vcs_info_when_the_branch_changes() {
             let next = responses.lock().unwrap().remove(0);
             async move { ok(json!({ "location": { "directory": "/worktree" }, "data": next })) }
         }),
-        Options {
-            directory: "/worktree".into(),
-            ..Default::default()
-        },
+        Options { directory: "/worktree".into(), ..Default::default() },
     );
     let vcs = || {
         data.read(|state| {
-            state
-                .location(None)
-                .and_then(|data| data.vcs.clone())
-                .map(|vcs| serde_json::to_value(vcs).unwrap())
+            state.location(None).and_then(|data| data.vcs.clone()).map(|vcs| serde_json::to_value(vcs).unwrap())
         })
     };
     data.catalog_sync(Catalog::Vcs, None).await.unwrap();
@@ -536,10 +450,7 @@ async fn reloads_vcs_info_when_the_branch_changes() {
         }),
     );
     wait(|| vcs().is_some_and(|vcs| vcs["provider"] == "git")).await;
-    assert_eq!(
-        vcs(),
-        Some(json!({ "provider": "git", "branch": { "current": "feature", "default": "dev" } }))
-    );
+    assert_eq!(vcs(), Some(json!({ "provider": "git", "branch": { "current": "feature", "default": "dev" } })));
 }
 
 #[tokio::test]
@@ -581,71 +492,38 @@ async fn preserves_sibling_catalogs_through_location_preload_branch_shell_and_we
     };
     let shell_event = |kind: &str, data: Value| json!({ "id": format!("evt_{kind}"), "created": 1, "type": kind, "location": public("/project"), "data": data });
     let first = ShellID("sh_first".into());
-    let references =
-        || data.read(|state| state.location(None).and_then(|data| data.reference.clone()));
-    let shells = || {
-        data.read(|state| {
-            state
-                .shells(None)
-                .iter()
-                .map(|shell| shell.info.id.0.clone())
-                .collect::<Vec<_>>()
-        })
-    };
+    let references = || data.read(|state| state.location(None).and_then(|data| data.reference.clone()));
+    let shells =
+        || data.read(|state| state.shells(None).iter().map(|shell| shell.info.id.0.clone()).collect::<Vec<_>>());
 
     // A live event may arrive before any location read populated the location.
-    emit(
-        &data,
-        shell_event("shell.created", json!({ "info": shell("sh_first") })),
-    );
+    emit(&data, shell_event("shell.created", json!({ "info": shell("sh_first") })));
     let created = data.read(|state| state.shell(&first).cloned()).unwrap();
     assert_eq!(created.info.command, "echo hello");
     data.catalog_sync(Catalog::Reference, None).await.unwrap();
     data.catalog_sync(Catalog::Vcs, None).await.unwrap();
     let loaded = references();
     assert_eq!(
-        loaded
-            .iter()
-            .flatten()
-            .map(|reference| (reference.name.clone(), reference.path.0.clone()))
-            .collect::<Vec<_>>(),
+        loaded.iter().flatten().map(|reference| (reference.name.clone(), reference.path.0.clone())).collect::<Vec<_>>(),
         [("docs".to_owned(), "/docs".to_owned())]
     );
-    assert_eq!(
-        data.read(|state| state.shell(&first).cloned()),
-        Some(created.clone())
-    );
+    assert_eq!(data.read(|state| state.shell(&first).cloned()), Some(created.clone()));
 
     *branch.lock().unwrap() = "feature".into();
-    emit(
-        &data,
-        shell_event("vcs.branch.updated", json!({ "branch": "feature" })),
-    );
+    emit(&data, shell_event("vcs.branch.updated", json!({ "branch": "feature" })));
     let current = || {
         data.read(|state| {
-            state
-                .location(None)
-                .and_then(|data| data.vcs.as_ref())
-                .and_then(|vcs| vcs.branch.current.clone())
+            state.location(None).and_then(|data| data.vcs.as_ref()).and_then(|vcs| vcs.branch.current.clone())
         })
     };
     wait(|| current().as_deref() == Some("feature")).await;
     assert_eq!(references(), loaded);
-    emit(
-        &data,
-        shell_event("shell.created", json!({ "info": shell("sh_second") })),
-    );
+    emit(&data, shell_event("shell.created", json!({ "info": shell("sh_second") })));
     assert_eq!(shells(), ["sh_first", "sh_second"]);
     assert_eq!(references(), loaded);
-    emit(
-        &data,
-        shell_event("shell.deleted", json!({ "id": "sh_second" })),
-    );
+    emit(&data, shell_event("shell.deleted", json!({ "id": "sh_second" })));
     assert_eq!(shells(), ["sh_first"]);
-    assert_eq!(
-        data.read(|state| state.shell(&first).cloned()),
-        Some(created.clone())
-    );
+    assert_eq!(data.read(|state| state.shell(&first).cloned()), Some(created.clone()));
 
     data.websearch_refresh(None).await.unwrap();
     assert_eq!(
@@ -657,17 +535,11 @@ async fn preserves_sibling_catalogs_through_location_preload_branch_shell_and_we
         ["Search"]
     );
     assert_eq!(references(), loaded);
-    emit(
-        &data,
-        json!({ "id": "evt_connected", "created": 1, "type": "server.connected", "data": {} }),
-    );
+    emit(&data, json!({ "id": "evt_connected", "created": 1, "type": "server.connected", "data": {} }));
     wait(|| data.read(|state| state.location(None).unwrap().info.is_some())).await;
     wait(|| requests.get().iter().any(|path| path == "/api/project")).await;
     assert_eq!(references(), loaded);
-    assert_eq!(
-        data.read(|state| state.shell(&first).cloned()),
-        Some(created)
-    );
+    assert_eq!(data.read(|state| state.shell(&first).cloned()), Some(created));
     assert_eq!(current().as_deref(), Some("feature"));
     let mut paths = requests.get();
     paths.sort();
@@ -692,10 +564,7 @@ async fn keeps_global_forms_per_location_and_settles_them_with_the_location_head
     let log = requests.clone();
     let data = data(
         handler(move |req: Req| {
-            log.push((
-                req.path.clone(),
-                req.header("x-opencode-directory").map(str::to_owned),
-            ));
+            log.push((req.path.clone(), req.header("x-opencode-directory").map(str::to_owned)));
             async move {
                 if req.method != "GET" {
                     return Reply::Json(
@@ -720,24 +589,15 @@ async fn keeps_global_forms_per_location_and_settles_them_with_the_location_head
     emit(&data, form("frm_global", "/other dir"));
     emit(&data, form("frm_global", "/other dir"));
     emit(&data, form("frm_project", "/other dir"));
-    let count = |directory: &str| {
-        data.read(|state| {
-            state
-                .forms("global", Some(&at(directory)))
-                .map(|forms| forms.len())
-        })
-    };
+    let count =
+        |directory: &str| data.read(|state| state.forms("global", Some(&at(directory))).map(|forms| forms.len()));
     assert_eq!(count("/project"), Some(1));
     assert_eq!(count("/other dir"), Some(1));
     assert!(data.read(|state| state.forms("global", None).is_none()));
     assert!(data.read(|state| state.form_sessions().is_empty()));
 
     data.form_cancel(
-        SessionFormCancelInput {
-            session_id: "global".into(),
-            form_id: FormID("frm_global".into()),
-            message: None,
-        },
+        SessionFormCancelInput { session_id: "global".into(), form_id: FormID("frm_global".into()), message: None },
         Some(&at("/other dir")),
     )
     .await
@@ -748,10 +608,7 @@ async fn keeps_global_forms_per_location_and_settles_them_with_the_location_head
     assert_eq!(
         requests.get(),
         [
-            (
-                "/api/session/global/form/frm_global".to_owned(),
-                Some("%2Fother%20dir".to_owned())
-            ),
+            ("/api/session/global/form/frm_global".to_owned(), Some("%2Fother%20dir".to_owned())),
             ("/api/form".to_owned(), None),
         ]
     );
@@ -773,8 +630,5 @@ async fn an_optimistic_session_takes_the_project_of_its_location() {
     );
     data.location_sync_info(None).await.unwrap();
     let (id, _request) = data.session_create(CreateSession::default());
-    assert_eq!(
-        data.read(|state| state.session(&id).map(|info| info.project_id.0.clone())),
-        Some("prj_known".into())
-    );
+    assert_eq!(data.read(|state| state.session(&id).map(|info| info.project_id.0.clone())), Some("prj_known".into()));
 }

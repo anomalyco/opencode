@@ -6,9 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_ui::dialog::DialogOptions;
-use opencode_ui::select::{
-    self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps,
-};
+use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
 
 use crate::app::Tui;
 use crate::routes::session::queued::{self, Action};
@@ -46,11 +44,8 @@ pub(crate) fn show(tui: &Tui, view: &Rc<queued::Inner>) {
                 action("queued_prompt.delete", "delete", List::delete),
                 action("queued_prompt.undo", "undo", List::undo),
             ];
-            props.footer_hints = vec![FooterHint {
-                title: "steer".to_owned(),
-                label: "enter".to_owned(),
-                group: Some(Group::Primary),
-            }];
+            props.footer_hints =
+                vec![FooterHint { title: "steer".to_owned(), label: "enter".to_owned(), group: Some(Group::Primary) }];
             let (view, handle) = select::select(cx, props);
             *this.select.borrow_mut() = Some(handle);
             // The dialog owns the list; handlers hold weak references.
@@ -84,9 +79,7 @@ impl List {
         prompts
             .into_iter()
             .enumerate()
-            .map(|(index, (id, text))| {
-                SelectOption::new(text, id).footer(format!("{} of {count}", index + 1))
-            })
+            .map(|(index, (id, text))| SelectOption::new(text, id).footer(format!("{} of {count}", index + 1)))
             .collect()
     }
 
@@ -96,26 +89,23 @@ impl List {
             return;
         };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { revisions.changed().await.is_ok().then_some(revisions) },
-            move |_, revisions| {
-                let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else {
-                    return;
-                };
-                let (Some(tui), Some(view)) = (list.tui.upgrade(), list.view.upgrade()) else {
-                    return;
-                };
-                let (revision, changes) = tui.data.changes_since(list.seen.get());
-                list.seen.set(revision);
-                if changes.pending(&view.session) {
-                    let select = list.select.borrow().clone();
-                    if let Some(select) = select {
-                        select.set_options(list.options());
-                    }
+        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
+            let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else {
+                return;
+            };
+            let (Some(tui), Some(view)) = (list.tui.upgrade(), list.view.upgrade()) else {
+                return;
+            };
+            let (revision, changes) = tui.data.changes_since(list.seen.get());
+            list.seen.set(revision);
+            if changes.pending(&view.session) {
+                let select = list.select.borrow().clone();
+                if let Some(select) = select {
+                    select.set_options(list.options());
                 }
-                list.watch(revisions);
-            },
-        );
+            }
+            list.watch(revisions);
+        });
     }
 
     /// Enter: steers the prompt and closes the dialog once the server took it.
@@ -123,18 +113,11 @@ impl List {
         let (Some(tui), Some(view)) = (self.tui.upgrade(), self.view.upgrade()) else {
             return;
         };
-        queued::mutate(
-            &tui,
-            &view.session,
-            Action::Steer,
-            inbox,
-            None,
-            |tui, steered| {
-                if steered {
-                    tui.dialogs.clear();
-                }
-            },
-        );
+        queued::mutate(&tui, &view.session, Action::Steer, inbox, None, |tui, steered| {
+            if steered {
+                tui.dialogs.clear();
+            }
+        });
     }
 
     /// Cancels the prompt; the dialog closes when it was the last one.
@@ -142,21 +125,12 @@ impl List {
         let (Some(tui), Some(view)) = (self.tui.upgrade(), self.view.upgrade()) else {
             return;
         };
-        let last = tui
-            .data
-            .read(|state| queued::prompts(state, &view.session).len() == 1);
-        queued::mutate(
-            &tui,
-            &view.session,
-            Action::Cancel,
-            inbox,
-            None,
-            move |tui, cancelled| {
-                if cancelled && last {
-                    tui.dialogs.clear();
-                }
-            },
-        );
+        let last = tui.data.read(|state| queued::prompts(state, &view.session).len() == 1);
+        queued::mutate(&tui, &view.session, Action::Cancel, inbox, None, move |tui, cancelled| {
+            if cancelled && last {
+                tui.dialogs.clear();
+            }
+        });
     }
 
     fn undo(&self, inbox: &str) {

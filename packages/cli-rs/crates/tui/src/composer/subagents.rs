@@ -16,8 +16,7 @@ use super::{Inner, Label, RowState, Tab, clamp_offset, empty, row, window};
 use crate::app::Tui;
 use crate::routes::Route;
 
-static AGENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"@([A-Za-z0-9_]+) subagent").expect("valid regex"));
+static AGENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"@([A-Za-z0-9_]+) subagent").expect("valid regex"));
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Entry {
@@ -77,9 +76,7 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
             let sessions = state.sessions();
             family(&sessions, &inner.session)
                 .into_iter()
-                .map(|(session, prefix)| {
-                    entry(session, prefix, &inner.session, state.status(&session.id))
-                })
+                .map(|(session, prefix)| entry(session, prefix, &inner.session, state.status(&session.id)))
                 .collect::<Vec<_>>()
         })
         .into_iter()
@@ -96,11 +93,7 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         return;
     }
     if state.centered.as_ref() != Some(&inner.session) && !state.entries.is_empty() {
-        let next = state
-            .entries
-            .iter()
-            .position(|entry| entry.current)
-            .unwrap_or(0);
+        let next = state.entries.iter().position(|entry| entry.current).unwrap_or(0);
         state.centered = Some(inner.session.clone());
         state.selected = next;
         state.scroll_to_index(next, true);
@@ -146,64 +139,39 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command(
-            "composer.subagent.select",
-            "Navigate to subagent",
-            |inner, tui| {
-                let session = {
-                    let state = inner.subagents.borrow();
-                    state
-                        .entries
-                        .get(state.selected)
-                        .map(|entry| entry.session.clone())
-                };
-                if let Some(id) = session {
-                    tui.navigate(Route::Session { id });
-                }
-            },
-        ),
-        command(
-            "composer.subagent.toggle-activity",
-            "Toggle active subagents",
-            |inner, tui| {
-                tui.composer.active.set(!tui.composer.active.get());
-                {
-                    let mut state = inner.subagents.borrow_mut();
-                    state.selected = 0;
-                    state.offset = 0;
-                }
-                inner.refresh(tui);
-            },
-        )
+        command("composer.subagent.select", "Navigate to subagent", |inner, tui| {
+            let session = {
+                let state = inner.subagents.borrow();
+                state.entries.get(state.selected).map(|entry| entry.session.clone())
+            };
+            if let Some(id) = session {
+                tui.navigate(Route::Session { id });
+            }
+        }),
+        command("composer.subagent.toggle-activity", "Toggle active subagents", |inner, tui| {
+            tui.composer.active.set(!tui.composer.active.get());
+            {
+                let mut state = inner.subagents.borrow_mut();
+                state.selected = 0;
+                state.offset = 0;
+            }
+            inner.refresh(tui);
+        })
         .bind(Bind::Key("ctrl+a".to_owned())),
-        command(
-            "composer.subagent.interrupt",
-            "Interrupt subagent",
-            |inner, tui| {
-                let session = {
-                    let state = inner.subagents.borrow();
-                    state
-                        .entries
-                        .get(state.selected)
-                        .filter(|entry| entry.running)
-                        .map(|entry| entry.session.clone())
-                };
-                let Some(session) = session else { return };
-                let client = tui.data.client().clone();
-                tui.app.runtime().spawn(async move {
-                    let input = SessionInterruptInput {
-                        session_id: session,
-                        resume: None,
-                    };
-                    if let Err(error) = client
-                        .session_interrupt(&input, &RequestOptions::default())
-                        .await
-                    {
-                        log::warn!("failed to interrupt the subagent: {error}");
-                    }
-                });
-            },
-        ),
+        command("composer.subagent.interrupt", "Interrupt subagent", |inner, tui| {
+            let session = {
+                let state = inner.subagents.borrow();
+                state.entries.get(state.selected).filter(|entry| entry.running).map(|entry| entry.session.clone())
+            };
+            let Some(session) = session else { return };
+            let client = tui.data.client().clone();
+            tui.app.runtime().spawn(async move {
+                let input = SessionInterruptInput { session_id: session, resume: None };
+                if let Err(error) = client.session_interrupt(&input, &RequestOptions::default()).await {
+                    log::warn!("failed to interrupt the subagent: {error}");
+                }
+            });
+        }),
     ]
 }
 
@@ -216,9 +184,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
     };
     if entries.is_empty() {
         let label = if filter { "active" } else { "inactive" };
-        inner
-            .body
-            .add(&empty(tui, theme, format!(" No {label} subagents")));
+        inner.body.add(&empty(tui, theme, format!(" No {label} subagents")));
     }
     for index in window(&entries, offset) {
         let entry = &entries[index];
@@ -274,28 +240,16 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
     }
     let mut hints = Vec::new();
     if entries.get(selected).is_some_and(|entry| entry.running) {
-        hints.push((
-            "interrupt".to_owned(),
-            tui.keymap
-                .shortcut("composer.subagent.interrupt")
-                .unwrap_or_default(),
-        ));
+        hints.push(("interrupt".to_owned(), tui.keymap.shortcut("composer.subagent.interrupt").unwrap_or_default()));
     }
     hints.push((
         format!("show {}", if filter { "inactive" } else { "active" }),
-        tui.keymap
-            .shortcut("composer.subagent.toggle-activity")
-            .unwrap_or_default(),
+        tui.keymap.shortcut("composer.subagent.toggle-activity").unwrap_or_default(),
     ));
     hints
 }
 
-fn entry(
-    session: &SessionInfo,
-    prefix: String,
-    current: &SessionID,
-    status: SessionStatus,
-) -> Entry {
+fn entry(session: &SessionInfo, prefix: String, current: &SessionID, status: SessionStatus) -> Entry {
     let title = crate::dialogs::session_list::title(session);
     let found = AGENT.captures(&title);
     let agent = match (&session.agent, &found) {
@@ -327,10 +281,8 @@ fn family<'a>(sessions: &[&'a SessionInfo], id: &SessionID) -> Vec<(&'a SessionI
     };
     let mut root = *current;
     let mut seen = vec![root.id.clone()];
-    while let Some(parent) = root
-        .parent_id
-        .as_ref()
-        .and_then(|parent| sessions.iter().find(|session| session.id == *parent))
+    while let Some(parent) =
+        root.parent_id.as_ref().and_then(|parent| sessions.iter().find(|session| session.id == *parent))
     {
         if seen.contains(&parent.id) {
             break;
@@ -349,27 +301,18 @@ fn walk<'a>(
     ancestors: &[bool],
     out: &mut Vec<(&'a SessionInfo, String)>,
 ) {
-    let group: Vec<_> = sessions
-        .iter()
-        .filter(|session| session.parent_id.as_ref() == Some(parent))
-        .collect();
+    let group: Vec<_> = sessions.iter().filter(|session| session.parent_id.as_ref() == Some(parent)).collect();
     for (index, session) in group.iter().enumerate() {
         let last = index == group.len() - 1;
         let prefix = if ancestors.is_empty() {
             String::new()
         } else {
-            let lines: String = ancestors[1..]
-                .iter()
-                .map(|ancestor| if *ancestor { "   " } else { "│  " })
-                .collect();
+            let lines: String = ancestors[1..].iter().map(|ancestor| if *ancestor { "   " } else { "│  " }).collect();
             format!("{lines}{}", if last { "└─ " } else { "├─ " })
         };
         out.push((session, prefix));
         // A cycle in `parentID` would recurse forever; TS has the same walk, so stop at a session already listed.
-        if out[..out.len() - 1]
-            .iter()
-            .any(|(seen, _)| seen.id == session.id)
-        {
+        if out[..out.len() - 1].iter().any(|(seen, _)| seen.id == session.id) {
             continue;
         }
         let mut next = ancestors.to_vec();
@@ -413,29 +356,14 @@ mod tests {
             .into_iter()
             .map(|(session, prefix)| (session.id.0.clone(), prefix))
             .collect();
-        let expected = [
-            ("a", ""),
-            ("a1", "├─ "),
-            ("a1x", "│  └─ "),
-            ("a2", "└─ "),
-            ("b", ""),
-            ("b1", "└─ "),
-        ];
-        assert_eq!(
-            walked,
-            expected.map(|(id, prefix)| (id.to_owned(), prefix.to_owned()))
-        );
+        let expected = [("a", ""), ("a1", "├─ "), ("a1x", "│  └─ "), ("a2", "└─ "), ("b", ""), ("b1", "└─ ")];
+        assert_eq!(walked, expected.map(|(id, prefix)| (id.to_owned(), prefix.to_owned())));
     }
 
     #[test]
     fn entries_take_the_agent_from_the_session_or_the_title() {
         let current = SessionID("x".into());
-        let titled = session(
-            "a",
-            Some("root"),
-            "Find the parser (@explore subagent)",
-            1.0,
-        );
+        let titled = session("a", Some("root"), "Find the parser (@explore subagent)", 1.0);
         let found = entry(&titled, String::new(), &current, SessionStatus::Running);
         assert_eq!(
             (found.agent.as_str(), found.title.as_str(), found.running),
@@ -444,20 +372,11 @@ mod tests {
         let mut named = session("b", Some("root"), "Review", 1.0);
         named.agent = Some(opencode_api::generated::AgentID("code-review".into()));
         let found = entry(&named, String::new(), &current, SessionStatus::Idle);
-        assert_eq!(
-            (found.agent.as_str(), found.title.as_str()),
-            ("Code-Review", "Review")
-        );
+        assert_eq!((found.agent.as_str(), found.title.as_str()), ("Code-Review", "Review"));
         let bare = session("x", Some("root"), "@general subagent", 1.0);
         let found = entry(&bare, String::new(), &current, SessionStatus::Idle);
-        assert_eq!(
-            (found.agent.as_str(), found.title.as_str(), found.current),
-            ("General", "@general subagent", true)
-        );
+        assert_eq!((found.agent.as_str(), found.title.as_str(), found.current), ("General", "@general subagent", true));
         let plain = session("c", Some("root"), "Plain", 1.0);
-        assert_eq!(
-            entry(&plain, String::new(), &current, SessionStatus::Idle).agent,
-            "Subagent"
-        );
+        assert_eq!(entry(&plain, String::new(), &current, SessionStatus::Idle).agent, "Subagent");
     }
 }

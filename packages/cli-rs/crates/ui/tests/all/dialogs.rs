@@ -22,10 +22,7 @@ struct Kit {
 }
 
 fn theme() -> Theme {
-    Catalog::default()
-        .load("opencode", ThemeMode::Dark)
-        .unwrap()
-        .theme
+    Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
 }
 
 // Inside the TUI providers the TypeScript screen has the page background (`context/theme.tsx:317`), which the
@@ -35,10 +32,7 @@ fn kit(width: u16, height: u16) -> Kit {
         width,
         height,
         AppOptions {
-            theme: opentui::theme::Theme {
-                background: theme().background.base,
-                ..opentui::theme::Theme::default()
-            },
+            theme: opentui::theme::Theme { background: theme().background.base, ..opentui::theme::Theme::default() },
             light_theme: None,
             ..AppOptions::default()
         },
@@ -46,11 +40,7 @@ fn kit(width: u16, height: u16) -> Kit {
     let keymap = Rc::new(DialogKeymap::new(Keybinds::defaults(), Options::default()));
     route_keys(&app, keymap.clone());
     let dialogs = Dialogs::new(&app, keymap.clone(), theme());
-    Kit {
-        app,
-        dialogs,
-        keymap,
-    }
+    Kit { app, dialogs, keymap }
 }
 
 #[test]
@@ -58,11 +48,7 @@ fn alert_matches_typescript() {
     let kit = kit(60, 12);
     alert::show(
         &kit.dialogs,
-        alert::AlertProps {
-            title: "Heads up".into(),
-            message: "The session was compacted.".into(),
-            on_confirm: None,
-        },
+        alert::AlertProps { title: "Heads up".into(), message: "The session was compacted.".into(), on_confirm: None },
     );
     assert_eq!(kit.keymap.mode(), "modal");
     assert_fixture(&kit.app.render(), "U.3/alert");
@@ -139,16 +125,7 @@ fn escape_closes_the_dialog_and_calls_its_close_handler() {
     let log = Rc::new(RefCell::new(Vec::new()));
     let closed = log.clone();
     kit.dialogs.replace(
-        |cx| {
-            alert::alert(
-                cx,
-                alert::AlertProps {
-                    title: "A".into(),
-                    message: "B".into(),
-                    on_confirm: None,
-                },
-            )
-        },
+        |cx| alert::alert(cx, alert::AlertProps { title: "A".into(), message: "B".into(), on_confirm: None }),
         Some(Box::new(move || closed.borrow_mut().push("closed"))),
         Default::default(),
     );
@@ -168,16 +145,7 @@ fn replace_closes_the_previous_dialog_and_restores_focus_after_the_last() {
     for name in ["first", "second"] {
         let closed = log.clone();
         kit.dialogs.replace(
-            |cx| {
-                alert::alert(
-                    cx,
-                    alert::AlertProps {
-                        title: name.into(),
-                        message: String::new(),
-                        on_confirm: None,
-                    },
-                )
-            },
+            |cx| alert::alert(cx, alert::AlertProps { title: name.into(), message: String::new(), on_confirm: None }),
             Some(Box::new(move || closed.borrow_mut().push(name))),
             Default::default(),
         );
@@ -266,11 +234,7 @@ fn a_drag_over_a_toast_selects_its_text_without_running_the_action() {
             .action("Open", move || *count.borrow_mut() += 1),
     );
     let screen = kit.app.render().text();
-    let (y, line) = screen
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("copy this message"))
-        .unwrap();
+    let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains("copy this message")).unwrap();
     let x = line[..line.find("copy").unwrap()].chars().count() as u16;
     kit.app.drag((x, y as u16), (x + 8, y as u16));
     kit.app.render();
@@ -295,22 +259,14 @@ fn models() -> Vec<SelectOption<&'static str>> {
     let mut gpt5 = SelectOption::new("GPT-5", "gpt5").category("OpenAI");
     gpt5.details = vec!["/a/very/long/path/that/gets/cut/in/the/middle/model.json".into()];
     vec![
-        SelectOption::new("Claude Sonnet", "sonnet")
-            .category("Anthropic")
-            .footer("Free"),
-        SelectOption::new("Claude Opus", "opus")
-            .category("Anthropic")
-            .description("best"),
+        SelectOption::new("Claude Sonnet", "sonnet").category("Anthropic").footer("Free"),
+        SelectOption::new("Claude Opus", "opus").category("Anthropic").description("best"),
         SelectOption::new("Claude Haiku", "haiku").category("Anthropic"),
         disabled,
         gpt5,
-        SelectOption::new("GPT-5 mini", "gpt5-mini")
-            .category("OpenAI")
-            .footer("$0.25"),
+        SelectOption::new("GPT-5 mini", "gpt5-mini").category("OpenAI").footer("$0.25"),
         SelectOption::new("o4", "o4").category("OpenAI"),
-        SelectOption::new("Codex", "codex")
-            .category("OpenAI")
-            .search_text("code"),
+        SelectOption::new("Codex", "codex").category("OpenAI").search_text("code"),
     ]
 }
 
@@ -321,11 +277,7 @@ fn open_models(kit: &Kit) -> Rc<RefCell<Option<select::Select<&'static str>>>> {
         |cx| {
             let mut props = SelectProps::new("Select model", models());
             props.current = Some("haiku");
-            props.actions = vec![SelectAction::new(
-                "model.dialog.favorite",
-                "favorite",
-                |_| {},
-            )];
+            props.actions = vec![SelectAction::new("model.dialog.favorite", "favorite", |_| {})];
             let (view, select) = select::select(cx, props);
             *slot.borrow_mut() = Some(select);
             view
@@ -345,10 +297,7 @@ fn select_matches_typescript_when_opened_moved_and_filtered() {
     kit.app.press("down");
     kit.app.press("down");
     assert_fixture(&kit.app.render(), "U.3/select-down");
-    assert_eq!(
-        handle.borrow().as_ref().unwrap().selected().unwrap().value,
-        "gpt5-mini"
-    );
+    assert_eq!(handle.borrow().as_ref().unwrap().selected().unwrap().value, "gpt5-mini");
 
     let kit = self::kit(72, 30);
     open_models(&kit);
@@ -368,8 +317,7 @@ fn open_long(kit: &Kit) {
         .enumerate()
         .flat_map(|(c, category)| {
             (0..10).map(move |i| {
-                let mut option = SelectOption::new(format!("{category} {}", i + 1), c * 10 + i)
-                    .category(*category);
+                let mut option = SelectOption::new(format!("{category} {}", i + 1), c * 10 + i).category(*category);
                 if c == 1 && i == 3 {
                     option.details = vec!["/a/detail/row".into()];
                 }
@@ -403,10 +351,7 @@ fn select_scrolls_as_typescript() {
             open_long(&kit);
             press(&kit, "down", count, frames);
             let suffix = if frames { "-frames" } else { "" };
-            assert_fixture(
-                &kit.app.render(),
-                &format!("U.3/select-scroll-{count}{suffix}"),
-            );
+            assert_fixture(&kit.app.render(), &format!("U.3/select-scroll-{count}{suffix}"));
         }
     }
 
@@ -446,20 +391,14 @@ fn fuzzy_order_matches_fuzzysort() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|option| {
-            ["title", "category", "searchText"].map(|key| option[key].as_str().unwrap().to_owned())
-        })
+        .map(|option| ["title", "category", "searchText"].map(|key| option[key].as_str().unwrap().to_owned()))
         .collect();
     let mut failures = Vec::new();
     for case in fixture["cases"].as_array().unwrap() {
         let query = case["query"].as_str().unwrap();
         let threshold = case["threshold"].as_f64().unwrap();
-        let expected: Vec<usize> = case["results"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|index| index.as_u64().unwrap() as usize)
-            .collect();
+        let expected: Vec<usize> =
+            case["results"].as_array().unwrap().iter().map(|index| index.as_u64().unwrap() as usize).collect();
         let actual = select::fuzzy::go(
             &query.to_lowercase(),
             &options,
@@ -468,17 +407,10 @@ fn fuzzy_order_matches_fuzzysort() {
             threshold,
         );
         if actual != expected {
-            failures.push(format!(
-                "{query:?} @ {threshold}: expected {expected:?}\n  actual {actual:?}"
-            ));
+            failures.push(format!("{query:?} @ {threshold}: expected {expected:?}\n  actual {actual:?}"));
         }
     }
-    assert!(
-        failures.is_empty(),
-        "{} cases differ:\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
+    assert!(failures.is_empty(), "{} cases differ:\n{}", failures.len(), failures.join("\n"));
 }
 
 // The global layer of parity/component/U.3-palette.tsx; returns the commands that ran.
@@ -487,21 +419,15 @@ fn palette_commands(kit: &Kit) -> Rc<RefCell<Vec<String>>> {
     let command = |id: &str, title: &str, group: &str| {
         let ran = ran.clone();
         let name = id.to_owned();
-        TuiCommand::new(id, move |_, _| ran.borrow_mut().push(name.clone()))
-            .title(title)
-            .group(group)
+        TuiCommand::new(id, move |_, _| ran.borrow_mut().push(name.clone())).title(title).group(group)
     };
     let layer = kit.keymap.layer(KeymapLayer {
         mode: Some("global".into()),
         commands: vec![
             command("command.palette.show", "Show command palette", "System"),
-            command("session.new", "New session", "Session")
-                .palette()
-                .suggested(true),
+            command("session.new", "New session", "Session").palette().suggested(true),
             command("session.list", "Switch session", "Session").palette(),
-            command("session.rename", "Rename session", "Session")
-                .description("Give the session a name")
-                .palette(),
+            command("session.rename", "Rename session", "Session").description("Give the session a name").palette(),
             command("theme.switch", "Switch theme", "System").palette(),
             command("app.exit", "Exit the app", "System").palette(),
         ],
@@ -569,9 +495,7 @@ fn prompt_matches_typescript_and_submits_on_enter() {
                     prompt.set_value("generated");
                 }),
             }],
-            on_confirm: Some(Rc::new(move |value| {
-                log.borrow_mut().push(value.to_owned())
-            })),
+            on_confirm: Some(Rc::new(move |value| log.borrow_mut().push(value.to_owned()))),
             ..Default::default()
         },
     );
@@ -653,19 +577,12 @@ fn path_formatting_matches_typescript() {
         if !forward && (rooted || home.is_empty()) {
             let abbreviate = path::abbreviate_home(input, home);
             if abbreviate != text("abbreviate") {
-                failures.push(format!(
-                    "abbreviate {input:?} home {home:?}: {:?} != {abbreviate:?}",
-                    text("abbreviate")
-                ));
+                failures
+                    .push(format!("abbreviate {input:?} home {home:?}: {:?} != {abbreviate:?}", text("abbreviate")));
             }
         }
     }
-    assert!(
-        failures.is_empty(),
-        "{} cases differ:\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
+    assert!(failures.is_empty(), "{} cases differ:\n{}", failures.len(), failures.join("\n"));
 }
 
 #[test]
@@ -683,14 +600,10 @@ fn clicks_select_rows_and_the_backdrop_closes_the_dialog() {
         Default::default(),
     );
     let screen = kit.app.render();
-    let row = (0..30u16)
-        .find(|&y| screen.row(y as u32).contains("Claude Opus"))
-        .unwrap();
+    let row = (0..30u16).find(|&y| screen.row(y as u32).contains("Claude Opus")).unwrap();
     // A right button's release over a row does not choose it.
-    kit.app
-        .mouse(MouseEventKind::Down(MouseButton::Right), 20, row);
-    kit.app
-        .mouse(MouseEventKind::Up(MouseButton::Right), 20, row);
+    kit.app.mouse(MouseEventKind::Down(MouseButton::Right), 20, row);
+    kit.app.mouse(MouseEventKind::Up(MouseButton::Right), 20, row);
     kit.app.advance(Duration::from_millis(1));
     assert!(chosen.borrow().is_empty(), "{:?}", chosen.borrow());
     kit.app.click(20, row);

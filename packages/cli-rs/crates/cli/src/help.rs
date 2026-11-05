@@ -15,10 +15,7 @@ pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {
 
 /// The program name in help, version, and completions (plan 6.1).
 pub fn name() -> String {
-    std::env::var("OPENCODE_CLI_NAME")
-        .ok()
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "opencode-rs".into())
+    std::env::var("OPENCODE_CLI_NAME").ok().filter(|name| !name.is_empty()).unwrap_or_else(|| "opencode-rs".into())
 }
 
 /// The unbuilt tree: each command holds only the arguments it declares.
@@ -62,10 +59,8 @@ fn configure(command: clap::Command) -> clap::Command {
 /// Prints the help of the command at `path` (names below the root) to stdout.
 pub fn print(path: &[&str]) -> anyhow::Result<()> {
     let mut command = command();
-    let node = path.iter().fold(&mut command, |node, name| {
-        node.find_subcommand_mut(name)
-            .expect("help path names a command")
-    });
+    let node =
+        path.iter().fold(&mut command, |node, name| node.find_subcommand_mut(name).expect("help path names a command"));
     let help = node.render_help();
     match std::io::stdout().is_terminal() {
         true => output::print(&help.ansi().to_string()),

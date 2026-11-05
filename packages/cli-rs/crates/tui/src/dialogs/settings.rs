@@ -91,17 +91,7 @@ const fn choice(
     labels: &'static [&'static str],
     keywords: &'static [&'static str],
 ) -> Setting {
-    Setting {
-        title,
-        category,
-        path,
-        description,
-        default,
-        values,
-        labels,
-        range: None,
-        keywords,
-    }
+    Setting { title, category, path, description, default, values, labels, range: None, keywords }
 }
 
 const fn toggle(
@@ -112,16 +102,7 @@ const fn toggle(
     default: bool,
     keywords: &'static [&'static str],
 ) -> Setting {
-    choice(
-        title,
-        category,
-        path,
-        description,
-        Lit::Bool(default),
-        OFF_ON,
-        OFF_ON_LABELS,
-        keywords,
-    )
+    choice(title, category, path, description, Lit::Bool(default), OFF_ON, OFF_ON_LABELS, keywords)
 }
 
 const fn number(
@@ -364,12 +345,7 @@ pub const SETTINGS: &[Setting] = &[
         &["scroll", "speed"],
         "How far each scroll step moves",
         3.0,
-        Range {
-            step: 0.25,
-            min: 0.25,
-            max: 10.0,
-            format: |value| format!("{value:.2}"),
-        },
+        Range { step: 0.25, min: 0.25, max: 10.0, format: |value| format!("{value:.2}") },
         &["scrolling"],
     ),
     toggle(
@@ -380,14 +356,7 @@ pub const SETTINGS: &[Setting] = &[
         false,
         &["scroll acceleration"],
     ),
-    toggle(
-        "Mouse",
-        "Input",
-        &["mouse"],
-        "Whether the interface responds to the mouse",
-        true,
-        &["mouse capture"],
-    ),
+    toggle("Mouse", "Input", &["mouse"], "Whether the interface responds to the mouse", true, &["mouse capture"]),
     toggle(
         "Editor context",
         "Input",
@@ -420,12 +389,7 @@ pub const SETTINGS: &[Setting] = &[
         &["leader", "timeout"],
         "How long the leader key waits for the next key",
         2000.0,
-        Range {
-            step: 250.0,
-            min: 250.0,
-            max: 10000.0,
-            format: |value| format!("{} ms", js_number(value)),
-        },
+        Range { step: 250.0, min: 250.0, max: 10000.0, format: |value| format!("{} ms", js_number(value)) },
         &["leader key", "shortcut timeout"],
     ),
     toggle(
@@ -480,11 +444,7 @@ pub const SETTINGS: &[Setting] = &[
         "Terminal",
         &["terminal", "copy"],
         "Whether selecting text copies it",
-        if cfg!(windows) {
-            S("manual")
-        } else {
-            S("select")
-        },
+        if cfg!(windows) { S("manual") } else { S("select") },
         &[S("manual"), S("select")],
         &[],
         &["selection", "clipboard"],
@@ -578,11 +538,7 @@ pub fn update(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static) {
 }
 
 /// [`update`], then `done` once the write landed or failed.
-fn write(
-    tui: &Tui,
-    change: impl FnOnce(&mut Value) + Send + 'static,
-    done: impl FnOnce(&Tui) + 'static,
-) {
+fn write(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static, done: impl FnOnce(&Tui) + 'static) {
     let live = &tui.settings;
     let (Some(config), Some(serial)) = (live.config.clone(), live.serial.as_ref()) else {
         let mut value = live.info().to_value();
@@ -594,9 +550,7 @@ fn write(
     live.done.borrow_mut().push_back(Box::new(done));
     let proxy = tui.app.proxy();
     serial.run(move || {
-        let result = config
-            .update_value(change)
-            .map_err(|error| error.to_string());
+        let result = config.update_value(change).map_err(|error| error.to_string());
         let _ = proxy.send(Loaded::Written(result));
     });
 }
@@ -611,9 +565,7 @@ pub fn set_path(root: &mut Value, path: &[&str], value: Value) {
             *node = Value::Object(Map::new());
         }
         let map = node.as_object_mut().expect("an object");
-        let child = map
-            .entry((*key).to_owned())
-            .or_insert_with(|| Value::Object(Map::new()));
+        let child = map.entry((*key).to_owned()).or_insert_with(|| Value::Object(Map::new()));
         if !child.is_object() {
             *child = Value::Object(Map::new());
         }
@@ -645,8 +597,7 @@ fn apply(tui: &Tui, info: Info) {
             changed = true;
         }
         if new.mode != old.mode
-            && let Some(setting) =
-                ModeSetting::parse(new.mode.map_or("system", |mode| mode.as_str()))
+            && let Some(setting) = ModeSetting::parse(new.mode.map_or("system", |mode| mode.as_str()))
         {
             state.config_mode(setting);
             changed = true;
@@ -669,12 +620,8 @@ fn apply(tui: &Tui, info: Info) {
 /// The value of `setting` now: the config's, else the default (the active theme for `theme.name`).
 pub fn value(tui: &Tui, setting: &Setting) -> Value {
     let config = tui.settings.info().to_value();
-    let current = setting
-        .path
-        .iter()
-        .try_fold(&config, |node, key| node.get(*key))
-        .filter(|value| !value.is_null())
-        .cloned();
+    let current =
+        setting.path.iter().try_fold(&config, |node, key| node.get(*key)).filter(|value| !value.is_null()).cloned();
     match current {
         Some(value) => value,
         None if setting.is_theme() => Value::from(tui.theme.borrow().selected()),
@@ -719,10 +666,7 @@ fn change(tui: &Tui, saving: &Rc<Cell<bool>>, index: usize, direction: i32) {
     let next = match (values(tui, setting), setting.range) {
         (Some(choices), _) if !choices.is_empty() => {
             let len = choices.len() as i64;
-            let at = choices
-                .iter()
-                .position(|choice| *choice == current)
-                .map_or(-1, |at| at as i64);
+            let at = choices.iter().position(|choice| *choice == current).map_or(-1, |at| at as i64);
             choices[(at + i64::from(direction) + len).rem_euclid(len) as usize].clone()
         }
         (_, Some(range)) => {
@@ -731,18 +675,13 @@ fn change(tui: &Tui, saving: &Rc<Cell<bool>>, index: usize, direction: i32) {
         }
         _ => return,
     };
-    if next == current || matches!((next.as_f64(), current.as_f64()), (Some(a), Some(b)) if a == b)
-    {
+    if next == current || matches!((next.as_f64(), current.as_f64()), (Some(a), Some(b)) if a == b) {
         return;
     }
     let path = setting.path;
     saving.set(true);
     let saving = saving.clone();
-    write(
-        tui,
-        move |draft| set_path(draft, path, next),
-        move |_| saving.set(false),
-    );
+    write(tui, move |draft| set_path(draft, path, next), move |_| saving.set(false));
 }
 
 /// The dialog rows.
@@ -752,10 +691,7 @@ fn options(tui: &Tui) -> Vec<SelectOption<usize>> {
         .enumerate()
         .map(|(index, setting)| {
             let mut option = SelectOption::new(setting.title, index).category(setting.category);
-            option.choice = Some(Choice {
-                value: display(tui, setting),
-                open: setting.is_theme(),
-            });
+            option.choice = Some(Choice { value: display(tui, setting), open: setting.is_theme() });
             option.detail = Some(Detail::Text(setting.description.to_owned()));
             if !setting.keywords.is_empty() {
                 option.search_text = Some(setting.keywords.join(" "));
@@ -792,9 +728,7 @@ pub fn palette_options(tui: &Tui) -> Vec<SelectOption<String>> {
 /// `DialogConfig`, opened on the setting with id `current` (the first one otherwise), in place of any open
 /// dialog.
 pub fn show(tui: &Tui, current: Option<&str>) {
-    let current = current
-        .and_then(|id| SETTINGS.iter().position(|setting| setting.id() == id))
-        .unwrap_or(0);
+    let current = current.and_then(|id| SETTINGS.iter().position(|setting| setting.id() == id)).unwrap_or(0);
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {
@@ -842,17 +776,11 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                 }
             }));
             props.bindings = vec![
-                TuiCommand::inline("left", step(-1))
-                    .title("Previous value")
-                    .group("Settings"),
-                TuiCommand::inline("right", step(1))
-                    .title("Next value")
-                    .group("Settings"),
+                TuiCommand::inline("left", step(-1)).title("Previous value").group("Settings"),
+                TuiCommand::inline("right", step(1)).title("Next value").group("Settings"),
             ];
             let (view, handle) = select(cx, props);
-            refresh_on_change(&tui, Rc::downgrade(cx), move |tui| {
-                handle.set_options(options(tui))
-            });
+            refresh_on_change(&tui, Rc::downgrade(cx), move |tui| handle.set_options(options(tui)));
             view
         },
         None,
@@ -861,11 +789,7 @@ pub fn show(tui: &Tui, current: Option<&str>) {
 }
 
 /// Calls `refresh` after each config change while the dialog of `cx` is open.
-pub(crate) fn refresh_on_change(
-    tui: &Tui,
-    cx: Weak<opencode_ui::dialog::DialogCx>,
-    refresh: impl Fn(&Tui) + 'static,
-) {
+pub(crate) fn refresh_on_change(tui: &Tui, cx: Weak<opencode_ui::dialog::DialogCx>, refresh: impl Fn(&Tui) + 'static) {
     let open = Rc::new(Cell::new(true));
     if let Some(cx) = cx.upgrade() {
         let open = open.clone();
@@ -897,22 +821,14 @@ pub fn install(tui: &Rc<Tui>) {
         .title(title)
         .group("System")
         .palette()
-        .slash(Slash {
-            name: slash.to_owned(),
-            aliases: Vec::new(),
-            arguments: false,
-        })
+        .slash(Slash { name: slash.to_owned(), aliases: Vec::new(), arguments: false })
     };
     let layer = KeymapLayer {
         mode: Some(GLOBAL_MODE.to_owned()),
         commands: vec![
-            command("opencode.settings", "Open settings", "settings", |tui| {
-                show(tui, None)
-            })
-            .suggested(opentui::keymap::Condition::Always),
-            command("opencode.debug", "View debug info", "debug", |tui| {
-                super::debug::show(tui)
-            }),
+            command("opencode.settings", "Open settings", "settings", |tui| show(tui, None))
+                .suggested(opentui::keymap::Condition::Always),
+            command("opencode.debug", "View debug info", "debug", |tui| super::debug::show(tui)),
         ],
         ..KeymapLayer::default()
     };
@@ -973,9 +889,7 @@ fn js_string(value: &Value) -> String {
     match value {
         Value::String(text) => text.clone(),
         Value::Null => "undefined".to_owned(),
-        Value::Number(number) => number
-            .as_f64()
-            .map_or_else(|| number.to_string(), js_number),
+        Value::Number(number) => number.as_f64().map_or_else(|| number.to_string(), js_number),
         other => other.to_string(),
     }
 }
@@ -998,11 +912,7 @@ mod tests {
         assert_eq!(SETTINGS[0].id(), "theme.name");
         assert_eq!(SETTINGS[35].id(), "debug.devtools");
         for setting in SETTINGS {
-            assert!(
-                setting.labels.is_empty() || setting.labels.len() == setting.values.len(),
-                "{}",
-                setting.id()
-            );
+            assert!(setting.labels.is_empty() || setting.labels.len() == setting.values.len(), "{}", setting.id());
             assert!(setting.range.is_some() != !setting.values.is_empty() || setting.is_theme());
         }
     }
@@ -1012,31 +922,19 @@ mod tests {
         let mut value = serde_json::json!({ "session": 1 });
         set_path(&mut value, &["session", "thinking"], "show".into());
         set_path(&mut value, &["mouse"], false.into());
-        assert_eq!(
-            value,
-            serde_json::json!({ "session": { "thinking": "show" }, "mouse": false })
-        );
+        assert_eq!(value, serde_json::json!({ "session": { "thinking": "show" }, "mouse": false }));
     }
 
     #[test]
     fn numbers_format_as_in_javascript() {
         assert_eq!(number_value(2250.0), serde_json::json!(2250));
-        assert_eq!(
-            number_value(0.7999999999999999).to_string(),
-            "0.7999999999999999"
-        );
-        let volume = SETTINGS
-            .iter()
-            .find(|s| s.id() == "attention.volume")
-            .unwrap();
+        assert_eq!(number_value(0.7999999999999999).to_string(), "0.7999999999999999");
+        let volume = SETTINGS.iter().find(|s| s.id() == "attention.volume").unwrap();
         assert_eq!((volume.range.unwrap().format)(0.4), "40%");
         assert_eq!((volume.range.unwrap().format)(0.7999999999999999), "80%");
         let speed = SETTINGS.iter().find(|s| s.id() == "scroll.speed").unwrap();
         assert_eq!((speed.range.unwrap().format)(3.0), "3.00");
-        let leader = SETTINGS
-            .iter()
-            .find(|s| s.id() == "leader.timeout")
-            .unwrap();
+        let leader = SETTINGS.iter().find(|s| s.id() == "leader.timeout").unwrap();
         assert_eq!((leader.range.unwrap().format)(2250.0), "2250 ms");
     }
 }

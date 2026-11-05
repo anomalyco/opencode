@@ -27,12 +27,7 @@ pub fn run(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
 }
 
 fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
-    if [args.days.is_some(), args.year.is_some(), args.all]
-        .iter()
-        .filter(|set| **set)
-        .count()
-        > 1
-    {
+    if [args.days.is_some(), args.year.is_some(), args.all].iter().filter(|set| **set).count() > 1 {
         anyhow::bail!("--days, --year, and --all cannot be combined");
     }
     let range = Range::new(args, Local::now());
@@ -42,22 +37,13 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
         let url = &server.endpoint().url;
         let project = match args.project.as_deref() {
             Some(".") => Some(
-                request(
-                    url,
-                    get_located(&server.client, "/api/location", &[400, 401, 404]),
-                )
-                .await?["project"]["id"]
+                request(url, get_located(&server.client, "/api/location", &[400, 401, 404])).await?["project"]["id"]
                     .clone(),
             ),
             Some(project) => Some(Value::from(project)),
             None => None,
         };
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/session/stats".to_owned(),
-            200,
-            &[400, 401],
-        );
+        let mut call = Call::new("GET", "/api/experimental/session/stats".to_owned(), 200, &[400, 401]);
         if let Some(from) = range.from {
             call.query("from", &from)?;
         }
@@ -74,20 +60,14 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
             "summary"
         };
         call.query("tools", tools)?;
-        request(url, async {
-            Ok(server
-                .client
-                .json::<Value>(call, &RequestOptions::default())
-                .await?)
-        })
-        .await
+        request(url, async { Ok(server.client.json::<Value>(call, &RequestOptions::default()).await?) }).await
     })??;
     let data = &stats["data"];
     if args.json {
         return print(&pretty(data)?);
     }
-    let info: SessionStatsInfo = serde_json::from_value(data.clone())
-        .map_err(|error| anyhow::anyhow!("MalformedResponse: {error}"))?;
+    let info: SessionStatsInfo =
+        serde_json::from_value(data.clone()).map_err(|error| anyhow::anyhow!("MalformedResponse: {error}"))?;
     let scope = match args.project.as_deref() {
         None => "all projects",
         Some(".") => "current project",
@@ -113,12 +93,7 @@ async fn request<T>(url: &str, call: impl Future<Output = anyhow::Result<T>>) ->
     let unreachable = || anyhow::anyhow!("Could not reach server at {url}");
     match tokio::time::timeout(Duration::from_secs(30), call).await {
         Err(_) => Err(unreachable()),
-        Ok(Err(error))
-            if matches!(
-                error.downcast_ref::<ApiError>(),
-                Some(ApiError::Transport(_))
-            ) =>
-        {
+        Ok(Err(error)) if matches!(error.downcast_ref::<ApiError>(), Some(ApiError::Transport(_))) => {
             Err(unreachable())
         }
         Ok(result) => result,
@@ -127,10 +102,7 @@ async fn request<T>(url: &str, call: impl Future<Output = anyhow::Result<T>>) ->
 
 // `errorMessage`: a declared error's message, else the error's own text.
 fn message(error: &anyhow::Error) -> String {
-    match error
-        .downcast_ref::<ApiError>()
-        .and_then(ApiError::declared)
-    {
+    match error.downcast_ref::<ApiError>().and_then(ApiError::declared) {
         Some(declared) => declared.message.clone().unwrap_or_default(),
         None => format!("{error:#}"),
     }
@@ -142,10 +114,7 @@ fn columns() -> Option<usize> {
     if !stdout.is_terminal() {
         return None;
     }
-    rustix::termios::tcgetwinsize(&stdout)
-        .ok()
-        .map(|size| usize::from(size.ws_col))
-        .filter(|columns| *columns > 0)
+    rustix::termios::tcgetwinsize(&stdout).ok().map(|size| usize::from(size.ws_col)).filter(|columns| *columns > 0)
 }
 
 /// `statsRange`: the requested window in epoch milliseconds, end exclusive, and its label.
@@ -161,11 +130,7 @@ impl Range {
         let zone = now.timezone();
         let to = now.timestamp_millis() + 1;
         if args.all {
-            return Self {
-                from: None,
-                to,
-                label: "all time".to_owned(),
-            };
+            return Self { from: None, to, label: "all time".to_owned() };
         }
         if let Some(days) = args.days {
             let from = now.date_naive() - chrono::Days::new(u64::from(days.max(1) - 1));
@@ -184,11 +149,7 @@ impl Range {
         Self {
             from: Some(start(year)),
             to: if year == current { to } else { start(year + 1) },
-            label: if year == current {
-                format!("{year} so far")
-            } else {
-                year.to_string()
-            },
+            label: if year == current { format!("{year} so far") } else { year.to_string() },
         }
     }
 }
@@ -197,10 +158,7 @@ impl Range {
 fn local_midnight<Tz: TimeZone>(zone: &Tz, date: NaiveDate) -> i64 {
     let midnight = date.and_hms_opt(0, 0, 0).unwrap();
     (0..=24)
-        .find_map(|hours| {
-            zone.from_local_datetime(&(midnight + chrono::Duration::hours(hours)))
-                .earliest()
-        })
+        .find_map(|hours| zone.from_local_datetime(&(midnight + chrono::Duration::hours(hours))).earliest())
         .map_or(0, |time| time.timestamp_millis())
 }
 
@@ -216,26 +174,13 @@ impl Palette {
         match value.and_then(|value| js_number(value.rsplit(';').next().unwrap_or(value))) {
             Some(background) if background >= 7.0 => Self {
                 primary: "38;2;59;125;216",
-                activity: [
-                    "38;2;153;169;192",
-                    "38;2;122;155;200",
-                    "38;2;90;140;208",
-                    "38;2;59;125;216",
-                ],
+                activity: ["38;2;153;169;192", "38;2;122;155;200", "38;2;90;140;208", "38;2;59;125;216"],
             },
             Some(_) => Self {
                 primary: "38;2;250;178;131",
-                activity: [
-                    "38;2;117;99;87",
-                    "38;2;161;125;102",
-                    "38;2;206;152;116",
-                    "38;2;250;178;131",
-                ],
+                activity: ["38;2;117;99;87", "38;2;161;125;102", "38;2;206;152;116", "38;2;250;178;131"],
             },
-            None => Self {
-                primary: "36",
-                activity: ["2;36", "36", "1;36", "1;96"],
-            },
+            None => Self { primary: "36", activity: ["2;36", "36", "1;36", "1;96"] },
         }
     }
 }
@@ -247,26 +192,14 @@ fn js_number(text: &str) -> Option<f64> {
     if text.is_empty() {
         return Some(0.0);
     }
-    let radix = [
-        ("0x", 16),
-        ("0X", 16),
-        ("0o", 8),
-        ("0O", 8),
-        ("0b", 2),
-        ("0B", 2),
-    ]
-    .iter()
-    .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|rest| (rest, *radix)));
+    let radix = [("0x", 16), ("0X", 16), ("0o", 8), ("0O", 8), ("0b", 2), ("0B", 2)]
+        .iter()
+        .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|rest| (rest, *radix)));
     if let Some((digits, radix)) = radix {
-        return u64::from_str_radix(digits, radix)
-            .ok()
-            .map(|value| value as f64);
+        return u64::from_str_radix(digits, radix).ok().map(|value| value as f64);
     }
     // Rust also reads `inf` and `nan`, which are never finite; JavaScript reads neither.
-    if text
-        .chars()
-        .any(|c| c.is_ascii_alphabetic() && !matches!(c, 'e' | 'E'))
-    {
+    if text.chars().any(|c| c.is_ascii_alphabetic() && !matches!(c, 'e' | 'E')) {
         return None;
     }
     text.parse::<f64>().ok().filter(|value| value.is_finite())
@@ -326,18 +259,9 @@ pub fn render_stats<Tz: TimeZone>(
         style(&format!("· {} · {}", options.label, options.scope), "2")
     );
     let mut lines: Vec<String> = if details {
-        vec![style(
-            &format!("{} · {}", options.label, options.scope),
-            "2",
-        )]
+        vec![style(&format!("{} · {}", options.label, options.scope), "2")]
     } else if empty {
-        vec![
-            heading,
-            String::new(),
-            style("no activity in this range", "2"),
-            String::new(),
-            style("opencode.ai", "2"),
-        ]
+        vec![heading, String::new(), style("no activity in this range", "2"), String::new(), style("opencode.ai", "2")]
     } else {
         let mut lines = vec![heading, String::new()];
         lines.extend(render_activity(stats, options, palette, zone));
@@ -363,14 +287,8 @@ pub fn render_stats<Tz: TimeZone>(
     };
     let sections = [
         (options.cost, render_cost(stats)),
-        (
-            options.models,
-            render_models(stats, options.limit, options.width),
-        ),
-        (
-            options.tools,
-            render_tools(stats, options.limit, options.width),
-        ),
+        (options.models, render_models(stats, options.limit, options.width)),
+        (options.tools, render_tools(stats, options.limit, options.width)),
     ];
     for (_, section) in sections.into_iter().filter(|(show, _)| *show) {
         if !lines.is_empty() {
@@ -401,11 +319,7 @@ fn render_activity<Tz: TimeZone>(
         .iter()
         .enumerate()
         .map(|(index, month)| {
-            let label = if index == last || month.label.len() <= month.span {
-                month.label
-            } else {
-                ""
-            };
+            let label = if index == last || month.label.len() <= month.span { month.label } else { "" };
             format!("{label:<width$}", width = month.span)
         })
         .collect::<String>()
@@ -416,10 +330,8 @@ fn render_activity<Tz: TimeZone>(
     } else {
         "activity".to_owned()
     };
-    let mut lines = vec![
-        style(&title, &format!("1;{}", palette.primary), color),
-        format!("   {}", style(&months, "2", color)),
-    ];
+    let mut lines =
+        vec![style(&title, &format!("1;{}", palette.primary), color), format!("   {}", style(&months, "2", color))];
     let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
     for (day, label) in weekdays.iter().enumerate() {
         let cells = calendar
@@ -435,26 +347,16 @@ fn render_activity<Tz: TimeZone>(
             lines.push(String::new());
         }
     }
-    let legend = (0..5)
-        .map(|level| paint_activity(level, palette, color))
-        .collect::<String>();
+    let legend = (0..5).map(|level| paint_activity(level, palette, color)).collect::<String>();
     lines.push(String::new());
-    lines.push(format!(
-        "   {} {legend} {}",
-        style("less", "2", color),
-        style("more", "2", color)
-    ));
+    lines.push(format!("   {} {legend} {}", style("less", "2", color), style("more", "2", color)));
     lines
 }
 
 fn render_cost(stats: &SessionStatsInfo) -> Vec<String> {
     let tokens = &stats.tokens;
     let input = tokens.input + tokens.cache.read + tokens.cache.write;
-    let cached = if input == 0.0 {
-        0.0
-    } else {
-        tokens.cache.read / input * 100.0
-    };
+    let cached = if input == 0.0 { 0.0 } else { tokens.cache.read / input * 100.0 };
     vec![
         "COST & TOKENS".to_owned(),
         row("cost", &format!("${}", to_fixed(stats.cost, 2))),
@@ -510,11 +412,7 @@ fn render_models(stats: &SessionStatsInfo, limit: usize, width: usize) -> Vec<St
     }
     if more > 0 {
         lines.push(String::new());
-        lines.push(format!(
-            "+{} more model{}",
-            group(more as i64),
-            if more == 1 { "" } else { "s" }
-        ));
+        lines.push(format!("+{} more model{}", group(more as i64), if more == 1 { "" } else { "s" }));
     }
     lines
 }
@@ -537,32 +435,21 @@ fn render_tools(stats: &SessionStatsInfo, limit: usize, width: usize) -> Vec<Str
         format_percent(tool.failed as f64 / terminal as f64 * 100.0)
     };
     let p50 = |tool: &opencode_api::generated::types::SessionStatsToolUsage| {
-        tool.duration_p50
-            .map_or_else(|| "-".to_owned(), format_duration)
+        tool.duration_p50.map_or_else(|| "-".to_owned(), format_duration)
     };
     let mut lines = vec![title];
     if width < 68 {
         lines.extend(tools.iter().flat_map(|tool| {
             [
                 truncate(&tool.name, width),
-                format!(
-                    "  {} calls · {} error · {} p50",
-                    format_number(tool.calls as f64),
-                    error(tool),
-                    p50(tool)
-                ),
+                format!("  {} calls · {} error · {} p50", format_number(tool.calls as f64), error(tool), p50(tool)),
             ]
         }));
     } else {
         lines.push(table_row("tool", "calls", "error", "p50"));
-        lines.extend(tools.iter().map(|tool| {
-            table_row(
-                &tool.name,
-                &format_number(tool.calls as f64),
-                &error(tool),
-                &p50(tool),
-            )
-        }));
+        lines.extend(
+            tools.iter().map(|tool| table_row(&tool.name, &format_number(tool.calls as f64), &error(tool), &p50(tool))),
+        );
     }
     lines.push(String::new());
     lines.push(format!(
@@ -571,11 +458,7 @@ fn render_tools(stats: &SessionStatsInfo, limit: usize, width: usize) -> Vec<Str
         format_number(detail.totals.unfinished as f64)
     ));
     if more > 0 {
-        lines.push(format!(
-            "+{} more tool{}",
-            group(more as i64),
-            if more == 1 { "" } else { "s" }
-        ));
+        lines.push(format!("+{} more tool{}", group(more as i64), if more == 1 { "" } else { "s" }));
     }
     lines
 }
@@ -706,11 +589,7 @@ fn to_fixed(value: f64, digits: usize) -> String {
 }
 
 fn metric_count(value: f64, noun: &str, primary: &str, color: bool) -> String {
-    format!(
-        "{} {noun}{}",
-        style(&format_number(value), primary, color),
-        if value == 1.0 { "" } else { "s" }
-    )
+    format!("{} {noun}{}", style(&format_number(value), primary, color), if value == 1.0 { "" } else { "s" })
 }
 
 fn style(value: &str, code: &str, color: bool) -> String {
@@ -747,10 +626,8 @@ mod tests {
         for group in fixture["render"].as_array().unwrap() {
             let palette = Palette::from_colorfgbg(group["colorfgbg"].as_str());
             for case in group["cases"].as_array().unwrap() {
-                let stats: SessionStatsInfo = serde_json::from_value(
-                    fixture["stats"][case["stats"].as_str().unwrap()].clone(),
-                )
-                .unwrap();
+                let stats: SessionStatsInfo =
+                    serde_json::from_value(fixture["stats"][case["stats"].as_str().unwrap()].clone()).unwrap();
                 let options = &case["options"];
                 let options = RenderOptions {
                     label: options["label"].as_str().unwrap().to_owned(),
@@ -783,10 +660,7 @@ mod tests {
         let url = "http://localhost:4096";
         let failed = |error: ApiError| request::<()>(url, async { Err(error.into()) });
         let transport = failed(ApiError::Transport("refused".to_owned())).await;
-        assert_eq!(
-            transport.unwrap_err().to_string(),
-            "Could not reach server at http://localhost:4096"
-        );
+        assert_eq!(transport.unwrap_err().to_string(), "Could not reach server at http://localhost:4096");
         let status = failed(ApiError::UnexpectedStatus { status: 500 }).await;
         assert_eq!(message(&status.unwrap_err()), "UnexpectedStatus: 500");
     }
@@ -828,11 +702,7 @@ mod tests {
     fn ranges_follow_stats_range() {
         let zone = FixedOffset::east_opt(3600).unwrap();
         let now = zone.with_ymd_and_hms(2026, 11, 4, 15, 30, 0).unwrap();
-        let ms = |y, m, d| {
-            zone.with_ymd_and_hms(y, m, d, 0, 0, 0)
-                .unwrap()
-                .timestamp_millis()
-        };
+        let ms = |y, m, d| zone.with_ymd_and_hms(y, m, d, 0, 0, 0).unwrap().timestamp_millis();
         let to = now.timestamp_millis() + 1;
         let args = |days: Option<u32>, year: Option<u16>, all: bool| StatsArgs {
             days,
@@ -848,31 +718,12 @@ mod tests {
             server: Default::default(),
         };
         let range = |args: StatsArgs| Range::new(&args, now);
-        let want = |from: Option<i64>, to: i64, label: &str| Range {
-            from,
-            to,
-            label: label.to_owned(),
-        };
+        let want = |from: Option<i64>, to: i64, label: &str| Range { from, to, label: label.to_owned() };
         assert_eq!(range(args(None, None, true)), want(None, to, "all time"));
-        assert_eq!(
-            range(args(Some(0), None, false)),
-            want(Some(ms(2026, 11, 4)), to, "today")
-        );
-        assert_eq!(
-            range(args(Some(1), None, false)),
-            want(Some(ms(2026, 11, 4)), to, "today")
-        );
-        assert_eq!(
-            range(args(Some(7), None, false)),
-            want(Some(ms(2026, 10, 29)), to, "last 7 days")
-        );
-        assert_eq!(
-            range(args(None, None, false)),
-            want(Some(ms(2026, 1, 1)), to, "2026 so far")
-        );
-        assert_eq!(
-            range(args(None, Some(2020), false)),
-            want(Some(ms(2020, 1, 1)), ms(2021, 1, 1), "2020")
-        );
+        assert_eq!(range(args(Some(0), None, false)), want(Some(ms(2026, 11, 4)), to, "today"));
+        assert_eq!(range(args(Some(1), None, false)), want(Some(ms(2026, 11, 4)), to, "today"));
+        assert_eq!(range(args(Some(7), None, false)), want(Some(ms(2026, 10, 29)), to, "last 7 days"));
+        assert_eq!(range(args(None, None, false)), want(Some(ms(2026, 1, 1)), to, "2026 so far"));
+        assert_eq!(range(args(None, Some(2020), false)), want(Some(ms(2020, 1, 1)), ms(2021, 1, 1), "2020"));
     }
 }

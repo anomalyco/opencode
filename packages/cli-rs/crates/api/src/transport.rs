@@ -38,10 +38,7 @@ pub struct Response {
 
 impl Response {
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(key, _)| key.eq_ignore_ascii_case(name))
-            .map(|(_, value)| value.as_str())
+        self.headers.iter().find(|(key, _)| key.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str())
     }
 
     /// Reads the whole body.
@@ -56,10 +53,7 @@ impl Response {
 
 impl std::fmt::Debug for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Response")
-            .field("status", &self.status)
-            .field("headers", &self.headers)
-            .finish_non_exhaustive()
+        f.debug_struct("Response").field("status", &self.status).field("headers", &self.headers).finish_non_exhaustive()
     }
 }
 
@@ -90,20 +84,14 @@ pub struct SseResponse<T> {
 
 impl<T> SseResponse<T> {
     pub fn new(response: Response) -> Self {
-        Self {
-            response,
-            event: PhantomData,
-        }
+        Self { response, event: PhantomData }
     }
 }
 
 impl<T: DeserializeOwned + Send> SseResponse<T> {
     /// The events, decoded by [`crate::sse::events`]. `activity` runs for every received chunk,
     /// keepalive comments included. The stream ends after the first error.
-    pub fn events(
-        self,
-        activity: impl FnMut() + Send + 'static,
-    ) -> impl Stream<Item = Result<T, Error>> + Send {
+    pub fn events(self, activity: impl FnMut() + Send + 'static) -> impl Stream<Item = Result<T, Error>> + Send {
         crate::sse::events(self.response.body, activity).map(|item| item.map_err(Error::from))
     }
 }
@@ -167,8 +155,7 @@ impl Reqwest {
 impl Transport for Reqwest {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
         Box::pin(async move {
-            let method = reqwest::Method::from_bytes(request.method.as_bytes())
-                .map_err(|error| error.to_string())?;
+            let method = reqwest::Method::from_bytes(request.method.as_bytes()).map_err(|error| error.to_string())?;
             let mut builder = self.client.request(method, request.url);
             for (name, value) in &request.headers {
                 builder = builder.header(name, value);
@@ -180,18 +167,12 @@ impl Transport for Reqwest {
             let headers = response
                 .headers()
                 .iter()
-                .filter_map(|(name, value)| {
-                    Some((name.as_str().to_owned(), value.to_str().ok()?.to_owned()))
-                })
+                .filter_map(|(name, value)| Some((name.as_str().to_owned(), value.to_str().ok()?.to_owned())))
                 .collect();
             Ok(Response {
                 status: response.status().as_u16(),
                 headers,
-                body: Box::pin(
-                    response
-                        .bytes_stream()
-                        .map(|chunk| chunk.map_err(|error| error.to_string())),
-                ),
+                body: Box::pin(response.bytes_stream().map(|chunk| chunk.map_err(|error| error.to_string()))),
             })
         })
     }

@@ -30,20 +30,12 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
         let query: Vec<(String, String)> = request.url.query_pairs().into_owned().collect();
-        let param = |name: &str| {
-            query
-                .iter()
-                .find(|(key, _)| key == name)
-                .map(|(_, value)| value.clone())
-                .unwrap_or_default()
-        };
+        let param =
+            |name: &str| query.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone()).unwrap_or_default();
         self.seen.lock().unwrap().push((
             request.method.to_owned(),
             path.clone(),
@@ -62,14 +54,10 @@ impl Transport for Fixture {
                     agent("explore", "all", false), agent("secret", "subagent", true),
                 ] }),
             ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [model("p", "m", "Model M")] }),
-            ),
-            ("GET", "/api/command") => (
-                200,
-                json!({ "location": location, "data": [{ "name": "review", "description": "Review changes" }] }),
-            ),
+            ("GET", "/api/model") => (200, json!({ "location": location, "data": [model("p", "m", "Model M")] })),
+            ("GET", "/api/command") => {
+                (200, json!({ "location": location, "data": [{ "name": "review", "description": "Review changes" }] }))
+            }
             ("GET", "/api/skill") => (
                 200,
                 json!({ "location": location, "data": [{
@@ -107,17 +95,13 @@ impl Transport for Fixture {
                 200,
                 json!({ "directory": "/project", "project": { "id": "project", "directory": "/project", "canonical": "/project" } }),
             ),
-            (
-                "GET",
-                "/api/provider" | "/api/integration" | "/api/form" | "/api/permission/request",
-            ) => (200, json!({ "location": location, "data": [] })),
-            ("GET", "/api/vcs") => (
-                200,
-                json!({ "location": location, "data": { "branch": { "current": "main", "default": "main" } } }),
-            ),
-            ("GET", path) if path.ends_with("/form") || path.ends_with("/permission") => {
-                (200, json!({ "data": [] }))
+            ("GET", "/api/provider" | "/api/integration" | "/api/form" | "/api/permission/request") => {
+                (200, json!({ "location": location, "data": [] }))
             }
+            ("GET", "/api/vcs") => {
+                (200, json!({ "location": location, "data": { "branch": { "current": "main", "default": "main" } } }))
+            }
+            ("GET", path) if path.ends_with("/form") || path.ends_with("/permission") => (200, json!({ "data": [] })),
             ("GET", "/api/config") => (200, json!([])),
             ("POST", path) if path.ends_with("/prompt") => (
                 200,
@@ -126,20 +110,12 @@ impl Transport for Fixture {
                     "payload": { "text": body["text"] }, "delivery": body["delivery"].as_str().unwrap_or("steer"),
                 } }),
             ),
-            ("POST", path)
-                if ["/model", "/agent", "/command", "/move"]
-                    .iter()
-                    .any(|end| path.ends_with(end)) =>
-            {
+            ("POST", path) if ["/model", "/agent", "/command", "/move"].iter().any(|end| path.ends_with(end)) => {
                 (204, Value::Null)
             }
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -190,11 +166,7 @@ impl Setup {
 
     fn with_home(home: tempfile::TempDir) -> Self {
         let seen = Seen::default();
-        let client = Client::with_transport(
-            "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone() }),
-        )
-        .unwrap();
+        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
         let app = TestApp::new(90, 30);
         let tui = opencode_tui::mount(
             &app,
@@ -202,23 +174,13 @@ impl Setup {
                 client,
                 directory: "/project".into(),
                 config: Resolved::new(Info::default(), |_| None),
-                roots: Some(Roots {
-                    paths: paths(home.path()),
-                    storage_channel: "latest".into(),
-                }),
-                route: Route::Session {
-                    id: SessionID("ses_a".into()),
-                },
+                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
+                route: Route::Session { id: SessionID("ses_a".into()) },
                 continue_: false,
                 events: false,
             },
         );
-        let setup = Self {
-            app,
-            tui,
-            seen,
-            home,
-        };
+        let setup = Self { app, tui, seen, home };
         setup.wait_for("Model M");
         setup
     }
@@ -231,9 +193,7 @@ impl Setup {
     }
 
     fn wait_gone(&self, text: &str) {
-        let gone = self
-            .app
-            .wait_until(WAIT, || !self.app.text().contains(text));
+        let gone = self.app.wait_until(WAIT, || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
@@ -256,15 +216,8 @@ impl Setup {
     }
 
     fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<(String, Value)> {
-        let found = self
-            .app
-            .wait_until(WAIT, || self.requests(method, suffix).len() >= count);
-        assert!(
-            found,
-            "no {method} …{suffix}: {:?}\n{}",
-            self.seen.lock().unwrap(),
-            self.app.text()
-        );
+        let found = self.app.wait_until(WAIT, || self.requests(method, suffix).len() >= count);
+        assert!(found, "no {method} …{suffix}: {:?}\n{}", self.seen.lock().unwrap(), self.app.text());
         self.requests(method, suffix)
     }
 
@@ -273,15 +226,8 @@ impl Setup {
     }
 
     fn wait_file(&self, name: &str, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(WAIT, || self.state_file(name).contains(text));
-        assert!(
-            found,
-            "{name} has {:?}\n{}",
-            self.state_file(name),
-            self.app.text()
-        );
+        let found = self.app.wait_until(WAIT, || self.state_file(name).contains(text));
+        assert!(found, "{name} has {:?}\n{}", self.state_file(name), self.app.text());
         self.state_file(name)
     }
 }
@@ -356,10 +302,7 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     let screen = setup.wait_for("@general");
     // Subagents and `all` agents; not primary or hidden ones.
     assert!(screen.contains("@explore"), "{screen}");
-    assert!(
-        !screen.contains("@build") && !screen.contains("@secret"),
-        "{screen}"
-    );
+    assert!(!screen.contains("@build") && !screen.contains("@secret"), "{screen}");
     setup.app.type_text("gen");
     setup.wait_gone("@explore");
     setup.app.press("return");
@@ -444,15 +387,7 @@ fn skills_and_references_are_listed_and_sent() {
     let setup = Setup::new();
     setup.app.type_text("@");
     // Skills, references and agents load separately.
-    let rows = [
-        "@release-notes",
-        "Write release notes.",
-        "@docs",
-        "/refs/docs",
-        "skill",
-        "reference",
-        "agent",
-    ];
+    let rows = ["@release-notes", "Write release notes.", "@docs", "/refs/docs", "skill", "reference", "agent"];
     let listed = setup.app.wait_until(WAIT, || {
         let screen = setup.app.text();
         rows.iter().all(|row| screen.contains(row))
@@ -469,13 +404,7 @@ fn skills_and_references_are_listed_and_sent() {
     setup.wait_for("@release-notes");
     setup.app.press("return");
     assert_eq!(setup.text(), "@docs @release-notes ");
-    assert!(
-        setup
-            .requests("GET", "/api/fs/find")
-            .iter()
-            .all(|(query, _)| !query.contains("query=docs")),
-        "{finds}"
-    );
+    assert!(setup.requests("GET", "/api/fs/find").iter().all(|(query, _)| !query.contains("query=docs")), "{finds}");
     setup.app.press("return");
     let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
     assert_eq!(
@@ -494,10 +423,7 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     let setup = Setup::new();
     setup.app.type_text("/cd ");
     let screen = setup.wait_for("packages/");
-    assert!(
-        !screen.contains(".git") && !screen.contains("README"),
-        "{screen}"
-    );
+    assert!(!screen.contains(".git") && !screen.contains("README"), "{screen}");
     let lists = setup.wait_request("GET", "/api/fs/list", 1);
     assert!(lists[0].0.contains("path=%2Fproject"), "{lists:?}");
     // Tab opens the directory; Enter takes the first row (the typed directory itself).
@@ -513,10 +439,7 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     assert_eq!(moves[0].1["directory"], "packages/tui/");
     let recents = setup.wait_file("latest/tui/directory-recents.json", "/project/packages/tui");
     let recents: Value = serde_json::from_str(&recents).unwrap();
-    assert_eq!(
-        recents["projects"]["project"][0]["directory"],
-        "/project/packages/tui"
-    );
+    assert_eq!(recents["projects"]["project"][0]["directory"], "/project/packages/tui");
 
     // An empty argument lists recents first; Ctrl+D twice forgets one.
     setup.app.type_text("/cd ");
@@ -547,11 +470,7 @@ fn escape_hides_and_ctrl_c_dismisses_the_command() {
     setup.wait_for("/agents");
     setup.app.press("up");
     setup.wait_gone("/agents");
-    assert!(
-        setup.app.text().contains("/variants"),
-        "{}",
-        setup.app.text()
-    );
+    assert!(setup.app.text().contains("/variants"), "{}", setup.app.text());
     setup.app.press("down");
     setup.wait_for("/agents");
 }
@@ -578,10 +497,7 @@ fn frecency_file_is_shared_with_typescript() {
 
     // TypeScript keeps the latest line per path and counts on from it.
     let frequencies = typescript_frecency(&root, &state, json!(["src/main.rs", "README.md"]));
-    assert_eq!(
-        frequencies,
-        json!({ "/project/src/main.rs": 3, "/project/README.md": 1 })
-    );
+    assert_eq!(frequencies, json!({ "/project/src/main.rs": 3, "/project/README.md": 1 }));
     let typescript = std::fs::read_to_string(state.join("frecency.jsonl")).unwrap();
     // Its load rewrote the Rust lines to one per path, the Rust line kept as written.
     assert_eq!(typescript.lines().next(), rust.lines().nth(1));
@@ -590,19 +506,12 @@ fn frecency_file_is_shared_with_typescript() {
     // A new Rust prompt reads the TypeScript file: its load rewrites it the same way, and it counts on.
     let home = tempfile::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
-    std::fs::copy(
-        state.join("frecency.jsonl"),
-        home.path().join("state/frecency.jsonl"),
-    )
-    .unwrap();
+    std::fs::copy(state.join("frecency.jsonl"), home.path().join("state/frecency.jsonl")).unwrap();
     let again = Setup::with_home(home);
     mention_main(&again);
     let written = again.wait_file("frecency.jsonl", "\"frequency\":4");
     let last: Value = serde_json::from_str(written.lines().last().unwrap()).unwrap();
-    assert_eq!(
-        (last["path"].clone(), last["frequency"].clone()),
-        (json!("/project/src/main.rs"), json!(4))
-    );
+    assert_eq!((last["path"].clone(), last["frequency"].clone()), (json!("/project/src/main.rs"), json!(4)));
     // The load kept one line per path, then the pick appended one.
     assert_eq!(written.lines().count(), 3, "{written}");
 }
@@ -612,16 +521,10 @@ fn ts_root() -> Option<std::path::PathBuf> {
     let root = std::env::var_os("OPENCODE_TS_ROOT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let present = root.join("node_modules").is_dir()
-        && std::process::Command::new("bun")
-            .arg("--version")
-            .output()
-            .is_ok();
+    let present =
+        root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
     if !present {
-        eprintln!(
-            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            root.display()
-        );
+        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
     }
     present.then_some(root)
 }
@@ -643,18 +546,9 @@ fn typescript_frecency(root: &Path, state: &Path, paths: Value) -> Value {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(paths.to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(paths.to_string().as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
     serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
 }

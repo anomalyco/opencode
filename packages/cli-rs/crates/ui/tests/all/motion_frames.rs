@@ -5,8 +5,7 @@
 
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::motion::{
-    FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, scanner_colors, scanner_frames,
-    work_spinner,
+    FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, scanner_colors, scanner_frames, work_spinner,
 };
 use opentui::AppOptions;
 use opentui::prelude::*;
@@ -23,56 +22,33 @@ const FAINT: Color = Color::rgba(0xe4, 0xe4, 0xe4, 0x5e);
 
 // The TypeScript screen is transparent, while an opentui-rust app clears the screen with its theme background.
 fn test_app(width: u16) -> TestApp {
-    let theme = Theme {
-        background: Color::TRANSPARENT,
-        ..Theme::default()
-    };
-    TestApp::with_options(
-        width,
-        1,
-        AppOptions {
-            theme,
-            light_theme: None,
-            ..AppOptions::default()
-        },
-    )
+    let theme = Theme { background: Color::TRANSPARENT, ..Theme::default() };
+    TestApp::with_options(width, 1, AppOptions { theme, light_theme: None, ..AppOptions::default() })
 }
 
 /// Renders `app` at every instant of the case and compares the filmstrip with the TypeScript one.
 #[track_caller]
 fn assert_filmstrip(app: &TestApp, name: &str) {
-    let instants: BTreeMap<String, Vec<u64>> = serde_json::from_str(
-        &std::fs::read_to_string(fixtures_dir().join("U.6/instants.json")).unwrap(),
-    )
-    .unwrap();
+    let instants: BTreeMap<String, Vec<u64>> =
+        serde_json::from_str(&std::fs::read_to_string(fixtures_dir().join("U.6/instants.json")).unwrap()).unwrap();
     let expected = Fixture::load(fixtures_dir().join(format!("U.6/{name}.json"))).unwrap();
-    let mut actual = Fixture {
-        width: expected.width,
-        height: 0,
-        cells: Vec::new(),
-    };
+    let mut actual = Fixture { width: expected.width, height: 0, cells: Vec::new() };
     let mut now = 0;
     for &instant in &instants[name] {
         app.advance(Duration::from_millis(instant - now));
         now = instant;
         let frame = app.render();
-        actual
-            .cells
-            .extend(frame.cells[..frame.width as usize].iter().cloned());
+        actual.cells.extend(frame.cells[..frame.width as usize].iter().cloned());
         actual.height += 1;
     }
     let comparison = compare(&expected, &actual);
-    assert!(
-        comparison.is_equal(),
-        "U.6/{name} (row N = instant N): {comparison}"
-    );
+    assert!(comparison.is_equal(), "U.6/{name} (row N = instant N): {comparison}");
 }
 
 #[test]
 fn spinner_with_label_steps_through_the_braille_frames() {
     let app = test_app(12);
-    app.root()
-        .add(&Spinner::new(&app).color(MUTED).label("Working"));
+    app.root().add(&Spinner::new(&app).color(MUTED).label("Working"));
     assert_filmstrip(&app, "spinner");
 }
 
@@ -125,22 +101,14 @@ fn an_alpha_spinner_and_label_blend_into_the_page_background() {
 #[test]
 fn one_cell_soft_slide_brightens_by_level() {
     let app = test_app(1);
-    app.root().add(&Spinner::one_cell(
-        &app,
-        &work_spinner("block-soft-slide").unwrap(),
-        ACCENT,
-    ));
+    app.root().add(&Spinner::one_cell(&app, &work_spinner("block-soft-slide").unwrap(), ACCENT));
     assert_filmstrip(&app, "soft-slide");
 }
 
 #[test]
 fn shimmer_text_sweeps_toward_the_shimmer_color() {
     let app = test_app(24);
-    app.root().add(
-        &ShimmerText::new(&app, "Checking for updates…")
-            .fg(MUTED)
-            .shimmer(TEXT),
-    );
+    app.root().add(&ShimmerText::new(&app, "Checking for updates…").fg(MUTED).shimmer(TEXT));
     assert_filmstrip(&app, "shimmer");
 }
 
@@ -148,11 +116,7 @@ fn shimmer_text_sweeps_toward_the_shimmer_color() {
 fn fade_in_text_sweeps_in_from_the_backdrop() {
     let app = test_app(16);
     let backdrop = View::new(&app).bg(BACKDROP);
-    backdrop.add(
-        &FadeInText::new(&app, "Welcome back")
-            .fg(MUTED)
-            .backdrop(BACKDROP),
-    );
+    backdrop.add(&FadeInText::new(&app, "Welcome back").fg(MUTED).backdrop(BACKDROP));
     app.root().add(&backdrop);
     assert_filmstrip(&app, "fade");
 }
@@ -162,12 +126,7 @@ fn fade_in_text_sweeps_in_from_the_backdrop() {
 #[test]
 fn animations_off_shows_the_still_glyph_and_requests_no_frames() {
     let app = test_app(12);
-    app.root().add(
-        &Spinner::new(&app)
-            .color(MUTED)
-            .label("Working")
-            .animations(false),
-    );
+    app.root().add(&Spinner::new(&app).color(MUTED).label("Working").animations(false));
     assert_eq!(app.text(), "⋯ Working");
     app.advance(Duration::from_millis(500));
     assert!(!app.needs_frame());
@@ -187,10 +146,7 @@ fn toggling_animations_resumes_the_spinner() {
 #[test]
 fn a_shimmering_spinner_steps_its_glyph_on_the_spinner_interval() {
     let app = test_app(24);
-    let spinner = Spinner::new(&app)
-        .color(MUTED)
-        .shimmer(Some(TEXT))
-        .label("Checking");
+    let spinner = Spinner::new(&app).color(MUTED).shimmer(Some(TEXT)).label("Checking");
     app.root().add(&spinner);
     for _ in 0..17 {
         app.advance(Duration::from_millis(10));
@@ -218,23 +174,12 @@ fn a_dropped_spinner_stops_its_timer() {
 #[test]
 fn fade_in_settles_and_a_disabled_fade_shows_at_once() {
     let app = test_app(16);
-    app.root().add(
-        &FadeInText::new(&app, "Welcome back")
-            .fg(MUTED)
-            .enabled(false),
-    );
+    app.root().add(&FadeInText::new(&app, "Welcome back").fg(MUTED).enabled(false));
     let frame = app.render();
-    assert_eq!(
-        (frame.text(), frame.cells[0].fg),
-        ("Welcome back".to_owned(), MUTED)
-    );
+    assert_eq!((frame.text(), frame.cells[0].fg), ("Welcome back".to_owned(), MUTED));
 
     let app = test_app(16);
-    app.root().add(
-        &FadeInText::new(&app, "Welcome back")
-            .fg(MUTED)
-            .backdrop(BACKDROP),
-    );
+    app.root().add(&FadeInText::new(&app, "Welcome back").fg(MUTED).backdrop(BACKDROP));
     for _ in 0..30 {
         app.advance(Duration::from_millis(10));
         app.render();

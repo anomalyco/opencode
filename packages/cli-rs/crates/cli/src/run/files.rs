@@ -22,24 +22,14 @@ pub enum Prepared {
 pub fn prepare(input: &str, root: &Path) -> Result<Prepared, String> {
     let file = resolve(root, input);
     let mut handle = std::fs::File::open(&file).map_err(|_| format!("File not found: {input}"))?;
-    let metadata = handle
-        .metadata()
-        .map_err(|_| format!("File not found: {input}"))?;
+    let metadata = handle.metadata().map_err(|_| format!("File not found: {input}"))?;
     if !metadata.is_file() || metadata.len() > ATTACH_FILE_MAX_BYTES {
-        return Err(format!(
-            "Cannot attach a directory, special file, or file larger than 10 MiB: {input}"
-        ));
+        return Err(format!("Cannot attach a directory, special file, or file larger than 10 MiB: {input}"));
     }
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
     // At most the size `stat` reported, as the TS read loop does.
-    (&mut handle)
-        .take(metadata.len())
-        .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
-    let name = file
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    (&mut handle).take(metadata.len()).read_to_end(&mut bytes).map_err(|error| error.to_string())?;
+    let name = file.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
     Ok(classify(&file.to_string_lossy(), name, bytes))
 }
 
@@ -58,10 +48,7 @@ fn classify(path: &str, name: String, bytes: Vec<u8>) -> Prepared {
         let text = String::from_utf8_lossy(&bytes);
         return Prepared::Text(format!("<file name=\"{name}\">\n{text}\n</file>"));
     }
-    Prepared::Attachment {
-        uri: format!("data:{mime};base64,{}", STANDARD.encode(&bytes)),
-        name,
-    }
+    Prepared::Attachment { uri: format!("data:{mime};base64,{}", STANDARD.encode(&bytes)), name }
 }
 
 /// `path.resolve(root, input)`: absolute, with `.` and `..` resolved lexically.
@@ -104,10 +91,7 @@ fn is_binary(bytes: &[u8]) -> bool {
     if bytes.contains(&0) {
         return true;
     }
-    let control = bytes
-        .iter()
-        .filter(|byte| **byte < 9 || (**byte > 13 && **byte < 32))
-        .count();
+    let control = bytes.iter().filter(|byte| **byte < 9 || (**byte > 13 && **byte < 32)).count();
     control as f64 / bytes.len() as f64 > 0.3
 }
 
@@ -136,52 +120,28 @@ mod tests {
     #[test]
     fn text_goes_inline_and_the_rest_as_data_urls() {
         let text = classify("/w/a.md", "a.md".into(), b"# hi\n".to_vec());
-        assert_eq!(
-            text,
-            Prepared::Text("<file name=\"a.md\">\n# hi\n\n</file>".into())
-        );
+        assert_eq!(text, Prepared::Text("<file name=\"a.md\">\n# hi\n\n</file>".into()));
         // An image stays an image even when its bytes are text.
         let image = classify("/w/a.png", "a.png".into(), b"abc".to_vec());
-        assert_eq!(
-            image,
-            Prepared::Attachment {
-                uri: "data:image/png;base64,YWJj".into(),
-                name: "a.png".into()
-            }
-        );
+        assert_eq!(image, Prepared::Attachment { uri: "data:image/png;base64,YWJj".into(), name: "a.png".into() });
         let binary = classify("/w/a.bin", "a.bin".into(), vec![0, 1, 2]);
         assert_eq!(
             binary,
-            Prepared::Attachment {
-                uri: "data:application/octet-stream;base64,AAEC".into(),
-                name: "a.bin".into()
-            }
+            Prepared::Attachment { uri: "data:application/octet-stream;base64,AAEC".into(), name: "a.bin".into() }
         );
         // Invalid UTF-8 keeps the detected type: a `.txt` file goes inline with a replacement character,
         // anything else as a data URL.
         let latin1 = classify("/w/a.txt", "a.txt".into(), vec![b'h', 0xe9]);
-        assert_eq!(
-            latin1,
-            Prepared::Text("<file name=\"a.txt\">\nh\u{fffd}\n</file>".into())
-        );
+        assert_eq!(latin1, Prepared::Text("<file name=\"a.txt\">\nh\u{fffd}\n</file>".into()));
         let csv = classify("/w/a.csv", "a.csv".into(), vec![b'h', 0xe9]);
-        assert_eq!(
-            csv,
-            Prepared::Attachment {
-                uri: "data:text/csv;base64,aOk=".into(),
-                name: "a.csv".into()
-            }
-        );
+        assert_eq!(csv, Prepared::Attachment { uri: "data:text/csv;base64,aOk=".into(), name: "a.csv".into() });
         assert!(is_binary(&[1, 2, 3, b'a']));
         assert!(!is_binary(b"\t\r\n"));
     }
 
     #[test]
     fn paths_resolve_like_node() {
-        assert_eq!(
-            resolve(Path::new("/w/x"), "../a/./b.txt"),
-            Path::new("/w/a/b.txt")
-        );
+        assert_eq!(resolve(Path::new("/w/x"), "../a/./b.txt"), Path::new("/w/a/b.txt"));
         assert_eq!(resolve(Path::new("/w"), "/abs/c"), Path::new("/abs/c"));
     }
 }

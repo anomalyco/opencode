@@ -27,12 +27,8 @@ impl Client {
         input: &ServerConnectInput,
         options: &RequestOptions,
     ) -> Result<ServerConnectOutput, Error> {
-        let call = Call::new(
-            "GET",
-            format!("/auth/connect/{}", crate::client::path_param(&input.code)?),
-            200,
-            &[400, 401],
-        );
+        let call =
+            Call::new("GET", format!("/auth/connect/{}", crate::client::path_param(&input.code)?), 200, &[400, 401]);
 
         self.json(call, options).await
     }
@@ -52,22 +48,13 @@ impl Client {
 
     /// `POST /api/location/reload` (`reload`)
     pub async fn location_reload(&self, options: &RequestOptions) -> Result<(), Error> {
-        let call = Call::new(
-            "POST",
-            "/api/location/reload".to_owned(),
-            204,
-            &[400, 401, 503],
-        );
+        let call = Call::new("POST", "/api/location/reload".to_owned(), 204, &[400, 401, 503]);
 
         self.empty(call, options).await
     }
 
     /// `GET /api/agent` (`list`)
-    pub async fn agent_list(
-        &self,
-        input: &AgentListInput,
-        options: &RequestOptions,
-    ) -> Result<AgentListOutput, Error> {
+    pub async fn agent_list(&self, input: &AgentListInput, options: &RequestOptions) -> Result<AgentListOutput, Error> {
         let mut call = Call::new("GET", "/api/agent".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -76,11 +63,7 @@ impl Client {
     }
 
     /// `GET /api/agent/:agentID` (`get`)
-    pub async fn agent_get(
-        &self,
-        input: &AgentGetInput,
-        options: &RequestOptions,
-    ) -> Result<AgentGetOutput, Error> {
+    pub async fn agent_get(&self, input: &AgentGetInput, options: &RequestOptions) -> Result<AgentGetOutput, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/agent/{}", crate::client::path_param(&input.agent_id)?),
@@ -107,11 +90,7 @@ impl Client {
     }
 
     /// `GET /api/plugin/gui` (`gui`)
-    pub async fn plugin_gui(
-        &self,
-        input: &PluginGuiInput,
-        options: &RequestOptions,
-    ) -> Result<PluginGuiOutput, Error> {
+    pub async fn plugin_gui(&self, input: &PluginGuiInput, options: &RequestOptions) -> Result<PluginGuiOutput, Error> {
         let mut call = Call::new("GET", "/api/plugin/gui".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -126,12 +105,7 @@ impl Client {
         input: &PluginCheckInput,
         options: &RequestOptions,
     ) -> Result<PluginCheckOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/plugin/check".to_owned(),
-            200,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("POST", "/api/plugin/check".to_owned(), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -143,17 +117,8 @@ impl Client {
     }
 
     /// `POST /api/plugin/update` (`update`)
-    pub async fn plugin_update(
-        &self,
-        input: &PluginUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/plugin/update".to_owned(),
-            204,
-            &[400, 401, 404, 503],
-        );
+    pub async fn plugin_update(&self, input: &PluginUpdateInput, options: &RequestOptions) -> Result<(), Error> {
+        let mut call = Call::new("POST", "/api/plugin/update".to_owned(), 204, &[400, 401, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -235,10 +200,7 @@ impl Client {
     }
 
     /// `GET /api/session/active` (`active`)
-    pub async fn session_active(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<SessionActiveOutput, Error> {
+    pub async fn session_active(&self, options: &RequestOptions) -> Result<SessionActiveOutput, Error> {
         let call = Call::new("GET", "/api/session/active".to_owned(), 200, &[400, 401]);
 
         self.data(call, options).await
@@ -252,10 +214,7 @@ impl Client {
     ) -> Result<SessionGetOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -264,17 +223,10 @@ impl Client {
     }
 
     /// `DELETE /api/session/:sessionID` (`remove`)
-    pub async fn session_remove(
-        &self,
-        input: &SessionRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_remove(&self, input: &SessionRemoveInput, options: &RequestOptions) -> Result<(), Error> {
         let call = Call::new(
             "DELETE",
-            format!(
-                "/api/session/{}",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -290,10 +242,7 @@ impl Client {
     ) -> Result<SessionForkOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/fork",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/fork", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -312,10 +261,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/agent",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/agent", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -332,10 +278,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/model",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/model", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -345,17 +288,10 @@ impl Client {
     }
 
     /// `PATCH /api/session/:sessionID` (`update`)
-    pub async fn session_update(
-        &self,
-        input: &SessionUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_update(&self, input: &SessionUpdateInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "PATCH",
-            format!(
-                "/api/session/{}",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -376,17 +312,10 @@ impl Client {
     }
 
     /// `POST /api/session/:sessionID/move` (`move`)
-    pub async fn session_move(
-        &self,
-        input: &SessionMoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_move(&self, input: &SessionMoveInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/move",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/move", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -406,10 +335,7 @@ impl Client {
     ) -> Result<SessionPromptOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/prompt",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/prompt", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 409],
         );
@@ -440,17 +366,10 @@ impl Client {
     }
 
     /// `POST /api/session/:sessionID/command` (`command`)
-    pub async fn session_command(
-        &self,
-        input: &SessionCommandInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_command(&self, input: &SessionCommandInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/command",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/command", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 500],
         );
@@ -480,10 +399,7 @@ impl Client {
     ) -> Result<SessionSyntheticOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/synthetic",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/synthetic", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 409],
         );
@@ -508,17 +424,10 @@ impl Client {
     }
 
     /// `POST /api/session/:sessionID/shell` (`shell`)
-    pub async fn session_shell(
-        &self,
-        input: &SessionShellInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_shell(&self, input: &SessionShellInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/shell",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/shell", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -538,10 +447,7 @@ impl Client {
     ) -> Result<SessionCompactOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/compact",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/compact", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 409],
         );
@@ -563,10 +469,7 @@ impl Client {
     ) -> Result<SessionRevertStageOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/revert/stage",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/revert/stage", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 409, 500],
         );
@@ -586,10 +489,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "DELETE",
-            format!(
-                "/api/session/{}/revert",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/revert", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 409, 500],
         );
@@ -605,10 +505,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/revert/commit",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/revert/commit", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 409],
         );
@@ -624,10 +521,7 @@ impl Client {
     ) -> Result<SessionContextOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}/context",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/context", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 500],
         );
@@ -643,10 +537,7 @@ impl Client {
     ) -> Result<SessionDiffOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}/diff",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/diff", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 500],
         );
@@ -670,10 +561,7 @@ impl Client {
     ) -> Result<SessionInboxListOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}/inbox",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/inbox", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -730,10 +618,7 @@ impl Client {
     ) -> Result<SessionGenerateOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/generate",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/generate", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 503],
         );
@@ -750,10 +635,7 @@ impl Client {
     ) -> Result<SessionInterruptOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/interrupt",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/interrupt", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -771,10 +653,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/background",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/background", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -810,10 +689,7 @@ impl Client {
     ) -> Result<SessionFormListOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}/form",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/form", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -829,10 +705,7 @@ impl Client {
     ) -> Result<SessionFormCreateOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/form",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/form", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 409],
         );
@@ -919,10 +792,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "PUT",
-            format!(
-                "/api/session/{}/environment",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/environment", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -932,17 +802,10 @@ impl Client {
     }
 
     /// `POST /api/session/:sessionID/view` (`view`)
-    pub async fn session_view(
-        &self,
-        input: &SessionViewInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_view(&self, input: &SessionViewInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/view",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/view", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -957,12 +820,7 @@ impl Client {
         input: &ExperimentalSessionStatsInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalSessionStatsOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/session/stats".to_owned(),
-            200,
-            &[400, 401],
-        );
+        let mut call = Call::new("GET", "/api/experimental/session/stats".to_owned(), 200, &[400, 401]);
         if let Some(value) = &input.from {
             call.query("from", value)?;
         }
@@ -987,12 +845,7 @@ impl Client {
         input: &ExperimentalSessionImportInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalSessionImportOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/session/import".to_owned(),
-            200,
-            &[400, 401, 404, 409],
-        );
+        let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[400, 401, 404, 409]);
         call.object();
         call.field("info", &input.info)?;
         call.field("messages", &input.messages)?;
@@ -1010,10 +863,7 @@ impl Client {
     ) -> Result<ExperimentalSessionExportOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/export",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/export", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 500],
         );
@@ -1031,10 +881,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/session/{}/skill",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/skill", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
         );
@@ -1054,10 +901,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/session/{}/wait",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/wait", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 503],
         );
@@ -1073,10 +917,7 @@ impl Client {
     ) -> Result<ExperimentalSessionInstructionsEntryListOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/instructions/entries",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/instructions/entries", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -1133,10 +974,7 @@ impl Client {
     ) -> Result<SseResponse<ExperimentalSessionLogOutput>, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/log",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/log", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -1157,10 +995,7 @@ impl Client {
     ) -> Result<MessageListOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}/message",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/message", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 500],
         );
@@ -1180,11 +1015,7 @@ impl Client {
     }
 
     /// `GET /api/model` (`list`)
-    pub async fn model_list(
-        &self,
-        input: &ModelListInput,
-        options: &RequestOptions,
-    ) -> Result<ModelListOutput, Error> {
+    pub async fn model_list(&self, input: &ModelListInput, options: &RequestOptions) -> Result<ModelListOutput, Error> {
         let mut call = Call::new("GET", "/api/model".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1201,12 +1032,7 @@ impl Client {
         input: &ModelDefaultInput,
         options: &RequestOptions,
     ) -> Result<ModelDefaultOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/model/default".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -1219,12 +1045,8 @@ impl Client {
         input: &ExperimentalGenerateTextInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalGenerateTextOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/generate/text".to_owned(),
-            200,
-            &[400, 401, 404, 422, 502, 503],
-        );
+        let mut call =
+            Call::new("POST", "/api/experimental/generate/text".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
         call.object();
         call.field("prompt", &input.prompt)?;
         if let Some(value) = &input.model {
@@ -1239,12 +1061,8 @@ impl Client {
         input: &ExperimentalGenerateImageInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalGenerateImageOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/generate/image".to_owned(),
-            200,
-            &[400, 401, 404, 422, 502, 503],
-        );
+        let mut call =
+            Call::new("POST", "/api/experimental/generate/image".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
         call.object();
         call.field("model", &input.model)?;
         call.field("prompt", &input.prompt)?;
@@ -1269,12 +1087,8 @@ impl Client {
         input: &ExperimentalGenerateDecisionsInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalGenerateDecisionsOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/generate/decisions".to_owned(),
-            200,
-            &[400, 401, 404, 422, 502, 503],
-        );
+        let mut call =
+            Call::new("POST", "/api/experimental/generate/decisions".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
         call.object();
         call.field("model", &input.model)?;
         call.field("input", &input.input)?;
@@ -1287,12 +1101,7 @@ impl Client {
         &self,
         options: &RequestOptions,
     ) -> Result<ExperimentalVoiceModelsOutput, Error> {
-        let call = Call::new(
-            "GET",
-            "/api/experimental/voice/models".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let call = Call::new("GET", "/api/experimental/voice/models".to_owned(), 200, &[400, 401, 404, 503]);
 
         self.data(call, options).await
     }
@@ -1303,12 +1112,7 @@ impl Client {
         input: &ExperimentalVoiceSessionInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalVoiceSessionOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/voice/session".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("POST", "/api/experimental/voice/session".to_owned(), 200, &[400, 401, 404, 503]);
         call.object();
         call.field("model", &input.model)?;
         if let Some(value) = &input.session {
@@ -1324,12 +1128,7 @@ impl Client {
         input: &ProviderListInput,
         options: &RequestOptions,
     ) -> Result<ProviderListOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/provider".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("GET", "/api/provider".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -1344,10 +1143,7 @@ impl Client {
     ) -> Result<ProviderGetOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/provider/{}",
-                crate::client::path_param(&input.provider_id)?
-            ),
+            format!("/api/provider/{}", crate::client::path_param(&input.provider_id)?),
             200,
             &[400, 401, 404, 503],
         );
@@ -1378,10 +1174,7 @@ impl Client {
     ) -> Result<IntegrationGetOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/integration/{}",
-                crate::client::path_param(&input.integration_id)?
-            ),
+            format!("/api/integration/{}", crate::client::path_param(&input.integration_id)?),
             200,
             &[400, 401, 404],
         );
@@ -1399,10 +1192,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/integration/{}/connect/key",
-                crate::client::path_param(&input.integration_id)?
-            ),
+            format!("/api/integration/{}/connect/key", crate::client::path_param(&input.integration_id)?),
             204,
             &[400, 401, 404],
         );
@@ -1428,10 +1218,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/integration/{}/connect/external",
-                crate::client::path_param(&input.integration_id)?
-            ),
+            format!("/api/integration/{}/connect/external", crate::client::path_param(&input.integration_id)?),
             204,
             &[400, 401, 404],
         );
@@ -1457,10 +1244,7 @@ impl Client {
     ) -> Result<IntegrationOauthConnectOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/integration/{}/connect/oauth",
-                crate::client::path_param(&input.integration_id)?
-            ),
+            format!("/api/integration/{}/connect/oauth", crate::client::path_param(&input.integration_id)?),
             200,
             &[400, 401, 404],
         );
@@ -1556,10 +1340,7 @@ impl Client {
     ) -> Result<IntegrationCommandConnectOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/integration/{}/connect/command",
-                crate::client::path_param(&input.integration_id)?
-            ),
+            format!("/api/integration/{}/connect/command", crate::client::path_param(&input.integration_id)?),
             200,
             &[400, 401, 404],
         );
@@ -1624,12 +1405,7 @@ impl Client {
         input: &ExperimentalIntegrationWellknownAddInput,
         options: &RequestOptions,
     ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/integration/wellknown".to_owned(),
-            204,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("POST", "/api/experimental/integration/wellknown".to_owned(), 204, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1639,11 +1415,7 @@ impl Client {
     }
 
     /// `GET /api/mcp` (`list`)
-    pub async fn mcp_list(
-        &self,
-        input: &McpListInput,
-        options: &RequestOptions,
-    ) -> Result<McpListOutput, Error> {
+    pub async fn mcp_list(&self, input: &McpListInput, options: &RequestOptions) -> Result<McpListOutput, Error> {
         let mut call = Call::new("GET", "/api/mcp".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1672,10 +1444,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "PUT",
-            format!(
-                "/api/experimental/mcp/{}",
-                crate::client::path_param(&input.server)?
-            ),
+            format!("/api/experimental/mcp/{}", crate::client::path_param(&input.server)?),
             204,
             &[400, 401, 404],
         );
@@ -1695,10 +1464,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "DELETE",
-            format!(
-                "/api/experimental/mcp/{}",
-                crate::client::path_param(&input.server)?
-            ),
+            format!("/api/experimental/mcp/{}", crate::client::path_param(&input.server)?),
             204,
             &[400, 401, 404],
         );
@@ -1716,10 +1482,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/mcp/{}/connect",
-                crate::client::path_param(&input.server)?
-            ),
+            format!("/api/experimental/mcp/{}/connect", crate::client::path_param(&input.server)?),
             204,
             &[400, 401, 404],
         );
@@ -1737,10 +1500,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/mcp/{}/disconnect",
-                crate::client::path_param(&input.server)?
-            ),
+            format!("/api/experimental/mcp/{}/disconnect", crate::client::path_param(&input.server)?),
             204,
             &[400, 401, 404],
         );
@@ -1756,12 +1516,7 @@ impl Client {
         input: &ExperimentalMcpClientTokenInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalMcpClientTokenOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/client-mcp/token".to_owned(),
-            200,
-            &[400, 401, 403, 404],
-        );
+        let mut call = Call::new("POST", "/api/experimental/client-mcp/token".to_owned(), 200, &[400, 401, 403, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -1773,10 +1528,7 @@ impl Client {
     }
 
     /// `GET /api/credential` (`list`)
-    pub async fn credential_list(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<CredentialListOutput, Error> {
+    pub async fn credential_list(&self, options: &RequestOptions) -> Result<CredentialListOutput, Error> {
         let call = Call::new("GET", "/api/credential".to_owned(), 200, &[400, 401]);
 
         self.data(call, options).await
@@ -1812,10 +1564,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "PATCH",
-            format!(
-                "/api/credential/{}",
-                crate::client::path_param(&input.credential_id)?
-            ),
+            format!("/api/credential/{}", crate::client::path_param(&input.credential_id)?),
             204,
             &[400, 401],
         );
@@ -1832,10 +1581,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "POST",
-            format!(
-                "/api/credential/{}/activate",
-                crate::client::path_param(&input.credential_id)?
-            ),
+            format!("/api/credential/{}/activate", crate::client::path_param(&input.credential_id)?),
             204,
             &[400, 401],
         );
@@ -1851,10 +1597,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "DELETE",
-            format!(
-                "/api/credential/{}",
-                crate::client::path_param(&input.credential_id)?
-            ),
+            format!("/api/credential/{}", crate::client::path_param(&input.credential_id)?),
             204,
             &[400, 401],
         );
@@ -1883,10 +1626,7 @@ impl Client {
     ) -> Result<ProjectUpdateOutput, Error> {
         let mut call = Call::new(
             "PATCH",
-            format!(
-                "/api/project/{}",
-                crate::client::path_param(&input.project_id)?
-            ),
+            format!("/api/project/{}", crate::client::path_param(&input.project_id)?),
             200,
             &[400, 401, 404],
         );
@@ -1907,11 +1647,7 @@ impl Client {
     }
 
     /// `GET /api/form` (`list`)
-    pub async fn form_list(
-        &self,
-        input: &FormListInput,
-        options: &RequestOptions,
-    ) -> Result<FormListOutput, Error> {
+    pub async fn form_list(&self, input: &FormListInput, options: &RequestOptions) -> Result<FormListOutput, Error> {
         let mut call = Call::new("GET", "/api/form".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1925,12 +1661,7 @@ impl Client {
         input: &PermissionRequestListInput,
         options: &RequestOptions,
     ) -> Result<PermissionRequestListOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/permission/request".to_owned(),
-            200,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("GET", "/api/permission/request".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -1943,12 +1674,7 @@ impl Client {
         input: &PermissionSavedListInput,
         options: &RequestOptions,
     ) -> Result<PermissionSavedListOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/permission/saved".to_owned(),
-            200,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("GET", "/api/permission/saved".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.project_id {
             call.query("projectID", value)?;
         }
@@ -1963,10 +1689,7 @@ impl Client {
     ) -> Result<PermissionSavedUpdateOutput, Error> {
         let mut call = Call::new(
             "PATCH",
-            format!(
-                "/api/permission/saved/{}",
-                crate::client::path_param(&input.id)?
-            ),
+            format!("/api/permission/saved/{}", crate::client::path_param(&input.id)?),
             200,
             &[400, 401, 404, 409],
         );
@@ -1988,10 +1711,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "DELETE",
-            format!(
-                "/api/permission/saved/{}",
-                crate::client::path_param(&input.id)?
-            ),
+            format!("/api/permission/saved/{}", crate::client::path_param(&input.id)?),
             204,
             &[400, 401],
         );
@@ -2007,10 +1727,7 @@ impl Client {
     ) -> Result<PermissionCreateOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/session/{}/permission",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/permission", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -2043,10 +1760,7 @@ impl Client {
     ) -> Result<PermissionListOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/session/{}/permission",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/session/{}/permission", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
         );
@@ -2075,11 +1789,7 @@ impl Client {
     }
 
     /// `POST /api/session/:sessionID/permission/:requestID/reply` (`reply`)
-    pub async fn permission_reply(
-        &self,
-        input: &PermissionReplyInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn permission_reply(&self, input: &PermissionReplyInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "POST",
             format!(
@@ -2099,11 +1809,7 @@ impl Client {
     }
 
     /// `GET /api/fs/read/*` (`read`)
-    pub async fn file_read(
-        &self,
-        input: &FileReadInput,
-        options: &RequestOptions,
-    ) -> Result<bytes::Bytes, Error> {
+    pub async fn file_read(&self, input: &FileReadInput, options: &RequestOptions) -> Result<bytes::Bytes, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/fs/read/{}", crate::client::path_wildcard(&input.path)),
@@ -2117,11 +1823,7 @@ impl Client {
     }
 
     /// `GET /api/fs/list` (`list`)
-    pub async fn file_list(
-        &self,
-        input: &FileListInput,
-        options: &RequestOptions,
-    ) -> Result<FileListOutput, Error> {
+    pub async fn file_list(&self, input: &FileListInput, options: &RequestOptions) -> Result<FileListOutput, Error> {
         let mut call = Call::new("GET", "/api/fs/list".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2133,11 +1835,7 @@ impl Client {
     }
 
     /// `GET /api/fs/find` (`find`)
-    pub async fn file_find(
-        &self,
-        input: &FileFindInput,
-        options: &RequestOptions,
-    ) -> Result<FileFindOutput, Error> {
+    pub async fn file_find(&self, input: &FileFindInput, options: &RequestOptions) -> Result<FileFindOutput, Error> {
         let mut call = Call::new("GET", "/api/fs/find".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2158,12 +1856,7 @@ impl Client {
         input: &ExperimentalFileWriteInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalFileWriteOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/fs/write".to_owned(),
-            200,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("POST", "/api/experimental/fs/write".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -2178,12 +1871,7 @@ impl Client {
         input: &ExperimentalFileWatchInput,
         options: &RequestOptions,
     ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/fs/watch".to_owned(),
-            204,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("POST", "/api/experimental/fs/watch".to_owned(), 204, &[400, 401, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2198,12 +1886,7 @@ impl Client {
         input: &ExperimentalFileUnwatchInput,
         options: &RequestOptions,
     ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "DELETE",
-            "/api/experimental/fs/watch".to_owned(),
-            204,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("DELETE", "/api/experimental/fs/watch".to_owned(), 204, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2226,11 +1909,7 @@ impl Client {
     }
 
     /// `GET /api/skill` (`list`)
-    pub async fn skill_list(
-        &self,
-        input: &SkillListInput,
-        options: &RequestOptions,
-    ) -> Result<SkillListOutput, Error> {
+    pub async fn skill_list(&self, input: &SkillListInput, options: &RequestOptions) -> Result<SkillListOutput, Error> {
         let mut call = Call::new("GET", "/api/skill".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2239,11 +1918,7 @@ impl Client {
     }
 
     /// `POST /api/rpc/:rpcID/:method` (`call`)
-    pub async fn rpc_call(
-        &self,
-        input: &RpcCallInput,
-        options: &RequestOptions,
-    ) -> Result<RpcCallOutput, Error> {
+    pub async fn rpc_call(&self, input: &RpcCallInput, options: &RequestOptions) -> Result<RpcCallOutput, Error> {
         let mut call = Call::new(
             "POST",
             format!(
@@ -2278,11 +1953,7 @@ impl Client {
     }
 
     /// `GET /api/pty` (`list`)
-    pub async fn pty_list(
-        &self,
-        input: &PtyListInput,
-        options: &RequestOptions,
-    ) -> Result<PtyListOutput, Error> {
+    pub async fn pty_list(&self, input: &PtyListInput, options: &RequestOptions) -> Result<PtyListOutput, Error> {
         let mut call = Call::new("GET", "/api/pty".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2291,11 +1962,7 @@ impl Client {
     }
 
     /// `POST /api/pty` (`create`)
-    pub async fn pty_create(
-        &self,
-        input: &PtyCreateInput,
-        options: &RequestOptions,
-    ) -> Result<PtyCreateOutput, Error> {
+    pub async fn pty_create(&self, input: &PtyCreateInput, options: &RequestOptions) -> Result<PtyCreateOutput, Error> {
         let mut call = Call::new("POST", "/api/pty".to_owned(), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
@@ -2320,17 +1987,9 @@ impl Client {
     }
 
     /// `GET /api/pty/:ptyID` (`get`)
-    pub async fn pty_get(
-        &self,
-        input: &PtyGetInput,
-        options: &RequestOptions,
-    ) -> Result<PtyGetOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 404],
-        );
+    pub async fn pty_get(&self, input: &PtyGetInput, options: &RequestOptions) -> Result<PtyGetOutput, Error> {
+        let mut call =
+            Call::new("GET", format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -2338,17 +1997,9 @@ impl Client {
     }
 
     /// `PUT /api/pty/:ptyID` (`update`)
-    pub async fn pty_update(
-        &self,
-        input: &PtyUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<PtyUpdateOutput, Error> {
-        let mut call = Call::new(
-            "PUT",
-            format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 404],
-        );
+    pub async fn pty_update(&self, input: &PtyUpdateInput, options: &RequestOptions) -> Result<PtyUpdateOutput, Error> {
+        let mut call =
+            Call::new("PUT", format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2363,11 +2014,7 @@ impl Client {
     }
 
     /// `DELETE /api/pty/:ptyID` (`remove`)
-    pub async fn pty_remove(
-        &self,
-        input: &PtyRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn pty_remove(&self, input: &PtyRemoveInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new(
             "DELETE",
             format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?),
@@ -2388,10 +2035,7 @@ impl Client {
     ) -> Result<PtyConnectTokenOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/pty/{}/connect-token",
-                crate::client::path_param(&input.pty_id)?
-            ),
+            format!("/api/pty/{}/connect-token", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 403, 404],
         );
@@ -2412,10 +2056,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtyReadOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/terminal/read",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/terminal/read", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 503],
         );
@@ -2433,10 +2074,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtyListOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/terminal",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/terminal", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 503],
         );
@@ -2452,10 +2090,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtyCreateOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/session/{}/terminal",
-                crate::client::path_param(&input.session_id)?
-            ),
+            format!("/api/experimental/session/{}/terminal", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 503],
         );
@@ -2476,16 +2111,8 @@ impl Client {
     }
 
     /// `POST /api/experimental/persistent-pty/shutdown` (`persistentPty.shutdown`)
-    pub async fn experimental_persistent_pty_shutdown(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
-            "POST",
-            "/api/experimental/persistent-pty/shutdown".to_owned(),
-            204,
-            &[400, 401, 503],
-        );
+    pub async fn experimental_persistent_pty_shutdown(&self, options: &RequestOptions) -> Result<(), Error> {
+        let call = Call::new("POST", "/api/experimental/persistent-pty/shutdown".to_owned(), 204, &[400, 401, 503]);
 
         self.empty(call, options).await
     }
@@ -2495,12 +2122,7 @@ impl Client {
         &self,
         options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyHandoffOutput, Error> {
-        let call = Call::new(
-            "POST",
-            "/api/experimental/persistent-pty/handoff".to_owned(),
-            200,
-            &[400, 401, 503],
-        );
+        let call = Call::new("POST", "/api/experimental/persistent-pty/handoff".to_owned(), 200, &[400, 401, 503]);
 
         self.json(call, options).await
     }
@@ -2513,10 +2135,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtyGetOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/persistent-pty/{}",
-                crate::client::path_param(&input.pty_id)?
-            ),
+            format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 404, 503],
         );
@@ -2532,10 +2151,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtyUpdateOutput, Error> {
         let mut call = Call::new(
             "PUT",
-            format!(
-                "/api/experimental/persistent-pty/{}",
-                crate::client::path_param(&input.pty_id)?
-            ),
+            format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 404, 501, 503],
         );
@@ -2560,10 +2176,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtySnapshotOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/persistent-pty/{}/snapshot",
-                crate::client::path_param(&input.pty_id)?
-            ),
+            format!("/api/experimental/persistent-pty/{}/snapshot", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 404, 503],
         );
@@ -2579,10 +2192,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "DELETE",
-            format!(
-                "/api/experimental/persistent-pty/{}",
-                crate::client::path_param(&input.pty_id)?
-            ),
+            format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
             204,
             &[400, 401, 404, 503],
         );
@@ -2598,10 +2208,7 @@ impl Client {
     ) -> Result<ExperimentalPersistentPtyConnectTokenOutput, Error> {
         let mut call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/persistent-pty/{}/connect-token",
-                crate::client::path_param(&input.pty_id)?
-            ),
+            format!("/api/experimental/persistent-pty/{}/connect-token", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 403, 404, 503],
         );
@@ -2619,10 +2226,7 @@ impl Client {
     ) -> Result<bytes::Bytes, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/media/{}",
-                crate::client::path_param(&input.hash)?
-            ),
+            format!("/api/experimental/media/{}", crate::client::path_param(&input.hash)?),
             200,
             &[400, 401, 404],
         );
@@ -2636,12 +2240,7 @@ impl Client {
         input: &ExperimentalScheduleCreateInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalScheduleCreateOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/schedule".to_owned(),
-            200,
-            &[400, 401, 403, 404],
-        );
+        let mut call = Call::new("POST", "/api/experimental/schedule".to_owned(), 200, &[400, 401, 403, 404]);
         call.object();
         call.field("sessionID", &input.session_id)?;
         if let Some(value) = &input.name {
@@ -2669,12 +2268,7 @@ impl Client {
         input: &ExperimentalScheduleListInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalScheduleListOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/schedule".to_owned(),
-            200,
-            &[400, 401, 403, 404],
-        );
+        let mut call = Call::new("GET", "/api/experimental/schedule".to_owned(), 200, &[400, 401, 403, 404]);
         call.query("sessionID", &input.session_id)?;
         self.data(call, options).await
     }
@@ -2687,10 +2281,7 @@ impl Client {
     ) -> Result<ExperimentalScheduleGetOutput, Error> {
         let call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/schedule/{}",
-                crate::client::path_param(&input.schedule_id)?
-            ),
+            format!("/api/experimental/schedule/{}", crate::client::path_param(&input.schedule_id)?),
             200,
             &[400, 401, 403, 404],
         );
@@ -2706,10 +2297,7 @@ impl Client {
     ) -> Result<ExperimentalSchedulePauseOutput, Error> {
         let call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/schedule/{}/pause",
-                crate::client::path_param(&input.schedule_id)?
-            ),
+            format!("/api/experimental/schedule/{}/pause", crate::client::path_param(&input.schedule_id)?),
             200,
             &[400, 401, 403, 404],
         );
@@ -2725,10 +2313,7 @@ impl Client {
     ) -> Result<ExperimentalScheduleResumeOutput, Error> {
         let call = Call::new(
             "POST",
-            format!(
-                "/api/experimental/schedule/{}/resume",
-                crate::client::path_param(&input.schedule_id)?
-            ),
+            format!("/api/experimental/schedule/{}/resume", crate::client::path_param(&input.schedule_id)?),
             200,
             &[400, 401, 403, 404],
         );
@@ -2744,10 +2329,7 @@ impl Client {
     ) -> Result<(), Error> {
         let call = Call::new(
             "DELETE",
-            format!(
-                "/api/experimental/schedule/{}",
-                crate::client::path_param(&input.schedule_id)?
-            ),
+            format!("/api/experimental/schedule/{}", crate::client::path_param(&input.schedule_id)?),
             204,
             &[400, 401, 403, 404],
         );
@@ -2761,12 +2343,8 @@ impl Client {
         input: &ExperimentalArtifactsProvidersInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsProvidersOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/artifacts/providers".to_owned(),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
+        let mut call =
+            Call::new("GET", "/api/experimental/artifacts/providers".to_owned(), 200, &[400, 401, 403, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -2779,12 +2357,7 @@ impl Client {
         input: &ExperimentalArtifactsListInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsListOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/artifacts".to_owned(),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
+        let mut call = Call::new("GET", "/api/experimental/artifacts".to_owned(), 200, &[400, 401, 403, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -2803,12 +2376,7 @@ impl Client {
         input: &ExperimentalArtifactsCreateInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsCreateOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/artifacts".to_owned(),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
+        let mut call = Call::new("POST", "/api/experimental/artifacts".to_owned(), 200, &[400, 401, 403, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2835,10 +2403,7 @@ impl Client {
     ) -> Result<ExperimentalArtifactsGetOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/artifacts/{}",
-                crate::client::path_param(&input.artifact_id)?
-            ),
+            format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
             200,
             &[400, 401, 403, 404, 503],
         );
@@ -2856,10 +2421,7 @@ impl Client {
     ) -> Result<ExperimentalArtifactsUpdateOutput, Error> {
         let mut call = Call::new(
             "PATCH",
-            format!(
-                "/api/experimental/artifacts/{}",
-                crate::client::path_param(&input.artifact_id)?
-            ),
+            format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
             200,
             &[400, 401, 403, 404, 503],
         );
@@ -2888,10 +2450,7 @@ impl Client {
     ) -> Result<(), Error> {
         let mut call = Call::new(
             "DELETE",
-            format!(
-                "/api/experimental/artifacts/{}",
-                crate::client::path_param(&input.artifact_id)?
-            ),
+            format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
             204,
             &[400, 401, 403, 404, 503],
         );
@@ -2929,12 +2488,7 @@ impl Client {
         input: &ExperimentalJobListInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalJobListOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/job".to_owned(),
-            200,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("GET", "/api/experimental/job".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.session_id {
             call.query("sessionID", value)?;
         }
@@ -2951,11 +2505,7 @@ impl Client {
     }
 
     /// `GET /api/shell` (`list`)
-    pub async fn shell_list(
-        &self,
-        input: &ShellListInput,
-        options: &RequestOptions,
-    ) -> Result<ShellListOutput, Error> {
+    pub async fn shell_list(&self, input: &ShellListInput, options: &RequestOptions) -> Result<ShellListOutput, Error> {
         let mut call = Call::new("GET", "/api/shell".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2988,17 +2538,9 @@ impl Client {
     }
 
     /// `GET /api/shell/:id` (`get`)
-    pub async fn shell_get(
-        &self,
-        input: &ShellGetInput,
-        options: &RequestOptions,
-    ) -> Result<ShellGetOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/shell/{}", crate::client::path_param(&input.id)?),
-            200,
-            &[400, 401, 404],
-        );
+    pub async fn shell_get(&self, input: &ShellGetInput, options: &RequestOptions) -> Result<ShellGetOutput, Error> {
+        let mut call =
+            Call::new("GET", format!("/api/shell/{}", crate::client::path_param(&input.id)?), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3013,10 +2555,7 @@ impl Client {
     ) -> Result<ShellOutputOutput, Error> {
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/shell/{}/output",
-                crate::client::path_param(&input.id)?
-            ),
+            format!("/api/shell/{}/output", crate::client::path_param(&input.id)?),
             200,
             &[400, 401, 404],
         );
@@ -3033,17 +2572,9 @@ impl Client {
     }
 
     /// `DELETE /api/shell/:id` (`remove`)
-    pub async fn shell_remove(
-        &self,
-        input: &ShellRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!("/api/shell/{}", crate::client::path_param(&input.id)?),
-            204,
-            &[400, 401, 404],
-        );
+    pub async fn shell_remove(&self, input: &ShellRemoveInput, options: &RequestOptions) -> Result<(), Error> {
+        let mut call =
+            Call::new("DELETE", format!("/api/shell/{}", crate::client::path_param(&input.id)?), 204, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3099,11 +2630,7 @@ impl Client {
     }
 
     /// `DELETE /api/worktree` (`remove`)
-    pub async fn worktree_remove(
-        &self,
-        input: &WorktreeRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn worktree_remove(&self, input: &WorktreeRemoveInput, options: &RequestOptions) -> Result<(), Error> {
         let mut call = Call::new("DELETE", "/api/worktree".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("projectID", &input.project_id)?;
@@ -3113,34 +2640,16 @@ impl Client {
     }
 
     /// `POST /api/worktree/refresh` (`refresh`)
-    pub async fn worktree_refresh(
-        &self,
-        input: &WorktreeRefreshInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/worktree/refresh".to_owned(),
-            204,
-            &[400, 401, 404],
-        );
+    pub async fn worktree_refresh(&self, input: &WorktreeRefreshInput, options: &RequestOptions) -> Result<(), Error> {
+        let mut call = Call::new("POST", "/api/worktree/refresh".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("projectID", &input.project_id)?;
         self.empty(call, options).await
     }
 
     /// `POST /api/vcs/init` (`init`)
-    pub async fn vcs_init(
-        &self,
-        input: &VcsInitInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/vcs/init".to_owned(),
-            204,
-            &[400, 401, 404, 409, 501, 503],
-        );
+    pub async fn vcs_init(&self, input: &VcsInitInput, options: &RequestOptions) -> Result<(), Error> {
+        let mut call = Call::new("POST", "/api/vcs/init".to_owned(), 204, &[400, 401, 404, 409, 501, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3151,11 +2660,7 @@ impl Client {
     }
 
     /// `GET /api/vcs` (`get`)
-    pub async fn vcs_get(
-        &self,
-        input: &VcsGetInput,
-        options: &RequestOptions,
-    ) -> Result<VcsGetOutput, Error> {
+    pub async fn vcs_get(&self, input: &VcsGetInput, options: &RequestOptions) -> Result<VcsGetOutput, Error> {
         let mut call = Call::new("GET", "/api/vcs".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -3164,17 +2669,8 @@ impl Client {
     }
 
     /// `GET /api/vcs/base` (`base`)
-    pub async fn vcs_base(
-        &self,
-        input: &VcsBaseInput,
-        options: &RequestOptions,
-    ) -> Result<VcsBaseOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/vcs/base".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+    pub async fn vcs_base(&self, input: &VcsBaseInput, options: &RequestOptions) -> Result<VcsBaseOutput, Error> {
+        let mut call = Call::new("GET", "/api/vcs/base".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3182,11 +2678,7 @@ impl Client {
     }
 
     /// `GET /api/vcs/status` (`status`)
-    pub async fn vcs_status(
-        &self,
-        input: &VcsStatusInput,
-        options: &RequestOptions,
-    ) -> Result<VcsStatusOutput, Error> {
+    pub async fn vcs_status(&self, input: &VcsStatusInput, options: &RequestOptions) -> Result<VcsStatusOutput, Error> {
         let mut call = Call::new("GET", "/api/vcs/status".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -3214,17 +2706,8 @@ impl Client {
     }
 
     /// `GET /api/vcs/diff` (`diff`)
-    pub async fn vcs_diff(
-        &self,
-        input: &VcsDiffInput,
-        options: &RequestOptions,
-    ) -> Result<VcsDiffOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/vcs/diff".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+    pub async fn vcs_diff(&self, input: &VcsDiffInput, options: &RequestOptions) -> Result<VcsDiffOutput, Error> {
+        let mut call = Call::new("GET", "/api/vcs/diff".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3247,12 +2730,7 @@ impl Client {
         input: &DebugHeapDumpInput,
         options: &RequestOptions,
     ) -> Result<DebugHeapDumpOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/debug/heap-dump".to_owned(),
-            200,
-            &[400, 401, 500],
-        );
+        let mut call = Call::new("POST", "/api/debug/heap-dump".to_owned(), 200, &[400, 401, 500]);
         if let Some(value) = &input.directory {
             call.query("directory", value)?;
         }
@@ -3260,10 +2738,7 @@ impl Client {
     }
 
     /// `GET /api/debug/location` (`location.list`)
-    pub async fn debug_location_list(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<DebugLocationListOutput, Error> {
+    pub async fn debug_location_list(&self, options: &RequestOptions) -> Result<DebugLocationListOutput, Error> {
         let call = Call::new("GET", "/api/debug/location".to_owned(), 200, &[400, 401]);
 
         self.json(call, options).await
@@ -3287,12 +2762,7 @@ impl Client {
         &self,
         options: &RequestOptions,
     ) -> Result<ExperimentalMigrationV1StatusOutput, Error> {
-        let call = Call::new(
-            "GET",
-            "/api/experimental/migration/v1".to_owned(),
-            200,
-            &[400, 401],
-        );
+        let call = Call::new("GET", "/api/experimental/migration/v1".to_owned(), 200, &[400, 401]);
 
         self.json(call, options).await
     }
@@ -3303,12 +2773,7 @@ impl Client {
         input: &WebsearchProvidersInput,
         options: &RequestOptions,
     ) -> Result<WebsearchProvidersOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/websearch/provider".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("GET", "/api/websearch/provider".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3321,12 +2786,7 @@ impl Client {
         input: &WebsearchQueryInput,
         options: &RequestOptions,
     ) -> Result<WebsearchQueryOutput, Error> {
-        let mut call = Call::new(
-            "POST",
-            "/api/websearch".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("POST", "/api/websearch".to_owned(), 200, &[400, 401, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -3344,12 +2804,7 @@ impl Client {
         input: &ExperimentalUsageLimitsInput,
         options: &RequestOptions,
     ) -> Result<ExperimentalUsageLimitsOutput, Error> {
-        let mut call = Call::new(
-            "GET",
-            "/api/experimental/usage/limits".to_owned(),
-            200,
-            &[400, 401, 404, 503],
-        );
+        let mut call = Call::new("GET", "/api/experimental/usage/limits".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
@@ -3357,11 +2812,7 @@ impl Client {
     }
 
     /// `GET /api/config` (`get`)
-    pub async fn config_get(
-        &self,
-        input: &ConfigGetInput,
-        options: &RequestOptions,
-    ) -> Result<ConfigGetOutput, Error> {
+    pub async fn config_get(&self, input: &ConfigGetInput, options: &RequestOptions) -> Result<ConfigGetOutput, Error> {
         let mut call = Call::new("GET", "/api/config".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -3370,10 +2821,7 @@ impl Client {
     }
 
     /// `GET /api/config/shell` (`shells`)
-    pub async fn config_shells(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<ConfigShellsOutput, Error> {
+    pub async fn config_shells(&self, options: &RequestOptions) -> Result<ConfigShellsOutput, Error> {
         let call = Call::new("GET", "/api/config/shell".to_owned(), 200, &[400, 401, 404]);
 
         self.json(call, options).await
@@ -3385,12 +2833,7 @@ impl Client {
         input: &ExperimentalConfigUpdateInput,
         options: &RequestOptions,
     ) -> Result<(), Error> {
-        let mut call = Call::new(
-            "PATCH",
-            "/api/experimental/config".to_owned(),
-            204,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("PATCH", "/api/experimental/config".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("shell", &input.shell)?;
         self.empty(call, options).await

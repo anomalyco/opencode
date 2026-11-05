@@ -22,10 +22,7 @@ use sha1::{Digest, Sha1};
 
 /// `Hash.fast` from `packages/util/src/hash.ts`: lowercase SHA-1 hex.
 pub fn hash(input: &str) -> String {
-    Sha1::digest(input.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    Sha1::digest(input.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Timing, with the TypeScript defaults.
@@ -82,12 +79,7 @@ pub struct Lock {
 }
 
 /// Runs `f` while holding the lock for `key` in `dir`.
-pub fn with_lock<T>(
-    dir: &Path,
-    key: &str,
-    options: &Options,
-    f: impl FnOnce() -> T,
-) -> Result<T, Error> {
+pub fn with_lock<T>(dir: &Path, key: &str, options: &Options, f: impl FnOnce() -> T) -> Result<T, Error> {
     let lock = acquire(dir, key, options)?;
     let value = f();
     lock.release()?;
@@ -109,9 +101,7 @@ pub fn acquire(dir: &Path, key: &str, options: &Options) -> Result<Lock, Error> 
             return Err(Error::Timeout(key.to_string()));
         }
         thread::sleep(jitter(delay));
-        delay = options
-            .max_delay
-            .min(Duration::from_millis((delay.as_millis() as u64 * 17) / 10));
+        delay = options.max_delay.min(Duration::from_millis((delay.as_millis() as u64 * 17) / 10));
     }
 }
 
@@ -179,22 +169,13 @@ fn try_acquire(lock_dir: &Path, options: &Options) -> Result<Option<Lock>, Error
     .expect("meta serializes");
     if create_new(&heartbeat, b"").is_err() {
         let _ = remove(lock_dir);
-        return Err(Error::Compromised(
-            "Lock acquired but heartbeat already existed (possible compromise).",
-        ));
+        return Err(Error::Compromised("Lock acquired but heartbeat already existed (possible compromise)."));
     }
     if create_new(&meta, body.as_bytes()).is_err() {
         let _ = remove(lock_dir);
-        return Err(Error::Compromised(
-            "Lock acquired but meta.json already existed (possible compromise).",
-        ));
+        return Err(Error::Compromised("Lock acquired but meta.json already existed (possible compromise)."));
     }
-    Ok(Some(Lock {
-        dir: lock_dir.to_path_buf(),
-        token,
-        heartbeat: None,
-        released: false,
-    }))
+    Ok(Some(Lock { dir: lock_dir.to_path_buf(), token, heartbeat: None, released: false }))
 }
 
 impl Lock {
@@ -231,26 +212,18 @@ impl Lock {
         }
         let raw = fs::read_to_string(self.dir.join("meta.json")).map_err(|err| {
             if gone(&err) {
-                return Error::Compromised(
-                    "Refusing to release: lock is compromised (metadata missing).",
-                );
+                return Error::Compromised("Refusing to release: lock is compromised (metadata missing).");
             }
             Error::Io(err)
         })?;
         let current = match serde_json::from_str::<serde_json::Value>(&raw) {
             Err(_) => {
-                return Err(Error::Compromised(
-                    "Refusing to release: lock is compromised (metadata invalid).",
-                ));
+                return Err(Error::Compromised("Refusing to release: lock is compromised (metadata invalid)."));
             }
-            Ok(value) => serde_json::from_value::<TokenOnly>(value)
-                .ok()
-                .and_then(|meta| meta.token),
+            Ok(value) => serde_json::from_value::<TokenOnly>(value).ok().and_then(|meta| meta.token),
         };
         if current.as_ref().and_then(|token| token.as_str()) != Some(self.token.as_str()) {
-            return Err(Error::Compromised(
-                "Refusing to release: lock token mismatch (not the owner).",
-            ));
+            return Err(Error::Compromised("Refusing to release: lock token mismatch (not the owner)."));
         }
         remove(&self.dir)?;
         Ok(())
@@ -267,11 +240,7 @@ impl Drop for Lock {
 
 fn stale(lock_dir: &Path, stale: Duration) -> io::Result<bool> {
     // The heartbeat, else meta.json, else the directory itself dates the owner.
-    for path in [
-        lock_dir.join("heartbeat"),
-        lock_dir.join("meta.json"),
-        lock_dir.to_path_buf(),
-    ] {
+    for path in [lock_dir.join("heartbeat"), lock_dir.join("meta.json"), lock_dir.to_path_buf()] {
         if let Some(meta) = stat(&path)? {
             return Ok(age(&meta) > stale);
         }
@@ -280,10 +249,7 @@ fn stale(lock_dir: &Path, stale: Duration) -> io::Result<bool> {
 }
 
 fn age(meta: &fs::Metadata) -> Duration {
-    meta.modified()
-        .ok()
-        .and_then(|time| SystemTime::now().duration_since(time).ok())
-        .unwrap_or_default()
+    meta.modified().ok().and_then(|time| SystemTime::now().duration_since(time).ok()).unwrap_or_default()
 }
 
 fn stat(path: &Path) -> io::Result<Option<fs::Metadata>> {
@@ -295,10 +261,7 @@ fn stat(path: &Path) -> io::Result<Option<fs::Metadata>> {
 }
 
 fn gone(err: &io::Error) -> bool {
-    matches!(
-        err.kind(),
-        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
-    )
+    matches!(err.kind(), io::ErrorKind::NotFound | io::ErrorKind::NotADirectory)
 }
 
 fn mkdir(path: &Path) -> io::Result<()> {
@@ -309,11 +272,7 @@ fn mkdir(path: &Path) -> io::Result<()> {
 }
 
 fn create_new(path: &Path, body: &[u8]) -> io::Result<()> {
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?
-        .write_all(body)
+    fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(body)
 }
 
 // `rm -rf`: a missing path is fine.
@@ -326,10 +285,7 @@ fn remove(path: &Path) -> io::Result<()> {
 
 #[cfg(unix)]
 fn hostname() -> String {
-    rustix::system::uname()
-        .nodename()
-        .to_string_lossy()
-        .into_owned()
+    rustix::system::uname().nodename().to_string_lossy().into_owned()
 }
 
 #[cfg(not(unix))]
@@ -363,8 +319,7 @@ mod tests {
         let lock_dir = dir.path().join(format!("{}.lock", hash("/some/file.json")));
         assert_eq!(lock.path(), lock_dir);
         assert_eq!(fs::read(lock_dir.join("heartbeat")).unwrap(), b"");
-        let meta: Meta =
-            serde_json::from_str(&fs::read_to_string(lock_dir.join("meta.json")).unwrap()).unwrap();
+        let meta: Meta = serde_json::from_str(&fs::read_to_string(lock_dir.join("meta.json")).unwrap()).unwrap();
         assert_eq!(meta.pid, std::process::id());
         lock.release().unwrap();
         assert!(!lock_dir.exists());
@@ -377,51 +332,30 @@ mod tests {
         let err = acquire(dir.path(), "k", &quick()).unwrap_err();
         assert_eq!(err.to_string(), "Timed out waiting for lock: k");
         // Another key is independent.
-        acquire(dir.path(), "other", &quick())
-            .unwrap()
-            .release()
-            .unwrap();
+        acquire(dir.path(), "other", &quick()).unwrap().release().unwrap();
         drop(held);
-        acquire(dir.path(), "k", &quick())
-            .unwrap()
-            .release()
-            .unwrap();
+        acquire(dir.path(), "k", &quick()).unwrap().release().unwrap();
     }
 
     #[test]
     fn breaks_a_stale_lock() {
         let dir = tempfile::tempdir().unwrap();
-        let options = Options {
-            stale: Duration::from_millis(200),
-            ..quick()
-        };
+        let options = Options { stale: Duration::from_millis(200), ..quick() };
         let lock_dir = dir.path().join(format!("{}.lock", hash("k")));
         fs::create_dir(&lock_dir).unwrap();
         fs::write(lock_dir.join("heartbeat"), "").unwrap();
         let old = SystemTime::now() - Duration::from_secs(5);
-        fs::File::open(lock_dir.join("heartbeat"))
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-        acquire(dir.path(), "k", &options)
-            .unwrap()
-            .release()
-            .unwrap();
+        fs::File::open(lock_dir.join("heartbeat")).unwrap().set_modified(old).unwrap();
+        acquire(dir.path(), "k", &options).unwrap().release().unwrap();
     }
 
     #[test]
     fn heartbeat_keeps_a_long_hold_fresh() {
         let dir = tempfile::tempdir().unwrap();
-        let options = Options {
-            stale: Duration::from_millis(300),
-            ..quick()
-        };
+        let options = Options { stale: Duration::from_millis(300), ..quick() };
         let held = acquire(dir.path(), "k", &options).unwrap();
         thread::sleep(Duration::from_millis(700));
-        assert!(matches!(
-            acquire(dir.path(), "k", &options),
-            Err(Error::Timeout(_))
-        ));
+        assert!(matches!(acquire(dir.path(), "k", &options), Err(Error::Timeout(_))));
         held.release().unwrap();
     }
 

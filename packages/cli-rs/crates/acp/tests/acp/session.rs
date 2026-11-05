@@ -24,16 +24,10 @@ async fn initialize_advertises_capabilities_and_offers_terminal_auth_only_when_a
     let acp = start_wire(WireOptions::default()).await;
 
     let plain = acp.initialize(json!({ "_meta": {} })).await;
-    let terminal = acp
-        .initialize(
-            json!({ "_meta": { "terminal-auth": true, "opencode/child-session-updates": true } }),
-        )
-        .await;
+    let terminal =
+        acp.initialize(json!({ "_meta": { "terminal-auth": true, "opencode/child-session-updates": true } })).await;
     let standard = acp
-        .request(
-            "initialize",
-            json!({ "protocolVersion": 1, "clientCapabilities": { "auth": { "terminal": true } } }),
-        )
+        .request("initialize", json!({ "protocolVersion": 1, "clientCapabilities": { "auth": { "terminal": true } } }))
         .await
         .unwrap();
 
@@ -69,25 +63,12 @@ async fn initialize_advertises_capabilities_and_offers_terminal_auth_only_when_a
             "args": ["--login"],
         }])
     );
-    assert_eq!(
-        acp.request("authenticate", json!({ "methodId": "opencode-login" }))
-            .await
-            .unwrap(),
-        json!({})
-    );
+    assert_eq!(acp.request("authenticate", json!({ "methodId": "opencode-login" })).await.unwrap(), json!({}));
     assert_matches(
-        &error(
-            acp.request("authenticate", json!({ "methodId": "missing" }))
-                .await,
-        ),
+        &error(acp.request("authenticate", json!({ "methodId": "missing" })).await),
         &json!({ "code": -32602, "data": { "methodId": "missing" } }),
     );
-    assert_eq!(
-        acp.request("initialize", json!({ "protocolVersion": 99 }))
-            .await
-            .unwrap()["protocolVersion"],
-        json!(1)
-    );
+    assert_eq!(acp.request("initialize", json!({ "protocolVersion": 99 })).await.unwrap()["protocolVersion"], json!(1));
 }
 
 #[tokio::test]
@@ -97,8 +78,7 @@ async fn load_resume_and_fork_keep_the_selection_and_check_the_directory() {
         let mut state = acp.server.state();
         let mut loaded = make_session("ses_loaded", "/workspace");
         loaded["agent"] = json!("plan");
-        loaded["model"] =
-            json!({ "providerID": "test", "id": "second-model", "variant": "medium" });
+        loaded["model"] = json!({ "providerID": "test", "id": "second-model", "variant": "medium" });
         state.sessions.insert("ses_loaded".to_owned(), loaded);
         let mut resume = make_session("ses_resume", "/workspace");
         resume["agent"] = json!("plan");
@@ -116,48 +96,22 @@ async fn load_resume_and_fork_keep_the_selection_and_check_the_directory() {
     acp.initialize(json!({})).await;
     let params = |cwd: &str, id: &str| json!({ "cwd": cwd, "sessionId": id, "mcpServers": [] });
 
-    let loaded = acp
-        .request("session/load", params("/workspace", "ses_loaded"))
-        .await
-        .unwrap();
-    let resumed = acp
-        .request("session/resume", params("/workspace", "ses_resume"))
-        .await
-        .unwrap();
-    let forked = acp
-        .request("session/fork", params("/workspace", "ses_loaded"))
-        .await
-        .unwrap();
+    let loaded = acp.request("session/load", params("/workspace", "ses_loaded")).await.unwrap();
+    let resumed = acp.request("session/resume", params("/workspace", "ses_resume")).await.unwrap();
+    let forked = acp.request("session/fork", params("/workspace", "ses_loaded")).await.unwrap();
 
     assert_matches(
-        &error(
-            acp.request("session/load", params("/elsewhere", "ses_loaded"))
-                .await,
-        ),
+        &error(acp.request("session/load", params("/elsewhere", "ses_loaded")).await),
         &json!({ "code": -32602, "data": { "sessionId": "ses_loaded", "cwd": "/elsewhere" } }),
     );
     let sessions: Vec<String> = acp.server.state().sessions.keys().cloned().collect();
     assert_matches(
-        &error(
-            acp.request("session/fork", params("/elsewhere", "ses_loaded"))
-                .await,
-        ),
+        &error(acp.request("session/fork", params("/elsewhere", "ses_loaded")).await),
         &json!({ "code": -32602, "data": { "sessionId": "ses_loaded", "cwd": "/elsewhere" } }),
     );
-    assert_eq!(
-        acp.server
-            .state()
-            .sessions
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        sessions
-    );
+    assert_eq!(acp.server.state().sessions.keys().cloned().collect::<Vec<_>>(), sessions);
     assert_matches(
-        &error(
-            acp.request("session/load", params("/workspace", "ses_missing"))
-                .await,
-        ),
+        &error(acp.request("session/load", params("/workspace", "ses_missing")).await),
         &json!({ "code": -32602, "data": { "sessionId": "ses_missing" } }),
     );
     assert_eq!(current_value(&loaded, "model"), json!("test/second-model"));
@@ -170,20 +124,12 @@ async fn load_resume_and_fork_keep_the_selection_and_check_the_directory() {
     let replayed = |session_id: &str| -> Vec<Value> {
         acp.updates()
             .into_iter()
-            .filter(|item| {
-                item["sessionId"] == session_id
-                    && item["update"]["sessionUpdate"] == "user_message_chunk"
-            })
+            .filter(|item| item["sessionId"] == session_id && item["update"]["sessionUpdate"] == "user_message_chunk")
             .map(|item| item["update"].clone())
             .collect()
     };
-    let loaded_ids: Vec<Value> = replayed("ses_loaded")
-        .iter()
-        .map(|update| update["messageId"].clone())
-        .collect();
-    let history: Vec<Value> = (0..201)
-        .map(|index| json!(format!("msg_{index}")))
-        .collect();
+    let loaded_ids: Vec<Value> = replayed("ses_loaded").iter().map(|update| update["messageId"].clone()).collect();
+    let history: Vec<Value> = (0..201).map(|index| json!(format!("msg_{index}"))).collect();
     assert_eq!(loaded_ids, history);
     assert!(replayed(forked_id).is_empty());
     assert!(replayed("ses_resume").is_empty());
@@ -201,18 +147,14 @@ async fn until_commands(acp: &Wire, method: &str, params: Value) -> Vec<String> 
         let labels: Vec<String> = lock(&acp.received)[start..]
             .iter()
             .map(|message| match message["method"].as_str() {
-                Some("session/update") => message["params"]["update"]["sessionUpdate"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned(),
+                Some("session/update") => {
+                    message["params"]["update"]["sessionUpdate"].as_str().unwrap_or_default().to_owned()
+                }
                 Some(method) => method.to_owned(),
                 None => "response".to_owned(),
             })
             .collect();
-        labels
-            .iter()
-            .any(|label| label == "available_commands_update")
-            .then_some(labels)
+        labels.iter().any(|label| label == "available_commands_update").then_some(labels)
     })
     .await
 }
@@ -220,48 +162,28 @@ async fn until_commands(acp: &Wire, method: &str, params: Value) -> Vec<String> 
 #[tokio::test]
 async fn publishes_a_sessions_commands_after_the_response_that_attaches_it() {
     let acp = start_wire(WireOptions::default()).await;
-    acp.server.state().sessions.insert(
-        "ses_loaded".to_owned(),
-        make_session("ses_loaded", "/workspace"),
-    );
+    acp.server.state().sessions.insert("ses_loaded".to_owned(), make_session("ses_loaded", "/workspace"));
     acp.server.state().messages.insert(
         "ses_loaded".to_owned(),
         vec![json!({ "id": "msg_0", "type": "user", "text": "hello", "time": { "created": 0 } })],
     );
     acp.initialize(json!({})).await;
     let params = json!({ "cwd": "/workspace", "sessionId": "ses_loaded", "mcpServers": [] });
-    let expected = vec![
-        "response".to_owned(),
-        "available_commands_update".to_owned(),
-    ];
+    let expected = vec!["response".to_owned(), "available_commands_update".to_owned()];
 
-    assert_eq!(
-        until_commands(
-            &acp,
-            "session/new",
-            json!({ "cwd": "/workspace", "mcpServers": [] })
-        )
-        .await,
-        expected
-    );
+    assert_eq!(until_commands(&acp, "session/new", json!({ "cwd": "/workspace", "mcpServers": [] })).await, expected);
     assert_eq!(
         until_commands(&acp, "session/load", params.clone()).await,
-        [
-            "user_message_chunk",
-            "response",
-            "available_commands_update"
-        ]
+        ["user_message_chunk", "response", "available_commands_update"]
     );
-    assert_eq!(
-        until_commands(&acp, "session/resume", params.clone()).await,
-        expected
-    );
+    assert_eq!(until_commands(&acp, "session/resume", params.clone()).await, expected);
     assert_eq!(until_commands(&acp, "session/fork", params).await, expected);
 }
 
 #[tokio::test]
 async fn converts_mcp_configs_and_deduplicates_registrations_per_session_and_config() {
-    let local = json!({ "name": "tools", "command": "bun", "args": ["server.ts"], "env": [{ "name": "TOKEN", "value": "x" }] });
+    let local =
+        json!({ "name": "tools", "command": "bun", "args": ["server.ts"], "env": [{ "name": "TOKEN", "value": "x" }] });
     let mut changed = local.clone();
     changed["args"] = json!(["changed.ts"]);
     let remote = json!({
@@ -271,18 +193,12 @@ async fn converts_mcp_configs_and_deduplicates_registrations_per_session_and_con
     let acp = start_wire(WireOptions::default()).await;
     acp.initialize(json!({})).await;
 
-    let first = acp
-        .new_session("/workspace", json!([local, local, remote]))
-        .await
-        .unwrap();
+    let first = acp.new_session("/workspace", json!([local, local, remote])).await.unwrap();
     let id = first["sessionId"].as_str().unwrap();
     for servers in [json!([local, remote]), json!([changed]), json!([local])] {
-        acp.request(
-            "session/resume",
-            json!({ "cwd": "/workspace", "sessionId": id, "mcpServers": servers }),
-        )
-        .await
-        .unwrap();
+        acp.request("session/resume", json!({ "cwd": "/workspace", "sessionId": id, "mcpServers": servers }))
+            .await
+            .unwrap();
     }
 
     let local_config = |args: &[&str]| {
@@ -294,21 +210,11 @@ async fn converts_mcp_configs_and_deduplicates_registrations_per_session_and_con
         })
     };
     let tools = |acp: &Wire| -> Vec<Value> {
-        acp.server
-            .state()
-            .mcp
-            .iter()
-            .filter(|item| item["name"] == "tools")
-            .cloned()
-            .collect()
+        acp.server.state().mcp.iter().filter(|item| item["name"] == "tools").cloned().collect()
     };
     assert_eq!(
         tools(&acp),
-        vec![
-            local_config(&["server.ts"]),
-            local_config(&["changed.ts"]),
-            local_config(&["server.ts"]),
-        ]
+        vec![local_config(&["server.ts"]), local_config(&["changed.ts"]), local_config(&["server.ts"]),]
     );
 
     acp.new_session("/workspace", json!([local])).await.unwrap();
@@ -324,12 +230,7 @@ async fn converts_mcp_configs_and_deduplicates_registrations_per_session_and_con
         ]
     );
     assert_eq!(
-        acp.server
-            .state()
-            .mcp
-            .iter()
-            .find(|item| item["name"] == "docs")
-            .cloned(),
+        acp.server.state().mcp.iter().find(|item| item["name"] == "docs").cloned(),
         Some(json!({
             "name": "docs", "directory": "/workspace",
             "config": { "type": "remote", "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer x" }, "oauth": false },
@@ -340,10 +241,7 @@ async fn converts_mcp_configs_and_deduplicates_registrations_per_session_and_con
 #[tokio::test]
 async fn rejects_relative_cwds_mcp_over_acp_and_sse_servers_before_creating_or_loading() {
     let acp = start_wire(WireOptions::default()).await;
-    acp.server.state().sessions.insert(
-        "ses_saved".to_owned(),
-        make_session("ses_saved", "/workspace"),
-    );
+    acp.server.state().sessions.insert("ses_saved".to_owned(), make_session("ses_saved", "/workspace"));
     acp.initialize(json!({})).await;
     let existing: Vec<String> = acp.server.state().sessions.keys().cloned().collect();
     let mcp_servers = json!([{ "type": "acp", "name": "client", "serverId": "mcp_client" }]);
@@ -359,10 +257,7 @@ async fn rejects_relative_cwds_mcp_over_acp_and_sse_servers_before_creating_or_l
         "data": { "field": "cwd" },
     });
 
-    assert_eq!(
-        error(acp.new_session("/workspace", mcp_servers.clone()).await),
-        invalid
-    );
+    assert_eq!(error(acp.new_session("/workspace", mcp_servers.clone()).await), invalid);
     assert_eq!(error(acp.new_session("/workspace", sse).await), invalid);
     assert_eq!(
         error(
@@ -374,47 +269,21 @@ async fn rejects_relative_cwds_mcp_over_acp_and_sse_servers_before_creating_or_l
         ),
         invalid
     );
-    assert_eq!(
-        error(acp.new_session("workspace", json!([])).await),
-        relative
-    );
+    assert_eq!(error(acp.new_session("workspace", json!([])).await), relative);
     assert_eq!(
         error(
-            acp.request(
-                "session/load",
-                json!({ "cwd": "workspace", "sessionId": "ses_saved", "mcpServers": [] }),
-            )
-            .await
-        ),
-        relative
-    );
-    assert_eq!(
-        error(
-            acp.request("session/list", json!({ "cwd": "workspace" }))
+            acp.request("session/load", json!({ "cwd": "workspace", "sessionId": "ses_saved", "mcpServers": [] }),)
                 .await
         ),
         relative
     );
+    assert_eq!(error(acp.request("session/list", json!({ "cwd": "workspace" })).await), relative);
     assert_matches(
         &error(acp.request("session/list", json!({ "cwd": "" })).await),
         &json!({ "code": -32602, "data": { "field": "cwd" } }),
     );
-    assert_eq!(
-        acp.server
-            .state()
-            .sessions
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        existing
-    );
-    assert!(
-        acp.server
-            .state()
-            .requests
-            .iter()
-            .all(|(_, path)| !path.contains("ses_saved"))
-    );
+    assert_eq!(acp.server.state().sessions.keys().cloned().collect::<Vec<_>>(), existing);
+    assert!(acp.server.state().requests.iter().all(|(_, path)| !path.contains("ses_saved")));
 }
 
 #[tokio::test]
@@ -431,10 +300,7 @@ async fn lists_sessions_with_titles_and_update_times() {
     }
     acp.initialize(json!({})).await;
 
-    let listed = acp
-        .request("session/list", json!({ "cwd": "/workspace" }))
-        .await
-        .unwrap();
+    let listed = acp.request("session/list", json!({ "cwd": "/workspace" })).await.unwrap();
 
     assert_eq!(
         listed,
@@ -456,10 +322,7 @@ async fn answers_protocol_errors_and_unknown_methods() {
         json!({ "code": -32601, "message": "\"Method not found\": session/unknown", "data": { "method": "session/unknown" } })
     );
     assert_eq!(
-        error(
-            acp.request("session/new", json!({ "mcpServers": [] }))
-                .await
-        ),
+        error(acp.request("session/new", json!({ "mcpServers": [] })).await),
         json!({
             "code": -32602,
             "message": "Invalid params",

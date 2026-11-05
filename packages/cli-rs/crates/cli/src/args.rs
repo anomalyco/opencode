@@ -28,25 +28,11 @@ pub struct GlobalArgs {
     pub version: bool,
     #[arg(long, global = true, help = "Start wizard mode for a command")]
     pub wizard: bool,
-    #[arg(
-        long,
-        global = true,
-        value_name = "shell",
-        help = "Print shell completion script"
-    )]
+    #[arg(long, global = true, value_name = "shell", help = "Print shell completion script")]
     pub completions: Option<Shell>,
-    #[arg(
-        long,
-        global = true,
-        value_name = "level",
-        help = "Sets the minimum log level"
-    )]
+    #[arg(long, global = true, value_name = "level", help = "Sets the minimum log level")]
     pub log_level: Option<LogLevel>,
-    #[arg(
-        long,
-        global = true,
-        help = "Print logs to stderr (server logs require --standalone)"
-    )]
+    #[arg(long, global = true, help = "Print logs to stderr (server logs require --standalone)")]
     pub print_logs: bool,
 }
 
@@ -109,10 +95,7 @@ impl PermissionFlags {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    #[command(
-        about = "Upgrade OpenCode to the latest or a specific version",
-        visible_alias = "update"
-    )]
+    #[command(about = "Upgrade OpenCode to the latest or a specific version", visible_alias = "update")]
     Upgrade(UpgradeArgs),
     #[command(about = "Uninstall OpenCode, keeping session data, configuration, and state")]
     Uninstall(UninstallArgs),
@@ -157,17 +140,9 @@ pub struct ServerArgs {
 
 #[derive(Args, Debug)]
 pub struct UpgradeArgs {
-    #[arg(
-        value_name = "target",
-        help = "Version to upgrade to (with or without a leading v)"
-    )]
+    #[arg(value_name = "target", help = "Version to upgrade to (with or without a leading v)")]
     pub target: Option<String>,
-    #[arg(
-        short = 'm',
-        long,
-        value_name = "choice",
-        help = "Installation method to use"
-    )]
+    #[arg(short = 'm', long, value_name = "choice", help = "Installation method to use")]
     pub method: Option<UpgradeMethod>,
 }
 
@@ -295,12 +270,7 @@ pub enum AuthCommand {
 
 #[derive(Args, Debug)]
 pub struct AuthListArgs {
-    #[arg(
-        long,
-        value_name = "choice",
-        default_value = "default",
-        help = "Output format"
-    )]
+    #[arg(long, value_name = "choice", default_value = "default", help = "Output format")]
     pub format: OutputFormat,
 }
 
@@ -312,10 +282,7 @@ pub enum OutputFormat {
 
 #[derive(Args, Debug)]
 pub struct AuthLoginArgs {
-    #[arg(
-        value_name = "target",
-        help = "Integration ID, name, or well-known provider URL"
-    )]
+    #[arg(value_name = "target", help = "Integration ID, name, or well-known provider URL")]
     pub target: Option<String>,
     #[arg(long, value_name = "string", help = "Authentication method ID")]
     pub method: Option<String>,
@@ -333,28 +300,19 @@ pub struct AuthLoginArgs {
 pub struct AuthAccountArgs {
     #[arg(value_name = "target", help = "Integration ID or name")]
     pub target: Option<String>,
-    #[arg(
-        value_name = "credential",
-        help = "Credential ID or label (opens an account picker when omitted)"
-    )]
+    #[arg(value_name = "credential", help = "Credential ID or label (opens an account picker when omitted)")]
     pub credential: Option<String>,
 }
 
 #[derive(Args, Debug)]
 pub struct AuthExportArgs {
-    #[arg(
-        value_name = "target",
-        help = "Integration ID or name (exports every integration when omitted)"
-    )]
+    #[arg(value_name = "target", help = "Integration ID or name (exports every integration when omitted)")]
     pub target: Option<String>,
 }
 
 #[derive(Args, Debug)]
 pub struct AuthImportArgs {
-    #[arg(
-        value_name = "file",
-        help = "JSON file to import (reads stdin when omitted)"
-    )]
+    #[arg(value_name = "file", help = "JSON file to import (reads stdin when omitted)")]
     pub file: Option<String>,
 }
 
@@ -380,10 +338,7 @@ pub enum McpCommand {
 pub struct McpAddArgs {
     #[arg(value_name = "name", help = "Name of the MCP server")]
     pub name: String,
-    #[arg(
-        value_name = "command",
-        help = "Command and arguments for a local server, passed after --"
-    )]
+    #[arg(value_name = "command", help = "Command and arguments for a local server, passed after --")]
     pub command: Vec<String>,
     #[arg(long, value_name = "string", help = "URL for a remote MCP server")]
     pub url: Option<String>,
@@ -391,10 +346,7 @@ pub struct McpAddArgs {
     pub header: Vec<(String, String)>,
     #[arg(long, value_name = "key=value", action = ArgAction::Append, value_parser = key_value, help = "Environment variable for a local server, as name=value")]
     pub env: Vec<(String, String)>,
-    #[arg(
-        long,
-        help = "Write to the global config instead of the project config"
-    )]
+    #[arg(long, help = "Write to the global config instead of the project config")]
     pub global: bool,
 }
 
@@ -458,10 +410,7 @@ pub struct PluginCheckArgs {
 
 #[derive(Args, Debug)]
 pub struct PluginUpdateArgs {
-    #[arg(
-        value_name = "target",
-        help = "Configured package target; omit to update all outdated plugins"
-    )]
+    #[arg(value_name = "target", help = "Configured package target; omit to update all outdated plugins")]
     pub target: Option<String>,
     #[command(flatten)]
     pub server: ServerFlags,
@@ -481,11 +430,7 @@ pub struct StatsArgs {
     pub year: Option<u16>,
     #[arg(long, help = "Show lifetime statistics")]
     pub all: bool,
-    #[arg(
-        long,
-        value_name = "string",
-        help = "Filter by project ID, or use \".\" for the current project"
-    )]
+    #[arg(long, value_name = "string", help = "Filter by project ID, or use \".\" for the current project")]
     pub project: Option<String>,
     #[arg(long, help = "Show model usage")]
     pub models: bool,
@@ -511,26 +456,14 @@ pub struct MiniArgs {
     pub session: Option<String>,
     #[arg(long, help = "Fork the session when continuing")]
     pub fork: bool,
-    #[arg(
-        long,
-        help = "Restore session history on resume and resize (disable with --no-replay)"
-    )]
+    #[arg(long, help = "Restore session history on resume and resize (disable with --no-replay)")]
     pub replay: bool,
     // Set by `normalize` for `--no-replay` and `--replay=false`, so `replay()` can tell false from absent.
     #[arg(long = "no-replay", hide = true)]
     pub no_replay: bool,
-    #[arg(
-        long,
-        value_name = "integer",
-        help = "Limit replay to the newest N messages (default: 200)"
-    )]
+    #[arg(long, value_name = "integer", help = "Limit replay to the newest N messages (default: 200)")]
     pub replay_limit: Option<i64>,
-    #[arg(
-        short = 'm',
-        long,
-        value_name = "string",
-        help = "Model to use in the format provider/model"
-    )]
+    #[arg(short = 'm', long, value_name = "string", help = "Model to use in the format provider/model")]
     pub model: Option<String>,
     #[arg(long, value_name = "string", help = "Agent to use")]
     pub agent: Option<String>,
@@ -574,21 +507,11 @@ pub struct RunArgs {
         help = "Start a new session in a new git worktree, optionally with this name"
     )]
     pub worktree: Option<String>,
-    #[arg(
-        short = 'm',
-        long,
-        value_name = "string",
-        help = "Model to use in the format provider/model#variant"
-    )]
+    #[arg(short = 'm', long, value_name = "string", help = "Model to use in the format provider/model#variant")]
     pub model: Option<String>,
     #[arg(long, value_name = "string", help = "Agent to use")]
     pub agent: Option<String>,
-    #[arg(
-        long,
-        value_name = "choice",
-        default_value = "default",
-        help = "Output format"
-    )]
+    #[arg(long, value_name = "choice", default_value = "default", help = "Output format")]
     pub format: OutputFormat,
     #[arg(short = 'f', long, value_name = "string", action = ArgAction::Append, help = "File to attach to the message")]
     pub file: Vec<String>,
@@ -610,9 +533,7 @@ pub struct RunArgs {
 impl RunArgs {
     /// `None` without `-w`; `Some(None)` for `-w` without a name.
     pub fn worktree(&self) -> Option<Option<&str>> {
-        self.worktree
-            .as_deref()
-            .map(|name| Some(name).filter(|name| !name.is_empty()))
+        self.worktree.as_deref().map(|name| Some(name).filter(|name| !name.is_empty()))
     }
 }
 
@@ -640,12 +561,7 @@ pub enum SessionCommand {
 pub struct SessionListArgs {
     #[arg(short = 'n', long, value_name = "integer", value_parser = clap::value_parser!(u32).range(1..), help = "Limit to N most recent sessions (default: 100)")]
     pub max_count: Option<u32>,
-    #[arg(
-        long,
-        value_name = "choice",
-        default_value = "table",
-        help = "Output format"
-    )]
+    #[arg(long, value_name = "choice", default_value = "table", help = "Output format")]
     pub format: SessionListFormat,
 }
 
@@ -673,11 +589,7 @@ pub struct SessionExportArgs {
 pub struct SessionImportArgs {
     #[arg(value_name = "file", help = "JSON file or URL to import")]
     pub file: String,
-    #[arg(
-        long,
-        value_name = "string",
-        help = "Directory in which to import the session"
-    )]
+    #[arg(long, value_name = "string", help = "Directory in which to import the session")]
     pub directory: Option<String>,
 }
 
@@ -717,10 +629,7 @@ pub struct ServiceGetArgs {
 pub struct ServiceSetArgs {
     #[arg(value_name = "key", help = "Service setting or env")]
     pub key: String,
-    #[arg(
-        value_name = "value",
-        help = "Setting value or environment variable name"
-    )]
+    #[arg(value_name = "value", help = "Setting value or environment variable name")]
     pub value: String,
     #[arg(value_name = "env-value", help = "Environment variable value")]
     pub env_value: Option<String>,
@@ -796,22 +705,17 @@ pub enum LogLevel {
 
 fn key_value(value: &str) -> Result<(String, String), String> {
     let Some((key, val)) = value.split_once('=') else {
-        return Err(format!(
-            "Invalid key=value format. Expected format: key=value, got: {value}"
-        ));
+        return Err(format!("Invalid key=value format. Expected format: key=value, got: {value}"));
     };
     if key.is_empty() || val.is_empty() {
-        return Err(format!(
-            "Invalid key=value format. Both key and value must be non-empty. Got: {value}"
-        ));
+        return Err(format!("Invalid key=value format. Both key and value must be non-empty. Got: {value}"));
     }
     Ok((key.to_string(), val.to_string()))
 }
 
 // commands.ts:551-561: an HTTP(S) URL without credentials, query, or fragment, without trailing slashes.
 fn pairing_url(value: &str) -> Result<String, String> {
-    let error =
-        "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
+    let error = "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
     let url = url::Url::parse(value).map_err(|_| error.to_string())?;
     let plain = matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
@@ -868,13 +772,9 @@ pub fn normalize(command: &clap::Command, args: Vec<OsString>) -> Result<Vec<OsS
             Some((name, value)) => (name, Some(value)),
             None => (text, None),
         };
-        let negated = name
-            .strip_prefix("--no-")
-            .and_then(|long| find_long(node, long).filter(|arg| is_bool(arg)));
+        let negated = name.strip_prefix("--no-").and_then(|long| find_long(node, long).filter(|arg| is_bool(arg)));
         if let Some(arg) = negated {
-            let literal = value
-                .map(str::to_string)
-                .or_else(|| take_literal(&mut tokens));
+            let literal = value.map(str::to_string).or_else(|| take_literal(&mut tokens));
             if let Some(literal) = literal {
                 let long = arg.get_long().unwrap_or_default();
                 return Err(format!(
@@ -890,9 +790,7 @@ pub fn normalize(command: &clap::Command, args: Vec<OsString>) -> Result<Vec<OsS
             continue;
         };
         if is_bool(arg) {
-            let literal = value
-                .map(str::to_string)
-                .or_else(|| take_literal(&mut tokens));
+            let literal = value.map(str::to_string).or_else(|| take_literal(&mut tokens));
             let enabled = match literal.as_deref() {
                 None => true,
                 Some(literal) => parse_bool(literal).ok_or_else(|| {
@@ -909,14 +807,9 @@ pub fn normalize(command: &clap::Command, args: Vec<OsString>) -> Result<Vec<OsS
         // A flag that takes the next word: keep that word out of subcommand detection.
         let takes_next = value.is_none()
             && !arg.is_require_equals_set()
-            && arg
-                .get_num_args()
-                .is_some_and(|range| range.min_values() > 0);
+            && arg.get_num_args().is_some_and(|range| range.min_values() > 0);
         out.push(token);
-        if takes_next
-            && let Some(next) =
-                tokens.next_if(|next| next.to_str().is_none_or(|next| !is_flag(next)))
-        {
+        if takes_next && let Some(next) = tokens.next_if(|next| next.to_str().is_none_or(|next| !is_flag(next))) {
             out.push(next);
         }
     }
@@ -926,11 +819,7 @@ pub fn normalize(command: &clap::Command, args: Vec<OsString>) -> Result<Vec<OsS
 
 // Effect's lexer: a word starting with `-` is a flag unless it is `-` alone or a negative number.
 fn is_flag(text: &str) -> bool {
-    text.len() > 1
-        && text.starts_with('-')
-        && text != "--"
-        && !text.starts_with("--=")
-        && !is_negative_number(text)
+    text.len() > 1 && text.starts_with('-') && text != "--" && !text.starts_with("--=") && !is_negative_number(text)
 }
 
 // lexer.ts:49, `^-(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$`.
@@ -973,13 +862,11 @@ fn cluster(text: &str) -> Option<Vec<String>> {
 }
 
 fn find_subcommand<'a>(node: &'a clap::Command, name: &str) -> Option<&'a clap::Command> {
-    node.get_subcommands()
-        .find(|sub| sub.get_name() == name || sub.get_all_aliases().any(|alias| alias == name))
+    node.get_subcommands().find(|sub| sub.get_name() == name || sub.get_all_aliases().any(|alias| alias == name))
 }
 
 fn find_long<'a>(node: &'a clap::Command, long: &str) -> Option<&'a clap::Arg> {
-    node.get_arguments()
-        .find(|arg| arg.get_long() == Some(long))
+    node.get_arguments().find(|arg| arg.get_long() == Some(long))
 }
 
 fn find_flag<'a>(node: &'a clap::Command, name: &str) -> Option<&'a clap::Arg> {
@@ -988,8 +875,7 @@ fn find_flag<'a>(node: &'a clap::Command, name: &str) -> Option<&'a clap::Arg> {
     }
     let mut chars = name[1..].chars();
     let short = chars.next().filter(|_| chars.next().is_none())?;
-    node.get_arguments()
-        .find(|arg| arg.get_short() == Some(short))
+    node.get_arguments().find(|arg| arg.get_short() == Some(short))
 }
 
 fn is_bool(arg: &clap::Arg) -> bool {
@@ -1004,12 +890,8 @@ fn parse_bool(text: &str) -> Option<bool> {
     }
 }
 
-fn take_literal(
-    tokens: &mut std::iter::Peekable<impl Iterator<Item = OsString>>,
-) -> Option<String> {
-    tokens
-        .next_if(|next| next.to_str().and_then(parse_bool).is_some())
-        .and_then(|next| next.into_string().ok())
+fn take_literal(tokens: &mut std::iter::Peekable<impl Iterator<Item = OsString>>) -> Option<String> {
+    tokens.next_if(|next| next.to_str().and_then(parse_bool).is_some()).and_then(|next| next.into_string().ok())
 }
 
 fn record(seen: &mut HashSet<String>, arg: &clap::Arg) -> Result<(), String> {
@@ -1017,9 +899,7 @@ fn record(seen: &mut HashSet<String>, arg: &clap::Arg) -> Result<(), String> {
     if seen.insert(long.to_string()) {
         return Ok(());
     }
-    Err(format!(
-        "Invalid value for flag --{long}: \"2 occurrences\". Expected: at most 1 value"
-    ))
+    Err(format!("Invalid value for flag --{long}: \"2 occurrences\". Expected: at most 1 value"))
 }
 
 fn push_bool(out: &mut Vec<OsString>, node: &clap::Command, arg: &clap::Arg, enabled: bool) {
@@ -1034,8 +914,7 @@ fn push_bool(out: &mut Vec<OsString>, node: &clap::Command, arg: &clap::Arg, ena
 }
 
 /// The repeatable flags with `Flag.atMost(100)` in commands.ts, by command name and flag.
-pub const AT_MOST_100: [(&str, &str); 3] =
-    [("api", "header"), ("login", "answer"), ("run", "file")];
+pub const AT_MOST_100: [(&str, &str); 3] = [("api", "header"), ("login", "answer"), ("run", "file")];
 
 /// Checks Effect CLI rules clap does not know, after clap parsed `matches` of `command` (built). Returns the
 /// `--standalone` and `--server` that apply to the selected command: the root's own, or those of the
@@ -1044,11 +923,7 @@ pub fn validate(command: &clap::Command, matches: &ArgMatches) -> Result<ServerF
     let mut path = vec![command];
     let mut leaf = matches;
     while let Some((name, sub)) = leaf.subcommand() {
-        path.push(
-            path.last()
-                .and_then(|node| node.find_subcommand(name))
-                .expect("clap matched it"),
-        );
+        path.push(path.last().and_then(|node| node.find_subcommand(name)).expect("clap matched it"));
         leaf = sub;
     }
     let names: Vec<&str> = path.iter().map(|node| node.get_name()).collect();
@@ -1059,17 +934,10 @@ pub fn validate(command: &clap::Command, matches: &ArgMatches) -> Result<ServerF
         });
     }
     let mut flags = ServerFlags {
-        standalone: leaf
-            .try_get_one::<bool>("standalone")
-            .ok()
-            .flatten()
-            .copied()
-            .unwrap_or(false),
+        standalone: leaf.try_get_one::<bool>("standalone").ok().flatten().copied().unwrap_or(false),
         server: leaf.try_get_one::<String>("server").ok().flatten().cloned(),
     };
-    let root_flags = command
-        .get_arguments()
-        .filter(|arg| !arg.is_global_set() && !arg.is_positional());
+    let root_flags = command.get_arguments().filter(|arg| !arg.is_global_set() && !arg.is_positional());
     for arg in root_flags {
         let id = arg.get_id().as_str();
         if matches.value_source(id) != Some(ValueSource::CommandLine) {
@@ -1078,15 +946,10 @@ pub fn validate(command: &clap::Command, matches: &ArgMatches) -> Result<ServerF
         let long = arg.get_long().unwrap_or(id);
         // Effect CLI does not pass a command's own flags to its subcommands; only declared globals apply.
         if !matches!(long, "standalone" | "server") || leaf.try_contains_id(long).is_err() {
-            return Err(format!(
-                "Unrecognized flag: --{long} in command {}",
-                names.join(" ")
-            ));
+            return Err(format!("Unrecognized flag: --{long} in command {}", names.join(" ")));
         }
         if leaf.value_source(long) == Some(ValueSource::CommandLine) {
-            return Err(format!(
-                "Invalid value for flag --{long}: \"2 occurrences\". Expected: at most 1 value"
-            ));
+            return Err(format!("Invalid value for flag --{long}: \"2 occurrences\". Expected: at most 1 value"));
         }
         match long {
             "standalone" => flags.standalone = true,
@@ -1094,13 +957,8 @@ pub fn validate(command: &clap::Command, matches: &ArgMatches) -> Result<ServerF
         }
     }
     // Flag.atMost(100) in commands.ts.
-    if let Some((_, id)) = AT_MOST_100
-        .iter()
-        .find(|(name, _)| names.last() == Some(name))
-    {
-        let count = leaf
-            .get_raw_occurrences(id)
-            .map_or(0, |values| values.count());
+    if let Some((_, id)) = AT_MOST_100.iter().find(|(name, _)| names.last() == Some(name)) {
+        let count = leaf.get_raw_occurrences(id).map_or(0, |values| values.count());
         if count > 100 {
             return Err(format!(
                 "Invalid value for flag --{id}: \"{count} occurrences\". Expected: at most 100 values"

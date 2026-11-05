@@ -9,9 +9,9 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID,
-    SessionInboxDelivery, SessionInboxInfo, SessionPromptInput, SessionRevertCommitInput,
-    SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput, SessionSyntheticInput,
+    AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID, SessionInboxDelivery,
+    SessionInboxInfo, SessionPromptInput, SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput,
+    SessionSwitchModelInput, SessionSyntheticInput,
 };
 use opencode_store::inbox::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
@@ -44,11 +44,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     if prompt.staging.creating() {
         return false;
     }
-    if prompt
-        .autocomplete
-        .get()
-        .is_some_and(|complete| complete.visible().is_some())
-    {
+    if prompt.autocomplete.get().is_some_and(|complete| complete.visible().is_some()) {
         return false;
     }
     let text = prompt.textarea.text();
@@ -92,8 +88,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         return false;
     };
     let session = prompt.session_info(tui);
-    let Some(selection) = crate::dialogs::model::prompt_selection(tui, &catalog, session.as_ref())
-    else {
+    let Some(selection) = crate::dialogs::model::prompt_selection(tui, &catalog, session.as_ref()) else {
         return false;
     };
     let Some(model) = selection.model.clone() else {
@@ -111,30 +106,20 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         tui.toasts.show(
             ToastOptions::new(
                 Variant::Warning,
-                format!(
-                    "{}/{} is not available in this session's location",
-                    model.provider_id, model.model_id
-                ),
+                format!("{}/{} is not available in this session's location", model.provider_id, model.model_id),
             )
             .title("Model unavailable"),
         );
         return false;
     }
     let head = slash_head(&text);
-    let command = head
-        .as_ref()
-        .filter(|(name, _)| catalog.commands.iter().any(|command| command == name))
-        .cloned();
+    let command = head.as_ref().filter(|(name, _)| catalog.commands.iter().any(|command| command == name)).cloned();
 
     // Snapshot, then clear before any request: text typed meanwhile survives, and history records
     // exactly what was sent.
     let entry = prompt.snapshot();
     let (files, agents, skills) = (
-        serde_json::from_value(super::attach::files_for_server(
-            &entry,
-            tui.startup.args.local,
-        ))
-        .ok(),
+        serde_json::from_value(super::attach::files_for_server(&entry, tui.startup.args.local)).ok(),
         parts::agents(&entry),
         parts::skills(&entry),
     );
@@ -154,13 +139,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 // Typed while the worktree was created: kept as home's draft.
                 let mut draft = prompt.snapshot();
                 draft["text"] = Value::String(typed);
-                tui.prompt.drafts.save(
-                    None,
-                    Draft {
-                        prompt: draft,
-                        cursor: u32::MAX,
-                    },
-                );
+                tui.prompt.drafts.save(None, Draft { prompt: draft, cursor: u32::MAX });
             }
             prompt.restore(pending);
             prompt.textarea.set_cursor_offset(prompt.text_end());
@@ -175,11 +154,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     let agent = selection.agent.id.clone();
     let model = model.model_ref();
     // `--session` with an unknown ID names the first session created here (`takeNewSessionID`).
-    let startup_id = prompt
-        .session
-        .is_none()
-        .then(|| tui.startup.take_new_session_id())
-        .flatten();
+    let startup_id = prompt.session.is_none().then(|| tui.startup.take_new_session_id()).flatten();
     let (target, creation) = match &prompt.session {
         Some(session) => (session.clone(), None),
         None => {
@@ -189,10 +164,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 model: Some(model.clone()),
                 location: Some(LocationPublicRef {
                     directory: AbsolutePath(
-                        prompt
-                            .staging
-                            .directory()
-                            .unwrap_or_else(|| prompt.location(tui).directory),
+                        prompt.staging.directory().unwrap_or_else(|| prompt.location(tui).directory),
                     ),
                 }),
                 ..CreateSession::default()
@@ -202,39 +174,32 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     };
     let created = creation.is_some();
     // New-session sends wait for creation and the environment upload.
-    let environment = created
-        .then(|| tui.startup.args.environment.clone())
-        .flatten();
+    let environment = created.then(|| tui.startup.args.environment.clone()).flatten();
     let commit = Commit {
         client: tui.data.client().clone(),
         session: target.clone(),
         environment: environment.clone(),
-        switch_agent: session
-            .as_ref()
-            .is_some_and(|session| session.agent.as_ref() != Some(&agent))
-            .then_some(agent),
+        switch_agent: session.as_ref().is_some_and(|session| session.agent.as_ref() != Some(&agent)).then_some(agent),
         model,
     };
     // A shell command commits no selection.
     if trimmed.is_empty() || mode != Mode::Shell {
-        tui.local
-            .track_commit(&target, &commit.model, &selection.agent.id.0);
+        tui.local.track_commit(&target, &commit.model, &selection.agent.id.0);
     }
 
     if trimmed.is_empty() {
         // A blank Enter commits the selection, then steers the first queued prompt.
         let weak = prompt.this.clone();
         let entry = entry.clone();
-        tui.app
-            .spawn(async move { commit.run().await }, move |_, result| {
-                if let Err(error) = result {
-                    fail(&weak, "Failed to prepare session", &error, &entry);
-                } else if let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade())
-                    && let Some(session) = weak.upgrade().and_then(|prompt| prompt.session.clone())
-                {
-                    steer_first_queued(&tui, &session);
-                }
-            });
+        tui.app.spawn(async move { commit.run().await }, move |_, result| {
+            if let Err(error) = result {
+                fail(&weak, "Failed to prepare session", &error, &entry);
+            } else if let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade())
+                && let Some(session) = weak.upgrade().and_then(|prompt| prompt.session.clone())
+            {
+                steer_first_queued(&tui, &session);
+            }
+        });
         return true;
     }
 
@@ -249,11 +214,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     match (mode, command) {
         (Mode::Shell, _) => {
             let client = tui.data.client().clone();
-            let input = SessionShellInput {
-                session_id: target.clone(),
-                id: None,
-                command: text,
-            };
+            let input = SessionShellInput { session_id: target.clone(), id: None, command: text };
             tui.app.spawn(
                 async move {
                     if let Some(creation) = creation {
@@ -264,10 +225,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                             .await
                             .map_err(Error::new)?;
                     }
-                    client
-                        .session_shell(&input, &RequestOptions::default())
-                        .await
-                        .map_err(Error::new)
+                    client.session_shell(&input, &RequestOptions::default()).await.map_err(Error::new)
                 },
                 move |_, result| failure.check("Failed to run shell command", result),
             );
@@ -290,10 +248,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                     }
                     let client = commit.client.clone();
                     commit.run().await?;
-                    client
-                        .session_command(&input, &RequestOptions::default())
-                        .await
-                        .map_err(Error::new)
+                    client.session_command(&input, &RequestOptions::default()).await.map_err(Error::new)
                 },
                 move |_, result| failure.check("Failed to run command", result),
             );
@@ -324,11 +279,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                     if let Some(creation) = creation {
                         creation.await?;
                     }
-                    client
-                        .session_synthetic(&input, &RequestOptions::default())
-                        .await
-                        .map(drop)
-                        .map_err(Error::new)
+                    client.session_synthetic(&input, &RequestOptions::default()).await.map(drop).map_err(Error::new)
                 })
             });
             let send = move |tui: &Tui| {
@@ -337,28 +288,20 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                     gate,
                     prepare: Some(Box::new(move || -> Gate { Box::pin(commit.run()) })),
                 });
-                tui.app.spawn(task, move |_, result| {
-                    failure.check("Failed to send prompt", result.map(drop))
-                });
+                tui.app.spawn(task, move |_, result| failure.check("Failed to send prompt", result.map(drop)));
             };
             // A staged revert is committed before the prompt is admitted: the committed event drops every
             // inbox row at or after the boundary, which would include the new prompt.
             if session.as_ref().is_some_and(|info| info.revert.is_some()) {
                 let client = tui.data.client().clone();
-                let input = SessionRevertCommitInput {
-                    session_id: target.clone(),
-                };
+                let input = SessionRevertCommitInput { session_id: target.clone() };
                 let weak = prompt.this.clone();
                 tui.app.spawn(
                     async move {
-                        client
-                            .session_revert_commit(&input, &RequestOptions::default())
-                            .await
-                            .map_err(Error::new)
+                        client.session_revert_commit(&input, &RequestOptions::default()).await.map_err(Error::new)
                     },
                     move |_, result| {
-                        let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade())
-                        else {
+                        let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade()) else {
                             return;
                         };
                         match result {
@@ -406,32 +349,16 @@ impl Commit {
     async fn run(self) -> Result<(), Error> {
         let options = RequestOptions::default();
         if let Some(variables) = self.environment {
-            opencode_store::environment::upload(&self.client, &self.session, variables)
-                .await
-                .map_err(Error::new)?;
+            opencode_store::environment::upload(&self.client, &self.session, variables).await.map_err(Error::new)?;
         }
         if let Some(agent) = self.switch_agent {
-            let input = SessionSwitchAgentInput {
-                session_id: self.session.clone(),
-                agent,
-            };
-            self.client
-                .session_switch_agent(&input, &options)
-                .await
-                .map_err(Error::new)?;
+            let input = SessionSwitchAgentInput { session_id: self.session.clone(), agent };
+            self.client.session_switch_agent(&input, &options).await.map_err(Error::new)?;
         }
-        let input = SessionSwitchModelInput {
-            session_id: self.session,
-            model: self.model,
-        };
-        self.client
-            .session_switch_model(&input, &options)
-            .await
-            .map_err(|error| {
-                Error::new(opencode_api::error::Error::Transport(format!(
-                    "Failed to switch model: {error}"
-                )))
-            })
+        let input = SessionSwitchModelInput { session_id: self.session, model: self.model };
+        self.client.session_switch_model(&input, &options).await.map_err(|error| {
+            Error::new(opencode_api::error::Error::Transport(format!("Failed to switch model: {error}")))
+        })
     }
 }
 
@@ -458,23 +385,12 @@ impl Failure {
             return;
         };
         let exists = tui.data.read(|state| state.session(&session).is_some());
-        let title = if exists {
-            "Failed to set up session"
-        } else {
-            "Creating a session failed"
-        };
+        let title = if exists { "Failed to set up session" } else { "Creating a session failed" };
         if let Some(id) = self.startup_id.filter(|_| !exists) {
             tui.startup.restore_new_session_id(id);
         }
-        tui.toasts
-            .show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
-        tui.prompt.drafts.save(
-            None,
-            Draft {
-                prompt: self.entry,
-                cursor: u32::MAX,
-            },
-        );
+        tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
+        tui.prompt.drafts.save(None, Draft { prompt: self.entry, cursor: u32::MAX });
         if tui.route() == (Route::Session { id: session }) {
             tui.navigate(Route::Home);
         }
@@ -489,8 +405,7 @@ fn fail(prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value
     let Some(tui) = prompt.tui.upgrade() else {
         return;
     };
-    tui.toasts
-        .show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
+    tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
     if prompt.textarea.text().is_empty() {
         prompt.restore(entry.clone());
         prompt.textarea.set_cursor_offset(prompt.text_end());
@@ -501,9 +416,7 @@ fn fail(prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value
 fn steer_first_queued(tui: &Tui, session: &SessionID) -> bool {
     let queued = tui.data.read(|state| {
         state.pending(session).iter().find_map(|item| match item {
-            SessionInboxInfo::User(user) if user.delivery == SessionInboxDelivery::Queue => {
-                Some(user.id.clone())
-            }
+            SessionInboxInfo::User(user) if user.delivery == SessionInboxDelivery::Queue => Some(user.id.clone()),
             _ => None,
         })
     });
@@ -526,8 +439,7 @@ fn argument_slash(tui: &Tui, text: &str) -> Option<(String, String)> {
     let (name, arguments) = slash_head(text)?;
     tui.keymap.commands().into_iter().find_map(|command| {
         let slash = command.slash.as_ref().filter(|slash| slash.arguments)?;
-        (slash.name == name || slash.aliases.contains(&name))
-            .then(|| (command.id.clone(), arguments.clone()))
+        (slash.name == name || slash.aliases.contains(&name)).then(|| (command.id.clone(), arguments.clone()))
     })
 }
 
@@ -544,8 +456,7 @@ fn slash_head(text: &str) -> Option<(String, String)> {
 }
 
 fn warn(tui: &Tui, message: &str) {
-    tui.toasts
-        .show(ToastOptions::new(Variant::Warning, message));
+    tui.toasts.show(ToastOptions::new(Variant::Warning, message));
 }
 
 #[cfg(test)]
@@ -554,15 +465,9 @@ mod tests {
 
     #[test]
     fn slash_head_splits_at_the_first_whitespace() {
-        assert_eq!(
-            slash_head("/cd ../x y"),
-            Some(("cd".into(), "../x y".into()))
-        );
+        assert_eq!(slash_head("/cd ../x y"), Some(("cd".into(), "../x y".into())));
         assert_eq!(slash_head("/init"), Some(("init".into(), String::new())));
-        assert_eq!(
-            slash_head("/review\nmore"),
-            Some(("review".into(), "more".into()))
-        );
+        assert_eq!(slash_head("/review\nmore"), Some(("review".into(), "more".into())));
         assert_eq!(slash_head("hello"), None);
     }
 }

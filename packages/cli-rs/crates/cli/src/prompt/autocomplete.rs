@@ -4,8 +4,8 @@
 use super::core::{self, Base, Prompt};
 use super::select::{Choice, limit_options};
 use super::style::{
-    S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE, cyan, dim, gray, green, hidden, inverse,
-    strikethrough, symbol, yellow,
+    S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE, cyan, dim, gray, green, hidden, inverse, strikethrough, symbol,
+    yellow,
 };
 use super::{Cancelled, Output, State, Validate};
 
@@ -66,17 +66,11 @@ impl<'a, T: Clone + PartialEq + ToString> Autocomplete<'a, T> {
     }
 
     /// Checks the focused value on Enter; `None` when no option matches the search.
-    pub fn validate<'b>(
-        self,
-        validate: impl Fn(&Option<T>) -> Option<String> + 'b,
-    ) -> Autocomplete<'b, T>
+    pub fn validate<'b>(self, validate: impl Fn(&Option<T>) -> Option<String> + 'b) -> Autocomplete<'b, T>
     where
         'a: 'b,
     {
-        Autocomplete {
-            validate: Some(Box::new(validate)),
-            ..self
-        }
+        Autocomplete { validate: Some(Box::new(validate)), ..self }
     }
 
     /// Replaces the default filter, which matches the label, hint, or value, ignoring case.
@@ -84,10 +78,7 @@ impl<'a, T: Clone + PartialEq + ToString> Autocomplete<'a, T> {
     where
         'a: 'b,
     {
-        Autocomplete {
-            filter: Some(Box::new(filter)),
-            ..self
-        }
+        Autocomplete { filter: Some(Box::new(filter)), ..self }
     }
 
     /// Replaces the frame Clack's `autocomplete` draws.
@@ -95,10 +86,7 @@ impl<'a, T: Clone + PartialEq + ToString> Autocomplete<'a, T> {
     where
         'a: 'b,
     {
-        Autocomplete {
-            render: Some(Box::new(render)),
-            ..self
-        }
+        Autocomplete { render: Some(Box::new(render)), ..self }
     }
 
     /// The focused option on Enter, `None` when nothing matched the search.
@@ -117,10 +105,7 @@ impl<'a, T: Clone + PartialEq + ToString> Autocomplete<'a, T> {
             options: self,
         };
         core::run(&mut prompt, output, None)?;
-        Ok(prompt
-            .value
-            .flatten()
-            .map(|index| prompt.options.options[index].value.clone()))
+        Ok(prompt.value.flatten().map(|index| prompt.options.options[index].value.clone()))
     }
 }
 
@@ -145,12 +130,7 @@ impl<T: Clone + PartialEq + ToString> AutocompletePrompt<'_, T> {
         let term = search.to_lowercase();
         search.is_empty()
             || option.label.to_lowercase().contains(&term)
-            || option
-                .hint
-                .as_deref()
-                .unwrap_or("")
-                .to_lowercase()
-                .contains(&term)
+            || option.hint.as_deref().unwrap_or("").to_lowercase().contains(&term)
             || option.value.to_string().to_lowercase().contains(&term)
     }
 
@@ -164,10 +144,7 @@ impl<T: Clone + PartialEq + ToString> AutocompletePrompt<'_, T> {
         }
         let before: String = chars[..base.cursor].iter().collect();
         let after: String = chars[base.cursor + 1..].iter().collect();
-        format!(
-            "{before}{}{after}",
-            inverse(&chars[base.cursor].to_string())
-        )
+        format!("{before}{}{after}", inverse(&chars[base.cursor].to_string()))
     }
 
     fn view<'v>(&'v self, base: &'v Base) -> View<'v, T> {
@@ -178,15 +155,8 @@ impl<T: Clone + PartialEq + ToString> AutocompletePrompt<'_, T> {
             user_input_with_cursor: Self::user_input_with_cursor(base),
             is_navigating: self.navigating,
             cursor: self.cursor,
-            filtered: self
-                .filtered
-                .iter()
-                .map(|index| &self.options.options[*index])
-                .collect(),
-            value: self
-                .value
-                .flatten()
-                .map(|index| &self.options.options[index]),
+            filtered: self.filtered.iter().map(|index| &self.options.options[*index]).collect(),
+            value: self.value.flatten().map(|index| &self.options.options[index]),
         }
     }
 }
@@ -202,20 +172,12 @@ impl<T: Clone + PartialEq + ToString> Prompt for AutocompletePrompt<'_, T> {
         }
         self.last_input = base.user_input.clone();
         self.filtered = (0..self.options.options.len())
-            .filter(|index| {
-                base.user_input.is_empty()
-                    || self.matches(&base.user_input, &self.options.options[*index])
-            })
+            .filter(|index| base.user_input.is_empty() || self.matches(&base.user_input, &self.options.options[*index]))
             .collect();
-        self.cursor = self
-            .focused
-            .and_then(|focused| self.filtered.iter().position(|index| *index == focused))
-            .unwrap_or(0);
+        self.cursor =
+            self.focused.and_then(|focused| self.filtered.iter().position(|index| *index == focused)).unwrap_or(0);
         self.focused = self.filtered.get(self.cursor).copied();
-        self.selected = self
-            .focused
-            .map(|focused| vec![Some(focused)])
-            .unwrap_or_default();
+        self.selected = self.focused.map(|focused| vec![Some(focused)]).unwrap_or_default();
     }
 
     fn key(&mut self, _char: Option<&str>, key: &super::term::Key, _base: &mut Base) {
@@ -238,26 +200,15 @@ impl<T: Clone + PartialEq + ToString> Prompt for AutocompletePrompt<'_, T> {
     }
 
     fn validate(&self, _base: &Base) -> Option<String> {
-        let value = self
-            .value
-            .flatten()
-            .map(|index| self.options.options[index].value.clone());
-        self.options
-            .validate
-            .as_ref()
-            .and_then(|validate| validate(&value))
+        let value = self.value.flatten().map(|index| self.options.options[index].value.clone());
+        self.options.validate.as_ref().and_then(|validate| validate(&value))
     }
 
     fn render(&self, base: &Base) -> String {
         if let Some(render) = &self.options.render {
             return render(&self.view(base));
         }
-        let title = format!(
-            "{}\n{}  {}\n",
-            gray(S_BAR()),
-            symbol(base.state),
-            self.options.message
-        );
+        let title = format!("{}\n{}  {}\n", gray(S_BAR()), symbol(base.state), self.options.message);
         match base.state {
             State::Submit => {
                 let labels: Vec<&str> = self
@@ -270,23 +221,12 @@ impl<T: Clone + PartialEq + ToString> Prompt for AutocompletePrompt<'_, T> {
                     .collect();
                 format!("{title}{}  {}", gray(S_BAR()), dim(&labels.join(", ")))
             }
-            State::Cancel => format!(
-                "{title}{}  {}",
-                gray(S_BAR()),
-                strikethrough(&dim(&base.user_input))
-            ),
+            State::Cancel => format!("{title}{}  {}", gray(S_BAR()), strikethrough(&dim(&base.user_input))),
             _ => {
-                let search = if self.navigating {
-                    dim(&base.user_input)
-                } else {
-                    Self::user_input_with_cursor(base)
-                };
+                let search = if self.navigating { dim(&base.user_input) } else { Self::user_input_with_cursor(base) };
                 let count = self.filtered.len();
                 let matches = if count != self.options.options.len() {
-                    dim(&format!(
-                        " ({count} match{})",
-                        if count == 1 { "" } else { "es" }
-                    ))
+                    dim(&format!(" ({count} match{})", if count == 1 { "" } else { "es" }))
                 } else {
                     String::new()
                 };
@@ -302,9 +242,7 @@ impl<T: Clone + PartialEq + ToString> Prompt for AutocompletePrompt<'_, T> {
                         |index, active| {
                             let option = &self.options.options[*index];
                             let hint = match &option.hint {
-                                Some(hint) if self.focused == Some(*index) => {
-                                    dim(&format!(" ({hint})"))
-                                }
+                                Some(hint) if self.focused == Some(*index) => dim(&format!(" ({hint})")),
                                 _ => String::new(),
                             };
                             if active {
@@ -320,25 +258,15 @@ impl<T: Clone + PartialEq + ToString> Prompt for AutocompletePrompt<'_, T> {
                     format!("{} confirm", dim("Enter:")),
                     format!("{} to search", dim("Type:")),
                 ];
-                let mut lines = vec![
-                    title,
-                    format!("{}  {} {search}{matches}", cyan(S_BAR()), dim("Search:")),
-                ];
+                let mut lines = vec![title, format!("{}  {} {search}{matches}", cyan(S_BAR()), dim("Search:"))];
                 if filtered.is_empty() && !base.user_input.is_empty() {
                     lines.push(format!("{}  {}", cyan(S_BAR()), yellow("No matches found")));
                 }
                 if base.state == State::Error {
                     lines.push(format!("{}  {}", yellow(S_BAR()), yellow(&base.error)));
                 }
-                lines.extend(
-                    rows.into_iter()
-                        .map(|row| format!("{}  {row}", cyan(S_BAR()))),
-                );
-                lines.push(format!(
-                    "{}  {}",
-                    cyan(S_BAR()),
-                    dim(&instructions.join(" • "))
-                ));
+                lines.extend(rows.into_iter().map(|row| format!("{}  {row}", cyan(S_BAR()))));
+                lines.push(format!("{}  {}", cyan(S_BAR()), dim(&instructions.join(" • "))));
                 lines.push(cyan(S_BAR_END()));
                 lines.join("\n")
             }

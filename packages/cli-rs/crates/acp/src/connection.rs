@@ -100,9 +100,7 @@ struct Inner {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn key(id: &Value) -> String {
@@ -140,28 +138,16 @@ impl Connection {
             return Err(closed_failure());
         }
         self.inner.unwritten.fetch_add(1, Ordering::SeqCst);
-        self.inner
-            .out
-            .send(Outgoing {
-                message,
-                response_to,
-            })
-            .map_err(|_| closed_failure())
+        self.inner.out.send(Outgoing { message, response_to }).map_err(|_| closed_failure())
     }
 
     pub fn notify(&self, method: &str, params: Value) -> Result<(), Failure> {
-        self.send(
-            json!({ "jsonrpc": "2.0", "method": method, "params": params }),
-            None,
-        )
+        self.send(json!({ "jsonrpc": "2.0", "method": method, "params": params }), None)
     }
 
     /// `session/update`.
     pub fn session_update(&self, session_id: &str, update: Value) -> Result<(), Failure> {
-        self.notify(
-            "session/update",
-            json!({ "sessionId": session_id, "update": update }),
-        )
+        self.notify("session/update", json!({ "sessionId": session_id, "update": update }))
     }
 
     /// Sends a request to the client. Dropping the future before the answer sends
@@ -171,16 +157,8 @@ impl Connection {
         let id_key = key(&json!(id));
         let (sender, receiver) = oneshot::channel();
         lock(&self.inner.pending).insert(id_key.clone(), sender);
-        let guard = CancelGuard {
-            connection: self.clone(),
-            id,
-            key: id_key,
-            done: false,
-        };
-        self.send(
-            json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
-            None,
-        )?;
+        let guard = CancelGuard { connection: self.clone(), id, key: id_key, done: false };
+        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }), None)?;
         let mut guard = guard;
         let result = tokio::select! {
             result = receiver => result,
@@ -209,10 +187,7 @@ impl Connection {
     }
 
     fn protocol_error(&self, error: &RpcError) {
-        let _ = self.send(
-            json!({ "jsonrpc": "2.0", "id": null, "error": error.to_json() }),
-            None,
-        );
+        let _ = self.send(json!({ "jsonrpc": "2.0", "id": null, "error": error.to_json() }), None);
     }
 
     fn close(&self) {
@@ -249,9 +224,7 @@ impl Connection {
         let is_request = envelope && method.is_some() && valid_id;
         let is_notification = envelope && method.is_some() && id.is_none();
         let response_shaped = !object.contains_key("method")
-            && (object.contains_key("id")
-                || object.contains_key("result")
-                || object.contains_key("error"));
+            && (object.contains_key("id") || object.contains_key("result") || object.contains_key("error"));
         if !is_request && !is_notification && !response_shaped {
             self.protocol_error(&RpcError::invalid_request(message.clone()));
             return;
@@ -280,10 +253,7 @@ impl Connection {
         lock(&self.inner.incoming).insert(key(&id), cancel.clone());
         let (sender, receiver) = oneshot::channel();
         lock(&self.inner.responded).insert(key(&id), sender);
-        let context = RequestContext {
-            cancel,
-            responded: Responded(Some(receiver)),
-        };
+        let context = RequestContext { cancel, responded: Responded(Some(receiver)) };
         let Some(work) = handler.request(method, params, context) else {
             self.respond(&id, Err(RpcError::method_not_found(method)));
             return;
@@ -296,10 +266,7 @@ impl Connection {
     }
 
     fn cancel_incoming(&self, params: &Value) {
-        let Some(id) = params
-            .get("requestId")
-            .filter(|id| id.is_null() || id.is_string() || id.is_number())
-        else {
+        let Some(id) = params.get("requestId").filter(|id| id.is_null() || id.is_string() || id.is_number()) else {
             return;
         };
         if let Some(token) = lock(&self.inner.incoming).get(&key(id)) {
@@ -315,20 +282,13 @@ impl Connection {
         let error = object.get("error");
         let has_result = object.contains_key("result");
         let valid_error = error.is_some_and(|error| {
-            error.get("code").is_some_and(Value::is_i64)
-                && error.get("message").is_some_and(Value::is_string)
+            error.get("code").is_some_and(Value::is_i64) && error.get("message").is_some_and(Value::is_string)
         });
         let result = match (has_result, error) {
             (true, None) => Ok(object.get("result").cloned().unwrap_or(Value::Null)),
             (false, Some(error)) if valid_error => Err(RpcError::new(
-                error
-                    .get("code")
-                    .and_then(Value::as_i64)
-                    .unwrap_or_default(),
-                error
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default(),
+                error.get("code").and_then(Value::as_i64).unwrap_or_default(),
+                error.get("message").and_then(Value::as_str).unwrap_or_default(),
                 error.get("data").cloned(),
             )),
             _ => Err(RpcError::invalid_request(Value::Object(object.clone()))),
@@ -338,10 +298,7 @@ impl Connection {
 }
 
 fn closed_failure() -> Failure {
-    Failure::Defect {
-        name: Some("Error".to_owned()),
-        detail: "ACP connection closed".to_owned(),
-    }
+    Failure::Defect { name: Some("Error".to_owned()), detail: "ACP connection closed".to_owned() }
 }
 
 struct CancelGuard {
@@ -357,9 +314,7 @@ impl Drop for CancelGuard {
             return;
         }
         lock(&self.connection.inner.pending).remove(&self.key);
-        let _ = self
-            .connection
-            .notify(CANCEL_REQUEST, json!({ "requestId": self.id }));
+        let _ = self.connection.notify(CANCEL_REQUEST, json!({ "requestId": self.id }));
     }
 }
 
@@ -376,18 +331,8 @@ where
     W: AsyncWrite + Unpin + Send + 'static,
 {
     let (closed_sender, mut closed_receiver) = mpsc::unbounded_channel::<Closed>();
-    let write = tokio::spawn(write_loop(
-        connection.clone(),
-        writer,
-        output,
-        closed_sender.clone(),
-    ));
-    let read = tokio::spawn(read_loop(
-        connection.clone(),
-        reader,
-        handler,
-        closed_sender,
-    ));
+    let write = tokio::spawn(write_loop(connection.clone(), writer, output, closed_sender.clone()));
+    let read = tokio::spawn(read_loop(connection.clone(), reader, handler, closed_sender));
     let reason = closed_receiver.recv().await.unwrap_or(Closed::Eof);
     if reason == Closed::Eof {
         // Answers already queued, such as protocol errors for the last lines, still go out.
@@ -533,13 +478,7 @@ mod tests {
         let (agent_read, agent_write) = tokio::io::split(agent);
         let (client_read, mut client_write) = tokio::io::split(client);
         let (connection, writer) = Connection::new();
-        let served = tokio::spawn(run(
-            connection,
-            writer,
-            agent_read,
-            agent_write,
-            Arc::new(Echo),
-        ));
+        let served = tokio::spawn(run(connection, writer, agent_read, agent_write, Arc::new(Echo)));
         client_write.write_all(input).await.unwrap();
         client_write.shutdown().await.unwrap();
         drop(client_write);

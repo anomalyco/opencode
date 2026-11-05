@@ -9,9 +9,7 @@ use opentui::prelude::*;
 use opentui::widget::DiffView;
 use serde_json::Value;
 
-use super::dispatch::{
-    Block, BlockColors, BlockTool, Header, Props, Status, content_width, format_path, number,
-};
+use super::dispatch::{Block, BlockColors, BlockTool, Header, Props, Status, content_width, format_path, number};
 use crate::dialogs::open::truncate_file_path;
 use crate::routes::session::messages::list::Context;
 
@@ -23,22 +21,9 @@ pub struct Patch {
 
 #[derive(Clone, Debug, PartialEq)]
 enum Shown {
-    Files {
-        files: Vec<File>,
-        view: DiffView,
-        wrap: WrapMode,
-        common: Common,
-    },
-    Applied {
-        applied: Vec<(String, String)>,
-        common: Common,
-    },
-    Pending {
-        targets: Vec<String>,
-        status: Status,
-        error: Option<String>,
-        common: Common,
-    },
+    Files { files: Vec<File>, view: DiffView, wrap: WrapMode, common: Common },
+    Applied { applied: Vec<(String, String)>, common: Common },
+    Pending { targets: Vec<String>, status: Status, error: Option<String>, common: Common },
 }
 
 /// What every block of the call shares.
@@ -77,23 +62,14 @@ impl Patch {
         }
         self.root.clear();
         let blocks = match &shown {
-            Shown::Files {
-                files,
-                view,
-                wrap,
-                common,
-            } => files
+            Shown::Files { files, view, wrap, common } => files
                 .iter()
                 .map(|file| {
                     let block = self.block(cx, common, label(&file.kind), &file.relative_path);
                     let child = if file.kind == "delete" {
                         Text::new(
                             cx.app,
-                            format!(
-                                "-{} line{}",
-                                number(file.deletions),
-                                if file.deletions == 1.0 { "" } else { "s" }
-                            ),
+                            format!("-{} line{}", number(file.deletions), if file.deletions == 1.0 { "" } else { "s" }),
                         )
                         .fg(cx.theme.diff.text.removed)
                         .as_any()
@@ -108,11 +84,7 @@ impl Patch {
                             *wrap,
                             0,
                         );
-                        View::new(cx.app)
-                            .padding_edge(Edge::Left, 1)
-                            .padding_edge(Edge::Right, 3)
-                            .child(&diff)
-                            .as_any()
+                        View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 3).child(&diff).as_any()
                     };
                     block.children().add(&child);
                     block.show_children(true);
@@ -123,30 +95,18 @@ impl Patch {
                 .iter()
                 .map(|(kind, resource)| {
                     let block = self.block(cx, common, label(kind), resource);
-                    let fg = if kind == "delete" {
-                        cx.theme.diff.text.removed
-                    } else {
-                        cx.theme.text.muted
-                    };
+                    let fg = if kind == "delete" { cx.theme.diff.text.removed } else { cx.theme.text.muted };
                     block.children().add(
-                        &Text::new(
-                            cx.app,
-                            truncate_file_path(resource, (common.width - 3).max(2)),
-                        )
-                        .fg(fg)
-                        .wrap(WrapMode::None)
-                        .truncate(true),
+                        &Text::new(cx.app, truncate_file_path(resource, (common.width - 3).max(2)))
+                            .fg(fg)
+                            .wrap(WrapMode::None)
+                            .truncate(true),
                     );
                     block.show_children(true);
                     block
                 })
                 .collect(),
-            Shown::Pending {
-                targets,
-                status,
-                error,
-                common,
-            } => {
+            Shown::Pending { targets, status, error, common } => {
                 let block = BlockTool::new(cx);
                 let failed = *status == Status::Error;
                 let title = if failed { "# Patch failed" } else { "Patching" };
@@ -156,10 +116,7 @@ impl Patch {
                 });
                 block.set(Block {
                     header: match targets.as_slice() {
-                        [target] => Header::Path {
-                            label: title.to_owned(),
-                            value: format_path(cx, Some(target)),
-                        },
+                        [target] => Header::Path { label: title.to_owned(), value: format_path(cx, Some(target)) },
                         _ => Header::Title(title.to_owned()),
                     },
                     spinner: matches!(status, Status::Streaming | Status::Running),
@@ -182,10 +139,7 @@ impl Patch {
     fn block(&self, cx: &Context<'_>, common: &Common, label: &str, path: &str) -> BlockTool {
         let block = BlockTool::new(cx);
         block.set(Block {
-            header: Header::Path {
-                label: label.to_owned(),
-                value: format_path(cx, Some(path)),
-            },
+            header: Header::Path { label: label.to_owned(), value: format_path(cx, Some(path)) },
             spinner: false,
             permission: common.permission,
             error: None,
@@ -197,10 +151,7 @@ impl Patch {
 }
 
 fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {
-    let common = Common {
-        permission: props.permission,
-        width: content_width(cx),
-    };
+    let common = Common { permission: props.permission, width: content_width(cx) };
     let files = parse_files(props.metadata.get("files"));
     if !files.is_empty() {
         let diffs = cx.tui.config().info.diffs.clone();
@@ -215,12 +166,7 @@ fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {
             Some(DiffWrap::None) => WrapMode::None,
             _ => WrapMode::Word,
         };
-        return Shown::Files {
-            files,
-            view,
-            wrap,
-            common,
-        };
+        return Shown::Files { files, view, wrap, common };
     }
     let applied = applied(props.metadata.get("applied"));
     if !applied.is_empty() {
@@ -252,10 +198,7 @@ pub fn parse_files(value: Option<&Value>) -> Vec<File> {
         .filter_map(|item| {
             let file = item.as_object()?;
             let text = |key: &str| file.get(key).and_then(Value::as_str);
-            let number = |key: &str| {
-                file.get(key)
-                    .and_then(opencode_ui::tool_info::finite_number)
-            };
+            let number = |key: &str| file.get(key).and_then(opencode_ui::tool_info::finite_number);
             let kind = text("type").or(match text("status") {
                 Some("added") => Some("add"),
                 Some("deleted") => Some("delete"),
@@ -287,10 +230,7 @@ fn applied(value: Option<&Value>) -> Vec<(String, String)> {
         .flatten()
         .filter_map(|item| {
             let kind = item.get("type")?.as_str().filter(|kind| !kind.is_empty())?;
-            let resource = item
-                .get("resource")?
-                .as_str()
-                .filter(|resource| !resource.is_empty())?;
+            let resource = item.get("resource")?.as_str().filter(|resource| !resource.is_empty())?;
             Some((kind.to_owned(), resource.to_owned()))
         })
         .collect()
@@ -302,9 +242,8 @@ fn targets(patch: &str) -> Vec<String> {
     let mut at = 0;
     while let Some(start) = patch[at..].find("*** ") {
         at += start + 4;
-        let line = ["Add", "Update", "Delete"]
-            .iter()
-            .find_map(|kind| patch[at..].strip_prefix(kind)?.strip_prefix(" File: "));
+        let line =
+            ["Add", "Update", "Delete"].iter().find_map(|kind| patch[at..].strip_prefix(kind)?.strip_prefix(" File: "));
         let Some(line) = line else { continue };
         let end = line.find(['\r', '\n']).unwrap_or(line.len());
         if end == 0 {
@@ -341,18 +280,12 @@ mod tests {
         assert_eq!(
             files
                 .iter()
-                .map(|file| (
-                    file.kind.as_str(),
-                    file.relative_path.as_str(),
-                    file.deletions
-                ))
+                .map(|file| (file.kind.as_str(), file.relative_path.as_str(), file.deletions))
                 .collect::<Vec<_>>(),
             [("add", "a.rs", 0.0), ("delete", "b.rs", 3.0)]
         );
         assert_eq!(
-            applied(Some(
-                &json!([{ "type": "add", "resource": "x" }, { "type": "add" }, 1])
-            )),
+            applied(Some(&json!([{ "type": "add", "resource": "x" }, { "type": "add" }, 1]))),
             [("add".to_owned(), "x".to_owned())]
         );
     }

@@ -59,34 +59,22 @@ impl Subagent {
         let continuation = continued.is_some_and(|id| !id.is_empty());
         let running = status == Status::Running
             || session.as_deref().is_some_and(|id| {
-                !id.is_empty()
-                    && cx.state.status(&SessionID(id.to_owned())) == SessionStatus::Running
+                !id.is_empty() && cx.state.status(&SessionID(id.to_owned())) == SessionStatus::Running
             });
         let description = props.input_str("description");
-        let agent = props
-            .input_str("agent")
-            .or(props.input_str("subagent_type"))
-            .unwrap_or("General");
-        let title = if continuation {
-            "Continue subagent".to_owned()
-        } else {
-            format!("{} Subagent", titlecase(agent))
-        };
-        let model = model_label(props.input_str("model"), cx.models)
-            .map(|model| format!(" · {model}"))
-            .unwrap_or_default();
+        let agent = props.input_str("agent").or(props.input_str("subagent_type")).unwrap_or("General");
+        let title =
+            if continuation { "Continue subagent".to_owned() } else { format!("{} Subagent", titlecase(agent)) };
+        let model =
+            model_label(props.input_str("model"), cx.models).map(|model| format!(" · {model}")).unwrap_or_default();
         let icon = match (running, continuation, status) {
             (true, _, _) => "│",
             (_, true, _) => "↳",
             (_, _, Status::Completed) => "✓",
             _ => "│",
         };
-        let inline = Inline::new(
-            props,
-            icon,
-            "Delegating…",
-            description.is_some_and(|description| !description.is_empty()),
-        );
+        let inline =
+            Inline::new(props, icon, "Delegating…", description.is_some_and(|description| !description.is_empty()));
         self.inline.set(Inline {
             spinner: running,
             text: format!("{title} — {}{model}", description.unwrap_or("Subagent")),
@@ -131,10 +119,7 @@ mod tests {
     fn model_labels_match_subagent_model_label() {
         assert_eq!(model_label(None, &[]), None);
         assert_eq!(model_label(Some(""), &[]), None);
-        assert_eq!(
-            model_label(Some("anthropic/claude#high"), &[]).as_deref(),
-            Some("anthropic/claude (high)")
-        );
+        assert_eq!(model_label(Some("anthropic/claude#high"), &[]).as_deref(), Some("anthropic/claude (high)"));
         assert_eq!(model_label(Some("gpt"), &[]).as_deref(), Some("gpt"));
     }
 }

@@ -25,10 +25,7 @@ async fn unavailable(lose: fn(&Server)) {
     let acp = start_session(
         WireOptions {
             on_prompt: Some(events(|call| {
-                vec![
-                    delivered(&call.session_id, &call.id),
-                    text_delta(&call.session_id, "msg_held", "working", 0),
-                ]
+                vec![delivered(&call.session_id, &call.id), text_delta(&call.session_id, "msg_held", "working", 0)]
             })),
             ..WireOptions::default()
         },
@@ -42,27 +39,13 @@ async fn unavailable(lose: fn(&Server)) {
     });
 
     let prompt = tokio::spawn(acp.begin_prompt("hold"));
-    acp.wait_for_update("agent_message_chunk", |item| {
-        item["update"]["sessionUpdate"] == "agent_message_chunk"
-    })
-    .await;
-    acp.request(
-        "session/set_mode",
-        json!({ "sessionId": acp.session_id, "modeId": "build" }),
-    )
-    .await
-    .unwrap();
+    acp.wait_for_update("agent_message_chunk", |item| item["update"]["sessionUpdate"] == "agent_message_chunk").await;
+    acp.request("session/set_mode", json!({ "sessionId": acp.session_id, "modeId": "build" })).await.unwrap();
     lose(&acp.server);
 
     assert_eq!(prompt.await.unwrap().unwrap_err().json(), unavailable);
     acp.server.stop();
-    assert_eq!(
-        acp.request("session/list", json!({}))
-            .await
-            .unwrap_err()
-            .json(),
-        unavailable
-    );
+    assert_eq!(acp.request("session/list", json!({})).await.unwrap_err().json(), unavailable);
 }
 
 #[tokio::test]

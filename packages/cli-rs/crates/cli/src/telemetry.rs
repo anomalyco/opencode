@@ -56,20 +56,12 @@ impl Options {
         let run = run_id();
         Self {
             level: min_level(flag, var("OPENCODE_LOG_LEVEL").as_deref()),
-            dir: opencode_local::paths::Paths::from_env()
-                .ok()
-                .map(|paths| paths.log),
+            dir: opencode_local::paths::Paths::from_env().ok().map(|paths| paths.log),
             channel: CHANNEL.to_owned(),
             print: var("OPENCODE_PRINT_LOGS").as_deref() == Some("1"),
             endpoint: var("OTEL_EXPORTER_OTLP_ENDPOINT").filter(|value| !value.is_empty()),
             headers: var("OTEL_EXPORTER_OTLP_HEADERS").filter(|value| !value.is_empty()),
-            resource: resource(
-                &crate::env::client(),
-                crate::help::VERSION,
-                CHANNEL,
-                run,
-                |name| var(name),
-            ),
+            resource: resource(&crate::env::client(), crate::help::VERSION, CHANNEL, run, |name| var(name)),
         }
     }
 }
@@ -86,14 +78,12 @@ pub fn install(options: Options) {
     log::set_max_level(logger.level);
     let _ = LOGGER.set(logger);
     if let Some(path) = logger.path.clone() {
-        let _ = std::thread::Builder::new()
-            .name("opencode-log-trim".into())
-            .spawn(move || {
-                loop {
-                    let _ = trim(&path, LOG_MAX_BYTES, LOG_KEEP_BYTES);
-                    std::thread::sleep(LOG_TRIM_INTERVAL);
-                }
-            });
+        let _ = std::thread::Builder::new().name("opencode-log-trim".into()).spawn(move || {
+            loop {
+                let _ = trim(&path, LOG_MAX_BYTES, LOG_KEEP_BYTES);
+                std::thread::sleep(LOG_TRIM_INTERVAL);
+            }
+        });
     }
 }
 
@@ -138,13 +128,7 @@ pub fn file_name(channel: &str) -> String {
     }
     let safe: String = channel
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
-                c
-            } else {
-                '-'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
         .collect();
     format!("opencode-{safe}.log")
 }
@@ -165,14 +149,11 @@ struct Logger {
 
 impl Logger {
     fn new(options: Options) -> Self {
-        let path = options.dir.as_ref().and_then(|dir| {
-            std::fs::create_dir_all(dir)
-                .ok()
-                .map(|()| dir.join(file_name(&options.channel)))
-        });
-        let file = path
+        let path = options
+            .dir
             .as_ref()
-            .and_then(|path| OpenOptions::new().create(true).append(true).open(path).ok());
+            .and_then(|dir| std::fs::create_dir_all(dir).ok().map(|()| dir.join(file_name(&options.channel))));
+        let file = path.as_ref().and_then(|path| OpenOptions::new().create(true).append(true).open(path).ok());
         let otlp = options.endpoint.map(|endpoint| {
             Otlp {
                 url: format!("{endpoint}/v1/logs"),
@@ -181,13 +162,7 @@ impl Logger {
             }
             .start()
         });
-        Self {
-            level: options.level,
-            path: file.as_ref().and(path),
-            file,
-            print: options.print,
-            otlp,
-        }
+        Self { level: options.level, path: file.as_ref().and(path), file, print: options.print, otlp }
     }
 
     fn export(&self) {
@@ -202,8 +177,7 @@ impl Logger {
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         // Other crates' debug and trace records (HTTP connections, TLS) would drown the client's own.
-        metadata.level() <= self.level
-            && (metadata.level() <= Level::Info || metadata.target().starts_with("opencode"))
+        metadata.level() <= self.level && (metadata.level() <= Level::Info || metadata.target().starts_with("opencode"))
     }
 
     fn log(&self, record: &Record) {
@@ -213,10 +187,7 @@ impl Log for Logger {
         let fields = fields(record);
         let message = record.args().to_string();
         let now = SystemTime::now();
-        let line = format!(
-            "{}\n",
-            format_line(now, record.level(), run_id(), &message, &fields)
-        );
+        let line = format!("{}\n", format_line(now, record.level(), run_id(), &message, &fields));
         // One append per record: lines of concurrent processes do not interleave, and no lock is held, so
         // a panic hook can log too.
         if let Some(mut file) = self.file.as_ref() {
@@ -227,12 +198,7 @@ impl Log for Logger {
         }
         if let Some(otlp) = &self.otlp {
             // A full queue drops the record rather than block the caller.
-            let _ = otlp.try_send(Message::Record(log_record(
-                now,
-                record.level(),
-                &message,
-                &fields,
-            )));
+            let _ = otlp.try_send(Message::Record(log_record(now, record.level(), &message, &fields)));
         }
     }
 
@@ -243,11 +209,7 @@ impl Log for Logger {
 fn fields(record: &Record) -> Vec<(String, Field)> {
     struct Collect(Vec<(String, Field)>);
     impl<'kvs> log::kv::VisitSource<'kvs> for Collect {
-        fn visit_pair(
-            &mut self,
-            key: log::kv::Key<'kvs>,
-            value: log::kv::Value<'kvs>,
-        ) -> Result<(), log::kv::Error> {
+        fn visit_pair(&mut self, key: log::kv::Key<'kvs>, value: log::kv::Value<'kvs>) -> Result<(), log::kv::Error> {
             let field = if let Some(value) = value.to_bool() {
                 Field::Bool(value)
             } else if let Some(value) = value.to_i64() {
@@ -297,15 +259,8 @@ impl Field {
 
 /// One line of the TypeScript file format (`logging.ts:16-30`):
 /// `timestamp=… level=INFO run=… message=… <fields>`, each value bare or as a JSON string.
-pub fn format_line(
-    now: SystemTime,
-    level: Level,
-    run: &str,
-    message: &str,
-    fields: &[(String, Field)],
-) -> String {
-    let timestamp = chrono::DateTime::<chrono::Utc>::from(now)
-        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+pub fn format_line(now: SystemTime, level: Level, run: &str, message: &str, fields: &[(String, Field)]) -> String {
+    let timestamp = chrono::DateTime::<chrono::Utc>::from(now).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     [
         ("timestamp".to_owned(), timestamp),
         ("level".to_owned(), level.as_str().to_owned()),
@@ -313,11 +268,7 @@ pub fn format_line(
         ("message".to_owned(), message.to_owned()),
     ]
     .into_iter()
-    .chain(
-        fields
-            .iter()
-            .map(|(key, value)| (key.clone(), value.text())),
-    )
+    .chain(fields.iter().map(|(key, value)| (key.clone(), value.text())))
     .map(|(key, value)| format!("{key}={}", quote(&value)))
     .collect::<Vec<_>>()
     .join(" ")
@@ -325,10 +276,7 @@ pub fn format_line(
 
 /// Bare when the value matches `^[^\s="\\]+$`, else `JSON.stringify(value)`.
 fn quote(value: &str) -> String {
-    let bare = !value.is_empty()
-        && !value
-            .chars()
-            .any(|c| c.is_whitespace() || matches!(c, '=' | '"' | '\\'));
+    let bare = !value.is_empty() && !value.chars().any(|c| c.is_whitespace() || matches!(c, '=' | '"' | '\\'));
     if bare {
         return value.to_owned();
     }
@@ -417,18 +365,9 @@ pub fn parse_headers(value: Option<&str>) -> Vec<(String, String)> {
 
 /// The OTLP resource (`otlp.ts:46-61` with Effect's `OtlpResource.fromConfig`): service name `opencode` (or
 /// `OTEL_SERVICE_NAME`), the version, `OTEL_RESOURCE_ATTRIBUTES`, the channel, client, and run ID.
-pub fn resource(
-    client: &str,
-    version: &str,
-    channel: &str,
-    run: &str,
-    var: impl Fn(&str) -> Option<String>,
-) -> Value {
+pub fn resource(client: &str, version: &str, channel: &str, run: &str, var: impl Fn(&str) -> Option<String>) -> Value {
     let env = var("OTEL_RESOURCE_ATTRIBUTES").filter(|value| !value.is_empty());
-    let decoded = env
-        .as_deref()
-        .and_then(decode_attributes)
-        .unwrap_or_default();
+    let decoded = env.as_deref().and_then(decode_attributes).unwrap_or_default();
     // Effect reads the variable again, without percent decoding, and lets it win.
     let raw: Vec<(String, String)> = env
         .as_deref()
@@ -452,18 +391,11 @@ pub fn resource(
     for (key, value) in &raw {
         set(key, value);
     }
-    let lookup = |key: &str| {
-        attributes
-            .iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, value)| value.clone())
-    };
-    let service_name = var("OTEL_SERVICE_NAME")
-        .or_else(|| lookup("service.name"))
-        .unwrap_or_else(|| "opencode".to_owned());
-    let service_version = var("OTEL_SERVICE_VERSION")
-        .or_else(|| lookup("service.version"))
-        .unwrap_or_else(|| version.to_owned());
+    let lookup = |key: &str| attributes.iter().find(|(k, _)| k == key).map(|(_, value)| value.clone());
+    let service_name =
+        var("OTEL_SERVICE_NAME").or_else(|| lookup("service.name")).unwrap_or_else(|| "opencode".to_owned());
+    let service_version =
+        var("OTEL_SERVICE_VERSION").or_else(|| lookup("service.version")).unwrap_or_else(|| version.to_owned());
     let mut list: Vec<Value> = attributes
         .iter()
         .filter(|(key, _)| key != "service.name" && key != "service.version")
@@ -482,10 +414,7 @@ fn decode_attributes(value: &str) -> Option<Vec<(String, String)>> {
         .split(',')
         .map(|entry| {
             let index = entry.find('=').filter(|index| *index >= 1)?;
-            Some((
-                percent_decode(&entry[..index])?,
-                percent_decode(&entry[index + 1..])?,
-            ))
+            Some((percent_decode(&entry[..index])?, percent_decode(&entry[index + 1..])?))
         })
         .collect()
 }
@@ -509,16 +438,8 @@ fn percent_decode(text: &str) -> Option<String> {
 
 /// One OTLP/JSON log record (Effect's `OtlpLogger.makeLogRecord`). With fields the body is
 /// `[message, fields]`, as Effect logs `logInfo(message, fields)`.
-pub fn log_record(
-    now: SystemTime,
-    level: Level,
-    message: &str,
-    fields: &[(String, Field)],
-) -> Value {
-    let nanos = now
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_nanos())
-        .to_string();
+pub fn log_record(now: SystemTime, level: Level, message: &str, fields: &[(String, Field)]) -> Value {
+    let nanos = now.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_nanos()).to_string();
     let (severity, text) = match level {
         Level::Trace => (1, "Trace"),
         Level::Debug => (5, "Debug"),
@@ -528,10 +449,8 @@ pub fn log_record(
     };
     // The annotation goes with the attributes; the record's own fields go in the body.
     let (annotations, own): (Vec<_>, Vec<_>) = fields.iter().partition(|(key, _)| key == "role");
-    let attributes: Vec<Value> = annotations
-        .iter()
-        .map(|(key, value)| json!({ "key": key, "value": value.otlp() }))
-        .collect();
+    let attributes: Vec<Value> =
+        annotations.iter().map(|(key, value)| json!({ "key": key, "value": value.otlp() })).collect();
     let body = if own.is_empty() {
         json!({ "stringValue": message })
     } else {
@@ -596,17 +515,12 @@ impl Otlp {
     /// drops records for 60 s, as Effect's exporter does. The queue is bounded; a full queue drops records.
     fn start(self) -> SyncSender<Message> {
         let (sender, receiver) = std::sync::mpsc::sync_channel(OTLP_QUEUE);
-        let _ = std::thread::Builder::new()
-            .name("opencode-otlp".into())
-            .spawn(move || self.run(receiver));
+        let _ = std::thread::Builder::new().name("opencode-otlp".into()).spawn(move || self.run(receiver));
         sender
     }
 
     fn run(self, receiver: Receiver<Message>) {
-        let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        else {
+        let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
             return;
         };
         let client = reqwest::Client::new();
@@ -650,19 +564,13 @@ impl Otlp {
         let mut request = client
             .post(&self.url)
             .header("content-type", "application/json")
-            .header(
-                "user-agent",
-                format!("opencode-rs/{}", crate::help::VERSION),
-            )
+            .header("user-agent", format!("opencode-rs/{}", crate::help::VERSION))
             .timeout(OTLP_SHUTDOWN)
             .body(body.to_string());
         for (key, value) in &self.headers {
             request = request.header(key.as_str(), value.as_str());
         }
-        request
-            .send()
-            .await
-            .is_ok_and(|response| response.status().is_success())
+        request.send().await.is_ok_and(|response| response.status().is_success())
     }
 }
 
@@ -711,23 +619,14 @@ mod tests {
     fn lines_use_the_typescript_format() {
         let fields = vec![
             ("version".to_owned(), Field::Text("local".into())),
-            (
-                "args".to_owned(),
-                Field::Text(r#"["serve","--port"]"#.into()),
-            ),
+            ("args".to_owned(), Field::Text(r#"["serve","--port"]"#.into())),
             ("local".to_owned(), Field::Bool(true)),
             ("durationMs".to_owned(), Field::Int(66)),
             ("empty".to_owned(), Field::Text(String::new())),
             ("role".to_owned(), Field::Text("cli".into())),
         ];
         assert_eq!(
-            format_line(
-                at(1_793_822_581_271),
-                Level::Info,
-                "44c56d35",
-                "cli starting",
-                &fields
-            ),
+            format_line(at(1_793_822_581_271), Level::Info, "44c56d35", "cli starting", &fields),
             r#"timestamp=2026-11-04T20:03:01.271Z level=INFO run=44c56d35 message="cli starting" version=local args="[\"serve\",\"--port\"]" local=true durationMs=66 empty="" role=cli"#
         );
         assert_eq!(
@@ -749,30 +648,15 @@ mod tests {
             resource: json!({}),
         });
         let record = |level, target, message: &str| {
-            logger.log(
-                &Record::builder()
-                    .level(level)
-                    .target(target)
-                    .args(format_args!("{message}"))
-                    .build(),
-            );
+            logger.log(&Record::builder().level(level).target(target).args(format_args!("{message}")).build());
         };
         record(Level::Info, "opencode_cli", "kept");
         record(Level::Debug, "opencode_cli", "below the level");
         record(Level::Warn, "hyper", "other crate warning");
         let text = std::fs::read_to_string(dir.path().join("log/opencode-local.log")).unwrap();
-        let messages: Vec<&str> = text
-            .lines()
-            .map(|line| line.split(" message=").nth(1).unwrap())
-            .collect();
-        assert_eq!(
-            messages,
-            [r#"kept role=cli"#, r#""other crate warning" role=cli"#]
-        );
-        assert_eq!(
-            logger.path.as_deref(),
-            Some(dir.path().join("log/opencode-local.log").as_path())
-        );
+        let messages: Vec<&str> = text.lines().map(|line| line.split(" message=").nth(1).unwrap()).collect();
+        assert_eq!(messages, [r#"kept role=cli"#, r#""other crate warning" role=cli"#]);
+        assert_eq!(logger.path.as_deref(), Some(dir.path().join("log/opencode-local.log").as_path()));
     }
 
     #[test]
@@ -786,9 +670,7 @@ mod tests {
             headers: None,
             resource: json!({}),
         });
-        let enabled = |level, target| {
-            logger.enabled(&Metadata::builder().level(level).target(target).build())
-        };
+        let enabled = |level, target| logger.enabled(&Metadata::builder().level(level).target(target).build());
         assert!(enabled(Level::Trace, "opencode_service::connect"));
         assert!(!enabled(Level::Debug, "reqwest::connect"));
         assert!(enabled(Level::Info, "reqwest::connect"));
@@ -805,10 +687,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), lines);
         // Over it: the head goes, the cut moves forward to the next line.
         trim(&path, 100, 25).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(&path).unwrap(),
-            "line 098\nline 099\n"
-        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "line 098\nline 099\n");
         assert!(!dir.path().join("opencode-local.log.trim").exists());
         // A tail without a newline is dropped whole.
         std::fs::write(&path, "aaaa\nbbbbbbbbbb").unwrap();
@@ -852,10 +731,7 @@ mod tests {
     #[test]
     fn the_resource_names_the_client_channel_and_run() {
         let attributes = |vars: &[(&str, &str)]| {
-            let vars: Vec<(String, String)> = vars
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect();
+            let vars: Vec<(String, String)> = vars.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
             let resource = resource("opencode-rs", "1.2.3", "local", "abcd1234", |name| {
                 vars.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone())
             });
@@ -864,11 +740,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .map(|entry| {
-                    format!(
-                        "{}={}",
-                        entry["key"].as_str().unwrap(),
-                        entry["value"]["stringValue"].as_str().unwrap()
-                    )
+                    format!("{}={}", entry["key"].as_str().unwrap(), entry["value"]["stringValue"].as_str().unwrap())
                 })
                 .collect::<Vec<_>>()
         };
@@ -902,12 +774,7 @@ mod tests {
 
     #[test]
     fn otlp_records_match_effects_shape() {
-        let record = log_record(
-            at(1_500),
-            Level::Warn,
-            "plain",
-            &[("role".into(), Field::Text("cli".into()))],
-        );
+        let record = log_record(at(1_500), Level::Warn, "plain", &[("role".into(), Field::Text("cli".into()))]);
         assert_eq!(
             record,
             json!({
@@ -924,10 +791,7 @@ mod tests {
             at(0),
             Level::Info,
             "cli starting",
-            &[
-                ("local".into(), Field::Bool(true)),
-                ("role".into(), Field::Text("cli".into())),
-            ],
+            &[("local".into(), Field::Bool(true)), ("role".into(), Field::Text("cli".into()))],
         );
         assert_eq!(
             record["body"],
@@ -937,10 +801,7 @@ mod tests {
             ] } })
         );
         let body = logs_body(&resource("c", "v", "local", "r", |_| None), vec![record]);
-        assert_eq!(
-            body["resourceLogs"][0]["scopeLogs"][0]["scope"]["name"],
-            "opencode"
-        );
+        assert_eq!(body["resourceLogs"][0]["scopeLogs"][0]["scope"]["name"], "opencode");
     }
 
     #[test]
@@ -970,9 +831,7 @@ mod tests {
             let mut body = vec![0u8; length];
             reader.read_exact(&mut body).unwrap();
             let mut socket = socket;
-            socket
-                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-                .unwrap();
+            socket.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n").unwrap();
             (head, String::from_utf8(body).unwrap())
         });
         let logger = Logger::new(Options {
@@ -984,13 +843,7 @@ mod tests {
             headers: Some("x-team=core".into()),
             resource: resource("opencode-rs", "local", "local", "r", |_| None),
         });
-        logger.log(
-            &Record::builder()
-                .level(Level::Info)
-                .target("opencode_cli")
-                .args(format_args!("exported"))
-                .build(),
-        );
+        logger.log(&Record::builder().level(Level::Info).target("opencode_cli").args(format_args!("exported")).build());
         logger.export();
         let (head, body) = server.join().unwrap();
         assert_eq!(head[0], "POST /v1/logs HTTP/1.1");

@@ -10,18 +10,10 @@ use crate::app::Tui;
 
 /// `logo.ts`: `_` is a shadow-filled space, `^` a `▀` on the shadow, `~` a shadow-colored `▀`, and `,` a
 /// shadow-colored `▄`.
-const LOGO_LEFT: [&str; 4] = [
-    "                   ",
-    "█▀▀█ █▀▀█ █▀▀█ █▀▀▄",
-    "█__█ █__█ █^^^ █__█",
-    "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀",
-];
-const LOGO_RIGHT: [&str; 4] = [
-    "             ▄     ",
-    "█▀▀▀ █▀▀█ █▀▀█ █▀▀█",
-    "█___ █__█ █__█ █^^^",
-    "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
-];
+const LOGO_LEFT: [&str; 4] =
+    ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"];
+const LOGO_RIGHT: [&str; 4] =
+    ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"];
 const GO_RIGHT: [&str; 4] = ["    ", "█▀▀█", "█__█", "▀▀▀▀"];
 
 pub struct Home {
@@ -65,10 +57,7 @@ impl Home {
             .child(&update)
             .child(&composer)
             .child(&spacer());
-        let footer = View::new(app)
-            .column()
-            .width(Length::percent(100.0))
-            .shrink(0.0);
+        let footer = View::new(app).column().width(Length::percent(100.0)).shrink(0.0);
         let slot = crate::plugins::host::slot(
             tui,
             &footer,
@@ -77,13 +66,7 @@ impl Home {
             // The footer itself is the `opencode.home.footer` plugin's claim (E.14).
             |_| {},
         );
-        let root = View::new(app)
-            .column()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_height(0)
-            .child(&center)
-            .child(&footer);
+        let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&center).child(&footer);
         let forms = crate::features::home_forms::mount(tui, &root);
         // The logo and the side padding follow the terminal size (`useTerminalDimensions`).
         let weak = tui.weak();
@@ -98,12 +81,7 @@ impl Home {
             paint_logo(&tui.app, &logo, &tui.page(), width, height);
             tui.app.request_redraw();
         });
-        Self {
-            root,
-            prompt,
-            forms,
-            slot,
-        }
+        Self { root, prompt, forms, slot }
     }
 }
 
@@ -159,32 +137,21 @@ pub(crate) fn paint_logo(app: &App, logo: &View, theme: &Theme, width: u16, heig
         return;
     }
     if width < 22 {
-        GO_RIGHT[1..]
-            .iter()
-            .for_each(|right| line(None, Some(right)));
+        GO_RIGHT[1..].iter().for_each(|right| line(None, Some(right)));
         return;
     }
     if width < 44 {
-        LOGO_LEFT[1..]
-            .iter()
-            .for_each(|left| line(Some(left), None));
+        LOGO_LEFT[1..].iter().for_each(|left| line(Some(left), None));
         LOGO_RIGHT.iter().for_each(|right| line(None, Some(right)));
         return;
     }
-    LOGO_LEFT
-        .iter()
-        .zip(LOGO_RIGHT)
-        .for_each(|(left, right)| line(Some(left), Some(right)));
+    LOGO_LEFT.iter().zip(LOGO_RIGHT).for_each(|(left, right)| line(Some(left), Some(right)));
 }
 
 /// `renderLine`: one span per cell, so each shadow cell gets its own colors.
 fn spans(theme: &Theme, line: &str, fg: Color, bold: bool) -> Vec<Span<'static>> {
     let shadow = tint(theme.background.base, fg, 0.25);
-    let attributes = if bold {
-        Attributes::BOLD
-    } else {
-        Attributes::NONE
-    };
+    let attributes = if bold { Attributes::BOLD } else { Attributes::NONE };
     line.chars()
         .map(|char| {
             let (text, style) = match char {

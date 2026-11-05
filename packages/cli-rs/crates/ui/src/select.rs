@@ -5,8 +5,8 @@
 //! the footer, and the `dialog.select.*` commands. It returns a [`Select`] handle, the TS `DialogSelectRef`.
 
 use crate::dialog::{
-    DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, Dialogs, FocusId, FooterAction, FooterProps,
-    HeaderProps, header, layout_view,
+    DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, Dialogs, FocusId, FooterAction, FooterProps, HeaderProps, header,
+    layout_view,
 };
 use crate::keymap::{Bind, KeymapLayer, TuiCommand};
 use crate::theme::Surface;
@@ -204,11 +204,7 @@ impl<T> Clone for SelectAction<T> {
 }
 
 impl<T: 'static> SelectAction<T> {
-    pub fn new(
-        command: impl Into<String>,
-        title: impl Into<String>,
-        run: impl Fn(&SelectOption<T>) + 'static,
-    ) -> Self {
+    pub fn new(command: impl Into<String>, title: impl Into<String>, run: impl Fn(&SelectOption<T>) + 'static) -> Self {
         let title = title.into();
         Self {
             command: command.into(),
@@ -364,10 +360,7 @@ impl<T> Clone for Select<T> {
 }
 
 /// Builds `DialogSelect` in `cx` and returns the dialog content and the handle.
-pub fn select<T: Clone + PartialEq + 'static>(
-    cx: &Rc<DialogCx>,
-    props: SelectProps<T>,
-) -> (View, Select<T>) {
+pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectProps<T>) -> (View, Select<T>) {
     let app = &cx.app;
     let theme = &cx.theme;
     let search_in_title = props.search_in_title && props.render_filter;
@@ -385,16 +378,12 @@ pub fn select<T: Clone + PartialEq + 'static>(
             .placeholder(placeholder)
             .placeholder_color(theme.text.muted)
             .colors(theme.text.formfield.focused, Color::TRANSPARENT)
-            .focused_colors(
-                theme.text.formfield.base,
-                theme.background.formfield.focused,
-            )
+            .focused_colors(theme.text.formfield.base, theme.background.formfield.focused)
             .cursor_color(search_cursor(theme, ""))
     });
     let scroll = ScrollBox::new(app).scrollbars(false);
-    let body = View::new(app)
-        .margin_edge(Edge::Left, -(DIALOG_INSET as i32))
-        .margin_edge(Edge::Right, -(DIALOG_INSET as i32));
+    let body =
+        View::new(app).margin_edge(Edge::Left, -(DIALOG_INSET as i32)).margin_edge(Edge::Right, -(DIALOG_INSET as i32));
     let footer_slot = View::new(app);
     let inner = Rc::new(Inner {
         cx: cx.clone(),
@@ -438,10 +427,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
         }
     });
     handle.0.scroll.on_mouse(move |cx, event| {
-        if !matches!(
-            event.kind,
-            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
-        ) {
+        if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
             return;
         }
         let weak = weak.clone();
@@ -460,12 +446,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
         Some(input) => {
             head.add(&header(
                 cx,
-                HeaderProps {
-                    title_view: Some(input.as_any()),
-                    gap: Some(2),
-                    on_close,
-                    ..HeaderProps::default()
-                },
+                HeaderProps { title_view: Some(input.as_any()), gap: Some(2), on_close, ..HeaderProps::default() },
             ));
         }
         None => {
@@ -500,11 +481,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
                 return false;
             };
             let select = Select(inner);
-            let focused = select
-                .0
-                .input
-                .as_ref()
-                .is_some_and(|input| input.is_focused());
+            let focused = select.0.input.as_ref().is_some_and(|input| input.is_focused());
             if !focused || select.filter().is_empty() {
                 return false;
             }
@@ -514,25 +491,15 @@ pub fn select<T: Clone + PartialEq + 'static>(
         cx.focus(input);
     }
     handle.render();
-    let root = layout_view(
-        cx,
-        &head,
-        &handle.0.body,
-        Some(&handle.0.footer_slot),
-        DIALOG_INSET,
-        handle.0.props.footer_gap,
-    );
+    let root =
+        layout_view(cx, &head, &handle.0.body, Some(&handle.0.footer_slot), DIALOG_INSET, handle.0.props.footer_gap);
     (root, handle)
 }
 
 /// Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
 /// placeholder's first letter. Until the user types, the cursor matches the highlighted row so that letter shows.
 fn search_cursor(theme: &crate::theme::Theme, filter: &str) -> Color {
-    if filter.is_empty() {
-        theme.background.action.primary.focused
-    } else {
-        theme.text.base
-    }
+    if filter.is_empty() { theme.background.action.primary.focused } else { theme.text.base }
 }
 
 impl<T: Clone + PartialEq + 'static> Select<T> {
@@ -547,10 +514,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     pub fn selected(&self) -> Option<SelectOption<T>> {
         let state = self.0.state.borrow();
-        state
-            .flat
-            .get(state.selected)
-            .map(|&index| state.filtered[index].clone())
+        state.flat.get(state.selected).map(|&index| state.filtered[index].clone())
     }
 
     /// Sets the filter, through the input when there is one.
@@ -617,10 +581,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     fn index_of(&self, value: &T) -> Option<usize> {
         let state = self.0.state.borrow();
-        state
-            .flat
-            .iter()
-            .position(|&index| state.filtered[index].value == *value)
+        state.flat.iter().position(|&index| state.filtered[index].value == *value)
     }
 
     fn count(&self) -> usize {
@@ -633,17 +594,9 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let mut state = self.0.state.borrow_mut();
         let filter = state.filter.clone();
         let filtered: Vec<SelectOption<T>> = match &props.search {
-            Some(search) => search(&filter)
-                .into_iter()
-                .filter(|x| !x.disabled)
-                .collect(),
+            Some(search) => search(&filter).into_iter().filter(|x| !x.disabled).collect(),
             None => {
-                let options: Vec<SelectOption<T>> = state
-                    .options
-                    .iter()
-                    .filter(|x| !x.disabled)
-                    .cloned()
-                    .collect();
+                let options: Vec<SelectOption<T>> = state.options.iter().filter(|x| !x.disabled).cloned().collect();
                 let needle = filter.to_lowercase();
                 if props.skip_filter || !props.render_filter || needle.is_empty() {
                     options
@@ -652,11 +605,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                         &needle,
                         &options,
                         |option| {
-                            [
-                                Some(option.title.as_str()),
-                                option.category.as_deref(),
-                                option.search_text.as_deref(),
-                            ]
+                            [Some(option.title.as_str()), option.category.as_deref(), option.search_text.as_deref()]
                         },
                         // Title matches weigh twice as much as category and search text.
                         |scores| scores[0] * 2.0 + scores[1] + scores[2],
@@ -670,11 +619,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         };
         let flatten = props.search.is_some() || (props.flat && !filter.is_empty());
         let grouped: Vec<(String, Vec<usize>)> = if flatten {
-            if filtered.is_empty() {
-                Vec::new()
-            } else {
-                vec![(String::new(), (0..filtered.len()).collect())]
-            }
+            if filtered.is_empty() { Vec::new() } else { vec![(String::new(), (0..filtered.len()).collect())] }
         } else {
             let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
             for (index, option) in filtered.iter().enumerate() {
@@ -686,10 +631,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             }
             groups
         };
-        state.flat = grouped
-            .iter()
-            .flat_map(|(_, members)| members.clone())
-            .collect();
+        state.flat = grouped.iter().flat_map(|(_, members)| members.clone()).collect();
         state.grouped = grouped;
         state.filtered = filtered;
     }
@@ -697,11 +639,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     // `focusTarget ?? current` with `focusCurrent`, used at mount and when the filter clears.
     fn current(&self) -> Option<T> {
         let props = self.props();
-        props
-            .focus_target
-            .clone()
-            .or_else(|| props.current.clone())
-            .filter(|_| props.focus_current)
+        props.focus_target.clone().or_else(|| props.current.clone()).filter(|_| props.focus_current)
     }
 
     fn focus_initial(&self) {
@@ -801,8 +739,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             Some(index) => {
                 let moved = {
                     let state = self.0.state.borrow();
-                    index != state.selected
-                        || state.filtered[state.flat[index]].category != category
+                    index != state.selected || state.filtered[state.flat[index]].category != category
                 };
                 self.0.state.borrow_mut().selected = index;
                 self.remember_selection();
@@ -834,27 +771,14 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let (query, count) = (self.filter(), self.count());
         let current = self.current();
         let intended: Option<T> = if query_changed && !query.is_empty() {
-            self.0
-                .state
-                .borrow()
-                .flat
-                .first()
-                .map(|&index| self.0.state.borrow().filtered[index].value.clone())
+            self.0.state.borrow().flat.first().map(|&index| self.0.state.borrow().filtered[index].value.clone())
         } else if (query_changed || current_changed) && current.is_some() {
             current
         } else if query_changed {
             let state = self.0.state.borrow();
-            state
-                .flat
-                .get(reconcile(state.selected, count))
-                .map(|&index| state.filtered[index].value.clone())
+            state.flat.get(reconcile(state.selected, count)).map(|&index| state.filtered[index].value.clone())
         } else {
-            self.0
-                .state
-                .borrow()
-                .selection
-                .as_ref()
-                .map(|(value, _)| value.clone())
+            self.0.state.borrow().selection.as_ref().map(|(value, _)| value.clone())
         };
         let next = intended
             .and_then(|value| self.index_of(&value))
@@ -881,22 +805,15 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         }
         let target = {
             let state = self.0.state.borrow();
-            let sections: Vec<&(String, Vec<usize>)> = state
-                .grouped
-                .iter()
-                .filter(|(_, members)| !members.is_empty())
-                .collect();
+            let sections: Vec<&(String, Vec<usize>)> =
+                state.grouped.iter().filter(|(_, members)| !members.is_empty()).collect();
             if sections.is_empty() {
                 return;
             }
-            let category = state
-                .flat
-                .get(state.selected)
-                .map(|&index| state.filtered[index].category.clone().unwrap_or_default());
-            let current = sections
-                .iter()
-                .position(|(name, _)| Some(name) == category.as_ref())
-                .map_or(-1, |index| index as i64);
+            let category =
+                state.flat.get(state.selected).map(|&index| state.filtered[index].category.clone().unwrap_or_default());
+            let current =
+                sections.iter().position(|(name, _)| Some(name) == category.as_ref()).map_or(-1, |index| index as i64);
             let len = sections.len() as i64;
             let section = sections[((current + direction + len) % len) as usize];
             state.flat.iter().position(|&index| index == section.1[0])
@@ -952,10 +869,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     }
 
     fn action_hidden(&self, action: &SelectAction<T>) -> bool {
-        action
-            .hidden_when
-            .as_ref()
-            .is_some_and(|hidden| hidden(self.selected().as_ref()))
+        action.hidden_when.as_ref().is_some_and(|hidden| hidden(self.selected().as_ref()))
     }
 
     fn action_disabled(&self, action: &SelectAction<T>) -> bool {
@@ -963,10 +877,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         if matches!(action.run, ActionRun::Selected(_)) && option.is_none() {
             return true;
         }
-        action
-            .disabled
-            .as_ref()
-            .is_some_and(|disabled| disabled(option.as_ref()))
+        action.disabled.as_ref().is_some_and(|disabled| disabled(option.as_ref()))
     }
 
     fn register_layer(&self) {
@@ -1015,8 +926,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             if action.hidden_when.is_some() {
                 let (weak, action) = (Rc::downgrade(&self.0), action.clone());
                 item = item.enabled(opentui::keymap::Condition::When(Rc::new(move || {
-                    weak.upgrade()
-                        .is_some_and(|inner| !Select(inner).action_hidden(&action))
+                    weak.upgrade().is_some_and(|inner| !Select(inner).action_hidden(&action))
                 })));
             }
             commands.push(item);
@@ -1060,10 +970,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 .group("Dialog"),
             );
         }
-        self.0.cx.layer(KeymapLayer::<FocusId> {
-            commands,
-            ..KeymapLayer::default()
-        });
+        self.0.cx.layer(KeymapLayer::<FocusId> { commands, ..KeymapLayer::default() });
     }
 
     // The list height: `min(rows, floor(height / 2) - 6)`, less the row the `…` takes.
@@ -1102,12 +1009,8 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             .filter(|(_, (category, _))| !category.is_empty())
             .map(|(i, _)| if i > 0 { 2 } else { 1 })
             .sum();
-        let rows: u32 = state
-            .flat
-            .iter()
-            .map(|&index| 1 + state.filtered[index].details.len() as u32)
-            .sum::<u32>()
-            + headers;
+        let rows: u32 =
+            state.flat.iter().map(|&index| 1 + state.filtered[index].details.len() as u32).sum::<u32>() + headers;
         let limit = (i64::from(self.0.cx.app.size().1) / 2 - 6).max(0) as u32;
         (rows, limit)
     }
@@ -1176,15 +1079,12 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             match view {
                 Some(view) => body.add(&view()),
                 None => body.add(
-                    &View::new(app)
-                        .padding_x(DIALOG_LIST_INSET)
-                        .child(&Text::new(app, text).fg(theme.text.muted)),
+                    &View::new(app).padding_x(DIALOG_LIST_INSET).child(&Text::new(app, text).fg(theme.text.muted)),
                 ),
             };
         } else {
             let selected = state.flat.get(state.selected).copied();
-            let flattened =
-                self.props().search.is_some() || (self.props().flat && !state.filter.is_empty());
+            let flattened = self.props().search.is_some() || (self.props().flat && !state.filter.is_empty());
             let width = content_width(cx.dialogs.size().width().min(u32::from(app.size().0)));
             for (i, (category, members)) in state.grouped.iter().enumerate() {
                 if !category.is_empty() {
@@ -1203,19 +1103,9 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     } else {
                         option.footer.clone()
                     };
-                    let description = option
-                        .description
-                        .clone()
-                        .filter(|description| description != category);
+                    let description = option.description.clone().filter(|description| description != category);
                     let row = View::new(app).column();
-                    row.add(&option_row(
-                        cx,
-                        option,
-                        description,
-                        footer,
-                        active,
-                        current,
-                    ));
+                    row.add(&option_row(cx, option, description, footer, active, current));
                     for detail in &option.details {
                         row.add(
                             &View::new(app).padding_x(DIALOG_LIST_INSET).child(
@@ -1249,10 +1139,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 );
             }
             if let Some(detail) = detail {
-                let area = View::new(app)
-                    .padding_edge(Edge::Top, 1)
-                    .padding_x(DIALOG_LIST_INSET)
-                    .shrink(0.0);
+                let area = View::new(app).padding_edge(Edge::Top, 1).padding_x(DIALOG_LIST_INSET).shrink(0.0);
                 match detail {
                     Some(Detail::View(build)) => area.add(&build(cx)),
                     text => area.add(
@@ -1323,16 +1210,8 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let props = self.props();
         let selected = self.selected();
         let mut items: Vec<(Group, FooterAction)> = Vec::new();
-        for action in props
-            .actions
-            .iter()
-            .filter(|action| !action.hidden && !self.action_hidden(action))
-        {
-            let Some(label) = cx
-                .keymap
-                .shortcut_all(&action.command)
-                .filter(|label| !label.is_empty())
-            else {
+        for action in props.actions.iter().filter(|action| !action.hidden && !self.action_hidden(action)) {
+            let Some(label) = cx.keymap.shortcut_all(&action.command).filter(|label| !label.is_empty()) else {
                 continue;
             };
             let group = action.group.unwrap_or(match action.run {
@@ -1361,11 +1240,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             ));
         }
         let pick = |group: Group| -> Vec<FooterAction> {
-            items
-                .iter()
-                .filter(|(of, _)| *of == group)
-                .map(|(_, action)| action.clone())
-                .collect()
+            items.iter().filter(|(of, _)| *of == group).map(|(_, action)| action.clone()).collect()
         };
         let (secondary, primary) = (pick(Group::Secondary), pick(Group::Primary));
         slot.add(&crate::dialog::footer(
@@ -1398,17 +1273,9 @@ fn option_row<T>(
 ) -> View {
     let app = &cx.app;
     let theme = &cx.theme;
-    let text = if active {
-        option.fg.unwrap_or(theme.text.action.primary.focused)
-    } else {
-        theme.text.base
-    };
+    let text = if active { option.fg.unwrap_or(theme.text.action.primary.focused) } else { theme.text.base };
     // Secondary text: the description and the footer.
-    let secondary = if active {
-        theme.text.action.secondary.focused
-    } else {
-        theme.text.muted
-    };
+    let secondary = if active { theme.text.action.secondary.focused } else { theme.text.muted };
     // A marker or gutter takes its cell plus the row gap out of the left padding, so titles line up with unmarked
     // rows.
     let marked = current || option.gutter.is_some();
@@ -1416,27 +1283,12 @@ fn option_row<T>(
         .row()
         .grow(1.0)
         .basis(Length::Auto)
-        .padding_edge(
-            Edge::Left,
-            if marked {
-                DIALOG_LIST_INSET - 3
-            } else {
-                DIALOG_LIST_INSET - 1
-            },
-        )
+        .padding_edge(Edge::Left, if marked { DIALOG_LIST_INSET - 3 } else { DIALOG_LIST_INSET - 1 })
         .padding_edge(Edge::Right, DIALOG_LIST_INSET)
         .gap(1)
-        .bg(if active {
-            option.bg.unwrap_or(theme.background.action.primary.focused)
-        } else {
-            Color::TRANSPARENT
-        });
+        .bg(if active { option.bg.unwrap_or(theme.background.action.primary.focused) } else { Color::TRANSPARENT });
     if current && option.gutter.is_none() {
-        row.add(
-            &Text::new(app, "▪")
-                .shrink(0.0)
-                .fg(theme.text.formfield.selected),
-        );
+        row.add(&Text::new(app, "▪").shrink(0.0).fg(theme.text.formfield.selected));
     }
     if let Some(gutter) = &option.gutter {
         row.add(&View::new(app).shrink(0.0).child(&gutter(app, text)));
@@ -1447,10 +1299,7 @@ fn option_row<T>(
         Truncate::Right => truncate(&option.title, option.title_width.unwrap_or(61)),
     };
     let mut spans = match &option.title_spans {
-        Some(spans) => spans
-            .iter()
-            .map(|(part, color)| part.clone().fg(color.unwrap_or(text)))
-            .collect(),
+        Some(spans) => spans.iter().map(|(part, color)| part.clone().fg(color.unwrap_or(text))).collect(),
         None => vec![title.fg(text)],
     };
     if let Some(description) = description {
@@ -1472,11 +1321,7 @@ fn option_row<T>(
                 (true, true) => format!("  {} ↵", choice.value),
                 (true, false) => format!("‹ {} ›", choice.value),
             };
-            let color = if active {
-                theme.text.action.primary.focused
-            } else {
-                theme.text.muted
-            };
+            let color = if active { theme.text.action.primary.focused } else { theme.text.muted };
             Some((text, color, 2))
         }
         None => footer.map(|footer| {
@@ -1489,9 +1334,7 @@ fn option_row<T>(
         }),
     };
     if let Some((footer, color, overhang)) = footer {
-        let cell = View::new(app)
-            .shrink(0.0)
-            .child(&Text::new(app, footer).fg(color));
+        let cell = View::new(app).shrink(0.0).child(&Text::new(app, footer).fg(color));
         if overhang > 0 {
             cell.margin_edge(Edge::Right, -(overhang as i32));
         }
@@ -1499,12 +1342,7 @@ fn option_row<T>(
     }
     View::new(app)
         .row()
-        .child(
-            &Text::new(app, if active { "┃" } else { " " })
-                .width(1)
-                .shrink(0.0)
-                .fg(theme.text.formfield.focused),
-        )
+        .child(&Text::new(app, if active { "┃" } else { " " }).width(1).shrink(0.0).fg(theme.text.formfield.focused))
         .child(&row)
 }
 
@@ -1594,14 +1432,7 @@ pub mod fuzzy {
         score: impl Fn(&[f64; N]) -> f64,
         threshold: f64,
     ) -> Vec<usize> {
-        go_scored(
-            search,
-            targets,
-            keys,
-            |keys, _, _| score(keys),
-            threshold,
-            usize::MAX,
-        )
+        go_scored(search, targets, keys, |keys, _, _| score(keys), threshold, usize::MAX)
     }
 
     /// [`go`] whose `score` also gets fuzzysort's own normalized score for the target, the `objResults.score` a
@@ -1623,14 +1454,9 @@ pub mod fuzzy {
         let mut heap = Heap::default();
         let mut partial = vec![NEG; search.spaces.len()];
         'outer: for (index, target) in targets.iter().enumerate() {
-            let mut prepared: Vec<Option<Prepared>> = keys(target)
-                .iter()
-                .map(|key| key.filter(|key| !key.is_empty()).map(prepare))
-                .collect();
-            let bitflags = prepared
-                .iter()
-                .flatten()
-                .fold(0, |flags, key| flags | key.bitflags);
+            let mut prepared: Vec<Option<Prepared>> =
+                keys(target).iter().map(|key| key.filter(|key| !key.is_empty()).map(prepare)).collect();
+            let bitflags = prepared.iter().flatten().fold(0, |flags, key| flags | key.bitflags);
             if search.bitflags & bitflags != search.bitflags {
                 continue;
             }
@@ -1638,9 +1464,7 @@ pub mod fuzzy {
             let mut results = [NEG; N];
             for (key, target) in prepared.iter_mut().enumerate() {
                 let Some(target) = target else { continue };
-                let Some(result) =
-                    algorithm(&search, target, false, search.contains_space, &mut partial)
-                else {
+                let Some(result) = algorithm(&search, target, false, search.contains_space, &mut partial) else {
                     continue;
                 };
                 results[key] = result;
@@ -1759,21 +1583,12 @@ pub mod fuzzy {
                 });
             }
         }
-        Search {
-            lower,
-            bitflags,
-            contains_space,
-            spaces,
-        }
+        Search { lower, bitflags, contains_space, spaces }
     }
 
     fn prepare(target: &str) -> Prepared {
         let (lower, bitflags, _) = lower_info(target);
-        Prepared {
-            lower,
-            bitflags,
-            next: next_beginnings(target),
-        }
+        Prepared { lower, bitflags, next: next_beginnings(target) }
     }
 
     fn next_beginnings(target: &str) -> Vec<usize> {
@@ -1809,8 +1624,7 @@ pub mod fuzzy {
         if needle.is_empty() {
             return Some(from.min(haystack.len()));
         }
-        (from..haystack.len().saturating_sub(needle.len() - 1))
-            .find(|&i| haystack[i..].starts_with(needle))
+        (from..haystack.len().saturating_sub(needle.len() - 1)).find(|&i| haystack[i..].starts_with(needle))
     }
 
     // `algorithm`: the score of one search against one target, or `None`. Leaves the match indexes in `indexes`.
@@ -1840,11 +1654,7 @@ pub mod fuzzy {
         let mut strict: Vec<usize> = Vec::with_capacity(search_len);
         let mut success = false;
         search_i = 0;
-        target_i = if simple[0] == 0 {
-            0
-        } else {
-            next[simple[0] - 1]
-        };
+        target_i = if simple[0] == 0 { 0 } else { next[simple[0] - 1] };
         let mut backtracks = 0;
         if target_i != target_len {
             loop {
@@ -1872,11 +1682,7 @@ pub mod fuzzy {
                 }
             }
         }
-        let mut substring = if search_len <= 1 {
-            None
-        } else {
-            find(codes, search, simple[0])
-        };
+        let mut substring = if search_len <= 1 { None } else { find(codes, search, simple[0]) };
         let mut substring_beginning = substring.is_some_and(|i| i == 0 || next[i - 1] == i);
         if let Some(found) = substring.filter(|_| !substring_beginning) {
             let mut i = 0;
@@ -1899,8 +1705,7 @@ pub mod fuzzy {
                     groups += 1.0;
                 }
             }
-            let unmatched =
-                matches[search_len - 1] as f64 - matches[0] as f64 - (search_len as f64 - 1.0);
+            let unmatched = matches[search_len - 1] as f64 - matches[0] as f64 - (search_len as f64 - 1.0);
             score -= (12.0 + unmatched) * groups;
             if matches[0] != 0 {
                 score -= (matches[0] * matches[0]) as f64 * 0.2;
@@ -1955,12 +1760,7 @@ pub mod fuzzy {
     }
 
     // `algorithmSpaces`; only the score is kept.
-    fn spaces(
-        search: &Search,
-        target: &mut Prepared,
-        partial_match: bool,
-        partial: &mut [f64],
-    ) -> Option<f64> {
+    fn spaces(search: &Search, target: &mut Prepared, partial_match: bool, partial: &mut [f64]) -> Option<f64> {
         let mut score = 0.0;
         let mut first_seen = 0usize;
         let count = search.spaces.len();
@@ -2004,13 +1804,9 @@ pub mod fuzzy {
         for &(at, value) in changes.iter().rev() {
             target.next[at] = value;
         }
-        if let Some(whole) =
-            single(&search.lower, target, &mut Vec::new()).filter(|whole| *whole > score)
-        {
+        if let Some(whole) = single(&search.lower, target, &mut Vec::new()).filter(|whole| *whole > score) {
             if partial_match {
-                partial
-                    .iter_mut()
-                    .for_each(|slot| *slot = whole / count as f64);
+                partial.iter_mut().for_each(|slot| *slot = whole / count as f64);
             }
             return Some(whole);
         }

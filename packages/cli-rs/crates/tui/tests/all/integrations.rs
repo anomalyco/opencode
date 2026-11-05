@@ -111,29 +111,22 @@ struct Fixture {
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
         let path = request.url.path().to_owned();
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let full = match request.url.query() {
             Some(query) => format!("{path}?{query}"),
             None => path.clone(),
         };
-        self.log
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), full, body.clone()));
+        self.log.lock().unwrap().push((request.method.to_owned(), full, body.clone()));
         let location = json!({ "directory": DIRECTORY });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/location") => (
                 200,
                 json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
             ),
-            ("GET", "/api/integration") => (
-                200,
-                json!({ "location": location, "data": self.integrations.lock().unwrap().clone() }),
-            ),
+            ("GET", "/api/integration") => {
+                (200, json!({ "location": location, "data": self.integrations.lock().unwrap().clone() }))
+            }
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/agent") => (
                 200,
@@ -161,10 +154,9 @@ impl Transport for Fixture {
             ("GET", "/api/command") => (200, json!({ "location": location, "data": [] })),
             ("GET", "/api/mcp") => (200, json!({ "location": location, "data": [] })),
             // A wrong key is rejected with the server's message.
-            ("POST", "/api/integration/anthropic/connect/key") => (
-                400,
-                json!({ "_tag": "BadRequest", "message": "Invalid API key" }),
-            ),
+            ("POST", "/api/integration/anthropic/connect/key") => {
+                (400, json!({ "_tag": "BadRequest", "message": "Invalid API key" }))
+            }
             ("POST", path) if path.ends_with("/connect/oauth") => {
                 let mut attempt = attempt();
                 attempt["mode"] = json!(self.mode);
@@ -174,18 +166,13 @@ impl Transport for Fixture {
                 200,
                 json!({ "location": location, "data": { "attemptID": "att_cmd", "time": { "created": 1, "expires": 2 } } }),
             ),
-            ("GET", path) if path.contains("/connect/") => (
-                200,
-                json!({ "location": location, "data": self.status.lock().unwrap().clone() }),
-            ),
+            ("GET", path) if path.contains("/connect/") => {
+                (200, json!({ "location": location, "data": self.status.lock().unwrap().clone() }))
+            }
             ("POST" | "PATCH" | "DELETE", _) => (204, Value::Null),
             _ => (404, json!({})),
         };
-        let bytes = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let bytes = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -227,19 +214,14 @@ impl Kit {
             log: log.clone(),
         };
         let client = Client::with_transport("http://opencode.local", Arc::new(transport)).unwrap();
-        let theme = opencode_ui::theme::Catalog::default()
-            .load("opencode", opencode_ui::theme::ThemeMode::Dark)
-            .unwrap()
-            .theme;
+        let theme =
+            opencode_ui::theme::Catalog::default().load("opencode", opencode_ui::theme::ThemeMode::Dark).unwrap().theme;
         // As the TS screen, the app clears with the page background the backdrop blends over.
         let app = TestApp::with_options(
             100,
             40,
             AppOptions {
-                theme: opentui::theme::Theme {
-                    background: theme.background.base,
-                    ..opentui::theme::Theme::default()
-                },
+                theme: opentui::theme::Theme { background: theme.background.base, ..opentui::theme::Theme::default() },
                 light_theme: None,
                 ..AppOptions::default()
             },
@@ -251,10 +233,7 @@ impl Kit {
                 client,
                 directory: DIRECTORY.into(),
                 config: Resolved::new(info, |_| None),
-                roots: Some(Roots {
-                    paths,
-                    storage_channel: "test".into(),
-                }),
+                roots: Some(Roots { paths, storage_channel: "test".into() }),
                 route: Route::Home,
                 continue_: false,
                 events: false,
@@ -269,19 +248,10 @@ impl Kit {
                 Ok(())
             });
         }
-        let kit = Self {
-            app,
-            tui,
-            status,
-            log,
-            opened,
-            _home: home,
-        };
+        let kit = Self { app, tui, status, log, opened, _home: home };
         kit.wait_for("Model M");
         // The integrations are read at startup, so the dialog opens on the list.
-        let read = kit
-            .app
-            .wait_until(WAIT, || kit.tui.local.integrations().is_some());
+        let read = kit.app.wait_until(WAIT, || kit.tui.local.integrations().is_some());
         assert!(read, "the integrations were never read");
         kit
     }
@@ -326,13 +296,7 @@ impl Kit {
 
     /// Mutating requests, in order, with their bodies.
     fn writes(&self) -> Vec<Logged> {
-        self.log
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(method, _, _)| method != "GET")
-            .cloned()
-            .collect()
+        self.log.lock().unwrap().iter().filter(|(method, _, _)| method != "GET").cloned().collect()
     }
 
     fn wait_writes(&self, count: usize) -> Vec<Logged> {
@@ -342,12 +306,7 @@ impl Kit {
     }
 
     fn reads(&self, prefix: &str) -> usize {
-        self.log
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(method, url, _)| method == "GET" && url.starts_with(prefix))
-            .count()
+        self.log.lock().unwrap().iter().filter(|(method, url, _)| method == "GET" && url.starts_with(prefix)).count()
     }
 }
 
@@ -365,10 +324,7 @@ fn integrations_match_typescript() {
         .into_iter()
         .find(|command| command.id == "provider.connect")
         .expect("provider.connect is not registered");
-    assert_eq!(
-        command.slash.as_ref().map(|slash| slash.name.as_str()),
-        Some("connect")
-    );
+    assert_eq!(command.slash.as_ref().map(|slash| slash.name.as_str()), Some("connect"));
     assert_eq!(command.group.as_deref(), Some("Integration"));
 
     kit.connect();
@@ -393,11 +349,7 @@ fn integrations_match_typescript() {
     open(&["down", "return"], "Connect OpenAI", "E.17a/methods");
     open(&["down", "return", "down", "return"], "submit", "E.17a/key");
     open(&["down", "down", "return"], "Deployment", "E.17a/form");
-    open(
-        &["down", "down", "return", "return"],
-        "Waiting for authorization",
-        "E.17a/oauth",
-    );
+    open(&["down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
 }
 
 #[test]
@@ -418,11 +370,7 @@ fn an_api_key_connects_and_opens_the_provider_models() {
     kit.app.press("return");
     assert_eq!(
         kit.wait_writes(1),
-        [write(
-            "POST",
-            &format!("/api/integration/openai/connect/key?{QUERY}"),
-            json!({ "key": "sk-test" })
-        )]
+        [write("POST", &format!("/api/integration/openai/connect/key?{QUERY}"), json!({ "key": "sk-test" }))]
     );
     kit.wait_for("Connected OpenAI");
     // The catalog is read again, then the model dialog of the connected provider opens. The home footer
@@ -450,11 +398,7 @@ fn a_rejected_key_shows_the_error_and_stays() {
     assert!(kit.tui.dialogs.is_open());
     assert_eq!(
         kit.writes(),
-        [write(
-            "POST",
-            &format!("/api/integration/anthropic/connect/key?{QUERY}"),
-            json!({ "key": "bad" })
-        )]
+        [write("POST", &format!("/api/integration/anthropic/connect/key?{QUERY}"), json!({ "key": "bad" }))]
     );
 }
 
@@ -497,8 +441,7 @@ fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
     let polls = || kit.reads("/api/integration/github-copilot/connect/oauth/att_1");
     let polled = kit.poll_until(|| polls() >= 2);
     assert!(polled, "polled {} times", polls());
-    *kit.status.lock().unwrap() =
-        json!({ "status": "complete", "time": { "created": 1, "expires": 2 } });
+    *kit.status.lock().unwrap() = json!({ "status": "complete", "time": { "created": 1, "expires": 2 } });
     assert!(kit.poll_until(|| kit.app.text().contains("Connected GitHub Copilot")));
     // A finished attempt is not cancelled.
     assert_eq!(kit.writes().len(), 1);
@@ -517,11 +460,7 @@ fn closing_a_pending_oauth_cancels_it() {
     let writes = kit.wait_writes(2);
     assert_eq!(
         writes[1],
-        write(
-            "DELETE",
-            &format!("/api/integration/github-copilot/connect/oauth/att_1?{QUERY}"),
-            Value::Null
-        )
+        write("DELETE", &format!("/api/integration/github-copilot/connect/oauth/att_1?{QUERY}"), Value::Null)
     );
     assert!(!kit.tui.dialogs.is_open());
     // Escape on the form's first field cancels the connect without a request.
@@ -549,11 +488,7 @@ fn a_pasted_code_completes_the_oauth() {
     assert_eq!(
         kit.writes(),
         [
-            write(
-                "POST",
-                &format!("/api/integration/openai/connect/oauth?{QUERY}"),
-                json!({ "methodID": "browser" })
-            ),
+            write("POST", &format!("/api/integration/openai/connect/oauth?{QUERY}"), json!({ "methodID": "browser" })),
             write(
                 "POST",
                 &format!("/api/integration/openai/connect/oauth/att_1/complete?{QUERY}"),
@@ -595,11 +530,7 @@ fn accounts_activate_rename_and_remove() {
         writes,
         [
             write("POST", "/api/credential/cred_home/activate", Value::Null),
-            write(
-                "PATCH",
-                "/api/credential/cred_home",
-                json!({ "label": "laptop" })
-            ),
+            write("PATCH", "/api/credential/cred_home", json!({ "label": "laptop" })),
             write("DELETE", "/api/credential/cred_home", Value::Null),
         ]
     );
@@ -618,27 +549,17 @@ fn removing_the_last_account_disconnects() {
     kit.app.press("ctrl+d");
     kit.wait_for("Disconnected OpenCode Console");
     assert!(!kit.tui.dialogs.is_open());
-    assert_eq!(
-        kit.writes(),
-        [write("DELETE", "/api/credential/cred_work", Value::Null)]
-    );
+    assert_eq!(kit.writes(), [write("DELETE", "/api/credential/cred_work", Value::Null)]);
 }
 
 #[test]
 fn an_mcp_sign_in_goes_straight_to_its_method() {
     let kit = Kit::new();
-    opencode_tui::dialogs::integration::show_auto_connect(
-        &kit.tui,
-        &IntegrationID("mcp_notion".into()),
-    );
+    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_notion".into()));
     kit.wait_for("Waiting for authorization");
     assert_eq!(
         kit.writes(),
-        [write(
-            "POST",
-            &format!("/api/integration/mcp_notion/connect/oauth?{QUERY}"),
-            json!({ "methodID": "mcp" })
-        )]
+        [write("POST", &format!("/api/integration/mcp_notion/connect/oauth?{QUERY}"), json!({ "methodID": "mcp" }))]
     );
     // MCP integrations stay out of the connect list.
     kit.app.press("escape");
@@ -659,10 +580,7 @@ fn a_command_connect_shows_its_output_and_completes() {
         "status": "pending", "message": "Visit example.test and enter 1234\n",
         "time": { "created": 1, "expires": 2 },
     });
-    opencode_tui::dialogs::integration::show_auto_connect(
-        &kit.tui,
-        &IntegrationID("mcp_cli".into()),
-    );
+    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_cli".into()));
     kit.wait_for("Visit example.test and enter 1234");
     kit.wait_for("Waiting for command to finish");
     *kit.status.lock().unwrap() = json!({
@@ -672,11 +590,7 @@ fn a_command_connect_shows_its_output_and_completes() {
     assert!(!kit.tui.dialogs.is_open());
     assert_eq!(
         kit.writes(),
-        [write(
-            "POST",
-            &format!("/api/integration/mcp_cli/connect/command?{QUERY}"),
-            json!({ "methodID": "login" })
-        )]
+        [write("POST", &format!("/api/integration/mcp_cli/connect/command?{QUERY}"), json!({ "methodID": "login" }))]
     );
 }
 
@@ -709,10 +623,7 @@ fn form_steps_open_a_link_take_an_own_answer_and_a_multiselect() {
         "connections": [],
     }));
     let kit = Kit::with(list, "auto");
-    opencode_tui::dialogs::integration::show_auto_connect(
-        &kit.tui,
-        &IntegrationID("mcp_aws".into()),
-    );
+    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_aws".into()));
     // "I finished" stays hidden until the link was opened.
     kit.wait_for("Open link");
     assert!(!kit.app.text().contains("I finished"));

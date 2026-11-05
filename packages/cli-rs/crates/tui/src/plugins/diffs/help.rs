@@ -28,10 +28,8 @@ pub fn open(viewer: &Viewer) {
             );
             let content = View::new(app).column().gap(1);
             for (title, rows) in &groups {
-                let group = View::new(app)
-                    .column()
-                    .shrink(0.0)
-                    .child(&Text::new(app, *title).fg(theme.text.base).bold());
+                let group =
+                    View::new(app).column().shrink(0.0).child(&Text::new(app, *title).fg(theme.text.base).bold());
                 for (shortcut, label) in rows {
                     group.add(
                         &View::new(app)
@@ -43,12 +41,7 @@ pub fn open(viewer: &Viewer) {
                                     .width(SHORTCUT_WIDTH)
                                     .shrink(0.0),
                             )
-                            .child(
-                                &Text::new(app, *label)
-                                    .fg(theme.text.muted)
-                                    .grow(1.0)
-                                    .min_width(0),
-                            ),
+                            .child(&Text::new(app, *label).fg(theme.text.muted).grow(1.0).min_width(0)),
                     );
                 }
                 content.add(&group);
@@ -61,10 +54,7 @@ pub fn open(viewer: &Viewer) {
             layout(cx, &head, &scroll, None)
         },
         None,
-        DialogOptions {
-            size: DialogSize::Medium,
-            key: None,
-        },
+        DialogOptions { size: DialogSize::Medium, key: None },
     );
     tui.dialogs.set_centered(true);
 }
@@ -75,20 +65,11 @@ type Group = (&'static str, Vec<(String, &'static str)>);
 fn groups(tui: &Tui, single: bool, fullscreen: bool, tree: bool) -> Vec<Group> {
     let keymap = &tui.keymap;
     // The first shortcut of each command.
-    let first = |ids: &[&str]| {
-        ids.iter()
-            .filter_map(|id| keymap.shortcut(id))
-            .collect::<Vec<_>>()
-            .join(" / ")
-    };
+    let first = |ids: &[&str]| ids.iter().filter_map(|id| keymap.shortcut(id)).collect::<Vec<_>>().join(" / ");
     // Every shortcut of one command.
     let all = |id: &str| keymap.shortcuts(id).join(" / ");
     let row = |shortcut: String, label: &'static str| {
-        let shortcut = if shortcut.is_empty() {
-            "unbound".to_owned()
-        } else {
-            shortcut
-        };
+        let shortcut = if shortcut.is_empty() { "unbound".to_owned() } else { shortcut };
         (shortcut, label)
     };
     let mut view = vec![
@@ -96,17 +77,11 @@ fn groups(tui: &Tui, single: bool, fullscreen: bool, tree: bool) -> Vec<Group> {
         row(first(&["diff.single_patch"]), "All files / single file"),
     ];
     if tree {
-        view.push(row(
-            first(&["diff.toggle_file_tree"]),
-            "Show / hide file tree",
-        ));
+        view.push(row(first(&["diff.toggle_file_tree"]), "Show / hide file tree"));
     }
     view.push(row(first(&["diff.switch_source"]), "Switch diff source"));
     if fullscreen {
-        view.push(row(
-            first(&["diff.toggle_fullscreen"]),
-            "Full screen / split view",
-        ));
+        view.push(row(first(&["diff.toggle_fullscreen"]), "Full screen / split view"));
     }
     view.push(row(all("diff.close"), "Close diff viewer"));
     vec![
@@ -117,16 +92,9 @@ fn groups(tui: &Tui, single: bool, fullscreen: bool, tree: bool) -> Vec<Group> {
                 row(all("diff.previous_file"), "Previous file"),
                 row(
                     first(&["diff.mark_reviewed"]),
-                    if single {
-                        "Review + next / reopen"
-                    } else {
-                        "Review + collapse / reopen"
-                    },
+                    if single { "Review + next / reopen" } else { "Review + collapse / reopen" },
                 ),
-                row(
-                    first(&["diff.next_hunk", "diff.previous_hunk"]),
-                    "Next / previous change",
-                ),
+                row(first(&["diff.next_hunk", "diff.previous_hunk"]), "Next / previous change"),
                 row("right-click".to_owned(), "File menu (heading or tree)"),
             ],
         ),
@@ -134,10 +102,7 @@ fn groups(tui: &Tui, single: bool, fullscreen: bool, tree: bool) -> Vec<Group> {
             "Scroll",
             vec![
                 row(first(&["diff.down", "diff.up"]), "Down / up"),
-                row(
-                    first(&["diff.half_page.down", "diff.half_page.up"]),
-                    "Half page down / up",
-                ),
+                row(first(&["diff.half_page.down", "diff.half_page.up"]), "Half page down / up"),
                 row(first(&["diff.page.down", "diff.page.up"]), "Page down / up"),
                 row(first(&["diff.first", "diff.last"]), "First / last"),
             ],

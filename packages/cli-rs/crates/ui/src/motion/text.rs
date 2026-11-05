@@ -21,26 +21,16 @@ pub fn shimmer_strength(elapsed: Duration, column: u32, end: u32) -> f32 {
 }
 
 pub(super) fn shimmer_strength_at(elapsed: f64, column: u32, end: u32) -> f32 {
-    let front =
-        -4.0 + coast((elapsed % SHIMMER_DURATION) / SHIMMER_DURATION) * (f64::from(end) + 22.0);
+    let front = -4.0 + coast((elapsed % SHIMMER_DURATION) / SHIMMER_DURATION) * (f64::from(end) + 22.0);
     intensity_at(f64::from(column), front, 4.0, 18.0) as f32
 }
 
 /// How hidden (pulled toward the backdrop) the cell at `column` of a fade-in is after `elapsed`: 1 hidden, 0
 /// shown. The sweep crosses `sweep_width` columns (default `end`), shifted by `sweep_offset`.
-pub fn fade_strength(
-    elapsed: Duration,
-    column: u32,
-    end: u32,
-    sweep_offset: f64,
-    sweep_width: Option<f64>,
-) -> f32 {
+pub fn fade_strength(elapsed: Duration, column: u32, end: u32, sweep_offset: f64, sweep_width: Option<f64>) -> f32 {
     let progress = millis(elapsed.min(FADE_DURATION)) / millis(FADE_DURATION);
-    let front = -FADE_FEATHER
-        + coast(progress) * (sweep_width.unwrap_or(f64::from(end)) + FADE_FEATHER * 2.0);
-    (1.0 - smootherstep(clamp(
-        (front - (sweep_offset + f64::from(column))) / FADE_FEATHER,
-    ))) as f32
+    let front = -FADE_FEATHER + coast(progress) * (sweep_width.unwrap_or(f64::from(end)) + FADE_FEATHER * 2.0);
+    (1.0 - smootherstep(clamp((front - (sweep_offset + f64::from(column))) / FADE_FEATHER))) as f32
 }
 
 /// Paints one line of `text` in `fg`, then shades every cell of the widget's first row toward `target`.
@@ -56,12 +46,7 @@ pub(super) fn paint_shaded(
     let end = painter.text_width(text.trim_end());
     let [r, g, b, _] = channels(target).map(|channel| channel as f32);
     let mut matrix = ColorMatrix {
-        rows: [
-            [0.0, 0.0, 0.0, r],
-            [0.0, 0.0, 0.0, g],
-            [0.0, 0.0, 0.0, b],
-            [0.0, 0.0, 0.0, 1.0],
-        ],
+        rows: [[0.0, 0.0, 0.0, r], [0.0, 0.0, 0.0, g], [0.0, 0.0, 0.0, b], [0.0, 0.0, 0.0, 1.0]],
         strength: 0.0,
         channels: Channels::Foreground,
     };
@@ -101,15 +86,9 @@ impl ShimmerText {
     pub fn new(app: &App, text: impl Into<String>) -> Self {
         let clock = Clock::default();
         tick_frames(app, &clock, None);
-        let view = ShimmerView {
-            text: text.into(),
-            fg: Color::DEFAULT_FOREGROUND,
-            shimmer: Color::DEFAULT_FOREGROUND,
-            clock,
-        };
-        Self {
-            widget: Custom::measured(app, view),
-        }
+        let view =
+            ShimmerView { text: text.into(), fg: Color::DEFAULT_FOREGROUND, shimmer: Color::DEFAULT_FOREGROUND, clock };
+        Self { widget: Custom::measured(app, view) }
     }
 
     pub fn fg(self, fg: Color) -> Self {
@@ -180,9 +159,7 @@ impl FadeInText {
             clock,
             finished: Cell::new(false),
         };
-        Self {
-            widget: Custom::measured(app, view),
-        }
+        Self { widget: Custom::measured(app, view) }
     }
 
     pub fn fg(self, fg: Color) -> Self {
@@ -221,22 +198,13 @@ impl Component for FadeView {
     fn paint(&self, painter: &mut Painter<'_>) {
         let elapsed = self.clock.get();
         if !self.enabled || self.finished.get() {
-            painter.text(
-                0,
-                0,
-                &self.text,
-                Style::new().fg(self.fg).bg(Color::TRANSPARENT),
-            );
+            painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
             return;
         }
         self.finished.set(elapsed >= FADE_DURATION);
-        paint_shaded(
-            painter,
-            &self.text,
-            self.fg,
-            self.backdrop,
-            |column, end| fade_strength(elapsed, column, end, self.sweep_offset, self.sweep_width),
-        );
+        paint_shaded(painter, &self.text, self.fg, self.backdrop, |column, end| {
+            fade_strength(elapsed, column, end, self.sweep_offset, self.sweep_width)
+        });
     }
 
     fn measure(&self, width: Constraint, height: Constraint) -> (f32, f32) {

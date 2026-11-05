@@ -71,11 +71,7 @@ impl Session {
             Rc::new(move |tui: &Tui, open: bool| {
                 rest.visible(!open);
                 if open {
-                    if tui
-                        .app
-                        .focused()
-                        .is_some_and(|widget| widget.id() == textarea.id())
-                    {
+                    if tui.app.focused().is_some_and(|widget| widget.id() == textarea.id()) {
                         tui.app.blur();
                     }
                 } else if prompt_root.is_visible() {
@@ -149,8 +145,7 @@ impl RouteView for Session {
         self.permission.sync(tui, changes);
         self.form.sync(tui, changes, self.permission.active());
         self.location.sync(tui);
-        self.composer
-            .sync(tui, self.form.active(), !self.frame.session_active());
+        self.composer.sync(tui, self.form.active(), !self.frame.session_active());
         let blocked = self.permission.active() || self.form.active() || self.composer.open();
         self.queued.sync(tui, changes, blocked);
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
@@ -167,11 +162,7 @@ impl RouteView for Session {
     }
 
     fn focus(&self, tui: &Tui) {
-        if !self.permission.active()
-            && !self.form.active()
-            && !self.location.active()
-            && !self.composer.open()
-        {
+        if !self.permission.active() && !self.form.active() && !self.location.active() && !self.composer.open() {
             self.prompt.focus(tui);
         }
     }
