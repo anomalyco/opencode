@@ -37,6 +37,8 @@ import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
 import { ToolInterrupted } from "@opencode/core/tool/interrupted"
@@ -167,6 +169,14 @@ const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
 )
+// Without the process daemon, so commands are spawned by the server.
+const spawnerIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(disabledPersistentPtyLayer),
+  ]),
+)
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
     SessionExecution.node.replace(executionNode),
@@ -208,6 +218,19 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
+
+// The process daemon keeps a finished command's zombie until the command is forgotten.
+const running = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false
+  }
+  return !Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+    .stdout.toString()
+    .trim()
+    .startsWith("Z")
+}
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
@@ -1574,7 +1597,7 @@ describe("ShellTool", () => {
                   expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
-                  expect(() => process.kill(pid, 0)).toThrow()
+                  expect(running(pid)).toBe(false)
                 }),
               (info) =>
                 Effect.try(() => {
@@ -1719,7 +1742,7 @@ describe("ShellTool", () => {
       }),
     )
 
-    it.live("leaves a spawned command's interrupt unchanged while detaching", () =>
+    spawnerIt.live("leaves a spawned command's interrupt unchanged while detaching", () =>
       withTempDir((tmp) => {
         reset()
         return withSession(tmp.path, (registry) =>
