@@ -67,7 +67,9 @@ export function PluginGuiLoader(props: {
 
       machine.state = next.state
       next.effects.forEach((effect) =>
-        Promise.try(() => run(effect)).catch((cause: unknown) => console.error("[plugin] plugin GUI effect failed", cause)),
+        Promise.try(() => run(effect)).catch((cause: unknown) =>
+          console.error("[plugin] plugin GUI effect failed", cause),
+        ),
       )
     } finally {
       queue.shift()

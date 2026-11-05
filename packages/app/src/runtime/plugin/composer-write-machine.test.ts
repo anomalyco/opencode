@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  createComposerWriteState,
-  transitionComposerWrite,
-  type ComposerWriteEvent,
-} from "./composer-write-machine"
+import { createComposerWriteState, transitionComposerWrite, type ComposerWriteEvent } from "./composer-write-machine"
 
 type Draft = { readonly name: string; readonly log: string[] }
 

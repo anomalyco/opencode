@@ -1,13 +1,4 @@
-import {
-  For,
-  Show,
-  createMemo,
-  createRenderEffect,
-  createSignal,
-  onCleanup,
-  type Accessor,
-  type JSX,
-} from "solid-js"
+import { For, Show, createMemo, createRenderEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -259,8 +250,7 @@ export function PaneTabs(props: {
         )
           return
 
-        if (props.region.newTabs(props.pane.id).includes(value))
-          return props.region.selectNewTab(props.pane.id, value)
+        if (props.region.newTabs(props.pane.id).includes(value)) return props.region.selectNewTab(props.pane.id, value)
         props.region.select(value)
       }}
     >

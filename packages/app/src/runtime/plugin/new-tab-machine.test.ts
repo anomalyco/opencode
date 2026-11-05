@@ -103,7 +103,13 @@ describe("new tab machine", () => {
   test("selecting a strip tab shows it over the New tab, which stays", () => {
     const before: Region = { regionActive: "a", side: { active: "a", keys: ["a", "b"] } }
     const after: Region = { regionActive: "b", side: { active: "b", keys: ["a", "b"] } }
-    const result = run([sync(before), { type: "open", pane: "side" }, { type: "select.tab", pane: "side" }, sync(after)])
+
+    const result = run([
+      sync(before),
+      { type: "open", pane: "side" },
+      { type: "select.tab", pane: "side" },
+      sync(after),
+    ])
 
     expect(result.state.panes.side).toEqual({ ids: ["new:1"], chosen: undefined })
   })

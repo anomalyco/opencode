@@ -59,7 +59,10 @@ export function transitionComposerWrite<T>(
     if (!event.load) return { state, effects: [{ type: "apply", target: event.target, write: event.write }] }
 
     return {
-      state: { status: "active", entries: [...state.entries, { status: "loading", target: event.target, queue: [event.write] }] },
+      state: {
+        status: "active",
+        entries: [...state.entries, { status: "loading", target: event.target, queue: [event.write] }],
+      },
       effects: [{ type: "observe", target: event.target, load: event.load }],
     }
   }

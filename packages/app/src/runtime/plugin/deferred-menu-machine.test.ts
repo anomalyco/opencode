@@ -31,7 +31,14 @@ const ran = (effects: readonly DeferredMenuEffect<string>[]) =>
 describe("deferred menu machine", () => {
   test.each([
     ["a modifier pressed alone", [{ type: "arm", intent: "menu" }, { type: "disarm" }]],
-    ["a press dragged off the trigger", [{ type: "hover", hover: true }, { type: "arm", intent: "menu" }, { type: "hover", hover: false }]],
+    [
+      "a press dragged off the trigger",
+      [
+        { type: "hover", hover: true },
+        { type: "arm", intent: "menu" },
+        { type: "hover", hover: false },
+      ],
+    ],
     ["a menu opened and closed", [{ type: "arm", intent: "menu" }, press, close]],
   ] satisfies [string, DeferredMenuEvent<string>[]][])("after %s, a plain activation opens a new tab", (_, events) => {
     const result = run([...events, press])
@@ -43,7 +50,10 @@ describe("deferred menu machine", () => {
   test("a press that asks for the menu opens it while it lists something", () => {
     expect(selectDeferredMenuOpen(run([{ type: "arm", intent: "menu" }, press]).state)).toBe(true)
 
-    const empty = run([{ type: "arm", intent: "menu" }, { ...press, available: false }])
+    const empty = run([
+      { type: "arm", intent: "menu" },
+      { ...press, available: false },
+    ])
 
     expect(empty.effects).toEqual([{ type: "open.new-tab" }])
   })
@@ -56,14 +66,26 @@ describe("deferred menu machine", () => {
   })
 
   test("a chosen item runs once focus returns", () => {
-    const result = run([{ type: "arm", intent: "menu" }, press, { type: "select", choice: "a" }, close, { type: "close.autofocus" }])
+    const result = run([
+      { type: "arm", intent: "menu" },
+      press,
+      { type: "select", choice: "a" },
+      close,
+      { type: "close.autofocus" },
+    ])
 
     expect(result.effects).toEqual([
       { type: "timer.start", attempt: 1, delay: DEFERRED_MENU_FALLBACK_MS },
       { type: "timer.start", attempt: 1, delay: 0 },
     ])
 
-    const fired = run([{ type: "timer.fired", attempt: 1 }, { type: "timer.fired", attempt: 1 }], result.state)
+    const fired = run(
+      [
+        { type: "timer.fired", attempt: 1 },
+        { type: "timer.fired", attempt: 1 },
+      ],
+      result.state,
+    )
 
     expect(ran(fired.effects)).toEqual(["a"])
   })
@@ -82,7 +104,14 @@ describe("deferred menu machine", () => {
 
   test("reopening before the choice ran runs it at once", () => {
     const chosen = run([{ type: "arm", intent: "menu" }, press, { type: "select", choice: "a" }])
-    const reopened = run([{ type: "context.menu", available: true }, { type: "timer.fired", attempt: 1 }], chosen.state)
+
+    const reopened = run(
+      [
+        { type: "context.menu", available: true },
+        { type: "timer.fired", attempt: 1 },
+      ],
+      chosen.state,
+    )
 
     expect(reopened.effects).toEqual([{ type: "timer.stop" }, { type: "run.choice", choice: "a" }])
     expect(selectDeferredMenuOpen(reopened.state)).toBe(true)

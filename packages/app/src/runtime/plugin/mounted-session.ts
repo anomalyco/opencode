@@ -276,9 +276,7 @@ export function createMountedSession(session: SessionModel) {
 
       // Behind the writes still waiting, so it finds a quote an `attach` just before it added.
       write((draft) => {
-        const item = draft.context
-          .items()
-          .find((entry) => entry.type === "quote" && entry.commentID === commentID)
+        const item = draft.context.items().find((entry) => entry.type === "quote" && entry.commentID === commentID)
 
         if (item) draft.quoteComment.set(item.key, options?.anchor)
       })

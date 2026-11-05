@@ -74,7 +74,8 @@ export function transitionDeferredMenu<T>(
     return { state: { status: "disposed" }, effects: state.status === "closing" ? [{ type: "timer.stop" }] : [] }
 
   if (event.type === "hover") {
-    if (state.status !== "closed") return { state: state.hover === event.hover ? state : { ...state, hover: event.hover }, effects: [] }
+    if (state.status !== "closed")
+      return { state: state.hover === event.hover ? state : { ...state, hover: event.hover }, effects: [] }
 
     // A press that leaves the trigger is abandoned.
     const armed = event.hover ? state.armed : undefined
@@ -87,7 +88,8 @@ export function transitionDeferredMenu<T>(
   if (state.status === "closed") return closed(state, event)
 
   if (state.status === "open") {
-    if (event.type === "open.change" && !event.open) return { state: closedState(state.attempt, state.hover), effects: [] }
+    if (event.type === "open.change" && !event.open)
+      return { state: closedState(state.attempt, state.hover), effects: [] }
 
     if (event.type === "select") return choose(state.attempt, state.hover, event.choice)
 
@@ -131,10 +133,15 @@ function closed<T>(
   if (event.type === "arm")
     return { state: state.armed === event.intent ? state : { ...state, armed: event.intent }, effects: [] }
 
-  if (event.type === "disarm" || (event.type === "open.change" && !event.open) || (event.type === "context.menu" && !event.available))
+  if (
+    event.type === "disarm" ||
+    (event.type === "open.change" && !event.open) ||
+    (event.type === "context.menu" && !event.available)
+  )
     return { state: state.armed === undefined ? state : { ...state, armed: undefined }, effects: [] }
 
-  if (event.type === "context.menu") return { state: { status: "open", attempt: state.attempt, hover: state.hover }, effects: [] }
+  if (event.type === "context.menu")
+    return { state: { status: "open", attempt: state.attempt, hover: state.hover }, effects: [] }
 
   if (event.type !== "open.change") return { state, effects: [] }
 

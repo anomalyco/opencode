@@ -238,8 +238,7 @@ export function NewTabButton(props: {
   const menu = createDeferredMenu<string>({ onChoose: (key) => props.onReopen(key), onNewTab: () => props.onNewTab() })
 
   const swapped = () =>
-    selectDeferredMenuOpen(menu.state()) ||
-    (available() && held() && (global || selectDeferredMenuHover(menu.state())))
+    selectDeferredMenuOpen(menu.state()) || (available() && held() && (global || selectDeferredMenuHover(menu.state())))
 
   return (
     <Tooltip
