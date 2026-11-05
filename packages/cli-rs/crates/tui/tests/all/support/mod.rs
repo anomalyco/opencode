@@ -118,6 +118,14 @@ pub fn not_found() -> Reply {
     (404, json!({}))
 }
 
+/// An empty session list; anything else is a 404.
+pub fn empty() -> Fake {
+    Fake::new(|seen| match seen.path.as_str() {
+        "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+        _ => not_found(),
+    })
+}
+
 /// The routes most fixtures serve, for a location at `directory`: session `ses_a` with no messages, the `build`
 /// agent and "Model M", empty catalogs and request lists, an echo of each prompt, and 204 for model and agent
 /// writes. Anything else is a 404.
@@ -291,6 +299,67 @@ pub fn ts_root() -> Option<PathBuf> {
     present.then_some(root)
 }
 
+/// The harness config of `parity/lib/component.tsx` (the dark `opencode` theme, no animations) plus `extra`.
+pub fn component_info(extra: Value) -> Info {
+    cli_config::merge(&[
+        Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })),
+        Some(extra),
+    ])
+}
+
+/// The variables that put every root of a run under `home`.
+fn xdg_env(home: &Path) -> Vec<(&'static str, PathBuf)> {
+    vec![
+        ("HOME", home.to_path_buf()),
+        ("XDG_CONFIG_HOME", home.join("config")),
+        ("XDG_STATE_HOME", home.join("state")),
+        ("XDG_DATA_HOME", home.join("data")),
+        ("XDG_CACHE_HOME", home.join("cache")),
+    ]
+}
+
+/// The roots a run with [`xdg_env`] uses, as the TS `Config` service in [`ts_config`] sees them.
+pub fn xdg_paths(home: &Path) -> Paths {
+    let vars = xdg_env(home);
+    Paths::from_vars(|name| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string()))
+        .unwrap()
+}
+
+/// One op of the F.5 oracle's `config` command in `home`, or `None` without bun and `node_modules`.
+pub fn ts_config(home: &Path, op: Value) -> Option<Value> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap();
+    if !root.join("node_modules").is_dir() || Command::new("bun").arg("--version").output().is_err() {
+        eprintln!("skipped the TypeScript side: needs bun and node_modules");
+        return None;
+    }
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/F.5-config.ts");
+    let mut command = Command::new("bun");
+    command
+        .arg("--cwd")
+        .arg(root.join("packages/cli"))
+        .arg(script)
+        .arg(&root)
+        .arg("config")
+        .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
+        .env_remove("OPENCODE_CONFIG_DIR")
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (name, value) in xdg_env(home) {
+        command.env(name, value);
+    }
+    let mut child = command.spawn().unwrap();
+    child.stdin.take().unwrap().write_all(json!([op]).to_string().as_bytes()).unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let mut results: Vec<Value> = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
+    Some(results.remove(0))
+}
+
 /// A mounted TUI and its app.
 pub struct Harness {
     pub app: TestApp,
@@ -299,6 +368,11 @@ pub struct Harness {
 
 pub fn mount(width: u16, height: u16, deps: Deps) -> Harness {
     mount_on(TestApp::new(width, height), deps, Args::default())
+}
+
+/// Home over [`empty`], with `info` and `roots`.
+pub fn mount_empty(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
+    opencode_tui::mount(app, Deps { config: config(info), roots, route: Route::Home, ..deps(Arc::new(empty())) })
 }
 
 pub fn mount_on(app: TestApp, deps: Deps, args: Args) -> Harness {
@@ -323,10 +397,7 @@ impl Harness {
     /// Waits until the screen shows `text`, and returns the screen.
     #[track_caller]
     pub fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
+        wait_for(&self.app, text)
     }
 
     #[track_caller]
@@ -377,6 +448,15 @@ impl Harness {
             }
         }
     }
+}
+
+/// Waits until `app` shows `text`, and returns the screen.
+#[track_caller]
+pub fn wait_for(app: &TestApp, text: &str) -> String {
+    let found = app.wait_until(WAIT, || app.text().contains(text));
+    let screen = app.text();
+    assert!(found, "{text:?} never showed:\n{screen}");
+    screen
 }
 
 /// The cell where `needle` first starts in `screen`.
