@@ -133,11 +133,23 @@ async function handleChat(req, res, config) {
   if (!candidates.length) return sendJson(res, 404, { error: { message: "No enabled provider supports model " + payload.model } });
 
   const available = candidates.filter(({ provider }) => cooldownRemaining(provider.id) === 0);
-  const ordered = available.length ? available : candidates;
+  if (available.length === 0) {
+    const retryMs = Math.min(...candidates.map(({ provider }) => cooldownRemaining(provider.id)).filter((ms) => ms > 0));
+    return sendJson(res, 503, {
+      error: { message: "All eligible providers are cooling down", type: "ocu_no_provider_available" },
+      retry_after_ms: Number.isFinite(retryMs) ? retryMs : null
+    });
+  }
   let lastStatus = 503;
   let lastMessage = "No provider could complete the request";
 
-  for (const { provider, mapping } of ordered) {
+  for (const { provider, mapping } of available) {
+    const key = provider.apiKeyEnv ? process.env[provider.apiKeyEnv] : "";
+    if (provider.apiKeyEnv && !key) {
+      lastStatus = 503;
+      lastMessage = "Provider credential is not configured";
+      continue;
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
     const headers = { "content-type": "application/json", accept: "application/json" };
