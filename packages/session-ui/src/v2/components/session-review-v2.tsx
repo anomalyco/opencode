@@ -45,6 +45,8 @@ export type SessionReviewV2SidebarProps = {
   transition: boolean
   title?: JSX.Element
   stats?: JSX.Element
+  /** Controls at the header's end, after the stats. */
+  actions?: JSX.Element
   filter: string
   onFilterChange: (value: string) => void
   onFilterKeyDown?: JSX.EventHandlerUnion<HTMLInputElement, KeyboardEvent>
@@ -68,13 +70,6 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   const minWidth = () => props.minWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN
   const maxWidth = () => props.maxWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX
 
-  createEffect(() => {
-    if (!resizing()) return
-    const stop = () => setResizing(false)
-    makeEventListener(document, "pointerup", stop)
-    makeEventListener(document, "pointercancel", stop)
-  })
-
   return (
     <div data-component="session-review-v2-sidebar-root">
       <Show when={props.open}>
@@ -87,6 +82,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
           <div data-slot="session-review-v2-sidebar-header">
             <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
             {props.stats}
+            {props.actions}
           </div>
           <div data-slot="session-review-v2-sidebar-filter">
             <TextInput
@@ -136,13 +132,14 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
         </aside>
       </Show>
       <Show when={props.open && props.onWidthChange}>
-        <div data-slot="session-review-v2-sidebar-resize" onPointerDown={() => setResizing(true)}>
+        <div data-slot="session-review-v2-sidebar-resize">
           <ResizeHandle
             direction="horizontal"
             size={width()}
             min={minWidth()}
             max={maxWidth()}
             onResize={(next) => props.onWidthChange?.(next)}
+            onDraggingChange={setResizing}
             onDblClick={() => props.onWidthChange?.(SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT)}
           />
         </div>

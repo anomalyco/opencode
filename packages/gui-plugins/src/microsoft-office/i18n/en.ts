@@ -10,6 +10,8 @@ export default {
   hiddenSlide: "Hidden slide",
   slideFailed: "This slide could not be shown",
   speakerNotes: "Speaker notes",
+  "document.pageFailed": "This page could not be shown",
+  "document.layoutFailed": "The rest of this document could not be laid out",
   "sheet.copyTooLarge": "The selection is too large to copy",
   "sheet.copyFailed": "The cells could not be copied",
   "sheet.openFailed": "This sheet could not be opened",

@@ -609,6 +609,7 @@ describe("Tool", () => {
           execute: () => Effect.succeed({ content: "ok" }),
           options: { codemode: false },
         } as unknown as Info)
+        editor.add({ ...make(), name: "boolean_input", input: true, options: { codemode: false } } as unknown as Info)
         editor.add({ ...make(), name: "codemode" })
       })
 
@@ -619,6 +620,14 @@ describe("Tool", () => {
             name: "phone_type",
             namespace: undefined,
             error: expect.stringContaining('Expected string\n  at ["description"]'),
+          },
+        ],
+        [
+          "Skipping invalid tool registration",
+          {
+            name: "boolean_input",
+            namespace: undefined,
+            error: "Invalid tool definition boolean_input: input must be a schema",
           },
         ],
       ])
@@ -688,10 +697,14 @@ describe("Tool", () => {
           input: undefined,
         } as unknown as Info),
       )
+      yield* service.transform((editor) =>
+        editor.add({ ...make(), name: "direct", input: null, options: { codemode: false } } as unknown as Info),
+      )
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["direct", "execute"])
       expect(codeModeListings(snapshot.codeModeCatalog!)[0]?.line).toContain("tools.echo")
+      expect((yield* snapshot.execute(call("direct"))).output).toEqual({ text: "direct" })
     }),
   )
 

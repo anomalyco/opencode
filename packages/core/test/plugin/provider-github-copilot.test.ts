@@ -5,7 +5,7 @@ import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -220,14 +220,20 @@ describe("GithubCopilotPlugin", () => {
         kind: "primary",
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": "token" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": "token",
+            "anthropic-beta": "interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01",
+          },
           body: JSON.stringify({ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
         }),
       })
       expect(event.request.headers.get("authorization")).toBe("Bearer token")
       expect(event.request.headers.has("x-api-key")).toBe(false)
       expect(event.request.headers.get("x-initiator")).toBe("user")
-      expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
+      expect(event.request.headers.get("anthropic-beta")).toBe(
+        "interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01",
+      )
       expect(event.request.headers.get("x-github-api-version")).toBe("2026-08-01")
     }),
   )
@@ -345,6 +351,69 @@ describe("GithubCopilotPlugin", () => {
           { role: "user", content: "how do I make my python script faster" },
         ],
       })
+    }),
+  )
+
+  it.effect("sends the utility title request through the host's fetch", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const providers = yield* Provider.Service
+      const hooks = yield* PluginHooks.Service
+      const http = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              data: [
+                {
+                  model_picker_enabled: true,
+                  id: "gpt-4o-mini",
+                  name: "GPT-4o mini",
+                  version: "gpt-4o-mini",
+                  capabilities: {
+                    family: "gpt-4o-mini",
+                    limits: { max_output_tokens: 1, max_prompt_tokens: 1 },
+                    supports: { tool_calls: true },
+                  },
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+      const sent: string[] = []
+      const outbound = Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          sent.push(String(input))
+          return Response.json({ choices: [{ message: { content: "Faster Python" } }] })
+        },
+        { preconnect: fetch.preconnect },
+      )
+      yield* providers.transform((draft) => {
+        draft.update(Provider.ID.githubCopilot, () => {})
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("github-copilot"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "token",
+          refresh: "token",
+          expires: 0,
+        }),
+      })
+      yield* addPlugin().pipe(
+        Effect.provideService(HttpClient.HttpClient, http),
+        Effect.provideService(FetchHttpClient.Fetch, outbound),
+      )
+      yield* drain
+
+      const event = yield* hooks.trigger("session", "title", {
+        ...titleRequest,
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5") }),
+      })
+      expect(event.result).toBe("Faster Python")
+      expect(sent).toEqual(["https://api.githubcopilot.com/chat/completions"])
     }),
   )
 

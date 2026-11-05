@@ -10,7 +10,7 @@ export const id = ProviderID.make("runway")
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
+  readonly http?: HttpOptions
 }
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "RUNWAYML_API_SECRET")

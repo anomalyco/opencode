@@ -9,6 +9,21 @@ export type CatalogIdentity = {
   models: ReadonlyMap<string, string>
 }
 
+// A JSON-safe copy of a catalog identity, so a sync plan can carry one snapshot
+// to every step of a run.
+export type CatalogSnapshot = {
+  offerings: [string, string][]
+  models: [string, string][]
+}
+
+export function toCatalogSnapshot(identity: CatalogIdentity): CatalogSnapshot {
+  return { offerings: [...identity.offerings], models: [...identity.models] }
+}
+
+export function fromCatalogSnapshot(snapshot: CatalogSnapshot): CatalogIdentity {
+  return { offerings: new Map(snapshot.offerings), models: new Map(snapshot.models) }
+}
+
 export async function loadCatalogIdentity() {
   if (cache.value && (cache.expiresAt ?? 0) > Date.now()) return { catalog: cache.value, stale: false }
   return fetch(CATALOG_URL, { signal: AbortSignal.timeout(10_000) })

@@ -1,0 +1,65 @@
+/* Mode "layers" (layers.tsx): the room, the live light, the cabinet and the poster, stacked at the room shot's
+   size. arcade.css lays out and grades the stack as `[data-slot="scene"]`; these rules only fill it. */
+
+[data-component="arcade-404"] {
+  [data-slot="scene"][data-layers] {
+    overflow: hidden;
+    isolation: isolate;
+
+    > picture {
+      display: contents;
+    }
+
+    :is([data-slot="layer-room"], [data-slot="layer-light"], [data-slot="layer-cabinet"], [data-slot="layer-poster"]) {
+      position: absolute;
+      max-width: none;
+      pointer-events: none;
+    }
+  }
+
+  [data-slot="layer-room"],
+  [data-slot="layer-light"] {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  [data-slot="layer-light"] {
+    /* Opaque black plus light: plus-lighter adds it to the room exactly. */
+    mix-blend-mode: plus-lighter;
+  }
+
+  [data-slot="layer-poster"] {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.5s linear;
+  }
+
+  /* Until then only the poster shows, so a room or cabinet that arrives first never paints alone. */
+  [data-slot="scene"][data-layers]:not([data-light-live]) :is([data-slot="layer-room"], [data-slot="layer-cabinet"]) {
+    visibility: hidden;
+  }
+
+  /* The live stack has drawn the poster's own first frame: the poster fades out over it. */
+  [data-light-live] [data-slot="layer-poster"] {
+    opacity: 0;
+  }
+
+  /* layers.json › cabinet: 1133, 411, 444 × 827 of 2752 × 1536. */
+  [data-slot="layer-cabinet"] {
+    left: calc(1133 / 2752 * 100%);
+    top: calc(411 / 1536 * 100%);
+    width: calc(444 / 2752 * 100%);
+    height: calc(827 / 1536 * 100%);
+  }
+
+  /* Before the camera takes over (server render), the stack covers the stage like the still. */
+  &:not([data-live]) [data-slot="scene"][data-layers] {
+    inset: 50% auto auto 50%;
+    width: max(100%, var(--arcade-frame-height, 100svh) * 2752 / 1536);
+    height: auto;
+    aspect-ratio: 2752 / 1536;
+    translate: -50% -50%;
+  }
+}

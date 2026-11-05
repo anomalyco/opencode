@@ -16,6 +16,7 @@ import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { Mcp } from "@opencode/core/mcp/index"
+import { McpPool } from "@opencode/core/mcp/pool"
 import { McpTls } from "@opencode/core/mcp/tls"
 import { McpTrustedHost } from "@opencode/core/mcp/trust"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -121,6 +122,8 @@ function trustMcpLayer(url: string) {
           },
         }),
         Layer.mock(Credential.Service, {}),
+        // The test servers never set pool, so the pool service is requested but never used.
+        Layer.mock(McpPool.Service, { connection: () => { throw new Error("unused pool service") } }),
         hostEnvironmentLayer,
       ),
     ),

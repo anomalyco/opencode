@@ -1,17 +1,17 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { Auth } from "../route/auth.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export type GoogleInteractionsOptionsInput = GoogleInteractions.OptionsInput
 
 export const id = ProviderID.make("google-vertex")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   GoogleVertexShared.ApiKeyOptions & {
     readonly baseURL?: string
     readonly location?: string

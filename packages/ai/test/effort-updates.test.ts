@@ -12,15 +12,15 @@ import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
-const anthropic = (id: string, compatibility?: { readonly supportsEffortUpdates?: boolean }) =>
+const anthropic = (id: string, updates?: boolean) =>
   AnthropicMessages.route
     .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-    .model({ id, compatibility })
+    .model({ id, capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
 
-const openai = (id: string, compatibility?: { readonly supportsEffortUpdates?: boolean }) =>
+const openai = (id: string, updates?: boolean) =>
   OpenAIResponses.route
     .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-    .model({ id, compatibility })
+    .model({ id, capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
 
 const opus5 = anthropic("claude-opus-5")
 const astra = openai("gpt-6-astra")
@@ -135,7 +135,7 @@ describe("Anthropic Messages effort updates", () => {
           model,
           messages: conversation,
           providerOptions: { effort: "low" },
-          http: { headers: { "anthropic-beta": "existing-beta" } },
+          headers: { "anthropic-beta": "existing-beta" },
         })
         const compiled = yield* compileRequest(request)
         const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
@@ -250,14 +250,14 @@ describe("Anthropic Messages effort updates", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         ai.request({
-          model: anthropic("claude-sonnet-5", { supportsEffortUpdates: true }),
+          model: anthropic("claude-sonnet-5", true),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
       const disabled = yield* compileRequest(
         ai.request({
-          model: anthropic("claude-opus-5", { supportsEffortUpdates: false }),
+          model: anthropic("claude-opus-5", false),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
@@ -506,14 +506,14 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         ai.request({
-          model: openai("gpt-5.5", { supportsEffortUpdates: true }),
+          model: openai("gpt-5.5", true),
           messages: conversation,
           providerOptions: { reasoningEffort: "low" },
         }),
       )
       const disabled = yield* compileRequest(
         ai.request({
-          model: openai("gpt-6-astra", { supportsEffortUpdates: false }),
+          model: openai("gpt-6-astra", false),
           messages: conversation,
           providerOptions: { reasoningEffort: "low" },
         }),

@@ -36,6 +36,10 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
@@ -78,6 +82,10 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   tls: TlsConfig.pipe(optional).annotate({
     description:
       "TLS trust for this server: a custom CA and/or a pinned certificate fingerprint. Applies to this server only.",
+  }),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
   }),
 }) {}
 
