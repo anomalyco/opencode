@@ -190,6 +190,7 @@ function settle(
   if (!found) return { state, effects: NO_EFFECTS }
 
   const consumerIds = found.job.consumers
+
   const next = remove(
     state,
     found,
@@ -225,6 +226,7 @@ function remove(
   consumerJobs: ReadonlyMap<number, number>,
 ): MarkdownCacheState {
   const jobs = found.keyState.jobs.filter((job) => job !== found.job)
+
   const keys = jobs.length
     ? put(state.keys, found.key, { targetSrc: found.keyState.targetSrc, jobs })
     : without(state.keys, found.key)

@@ -10,7 +10,9 @@ import {
 } from "./file-media-machine"
 
 const diagram = { key: "image:diagram.png", kind: "image", path: "diagram.png" } as const
+
 const other = { key: "image:other.png", kind: "image", path: "other.png" } as const
+
 const png = { src: "data:image/png;base64,AAAA", mime: undefined }
 
 function replay(events: FileMediaEvent[], state = INITIAL_FILE_MEDIA_STATE) {

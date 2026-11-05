@@ -111,6 +111,7 @@ describe("transitionMarkdownCache", () => {
       { type: "render.requested", key: "k", raw: "v", src: "v" },
       { type: "render.requested", key: "k", raw: "v", src: "v" },
     ]).state
+
     const error = new Error("worker failed")
     const failed = transitionMarkdownCache(shared, { type: "parse.failed", jobId: 1, error })
 
@@ -124,6 +125,7 @@ describe("transitionMarkdownCache", () => {
 
   test("an entry without a hash resolves its consumers but is not cached", () => {
     const state = replay([{ type: "render.requested", key: "k", raw: "v", src: "v" }]).state
+
     const settled = transitionMarkdownCache(state, {
       type: "parse.succeeded",
       jobId: 1,

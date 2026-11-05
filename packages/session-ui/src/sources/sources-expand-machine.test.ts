@@ -13,6 +13,7 @@ import {
 } from "./sources-expand-machine"
 
 const curve = { duration: 0.35, bounce: 0 }
+
 const toggle = (reduced = false): SourcesExpandEvent => ({ type: "toggle", expandable: true, reduced, curve })
 
 function replay(events: SourcesExpandEvent[], state = INITIAL_SOURCES_EXPAND_STATE) {
@@ -101,6 +102,7 @@ describe("transitionSourcesExpand", () => {
 
   test("collapse, reduced motion and dispose end any flight", () => {
     const opening = moving(replay([toggle(), { type: "measured", attempt: 1, from: 0, to: 120 }]))
+
     const closing = moving(
       replay([toggle(), { type: "measured", attempt: 1, from: 120, to: 0 }], { status: "open", attempt: 0 }),
     )
