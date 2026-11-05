@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { existsSync, readdirSync, realpathSync } from "node:fs"
-import { mkdir, utimes, writeFile } from "node:fs/promises"
+import { mkdir, rm, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
@@ -414,9 +414,19 @@ describe("Shell on the process daemon", () => {
           const finished = yield* shell.create({ shell: "/bin/sh", command: "finished" })
           env.daemon.exit(2, 0)
           yield* shell.wait(finished.id)
-          return { running, finished }
+          const lostFile = yield* shell.create({ shell: "/bin/sh", command: "lost file" })
+          env.daemon.exit(3, 0)
+          yield* shell.wait(lostFile.id)
+          const old = yield* shell.create({ shell: "/bin/sh", command: "old" })
+          env.daemon.exit(4, 0)
+          yield* shell.wait(old.id)
+          return { running, finished, lostFile, old }
         }),
       )
+      // A finished process whose file was deleted elsewhere, and one that ended more than 7 days ago.
+      yield* Effect.promise(() => rm(ids.lostFile.file))
+      const ended = env.daemon.processes.find((process) => process.id === 4)
+      if (ended) ended.exited_at = Date.now() - 8 * 24 * 60 * 60 * 1_000
       const expired = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000)
       yield* Effect.promise(() => utimes(ids.running.file, expired, expired))
       yield* Effect.promise(() => utimes(ids.finished.file, expired, expired))
@@ -437,6 +447,8 @@ describe("Shell on the process daemon", () => {
       expect(existsSync(ids.finished.file)).toBe(false)
       expect(existsSync(orphan)).toBe(false)
       expect(env.daemon.processes.map((process) => process.id)).toEqual([1])
+      // The old process's file is recent, so it stays.
+      expect(existsSync(ids.old.file)).toBe(true)
     }))
 })
 

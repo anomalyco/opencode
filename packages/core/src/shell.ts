@@ -211,6 +211,19 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
       return process ? pty.terminatePipe(process.id).pipe(Effect.ignore) : Effect.void
     },
   )
+  // Finished processes whose file is gone, or that ended long ago, are of no use to any Location: forget them.
+  const cutoff = Date.now() - Duration.toMillis(RETENTION)
+  yield* Effect.forEach(
+    processes.values(),
+    (process) =>
+      Effect.gen(function* () {
+        if (process.lifecycle.status === "running") return
+        const stale = (process.exitedAt ?? process.startedAt) < cutoff
+        if (!stale && (yield* fs.exists(process.outputPath).pipe(Effect.orElseSucceed(() => true)))) return
+        yield* pty.terminatePipe(process.id).pipe(Effect.ignore)
+      }),
+    { concurrency: 8, discard: true },
+  )
 })
 
 const cleanupLayer = Layer.effectDiscard(
