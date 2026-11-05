@@ -70,6 +70,7 @@ const StructuredOutput = Schema.Struct({
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),
   interrupted: Schema.optionalKey(Schema.Boolean),
+  killed: Schema.optionalKey(Schema.String),
 })
 
 const Output = Schema.Struct({

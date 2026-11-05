@@ -49,6 +49,7 @@ const EXITED_LIMIT = 25
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
 const STOP_GRACE = Duration.seconds(3)
+const LOST = "Command was killed: the process daemon stopped"
 
 type Info = Shell.Info
 export type StopReason = "timeout" | "killed"
@@ -108,6 +109,8 @@ type Active = {
   // Whether the process can outlive this server (run by the process daemon). Spawned commands cannot.
   detachable: boolean
   daemon?: Daemon
+  // Why a command was killed without a signal of its own.
+  killed?: string
 }
 
 type Ended = {
@@ -516,7 +519,13 @@ const layer = () =>
           const total = empty ? 0 : Math.max(page.newlines + (page.text.endsWith("\n") ? 0 : 1), shown)
           const notice = truncated ? `\n\n${ShellResult.savedNotice({ shown, total }, info.file)}` : ""
           const error = page.error ? `\n\n[output file ${info.file} stopped early: ${page.error}]` : ""
-          return { output: `${text || "(no output)"}${notice}${error}`, truncated, lines: { shown, total } }
+          const killed = (yield* require(info.id)).killed
+          return {
+            output: `${text || "(no output)"}${notice}${error}`,
+            truncated,
+            lines: { shown, total },
+            ...(killed ? { killed } : {}),
+          }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })
@@ -615,7 +624,12 @@ const layer = () =>
             // The daemon went away (and its processes with it), or forgot the process: it was killed.
             Effect.catch((error) =>
               Effect.logWarning("lost a shell command's process", { id: command.info.id, error: error.message }).pipe(
-                Effect.as<Ended>({ status: "killed", completed: Date.now() }),
+                Effect.andThen(
+                  Effect.sync((): Ended => {
+                    command.killed = LOST
+                    return { status: "killed", completed: Date.now() }
+                  }),
+                ),
               ),
             ),
             Effect.flatMap((outcome) => finish(command, outcome)),
@@ -738,6 +752,8 @@ const layer = () =>
             ...(running ? {} : { outputLines: process.outputLines, outputError: process.outputError }),
           }
           const command = daemonCommand(info, daemon)
+          if (process.lifecycle.status === "failed" && !stored.stopReason)
+            command.killed = `Command was killed: ${process.lifecycle.message}`
           commands.set(stored.id, command)
           if (running) {
             // A command moved to the background at shutdown has no timeout; an expired deadline fires at once.

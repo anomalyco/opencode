@@ -155,6 +155,11 @@ export const fakeDaemon = Effect.fn(function* () {
     }
     found.output_tail += Buffer.byteLength(text)
   }
+  // The daemon going away under a waiting server: the wait connection closes without a reply.
+  const drop = (id: number) => {
+    waiters.get(id)?.forEach((connection) => connection.destroy())
+    waiters.delete(id)
+  }
   const fail = (id: number, message: string) => {
     const found = find(id)
     if (found?.pipe) found.pipe.output_error = message
@@ -244,6 +249,7 @@ export const fakeDaemon = Effect.fn(function* () {
     exit,
     output,
     fail,
+    drop,
     processes,
     waiters: (id: number) => waiters.get(id)?.length ?? 0,
     options: {

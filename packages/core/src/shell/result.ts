@@ -7,10 +7,19 @@ export type Lines = { shown: number; total: number }
 export type Result = {
   info: Shell.Info
   // `lines` counts the tail's lines (`shown`) and the file's (`total`), zero for an empty file.
-  capture: { output: string; truncated: boolean; lines?: Lines } | undefined
+  // `killed` says why a command was killed when no signal of its own tells, e.g. the process daemon stopped.
+  capture: { output: string; truncated: boolean; lines?: Lines; killed?: string } | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean }
+type Output = {
+  output: string
+  truncated: boolean
+  exit?: number
+  signal?: string
+  timeout?: boolean
+  // Killed without an exit code or signal of its own: stopped, or lost with the process daemon.
+  killed?: string
+}
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -20,13 +29,17 @@ export const unavailable: Shell.Output = {
   truncated: false,
 }
 
-export function output(result: Result): Output {
+export function output(result: Result, reportKilled = true): Output {
   return {
     output: result.capture?.output ?? unavailable.output,
     truncated: result.capture?.truncated ?? false,
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
+    // A removed command has no capture and keeps today's plain "unavailable" result.
+    ...(reportKilled && result.info.status === "killed" && result.capture && result.info.signal === undefined
+      ? { killed: result.capture.killed ?? "Command was killed" }
+      : {}),
   }
 }
 
@@ -38,19 +51,23 @@ export function savedNotice(lines: Lines, file: string) {
 // The result of a command stopped because the user interrupted its call. It always names the shell
 // and its output file, which `output` leaves out when the output fits.
 export function interrupted(result: Result): Output {
-  const captured = output(result)
+  // Saying it was interrupted already says it was killed.
+  const captured = output(result, false)
   const lines = result.capture && !result.capture.truncated ? result.capture.lines : undefined
+  // An empty capture is all notice: no "(no output)" before "[no output; …]".
+  const text = lines?.total === 0 ? "" : `${captured.output.replace(/\n$/, "")}\n\n`
   return {
     ...captured,
     output: [
-      lines ? `${captured.output.replace(/\n$/, "")}\n\n${savedNotice(lines, result.info.file)}` : captured.output,
+      lines ? `${text}${savedNotice(lines, result.info.file)}` : captured.output,
       `Command interrupted by the user (shell ID: ${result.info.id}).`,
     ].join("\n\n"),
   }
 }
 
-export function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
+export function notice(output: Pick<Output, "exit" | "signal" | "timeout" | "killed">) {
   if (output.timeout) return "Timed out before completion"
+  if (output.killed !== undefined) return output.killed
   if (output.signal !== undefined) return `Killed by ${output.signal}`
   if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`
 }
@@ -61,6 +78,7 @@ export function metadata(output: Output) {
     ...(output.exit !== undefined ? { exit: output.exit } : {}),
     ...(output.signal !== undefined ? { signal: output.signal } : {}),
     ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
+    ...(output.killed !== undefined ? { killed: true } : {}),
   }
 }
 

@@ -140,6 +140,23 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
+  test("reports a command lost with the daemon as killed, with what it wrote", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const info = yield* shell.create({ shell: "/bin/sh", command: "work" })
+          env.daemon.output(1, "partial\n")
+          yield* until(() => env.daemon.waiters(1) > 0)
+          env.daemon.drop(1)
+          expect(yield* shell.result(info)).toMatchObject({
+            info: { status: "killed" },
+            capture: { output: "partial\n", killed: "Command was killed: the process daemon stopped" },
+          })
+        }),
+      )
+    }))
+
   test("fails a command the daemon rejected instead of spawning it", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
