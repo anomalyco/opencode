@@ -25,6 +25,8 @@ import { ToolInterrupted } from "../interrupted.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
+// How long an interrupted call waits for its stopped command to exit before settling with the output so far.
+const INTERRUPT_WAIT = "500 millis"
 
 const BACKGROUND_INSTRUCTION =
   "You will be notified automatically when the command finishes. The notification will include the command's output. Unless the user explicitly asks otherwise, DO NOT poll for completion, even if you need the final result to continue. Repeatedly sleeping and reading or searching the output file is polling, not useful work. You may read the current output if it lets you do useful work now, but do not repeatedly check it while waiting for the command to finish. Keep working on anything that does not depend on the result. If you have nothing else to do, end your response; you will be resumed automatically when the command finishes."
@@ -317,7 +319,8 @@ export const Plugin = {
       // Settled as interrupted by the step, as before; the command ends with the job's scope.
       if (closing()) return yield* Effect.failCause(cause)
       yield* shell.stop(info.id, "killed").pipe(Effect.ignore)
-      const result = yield* shell.result(info)
+      // The stop escalates to SIGKILL on its own; the session does not wait for that to settle the call.
+      const result = yield* shell.result(info, { wait: INTERRUPT_WAIT })
       // The stopped job settles from the same exit; this only releases it.
       yield* jobs.cancel(jobID)
       // No `shellID`: clients read it as a background call and show the shell's live output instead of this result.

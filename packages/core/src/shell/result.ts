@@ -60,7 +60,9 @@ export function interrupted(result: Result): Output {
     ...captured,
     output: [
       lines ? `${text}${savedNotice(lines, result.info.file)}` : captured.output,
-      `Command interrupted by the user (shell ID: ${result.info.id}).`,
+      result.info.status === "running"
+        ? `Command interrupted by the user (shell ID: ${result.info.id}); it is still being stopped.`
+        : `Command interrupted by the user (shell ID: ${result.info.id}).`,
     ].join("\n\n"),
   }
 }

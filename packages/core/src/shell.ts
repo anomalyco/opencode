@@ -152,7 +152,11 @@ export interface Interface {
   // NotFoundError if the command is unknown or is removed before it terminates.
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
-  readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
+  // With `wait`, gives up waiting for the exit after that long and returns the output so far, still running.
+  readonly result: (
+    started: Shell.Info,
+    options?: { readonly wait?: Duration.Input },
+  ) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it. Ignored once the command has
   // ended or timed out, even while its process is still being killed or its output captured.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
@@ -826,8 +830,19 @@ const layer = () =>
         }
       })
 
-      const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
-        const info = yield* wait(started.id).pipe(
+      const result = Effect.fn("Shell.result")(function* (
+        started: Shell.Info,
+        options?: { readonly wait?: Duration.Input },
+      ) {
+        const ended = wait(started.id).pipe(Effect.map(Option.some))
+        const info = yield* (
+          options?.wait === undefined
+            ? ended
+            : ended.pipe(
+                Effect.timeoutOrElse({ duration: options.wait, orElse: () => Effect.succeed(Option.none<Info>()) }),
+              )
+        ).pipe(
+          Effect.flatMap((info) => (Option.isSome(info) ? Effect.succeed(info.value) : get(started.id))),
           Effect.catchTag("Shell.NotFoundError", () =>
             Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
           ),

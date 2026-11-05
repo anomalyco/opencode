@@ -1899,6 +1899,37 @@ describe("ShellTool", () => {
       }),
     )
 
+    parity.live(
+      "settles an interrupted call without waiting for a command that ignores SIGTERM",
+      () =>
+        withTempDir((tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const started = Date.now()
+              const { shellID, result } = yield* interruptCall(
+                registry,
+                "trap '' TERM; printf 'kept\\n'; while :; do sleep 1; done",
+                "call-interrupted-stubborn",
+              )
+              // Bounded by the interrupt's short wait, not by the 3 s grace before SIGKILL.
+              expect(Date.now() - started).toBeLessThan(2_500)
+              const info = yield* shell.get(shellID)
+              expect(result?.content).toEqual([
+                {
+                  type: "text",
+                  text: `kept\n\n[showing lines 1-1 of 1; full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}); it is still being stopped.`,
+                },
+              ])
+              // The stop still ends it.
+              expect((yield* shell.wait(shellID)).status).toBe("killed")
+            }),
+          )
+        }),
+      { timeout: 15_000 },
+    )
+
     fakeDaemonIt.live("a prepared handoff moves a daemon-run foreground call to the background at shutdown", () =>
       withTempDir((tmp) => {
         reset()
