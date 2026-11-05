@@ -1205,7 +1205,16 @@ impl Oauth {
                 let closing = me.clone();
                 cx.on_close(Disposer::new(move || closing.close()));
                 let (errors, set_error) = error_slot(cx, false);
-                let link = link(cx, &me.attempt.url);
+                let open = Rc::downgrade(&me);
+                let link = link(
+                    cx,
+                    &me.attempt.url,
+                    Some(Rc::new(move || {
+                        if let Some(me) = open.upgrade() {
+                            me.open();
+                        }
+                    })),
+                );
                 let description = View::new(&cx.app).gap(1).child(&link).child(&errors);
                 let submit = Rc::downgrade(&me);
                 let on_confirm = Rc::new(move |code: &str| {
@@ -1304,12 +1313,28 @@ impl Oauth {
 }
 
 /// `Link`: the URL in the link color, as a terminal hyperlink.
-fn link(cx: &DialogCx, url: &str) -> Text {
-    Text::new(
+fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
+    let text = Text::new(
         &cx.app,
         vec![url.fg(cx.theme.markdown.link).link(url.to_owned())],
     )
-    .wrap(WrapMode::Word)
+    .wrap(WrapMode::Word);
+    // `Link`'s `onMouseUp`. The dialog panel stops a release before the app's link handler sees it.
+    if let Some(open) = open {
+        let app = cx.app.clone();
+        text.on_mouse(move |_, event| {
+            let plain = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SHIFT]
+                .into_iter()
+                .all(|modifier| !event.modifiers.contains(modifier));
+            if event.kind == MouseEventKind::Up(MouseButton::Left)
+                && plain
+                && app.selected_text().is_none()
+            {
+                open();
+            }
+        });
+    }
+    text
 }
 
 /// The copy and open actions of [`oauth_view`].
@@ -1334,7 +1359,8 @@ fn oauth_view(
     );
     let body = View::new(app).gap(1);
     if let Some((url, instructions)) = url {
-        let details = View::new(app).gap(1).child(&link(cx, url));
+        let open = actions.as_ref().map(|(_, open)| open.clone());
+        let details = View::new(app).gap(1).child(&link(cx, url, open));
         if !instructions.is_empty() {
             details.add(&Text::new(app, instructions).fg(cx.theme.text.muted));
         }
