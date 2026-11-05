@@ -28,6 +28,7 @@ import {
 import { BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Changes, type ChangeKind } from "@opencode/plugin/gui/review"
 import type Review from "./index"
+import { ReviewDetails, type ReviewDetailsView } from "./contract"
 import { createReviewModel, type Demand, type ReviewModel } from "./model"
 import {
   INITIAL_REVIEW_SCREEN_STATE,
@@ -361,19 +362,32 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
 
   const none: readonly FileDiffInfo[] = []
   const noKinds: ReadonlyMap<string, ChangeKind> = new Map()
+  const detailsLoading: ReviewDetailsView = { status: "loading" }
 
   ctx.provide(Changes, {
     diffs: (session) => modelFor(session)?.diffs() ?? none,
     ready: (session) => modelFor(session)?.ready() ?? false,
     kinds: (session) => modelFor(session)?.kinds() ?? noKinds,
     active: (session) => modelFor(session)?.activeFile(),
-    details: (session) => modelFor(session)?.details(),
+    details: (session) => {
+      const current = modelFor(session)?.details()
+
+      if (current?.status === "ready") return current.rows
+
+      // The documented contract: empty once the load failed. The details row reads `ReviewDetails` instead.
+      return current?.status === "error" ? none : undefined
+    },
     focus: (session, path) => modelFor(session)?.focusFile(path),
     open(session) {
       // The session details' changes row: narrow screens switch to the Changes view; wide ones open the review tab.
       layout.open(KEY, session)
     },
     watch,
+  })
+
+  ctx.provide(ReviewDetails, {
+    view: (session) => modelFor(session)?.details() ?? detailsLoading,
+    retry: (session) => modelFor(session)?.retryDetails(),
   })
 }
 

@@ -39,6 +39,8 @@ export default {
     "Help me write a new OpenCode skill in my global config. Ask me what it should teach you, then write its SKILL.md.",
   loadingChanges: "Loading changes…",
   noChanges: "No changes",
+  changesFailed: "Couldn't load changes",
+  changesOffline: "Can't reach this server",
   basedOn: "Based on {{branch}}",
   "workspace.local": "Local repository",
   "workspace.existing": "Worktree",

@@ -28,6 +28,16 @@ describe("reviewDiffNeedsLoad", () => {
       false,
     )
   })
+
+  // The preview shows them from the file, so a patch request for them was wasted.
+  test("never loads a patch for images and audio", () => {
+    expect(
+      reviewDiffNeedsLoad({ file: "assets/preview.png", patch: "", additions: 1, deletions: 0, status: "added" }),
+    ).toBe(false)
+    expect(reviewDiffNeedsLoad({ file: "sounds/ping.mp3", patch: "", additions: 1, deletions: 0, status: "added" })).toBe(
+      false,
+    )
+  })
 })
 
 describe("reviewDiffDirectory", () => {
