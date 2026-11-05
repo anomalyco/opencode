@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { ActiveComposerAdapter, ComposerSession } from "@/composer/adapter"
-import { createMemoryComposerState } from "@/composer/state"
+import { createMemoryComposerState, type Prompt } from "@/composer/state"
 import { composerSubmitView } from "@/composer/machine"
 import { createComposerSubmit } from "@/composer/submit"
 import type { ModelSelection } from "@/providers/models/selection"
@@ -39,6 +39,7 @@ test.each<{
   sent: string[]
   left: string
   timeline: string[]
+  history: string[]
 }>([
   {
     name: "a held prompt shows in the session at once and sends once the Location loads, keeping a new draft",
@@ -47,6 +48,7 @@ test.each<{
     sent: ["ship it"],
     left: "next",
     timeline: ["hold:ship it", "set:ship it"],
+    history: ["add:ship it"],
   },
   {
     name: "a held prompt whose Location loads without an agent returns to the composer and asks for one",
@@ -55,6 +57,7 @@ test.each<{
     sent: [],
     left: "ship it",
     timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
   },
   {
     name: "stopping a held prompt cancels it and returns it to the composer",
@@ -63,6 +66,28 @@ test.each<{
     sent: [],
     left: "ship it",
     timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
+  },
+  // A draft typed while the prompt waited is the user's too, so the prompt goes back in front of it.
+  {
+    name: "stopping a held prompt after typing a new draft puts it back in front of the draft",
+    edit: "next",
+    stop: true,
+    toasts: [],
+    sent: [],
+    left: "ship it\n\nnext",
+    timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
+  },
+  {
+    name: "a held prompt whose Location loads without an agent goes back in front of a draft typed since",
+    agent: "",
+    edit: "next",
+    toasts: ["missing"],
+    sent: [],
+    left: "ship it\n\nnext",
+    timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
   },
   {
     name: "editing a held shell command cancels it and keeps the edit",
@@ -72,6 +97,7 @@ test.each<{
     sent: [],
     left: "ship i",
     timeline: [],
+    history: [],
   },
   {
     name: "clearing a held shell command cancels it",
@@ -81,12 +107,15 @@ test.each<{
     sent: [],
     left: "",
     timeline: [],
+    history: [],
   },
 ])("$name", async (row) => {
   const state = createMemoryComposerState({ prompt: "ship it" }).capture()
   const sent: string[] = []
   const toasts: string[] = []
   const timeline: string[] = []
+  const history: string[] = []
+  const statuses: string[] = []
   const prompted = Promise.withResolvers<void>()
   const [agent, setAgent] = createSignal<string>()
 
@@ -124,7 +153,7 @@ test.each<{
             delivery: value.delivery ?? "steer",
           }
         },
-        setStatus() {},
+        setStatus: (_id, status) => void statuses.push(status),
       },
     },
   }
@@ -152,8 +181,8 @@ test.each<{
       commands: () => [],
       editor: () => undefined,
       queueScroll() {},
-      addToHistory() {},
-      removeFromHistory() {},
+      addToHistory: (prompt) => void history.push(`add:${promptText(prompt)}`),
+      removeFromHistory: (prompt) => void history.push(`remove:${promptText(prompt)}`),
       resetHistory() {},
       closePopover() {},
       notify: { missingSelection: () => void toasts.push("missing"), unqueueable() {}, failed() {} },
@@ -189,13 +218,17 @@ test.each<{
     expect(sent).toEqual(row.sent)
     expect(text(state)).toBe(row.left)
     expect(timeline).toEqual(row.timeline)
+    expect(history).toEqual(row.history)
+    // A held prompt marks the Session running only once it is dispatched, like any prompt into an idle Session.
+    expect(statuses).toEqual(row.sent.length > 0 ? ["running"] : [])
     dispose()
   })
 })
 
 function text(state: ReturnType<ReturnType<typeof createMemoryComposerState>["capture"]>) {
-  return state
-    .current()
-    .map((part) => ("content" in part ? part.content : ""))
-    .join("")
+  return promptText(state.current())
+}
+
+function promptText(prompt: Prompt) {
+  return prompt.map((part) => ("content" in part ? part.content : "")).join("")
 }
