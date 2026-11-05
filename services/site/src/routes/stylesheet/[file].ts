@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { getRequestEvent } from "solid-js/web"
+import { assets } from "#resource"
 import { edgeCache } from "~/lib/edge-cache"
 
 // A page's stylesheets as one file (lib/one-stylesheet.ts): /stylesheet/<name>~<name>….css joins
@@ -20,13 +20,12 @@ export async function GET(event: APIEvent) {
   const hit = cache && (await cache.match(key).catch(() => undefined))
   if (hit) return hit
 
-  const assets = (
-    getRequestEvent()?.nativeEvent.context as { cloudflare?: { env?: { ASSETS?: { fetch: typeof fetch } } } }
-  ).cloudflare?.env?.ASSETS
+  // From the assets binding: a fetch of the site's own URL would not come back to this Worker.
+  const binding = assets()
   const parts = await Promise.all(
     names.map(async (part) => {
       const request = new Request(`${url.origin}/_build/assets/${part}.css`)
-      const response = await (assets ? assets.fetch(request) : fetch(request))
+      const response = await (binding ? binding.fetch(request) : fetch(request))
       return response.ok ? response.text() : undefined
     }),
   )
