@@ -10,6 +10,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M4.5 10V13.5H11.5V10" stroke="currentColor"/><path d="M3.5 4.5V2.5H5.5V4.5" stroke-linecap="square" stroke="currentColor"/><path d="M10.5 4.5V2.5H12.5V4.5" stroke-linecap="square" stroke="currentColor"/><path d="M9.5 4.5H13.5V10.5H9.5V4.5Z" stroke-linecap="square" stroke="currentColor"/><path d="M2.5 4.5H6.5V10.5H2.5V4.5Z" stroke-linecap="square" stroke="currentColor"/>`,
   },
+  pin: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5 2.5H11M6 2.5V6L3.5 8.5V10H12.5V8.5L10 6V2.5M8 10V14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   lock: {
     viewBox: "0 0 16 16",
     body: `<rect x="3.5" y="7" width="9" height="7" rx="1" stroke="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1" stroke="currentColor" stroke-linecap="round"/>`,

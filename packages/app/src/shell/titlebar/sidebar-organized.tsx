@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { createEffect, createMemo, Show, onCleanup, untrack, type Accessor, type JSX } from "solid-js"
 import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
-import { useQuery } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -228,8 +228,9 @@ function ProjectList(props: {
     untrack(() => props.onReorder(key, ids))
   })
 
+  const queryClient = useQueryClient()
   const sessions = useQuery(() => ({
-    ...homeSessionsQuery(connection(), ctx()),
+    ...homeSessionsQuery(connection(), ctx(), queryClient),
     enabled: ctx()?.sdk.connection.status() === "connected",
   }))
 

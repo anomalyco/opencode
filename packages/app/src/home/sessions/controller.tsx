@@ -180,7 +180,7 @@ export function createHomeSessionsController(home: HomeController) {
     }
 
     // Through the shared query, so a fetch the sidebar already started is joined and the result lands in its cache.
-    void queryClient.fetchQuery({ ...homeSessionsQuery(conn, ctx), staleTime: 0 }).then(
+    void queryClient.fetchQuery({ ...homeSessionsQuery(conn, ctx, queryClient), staleTime: 0 }).then(
       () => dispatchLoad({ type: "fetch.succeeded", attempt, reducedMotion: prefersReducedMotion() }),
       (cause) =>
         dispatchLoad({

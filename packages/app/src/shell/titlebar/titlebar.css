@@ -29,6 +29,43 @@
   );
 }
 
+/* Side bar keeps its shared native thumb visible so overflow is discoverable before hovering. */
+.sidebar-sessions :is([data-slot="vertical-tabs-scroll"], [data-slot="sidebar-pinned-scroll"]),
+[data-slot="active-sessions-list"] {
+  scrollbar-gutter: stable;
+}
+
+[data-slot="sidebar-pinned-scroll"] [data-titlebar-tab-list] > .sidebar-project-header:first-child {
+  margin-block-start: 0;
+}
+
+.sidebar-project-actions::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -12px;
+  width: 12px;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--v2-background-bg-layer-02));
+}
+
+.sidebar-project-actions:dir(rtl)::before {
+  background: linear-gradient(to left, transparent, var(--v2-background-bg-layer-02));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(
+    .sidebar-sessions :is([data-slot="vertical-tabs-scroll"], [data-slot="sidebar-pinned-scroll"])
+  )::-webkit-scrollbar-thumb,
+  :where([data-slot="active-sessions-list"])::-webkit-scrollbar-thumb {
+    background-color: var(--v2-border-border-muted);
+  }
+
+  .sidebar-project-header:not(:hover):not(:focus-within) .sidebar-project-action:not([aria-pressed="true"]) {
+    display: none;
+  }
+}
+
 [data-slot="mobile-tabs-trigger"][aria-expanded="true"] {
   background:
     linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
