@@ -205,10 +205,12 @@ export function mountBrowserPane(input: PaneHost) {
       },
       embed: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
-        setStore("captures", (count) => count + 1)
+        const count = store.captures + 1
+        setStore("captures", count)
 
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
-        const canvas = new OffscreenCanvas(4, 4)
+        // Each capture is a pixel wider than the last, so a spec can tell which one a still shows.
+        const canvas = new OffscreenCanvas(3 + count, 4)
         const paint = canvas.getContext("2d")
 
         if (paint) {

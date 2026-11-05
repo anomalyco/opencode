@@ -212,6 +212,33 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story(
+  "freezes on the latest capture when floating content closes and reopens before a capture lands",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const popover = root.getByRole("button", { name: "Toggle popover", exact: true })
+    const still = root.locator("#browser-panel img")
+    const native = root.getByTestId("native-Alpha")
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+    await popover.click()
+    await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+    await popover.click()
+    await expect(page.locator("[data-popper-positioner]")).toHaveCount(0)
+    // The pane measures the overlap on the next animation frame; nothing on screen changes while the capture is held.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await popover.click()
+    await expect(root.getByText("Captures: 2", { exact: true })).toBeVisible()
+
+    // Both captures land in order; the first one belongs to the cover that already closed.
+    await root.getByRole("button", { name: "Release capture", exact: true }).click()
+    await expect(native).toHaveAttribute("data-visible", "false")
+    await expect(still).toBeVisible()
+    // The fixture draws each capture a pixel wider: the second one is 5 pixels wide.
+    await expect(still).toHaveJSProperty("naturalWidth", 5)
+  },
+)
+
 story("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
@@ -239,6 +266,26 @@ story("keeps a still of the page under an open dialog instead of blanking the pa
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+})
+
+story("hides the native page under a dialog even when its still never arrives", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+  const toggle = root.getByRole("button", { name: "Toggle dialog", exact: true })
+  await page.clock.install()
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+  await toggle.click()
+  await page.clock.runFor(100)
+  await expect(native).toHaveAttribute("data-visible", "true")
+
+  // The capture never settles: after its timeout the page hides over the box background instead of the dialog.
+  await page.clock.runFor(5_000)
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(root.locator("#browser-panel img")).toHaveCount(0)
+
+  await toggle.click()
+  await page.clock.runFor(100)
+  await expect(native).toHaveAttribute("data-visible", "true")
 })
 
 story("comments on a picked element over a still of the page", async ({ page }) => {
