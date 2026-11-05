@@ -13,6 +13,7 @@ import {
   absolutePath,
   canonicalName,
   filePath,
+  locationFrom,
   patchHunks,
   pendingToolCall,
   stringValue,
@@ -190,13 +191,9 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
 function permissionLocations(toolName: string, input: ToolInput, ask: PermissionEvent["data"], cwd: string) {
   const locations = toLocations(toolName, input, cwd)
   if (locations.length > 0 || !PathActions.has(ask.action)) return locations
-  const paths = ask.resources.flatMap((resource) => {
-    const path = resource.endsWith("/*") ? resource.slice(0, -2) : resource
-    return path && !/[*?]/.test(path) ? [absolutePath(path, cwd)] : []
-  })
-  return Array.from(new Set(paths), (path) => ({ path }))
+  return locationFrom(cwd, ...ask.resources.filter((resource) => !/[*?]/.test(resource)))
 }
 
-const PathActions = new Set(["read", "edit", "external_directory"])
+const PathActions = new Set(["read", "edit"])
 
 export * as ACPPermission from "./permission"
