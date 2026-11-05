@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn a_member_error_is_reported_at_the_member() {
-        use crate::generated::types::SessionMessageCompaction;
+        use crate::types::SessionMessageCompaction;
         let json = r#"[{"status":"running","type":7}]"#;
         let error = serde_json::from_str::<Vec<SessionMessageCompaction>>(json).unwrap_err();
         assert_eq!(error.to_string(), "invalid type: integer `7`, expected a string at line 1 column 31");

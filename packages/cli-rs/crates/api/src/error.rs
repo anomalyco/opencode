@@ -1,8 +1,9 @@
 //! Client errors, mirroring the reasons of the TypeScript `ClientError`
 //! (`packages/client/src/promise/generated/client-error.ts`), plus declared error bodies.
 
-use serde::de::DeserializeOwned;
 use serde_json::Value;
+
+pub use opencode_api_types::TaggedError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -105,11 +106,6 @@ impl DeclaredError {
         }
         serde_json::from_value(self.body.clone())
     }
-}
-
-/// A generated declared error type and the `_tag` (or `name`) that identifies it on the wire.
-pub trait TaggedError: DeserializeOwned {
-    const TAG: &'static str;
 }
 
 impl std::fmt::Display for DeclaredError {

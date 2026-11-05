@@ -2,8 +2,8 @@
 //! Types and methods generated from `ClientApi` by `script/gen/api.ts` (F.2).
 
 mod methods;
-pub mod types;
 
+pub use opencode_api_types::types;
 pub use types::*;
 
 /// Endpoints in the generated client.
