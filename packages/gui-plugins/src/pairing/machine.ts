@@ -438,7 +438,11 @@ function transitionScreen(
       }
 
     return {
-      state: { ...state, issued: attempt, screen: { ...screen, attempt, step: "waiting", failures: screen.failures + 1 } },
+      state: {
+        ...state,
+        issued: attempt,
+        screen: { ...screen, attempt, step: "waiting", failures: screen.failures + 1 },
+      },
       effects: [...effects, { type: "wait", for: "screen", attempt, delayMs: remoteReadDelay(screen.failures) }],
     }
   }

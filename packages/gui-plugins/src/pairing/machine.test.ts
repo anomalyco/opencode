@@ -527,9 +527,7 @@ describe("the display sleep setting", () => {
     const failed = step(changing.state, { type: "screen.change.failed", attempt: 3 }).state
 
     expect(viewPairingPage(failed).screenError).toBe(true)
-    ;(
-      [{ status: "pending" }, { status: "inactive" }, { status: "active", generation: 2 }] as const
-    ).forEach((main) => {
+    ;([{ status: "pending" }, { status: "inactive" }, { status: "active", generation: 2 }] as const).forEach((main) => {
       expect(viewPairingPage(step(failed, { type: "main.changed", main }).state).screenError).toBe(false)
     })
   })

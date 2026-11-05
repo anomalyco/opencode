@@ -11,10 +11,11 @@ import "@/settings/settings.css"
 /**
  * A local server and pairing main entry. Remote access starts on or off; turning it on takes a moment, after which
  * the server advertises its tunnel, as the background service does once OpenTunnel attaches. `fails` makes turning
- * it on fail, as when the tunnel cannot be created.
+ * it on fail, as when the tunnel cannot be created. `screenFails` makes every read of the display sleep setting
+ * fail, while changing it still works.
  */
-export function pairingRemote(input: { enabled: boolean; fails?: boolean }) {
-  const state = { enabled: input.enabled }
+export function pairingRemote(input: { enabled: boolean; fails?: boolean; screenFails?: boolean }) {
+  const state = { enabled: input.enabled, screen: false }
   const server: PairingServer = {
     client: {
       server: {
@@ -36,8 +37,14 @@ export function pairingRemote(input: { enabled: boolean; fails?: boolean }) {
       if (input.fails) throw new Error("Timed out creating the remote access tunnel")
       state.enabled = enabled
     },
-    screenActive: async () => false,
-    setScreenActive: async () => undefined,
+    screenActive: async () => {
+      if (input.screenFails) throw new Error("The display sleep setting could not be read")
+
+      return state.screen
+    },
+    setScreenActive: async (enabled) => {
+      state.screen = enabled
+    },
     state: () => undefined,
     on: () => () => undefined,
   }

@@ -89,7 +89,8 @@ function replay(state: WslDialogState, events: readonly WslDialogEvent[]) {
 const catalog = replay(createWslDialogState(), [{ type: "catalog.opened", defaultTarget: "Fedora", busy: false }]).state
 
 // The main view with `distro` picked.
-const picked = (distro: string) => transitionWslDialog(createWslDialogState(), { type: "distro.selected", distro }).state
+const picked = (distro: string) =>
+  transitionWslDialog(createWslDialogState(), { type: "distro.selected", distro }).state
 
 // A click on the primary button with `distro` picked, as the dialog reads the button.
 const primary = (distro: string): WslDialogEvent => {
@@ -100,7 +101,11 @@ const primary = (distro: string): WslDialogEvent => {
 
 describe("wsl add-server dialog", () => {
   test("installing a distro claims the catalog before main's state shows the job", () => {
-    const installing = transitionWslDialog(catalog, { type: "catalog.install.requested", distro: "Fedora", busy: false })
+    const installing = transitionWslDialog(catalog, {
+      type: "catalog.install.requested",
+      distro: "Fedora",
+      busy: false,
+    })
 
     expect(installing.state).toMatchObject({ status: "catalog-installing", attempt: 1, distro: "Fedora" })
     expect(installing.effects).toEqual([
@@ -146,7 +151,12 @@ describe("wsl add-server dialog", () => {
       },
     ])
     expect(add.effects).toEqual([
-      { type: "action.run", attempt: 1, action: { kind: "add-server", distro: "Ubuntu" }, timeoutMs: WSL_ACTION_TIMEOUT_MS },
+      {
+        type: "action.run",
+        attempt: 1,
+        action: { kind: "add-server", distro: "Ubuntu" },
+        timeoutMs: WSL_ACTION_TIMEOUT_MS,
+      },
     ])
     expect(refresh.effects).toEqual([
       { type: "probes.reset" },

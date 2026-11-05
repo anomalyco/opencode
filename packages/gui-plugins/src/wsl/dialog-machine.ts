@@ -250,7 +250,8 @@ function transitionRunning(
 
   const abort: WslDialogEffect = { type: "action.abort", attempt: event.attempt }
 
-  if (event.type === "action.failed") return { state: settled, effects: [abort, { type: "toast.error", cause: event.cause }] }
+  if (event.type === "action.failed")
+    return { state: settled, effects: [abort, { type: "toast.error", cause: event.cause }] }
 
   if (state.status === "catalog-installing")
     return { state: { status: "main", issued: state.issued, selectedDistro: state.selectedDistro }, effects: [abort] }

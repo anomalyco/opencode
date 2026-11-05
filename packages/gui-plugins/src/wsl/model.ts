@@ -130,8 +130,7 @@ export function addServerViewModel(input: {
     filteredInstallableDistros,
     catalogTarget,
     installingCatalogDistro:
-      selectWslDialogInstallingCatalog(input.dialog) ||
-      Object.values(state?.distroJobs ?? {}).includes("installing"),
+      selectWslDialogInstallingCatalog(input.dialog) || Object.values(state?.distroJobs ?? {}).includes("installing"),
   }
 }
 

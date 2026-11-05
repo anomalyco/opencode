@@ -300,7 +300,9 @@ function useWslAddServerController(props: DialogWslServerProps) {
     // probe beside the call.
     batch(() => {
       if (next.state !== previous) setDialogState(next.state)
-      next.effects.forEach((effect) => void Promise.try(() => run(effect)).catch((cause) => requestError(language, cause)))
+      next.effects.forEach(
+        (effect) => void Promise.try(() => run(effect)).catch((cause) => requestError(language, cause)),
+      )
     })
   }
 
