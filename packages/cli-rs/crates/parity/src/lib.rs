@@ -114,7 +114,7 @@ impl fmt::Display for Comparison {
         if self.differences.is_empty() {
             return write!(out, "all {} cells equal", expected.cells.len());
         }
-        writeln!(
+        write!(
             out,
             "{} of {} cells differ ({}x{})",
             self.differences.len(),
@@ -122,6 +122,22 @@ impl fmt::Display for Comparison {
             expected.width,
             expected.height
         )?;
+        // A deviation allows a whole checkpoint, so name the cells whose text matches and whose colors do not.
+        let colors = self
+            .differences
+            .iter()
+            .filter(|&&(x, y)| {
+                let (want, got) = (expected.cell(x, y), actual.cell(x, y));
+                want.zip(got).is_some_and(|(want, got)| {
+                    want.symbol == got.symbol
+                        && (want.bg != got.bg || (want.symbol != " " && want.fg != got.fg))
+                })
+            })
+            .count();
+        if colors > 0 {
+            write!(out, ", {colors} in color only")?;
+        }
+        writeln!(out)?;
         let mut rows: Vec<u32> = self.differences.iter().map(|&(_, y)| y).collect();
         rows.dedup();
         for &y in &rows {
