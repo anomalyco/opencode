@@ -72,6 +72,22 @@ export const Plugin = define({
             if (item.package !== undefined) model.package = undefined
           })
         }
+        // A canonical provider behaves like its source, so it also offers the source's other models; listed models
+        // only override, and `disabled` hides one. Integration documents keep only the models they list (`integrate`).
+        if (changed && source && item.canonical !== providerID) {
+          const providerPackage = providers.get(providerID)?.provider.package
+          for (const [id, base] of source.models) {
+            if (item.models?.[id] !== undefined || current?.models.has(id)) continue
+            providers.models.update(providerID, id, (model) => {
+              Object.assign(model, structuredClone(base))
+              if (item.package === undefined) return
+              model.package = undefined
+              // Inherited variants are spelled for the source's package, as for listed models.
+              if (base.variants.length > 0 && base.package !== undefined)
+                model.variants = [...Variant.resolve({ ...model, package: providerPackage })]
+            })
+          }
+        }
         // A configured provider baseURL replaces every catalog per-model endpoint, not only those of configured
         // models. Configured per-model settings are applied later and still win.
         if (item.settings?.baseURL !== undefined)

@@ -89,7 +89,7 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `name` | Display name. |
 | `env` | Ordered environment variable names that can provide the credential. |
 | `package` | Runtime provider package. |
-| `canonical` | Built-in provider ID whose catalog defaults this provider inherits. |
+| `canonical` | Built-in provider ID this provider behaves like: it inherits that provider's defaults and every one of its catalog models. |
 | `compatibility` | API quirks shared by every model of this provider. See [Compatibility](/models#compatibility). |
 | `settings` | Typed OpenCode controls and JSON options passed to the runtime package. |
 | `headers` | String-valued HTTP headers added to requests. |
