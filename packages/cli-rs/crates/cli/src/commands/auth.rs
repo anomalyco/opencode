@@ -71,13 +71,9 @@ pub(super) fn prompted(result: anyhow::Result<()>) -> anyhow::Result<()> {
 
 /// `errorMessage`: a declared error's message, else the client error (`reason: detail`), else the text.
 pub(super) fn error_message(error: &anyhow::Error) -> String {
-    match error
+    error
         .downcast_ref::<ApiError>()
-        .and_then(ApiError::declared)
-    {
-        Some(declared) => declared.message.clone().unwrap_or_default(),
-        None => format!("{error:#}"),
-    }
+        .map_or_else(|| format!("{error:#}"), ApiError::error_message)
 }
 
 /// `requireInteractive`: stdin and stdout are terminals.

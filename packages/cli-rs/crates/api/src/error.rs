@@ -46,6 +46,15 @@ impl Error {
             _ => None,
         }
     }
+
+    /// What the CLI's `errorMessage` prints: a declared error's message without its tag (empty when it
+    /// has none, as the TS client's `Error` gets `undefined`), else the `ClientError` text.
+    pub fn error_message(&self) -> String {
+        match self.declared() {
+            Some(declared) => declared.message.clone().unwrap_or_default(),
+            None => self.to_string(),
+        }
+    }
 }
 
 impl From<crate::sse::Error> for Error {
@@ -112,5 +121,28 @@ impl std::fmt::Display for DeclaredError {
             (None, Some(message)) => f.write_str(message),
             (None, None) => write!(f, "declared error {}", self.status),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DeclaredError, Error};
+    use serde_json::json;
+
+    #[test]
+    fn the_error_message_leaves_out_the_tag() {
+        let declared = |body| Error::Declared(Box::new(DeclaredError::new(400, body)));
+        let tagged =
+            declared(json!({ "_tag": "InvalidRequestError", "message": "Unknown agent: nope" }));
+        assert_eq!(
+            tagged.to_string(),
+            "InvalidRequestError: Unknown agent: nope"
+        );
+        assert_eq!(tagged.error_message(), "Unknown agent: nope");
+        let nested = declared(json!({ "name": "NotFound", "data": { "message": "gone" } }));
+        assert_eq!(nested.error_message(), "gone");
+        assert_eq!(declared(json!({ "_tag": "Bare" })).error_message(), "");
+        let status = Error::UnexpectedStatus { status: 500 };
+        assert_eq!(status.error_message(), "UnexpectedStatus: 500");
     }
 }

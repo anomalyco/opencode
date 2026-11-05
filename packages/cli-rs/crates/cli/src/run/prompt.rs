@@ -97,7 +97,7 @@ pub async fn run(input: Input) -> Result<(), String> {
         .client
         .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.error_message())?;
     let mut stream = Box::pin(SseResponse::<Value>::new(response.response).events(|| {}));
     if !matches!(stream.next().await, Some(Ok(_))) {
         return Err("Event stream disconnected before prompt admission".into());
@@ -143,7 +143,7 @@ impl Run {
                     &RequestOptions::default(),
                 )
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| error.error_message())?;
         }
         if let Some(model) = &self.input.model {
             // The TS key order, `{ providerID, id, variant }`; the generated `ModelRef` puts `id` first.
@@ -158,11 +158,11 @@ impl Run {
                 ("id", Some(model.id.clone().into())),
                 ("variant", model.variant.clone().map(Value::from)),
             ]) }))
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.error_message())?;
             client
                 .empty(call, &RequestOptions::default())
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| error.error_message())?;
         }
         self.flags.borrow_mut().submitted = true;
         tokio::task::spawn_local({
@@ -200,11 +200,11 @@ impl Run {
             "files": files,
             "delivery": "steer",
         }))
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.error_message())?;
         let admitted = client
             .json::<Value>(call, &RequestOptions::default())
             .await
-            .map_err(|error| error.to_string());
+            .map_err(|error| error.error_message());
         if let Err(error) = admitted {
             self.abort.send_replace(true);
             let _ = self.wait_completed().await;
@@ -288,7 +288,7 @@ impl Run {
                 &RequestOptions::default(),
             )
             .await
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.error_message())
     }
 
     async fn wait_completed(&self) -> Result<(), String> {
@@ -314,7 +314,7 @@ impl Run {
                 Some(Ok(event)) => event,
                 Some(Err(error)) => {
                     if !self.flags.borrow().emitted_error {
-                        return Err(error.to_string());
+                        return Err(error.error_message());
                     }
                     return Ok(());
                 }
@@ -972,18 +972,18 @@ impl Run {
                 &[400, 401, 404, 500],
             );
             call.query("limit", &200)
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| error.error_message())?;
             match &cursor {
                 Some(cursor) => call.query("cursor", cursor),
                 None => call.query("order", "desc"),
             }
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.error_message())?;
             let page: Value = self
                 .input
                 .client
                 .json(call, &RequestOptions::default())
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| error.error_message())?;
             for message in page["data"].as_array().into_iter().flatten() {
                 if text(&message["id"]) == self.message_id {
                     messages.reverse();
@@ -1147,7 +1147,7 @@ impl Run {
                 .declared()
                 .is_some_and(|declared| declared.tag.as_deref() == Some("FormAlreadySettledError"));
             if !settled {
-                return Err(error.to_string());
+                return Err(error.error_message());
             }
         }
         if continuing {
