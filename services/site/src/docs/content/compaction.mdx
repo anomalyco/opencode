@@ -85,6 +85,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | `auto` | `true` | Compact automatically near the context limit, and recover once when a provider rejects a request as too long. Manual compaction always works. |
 | `keep.tokens` | `15000` | Approximate recent conversation kept beside the summary. Larger values preserve more detail but leave less room for new work. |
 | `buffer` | `"15%"`, at least 16k | Share of the model's context window kept free. Automatic compaction starts once the conversation reaches the rest. Larger values compact earlier. |
+| `window` | model limit | Optional token cap on the context window used to schedule automatic compaction. Never raises a model's own limit. |
 
 `keep.tokens` accepts a non-negative integer.
 
@@ -101,6 +102,36 @@ Add `compaction` to any [OpenCode configuration file](/config):
 - Accepts `"1%"` to `"99%"`, including decimals such as `"12.5%"`.
 - A token count such as `20000` also works. The same count is a large share of a small window and a small share of a large one.
 - A token count at least as large as the model's window is ignored and the default applies.
+
+### Window
+
+Set `compaction.window` to compact earlier on large-context models while keeping the full window available when a single turn or summary needs it. You can override the window per provider, model, variant, or agent:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "window": 60000,
+  },
+  "providers": {
+    "anthropic": {
+      "settings": { "compaction": { "window": 80000 } },
+      "models": {
+        "claude-opus-4-7": {
+          "settings": { "compaction": { "window": 120000 } },
+        },
+      },
+    },
+  },
+  "agents": {
+    "compaction": {
+      "compaction": { "window": 200000 },
+    },
+  },
+}
+```
+
+More specific settings win (`agents.<id>.compaction.window` > variant/model/provider `settings.compaction.window` > top-level `compaction.window`), so a model or agent can opt back into a larger window up to the model's own limit.
 
 ## Model
 

@@ -6,7 +6,6 @@ import { ConfigAgent } from "@opencode/schema/config/agent"
 import path from "path"
 import { Effect, Option, Schema } from "effect"
 import { Agent } from "../../agent.js"
-import { Provider } from "../../provider.js"
 import { Config } from "../../config.js"
 import { ConfigMarkdown } from "../markdown.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
@@ -32,7 +31,7 @@ type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof R
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 // Fields only V2 understands. A file that uses any of them is read as V2, whatever else it contains.
-const nativeKeys = ["permissions", "request", "system", "disabled"]
+const nativeKeys = ["compaction", "permissions", "request", "system", "disabled"]
 
 export const Plugin = define({
   id: "opencode.config.agent",
@@ -89,9 +88,13 @@ export const Plugin = define({
                 providerID: item.model.providerID,
                 ...(item.model.variant === undefined ? {} : { variant: item.model.variant }),
               }
+            if (item.compaction?.window !== undefined) {
+              agent.request.settings.compaction = {
+                ...agent.request.settings.compaction,
+                window: item.compaction.window,
+              }
+            }
             if (item.request !== undefined) {
-              if (item.request.settings !== undefined)
-                agent.request.settings = Provider.mergeOverlay(agent.request.settings, item.request.settings) ?? {}
               Object.assign(agent.request.headers, item.request.headers ?? {})
               Object.assign(agent.request.body, item.request.body ?? {})
             }

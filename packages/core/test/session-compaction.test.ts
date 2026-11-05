@@ -666,7 +666,7 @@ it.effect("compaction window overrides and caps the automatic compaction ceiling
         time: { created: 0, completed: 0 },
       })
 
-    const agent = (settings?: { compaction?: { window?: number }; compactionWindow?: number }) => ({
+    const agent = (settings?: { compaction?: { window?: number } }) => ({
       id: Agent.defaultID,
       info: {
         ...Agent.Info.default(Agent.defaultID),
@@ -680,7 +680,7 @@ it.effect("compaction window overrides and caps the automatic compaction ceiling
 
     const context = (input: number, overrides?: {
       model?: { compaction?: { window?: number } }
-      agent?: { settings?: { compaction?: { window?: number }; compactionWindow?: number } }
+      agent?: { settings?: { compaction?: { window?: number } } }
     }) => ({
       ...loaded(session, [message(input)]),
       model: overrides?.model ? { ...resolved, compaction: overrides.model.compaction } : resolved,
@@ -704,14 +704,6 @@ it.effect("compaction window overrides and caps the automatic compaction ceiling
     ).toBe(false)
     expect(
       yield* due(context(170_000, { model: { compaction: { window: 50_000 } }, agent: { settings: { compaction: { window: 200_000 } } } })),
-    ).toBe(true)
-
-    // The same override through request.settings.compactionWindow.
-    expect(
-      yield* due(context(169_999, { model: { compaction: { window: 50_000 } }, agent: { settings: { compactionWindow: 200_000 } } })),
-    ).toBe(false)
-    expect(
-      yield* due(context(170_000, { model: { compaction: { window: 50_000 } }, agent: { settings: { compactionWindow: 200_000 } } })),
     ).toBe(true)
 
     // Invalid (-1) or larger-than-limit (1_000_000) windows never raise the ceiling past the model's own limit.

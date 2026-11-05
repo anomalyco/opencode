@@ -362,6 +362,7 @@ permissions:
             agents: {
               reviewer: {
                 model: "anthropic/claude-sonnet",
+                compaction: { window: 60_000 },
                 system: "Review carefully.",
                 description: "Reviews changes",
                 mode: "subagent",
@@ -381,6 +382,7 @@ permissions:
           info: decode({
             agents: {
               reviewer: {
+                compaction: { window: 80_000 },
                 request: {
                   headers: { shared: "last", second: "two" },
                   body: { retries: 2, effort: "high" },
@@ -407,7 +409,7 @@ permissions:
         model: { providerID: "anthropic", id: "claude-sonnet" },
       })
       expect(reviewer.request).toEqual({
-        settings: {},
+        settings: { compaction: { window: 80_000 } },
         headers: { first: "one", shared: "last", second: "two" },
         body: { enabled: true, profile: "review", retries: 2, effort: "high" },
       })
@@ -458,6 +460,8 @@ Review carefully.`,
               path.join(tmp.path, "agents", "native.md"),
               `---
 variant: high
+compaction:
+  window: 50000
 request:
   headers:
     x-agent: native
@@ -501,7 +505,7 @@ Use native v2 fields.`,
           expect(yield* agents.get(Agent.ID.make("team/helper"))).toMatchObject({ system: "Help the team." })
           expect(yield* agents.get(Agent.ID.make("native"))).toMatchObject({
             system: "Use native v2 fields.",
-            request: { headers: { "x-agent": "native" }, body: { effort: "high" } },
+            request: { settings: { compaction: { window: 50000 } }, headers: { "x-agent": "native" }, body: { effort: "high" } },
             permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
           })
           const themed = yield* agents.get(Agent.ID.make("themed"))

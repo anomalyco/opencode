@@ -32,7 +32,6 @@ const ModelOverlays = {
 }
 
 export class Request extends Schema.Class<Request>("Config.Provider.Request")({
-  settings: Overlays.settings,
   headers: Overlays.headers,
   body: Overlays.body,
 }) {}

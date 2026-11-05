@@ -1171,7 +1171,7 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
 
 /**
  * The limits automatic compaction plans for: the model's, narrowed to the effective compaction window when smaller.
- * An agent's `request.settings.compaction.window` (or `request.settings.compactionWindow`) overrides the model's or
+ * An agent's configured `compaction.window` (`request.settings.compaction.window`) overrides the model's or
  * provider's `settings.compaction.window`, which overrides the top-level `compaction.window`. A larger override on a
  * model, variant, or agent can therefore opt into the model's full window even when a lower global `compaction.window`
  * is set. It never raises the model's own window, and it leaves the summary request's size to the model's limits.
@@ -1180,10 +1180,8 @@ const autoLimit = (
   context: SessionContext.Loaded,
   configured?: number,
 ): SessionContext.Loaded["model"]["limit"] => {
-  const settings = context.agent.info.request?.settings
   const window =
-    settings?.compaction?.window ??
-    settings?.["compactionWindow"] ??
+    context.agent.info.request?.settings?.compaction?.window ??
     context.model.compaction?.window ??
     configured
   const limit = context.model.limit

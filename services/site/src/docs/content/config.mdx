@@ -364,11 +364,12 @@ Control automatic context compaction and how much recent context it preserves.
       "tokens": 15000,
     },
     "buffer": "15%",
+    "window": 80000,
   },
 }
 ```
 
-`buffer` is the share of the model's context window kept free before automatic compaction starts.
+`buffer` is the share of the effective context window kept free before automatic compaction starts. `window` optionally caps the context window used to schedule automatic compaction without raising a smaller model limit; override it per provider, model, or variant with `settings.compaction.window`, or per agent with `compaction.window`.
 
 Local summaries remain the default. Opt into native provider compaction for both
 automatic and manual requests with a provider or model policy:

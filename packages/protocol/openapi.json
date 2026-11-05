@@ -16129,12 +16129,20 @@
               }
             ]
           },
+          "compaction": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "integer",
+                "maximum": 9007199254740991,
+                "exclusiveMinimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
           "request": {
             "type": "object",
             "properties": {
-              "settings": {
-                "$ref": "#/components/schemas/Config.Provider.Settings"
-              },
               "headers": {
                 "type": "object",
                 "additionalProperties": {
