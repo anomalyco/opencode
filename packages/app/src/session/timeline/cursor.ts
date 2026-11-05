@@ -26,7 +26,6 @@ export function createTimelineCursor(input: {
   revealMessage: (id: string) => void
   detach: () => void
   toEnd: () => void
-  consumePendingMessage: (key: string) => string | undefined
   /** Whether history can page toward a pending target now; read tracked, so paging resumes after each page. */
   historySeekable: Accessor<boolean>
   seekHistory: () => void
@@ -61,8 +60,6 @@ export function createTimelineCursor(input: {
     }
 
     if (effect.type === "hash.clear") {
-      input.consumePendingMessage(input.sessionKey())
-
       if (location.hash) navigate(location.pathname + location.search, { replace: true })
 
       return
@@ -132,12 +129,11 @@ export function createTimelineCursor(input: {
       id: requestAnimationFrame(() => {
         applyFrame = undefined
         const hash = location.hash.slice(1)
-        const pending = merged ? input.consumePendingMessage(input.sessionKey()) : undefined
 
         dispatch({
           type: "hash.applied",
           hash,
-          messageID: pending ?? messageIdFromHash(hash),
+          messageID: messageIdFromHash(hash),
           initial: merged,
           reveal: !!location.state?.reveal,
         })

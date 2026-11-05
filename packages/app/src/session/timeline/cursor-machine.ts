@@ -9,7 +9,7 @@ export type CursorSeek = {
 // `attempt` advances on every change of target or seek, so a seek result from an earlier one is ignored.
 export type TimelineCursorState =
   | { readonly status: "none"; readonly attempt: number }
-  /** A `#message-<id>` or layout target that is not loaded yet; history pages toward it. */
+  /** A `#message-<id>` target that is not loaded yet; history pages toward it. */
   | { readonly status: "pending"; readonly messageID: string; readonly attempt: number }
   /**
    * The active prompt. `fresh` until the reader scrolls, after which navigation steps from the prompt in view instead.
@@ -27,7 +27,7 @@ export type TimelineCursorEvent =
   | { readonly type: "session.changed" }
   /**
    * The route hash, applied once the session's messages are ready (`initial`) and on every later change. `messageID` is
-   * the `#message-<id>` (or pending layout) target. `reveal`: the route opens the session on a tool call instead.
+   * the `#message-<id>` target. `reveal`: the route opens the session on a tool call instead.
    */
   | {
       readonly type: "hash.applied"

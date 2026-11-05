@@ -4,7 +4,6 @@ import { useLocation } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { frameLoop } from "@opencode/ui/motion"
-import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
 import { createTimelineCursor } from "./cursor"
 import {
@@ -34,7 +33,6 @@ import {
 import { createTimelineModel } from "./model"
 
 export function createSessionTimelineInteraction(session: SessionModel) {
-  const layout = useLayout()
   const location = useLocation<{ reveal?: string }>()
   const timeline = createTimelineModel({ session })
 
@@ -176,7 +174,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
       if (scroller) scheduleScrollState(scroller)
     },
-    consumePendingMessage: (key) => layout.pendingMessage.consume(key),
     historySeekable: () => canSeekHistory(historyState()),
     seekHistory: () => dispatchHistory(SEEK_REQUESTED_EVENT),
   })
