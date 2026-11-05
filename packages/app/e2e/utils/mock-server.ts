@@ -842,17 +842,15 @@ function mockHandlers(
             state.attempts.set(attemptID, created)
             const started = start({ integrationID: ctx.params.integrationID, directory, body: ctx.payload })
 
-            return {
-              location: location(config, directory),
-              data: {
-                attemptID,
-                url: started.url,
-                instructions: "",
-                mode: "auto",
-                ...(started.paste ? { paste: true } : {}),
-                time: { created, expires: created + 600_000 },
-              },
+            const data = {
+              attemptID,
+              url: started.url,
+              instructions: "",
+              mode: "auto",
+              time: { created, expires: created + 600_000 },
             }
+
+            return { location: location(config, directory), data: started.paste ? { ...data, paste: true } : data }
           })
         },
         integrationOAuthStatus: (ctx) =>

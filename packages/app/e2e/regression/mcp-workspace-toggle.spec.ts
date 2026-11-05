@@ -590,9 +590,13 @@ for (const surface of ["popover", "dialog"] as const) {
       mcpResourceFailures: () => state.signedIn && !state.recovered,
     })
 
-    const complete = await holdRoute(page, /\/api\/integration\/figma-oauth\/connect\/oauth\/[^/?]+\/complete(?:\?|$)/, {
-      method: "POST",
-    })
+    const complete = await holdRoute(
+      page,
+      /\/api\/integration\/figma-oauth\/connect\/oauth\/[^/?]+\/complete(?:\?|$)/,
+      {
+        method: "POST",
+      },
+    )
 
     await view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Sign in to figma-desktop", exact: true })
