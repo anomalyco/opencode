@@ -6,73 +6,15 @@
 //! - P-FILE: settings writes go to a `cli.json` in a temporary home, and the TS `Config` service reads them
 //!   back through `parity/oracle/F.5-config.ts` (skipped without bun and `node_modules`).
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Duration;
+use crate::support::{self, WAIT, wait_for};
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{CliConfig, Info, Resolved, merge};
-use opencode_local::paths::Paths;
+use opencode_local::cli_config::CliConfig;
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_tui::app::Roots;
 use opencode_tui::dialogs::{debug, experiments, settings};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::prelude::*;
+
 use opentui::testing::TestApp;
-use serde_json::{Value, json};
-
-/// An empty session list; anything else is a 404.
-struct Empty;
-
-impl Transport for Empty {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let (status, body) = match request.url.path() {
-            "/api/session" => (200, json!({ "data": [], "cursor": {} })),
-            _ => (404, json!({})),
-        };
-        let body = serde_json::to_vec(&body).unwrap();
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
-}
-
-/// The harness config of `parity/lib/component.tsx` plus `extra`.
-fn info(extra: Value) -> Info {
-    merge(&[Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })), Some(extra)])
-}
-
-fn mount(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
-    let client = Client::with_transport("http://opencode.local", Arc::new(Empty)).unwrap();
-    opencode_tui::mount(
-        app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots,
-            route: Route::Home,
-            continue_: false,
-            events: false,
-        },
-    )
-}
-
-fn wait_for(app: &TestApp, text: &str) -> String {
-    let found = app.wait_until(Duration::from_secs(5), || app.text().contains(text));
-    let screen = app.text();
-    assert!(found, "{text:?} never showed:\n{screen}");
-    screen
-}
+use serde_json::json;
 
 /// Compares the dialog panel with the fixture: every cell inside the bounding box of the cells that carry the
 /// panel background (the background under the fixture's first title letter).
@@ -112,7 +54,7 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
 #[test]
 fn settings_dialog_matches_typescript() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
     settings::show(&tui, None);
     wait_for(&app, "Search settings");
     assert_dialog(&app, "E.18a/settings", "Search settings");
@@ -129,9 +71,9 @@ fn settings_dialog_matches_typescript() {
 #[test]
 fn settings_dialog_shows_configured_values_as_typescript() {
     let app = TestApp::new(80, 30);
-    let tui = mount(
+    let tui = support::mount_empty(
         &app,
-        info(json!({
+        support::component_info(json!({
             "animations": true,
             "session": { "sidebar": "hide" },
             "scroll": { "speed": 2.5 },
@@ -147,13 +89,14 @@ fn settings_dialog_shows_configured_values_as_typescript() {
 #[test]
 fn experiments_dialog_matches_typescript() {
     let app = TestApp::new(80, 24);
-    let tui = mount(&app, info(json!({})), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
     experiments::show(&tui);
     wait_for(&app, "Experiments");
     assert_dialog(&app, "E.18a/experiments", "Experiments");
 
     let app = TestApp::new(80, 24);
-    let tui = mount(&app, info(json!({ "experimental": { "client-mcp": true } })), None);
+    let tui =
+        support::mount_empty(&app, support::component_info(json!({ "experimental": { "client-mcp": true } })), None);
     experiments::show(&tui);
     app.press("down");
     assert_dialog(&app, "E.18a/experiments-on", "Experiments");
@@ -184,7 +127,7 @@ fn footer(app: &TestApp, title: &str) -> String {
 #[test]
 fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
     settings::show(&tui, Some("animations"));
     wait_for(&app, "Animations");
     assert_eq!(footer(&app, "Animations"), "off");
@@ -226,7 +169,7 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
 #[test]
 fn the_palette_lists_settings_while_filtering_and_opens_the_one_chosen() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
     app.press("ctrl+p");
     let palette = wait_for(&app, "Open settings");
     assert!(!palette.contains("Settings · "), "{palette}");
@@ -244,7 +187,7 @@ fn the_palette_lists_settings_while_filtering_and_opens_the_one_chosen() {
 #[test]
 fn experiments_toggle_and_new_designs_graduated() {
     let app = TestApp::new(80, 24);
-    let tui = mount(&app, info(json!({})), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
     // The new designs are the only ones: `opencode2` leads the theme list and the experiment is gone.
     assert_eq!(tui.theme.borrow().names()[0], "opencode2");
     experiments::show(&tui);
@@ -261,7 +204,7 @@ fn experiments_toggle_and_new_designs_graduated() {
 #[test]
 fn slash_and_palette_commands_open_settings_and_debug() {
     let app = TestApp::new(100, 30);
-    let tui = mount(&app, info(json!({})), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
     tui.keymap.dispatch("opencode.debug", None);
     let screen = wait_for(&app, "Share this when reporting an issue");
     for label in ["Version", "Date", "OS", "Terminal", "Session ID", "Model"] {
@@ -280,7 +223,7 @@ fn slash_and_palette_commands_open_settings_and_debug() {
 #[test]
 fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     let app = TestApp::new(100, 30);
-    let tui = mount(&app, info(json!({ "debug": { "devtools": true } })), None);
+    let tui = support::mount_empty(&app, support::component_info(json!({ "debug": { "devtools": true } })), None);
     let screen = wait_for(&app, "Experiments");
     let bar = screen.lines().last().unwrap();
     assert_eq!(bar.trim_end(), " ↻ Server  ○ UI  Theme  Tools  Experiments", "{screen}");
@@ -318,81 +261,29 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
 
 // P-FILE ------------------------------------------------------------------------------------------------------
 
-fn ts_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap()
-}
-
-fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
-    vec![
-        ("HOME", home.to_path_buf()),
-        ("XDG_CONFIG_HOME", home.join("config")),
-        ("XDG_STATE_HOME", home.join("state")),
-        ("XDG_DATA_HOME", home.join("data")),
-        ("XDG_CACHE_HOME", home.join("cache")),
-    ]
-}
-
-fn paths(home: &Path) -> Paths {
-    let vars = env(home);
-    Paths::from_vars(|name| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string()))
-        .unwrap()
-}
-
-/// One op of the F.5 oracle's `config` command in `home`, or `None` without bun and `node_modules`.
-fn ts_config(home: &Path, op: Value) -> Option<Value> {
-    if !ts_root().join("node_modules").is_dir() || Command::new("bun").arg("--version").output().is_err() {
-        eprintln!("skipped the TypeScript side: needs bun and node_modules");
-        return None;
-    }
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/F.5-config.ts");
-    let mut command = Command::new("bun");
-    command
-        .arg("--cwd")
-        .arg(ts_root().join("packages/cli"))
-        .arg(script)
-        .arg(ts_root())
-        .arg("config")
-        .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
-        .env_remove("OPENCODE_CONFIG_DIR")
-        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    for (name, value) in env(home) {
-        command.env(name, value);
-    }
-    let mut child = command.spawn().unwrap();
-    child.stdin.take().unwrap().write_all(json!([op]).to_string().as_bytes()).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let mut results: Vec<Value> = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
-    Some(results.remove(0))
-}
-
 const ORIGINAL: &str = "{\n  // my settings\n  \"$schema\": \"https://opencode.ai/v2/cli.json\",\n  \"session\": { \"thinking\": \"hide\" }\n}\n";
 
 #[test]
 fn settings_writes_match_typescript_and_typescript_reads_them() {
     let home = tempfile::tempdir().unwrap();
-    let paths = paths(home.path());
+    let paths = support::xdg_paths(home.path());
     std::fs::create_dir_all(&paths.config).unwrap();
     let file = paths.config.join("cli.json");
     std::fs::write(&file, ORIGINAL).unwrap();
     let info = CliConfig::new(&paths).get().unwrap();
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info, Some(Roots { paths: paths.clone(), storage_channel: "test".into() }));
+    let tui = support::mount_empty(&app, info, Some(Roots { paths: paths.clone(), storage_channel: "test".into() }));
 
     settings::show(&tui, Some("session.thinking"));
     app.type_text("thinking");
     app.press("right");
     // The write runs on a blocking thread; the footer follows when it lands.
-    assert!(app.wait_until(Duration::from_secs(5), || footer(&app, "Thinking") == "show"));
+    assert!(app.wait_until(WAIT, || footer(&app, "Thinking") == "show"));
     app.press("escape");
     experiments::show(&tui);
     wait_for(&app, "TUI tools");
     app.press("right");
-    assert!(app.wait_until(Duration::from_secs(5), || { tui.settings.experiment("client-mcp") }));
+    assert!(app.wait_until(WAIT, || { tui.settings.experiment("client-mcp") }));
     // The bytes TS writes for the same two updates (`Config.update` through the F.5 oracle).
     let text = std::fs::read_to_string(&file).unwrap();
     assert_eq!(
@@ -402,22 +293,22 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
 
     // TS reads what Rust wrote, then writes a setting the Rust dialog shows on its next open.
     let twin = tempfile::tempdir().unwrap();
-    let twin_file = self::paths(twin.path()).config.join("cli.json");
+    let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();
     std::fs::write(&twin_file, ORIGINAL).unwrap();
-    let Some(_) = ts_config(twin.path(), json!({ "update": [[["session", "thinking"], "show"]] })) else {
+    let Some(_) = support::ts_config(twin.path(), json!({ "update": [[["session", "thinking"], "show"]] })) else {
         return;
     };
-    ts_config(twin.path(), json!({ "update": [[["experimental", "client-mcp"], true]] })).unwrap();
+    support::ts_config(twin.path(), json!({ "update": [[["experimental", "client-mcp"], true]] })).unwrap();
     assert_eq!(std::fs::read_to_string(&twin_file).unwrap(), text);
 
-    let read = ts_config(home.path(), json!({ "get": true })).unwrap();
+    let read = support::ts_config(home.path(), json!({ "get": true })).unwrap();
     assert_eq!(read["ok"]["session"]["thinking"], json!("show"), "{read}");
     assert_eq!(read["ok"]["experimental"]["client-mcp"], json!(true), "{read}");
-    let written = ts_config(home.path(), json!({ "update": [[["mouse"], false]] })).unwrap();
+    let written = support::ts_config(home.path(), json!({ "update": [[["mouse"], false]] })).unwrap();
     assert!(written.get("ok").is_some(), "{written}");
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, CliConfig::new(&paths).get().unwrap(), None);
+    let tui = support::mount_empty(&app, CliConfig::new(&paths).get().unwrap(), None);
     settings::show(&tui, None);
     app.type_text("mouse capture");
     assert_eq!(footer(&app, "Mouse"), "off");

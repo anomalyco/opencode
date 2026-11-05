@@ -5,93 +5,58 @@
 //! - `session.json` and `prompt-history.jsonl` keep what another client wrote, prompts submitted before
 //!   the history loads are kept, and `session.deleted` prunes its pin.
 
-use crate::support::WAIT;
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
-use std::path::Path;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
 use opencode_api::generated::{SessionID, V2Event};
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
 use opencode_local::model_pref::Model;
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
 use opencode_tui::dialogs::session_list::pins;
 use opencode_tui::prompt::history::History;
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::{Deps, Route};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-/// A request the fixture saw: method, path, and JSON body.
-type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
-
 /// Serves `ses_b` in `/project-b` with its project-local primary agent `reviewer`, which `/project`
 /// lacks, and the prompt writes.
-struct Fixture {
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        let directory = request
-            .url
-            .query_pairs()
-            .find(|(key, _)| key == "location[directory]")
-            .map_or("/project".to_owned(), |(_, value)| value.into_owned());
-        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
-        let location = json!({ "directory": directory });
+fn fake() -> Fake {
+    Fake::new(|seen| {
+        let directory = Some(seen.param("location[directory]")).filter(|value| !value.is_empty());
+        let directory = directory.as_deref().unwrap_or("/project");
+        let agent = |id| support::agent(id, "primary", false);
         let agents = if directory == "/project-b" {
             json!([agent("build"), agent("reviewer")])
         } else {
             json!([agent("build"), agent("plan")])
         };
-        let (status, body) = match (request.method, path.as_str()) {
+        match (seen.method.as_str(), seen.path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [session()], "cursor": {} })),
             ("GET", "/api/session/ses_b") => (200, json!({ "data": session() })),
             ("GET", "/api/session/ses_b/message") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", "/api/agent") => (200, json!({ "location": location, "data": agents })),
+            ("GET", "/api/agent") => (200, list(directory, agents)),
             ("GET", "/api/model") => (
                 200,
-                json!({ "location": location, "data": [
-                    model("anthropic", "claude-sonnet", "Claude Sonnet"),
-                    model("anthropic", "claude-haiku", "Claude Haiku"),
-                    model("openai", "gpt-5", "GPT-5"),
-                ] }),
+                list(
+                    directory,
+                    json!([
+                        support::model("anthropic", "claude-sonnet", "Claude Sonnet"),
+                        support::model("anthropic", "claude-haiku", "Claude Haiku"),
+                        support::model("openai", "gpt-5", "GPT-5"),
+                    ]),
+                ),
             ),
             ("GET", "/api/config") => (200, json!([])),
-            ("GET", "/api/location") => (
-                200,
-                json!({ "directory": directory, "project": { "id": "project", "directory": directory, "canonical": directory } }),
-            ),
+            ("GET", "/api/location") => (200, support::location(directory)),
             ("GET", path) if path.starts_with("/api/") && !path.starts_with("/api/session") => {
-                (200, json!({ "location": location, "data": [] }))
+                (200, list(directory, json!([])))
             }
-            ("POST", path) if path.ends_with("/prompt") => (
-                200,
-                json!({ "data": {
-                    "id": body["id"], "sessionID": "ses_b", "time": { "created": 1 }, "type": "user",
-                    "payload": { "text": body["text"] }, "delivery": "steer",
-                } }),
-            ),
+            ("POST", path) if path.ends_with("/prompt") => (200, support::prompted(seen, "steer")),
             ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => (204, Value::Null),
             ("GET", path) if path.starts_with("/api/session/ses_b/") => (200, json!({ "data": [] })),
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+            _ => support::not_found(),
+        }
+    })
 }
 
 fn session() -> Value {
@@ -104,59 +69,32 @@ fn session() -> Value {
     })
 }
 
-fn agent(id: &str) -> Value {
-    json!({
-        "id": id, "name": id, "mode": "primary", "hidden": false, "permissions": [],
-        "request": { "settings": {}, "headers": {}, "body": {} },
-    })
-}
-
-fn model(provider: &str, id: &str, name: &str) -> Value {
-    json!({
-        "id": id, "modelID": id, "providerID": provider, "name": name,
-        "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-        "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-        "enabled": true, "limit": { "context": 1000, "output": 100 },
-    })
-}
-
 struct Setup {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
     home: tempfile::TempDir,
     seq: std::cell::Cell<u64>,
 }
 
+deref_harness!(Setup);
+
 impl Setup {
     /// The TUI on `ses_b`, started from `/project`, with `state` files written first.
     fn new(state: &[(&str, &str)]) -> Self {
-        Self::at(Route::Session { id: SessionID("ses_b".into()) }, state)
+        Self::at(support::session_route("ses_b"), state)
     }
 
     fn at(route: Route, state: &[(&str, &str)]) -> Self {
         let home = tempfile::tempdir().unwrap();
-        let paths = paths(home.path());
+        let paths = support::paths(home.path());
         std::fs::create_dir_all(&paths.state).unwrap();
         for (name, text) in state {
             std::fs::write(paths.state.join(name), text).unwrap();
         }
-        let seen = Seen::default();
-        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
-        let app = TestApp::new(100, 30);
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: "/project".into(),
-                config: Resolved::new(Info::default(), |_| None),
-                roots: Some(Roots { paths, storage_channel: "latest".into() }),
-                route,
-                continue_: false,
-                events: false,
-            },
-        );
-        Self { app, tui, seen, home, seq: std::cell::Cell::new(0) }
+        let fake = fake();
+        let seen = fake.log();
+        let deps = Deps { roots: support::roots(paths, "latest"), route, ..support::deps(Arc::new(fake)) };
+        Self { harness: support::mount(100, 30, deps), seen, home, seq: std::cell::Cell::new(0) }
     }
 
     fn state(&self) -> std::path::PathBuf {
@@ -177,8 +115,8 @@ impl Setup {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(method, path, _)| method == "POST" && path.ends_with(suffix))
-            .map(|(_, _, body)| body.clone())
+            .filter(|seen| seen.method == "POST" && seen.path.ends_with(suffix))
+            .map(|seen| seen.body.clone())
             .collect()
     }
 
@@ -203,20 +141,6 @@ impl Setup {
 
     fn file(&self, name: &str) -> String {
         std::fs::read_to_string(self.state().join(name)).unwrap_or_default()
-    }
-}
-
-fn paths(home: &Path) -> Paths {
-    Paths {
-        home: home.to_owned(),
-        data: home.join("data"),
-        cache: home.join("cache"),
-        config: home.join("config"),
-        state: home.join("state"),
-        tmp: home.join("tmp"),
-        bin: home.join("bin"),
-        log: home.join("log"),
-        repos: home.join("repos"),
     }
 }
 
