@@ -20,6 +20,7 @@ use opencode_api::generated::{
     AgentInfo, AgentInfoMode, ExperimentalUsageLimitsInput, IntegrationInfo, LocationQueryInput, ModelInfo,
     ModelInfoStatus, ModelRef, ProviderInfo, SessionID, SessionInfo, UsageLimitsInfo,
 };
+use opencode_api::js::locale_compare;
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
@@ -1034,26 +1035,6 @@ fn denormalize(score: f64) -> f64 {
         return score;
     }
     1.0 - (score.ln() / -2.0 + 1.0).powf(1.0 / 0.04307)
-}
-
-/// `a.localeCompare(b)` for the root locale over ASCII, as `opencode-cli`'s `locale_compare`.
-pub fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
-    const SYMBOLS: &str = " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$";
-    let primary = |c: char| -> (u8, u32) {
-        if let Some(index) = SYMBOLS.find(c) {
-            return (0, index as u32);
-        }
-        if c.is_ascii_digit() {
-            return (1, c as u32);
-        }
-        if c.is_ascii_alphabetic() {
-            return (2, c.to_ascii_lowercase() as u32);
-        }
-        (3, c as u32)
-    };
-    let primaries = |s: &str| s.chars().map(primary).collect::<Vec<_>>();
-    let tertiary = |s: &str| s.chars().map(char::is_uppercase).collect::<Vec<_>>();
-    primaries(a).cmp(&primaries(b)).then_with(|| tertiary(a).cmp(&tertiary(b))).then_with(|| a.cmp(b))
 }
 
 /// Opens the model dialog (`DialogModel`): the free models picker with nothing connected, else the connected

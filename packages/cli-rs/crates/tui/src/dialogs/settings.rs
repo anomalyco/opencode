@@ -10,6 +10,7 @@ use std::cell::{Cell, Ref, RefCell};
 use std::collections::VecDeque;
 use std::rc::{Rc, Weak};
 
+use opencode_api::js::number_to_string;
 use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, merge};
 use opencode_local::serial::Serial;
 use opencode_local::watch::Watch;
@@ -390,7 +391,7 @@ pub const SETTINGS: &[Setting] = &[
         &["leader", "timeout"],
         "How long the leader key waits for the next key",
         2000.0,
-        Range { step: 250.0, min: 250.0, max: 10000.0, format: |value| format!("{} ms", js_number(value)) },
+        Range { step: 250.0, min: 250.0, max: 10000.0, format: |value| format!("{} ms", number_to_string(value)) },
         &["leader key", "shortcut timeout"],
     ),
     toggle(
@@ -861,17 +862,9 @@ fn js_string(value: &Value) -> String {
     match value {
         Value::String(text) => text.clone(),
         Value::Null => "undefined".to_owned(),
-        Value::Number(number) => number.as_f64().map_or_else(|| number.to_string(), js_number),
+        Value::Number(number) => number.as_f64().map_or_else(|| number.to_string(), number_to_string),
         other => other.to_string(),
     }
-}
-
-/// `String(number)` for the finite numbers settings hold.
-fn js_number(number: f64) -> String {
-    if number.fract() == 0.0 && number.abs() < 1e21 {
-        return format!("{}", number as i64);
-    }
-    format!("{number}")
 }
 
 #[cfg(test)]

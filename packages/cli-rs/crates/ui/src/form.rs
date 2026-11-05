@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 use opencode_api::generated::{
     FormField, FormOption, FormValue, FormWhen, FormWhenOp, FormWhenValue, SessionMessageShellExit,
 };
+use opencode_api::js::number_to_string;
 /// A choice row: an option, or Yes and No for a boolean (`FormRow`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -264,10 +265,10 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
                 return Some("Expected an integer".to_owned());
             }
             if let Some(minimum) = minimum.filter(|minimum| value < *minimum) {
-                return Some(format!("Must be at least {}", js_number(minimum)));
+                return Some(format!("Must be at least {}", number_to_string(minimum)));
             }
             if let Some(maximum) = maximum.filter(|maximum| value > *maximum) {
-                return Some(format!("Must be at most {}", js_number(maximum)));
+                return Some(format!("Must be at most {}", number_to_string(maximum)));
             }
             None
         }
@@ -349,19 +350,11 @@ pub fn array(value: Option<&FormValue>) -> Vec<String> {
 pub fn value_text(value: &FormValue) -> String {
     match value {
         FormValue::String(text) => text.clone(),
-        FormValue::Number(number) => js_number(*number),
+        FormValue::Number(number) => number_to_string(*number),
         FormValue::Bool(value) => value.to_string(),
         FormValue::Array(items) => items.join(","),
         FormValue::Unknown(value) => value.to_string(),
     }
-}
-
-/// A number as JavaScript prints it: no `.0` on integers.
-pub fn js_number(value: f64) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e21 {
-        return format!("{value:.0}");
-    }
-    value.to_string()
 }
 
 pub fn email(text: &str) -> bool {

@@ -14,6 +14,7 @@ use std::rc::{Rc, Weak};
 
 use indexmap::IndexMap;
 use opencode_api::generated::{FormField, FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID};
+use opencode_api::js::number_to_string;
 use opencode_store::forms::{Form, GLOBAL};
 use opencode_store::location::Location;
 use opencode_store::{Changes, State};
@@ -376,9 +377,11 @@ impl Inner {
     fn placeholder(&self) -> String {
         use opencode_api::generated::FormStringFieldFormat as Format;
         let range = |minimum: Option<f64>, maximum: Option<f64>| match (minimum, maximum) {
-            (Some(minimum), Some(maximum)) => Some(format!("{}-{}", js_number(minimum), js_number(maximum))),
-            (Some(minimum), None) => Some(format!("at least {}", js_number(minimum))),
-            (None, Some(maximum)) => Some(format!("at most {}", js_number(maximum))),
+            (Some(minimum), Some(maximum)) => {
+                Some(format!("{}-{}", number_to_string(minimum), number_to_string(maximum)))
+            }
+            (Some(minimum), None) => Some(format!("at least {}", number_to_string(minimum))),
+            (None, Some(maximum)) => Some(format!("at most {}", number_to_string(maximum))),
             (None, None) => None,
         };
         let text = match self.answer_field() {

@@ -2,6 +2,7 @@
 //! commands; `@` lists subagents, then the file search's results, then references. A typed query filters them
 //! with fuzzysort, except the files, which the server ranks.
 
+use opencode_api::js::locale_compare;
 use opencode_ui::prompt_input::parse::{self, LineRange};
 use opencode_ui::select::fuzzy;
 use unicode_width::UnicodeWidthStr;
@@ -218,11 +219,6 @@ fn go(search: &str, items: Vec<Choice>) -> Vec<Choice> {
         .into_iter()
         .map(|index| items[index].clone())
         .collect()
-}
-
-/// `localeCompare` for option labels: case-insensitive, lowercase first on a tie.
-fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
-    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| b.cmp(a))
 }
 
 #[cfg(test)]
