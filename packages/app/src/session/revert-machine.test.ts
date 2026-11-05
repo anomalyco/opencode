@@ -165,6 +165,21 @@ describe("transitionSessionRevert", () => {
     expect(echoed.effects).toEqual([])
   })
 
+  test("a commit while a rewind is still interrupting keeps that rewind's own echo", () => {
+    const steps = replay([
+      undo(),
+      // A prompt sent while an earlier boundary was staged commits it before this rewind's stage goes out.
+      { type: "revert.committed" },
+      rewound(1, "unsent draft"),
+      { type: "revert.staged", messageID: "msg_3" },
+    ])
+
+    expect(steps[1].state).toMatchObject({ status: "running", echoes: ["msg_3"] })
+    expect(steps[3].state).toEqual({ ...steps[2].state, echoes: [] })
+    expect(steps[3].state.status).toBe("restored")
+    expect(steps[3].effects).toEqual([])
+  })
+
   test("a late stage echo after a redo keeps the cleared boundary until the clear echo arrives", () => {
     const steps = replay([
       undo(),
