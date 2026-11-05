@@ -13,6 +13,7 @@ import {
   Meta,
   MiniMax,
   Moonshot,
+  OpenRouter,
   ZAICodingPlan,
 } from "../src/providers.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
@@ -243,6 +244,236 @@ describe("applyCachePolicy", () => {
       expect(body.tools[0]?.cache_control).toEqual(hour)
       expect(body.system.map((part) => part.cache_control)).toEqual([undefined, hour])
       expect(body.messages.map((message) => message.content[0]?.cache_control)).toEqual([hour, undefined, hour])
+    }),
+  )
+
+  it.effect("a manual hint takes the longer lifetime of a marker after it", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          system: "Base agent",
+          messages: [
+            Message.user([{ ...Message.text("pinned"), cache: new CacheHint({ type: "ephemeral", ttl: "5m" }) }]),
+            Message.assistant("first reply"),
+            Message.user("second user"),
+            Message.assistant("second reply"),
+            Message.user("latest"),
+          ],
+          cache: { ttl: "1h" },
+        }),
+      )
+
+      const body = prepared.body as {
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      // The tail and the previous tail go out at 1h after the manual 5m hint, which Anthropic rejects. Everything up
+      // to the last 1h marker is written for an hour anyway, so the manual hint takes the hour at no cost.
+      const hour = { type: "ephemeral", ttl: "1h" }
+      expect(body.system[0]?.cache_control).toEqual(hour)
+      expect(body.messages.map((message) => message.content[0]?.cache_control)).toEqual([
+        hour,
+        undefined,
+        hour,
+        undefined,
+        hour,
+      ])
+    }),
+  )
+
+  it.effect("a manual tool hint takes the longer lifetime of the markers after it", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          system: "Base agent",
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral", ttl: "5m" }),
+            },
+            { name: "t2", description: "t2", inputSchema: { type: "object", properties: {} } },
+          ],
+          prompt: "hi",
+          cache: { ttl: "1h" },
+        }),
+      )
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      const hour = { type: "ephemeral", ttl: "1h" }
+      expect(body.tools.map((tool) => tool.cache_control)).toEqual([hour, hour])
+      expect(body.system[0]?.cache_control).toEqual(hour)
+      expect(body.messages[0]?.content[0]?.cache_control).toEqual(hour)
+    }),
+  )
+
+  it.effect("lifetimes stay in send order when a system update moves after the next user turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          // Opus 4.8 takes native system messages, which go out after the user turn that follows them.
+          model: AnthropicMessages.route
+            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-opus-4-8" }),
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+          messages: [
+            Message.user("first user"),
+            Message.assistant("assistant reply"),
+            Message.system([
+              { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
+            ]),
+            Message.user("latest"),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ role: string; content: Array<{ cache_control?: unknown }> }>
+      }
+      // The tail sits after the update in the request but goes out before it, so it takes the update's hour too.
+      const hour = { type: "ephemeral", ttl: "1h" }
+      expect(body.tools[0]?.cache_control).toEqual(hour)
+      expect(body.system.map((part) => part.cache_control)).toEqual([undefined, hour])
+      expect(body.messages.map((message) => [message.role, message.content[0]?.cache_control])).toEqual([
+        ["user", undefined],
+        ["assistant", undefined],
+        ["user", hour],
+        ["system", hour],
+      ])
+    }),
+  )
+
+  it.effect("lifetimes follow the body when a held system update goes out before a reply", () =>
+    Effect.gen(function* () {
+      const hour = new CacheHint({ type: "ephemeral", ttl: "1h" })
+      const five = new CacheHint({ type: "ephemeral", ttl: "5m" })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: AnthropicMessages.route
+            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-opus-4-8" }),
+          system: "Base agent",
+          messages: [
+            Message.user("first user"),
+            Message.system([
+              { type: "text", text: "Use parameterized SQL.", cache: hour },
+              { type: "text", text: "Prefer small diffs.", cache: five },
+            ]),
+            Message.assistant([{ ...Message.text("Understood."), cache: five }]),
+            Message.user("latest"),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as {
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ role: string; content: Array<{ cache_control?: unknown }> }>
+      }
+      // The reply's blocks are lowered before the held update, which goes out ahead of them.
+      expect(body.system[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
+      expect(
+        body.messages.map((message) => [message.role, message.content.map((block) => block.cache_control)]),
+      ).toEqual([
+        ["user", [undefined]],
+        [
+          "system",
+          [
+            { type: "ephemeral", ttl: "1h" },
+            { type: "ephemeral", ttl: "5m" },
+          ],
+        ],
+        ["assistant", [{ type: "ephemeral", ttl: "5m" }]],
+        ["user", [undefined]],
+      ])
+    }),
+  )
+
+  it.effect("a wrapped system update keeps its marker when its last part is blank", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          messages: [
+            Message.user("first user"),
+            Message.system([
+              { type: "text", text: "Use parameterized SQL." },
+              { type: "text", text: " " },
+            ]),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ content: Array<{ cache_control?: unknown }> }> }
+      // The tail hint lands on the last non-blank part; the update is wrapped into the user turn as one block.
+      expect(body.messages.map((message) => message.content.map((block) => block.cache_control))).toEqual([
+        [undefined, { type: "ephemeral" }],
+      ])
+    }),
+  )
+
+  it.effect("gateway and Bedrock markers before a manual 1h hint take its hour", () =>
+    Effect.gen(function* () {
+      const input = {
+        system: "Base agent",
+        tools: [{ name: "t1", description: "t1", inputSchema: { type: "object" as const, properties: {} } }],
+        messages: [
+          Message.user("first user"),
+          Message.assistant("assistant reply"),
+          Message.user([{ ...Message.text("latest"), cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) }]),
+        ],
+        cache: "auto" as const,
+      }
+      const gateway = yield* compileRequest(
+        ai.request({
+          ...input,
+          model: OpenRouter.configure({ apiKey: "test", baseURL: "https://openrouter.test/api/v1" }).model(
+            "anthropic/claude-sonnet-4.5",
+          ),
+        }),
+      )
+      const bedrock = yield* compileRequest(
+        ai.request({
+          ...input,
+          model: AmazonBedrock.configure({
+            credentials: { region: "us-east-1", accessKeyId: "fixture", secretAccessKey: "fixture" },
+          }).model("anthropic.claude-sonnet-4-5-20250929-v1:0"),
+        }),
+      )
+
+      const hour = { type: "ephemeral", ttl: "1h" }
+      const gatewayBody = gateway.body as {
+        tools: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: unknown }>
+      }
+      expect(gatewayBody.tools[0]?.cache_control).toEqual(hour)
+      expect(gatewayBody.messages[0]?.content).toEqual([{ type: "text", text: "Base agent", cache_control: hour }])
+      expect(gatewayBody.messages.at(-1)?.content).toEqual([{ type: "text", text: "latest", cache_control: hour }])
+
+      const point = { cachePoint: { type: "default", ttl: "1h" } }
+      const bedrockBody = bedrock.body as {
+        toolConfig: { tools: Array<unknown> }
+        system: Array<unknown>
+        messages: Array<{ content: Array<unknown> }>
+      }
+      expect(bedrockBody.toolConfig.tools.at(-1)).toEqual(point)
+      expect(bedrockBody.system.at(-1)).toEqual(point)
+      expect(bedrockBody.messages.at(-1)?.content.at(-1)).toEqual(point)
     }),
   )
 

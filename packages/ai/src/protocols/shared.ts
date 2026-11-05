@@ -220,7 +220,12 @@ export const wrappedSystemUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
 ) {
   const content = yield* systemUpdateText(route, message)
-  return { type: "text" as const, text: wrapSystemUpdate(content), cache: content.at(-1)?.cache }
+  // The parts become one block, which takes the last hint on any of them: a trailing blank part never carries one.
+  return {
+    type: "text" as const,
+    text: wrapSystemUpdate(content),
+    cache: content.findLast((part) => part.cache !== undefined)?.cache,
+  }
 })
 
 /**

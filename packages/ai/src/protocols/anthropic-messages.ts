@@ -976,6 +976,16 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
         }))
   const messages = yield* lowerMessages(flattened.request, breakpoints)
   yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
+  // Read the markers from the finished body: a held system update goes out after the user turns that follow it.
+  Cache.orderLifetimes(
+    [
+      ...(tools ?? []).map((tool) => tool.cache_control),
+      ...(system ?? []).map((part) => part.cache_control),
+      ...messages.flatMap((message) =>
+        message.content.map((block) => ("cache_control" in block ? block.cache_control : undefined)),
+      ),
+    ].filter((marker) => marker !== undefined),
+  )
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
   const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS

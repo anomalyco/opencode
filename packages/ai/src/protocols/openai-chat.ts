@@ -871,15 +871,24 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const hasActiveTools = flattened.tools.length > 0
   const custom = OpenAIFreeform.tools(request)
   const lowering = { ...options, cacheControl: options.cacheControl ?? declaredCacheControl(request), custom }
+  const messages = yield* lowerMessages(flattened.request, lowering)
+  const tools =
+    flattened.tools.length === 0
+      ? hasHistory
+        ? []
+        : undefined
+      : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name)))
+  // Gateways hand markers to Anthropic as tools, then system, then messages; the system prompt is the first message.
+  Cache.orderLifetimes(
+    [
+      ...(tools ?? []),
+      ...messages.flatMap((message) => (Array.isArray(message.content) ? message.content : [])),
+    ].flatMap((item) => ("cache_control" in item && item.cache_control !== undefined ? [item.cache_control] : [])),
+  )
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request, lowering),
-    tools:
-      flattened.tools.length === 0
-        ? hasHistory
-          ? []
-          : undefined
-        : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
+    messages,
+    tools,
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice, custom) : undefined,
     stream: true as const,
     ...((request.model.compatibility?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
