@@ -1248,6 +1248,7 @@ dependencies = [
  "base64",
  "chrono",
  "futures-util",
+ "indexmap",
  "log",
  "opencode-api",
  "opencode-local",

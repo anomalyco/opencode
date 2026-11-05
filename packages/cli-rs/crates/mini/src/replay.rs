@@ -429,6 +429,11 @@ impl Transcript {
     }
 
     /// A prompt this client admitted (`mergePending`). It prints once the server delivers it.
+    /// Whether the server already delivered this inbox item (`promotedMessages`).
+    pub fn promoted(&self, message_id: &str) -> bool {
+        self.promoted.contains(message_id)
+    }
+
     pub fn admitted(&mut self, message_id: &str, text: &str) -> Output {
         if self.promoted.contains(message_id) {
             return self.user(message_id, text, true);
