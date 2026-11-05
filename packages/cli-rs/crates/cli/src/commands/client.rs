@@ -138,7 +138,7 @@ fn primary(c: char) -> (u8, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::args::{GlobalArgs, ServerFlags};
+    use crate::args::ServerFlags;
 
     // A standalone server: it prints its ready line, answers `/api/info`, and exits when its stdin
     // lease closes.
@@ -189,7 +189,6 @@ process.exit(0)
             ..Env::default()
         };
         let context = Context {
-            global: GlobalArgs::default(),
             server: ServerFlags {
                 standalone: true,
                 server: None,

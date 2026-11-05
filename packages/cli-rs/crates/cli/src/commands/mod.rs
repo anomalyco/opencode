@@ -20,12 +20,10 @@ pub mod stats;
 pub mod uninstall;
 pub mod upgrade;
 
-use crate::args::{Cli, Command, GlobalArgs, ServerFlags};
+use crate::args::{Cli, Command, ServerFlags};
 
 /// What every handler gets besides its own arguments.
-#[allow(dead_code, reason = "read by the handlers of later steps")]
 pub struct Context {
-    pub global: GlobalArgs,
     /// `--standalone` and `--server` for the selected command, wherever they were given (`args::validate`).
     pub server: ServerFlags,
 }
