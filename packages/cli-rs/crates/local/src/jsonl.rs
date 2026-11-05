@@ -2,10 +2,12 @@
 //! `frecency.jsonl`.
 //!
 //! Ports the three TypeScript providers (`packages/tui/src/prompt/{history,stash,frecency}.tsx`): their
-//! parse and limit rules, the rewrite on load that heals a broken file, appends, and the full rewrites
-//! after a trim. Full rewrites are atomic. The history, which both TUIs append to, is written under its
-//! lock from what the file holds, and only its load rewrites it. Write failures are ignored, as in TypeScript. Prompt
-//! entries stay `serde_json::Value`, so fields this client does not know survive.
+//! parse and limit rules, the rewrite on load that heals a broken file, and appends. Both TUIs write all
+//! three files, and TypeScript writes from memory without a lock. So this client writes each under its
+//! lock in `<state>/locks` from what the file holds, never from memory: saves only append, a stash pop
+//! or remove drops its one line, and only a load trims. Rewrites are atomic. Write failures are logged,
+//! and TypeScript ignores them. Prompt entries stay `serde_json::Value`, so fields this client does not
+//! know survive.
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -57,11 +59,6 @@ fn body<'a>(entries: impl Iterator<Item = &'a Value>) -> String {
     entries
         .map(|entry| jsonc::stringify(entry) + "\n")
         .collect()
-}
-
-// A full rewrite, atomic so a concurrent reader never sees a partial file.
-fn write_text(file: &Path, text: &str) {
-    let _ = write_text_atomic(file, text);
 }
 
 fn append_text(file: &Path, text: &str) {
@@ -174,11 +171,11 @@ fn history_file(state: &Path) -> PathBuf {
     state.join("prompt-history.jsonl")
 }
 
-fn with_lock(
+fn with_lock<T>(
     state: &Path,
     file: &Path,
-    f: impl FnOnce() -> io::Result<()>,
-) -> Result<(), lock::Error> {
+    f: impl FnOnce() -> io::Result<T>,
+) -> Result<T, lock::Error> {
     lock::with_lock(
         &state.join("locks"),
         &file.to_string_lossy(),
@@ -237,22 +234,34 @@ pub fn parse_stash(text: &str) -> Vec<Value> {
     last(entries, MAX_STASH_ENTRIES)
 }
 
-/// `usePromptStash`.
+/// `usePromptStash`: the entries in memory. Each change also goes to the file under its lock
+/// ([`save_stash`], [`delete_stash`]), against what the file holds, so entries another client stashed
+/// meanwhile stay.
 #[derive(Debug)]
 pub struct Stash {
-    file: PathBuf,
+    state: PathBuf,
     entries: Vec<Value>,
 }
 
 impl Stash {
-    /// Loads `<state>/prompt-stash.jsonl` and rewrites its valid, retained entries.
+    /// Loads `<state>/prompt-stash.jsonl` and, under the lock, rewrites it with its valid, retained
+    /// entries when that changes it.
     pub fn load(state: &Path) -> Self {
-        let file = state.join("prompt-stash.jsonl");
-        let entries = parse_stash(&fs::read_to_string(&file).unwrap_or_default());
-        if !entries.is_empty() {
-            write_text(&file, &body(entries.iter()));
+        let file = stash_file(state);
+        let healed = with_lock(state, &file, || {
+            rewrite(&file, |text| {
+                let entries = parse_stash(text);
+                let healed = body(entries.iter());
+                (!entries.is_empty() && healed != text).then_some(healed)
+            })
+        });
+        if let Err(error) = healed {
+            log::warn!("prompt-stash.jsonl: {error}");
         }
-        Self { file, entries }
+        Self {
+            state: state.to_path_buf(),
+            entries: parse_stash(&fs::read_to_string(&file).unwrap_or_default()),
+        }
     }
 
     pub fn list(&self) -> &[Value] {
@@ -261,20 +270,15 @@ impl Stash {
 
     /// `push({prompt})` with the time `now` in milliseconds.
     pub fn push(&mut self, prompt: Value, now: i64) {
-        let entry = json!({"prompt": prompt, "timestamp": now});
-        let line = jsonc::stringify(&entry) + "\n";
-        self.entries.push(entry);
-        if self.entries.len() > MAX_STASH_ENTRIES {
-            self.entries = last(std::mem::take(&mut self.entries), MAX_STASH_ENTRIES);
-            self.rewrite();
-            return;
-        }
-        append_text(&self.file, &line);
+        let entry = stash_entry(prompt, now);
+        self.entries.push(entry.clone());
+        self.entries = last(std::mem::take(&mut self.entries), MAX_STASH_ENTRIES);
+        log_stash(save_stash(&self.state, &entry));
     }
 
     pub fn pop(&mut self) -> Option<Value> {
         let entry = self.entries.pop()?;
-        self.rewrite();
+        log_stash(delete_stash(&self.state, &entry));
         Some(entry)
     }
 
@@ -282,12 +286,47 @@ impl Stash {
         if index >= self.entries.len() {
             return;
         }
-        self.entries.remove(index);
-        self.rewrite();
+        let entry = self.entries.remove(index);
+        log_stash(delete_stash(&self.state, &entry));
     }
+}
 
-    fn rewrite(&self) {
-        write_text(&self.file, &body(self.entries.iter()));
+/// A stash entry, `{prompt, timestamp}`.
+pub fn stash_entry(prompt: Value, now: i64) -> Value {
+    json!({"prompt": prompt, "timestamp": now})
+}
+
+/// `push`'s write, under the lock: appends the entry. It never trims, as [`save_history`] never does;
+/// [`Stash::load`] and the next delete keep the newest 50.
+pub fn save_stash(state: &Path, entry: &Value) -> Result<(), lock::Error> {
+    let file = stash_file(state);
+    with_lock(state, &file, || {
+        append_text(&file, &(jsonc::stringify(entry) + "\n"));
+        Ok(())
+    })
+}
+
+/// `pop` and `remove`'s write, under the lock: rereads the file and drops the newest line equal to
+/// `entry`, keeping every other entry. An entry the file no longer holds changes nothing.
+pub fn delete_stash(state: &Path, entry: &Value) -> Result<(), lock::Error> {
+    let file = stash_file(state);
+    with_lock(state, &file, || {
+        rewrite(&file, |text| {
+            let mut entries = parse_stash(text);
+            let index = entries.iter().rposition(|line| jsonc::same(line, entry))?;
+            entries.remove(index);
+            Some(body(entries.iter()))
+        })
+    })
+}
+
+fn stash_file(state: &Path) -> PathBuf {
+    state.join("prompt-stash.jsonl")
+}
+
+fn log_stash(result: Result<(), lock::Error>) {
+    if let Err(error) = result {
+        log::warn!("prompt-stash.jsonl: {error}");
     }
 }
 
@@ -319,34 +358,36 @@ fn last_open(entry: &Value) -> f64 {
         .unwrap_or(f64::NAN)
 }
 
-/// `useFrecency`: how often and how recently files were opened, by absolute path.
+/// `useFrecency`: how often and how recently files were opened, by absolute path, in memory.
+/// [`save_frecency`] writes a visit to the file.
 #[derive(Debug)]
 pub struct Frecency {
-    file: PathBuf,
+    state: PathBuf,
     cwd: PathBuf,
     data: IndexMap<String, Visit>,
 }
 
 impl Frecency {
-    /// Loads `<state>/frecency.jsonl` and rewrites it with one line per path.
+    /// Loads `<state>/frecency.jsonl` and, under the lock, rewrites it with one line per path, the
+    /// newest 1000, when that changes it.
     pub fn load(state: &Path, cwd: &Path) -> Self {
-        let file = state.join("frecency.jsonl");
-        let entries = parse_frecency(&fs::read_to_string(&file).unwrap_or_default());
-        if !entries.is_empty() {
-            write_text(&file, &body(entries.iter()));
-        }
-        let data = entries
-            .iter()
-            .filter_map(|entry| {
-                let visit = Visit {
-                    frequency: entry.get("frequency")?.as_f64()?,
-                    last_open: entry.get("lastOpen")?.as_f64()?,
-                };
-                Some((entry.get("path")?.as_str()?.to_string(), visit))
+        let file = frecency_file(state);
+        let healed = with_lock(state, &file, || {
+            rewrite(&file, |text| {
+                let entries = parse_frecency(text);
+                let healed = body(entries.iter());
+                (!entries.is_empty() && healed != text).then_some(healed)
             })
+        });
+        if let Err(error) = healed {
+            log::warn!("frecency.jsonl: {error}");
+        }
+        let data = parse_frecency(&fs::read_to_string(&file).unwrap_or_default())
+            .iter()
+            .filter_map(|entry| Some((entry.get("path")?.as_str()?.to_string(), visit(entry)?)))
             .collect();
         Self {
-            file,
+            state: state.to_path_buf(),
             cwd: cwd.to_path_buf(),
             data,
         }
@@ -365,14 +406,16 @@ impl Frecency {
             })
     }
 
-    /// `updateFrecency(path)` at the time `now`.
+    /// `updateFrecency(path)` at the time `now`: [`save_frecency`], then [`Frecency::record`].
     pub fn update(&mut self, path: &str, now: i64) {
-        let path = resolve(&self.cwd, path);
-        let visit = Visit {
-            frequency: self.data.get(&path).map_or(0.0, |v| v.frequency) + 1.0,
-            last_open: now as f64,
-        };
-        append_text(&self.file, &(line(&path, &visit) + "\n"));
+        match save_frecency(&self.state, &self.cwd, path, now) {
+            Ok((path, visit)) => self.record(path, visit),
+            Err(error) => log::warn!("frecency.jsonl: {error}"),
+        }
+    }
+
+    /// Puts a visit [`save_frecency`] wrote in memory, keeping the newest 1000 paths.
+    pub fn record(&mut self, path: String, visit: Visit) {
         self.data.insert(path, visit);
         if self.data.len() <= MAX_FRECENCY_ENTRIES {
             return;
@@ -380,13 +423,46 @@ impl Frecency {
         self.data
             .sort_by(|_, a, _, b| b.last_open.total_cmp(&a.last_open));
         self.data.truncate(MAX_FRECENCY_ENTRIES);
-        let text: String = self
-            .data
-            .iter()
-            .map(|(path, visit)| line(path, visit) + "\n")
-            .collect();
-        write_text(&self.file, &text);
     }
+}
+
+/// `updateFrecency(path)`'s write at the time `now`, under the lock: counts one more than the file's
+/// latest line for the path, which another client may have written since the load, and appends the
+/// line. It never trims; [`Frecency::load`] does. Returns the absolute path and its visit.
+pub fn save_frecency(
+    state: &Path,
+    cwd: &Path,
+    path: &str,
+    now: i64,
+) -> Result<(String, Visit), lock::Error> {
+    let file = frecency_file(state);
+    let path = resolve(cwd, path);
+    let visit = with_lock(state, &file, || {
+        let text = fs::read_to_string(&file).unwrap_or_default();
+        let frequency = lines(&text)
+            .filter(|entry| entry.get("path").and_then(Value::as_str) == Some(&path))
+            .last()
+            .and_then(|entry| visit(&entry))
+            .map_or(0.0, |visit| visit.frequency);
+        let visit = Visit {
+            frequency: frequency + 1.0,
+            last_open: now as f64,
+        };
+        append_text(&file, &(line(&path, &visit) + "\n"));
+        Ok(visit)
+    })?;
+    Ok((path, visit))
+}
+
+fn frecency_file(state: &Path) -> PathBuf {
+    state.join("frecency.jsonl")
+}
+
+fn visit(entry: &Value) -> Option<Visit> {
+    Some(Visit {
+        frequency: entry.get("frequency")?.as_f64()?,
+        last_open: entry.get("lastOpen")?.as_f64()?,
+    })
 }
 
 fn line(path: &str, visit: &Visit) -> String {
@@ -492,6 +568,94 @@ mod tests {
         assert_eq!(stash.pop().unwrap()["timestamp"], 2);
         stash.remove(0);
         assert_eq!(fs::read_to_string(&file).unwrap(), "");
+    }
+
+    /// The TypeScript TUI's `push`: one appended line, without the lock.
+    fn ts_stash(file: &Path, text: &str, timestamp: i64) {
+        append_text(
+            file,
+            &format!(
+                "{{\"prompt\":{{\"text\":\"{text}\",\"files\":[],\"agents\":[],\"skills\":[],\"pasted\":[]}},\"timestamp\":{timestamp}}}\n"
+            ),
+        );
+    }
+
+    fn stash_texts(file: &Path) -> Vec<String> {
+        parse_stash(&fs::read_to_string(file).unwrap())
+            .iter()
+            .map(|entry| entry["prompt"]["text"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn stash_writes_keep_entries_another_client_stashed() {
+        let state = tempfile::tempdir().unwrap();
+        let file = state.path().join("prompt-stash.jsonl");
+        ts_stash(&file, "ts-old", 1);
+        let mut stash = Stash::load(state.path());
+        stash.push(prompt("a"), 2);
+        stash.push(prompt("b"), 3);
+        ts_stash(&file, "ts-important-draft", 4);
+        assert_eq!(stash.pop().unwrap()["prompt"]["text"], "b");
+        assert_eq!(stash_texts(&file), ["ts-old", "a", "ts-important-draft"]);
+        stash.remove(0);
+        assert_eq!(stash_texts(&file), ["a", "ts-important-draft"]);
+        // Past the limit, a push only appends; the next load trims the file to the newest 50.
+        for index in 0..MAX_STASH_ENTRIES {
+            stash.push(prompt(&index.to_string()), 10 + index as i64);
+        }
+        ts_stash(&file, "ts-late", 100);
+        assert_eq!(stash.list().len(), MAX_STASH_ENTRIES);
+        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 53);
+        let loaded = Stash::load(state.path());
+        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 50);
+        assert_eq!(loaded.list()[49]["prompt"]["text"], "ts-late");
+        // A load that changes nothing does not rewrite the file.
+        let before = fs::metadata(&file).unwrap().modified().unwrap();
+        Stash::load(state.path());
+        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
+    }
+
+    #[test]
+    fn a_frecency_update_at_the_limit_keeps_another_clients_writes() {
+        let state = tempfile::tempdir().unwrap();
+        let file = state.path().join("frecency.jsonl");
+        let full: String = (0..MAX_FRECENCY_ENTRIES)
+            .map(|n| {
+                format!(
+                    "{{\"path\":\"/w/f{n}.rs\",\"frequency\":1,\"lastOpen\":{}}}\n",
+                    1000 - n
+                )
+            })
+            .collect();
+        fs::write(&file, full).unwrap();
+        let mut frecency = Frecency::load(state.path(), Path::new("/w"));
+        // The TypeScript TUI opens a new file and reopens `f0.rs`, appending without the lock.
+        append_text(
+            &file,
+            "{\"path\":\"/w/from_ts.rs\",\"frequency\":1,\"lastOpen\":5000}\n{\"path\":\"/w/f0.rs\",\"frequency\":20,\"lastOpen\":5001}\n",
+        );
+        frecency.update("new.rs", 6000);
+        let latest = |path: &str| {
+            parse_frecency(&fs::read_to_string(&file).unwrap())
+                .into_iter()
+                .find(|entry| entry["path"] == path)
+        };
+        assert!(latest("/w/from_ts.rs").is_some(), "from_ts.rs was lost");
+        assert_eq!(latest("/w/f0.rs").unwrap()["frequency"], 20);
+        // The next update counts from the file, not from the load.
+        frecency.update("f0.rs", 7000);
+        assert_eq!(latest("/w/f0.rs").unwrap()["frequency"], 21);
+        assert_eq!(frecency.score("/w/f0.rs", 7000), 21.0);
+        assert_eq!(frecency.data().len(), MAX_FRECENCY_ENTRIES);
+        // Updates only append; the next load trims to the newest 1000.
+        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 1004);
+        let loaded = Frecency::load(state.path(), Path::new("/w"));
+        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 1000);
+        assert_eq!(loaded.score("/w/from_ts.rs", 5000), 1.0);
+        let before = fs::metadata(&file).unwrap().modified().unwrap();
+        Frecency::load(state.path(), Path::new("/w"));
+        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
     }
 
     #[test]
