@@ -19,16 +19,16 @@ export type McpSignInHost = {
   /** Polls the attempt's status. */
   status: (signal: AbortSignal) => Promise<McpSignInAttemptStatus>
   /** Sends a redirect URL pasted from the browser. */
-  complete: (code: string, signal: AbortSignal) => Promise<unknown>
+  complete: (code: string, signal: AbortSignal) => Promise<void>
   /** Ends the attempt on the server. */
-  cancel: () => Promise<unknown>
+  cancel: () => Promise<void>
   /** Reloads the MCP server and resource lists after the sign-in succeeded. */
   sync: () => Promise<void>
   openExternal: (url: string) => void
   /** Closes the dialog once the lists reloaded. */
   close: () => void
-  /** The text shown for a failed request. */
-  message: (error: unknown) => string
+  /** The text shown for a failed request. The SDK and the data layer reject with an `Error`. */
+  message: (error: Error) => string
 }
 
 /**
@@ -45,6 +45,8 @@ export function createMcpSignIn(host: McpSignInHost) {
   let syncTimer: ReturnType<typeof setTimeout> | undefined
   let pollController: AbortController | undefined
   let submitController: AbortController | undefined
+
+  const describe = (error: Error | string) => host.message(error instanceof Error ? error : new Error(error))
 
   const dispatch = (event: McpSignInEvent) => {
     const previous = untrack(signInState)
@@ -85,7 +87,7 @@ export function createMcpSignIn(host: McpSignInHost) {
         },
         (error) => {
           if (controller.signal.aborted) return
-          dispatch({ type: "submit.failed", submitAttempt: effect.submitAttempt, message: host.message(error) })
+          dispatch({ type: "submit.failed", submitAttempt: effect.submitAttempt, message: describe(error) })
         },
       )
 
@@ -104,7 +106,7 @@ export function createMcpSignIn(host: McpSignInHost) {
       syncTimer = setTimeout(() => dispatch({ type: "sync.timed-out", syncAttempt: effect.syncAttempt }), effect.timeoutMs)
       void Promise.try(host.sync).then(
         () => dispatch({ type: "sync.succeeded", syncAttempt: effect.syncAttempt }),
-        (error) => dispatch({ type: "sync.failed", syncAttempt: effect.syncAttempt, message: host.message(error) }),
+        (error) => dispatch({ type: "sync.failed", syncAttempt: effect.syncAttempt, message: describe(error) }),
       )
 
       return
@@ -136,7 +138,7 @@ export function createMcpSignIn(host: McpSignInHost) {
       },
       (error) => {
         if (controller.signal.aborted) return
-        dispatch({ type: "polled", pollAttempt, outcome: { status: "unreachable", message: host.message(error) } })
+        dispatch({ type: "polled", pollAttempt, outcome: { status: "unreachable", message: describe(error) } })
       },
     )
   }

@@ -1563,7 +1563,7 @@ function McpSignInDialog(props: {
     sync: props.onSync,
     openExternal: (url) => ctx.system.openExternal(url),
     close: props.onClose,
-    message: (error) => (error instanceof Error ? error.message : String(error)),
+    message: (error) => error.message,
   })
 
   const view = signIn.view
