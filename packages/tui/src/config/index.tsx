@@ -149,6 +149,14 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
+  voice: Schema.optional(
+    Schema.Struct({
+      transcribe_command: Schema.optional(Schema.String).annotate({
+        description:
+          "Shell command that transcribes push-to-talk voice recordings. The recorded wav file path replaces {file} in the command, or is appended as the last argument when {file} is absent. The command's stdout is inserted into the prompt.",
+      }),
+    }),
+  ).annotate({ description: "Voice input settings" }),
   session: Schema.optional(
     Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
