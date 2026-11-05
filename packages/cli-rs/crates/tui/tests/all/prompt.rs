@@ -5,6 +5,7 @@ use crate::support::wait;
 
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -26,10 +27,11 @@ type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 
 /// Serves a session `ses_a` (agent `build`, model `p/m`), the location catalog, and the prompt
 /// writes; a session reads as `SessionNotFoundError` until its create lands, which takes 200 ms;
-/// anything else is a 404.
+/// anything else is a 404. The agent and model reads answer once `catalog` is set.
 struct Fixture {
     seen: Seen,
     created: Arc<Mutex<Vec<String>>>,
+    catalog: Arc<AtomicBool>,
 }
 
 fn missing(id: &str) -> (u16, Value) {
@@ -88,7 +90,11 @@ impl Transport for Fixture {
             _ => (404, json!({})),
         };
         let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
+        let catalog = ["/api/agent", "/api/model"].contains(&path.as_str()).then(|| self.catalog.clone());
         Box::pin(async move {
+            while catalog.as_ref().is_some_and(|catalog| !catalog.load(Ordering::SeqCst)) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
             if let Some((created, id)) = created {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 created.lock().unwrap().push(id);
@@ -132,6 +138,8 @@ struct Setup {
     app: TestApp,
     tui: Rc<Tui>,
     seen: Seen,
+    /// Lets the agent and model reads answer.
+    catalog: Arc<AtomicBool>,
     _home: tempfile::TempDir,
 }
 
@@ -141,11 +149,21 @@ impl Setup {
         Self::with_home(route, home)
     }
 
+    /// The agent and model reads wait for `catalog` to be set.
+    fn held(route: Route) -> Self {
+        Self::build(route, tempfile::tempdir().unwrap(), false)
+    }
+
     fn with_home(route: Route, home: tempfile::TempDir) -> Self {
+        Self::build(route, home, true)
+    }
+
+    fn build(route: Route, home: tempfile::TempDir, catalog: bool) -> Self {
         let seen = Seen::default();
+        let catalog = Arc::new(AtomicBool::new(catalog));
         let client = Client::with_transport(
             "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone(), created: Arc::default() }),
+            Arc::new(Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone() }),
         )
         .unwrap();
         let app = TestApp::new(90, 24);
@@ -161,7 +179,7 @@ impl Setup {
                 events: false,
             },
         );
-        Self { app, tui, seen, _home: home }
+        Self { app, tui, seen, catalog, _home: home }
     }
 
     fn wait_for(&self, text: &str) -> String {
@@ -448,6 +466,41 @@ fn home_prompt_creates_a_session_and_opens_it() {
     // The new session reads nothing before its create lands, so no "Session not found" toast.
     let toast = setup.app.wait_until(Duration::from_millis(500), || setup.app.text().contains("not found"));
     assert!(!toast, "{}", setup.app.text());
+}
+
+#[test]
+fn enter_before_the_catalog_loads_submits_once_it_has() {
+    let setup = Setup::held(Route::Home);
+    setup.app.type_text("Reply with ok");
+    setup.app.press("return");
+    // Nothing is sent without an agent and a model, and the text stays.
+    let sent = setup.app.wait_until(Duration::from_millis(300), || !setup.requests("POST", "/api/session").is_empty());
+    assert!(!sent, "{:?}", setup.seen.lock().unwrap());
+    assert!(!setup.app.text().contains("Model M"), "{}", setup.app.text());
+    assert_eq!(setup.textarea().text(), "Reply with ok");
+
+    setup.catalog.store(true, Ordering::SeqCst);
+    let created = setup.wait_request("POST", "/api/session", 1);
+    assert_eq!(created[0]["agent"], "build");
+    assert_eq!(created[0]["model"], json!({ "providerID": "p", "id": "m" }));
+    let id = created[0]["id"].as_str().unwrap().to_owned();
+    let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
+    assert_eq!(prompts[0]["text"], "Reply with ok");
+    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
+    assert!(opened, "{:?}", setup.tui.route());
+}
+
+#[test]
+fn an_early_enter_is_dropped_when_the_text_changes_before_the_catalog_loads() {
+    let setup = Setup::held(Route::Home);
+    setup.app.type_text("Reply");
+    setup.app.press("return");
+    setup.app.type_text(" with ok");
+    setup.catalog.store(true, Ordering::SeqCst);
+    setup.ready();
+    let sent = setup.app.wait_until(Duration::from_millis(300), || !setup.requests("POST", "/api/session").is_empty());
+    assert!(!sent, "{:?}", setup.seen.lock().unwrap());
+    assert_eq!(setup.textarea().text(), "Reply with ok");
 }
 
 /// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
