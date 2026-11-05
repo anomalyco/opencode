@@ -82,11 +82,13 @@ export function addServerViewModel(input: {
   const visibleOnlineDistros = (state?.online ?? []).filter((item) => !isHiddenDistro(item.name))
   const existingServerDistros = new Set((state?.servers ?? []).map((item) => item.config.distro))
   const addableInstalledDistros = visibleInstalledDistros.filter((item) => !existingServerDistros.has(item.name))
+
   const selectedDistro = addServerSelectedDistro(
     selectWslDialogSelectedDistro(input.dialog),
     visibleInstalledDistros,
     addableInstalledDistros,
   )
+
   const opencodeCheck = selectedDistro ? (state?.opencodeChecks[selectedDistro] ?? null) : null
   const installableDistros = addServerInstallableDistros(visibleInstalledDistros, visibleOnlineDistros)
   const filteredInstallableDistros = addServerFilteredInstallableDistros(installableDistros, catalogSearch)

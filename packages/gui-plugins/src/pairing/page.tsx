@@ -88,8 +88,10 @@ export default function PairingPage(props: {
   // that generation goes away.
   const runScreen = (effect: Extract<PairingEffect, { type: "read-screen" | "set-screen" }>) => {
     const attempt = effect.attempt
+
     const fail = () =>
       dispatch({ type: effect.type === "read-screen" ? "screen.read.failed" : "screen.change.failed", attempt })
+
     const live = main()
 
     if (live?.generation !== effect.generation) return fail()

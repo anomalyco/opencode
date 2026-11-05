@@ -48,12 +48,15 @@ const failReads = (state: PairingState, setting: "remote" | "screen" = "remote")
 
       const attempt = current.attempt
       const reading = current.step === "reading"
+
       const remote: PairingEvent = reading
         ? { type: "read.failed", attempt }
         : { type: "wait.ended", for: "read", attempt }
+
       const screen: PairingEvent = reading
         ? { type: "screen.read.failed", attempt }
         : { type: "wait.ended", for: "screen", attempt }
+
       const next = step(last.state, setting === "remote" ? remote : screen)
 
       return { state: next.state, effects: [...last.effects, ...next.effects] }

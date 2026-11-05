@@ -216,6 +216,7 @@ describe("wsl add-server dialog", () => {
       distro: "Fedora",
       busy: false,
     }).state
+
     const adding = transitionWslDialog(createWslDialogState(), primary("Ubuntu")).state
 
     ;[installing, adding].forEach((running) => {
@@ -236,7 +237,7 @@ describe("wsl add-server dialog", () => {
       expect(transitionWslDialog(running, { type: "action.failed", attempt: 7 }).state).toBe(running)
     })
 
-    // An install the user left the catalog during never pulls them out of the catalog they reopened.
+    // A late answer for an install that already ended never pulls the user out of the catalog they reopened.
     const reopened = replay(installing, [
       { type: "action.failed", attempt: 1, cause: new Error("busy") },
       { type: "catalog.closed", busy: false },
@@ -251,6 +252,7 @@ describe("wsl add-server dialog", () => {
       { type: "catalog.search.changed", value: "arch" },
       { type: "catalog.target.changed", distro: "Arch" },
     ]).state
+
     const installing = transitionWslDialog(searched, { type: "catalog.install.requested", distro: "Arch", busy: false })
 
     expect(transitionWslDialog(installing.state, { type: "action.succeeded", attempt: 1 })).toEqual({

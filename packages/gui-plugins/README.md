@@ -223,8 +223,10 @@ Pairing's shipping page reads through its state machine's driver, not `createLat
 // that generation goes away.
 const runScreen = (effect: Extract<PairingEffect, { type: "read-screen" | "set-screen" }>) => {
   const attempt = effect.attempt
+
   const fail = () =>
     dispatch({ type: effect.type === "read-screen" ? "screen.read.failed" : "screen.change.failed", attempt })
+
   const live = main()
 
   if (live?.generation !== effect.generation) return fail()
