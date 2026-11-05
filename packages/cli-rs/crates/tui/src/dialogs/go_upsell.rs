@@ -24,7 +24,7 @@ use opentui::keymap::Condition;
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
-use crate::dialogs::model::Local;
+use crate::local::Local;
 
 pub const GO_URL: &str = "https://opencode.ai/go";
 const ACTIONS: [&str; 3] = ["don't show again", "dismiss", "subscribe"];

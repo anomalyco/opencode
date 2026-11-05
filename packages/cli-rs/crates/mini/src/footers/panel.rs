@@ -1,7 +1,7 @@
 //! The searchable panels (`createSearchablePanelController` and `PanelShell` in `footer.command.tsx`): a title row
 //! with a count and hints, a search field, and the footer menu, on a shaded block that ends in a half-block row.
 
-use opencode_ui::select::fuzzy;
+use opencode_ui::fuzzy;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
