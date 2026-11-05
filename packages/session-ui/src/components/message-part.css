@@ -418,7 +418,7 @@
 
   &:hover [data-slot="user-message-copy-wrapper"],
   &:focus-within [data-slot="user-message-copy-wrapper"],
-  [data-slot="user-message-copy-wrapper"]:has([data-expanded]),
+  [data-slot="user-message-copy-wrapper"]:has([data-expanded], [data-closing]),
   &:hover [data-slot="user-message-meta-tail"],
   &:focus-within [data-slot="user-message-meta-tail"] {
     opacity: 1;
@@ -468,7 +468,7 @@
 
   &:hover [data-slot="user-message-run-actions"],
   &:focus-within [data-slot="user-message-run-actions"],
-  [data-slot="user-message-run-actions"]:has([data-expanded]) {
+  [data-slot="user-message-run-actions"]:has([data-expanded], [data-closing]) {
     opacity: 1;
     pointer-events: auto;
   }
