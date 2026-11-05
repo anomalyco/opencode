@@ -49,7 +49,6 @@ rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "http2"] }
 rustix = { version = "1", features = ["fs", "process"] }
-rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 sha1 = "0.11"
