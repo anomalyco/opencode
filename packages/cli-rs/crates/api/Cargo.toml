@@ -14,6 +14,7 @@ base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 log.workspace = true
+memchr.workspace = true
 percent-encoding.workspace = true
 rand.workspace = true
 reqwest.workspace = true
