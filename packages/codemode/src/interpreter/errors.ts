@@ -24,6 +24,7 @@ import { Push } from "./signals.js"
 import { withPrimitives } from "./callback.js"
 import { Drain, drain } from "../machine/natives.js"
 import { formatValue } from "../stdlib/console.js"
+import { inPrelude } from "./source.js"
 
 /**
  * A host error's message as text. A host can store anything there; an object must not cross as itself, and turning it
@@ -110,7 +111,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
  */
 export const locate = (error: unknown, node?: AstNode): unknown => {
   if (error instanceof PendingThrow) {
-    if (error.node === undefined && node) error.node = node
+    if ((error.node === undefined || inPrelude(error.node)) && node) error.node = node
     return error
   }
   if (error instanceof Error && !(error instanceof ToolError) && !(error instanceof ToolRuntimeError)) {

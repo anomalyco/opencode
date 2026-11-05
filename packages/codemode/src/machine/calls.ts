@@ -30,6 +30,7 @@ import {
   usesArguments,
 } from "../interpreter/operations.js"
 import { isOpaque } from "../interpreter/references.js"
+import { inPrelude } from "../interpreter/source.js"
 import { ScopeStack } from "../interpreter/scope.js"
 import { Convert, Enter, type Hint, Invoke, MAX_CALL_DEPTH, normal, Push } from "../interpreter/signals.js"
 import { conversions } from "../interpreter/callback.js"
@@ -404,8 +405,10 @@ const generator = (task: MachineTask, fn: Fn, frame: Frame): GeneratorObj => {
 export const CallKind = kind("Call", callStep, {
   // An async function's body that throws rejects its promise; the caller still receives the promise.
   unwind: (_task, frame, error) => {
+    // A failure inside a prelude function is located at the program's call, as a native built-in's is.
+    if (inPrelude(frame.node!)) error = locate(error, frame.slots[3] as AstNode | undefined)
     const resolving = frame.slots[7] as Resolving | undefined
-    if (resolving === undefined || frame.phase === SETTLED) return false
+    if (resolving === undefined || frame.phase === SETTLED) throw error
     resolving.reject(error)
     frame.phase = SETTLED
     return true

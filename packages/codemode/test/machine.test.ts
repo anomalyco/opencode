@@ -406,7 +406,7 @@ describe("built-ins as data", () => {
       stats.inspect = previous
     }
     for (const name of [
-      "Array callback",
+      "Call",
       "Drain",
       "Convert",
       "IteratorHelper.next",
@@ -414,7 +414,6 @@ describe("built-ins as data", () => {
       "Tool call",
       "Promise combinator",
       "PromiseReactionJob",
-      "Array sort",
       "JSON.parse reviver",
       "Set method",
       "search",

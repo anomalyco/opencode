@@ -12,6 +12,7 @@ import { type AstNode, type Binding, PendingThrow } from "./model.js"
 import { moduleName, resolveModule } from "./modules.js"
 import { type Arr, define, entries, nativeRule, Obj, type Value } from "./objects.js"
 import { promiseLike } from "./promises.js"
+import { Prelude, preludeSource } from "../prelude/prelude.js"
 import { ScopeStack } from "./scope.js"
 import { Host, Push } from "./signals.js"
 import type { NodeId, Source } from "./source.js"
@@ -25,6 +26,8 @@ export class Interpreter<R> {
   readonly machine: Machine
   /** Names for this runtime's intrinsics, taken before any program code can change a built-in. */
   readonly intrinsics: IntrinsicNames
+  /** The built-ins written in Code Mode, and the scope they close over. */
+  readonly prelude: Prelude
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new Map<TaggedTemplateExpression, Arr>()
   /** Makes the Effect an extension function's host work runs as; set by the extension bridge. */
@@ -54,8 +57,13 @@ export class Interpreter<R> {
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     const intrinsics = globals(this)
+    this.prelude = new Prelude(this as Interpreter<unknown>, intrinsics)
+    this.sources.set("prelude", preludeSource())
     const hosts = options.globals?.(this) ?? []
-    this.intrinsics = new IntrinsicNames(intrinsics, this.builtins, hosts)
+    this.intrinsics = new IntrinsicNames(intrinsics, this.builtins, hosts, [
+      ["Prelude", this.prelude.functions],
+      ["PreludeHelpers", this.prelude.helpers],
+    ])
     for (const [name, value] of [...intrinsics, ...(options.bindings?.(this) ?? []), ...hosts]) {
       this.globalScope.set(name, { mutable: false, value })
     }

@@ -21,7 +21,7 @@ import {
 import { describeValue } from "../interpreter/references.js"
 import { requireCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { callbackMethods, sortArray } from "./array.js"
+import { sortArray } from "./array.js"
 
 /** What becomes of the bytes `collectBytes` reads: a new Uint8Array (with its prototype), or bytes set into one. */
 type BytesInto =
@@ -184,7 +184,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
           target.bytes.sort()
           return target
         }
-        return sortArray(builtins, target, args[0], "Uint8Array.sort")
+        return sortArray(ctx, target, args[0], "Uint8Array.sort")
       },
     ],
     ["indexOf", 1, (thisValue, args) => self(thisValue, "indexOf").bytes.indexOf(search(args[0]), optNumber(args[1]))],
@@ -218,7 +218,6 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
     ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
     ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
-    ...callbackMethods("Uint8Array", self),
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return uint8Array

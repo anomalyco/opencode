@@ -24,6 +24,8 @@ export class IntrinsicNames {
     globals: ReadonlyArray<readonly [string, Value]>,
     builtins: Builtins,
     hosts: ReadonlyArray<readonly [string, Value]> = [],
+    /** Internal objects no global reaches (the prelude's functions and helpers), named like the builtins. */
+    internals: ReadonlyArray<readonly [string, Obj]> = [],
   ) {
     let next = 0
     const visit = (value: Value, path: string | readonly [number, string | symbol]) => {
@@ -41,7 +43,7 @@ export class IntrinsicNames {
     }
     for (const [name, value] of globals) visit(value, name)
     drain()
-    for (const [name, value] of Object.entries(builtins)) {
+    for (const [name, value] of [...Object.entries(builtins), ...internals]) {
       visit(value, `%${name}%`)
       drain()
     }

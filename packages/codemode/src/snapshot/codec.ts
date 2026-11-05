@@ -47,7 +47,6 @@ import { Machine } from "../machine/machine.js"
 import { consumers, EXIT } from "../machine/native-kind.js"
 import { HostCall, Resolving } from "../machine/scheduler.js"
 import { MachineTask } from "../machine/task.js"
-import { NEXT } from "../stdlib/array.js"
 import { TextDecoderObj } from "../stdlib/bytes.js"
 import { ToolError, toolError } from "../tool-error.js"
 import { ToolReference, ToolRuntimeError } from "../tool-runtime.js"
@@ -114,7 +113,6 @@ const symbols = new Map<string, symbol>([
   ["optionalShortCircuit", OptionalShortCircuit],
   ["slice", Slice],
   ["deleted", deleted],
-  ["next", NEXT],
   ["descend", DESCEND],
 ])
 const symbolNames = new Map([...symbols].map(([name, symbol]) => [symbol, name]))
@@ -288,7 +286,7 @@ const specs: ReadonlyArray<ClassSpec> = [
     ctor: Interpreter,
     anchor: "ctx",
     fields: ["logs", "templates", "globalScope", "modules", "namespaces"],
-    skip: ["tools", "builtins", "machine", "intrinsics", "extensionWork", "sources"],
+    skip: ["tools", "builtins", "machine", "intrinsics", "extensionWork", "sources", "prelude"],
   },
 ]
 

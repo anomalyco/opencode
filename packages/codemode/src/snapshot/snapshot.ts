@@ -1,7 +1,8 @@
 import packageJson from "../../package.json" with { type: "json" }
 import type { Interpreter } from "../interpreter/interpreter.js"
 import type { AstNode } from "../interpreter/model.js"
-import { Arr, Native, Obj, type Slot, type Value } from "../interpreter/objects.js"
+import { Arr, Fn, Native, Obj, type Slot, type Value } from "../interpreter/objects.js"
+import { preludeSource } from "../prelude/prelude.js"
 import type { Interruption } from "../interpreter/signals.js"
 import { nodeId, type Source } from "../interpreter/source.js"
 import { ToolReference, type ToolCall } from "../tool-runtime.js"
@@ -49,7 +50,7 @@ let build: string | undefined
 
 /** This build's id; a snapshot resumes only on the build that wrote it. */
 export const buildId = (bare: Bare): string =>
-  (build ??= `${packageJson.version}+${hash(`${FORMAT}\n${codecShape()}\n${bare.intrinsics.all().join("\n")}`)}`)
+  (build ??= `${packageJson.version}+${hash(`${FORMAT}\n${codecShape()}\n${hash(preludeSource().code)}\n${bare.intrinsics.all().join("\n")}`)}`)
 
 const hostsId = (ctx: Interpreter<unknown>): string =>
   hash(
@@ -82,6 +83,7 @@ export const capture = (
     [machine.root, "task"],
     [ctx, "ctx"],
     [ctx.globalScope, "globals"],
+    [ctx.prelude.scope, "prelude"],
   ])
   // A change to a built-in is saved even where no saved value refers to it (`Boolean.prototype.toString = ...`).
   const unchanged = new Map<Obj, boolean>()
@@ -120,7 +122,10 @@ export const capture = (
       build: buildId(options.bare),
       hosts: hostsId(ctx),
       runId: options.runId,
-      sources: sources.map((source) => ({ id: source.id, code: source.code, hash: hash(source.code) })),
+      // The prelude is named by the build id, never copied.
+      sources: sources
+        .filter((source) => source !== preludeSource())
+        .map((source) => ({ id: source.id, code: source.code, hash: hash(source.code) })),
       limits: options.limits,
       budget: { activeMs: options.activeMs, toolCalls: ctx.tools.calls.length },
       toolCalls: ctx.tools.calls.map((call) => ({ name: call.name })),
@@ -168,6 +173,7 @@ export const restore = (
     ["task", fresh.machine.root],
     ["ctx", fresh],
     ["globals", fresh.globalScope],
+    ["prelude", fresh.prelude.scope],
   ])
   decode(snapshot, {
     named: (name) => fresh.intrinsics.valueOf(name),
@@ -282,7 +288,7 @@ type Names = Interpreter<unknown>["intrinsics"]
 // values that are the same-named built-ins. Objects of other classes (an extension's Map, say) always count as changed.
 const sameObject = (value: Obj, original: Obj, names: Names, pristine: Names): boolean => {
   const ctor = value.constructor
-  if (ctor !== original.constructor || (ctor !== Obj && ctor !== Arr && ctor !== Native)) return false
+  if (ctor !== original.constructor || (ctor !== Obj && ctor !== Arr && ctor !== Native && ctor !== Fn)) return false
   if (value.extensible !== original.extensible) return false
   if (!sameValue(value.proto, original.proto, names, pristine)) return false
   if (value.props.size !== original.props.size) return false

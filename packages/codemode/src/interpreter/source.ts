@@ -55,3 +55,6 @@ const number = (root: AstNode, source: Source, nodes: Array<AstNode>): void => {
     for (let index = children.length - 1; index >= 0; index--) pending.push(children[index]!)
   }
 }
+
+/** Whether `node` is the prelude's: it is parsed without locations, so a failure there is located at the program's call. */
+export const inPrelude = (node: AstNode): boolean => node.loc === undefined || node.loc === null
