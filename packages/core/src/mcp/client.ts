@@ -3,6 +3,7 @@ export * as McpClient from "./client.js"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  createFetchWithInit,
   ProtocolError,
   SdkError,
   SdkErrorCode,
@@ -16,9 +17,9 @@ import {
   type ElicitRequestParams,
   type ElicitRequestURLParams,
   type ElicitResult,
+  type FetchLike,
   type GetPromptResult,
   type Implementation,
-  type OAuthClientProvider,
   type Prompt,
   type ReadResourceResult,
   type Resource,
@@ -30,6 +31,7 @@ import { Cause, Clock, Duration, Effect, Exit, PlatformError, Schedule, Schema }
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
+import type { Auth } from "./oauth.js"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -191,7 +193,7 @@ export interface ConnectOptions {
   /** Resolves a relative stdio `cwd` and is the default one, and is the root `roots/list` answers with. */
   readonly directory: string
   /** Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth. */
-  readonly authProvider?: OAuthClientProvider
+  readonly authProvider?: Auth
   readonly elicitation?: ElicitationHandler
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
@@ -340,6 +342,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
+    const auth = options.authProvider
+    const requestInit = config.headers ? { headers: config.headers } : undefined
+    const authFetch = createFetchWithInit(McpOAuth.withTimeout(fetch, McpOAuth.REFRESH_TIMEOUT_MS), requestInit)
+    const request = auth?.refresh
+      ? refreshFetch({ fetch, refresh: auth.refresh, endpoint: new URL(config.url), authFetch })
+      : fetch
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
@@ -347,9 +355,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     if (addedCodemode) url.searchParams.set("codemode", "false")
     const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
-        requestInit: config.headers ? { headers: config.headers } : undefined,
-        authProvider: options.authProvider,
-        fetch,
+        requestInit,
+        authProvider: auth?.provider,
+        fetch: request,
       })
       return yield* initialize(session.transport)
     })
@@ -571,6 +579,29 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     })
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
+
+// A per-request wrapper for remote MCP requests: refresh a stored OAuth credential before it expires,
+// then replace the bearer the transport already wrote in `_commonHeaders()`. OAuth token and discovery
+// requests have a different origin/path, so they bypass this wrapper and cannot recurse.
+function refreshFetch(input: {
+  readonly fetch: FetchLike
+  readonly refresh: NonNullable<Auth["refresh"]>
+  readonly endpoint: URL
+  readonly authFetch: FetchLike
+}): FetchLike {
+  return async (url, init) => {
+    const target = new URL(String(url))
+    if (target.origin !== input.endpoint.origin || target.pathname !== input.endpoint.pathname)
+      return input.fetch(url, init)
+    // terminateSession is capped at 1 s (TERMINATE_TIMEOUT); do not let a refresh delay teardown.
+    if (init?.method?.toUpperCase() === "DELETE") return input.fetch(url, init)
+    const token = await input.refresh(input.authFetch)
+    if (!token) return input.fetch(url, init)
+    const headers = new Headers(init?.headers)
+    headers.set("Authorization", `Bearer ${token}`)
+    return input.fetch(url, { ...init, headers })
+  }
+}
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.

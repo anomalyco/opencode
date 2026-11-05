@@ -1,12 +1,12 @@
 export * as McpConnection from "./connection.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import type { McpClient } from "./client.js"
+import type { Auth } from "./oauth.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
 
@@ -52,7 +52,7 @@ export interface Input {
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
   /** Read on every attempt, so a credential change applies to the next one. */
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<Auth | undefined>
   readonly elicitation: McpClient.ElicitationHandler
   /** A stdio server is spawned on this execution plane. */
   readonly environment: Environment.Interface

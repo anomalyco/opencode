@@ -1,6 +1,5 @@
 export * as McpPool from "./pool.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -12,6 +11,7 @@ import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
+import type { Auth } from "./oauth.js"
 
 export interface Input extends McpConnection.Input {
   /**
@@ -24,7 +24,7 @@ export interface Input extends McpConnection.Input {
 
 export interface Selection {
   readonly key: string
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<Auth | undefined>
 }
 
 export interface Interface {
@@ -88,7 +88,7 @@ function fingerprint(secret: string | Record<string, string> | undefined) {
 // A Location holding a shared connection. The pool reaches Locations only through the holders
 // registered right now, never through the one that opened the connection.
 interface Holder {
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<Auth | undefined>
   readonly elicitation: McpClient.ElicitationHandler["create"]
   readonly closed: (reason: string) => void
   readonly changed: (kind: McpConnection.Kind) => void

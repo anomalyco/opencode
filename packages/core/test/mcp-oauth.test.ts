@@ -1,11 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
+import { auth, InsufficientScopeError, refreshAuthorization } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Fiber, Logger, Scope, Semaphore } from "effect"
+import { Environment } from "@opencode/core/environment/index"
+import { FetchHttpClient } from "effect/http"
 import { hostEnvironmentLayer } from "./fixture/environment"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -15,8 +17,15 @@ const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
-
-const credential = (input: { access: string; refresh: string; expires?: number; url: string }) =>
+const credential = (input: {
+  access: string
+  refresh: string
+  expires?: number
+  url: string
+  scope?: string
+  issuer?: string
+  client?: Record<string, unknown>
+}) =>
   new Credential.Info({
     id: Credential.ID.make("cred_test"),
     integrationID,
@@ -27,17 +36,37 @@ const credential = (input: { access: string; refresh: string; expires?: number; 
       access: input.access,
       refresh: input.refresh,
       expires: input.expires ?? Date.now() - 1000,
-      metadata: { serverUrl: input.url, tokenType: "Bearer" },
+      metadata: {
+        serverUrl: input.url,
+        tokenType: "Bearer",
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(input.issuer ? { issuer: input.issuer } : {}),
+        ...(input.client ? { client: input.client } : {}),
+      },
     },
   })
 
 // Connect-time providers read and write the credential store; this one lives in memory so tests can
 // inspect the row the provider leaves behind.
-const memoryCredentials = (initial: Credential.Info[]) => {
+const memoryCredentials = (
+  initial: Credential.Info[],
+  options?: { beforeOperation?: () => void | Promise<void> },
+) => {
   const rows = new Map(initial.map((row) => [row.id, row]))
   const unused = () => Effect.die("unused credential method")
+  const lock = Semaphore.makeUnsafe(1)
+  let lockCalls = 0
+  const before = options?.beforeOperation
   const service = Credential.Service.of({
-    lock: unused,
+    lock: (_id, operation) =>
+      lock.withPermit(
+        Effect.sync(() => {
+          lockCalls++
+        }).pipe(
+          Effect.andThen(before ? Effect.promise(async () => before()) : Effect.void),
+          Effect.andThen(operation),
+        ),
+      ),
     all: unused,
     create: unused,
     activate: unused,
@@ -50,15 +79,33 @@ const memoryCredentials = (initial: Credential.Info[]) => {
       }),
     remove: (id) => Effect.sync(() => void rows.delete(id)),
   })
-  return { rows, service }
+  return { rows, service, lockCalls: () => lockCalls }
 }
 
-const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
-  Effect.runPromise(
-    McpOAuth.connectProvider({ config, credential: Array.from(store.rows.values()).at(-1) }).pipe(
-      Effect.provideService(Credential.Service, store.service),
-    ),
+const connectAuth = (
+  config: typeof ConfigMCP.Remote.Type,
+  store: ReturnType<typeof memoryCredentials>,
+  options?: { timeoutMs?: number; logs?: unknown[] },
+) => {
+  const effect = McpOAuth.connectProvider({
+    config,
+    credential: Array.from(store.rows.values()).at(-1),
+    ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  }).pipe(Effect.provideService(Credential.Service, store.service))
+  const logs = options?.logs
+  if (!logs) return Effect.runPromise(effect)
+  const logger = Logger.make(({ message }) => {
+    logs.push(message)
+  })
+  return Effect.runPromise(
+    effect.pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false }))),
   )
+}
+
+const connectProvider = async (
+  config: typeof ConfigMCP.Remote.Type,
+  store: ReturnType<typeof memoryCredentials>,
+) => (await connectAuth(config, store)).provider
 
 // Serves authorization server metadata with the given capabilities and records DCR + token requests.
 const authorizationServer = (metadata: Record<string, unknown>) => {
@@ -118,6 +165,142 @@ const authorize = (redirect_uri?: string) =>
       ),
     ),
   )
+
+type MockMcpRequest = {
+  readonly method: string
+  readonly authorization: string | null
+  readonly headers: Headers
+  readonly body: { readonly id?: string | number; readonly method?: string; readonly params?: { readonly name?: string } }
+}
+
+// A small Streamable HTTP MCP server plus its OAuth authorization/token endpoints. It accepts the
+// stale bearer with 200 so a missing proactive refresh cannot be masked by the SDK's 401 path.
+const mockMcpServer = () => {
+  const mcpRequests: MockMcpRequest[] = []
+  const tokenRequests: Array<{ readonly headers: Headers; readonly body: URLSearchParams }> = []
+  const authorizeRequests: string[] = []
+  const deleteRequests: Request[] = []
+  let mcpMode: "ok" | "401" | "403" = "ok"
+  let tokenMode: "ok" | "invalid_grant" | "never" = "ok"
+  let tokenDelayMs = 0
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url)
+      const origin = url.origin
+      if (url.pathname === "/as.json")
+        return Response.json({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          registration_endpoint: `${origin}/register`,
+          response_types_supported: ["code"],
+          grant_types_supported: ["authorization_code", "refresh_token"],
+          scopes_supported: ["read", "write", "offline_access"],
+          token_endpoint_auth_methods_supported: ["none"],
+        })
+      if (url.pathname === "/authorize") {
+        authorizeRequests.push(url.href)
+        return new Response(null, { status: 302, headers: { location: `${origin}/callback` } })
+      }
+      if (request.method === "POST" && url.pathname === "/token") {
+        tokenRequests.push({ headers: new Headers(request.headers), body: new URLSearchParams(await request.text()) })
+        if (tokenDelayMs) await Bun.sleep(tokenDelayMs)
+        if (tokenMode === "never") return new Promise<Response>(() => {})
+        if (tokenMode === "invalid_grant")
+          return Response.json({ error: "invalid_grant", error_description: "rejected" }, { status: 400 })
+        return Response.json({
+          access_token: "next-access",
+          token_type: "Bearer",
+          refresh_token: "next-refresh",
+          expires_in: 7200,
+        })
+      }
+      if (url.pathname === "/mcp" && request.method === "DELETE") {
+        deleteRequests.push(request)
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname === "/mcp" && request.method === "GET") return new Response(null, { status: 405 })
+      if (url.pathname === "/mcp" && request.method === "POST") {
+        const body = (await request.json()) as MockMcpRequest["body"]
+        mcpRequests.push({
+          method: request.method,
+          authorization: request.headers.get("authorization"),
+          headers: new Headers(request.headers),
+          body,
+        })
+        if (mcpMode === "401" && body.method === "initialize") {
+          mcpMode = "ok"
+          return new Response(null, { status: 401, headers: { "WWW-Authenticate": "Bearer" } })
+        }
+        if (mcpMode === "403" && body.method === "initialize") {
+          mcpMode = "ok"
+          return new Response(null, {
+            status: 403,
+            headers: { "WWW-Authenticate": 'Bearer error="insufficient_scope", scope="read write"' },
+          })
+        }
+        const result = (value: unknown) =>
+          Response.json(
+            { jsonrpc: "2.0", id: body.id, result: value },
+            { headers: { "Mcp-Session-Id": "session-test" } },
+          )
+        if (body.method === "initialize")
+          return result({
+            protocolVersion: "2025-06-18",
+            capabilities: { tools: {} },
+            serverInfo: { name: "mock", version: "1.0.0" },
+          })
+        if (body.method === "notifications/initialized") return new Response(null, { status: 202 })
+        if (body.method === "tools/list")
+          return result({ tools: [{ name: "echo", description: "Echo", inputSchema: { type: "object", properties: {} } }] })
+        if (body.method === "tools/call") return result({ content: [{ type: "text", text: "ok" }], isError: false })
+        return new Response(null, { status: 404 })
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+  return {
+    server,
+    mcpRequests,
+    tokenRequests,
+    authorizeRequests,
+    deleteRequests,
+    setMcpMode: (mode: typeof mcpMode) => {
+      mcpMode = mode
+    },
+    setTokenMode: (mode: typeof tokenMode) => {
+      tokenMode = mode
+    },
+    setTokenDelay: (ms: number) => {
+      tokenDelayMs = ms
+    },
+  }
+}
+
+const withConnection = <A, E>(
+  config: typeof ConfigMCP.Remote.Type,
+  authValue: McpOAuth.Auth | undefined,
+  run: (connection: McpClient.Connection) => Effect.Effect<A, E>,
+  options?: { fetch?: typeof fetch },
+) => {
+  const effect = Effect.scoped(
+    Effect.gen(function* () {
+      const connection = yield* McpClient.connect({
+        server: "test",
+        config,
+        directory: import.meta.dir,
+        authProvider: authValue,
+      })
+      return yield* run(connection)
+    }),
+  )
+  const withFetch = options?.fetch ? effect.pipe(Effect.provideService(FetchHttpClient.Fetch, options.fetch)) : effect
+  return Effect.runPromise(withFetch.pipe(Effect.provide(hostEnvironmentLayer)))
+}
+
+const exitOf = <A, E>(effect: Effect.Effect<A, E, Scope.Scope | Environment.Service>) =>
+  Effect.runPromise(Effect.scoped(Effect.exit(effect)).pipe(Effect.provide(hostEnvironmentLayer)))
 
 describe("MCP OAuth", () => {
   test("completes interactive authorization through the loopback callback", async () => {
@@ -310,7 +493,7 @@ describe("MCP OAuth", () => {
       id: Credential.ID.make("cred_newer"),
     })
     const store = memoryCredentials([selected, newer])
-    const oauthProvider = await Effect.runPromise(
+    const { provider: oauthProvider } = await Effect.runPromise(
       McpOAuth.connectProvider({ config: remote(server.url.href), credential: selected }).pipe(
         Effect.provideService(Credential.Service, store.service),
       ),
@@ -328,7 +511,7 @@ describe("MCP OAuth", () => {
 
   test("stays anonymous when made without a credential, even after one is signed in", async () => {
     const store = memoryCredentials([])
-    const oauthProvider = await Effect.runPromise(
+    const { provider: oauthProvider } = await Effect.runPromise(
       McpOAuth.connectProvider({ config: remote(authServer.url.href), credential: undefined }).pipe(
         Effect.provideService(Credential.Service, store.service),
       ),
@@ -352,11 +535,11 @@ describe("MCP OAuth", () => {
       },
     })
     const config = new ConfigMCP.Remote({ type: "remote", url: `${server.url.origin}/mcp` })
-    const oauthProvider = await connectProvider(config, memoryCredentials([]))
+    const authValue = await connectAuth(config, memoryCredentials([]))
 
     const exit = await Effect.runPromise(
       Effect.scoped(
-        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: oauthProvider }),
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: authValue }),
       ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
     ).finally(() => server.stop(true))
 
@@ -368,7 +551,7 @@ describe("MCP OAuth", () => {
     expect(registrations).toBe(0)
   })
 
-  test("drops an invalidated credential only while it still holds the presented token", async () => {
+  test("invalidates only the presented credential and keeps the row", async () => {
     const url = authServer.url.href
     const rotated = memoryCredentials([credential({ access: "a", refresh: "r1", url })])
     const rotatedProvider = await connectProvider(remote(url), rotated)
@@ -381,12 +564,28 @@ describe("MCP OAuth", () => {
     )
     await rotatedProvider.invalidateCredentials?.("tokens")
     expect(rotated.rows.size).toBe(1)
+    expect((rotated.rows.get(Credential.ID.make("cred_test"))?.value as Credential.OAuth).refresh).toBe("r2")
 
-    const stale = memoryCredentials([credential({ access: "a", refresh: "r1", url })])
-    const staleProvider = await connectProvider(remote(url), stale)
+    const current = memoryCredentials([credential({ access: "a", refresh: "r1", url })])
+    const currentProvider = await connectProvider(remote(url), current)
+    await currentProvider.tokens()
+    await currentProvider.invalidateCredentials?.("tokens")
+    expect(current.rows.size).toBe(1)
+    expect((current.rows.get(Credential.ID.make("cred_test"))?.value as Credential.OAuth).refresh).toBe("r1")
+    expect((await currentProvider.tokens())?.refresh_token).toBeUndefined()
+
+    // The raw 401-path save must not overwrite a newer row after a tokens() read.
+    const staleSave = memoryCredentials([credential({ access: "a", refresh: "r1", url })])
+    const staleProvider = await connectProvider(remote(url), staleSave)
     await staleProvider.tokens()
-    await staleProvider.invalidateCredentials?.("tokens")
-    expect(stale.rows.size).toBe(0)
+    await Effect.runPromise(
+      staleSave.service.update(Credential.ID.make("cred_test"), {
+        value: credential({ access: "b", refresh: "r2", url }).value,
+      }),
+    )
+    await staleProvider.saveTokens({ access_token: "stale", token_type: "Bearer", refresh_token: "r1" })
+    expect((staleSave.rows.get(Credential.ID.make("cred_test"))?.value as Credential.OAuth).refresh).toBe("r2")
+    expect(staleSave.rows.size).toBe(1)
   })
 
   test("shares concurrent refreshes for the same token", async () => {
@@ -675,5 +874,529 @@ describe("MCP OAuth", () => {
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
     })
+  })
+
+  test("refreshes an expired stored credential before the MCP initialize request", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      headers: { "X-LDMC-Test": "keep" },
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() - 1_000,
+        url: config.url,
+        scope: "read",
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    try {
+      await withConnection(config, authValue, (connection) => connection.tools())
+    } finally {
+      mock.server.stop(true)
+    }
+
+    expect(mock.tokenRequests).toHaveLength(1)
+    expect(mock.tokenRequests[0]?.body.get("grant_type")).toBe("refresh_token")
+    expect(mock.tokenRequests[0]?.body.get("client_id")).toBe("stored-client")
+    expect(mock.tokenRequests[0]?.headers.get("x-ldmc-test")).toBe("keep")
+    expect(mock.tokenRequests[0]?.headers.get("authorization")).toBeNull()
+    expect(mock.mcpRequests.find((entry) => entry.body.method === "initialize")?.authorization).toBe(
+      "Bearer next-access",
+    )
+    expect(mock.authorizeRequests).toHaveLength(0)
+    const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+    expect(row?.type === "oauth" && row.access).toBe("next-access")
+  })
+
+  test("does not refresh a non-expiring credential", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "keep-access",
+        refresh: "r1",
+        expires: 0,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    try {
+      await withConnection(config, authValue, (connection) => connection.tools())
+    } finally {
+      mock.server.stop(true)
+    }
+    expect(mock.tokenRequests).toHaveLength(0)
+    expect(mock.mcpRequests.find((entry) => entry.body.method === "initialize")?.authorization).toBe("Bearer keep-access")
+  })
+
+  test("refreshes after a 401 from the MCP server and retries", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    mock.setMcpMode("401")
+    try {
+      await withConnection(config, authValue, (connection) => connection.tools())
+    } finally {
+      mock.server.stop(true)
+    }
+    expect(mock.tokenRequests).toHaveLength(1)
+    expect(mock.tokenRequests[0]?.headers.get("authorization")).toBeNull()
+    const initializes = mock.mcpRequests.filter((entry) => entry.body.method === "initialize")
+    expect(initializes.map((entry) => entry.authorization)).toEqual(["Bearer old-access", "Bearer next-access"])
+  })
+
+  test("shares one proactive refresh across concurrent MCP requests", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    mock.setTokenDelay(50)
+    try {
+      const results = await withConnection(config, authValue, (connection) =>
+        Effect.gen(function* () {
+          const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+          if (row?.type === "oauth")
+            yield* store.service.update(Credential.ID.make("cred_test"), {
+              value: { ...row, expires: Date.now() + 1_000 },
+            })
+          return yield* Effect.all(
+            [connection.callTool({ name: "echo", args: {} }), connection.callTool({ name: "echo", args: {} })],
+            { concurrency: "unbounded" },
+          )
+        }),
+      )
+      expect(results).toHaveLength(2)
+      expect(mock.tokenRequests).toHaveLength(1)
+      expect(store.lockCalls()).toBe(2)
+      const calls = mock.mcpRequests.filter((entry) => entry.body.method === "tools/call")
+      expect(calls.every((entry) => entry.authorization === "Bearer next-access")).toBe(true)
+    } finally {
+      mock.server.stop(true)
+    }
+  })
+
+  test("keeps the credential when a proactive refresh is rejected", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    mock.setTokenMode("invalid_grant")
+    try {
+      const exit = await withConnection(config, authValue, (connection) =>
+        Effect.gen(function* () {
+          const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+          if (row?.type === "oauth")
+            yield* store.service.update(Credential.ID.make("cred_test"), {
+              value: { ...row, expires: Date.now() + 1_000 },
+            })
+          return yield* Effect.exit(connection.callTool({ name: "echo", args: {} }))
+        }),
+      )
+      const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(Error)
+      expect(error instanceof Error && error.message).toContain("requires user authorization")
+      expect(mock.tokenRequests).toHaveLength(1)
+      expect(mock.authorizeRequests).toHaveLength(0)
+      const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+      expect(row?.type === "oauth" && row.refresh).toBe("r1")
+      expect((await authValue.provider.tokens())?.refresh_token).toBeUndefined()
+
+      // A fresh provider from the same row retries the rejected token through the SDK's 401 path.
+      mock.setMcpMode("401")
+      mock.setTokenMode("invalid_grant")
+      const next = await connectAuth(config, store)
+      const nextExit = await exitOf(
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: next }),
+      )
+      const nextError = Exit.isFailure(nextExit) && Cause.squash(nextExit.cause)
+      expect(nextError).toBeInstanceOf(McpClient.NeedsAuthError)
+      expect(store.rows.size).toBe(1)
+    } finally {
+      mock.server.stop(true)
+    }
+  })
+
+  test("bounds a hung proactive refresh and keeps the row", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store, { timeoutMs: 75 })
+    mock.setTokenMode("never")
+    const started = Date.now()
+    try {
+      const exit = await withConnection(config, authValue, (connection) =>
+        Effect.gen(function* () {
+          const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+          if (row?.type === "oauth")
+            yield* store.service.update(Credential.ID.make("cred_test"), {
+              value: { ...row, expires: Date.now() + 1_000 },
+            })
+          return yield* Effect.exit(connection.callTool({ name: "echo", args: {} }))
+        }),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(Date.now() - started).toBeLessThan(2_000)
+      const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+      expect(row?.type === "oauth" && row.refresh).toBe("r1")
+    } finally {
+      mock.server.stop(true)
+    }
+  })
+
+  test("writes a late refresh only while the row still holds the attempt's token", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const logs: unknown[] = []
+    const authValue = await connectAuth(config, store, { timeoutMs: 75, logs })
+    const started = Promise.withResolvers<void>()
+    let release: (() => void) | undefined
+    const delayed = new Promise<Response>((resolve) => {
+      release = () =>
+        resolve(
+          Response.json({
+            access_token: "late-access",
+            token_type: "Bearer",
+            refresh_token: "next-refresh",
+            expires_in: 7200,
+          }),
+        )
+    })
+    const customFetch = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        if (new URL(String(input)).pathname === "/token") {
+          started.resolve()
+          return delayed
+        }
+        return fetch(input, init)
+      },
+      { preconnect: fetch.preconnect },
+    )
+    try {
+      const exit = await withConnection(
+        config,
+        authValue,
+        (connection): Effect.Effect<Credential.Value | undefined> =>
+          Effect.gen(function* () {
+            const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+            if (row?.type === "oauth")
+              yield* store.service.update(Credential.ID.make("cred_test"), {
+                value: { ...row, expires: Date.now() + 1_000 },
+              })
+            const fiber = yield* Effect.forkChild(Effect.exit(connection.callTool({ name: "echo", args: {} })))
+            yield* Effect.promise(() => started.promise)
+            const newer = store.rows.get(Credential.ID.make("cred_test"))?.value
+            if (newer?.type === "oauth")
+              yield* store.service.update(Credential.ID.make("cred_test"), {
+                value: { ...newer, access: "row2-access", refresh: "r2" },
+              })
+            yield* Effect.promise(async () => authValue.provider.tokens())
+            release?.()
+            yield* Fiber.join(fiber)
+            yield* Effect.promise(() => Bun.sleep(50))
+            return store.rows.get(Credential.ID.make("cred_test"))?.value
+          }),
+        { fetch: customFetch },
+      )
+      expect(exit?.type === "oauth" && exit.refresh).toBe("r2")
+      expect(exit?.type === "oauth" && exit.access).toBe("row2-access")
+      expect(logs.some((entry) => JSON.stringify(entry).includes("mcp oauth stale token save skipped"))).toBe(true)
+    } finally {
+      mock.server.stop(true)
+    }
+  })
+
+  test("preserves a custom Authorization header for a non-OAuth remote server", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: false,
+      headers: { Authorization: "Bearer custom" },
+    })
+    try {
+      await withConnection(config, undefined, (connection) => connection.tools())
+    } finally {
+      mock.server.stop(true)
+    }
+    expect(mock.mcpRequests.find((entry) => entry.body.method === "initialize")?.authorization).toBe("Bearer custom")
+    expect(mock.tokenRequests).toHaveLength(0)
+  })
+
+  test("reports needs_auth on a 403 insufficient_scope without a redirect", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        scope: "read",
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    mock.setMcpMode("403")
+    try {
+      const exit = await exitOf(
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: authValue }),
+      )
+      const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(McpClient.NeedsAuthError)
+      expect(error).not.toBeInstanceOf(InsufficientScopeError)
+      expect(mock.authorizeRequests).toHaveLength(0)
+    } finally {
+      mock.server.stop(true)
+    }
+  })
+
+  test("ends in needs_auth when a near-expiry credential has no refresh token", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const noRefresh = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "",
+        expires: Date.now() - 1_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, noRefresh)
+    try {
+      const exit = await exitOf(
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: authValue }),
+      )
+      const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(McpClient.NeedsAuthError)
+      expect(mock.mcpRequests).toHaveLength(0)
+      expect(noRefresh.rows.size).toBe(1)
+    } finally {
+      mock.server.stop(true)
+    }
+
+    const lostMock = mockMcpServer()
+    const lostOrigin = lostMock.server.url.origin
+    const lostConfig = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${lostOrigin}/mcp`,
+      oauth: { auth_server_metadata_url: `${lostOrigin}/as.json` },
+    })
+    const id = Credential.ID.make("cred_test")
+    let lostRows: ReturnType<typeof memoryCredentials>["rows"] | undefined
+    const lost = memoryCredentials(
+      [
+        credential({
+          access: "old-access",
+          refresh: "r1",
+          expires: Date.now() - 1_000,
+          url: lostConfig.url,
+          client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+        }),
+      ],
+      {
+        beforeOperation: () => {
+          const row = lostRows?.get(id)
+          if (row?.value.type === "oauth")
+            lostRows?.set(id, new Credential.Info({ ...row, value: { ...row.value, refresh: "" } }))
+        },
+      },
+    )
+    lostRows = lost.rows
+    const lostAuth = await connectAuth(lostConfig, lost)
+    try {
+      const exit = await exitOf(
+        McpClient.connect({ server: "test", config: lostConfig, directory: import.meta.dir, authProvider: lostAuth }),
+      )
+      const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(McpClient.NeedsAuthError)
+      expect(lostMock.mcpRequests).toHaveLength(0)
+      expect(lost.rows.size).toBe(1)
+    } finally {
+      lostMock.server.stop(true)
+    }
+  })
+
+  test("skips the proactive refresh on DELETE teardown", async () => {
+    const mock = mockMcpServer()
+    const origin = mock.server.url.origin
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      url: `${origin}/mcp`,
+      oauth: { auth_server_metadata_url: `${origin}/as.json` },
+    })
+    const store = memoryCredentials([
+      credential({
+        access: "old-access",
+        refresh: "r1",
+        expires: Date.now() + 3_600_000,
+        url: config.url,
+        client: { client_id: "stored-client", token_endpoint_auth_method: "none" },
+      }),
+    ])
+    const authValue = await connectAuth(config, store)
+    try {
+      await withConnection(config, authValue, (connection) =>
+        Effect.gen(function* () {
+          const tools = yield* connection.tools()
+          const row = store.rows.get(Credential.ID.make("cred_test"))?.value
+          if (row?.type === "oauth")
+            yield* store.service.update(Credential.ID.make("cred_test"), {
+              value: { ...row, expires: Date.now() + 1_000 },
+            })
+          return tools
+        }),
+      )
+      await Bun.sleep(20)
+      expect(mock.deleteRequests).toHaveLength(1)
+      expect(mock.tokenRequests).toHaveLength(0)
+    } finally {
+      mock.server.stop(true)
+    }
+  })
+
+  test("drops only client metadata and respects the presented-token guard", async () => {
+    const url = authServer.url.href
+    const id = Credential.ID.make("cred_test")
+    const store = memoryCredentials([credential({ access: "a", refresh: "r1", url, client: { client_id: "c1" } })])
+    const authValue = await connectAuth(remote(url), store)
+    await authValue.provider.tokens()
+    await authValue.provider.invalidateCredentials?.("client")
+    const cleared = store.rows.get(id)?.value
+    expect(cleared?.type === "oauth" && cleared.metadata?.client).toBeUndefined()
+    expect(cleared?.type === "oauth" && cleared.access).toBe("a")
+    expect(cleared?.type === "oauth" && cleared.refresh).toBe("r1")
+
+    const guardStore = memoryCredentials([credential({ access: "a", refresh: "r1", url, client: { client_id: "c1" } })])
+    const guard = await connectAuth(remote(url), guardStore)
+    await guard.provider.tokens()
+    await Effect.runPromise(
+      guardStore.service.update(id, {
+        value: credential({ access: "b", refresh: "r2", url, client: { client_id: "c2" } }).value,
+      }),
+    )
+    await guard.provider.invalidateCredentials?.("client")
+    const stale = guardStore.rows.get(id)?.value
+    expect(stale?.type === "oauth" && stale.metadata?.client).toEqual({ client_id: "c2" })
+
+    await guard.provider.tokens()
+    await guard.provider.invalidateCredentials?.("client")
+    const refreshed = guardStore.rows.get(id)?.value
+    expect(refreshed?.type === "oauth" && refreshed.metadata?.client).toBeUndefined()
+    expect(refreshed?.type === "oauth" && refreshed.refresh).toBe("r2")
+  })
+
+  test("aborts a fetch at the timeout with and without a caller signal", async () => {
+    const signals: AbortSignal[] = []
+    const fetchFn = async (_url: string | URL, init?: RequestInit) => {
+      if (init?.signal) signals.push(init.signal)
+      return new Response("ok")
+    }
+    const timed = McpOAuth.withTimeout(fetchFn, 10)
+    await timed("http://example.test/one", {})
+    const controller = new AbortController()
+    await timed("http://example.test/two", { signal: controller.signal })
+    expect(signals).toHaveLength(2)
+    expect(signals[0]).toBeInstanceOf(AbortSignal)
+    expect(signals[1]).toBeInstanceOf(AbortSignal)
+    controller.abort()
+    expect(signals[1]?.aborted).toBe(true)
+    await new Promise<void>((resolve) => {
+      const signal = signals[0]
+      if (!signal || signal.aborted) return resolve()
+      signal.addEventListener("abort", () => resolve(), { once: true })
+    })
+    expect(signals[0]?.aborted).toBe(true)
   })
 })
