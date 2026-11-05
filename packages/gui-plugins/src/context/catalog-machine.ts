@@ -62,7 +62,7 @@ export function transitionCatalog<Data>(
 ): CatalogTransition<Data> {
   if (state.status === "disposed") return { state, effects: [] }
 
-  if (event.type === "disposed") return { state: { status: "disposed" }, effects: cancel(state.phase) }
+  if (event.type === "disposed") return { state: { status: "disposed" }, effects: cancel<Data>(state.phase) }
 
   if (event.type === "input.changed") return inputChanged(state, event.active, event.target)
 
@@ -110,12 +110,12 @@ function inputChanged<Data>(
   if (!target) {
     if (state.active === active && !state.target) return { state, effects: [] }
 
-    return { state: { ...state, active, target: undefined, phase: { kind: "idle" } }, effects: cancel(state.phase) }
+    return { state: { ...state, active, target: undefined, phase: { kind: "idle" } }, effects: cancel<Data>(state.phase) }
   }
 
   // Another session of the same directory on the same server keeps the catalog it loaded.
   if (!state.target || state.target.data !== target.data || state.target.directory !== target.directory) {
-    const effects = cancel(state.phase)
+    const effects = cancel<Data>(state.phase)
 
     if (!active) return { state: { ...state, active, target, phase: { kind: "idle" } }, effects }
     const next = load({ ...state, active, target }, target)
@@ -128,7 +128,7 @@ function inputChanged<Data>(
   }
 
   if (!active && state.phase.kind === "retrying") {
-    return { state: { ...state, active, phase: { kind: "failed" } }, effects: cancel(state.phase) }
+    return { state: { ...state, active, phase: { kind: "failed" } }, effects: cancel<Data>(state.phase) }
   }
 
   if (state.active === active) return { state, effects: [] }
