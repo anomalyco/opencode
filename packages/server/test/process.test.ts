@@ -1,8 +1,43 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
+import { get } from "node:http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
+
+it.live("flushes SSE headers before waiting for the first event", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>(
+      {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        database: { path: ":memory:" },
+      },
+      undefined,
+      () => Effect.succeed(HttpServerResponse.stream(Stream.never, { contentType: "text/event-stream" })),
+    )
+    yield* Effect.callback<void>((resume) => {
+      const request = get(
+        new URL("/api/event", HttpServer.formatAddress(server.address)),
+        { signal: AbortSignal.timeout(2_000) },
+        (response) => {
+          response.destroy()
+          resume(
+            Effect.sync(() => {
+              expect(response.statusCode).toBe(200)
+              expect(response.headers["content-type"]).toContain("text/event-stream")
+            }),
+          )
+        },
+      )
+      request.on("error", (error) => resume(Effect.die(error)))
+      return Effect.sync(() => {
+        request.destroy()
+      })
+    })
+  }),
+)
 
 it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
   Effect.gen(function* () {
