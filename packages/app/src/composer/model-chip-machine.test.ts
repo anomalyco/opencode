@@ -9,7 +9,7 @@ import {
   type ModelChipState,
 } from "./model-chip-machine"
 
-const click = (detail = 1, loading = true): ModelChipEvent => ({
+const click = (detail = 1, loading = true): Extract<ModelChipEvent, { type: "clicked" }> => ({
   type: "clicked",
   detail,
   loading,

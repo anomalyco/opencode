@@ -23,7 +23,7 @@ const other: LocationEntry = { id: "other", type: "other" }
 
 const query = (value: string): LocationDialogEvent => ({ type: "query.changed", query: value })
 
-const openProject = (active: string | undefined): LocationDialogEvent => ({
+const openProject = (active: string | undefined): Extract<LocationDialogEvent, { type: "chosen" }> => ({
   type: "chosen",
   entry: add,
   active,
