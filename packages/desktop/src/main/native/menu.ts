@@ -1,5 +1,5 @@
-import { Menu } from "electron"
-import type { BrowserWindow, MenuItemConstructorOptions } from "electron"
+import { BrowserWindow, Menu } from "electron"
+import type { MenuItemConstructorOptions } from "electron"
 import {
   DESKTOP_MENU,
   desktopMenuKey,
@@ -13,12 +13,18 @@ import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
 import { runDesktopMenuAction } from "./menu-actions"
-import { createMenuState, transitionMenu, type MenuEvent, type MenubarProvider } from "./menu-machine"
+import {
+  createMenuState,
+  selectMenuActionWindow,
+  transitionMenu,
+  type MenuEvent,
+  type MenubarProvider,
+} from "./menu-machine"
 import { nativeT } from "./translations"
 
 type Deps = {
-  /** The window a menu command or action applies to. */
-  targetWindow: () => BrowserWindow | null
+  /** The window a menu command goes to; the renderer decides what it does there. */
+  commandWindow: () => BrowserWindow | null
   installCli: () => void
   createWindow: () => void
   openExternal: (url: string) => void
@@ -140,7 +146,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
     const command = entry.command
 
     item.click = () => {
-      const win = deps.targetWindow()
+      const win = deps.commandWindow()
 
       if (win) sendMenuCommand(win, command)
     }
@@ -148,12 +154,15 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
 
   if (entry.action) {
     const action = entry.action
-    item.click = () =>
-      runDesktopMenuAction(deps.targetWindow(), action, {
+    item.click = () => {
+      const win = selectMenuActionWindow(BrowserWindow.getFocusedWindow(), BrowserWindow.getAllWindows())
+
+      runDesktopMenuAction(win, action, {
         installCli: deps.installCli,
         createWindow: deps.createWindow,
         relaunch: deps.relaunch,
       })
+    }
   }
 
   if (entry.href) {

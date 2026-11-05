@@ -46,6 +46,28 @@ export function transitionMenu<Deps>(state: MenuState<Deps>, event: MenuEvent<De
   return { state: { status: "uninstalled", provider: state.provider }, commands: [] }
 }
 
+/** What a menu action reads of a window to pick it. */
+export type MenuActionCandidate = {
+  isDestroyed(): boolean
+  isVisible(): boolean
+  isMinimized(): boolean
+  readonly webContents: { isDevToolsFocused(): boolean }
+}
+
+/**
+ * The window a menu action (Close Window, Reload, Paste) applies to: the focused one, else the visible window whose
+ * detached DevTools hold focus. With neither the action does nothing, so it never reaches a window the user cannot see.
+ */
+export function selectMenuActionWindow<W extends MenuActionCandidate>(focused: W | null, windows: readonly W[]) {
+  if (focused) return focused
+
+  return (
+    windows.find(
+      (win) => !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.webContents.isDevToolsFocused(),
+    ) ?? null
+  )
+}
+
 function build<Deps>(state: Extract<MenuState<Deps>, { status: "installed" }>): MenuTransition<Deps> {
   return { state, commands: [{ type: "build", deps: state.deps, provider: state.provider }] }
 }

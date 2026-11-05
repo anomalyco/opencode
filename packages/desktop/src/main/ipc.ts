@@ -47,7 +47,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const runFork = Effect.runForkWith(yield* Effect.context())
 
   const menu = {
-    targetWindow: getLastFocusedWindow,
+    commandWindow: getLastFocusedWindow,
     installCli: () => runFork(showCliInstaller(desktopCli)),
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),

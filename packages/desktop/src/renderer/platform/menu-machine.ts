@@ -1,12 +1,14 @@
 export type MenuCommandHandler = (id: string) => void
 
 /**
- * Where native menu commands go. Until the app interface mounts, and after it unmounted, they wait in `queued`; the
- * interface's command context runs them once it binds.
+ * Where native menu commands go. Before the app interface first mounts they wait in `queued`, and its command context
+ * runs them once it binds. After it unmounted (the error boundary tripped), they are dropped: a later remount must not
+ * replay what the user pressed on the error screen.
  */
 export type MenuRouterState =
-  | { readonly status: "unbound"; readonly queued: readonly string[] }
+  | { readonly status: "starting"; readonly queued: readonly string[] }
   | { readonly status: "bound"; readonly handler: MenuCommandHandler }
+  | { readonly status: "unbound" }
 
 export type MenuRouterEvent =
   | { readonly type: "command.received"; readonly id: string }
@@ -26,20 +28,22 @@ export type MenuRouterTransition = {
 }
 
 export function createMenuRouterState(): MenuRouterState {
-  return { status: "unbound", queued: [] }
+  return { status: "starting", queued: [] }
 }
 
 export function transitionMenuRouter(state: MenuRouterState, event: MenuRouterEvent): MenuRouterTransition {
   if (event.type === "command.received") {
-    if (state.status === "unbound")
-      return { state: { status: "unbound", queued: [...state.queued, event.id] }, commands: [] }
+    if (state.status === "starting")
+      return { state: { status: "starting", queued: [...state.queued, event.id] }, commands: [] }
+
+    if (state.status === "unbound") return { state, commands: [] }
 
     return { state, commands: [{ type: "trigger", handler: state.handler, ids: [event.id] }] }
   }
 
   if (event.type === "bound") {
     if (state.status === "bound" && state.handler === event.handler) return { state, commands: [] }
-    const queued = state.status === "unbound" ? state.queued : []
+    const queued = state.status === "starting" ? state.queued : []
 
     return {
       state: { status: "bound", handler: event.handler },
@@ -49,5 +53,5 @@ export function transitionMenuRouter(state: MenuRouterState, event: MenuRouterEv
 
   if (state.status !== "bound" || state.handler !== event.handler) return { state, commands: [] }
 
-  return { state: createMenuRouterState(), commands: [] }
+  return { state: { status: "unbound" }, commands: [] }
 }

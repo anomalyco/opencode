@@ -39,12 +39,32 @@ describe("renderer menu command routing", () => {
       replay([
         { type: "bound", handler: first },
         { type: "unbound", handler: first },
-        { type: "command.received", id: "tab.new" },
+        { type: "command.received", id: "settings.open" },
         { type: "bound", handler: second },
         { type: "unbound", handler: first },
-        { type: "command.received", id: "settings.open" },
+        { type: "command.received", id: "tab.new" },
       ]).triggered,
-    ).toEqual(["second tab.new", "second settings.open"])
+    ).toEqual(["second tab.new"])
+  })
+
+  test("commands pressed after the interface unmounted are dropped, not replayed on the next mount", () => {
+    const unmounted = replay([
+      { type: "bound", handler: first },
+      { type: "unbound", handler: first },
+    ]).state
+
+    // Pressing New Session three times on the error screen must not open three sessions after a retry.
+    expect(
+      replay(
+        [
+          { type: "command.received", id: "tab.new" },
+          { type: "command.received", id: "tab.new" },
+          { type: "command.received", id: "tab.new" },
+          { type: "bound", handler: second },
+        ],
+        unmounted,
+      ),
+    ).toEqual({ state: { status: "bound", handler: second }, triggered: [] })
   })
 
   test("binding the same handler again changes nothing", () => {

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createMenuState, transitionMenu, type MenuEvent, type MenuState, type MenubarProvider } from "./menu-machine"
+import {
+  createMenuState,
+  selectMenuActionWindow,
+  transitionMenu,
+  type MenuEvent,
+  type MenuState,
+  type MenubarProvider,
+} from "./menu-machine"
 
 const deps = { name: "deps" }
 
@@ -42,6 +49,34 @@ describe("native menu install", () => {
         installed.state,
       ).builds,
     ).toEqual([1, 1, 1])
+  })
+
+  test.each([
+    { name: "detached DevTools hold focus", devTools: true, minimized: false, hidden: false, target: true },
+    { name: "its window minimized", devTools: false, minimized: true, hidden: false, target: false },
+    { name: "the DevTools' window is minimized", devTools: true, minimized: true, hidden: false, target: false },
+    { name: "the DevTools' window is hidden", devTools: true, minimized: false, hidden: true, target: false },
+  ])("with no focused window and $name, a menu action reaches a window: $target", (row) => {
+    const win = {
+      isDestroyed: () => false,
+      isVisible: () => !row.hidden,
+      isMinimized: () => row.minimized,
+      webContents: { isDevToolsFocused: () => row.devTools },
+    }
+
+    // Close Window, Reload and Paste never act on a window the user cannot see; on dev they did nothing then too.
+    expect(selectMenuActionWindow(null, [win])).toBe(row.target ? win : null)
+  })
+
+  test("a menu action reaches the focused window", () => {
+    const focused = {
+      isDestroyed: () => false,
+      isVisible: () => true,
+      isMinimized: () => false,
+      webContents: { isDevToolsFocused: () => false },
+    }
+
+    expect(selectMenuActionWindow(focused, [])).toBe(focused)
   })
 
   test("a disposed menu keeps its contributions but no longer rebuilds", () => {
