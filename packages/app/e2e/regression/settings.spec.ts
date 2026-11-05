@@ -619,6 +619,30 @@ test("project list menus rename, edit, add, and stay inside the scrollport", asy
   await expect(page.locator('[data-component="home-project-row"]').filter({ hasText: "dinocms" })).toBeVisible()
 })
 
+test("a project rename that hangs keeps its field focused, and Escape cancels it without leaving settings", async ({
+  page,
+}) => {
+  const { settings } = await open(page)
+  const hold = await holdRoute(page, (url) => url.pathname === `/api/project/${projectID}`, { method: "PATCH" })
+  await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  const card = settings.getByRole("listitem").filter({ hasText: "Settings demo" })
+  await card.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menu").getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const rename = settings.getByRole("textbox", { name: "Rename", exact: true })
+  await expect(rename).toBeFocused()
+  await rename.fill("Renamed demo")
+  await rename.press("Enter")
+  await hold.arrived
+
+  await expect(rename).toHaveAttribute("aria-busy", "true")
+  await expect(rename).toHaveAttribute("readonly", "")
+  await expect(rename).toBeFocused()
+  await rename.press("Escape")
+  await expect(card.getByRole("button", { name: "Settings demo", exact: true })).toBeFocused()
+  await expect(settings).toBeVisible()
+  hold.release()
+})
+
 test("project settings open as a nested view that keeps its route", async ({ page }) => {
   const { settings } = await open(page)
   await openProject(page)
@@ -820,6 +844,22 @@ for (const own of [false, true]) {
   })
 }
 
+test("typing in the shortcut search while recording filters instead of binding the key", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  const binding = settings.locator('[data-keybind-id="tab.new"]')
+  const shortcut = (await binding.textContent()) ?? ""
+  await binding.click()
+  await expect(binding).toHaveText("Press keys")
+
+  const search = settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
+  await search.click()
+  await expect(binding).toHaveText(shortcut)
+  await page.keyboard.type("new tab")
+  await expect(search).toHaveValue("new tab")
+  await expect(binding).toHaveText(shortcut)
+})
+
 test("the new session shortcut waits for a shortcut recording, then leaves settings", async ({ page }) => {
   const { settings } = await open(page)
   await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
@@ -1001,6 +1041,20 @@ test.describe("pages open before slow data", () => {
       await expect(website).toBeFocused()
     })
   }
+})
+
+test("the version's Copied tooltip closes when another settings page opens", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  const { settings } = await open(page)
+  await page.route(contributors, (route) => route.abort("failed"))
+  await settings.getByRole("tab", { name: "About", exact: true }).click()
+  await settings.getByRole("button", { name: "Copy", exact: true }).click()
+  const tooltip = page.getByRole("tooltip")
+  await expect(tooltip).toHaveText("Copied")
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Version /)
+
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  await expect(tooltip).toBeHidden()
 })
 
 test("worktrees follow inventory events, wait for session counts, and delete by project", async ({ page }) => {

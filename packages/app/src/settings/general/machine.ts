@@ -1,6 +1,7 @@
 export const SETTING_WRITE_TIMEOUT_MS = 15_000
 
-export type SettingWriteFailure = { readonly kind: "failed"; readonly error: unknown } | { readonly kind: "timeout" }
+/** `message` is empty when the error carried none. */
+export type SettingWriteFailure = { readonly kind: "failed"; readonly message: string } | { readonly kind: "timeout" }
 
 /** The read in flight for the current source. Once a write is accepted its value is stale, so it only fills `meta`. */
 type SettingLoad = { readonly attempt: number; readonly metaOnly: boolean }
@@ -39,7 +40,7 @@ export type OptimisticSettingEvent<T, M, S> =
   | { readonly type: "load.failed"; readonly attempt: number }
   | { readonly type: "write.requested"; readonly value: T }
   | { readonly type: "write.succeeded"; readonly attempt: number }
-  | { readonly type: "write.failed"; readonly attempt: number; readonly error: unknown }
+  | { readonly type: "write.failed"; readonly attempt: number; readonly message: string }
   | { readonly type: "write.timed-out"; readonly attempt: number }
 
 export type OptimisticSettingEffect<T, S> =
@@ -72,7 +73,7 @@ export function transitionOptimisticSetting<T, M, S>(
 
   if (event.type === "write.succeeded") return succeeded(state)
 
-  return failed(state, event.type === "write.failed" ? { kind: "failed", error: event.error } : { kind: "timeout" })
+  return failed(state, event.type === "write.failed" ? { kind: "failed", message: event.message } : { kind: "timeout" })
 }
 
 /** What the control shows: the newest choice while writes are in flight. */

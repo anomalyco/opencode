@@ -33,6 +33,7 @@ describe("inline rename machine", () => {
       { type: "input", draft },
       { type: "submitted", currentValue: "Work" },
     ])
+
     expect(closed.state.status).toBe("closed")
     expect(closed.effects).toEqual([{ type: "closed.notify" }, { type: "focus.trigger", ifOwned: false }])
 

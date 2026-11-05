@@ -54,10 +54,12 @@ describe("keybind capture machine", () => {
 
   test("a conflicting combination keeps recording; a free one binds and resumes", () => {
     const capturing = replay([capture("session.beta")]).state
+
     const conflict = transitionKeybindCapture(capturing, {
       type: "key.pressed",
       input: { kind: "combo", keybind: "mod+a", conflictTitles: ["Alpha"] },
     })
+
     expect(conflict.state).toBe(capturing)
     expect(conflict.effects).toEqual([{ type: "notify.conflict", keybind: "mod+a", conflictTitles: ["Alpha"] }])
 

@@ -44,7 +44,7 @@ export function createOptimisticSetting<T, M, S>(options: {
   initial: T
   initialMeta: M
   load: (source: S) => Promise<{ value: T; meta: M }>
-  write: (value: T, source: S) => Promise<unknown> | void
+  write: (value: T, source: S) => Promise<void> | void
   onError?: (failure: SettingWriteFailure) => void
 }) {
   const [state, setState] = createSignal(createOptimisticSettingState<T, M, S>(options.initial, options.initialMeta))
@@ -85,7 +85,7 @@ export function createOptimisticSetting<T, M, S>(options: {
     )
     void Promise.try(() => options.write(effect.value, effect.source)).then(
       () => settle(attempt, { type: "write.succeeded", attempt }),
-      (error: unknown) => settle(attempt, { type: "write.failed", attempt, error }),
+      (cause) => settle(attempt, { type: "write.failed", attempt, message: errorMessage(cause, "") }),
     )
   }
 
@@ -105,7 +105,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
   const setting = createOptimisticSetting({
     source: useServerCtx(server),
     initial: "",
-    initialMeta: [] as ConfigShellOption[],
+    initialMeta: Array.of<ConfigShellOption>(),
     load: async (context) => {
       const [entries, shells] = await Promise.all([
         context.sdk.api.config.get().catch(() => []),
@@ -123,7 +123,9 @@ export function createServerShellController(server: Accessor<ServerConnection.An
             .at(-1) ?? "",
       }
     },
-    write: (value, context) => context.sdk.api.experimental.config.update({ shell: value || null }),
+    write: async (value, context) => {
+      await context.sdk.api.experimental.config.update({ shell: value || null })
+    },
     onError: (failure) =>
       showToast({
         variant: "error",
@@ -131,7 +133,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
         description:
           failure.kind === "timeout"
             ? language.t("home.sessions.load.timeout")
-            : errorMessage(failure.error, language.t("common.requestFailed")),
+            : failure.message || language.t("common.requestFailed"),
       }),
   })
 

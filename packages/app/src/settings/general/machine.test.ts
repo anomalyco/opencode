@@ -10,6 +10,7 @@ import {
 } from "./machine"
 
 type Event = OptimisticSettingEvent<string, string[], string>
+
 type State = OptimisticSettingState<string, string[], string>
 
 function replay(events: Event[], state: State = createOptimisticSettingState("", [])) {
@@ -32,10 +33,11 @@ describe("optimistic setting machine", () => {
       { type: "write.requested", value: "bash" },
       { type: "write.requested", value: "fish" },
     ])
+
     expect(selectSettingValue(queued.state)).toBe("fish")
     expect(queued.effects).toEqual([])
 
-    const failed = replay([{ type: "write.failed", attempt: 2, error: new Error("boom") }], queued.state)
+    const failed = replay([{ type: "write.failed", attempt: 2, message: "boom" }], queued.state)
     expect(selectSettingValue(failed.state)).toBe("fish")
     expect(failed.effects).toEqual([
       { type: "write", attempt: 3, source: "server-a", value: "fish", timeoutMs: 15_000 },
@@ -52,11 +54,11 @@ describe("optimistic setting machine", () => {
       { type: "write.requested", value: "bash" },
       { type: "write.requested", value: "fish" },
       { type: "write.succeeded", attempt: 2 },
-      { type: "write.failed", attempt: 3, error: new Error("boom") },
+      { type: "write.failed", attempt: 3, message: "boom" },
     ])
 
     expect(failed.state).toMatchObject({ status: "idle", value: "bash" })
-    expect(failed.effects).toEqual([{ type: "notify.error", failure: { kind: "failed", error: new Error("boom") } }])
+    expect(failed.effects).toEqual([{ type: "notify.error", failure: { kind: "failed", message: "boom" } }])
   })
 
   test("a slow failure of an older toggle cannot flip the switch after newer toggles saved", () => {
@@ -70,6 +72,7 @@ describe("optimistic setting machine", () => {
       ],
       createOptimisticSettingState("off", []),
     )
+
     // Choosing the value on the wire again drops the queued revert.
     expect(toggled.state).toMatchObject({ status: "writing", active: "on", queued: undefined })
 
@@ -79,7 +82,7 @@ describe("optimistic setting machine", () => {
     const reverted = replay([{ type: "write.requested", value: "off" }], toggled.state)
     expect(reverted.state).toMatchObject({ active: "on", queued: { value: "off" } })
     // The revert matches what the source kept, so a failure needs neither a write nor a toast.
-    const rolledBack = replay([{ type: "write.failed", attempt: 2, error: undefined }], reverted.state)
+    const rolledBack = replay([{ type: "write.failed", attempt: 2, message: "" }], reverted.state)
     expect(rolledBack.state).toMatchObject({ status: "idle", value: "off" })
     expect(rolledBack.effects).toEqual([])
   })
@@ -90,11 +93,12 @@ describe("optimistic setting machine", () => {
       { type: "write.requested", value: "bash" },
       { type: "load.succeeded", attempt: 1, value: "/bin/zsh", meta: ["zsh", "bash"] },
     ])
+
     expect(selectSettingValue(writing.state)).toBe("bash")
     expect(selectSettingMeta(writing.state)).toEqual(["zsh", "bash"])
     expect(writing.state).toMatchObject({ confirmed: "/bin/zsh" })
 
-    const failed = replay([{ type: "write.failed", attempt: 2, error: undefined }], writing.state)
+    const failed = replay([{ type: "write.failed", attempt: 2, message: "" }], writing.state)
     expect(selectSettingValue(failed.state)).toBe("/bin/zsh")
   })
 
@@ -115,7 +119,7 @@ describe("optimistic setting machine", () => {
     const switched = replay([{ type: "source.synced", source: "server-b" }], writing.state)
     expect(switched.effects).toEqual([{ type: "load", attempt: 3, source: "server-b" }])
 
-    const stale = transitionOptimisticSetting(switched.state, { type: "write.failed", attempt: 2, error: undefined })
+    const stale = transitionOptimisticSetting(switched.state, { type: "write.failed", attempt: 2, message: "" })
     expect(stale.state).toBe(switched.state)
     expect(stale.effects).toEqual([])
     expect(transitionOptimisticSetting(switched.state, { type: "load.succeeded", attempt: 1, value: "x", meta: [] }).state).toBe(
