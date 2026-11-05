@@ -129,8 +129,7 @@
       "checkpoint": "slash",
       "until": "Review the working tree",
       "deviation": [
-        "V01-plain-transcript",
-        "K04-unported-slash-commands"
+        "V01-plain-transcript"
       ],
       "fixture": "E.3/complete/slash"
     },

@@ -1,4 +1,4 @@
-// Prompt autocomplete (P05, K04): `/rev` lists the server's command and Enter completes it; `@gen` lists the
+// Prompt autocomplete (P05): `/rev` lists the server's command and Enter completes it; `@gen` lists the
 // subagent and a file from /api/fs/find, and Enter turns the agent into a highlighted mention.
 import { defineApp, session, user } from "../../lib/app"
 
@@ -33,11 +33,7 @@ export default defineApp({
   steps: [
     { checkpoint: "open", until: "Why does the parser fail?", deviation },
     { type: "/rev" },
-    {
-      checkpoint: "slash",
-      until: "Review the working tree",
-      deviation: [...deviation, "K04-unported-slash-commands"],
-    },
+    { checkpoint: "slash", until: "Review the working tree", deviation },
     { keys: ["enter"] },
     { checkpoint: "command", until: "/review", deviation },
     { keys: ["ctrl+c"] },
