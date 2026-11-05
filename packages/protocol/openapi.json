@@ -17264,6 +17264,9 @@
           },
           "duration": {
             "type": "string"
+          },
+          "idle": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -21806,6 +21809,9 @@
                 ]
               },
               "duration": {
+                "type": "string"
+              },
+              "idle": {
                 "type": "string"
               }
             },

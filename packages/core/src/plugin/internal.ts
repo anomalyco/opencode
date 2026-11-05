@@ -67,6 +67,7 @@ import { Schedule } from "../schedule.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
+import { SessionWarmup } from "../session/warmup.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
@@ -163,6 +164,7 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionWarmup.Service,
   SubagentJob.Service,
   SharedCache.Service,
   Shell.Service,
@@ -224,6 +226,7 @@ export const requirements = LayerNode.group([
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionWarmup.node,
   SubagentJob.node,
   SharedCache.node,
   Shell.node,

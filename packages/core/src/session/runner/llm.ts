@@ -21,6 +21,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
+import { SessionWarmup } from "../warmup.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
@@ -56,6 +57,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
+    const warmup = yield* SessionWarmup.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
@@ -283,6 +285,7 @@ const layer = Layer.effect(
               executeTool: prepared.executeTool,
             })),
           )
+        yield* warmup.record(sessionID, prepared.request, prepared.options)
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
           sessionID,
@@ -455,6 +458,7 @@ export const node = makeLocationNode({
     PluginHooks.node,
     Job.node,
     SessionTitle.node,
+    SessionWarmup.node,
     Snapshot.node,
     ToolOutput.node,
     Database.node,
