@@ -10,10 +10,10 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use opencode_api::generated::SessionID;
+use opencode_api::generated::{LocationPublicRef, SessionID};
 use opencode_local::cli_config::Sidebar as SidebarSetting;
 use opencode_plugin::{SlotInput, SlotMount, Slotted, slot};
-use opencode_store::Changes;
+use opencode_store::{Changes, State};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
@@ -286,47 +286,102 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     }
 }
 
-/// One sidebar section of a built-in plugin: `render` reads what it needs and returns its view, or `None` to
-/// hide it. It renders again after every change batch while the sidebar shows.
-pub struct Section {
+/// One sidebar section of a built-in plugin: `model` reads what it shows, or `None` to hide it, and `render`
+/// builds its view from that. While the sidebar shows, a change batch that touches `scope` (see [`touches`];
+/// `None` for any change) reads the model again, and the section renders again only when the model differs.
+pub struct Section<M> {
     root: View,
-    render: Render,
+    scope: Option<SessionID>,
+    model: ReadModel<M>,
+    render: Render<M>,
+    shown: RefCell<Option<Option<M>>>,
 }
 
-type Render = Box<dyn Fn(&Tui) -> Option<View>>;
+type ReadModel<M> = Box<dyn Fn(&Tui, &Changes) -> Option<M>>;
+type Render<M> = Box<dyn Fn(&Tui, &M) -> View>;
 
-impl Section {
-    pub fn new(tui: &Tui, render: impl Fn(&Tui) -> Option<View> + 'static) -> Self {
-        let section = Self { root: View::new(&tui.app).column().shrink(0.0), render: Box::new(render) };
-        section.refresh(tui);
+impl<M: PartialEq + 'static> Section<M> {
+    pub fn new(
+        tui: &Tui,
+        scope: Option<SessionID>,
+        model: impl Fn(&Tui, &Changes) -> Option<M> + 'static,
+        render: impl Fn(&Tui, &M) -> View + 'static,
+    ) -> Self {
+        let section = Self {
+            root: View::new(&tui.app).column().shrink(0.0),
+            scope,
+            model: Box::new(model),
+            render: Box::new(render),
+            shown: RefCell::new(None),
+        };
+        section.refresh(tui, &Changes::everything());
         section
     }
 
-    pub fn refresh(&self, tui: &Tui) {
+    fn refresh(&self, tui: &Tui, changes: &Changes) {
+        let model = (self.model)(tui, changes);
+        if self.shown.borrow().as_ref() == Some(&model) {
+            return;
+        }
         self.root.clear();
-        match (self.render)(tui) {
-            Some(view) => {
-                self.root.add(&view);
+        match &model {
+            Some(model) => {
+                self.root.add(&(self.render)(tui, model));
                 self.root.visible(true);
             }
             None => {
                 self.root.visible(false);
             }
         }
+        *self.shown.borrow_mut() = Some(model);
         tui.app.request_redraw();
     }
 }
 
-impl Slotted<Tui> for Section {
+impl<M: PartialEq + 'static> Slotted<Tui> for Section<M> {
     fn root(&self) -> View {
         self.root.clone()
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
-        if !changes.is_empty() {
-            self.refresh(tui);
+        if changes.is_empty() {
+            return;
         }
+        if let Some(session) = &self.scope
+            && !tui.data.read(|state| touches(state, changes, session))
+        {
+            return;
+        }
+        self.refresh(tui, changes);
     }
+}
+
+/// Whether `changes` touch what a view of `session` reads: the info, status, messages, pending items and
+/// permissions of its family, its location, and the projects. A session the store does not know takes every
+/// change, since its views read the default location.
+pub fn touches(state: &State, changes: &Changes, session: &SessionID) -> bool {
+    if changes.all || changes.projects {
+        return true;
+    }
+    let Some(info) = state.session(session) else {
+        return !changes.is_empty();
+    };
+    let changed = |id: &SessionID| {
+        changes.session.contains(id)
+            || changes.status.contains(id)
+            || changes.messages.contains(id)
+            || changes.message.contains_key(id)
+            || changes.pending.contains(id)
+            || changes.permissions.contains(id)
+    };
+    // The family lookup allocates, so the session itself goes first.
+    location_changed(changes, &info.location) || changed(session) || state.family(session).iter().any(changed)
+}
+
+/// [`Changes::location`] of a session's location, without building a [`opencode_store::Location`].
+pub fn location_changed(changes: &Changes, location: &LocationPublicRef) -> bool {
+    changes.all
+        || changes.locations.iter().any(|item| item.directory == location.directory.0 && item.workspace_id.is_none())
 }
 
 /// A plugin's stored `{ open: true }` (`storage.store("view")`), as the MCP and todo sections keep it. Without
