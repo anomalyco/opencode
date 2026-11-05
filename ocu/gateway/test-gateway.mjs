@@ -108,7 +108,9 @@ test("provider in cooldown is not retried until its cooldown expires", async () 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: "ocu/auto", messages: [{ role: "user", content: "test" }] })
     });
-    assert.equal((await request()).status, 503);
+    const firstResponse = await request();
+    const firstBody = await firstResponse.text();
+    assert.equal(firstResponse.status, 503, "first response: " + firstBody + "; upstream calls: " + calls);
     const second = await request();
     assert.equal(second.status, 503);
     assert.match((await second.json()).error.message, /cooling down/i);
