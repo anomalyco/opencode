@@ -18,7 +18,10 @@ use opencode_api::error::Error;
 use opencode_api::generated::{
     ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder, ModelDefaultInput,
     SessionID, SessionInboxItem, SessionInterruptInput, SessionMessageAssistant,
-    SessionMessageAssistantContentItem as ContentItem, SessionMessageCompaction, SessionMessageInfo,
+    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool, SessionMessageAssistantToolState,
+    SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
+    SessionMessageInfo, SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted,
+    SessionMessageToolStateError, SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
     SessionStructuredError, V2Event,
 };
 use opentui::app::ProxyError;
@@ -26,7 +29,7 @@ use opentui::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::scrollback::{Commit, EntryKind, Phase, Source};
+use crate::scrollback::{Commit, EntryKind, Phase, Source, ToolState};
 
 /// `--replay-limit`'s default: the newest messages a replay lists.
 pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
@@ -219,6 +222,31 @@ pub struct Transcript {
     /// to call tools (`quietText`, `toolMessages`).
     quiet: Vec<(String, Vec<(String, String)>)>,
     tool_messages: HashSet<String>,
+    /// The session's directory, which tool paths are shown relative to.
+    pub directory: Option<String>,
+    /// Tool parts still running, by message and call (`tools`).
+    tool_tracks: HashMap<String, ToolTrack>,
+    finished_tools: HashSet<String>,
+    image_ids: HashSet<String>,
+    skill_messages: HashSet<String>,
+    shell_commands: HashMap<String, String>,
+    shell_started: HashSet<String>,
+    shell_ended: HashSet<String>,
+    active_compaction: Option<String>,
+}
+
+/// A tool part that is still running (`ToolState`): the output already shown, and the snapshot version it shows
+/// it under when the output was replaced rather than extended.
+#[derive(Clone, Debug)]
+struct ToolTrack {
+    part: SessionMessageAssistantTool,
+    output: String,
+    version: u32,
+    started: bool,
+}
+
+fn part_key(message: &str, id: &str) -> String {
+    format!("{message}\u{0}{id}")
 }
 
 impl Transcript {
@@ -241,6 +269,15 @@ impl Transcript {
             local: Vec::new(),
             quiet: Vec::new(),
             tool_messages: HashSet::new(),
+            directory: None,
+            tool_tracks: HashMap::new(),
+            finished_tools: HashSet::new(),
+            image_ids: HashSet::new(),
+            skill_messages: HashSet::new(),
+            shell_commands: HashMap::new(),
+            shell_started: HashSet::new(),
+            shell_ended: HashSet::new(),
+            active_compaction: None,
         }
     }
 
@@ -279,6 +316,16 @@ impl Transcript {
         self.message_ids.clear();
         self.errors.clear();
         self.fragments.clear();
+        self.tool_tracks.clear();
+        self.finished_tools.clear();
+        self.tool_messages.clear();
+        self.image_ids.clear();
+        self.skill_messages.clear();
+        self.shell_started.clear();
+        self.shell_ended.clear();
+        self.shell_commands.clear();
+        self.quiet.clear();
+        self.active_compaction = None;
         let mut output = Output::default();
         let local = std::mem::take(&mut self.local);
         output.extend(self.hydrate(messages, active));
@@ -442,6 +489,86 @@ impl Transcript {
             .collect()
     }
 
+    /// `renderTool`: one state of a tool part, from a list or rebuilt from live events. A running part prints its
+    /// start once and then only output it did not print yet; output that was replaced rather than extended starts a
+    /// new snapshot. A finished part prints its end once.
+    fn render_tool(&mut self, message: &str, part: &SessionMessageAssistantTool, render: bool) -> Output {
+        let render = render && self.tools;
+        if !self.tools {
+            self.remember_tool_message(message);
+        }
+        let key = part_key(message, &part.id);
+        if self.finished_tools.contains(&key) {
+            return Output::default();
+        }
+        if matches!(part.state, ToolPartState::Streaming(_)) {
+            self.tool_tracks
+                .insert(key, ToolTrack { part: part.clone(), output: String::new(), version: 0, started: false });
+            return Output::default();
+        }
+        let name = opencode_ui::tool_info::canonical_tool_name(&part.name).to_owned();
+        let directory = self.directory.clone();
+        let directory = directory.as_deref();
+        let current = self.tool_tracks.get(&key).cloned();
+        let output =
+            opencode_ui::tool_info::tool_output_text(&name, &opencode_ui::tool_info::tool_display_content(&part.state));
+        let prefix = current.as_ref().is_some_and(|current| output.starts_with(&current.output));
+        let version = match &current {
+            Some(current) if !prefix => current.version + 1,
+            Some(current) => current.version,
+            None => 0,
+        };
+        let delta = match &current {
+            Some(current) if prefix => output[current.output.len()..].to_owned(),
+            _ => output.clone(),
+        };
+        let started = current.as_ref().is_some_and(|current| current.started);
+        let mut result = Output::default();
+        if let ToolPartState::Running(state) = &part.state {
+            let ready = name != "websearch" || state.metadata.get("provider").is_some_and(Value::is_string);
+            if render && !started && ready {
+                result.commits.push(crate::tools::commit(part, message, Phase::Start, None, directory, version));
+                result.extend(Output::patch(true, &format!("running {name}")));
+            }
+            if render && !delta.is_empty() {
+                result.commits.push(crate::tools::commit(
+                    part,
+                    message,
+                    Phase::Progress,
+                    Some(&delta),
+                    directory,
+                    version,
+                ));
+            }
+            self.tool_tracks
+                .insert(key, ToolTrack { part: part.clone(), output, version, started: started || (render && ready) });
+            return result;
+        }
+        if render && !started {
+            result.commits.push(crate::tools::commit(part, message, Phase::Start, None, directory, version));
+        }
+        self.finished_tools.insert(key);
+        self.tool_tracks.remove(&part_key(message, &part.id));
+        let images: Vec<Commit> = crate::tools::image_commits(part, message)
+            .into_iter()
+            .filter(|commit| {
+                let id = part_key(message, commit.part_id.as_deref().unwrap_or_default());
+                self.image_ids.insert(id) && render
+            })
+            .collect();
+        if !render {
+            return result;
+        }
+        let phase = crate::tools::final_phase(part);
+        if matches!(part.state, ToolPartState::Error(_)) && !delta.is_empty() {
+            result.commits.push(crate::tools::commit(part, message, Phase::Progress, Some(&delta), directory, version));
+        }
+        let value = (phase == Phase::Progress).then_some(delta.as_str());
+        result.commits.push(crate::tools::commit(part, message, phase, value, directory, version));
+        result.commits.extend(images);
+        result
+    }
+
     /// `renderMessage`: one message of a list.
     pub fn message(&mut self, message: &SessionMessageInfo, render: bool) -> Output {
         match message {
@@ -453,7 +580,43 @@ impl Transcript {
             }
             SessionMessageInfo::Compaction(compaction) => self.compaction(compaction, render),
             SessionMessageInfo::Assistant(assistant) => self.assistant(assistant, render),
-            // Skills and shells are drawn by M.4.
+            SessionMessageInfo::Skill(skill) => {
+                let id = skill.id.as_str();
+                let fresh = self.skill_messages.insert(id.to_owned());
+                if !render || !self.tools || !fresh {
+                    return Output::default();
+                }
+                Output::commits(vec![skill_commit(id, skill.name.as_str())])
+            }
+            SessionMessageInfo::Shell(shell) => {
+                let id = shell.shell_id.as_str();
+                self.shell_commands.insert(id.to_owned(), shell.command.clone());
+                let completed = shell.time.completed.is_some();
+                if !render {
+                    // Settled shells of a quiet history stay silent when they arrive again live.
+                    if completed {
+                        self.shell_started.insert(id.to_owned());
+                        self.shell_ended.insert(id.to_owned());
+                    }
+                    return Output::default();
+                }
+                let mut commits = Vec::new();
+                if self.shell_started.insert(id.to_owned()) {
+                    commits.push(shell_commit(id, &shell.command, "running shell", Phase::Start, ToolState::Running));
+                }
+                if completed
+                    && let Some(output) = &shell.output
+                    && self.shell_ended.insert(id.to_owned())
+                {
+                    let exit = match &shell.exit {
+                        Some(SessionMessageShellExit::Number(code)) => Some(opencode_api::js::number_to_string(*code)),
+                        Some(SessionMessageShellExit::String(code)) => Some(code.clone()),
+                        _ => None,
+                    };
+                    commits.extend(shell_terminal(id, &shell.command, shell.status.as_str(), exit, output));
+                }
+                Output::commits(commits)
+            }
             _ => Output::default(),
         }
     }
@@ -536,9 +699,7 @@ impl Transcript {
                         commits.push(reasoning_commit(&fragment, delta));
                     }
                 }
-                ContentItem::Tool(tool) if render && self.tools => {
-                    commits.extend(crate::tools::commits(id, tool));
-                }
+                ContentItem::Tool(tool) => commits.extend(self.render_tool(id, tool, render).commits),
                 _ => {}
             }
         }
@@ -689,28 +850,253 @@ impl Transcript {
                 let commits = messages.iter().flat_map(|id| self.flush_quiet(id)).collect();
                 Output { commits, ..Output::patch(false, "") }
             }
-            _ => {
-                if let Some(message) = tool_message(event) {
-                    if !self.tools {
-                        self.remember_tool_message(message);
-                    }
-                    return footer();
+            V2Event::SessionSkillActivated(activated) => {
+                let message = message_from_event(activated.id.as_str());
+                if !self.skill_messages.insert(message.clone()) || !self.tools {
+                    return Output::default();
                 }
-                match event {
-                    V2Event::SessionShellStarted(_)
-                    | V2Event::SessionShellEnded(_)
-                    | V2Event::SessionCompactionStarted(_)
-                    | V2Event::SessionCompactionDelta(_)
-                    | V2Event::SessionCompactionEnded(_)
-                    | V2Event::SessionCompactionFailed(_)
-                    | V2Event::PermissionAsked(_)
-                    | V2Event::PermissionReplied(_)
-                    | V2Event::FormCreated(_)
-                    | V2Event::FormReplied(_)
-                    | V2Event::FormCancelled(_) => footer(),
-                    _ => Output::default(),
-                }
+                Output::commits(vec![skill_commit(&message, activated.data.name.as_str())])
             }
+            V2Event::SessionShellStarted(started) => {
+                let shell = &started.data.shell;
+                let id = shell.id.as_str();
+                self.shell_commands.insert(id.to_owned(), shell.command.clone());
+                let mut output = footer();
+                if self.shell_started.insert(id.to_owned()) {
+                    output.commits.push(shell_commit(
+                        id,
+                        &shell.command,
+                        "running shell",
+                        Phase::Start,
+                        ToolState::Running,
+                    ));
+                    output.extend(Output::patch(true, "running shell"));
+                }
+                output
+            }
+            V2Event::SessionShellEnded(ended) => {
+                let shell = &ended.data.shell;
+                let id = shell.id.as_str();
+                let command = self.shell_commands.get(id).cloned().unwrap_or_else(|| shell.command.clone());
+                let mut output = footer();
+                if self.shell_started.insert(id.to_owned()) && !command.is_empty() {
+                    output.commits.push(shell_commit(id, &command, "running shell", Phase::Start, ToolState::Running));
+                }
+                if self.shell_ended.insert(id.to_owned()) {
+                    let exit = shell.exit.map(opencode_api::js::number_to_string);
+                    output.commits.extend(shell_terminal(
+                        id,
+                        &command,
+                        shell.status.as_str(),
+                        exit,
+                        &ended.data.output,
+                    ));
+                }
+                output
+            }
+            V2Event::SessionCompactionStarted(started) => {
+                let message = match &started.data.input_id {
+                    Some(id) => id.as_str().to_owned(),
+                    None => message_from_event(started.id.as_str()),
+                };
+                self.active_compaction = Some(message.clone());
+                let mut output = footer();
+                if self.message_ids.insert(message.clone()) {
+                    output.commits.push(compaction_header(&message));
+                    output.extend(Output::patch(true, "compacting session"));
+                }
+                output
+            }
+            V2Event::SessionCompactionDelta(delta) => {
+                let mut output = footer();
+                let Some(message) = self.active_compaction.clone() else { return output };
+                let fragment = Fragment { message_id: message.clone(), part_id: "compaction:summary".into() };
+                if self.fragments.delta(&fragment, &delta.data.text).is_some() {
+                    output.commits.push(compaction_summary(&message, &delta.data.text, Phase::Progress));
+                }
+                output
+            }
+            V2Event::SessionCompactionEnded(ended) => {
+                let mut output = footer();
+                let Some(message) = self.active_compaction.take() else { return output };
+                let fragment = Fragment { message_id: message.clone(), part_id: "compaction:summary".into() };
+                let text = &ended.data.text;
+                let update = self.fragments.end(&fragment, text);
+                if text.len() > update.previous.len() {
+                    output.commits.push(compaction_summary(&message, suffix(text, &update.previous), Phase::Progress));
+                }
+                output.commits.push(compaction_summary(&message, "", Phase::Final));
+                output
+            }
+            V2Event::SessionCompactionFailed(failed) => {
+                let mut output = footer();
+                let Some(message) = self.active_compaction.take() else { return output };
+                output.commits.push(compaction_summary(&message, "", Phase::Final));
+                if failed.data.error.r#type != "aborted" {
+                    output
+                        .commits
+                        .push(Commit::error(&failed.data.error.message).message(&message).part_id("compaction:error"));
+                }
+                output
+            }
+            V2Event::PermissionAsked(_)
+            | V2Event::PermissionReplied(_)
+            | V2Event::FormCreated(_)
+            | V2Event::FormReplied(_)
+            | V2Event::FormCancelled(_) => footer(),
+            _ => self.tool_event(event).unwrap_or_default(),
+        }
+    }
+
+    /// A `session.tool.*` event, rebuilt into the tool part it updates and rendered as a listed part would be.
+    fn tool_event(&mut self, event: &V2Event) -> Option<Output> {
+        let message = tool_message(event)?.to_owned();
+        if !self.tools {
+            self.remember_tool_message(&message);
+            return Some(Output { footer: vec![event.clone()], ..Output::default() });
+        }
+        let current = |id: &str| self.tool_tracks.get(&part_key(&message, id)).map(|track| track.part.clone());
+        let input_of = |part: &Option<SessionMessageAssistantTool>| match part.as_ref().map(|part| &part.state) {
+            Some(ToolPartState::Running(state)) => state.input.clone(),
+            Some(ToolPartState::Completed(state)) => state.input.clone(),
+            Some(ToolPartState::Error(state)) => state.input.clone(),
+            _ => Default::default(),
+        };
+        let tool =
+            |id: &str, name: String, state: SessionMessageAssistantToolState, time| SessionMessageAssistantTool {
+                r#type: "tool".into(),
+                id: id.to_owned(),
+                name,
+                executed: None,
+                native: None,
+                state,
+                time,
+            };
+        let time = |created: f64, ran: Option<f64>, completed: Option<f64>| SessionMessageAssistantToolTime {
+            created,
+            ran,
+            completed,
+        };
+        let part = match event {
+            V2Event::SessionToolInputStarted(started) => {
+                let data = &started.data;
+                let state = ToolPartState::Streaming(SessionMessageToolStateStreaming {
+                    status: "streaming".into(),
+                    input: String::new(),
+                });
+                tool(&data.id, data.name.clone(), state, time(started.created, None, None))
+            }
+            V2Event::SessionToolInputDelta(_) | V2Event::SessionToolInputEnded(_) => {
+                let (id, text) = match event {
+                    V2Event::SessionToolInputDelta(delta) => (&delta.data.id, Err(delta.data.delta.as_str())),
+                    V2Event::SessionToolInputEnded(ended) => (&ended.data.id, Ok(ended.data.text.as_str())),
+                    _ => return None,
+                };
+                let mut part = current(id)?;
+                let ToolPartState::Streaming(state) = &mut part.state else { return Some(Output::default()) };
+                match text {
+                    Ok(text) => state.input = text.to_owned(),
+                    Err(delta) => state.input.push_str(delta),
+                }
+                part
+            }
+            V2Event::SessionToolCalled(called) => {
+                let data = &called.data;
+                if self.finished_tools.contains(&part_key(&message, &data.id)) {
+                    return Some(Output::default());
+                }
+                let part = current(&data.id);
+                let state = ToolPartState::Running(SessionMessageToolStateRunning {
+                    status: "running".into(),
+                    input: data.input.clone(),
+                    metadata: Default::default(),
+                });
+                let name = part.as_ref().map_or("tool".into(), |part| part.name.clone());
+                let created = part.as_ref().map_or(called.created, |part| part.time.created);
+                let mut item = tool(&data.id, name, state, time(created, Some(called.created), None));
+                item.executed = Some(data.executed);
+                item.native = data.native.clone();
+                item
+            }
+            V2Event::SessionToolProgress(progress) => {
+                let data = &progress.data;
+                if self.finished_tools.contains(&part_key(&message, &data.id)) {
+                    return Some(Output::default());
+                }
+                let part = current(&data.id);
+                let state = ToolPartState::Running(SessionMessageToolStateRunning {
+                    status: "running".into(),
+                    input: input_of(&part),
+                    metadata: data.metadata.clone(),
+                });
+                let name = part.as_ref().map_or("tool".into(), |part| part.name.clone());
+                let created = part.as_ref().map_or(progress.created, |part| part.time.created);
+                let ran = part.as_ref().and_then(|part| part.time.ran).unwrap_or(progress.created);
+                let mut item = tool(&data.id, name, state, time(created, Some(ran), None));
+                item.executed = part.as_ref().and_then(|part| part.executed);
+                item.native = part.as_ref().and_then(|part| part.native.clone());
+                item
+            }
+            V2Event::SessionToolSuccess(success) => {
+                let data = &success.data;
+                let part = current(&data.id);
+                let state = ToolPartState::Completed(SessionMessageToolStateCompleted {
+                    status: "completed".into(),
+                    input: input_of(&part),
+                    content: data.content.clone(),
+                    metadata: data.metadata.clone(),
+                });
+                let item = self.finished_part(part, &data.id, state, success.created, data.native.as_ref());
+                SessionMessageAssistantTool { executed: Some(data.executed), ..item }
+            }
+            V2Event::SessionToolFailed(failed) => {
+                let data = &failed.data;
+                let part = current(&data.id);
+                let state = ToolPartState::Error(SessionMessageToolStateError {
+                    status: "error".into(),
+                    input: input_of(&part),
+                    error: data.error.clone(),
+                    content: data.content.clone(),
+                    metadata: data.metadata.clone(),
+                });
+                let item = self.finished_part(part, &data.id, state, failed.created, data.native.as_ref());
+                SessionMessageAssistantTool { executed: Some(data.executed), ..item }
+            }
+            _ => return None,
+        };
+        Some(self.render_tool(&message, &part, true))
+    }
+
+    /// The part a `session.tool.success` or `.failed` event finishes, with the native fields merged.
+    fn finished_part(
+        &self,
+        part: Option<SessionMessageAssistantTool>,
+        id: &str,
+        state: SessionMessageAssistantToolState,
+        created: f64,
+        native: Option<&opencode_api::generated::SessionMessageNative>,
+    ) -> SessionMessageAssistantTool {
+        let previous = part.as_ref().and_then(|part| part.native.clone());
+        let native = match native {
+            Some(native) => {
+                let mut merged = previous.unwrap_or_default();
+                merged.extend(native.iter().map(|(key, value)| (key.clone(), value.clone())));
+                Some(merged)
+            }
+            None => previous,
+        };
+        SessionMessageAssistantTool {
+            r#type: "tool".into(),
+            id: id.to_owned(),
+            name: part.as_ref().map_or("tool".into(), |part| part.name.clone()),
+            executed: None,
+            native,
+            state,
+            time: SessionMessageAssistantToolTime {
+                created: part.as_ref().map_or(created, |part| part.time.created),
+                ran: part.as_ref().and_then(|part| part.time.ran),
+                completed: Some(created),
+            },
         }
     }
 }
@@ -740,6 +1126,7 @@ fn session_of(event: &V2Event) -> Option<&str> {
         V2Event::SessionToolProgress(event) => event.data.session_id.as_str(),
         V2Event::SessionToolSuccess(event) => event.data.session_id.as_str(),
         V2Event::SessionToolFailed(event) => event.data.session_id.as_str(),
+        V2Event::SessionSkillActivated(event) => event.data.session_id.as_str(),
         V2Event::SessionShellStarted(event) => event.data.session_id.as_str(),
         V2Event::SessionShellEnded(event) => event.data.session_id.as_str(),
         V2Event::SessionCompactionStarted(event) => event.data.session_id.as_str(),
@@ -789,6 +1176,71 @@ fn reasoning_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
 /// `errorMessage`: the message, else a fallback (the structured error has no `_tag`).
 fn error_message(error: &SessionStructuredError) -> String {
     if error.message.is_empty() { "Session execution failed".to_owned() } else { error.message.clone() }
+}
+
+fn skill_commit(message: &str, name: &str) -> Commit {
+    Commit::new(EntryKind::System, Source::System, Phase::Start, format!("→ Skill \"{name}\""))
+        .message(message)
+        .part_id(format!("skill:{message}"))
+}
+
+/// `shellCommit`: a direct shell call draws `$ command` at its start and its merged output as progress.
+fn shell_commit(id: &str, command: &str, text: &str, phase: Phase, state: ToolState) -> Commit {
+    let mut commit = Commit::new(EntryKind::Tool, Source::Tool, phase, text).part_id(format!("shell:{id}"));
+    commit.tool = Some("shell".into());
+    commit.shell = Some(command.to_owned());
+    commit.tool_state = Some(state);
+    commit
+}
+
+/// `shellTerminal`: the output of a finished shell, and an error line unless it exited with 0.
+fn shell_terminal(
+    id: &str,
+    command: &str,
+    status: &str,
+    exit: Option<String>,
+    output: &SessionMessageShellOutput,
+) -> Vec<Commit> {
+    let incomplete = output.truncated || output.cursor < output.size;
+    let newline = if output.output.ends_with('\n') || output.output.is_empty() { "" } else { "\n" };
+    let marker = if incomplete { format!("{newline}[output truncated]") } else { String::new() };
+    let text = format!("{}{marker}", output.output);
+    let error = match (status, exit.as_deref()) {
+        ("exited", Some("0")) => None,
+        ("exited", exit) => Some(format!("Shell exited with code {}", exit.unwrap_or("unknown"))),
+        (status, _) => Some(format!("Shell {status}")),
+    };
+    let Some(error) = error else {
+        return vec![shell_commit(id, command, &text, Phase::Progress, ToolState::Completed)];
+    };
+    let mut commits = Vec::new();
+    if !text.is_empty() {
+        commits.push(shell_commit(id, command, &text, Phase::Progress, ToolState::Running));
+    }
+    let mut failed = shell_commit(id, command, &error, Phase::Final, ToolState::Error);
+    failed.tool_error = Some(error);
+    commits.push(failed);
+    commits
+}
+
+fn compaction_header(message: &str) -> Commit {
+    let mut commit = Commit::new(EntryKind::System, Source::System, Phase::Start, "Compaction")
+        .message(message)
+        .part_id("compaction:header");
+    commit.compaction = true;
+    commit
+}
+
+fn compaction_summary(message: &str, text: &str, phase: Phase) -> Commit {
+    Commit::new(EntryKind::Assistant, Source::Assistant, phase, text).message(message).part_id("compaction:summary")
+}
+
+/// `SessionMessage.ID.fromEvent`.
+fn message_from_event(id: &str) -> String {
+    match id.strip_prefix("evt_") {
+        Some(rest) => format!("msg_{rest}"),
+        None => id.to_owned(),
+    }
 }
 
 /// What the network side posts to the UI thread.
@@ -1092,6 +1544,35 @@ mod tests {
             ]
         );
         assert!(!transcript.replaying());
+    }
+
+    #[test]
+    fn live_tool_events_print_the_start_new_output_and_the_end_once() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], true);
+        let call = |kind: &str, data: Value| {
+            let mut data = data;
+            data["assistantMessageID"] = json!("msg_a");
+            data["id"] = json!("call_1");
+            event(kind, data)
+        };
+        let tools = |output: Output| -> Vec<(Phase, String)> {
+            output.commits.iter().map(|commit| (commit.phase, commit.text.clone())).collect()
+        };
+        assert!(transcript.event(&call("session.tool.input.started", json!({ "name": "bash" }))).commits.is_empty());
+        let called = call("session.tool.called", json!({ "input": { "command": "ls" }, "executed": true }));
+        let output = transcript.event(&called);
+        assert_eq!(output.patch.unwrap().status.as_deref(), Some("running shell"));
+        assert_eq!(output.commits[0].tool.as_deref(), Some("shell"));
+        let success = call(
+            "session.tool.success",
+            json!({ "content": [{ "type": "text", "text": "a\n" }], "metadata": { "exit": 0 }, "executed": true }),
+        );
+        assert_eq!(tools(transcript.event(&success)), [(Phase::Progress, "a\n".into())]);
+        assert!(transcript.event(&success).commits.is_empty(), "a finished tool prints once");
+        let listed = message(json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "tool", "id": "call_1",
+            "name": "bash", "state": { "status": "completed", "input": {}, "content": [] }, "time": { "created": 1 } }] }));
+        assert!(transcript.message(&listed, true).commits.is_empty(), "nor when listed later");
     }
 
     /// One message the client cannot read does not fail the list.
