@@ -286,8 +286,11 @@ fn quote(value: &str) -> String {
 /// Compacts `target` in place once it passes `max` bytes, keeping about `keep` bytes from the first line
 /// boundary on (`logging.ts:84-129`). Other processes keep appending through their own `O_APPEND` handles, so
 /// it never renames. A `<target>.trim` directory is the cross-process lock; one older than 5 minutes belongs
-/// to a dead process and is removed, and the trim waits for the next round.
+/// to a dead process and is removed, and the trim waits for the next round. A log under `max` skips the lock.
 pub fn trim(target: &Path, max: u64, keep: u64) -> io::Result<()> {
+    if std::fs::metadata(target)?.len() <= max {
+        return Ok(());
+    }
     let lock = PathBuf::from(format!("{}.trim", target.display()));
     match std::fs::create_dir(&lock) {
         Ok(()) => {}
