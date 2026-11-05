@@ -79,3 +79,39 @@ test("automatic model falls back after an upstream 503", async () => {
     await close(gateway); await close(first); await close(second);
   }
 });
+
+
+test("provider in cooldown is not retried until its cooldown expires", async () => {
+  let calls = 0;
+  const upstream = mockProvider((_req, res) => {
+    calls += 1;
+    res.writeHead(503).end("unavailable");
+  });
+  const upstreamUrl = await listen(upstream);
+  const gateway = createServer({
+    cooldownBaseMs: 10000, cooldownMaxMs: 10000,
+    providers: [{
+      id: "cooldown-regression-provider",
+      baseURL: upstreamUrl + "/v1",
+      priority: 1,
+      enabled: true,
+      models: [{ alias: "ocu/auto", upstreamModel: "test-model" }]
+    }]
+  });
+  const gatewayUrl = await listen(gateway);
+  try {
+    const request = () => fetch(gatewayUrl + "/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "ocu/auto", messages: [{ role: "user", content: "test" }] })
+    });
+    assert.equal((await request()).status, 503);
+    const second = await request();
+    assert.equal(second.status, 503);
+    assert.match((await second.json()).error.message, /cooling down/i);
+    assert.equal(calls, 1);
+  } finally {
+    await close(gateway);
+    await close(upstream);
+  }
+});
