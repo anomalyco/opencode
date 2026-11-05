@@ -985,8 +985,9 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// An item without an id adopts the id already open in its output slot,
-// otherwise it gets a locally minted one.
+// An item adopts the id already open in its output slot, since GitHub Copilot
+// sends a different id on every event, including the item's own done event.
+// Otherwise it keeps its id or gets a locally minted one.
 const resolveItem = (
   state: Pick<ParserState, "outputItems">,
   item: StreamItem,
@@ -994,8 +995,8 @@ const resolveItem = (
 ): OutputItem => ({
   ...item,
   id:
-    item.id ??
     (index === undefined ? undefined : state.outputItems[index]) ??
+    item.id ??
     `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}`,
 })
 
