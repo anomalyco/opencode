@@ -1097,6 +1097,7 @@ dependencies = [
  "opencode-ui",
  "opentui",
  "rustix",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

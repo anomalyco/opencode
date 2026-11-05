@@ -20,8 +20,8 @@ use std::rc::Rc;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    FormInfo, PermissionListInput, PermissionReplyInput, PermissionRequest, SessionFormCancelInput,
-    SessionFormListInput, SessionFormReplyInput, SessionID, SessionMessageGetInput,
+    FormID, FormInfo, PermissionListInput, PermissionReplyInput, PermissionRequest, SessionFormCancelInput,
+    SessionFormListInput, SessionFormReplyInput, SessionID, SessionMessageGetInput, V2Event,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::input::KeyEvent;
@@ -282,13 +282,20 @@ impl Footers {
     }
 
     /// A permission or form event of the session.
-    pub fn event(&self, event: &Value) {
-        let data = &event["data"];
+    pub fn event(&self, event: &V2Event) {
         let inner = &self.0;
-        match event["type"].as_str().unwrap_or_default() {
-            "permission.asked" => {
-                let Ok(request) = serde_json::from_value::<PermissionRequest>(data.clone()) else {
-                    return;
+        match event {
+            V2Event::PermissionAsked(asked) => {
+                let data = asked.data.clone();
+                let request = PermissionRequest {
+                    id: data.id,
+                    session_id: data.session_id,
+                    action: data.action,
+                    resources: data.resources,
+                    save: data.save,
+                    metadata: data.metadata,
+                    source: data.source,
+                    message: data.message,
                 };
                 if inner.state.borrow().permissions.iter().any(|item| item.info.id == request.id) {
                     return;
@@ -312,15 +319,13 @@ impl Footers {
                     },
                 );
             }
-            "permission.replied" => {
-                let id = data["requestID"].as_str().unwrap_or_default();
-                inner.state.borrow_mut().permissions.retain(|item| item.info.id.0 != id);
+            V2Event::PermissionReplied(replied) => {
+                let id = &replied.data.request_id;
+                inner.state.borrow_mut().permissions.retain(|item| &item.info.id != id);
                 inner.sync();
             }
-            "form.created" => {
-                let Ok(form) = serde_json::from_value::<FormInfo>(data["form"].clone()) else {
-                    return;
-                };
+            V2Event::FormCreated(created) => {
+                let form = created.data.form.clone();
                 {
                     let mut state = inner.state.borrow_mut();
                     if state.forms.iter().any(|item| item.id == form.id) {
@@ -330,13 +335,17 @@ impl Footers {
                 }
                 inner.sync();
             }
-            "form.replied" | "form.cancelled" => {
-                let id = data["id"].as_str().unwrap_or_default();
-                inner.state.borrow_mut().forms.retain(|item| item.id.0 != id);
-                inner.sync();
-            }
+            V2Event::FormReplied(replied) => self.form_done(&replied.data.id),
+            V2Event::FormCancelled(cancelled) => self.form_done(&cancelled.data.id),
             _ => {}
         }
+    }
+}
+
+impl Footers {
+    fn form_done(&self, id: &FormID) {
+        self.0.state.borrow_mut().forms.retain(|item| &item.id != id);
+        self.0.sync();
     }
 }
 
