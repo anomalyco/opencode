@@ -95,7 +95,10 @@ test("provider in cooldown is not retried until its cooldown expires", async () 
       baseURL: upstreamUrl + "/v1",
       priority: 1,
       enabled: true,
-      models: [{ alias: "ocu/auto", upstreamModel: "test-model" }]
+      models: [
+        { alias: "ocu/auto", upstreamModel: "test-model" },
+        { alias: "ocu/cloud", upstreamModel: "test-model" }
+      ]
     }]
   });
   const gatewayUrl = await listen(gateway);
