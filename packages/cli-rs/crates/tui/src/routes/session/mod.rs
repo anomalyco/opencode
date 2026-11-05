@@ -185,10 +185,5 @@ impl RouteView for Session {
 
 /// Awaits a store read; a failure shows as an error toast.
 pub(super) fn load(tui: &Tui, task: Task<()>) {
-    let weak = tui.weak();
-    tui.app.spawn(task, move |_, result| {
-        if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-            tui.toasts.error(error.to_string());
-        }
-    });
+    tui.request(task, |_, ()| {});
 }

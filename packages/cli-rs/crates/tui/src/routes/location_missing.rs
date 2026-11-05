@@ -201,10 +201,8 @@ fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
                 result => tui.toasts.show(
                     ToastOptions::new(
                         Variant::Error,
-                        result.map_or_else(
-                            |error| crate::dialogs::worktrees::error_message(&error),
-                            |_| "No worktree directory returned".to_owned(),
-                        ),
+                        result
+                            .map_or_else(|error| error.tui_message(), |_| "No worktree directory returned".to_owned()),
                     )
                     .title("Creating workspace failed"),
                 ),

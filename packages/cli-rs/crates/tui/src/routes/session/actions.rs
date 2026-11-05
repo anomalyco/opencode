@@ -133,8 +133,7 @@ impl Inner {
         let data = tui.data.clone();
         let session = self.session.clone();
         let generate = title.is_empty();
-        let weak = tui.weak();
-        tui.app.spawn(
+        tui.request(
             async move {
                 let input = SessionUpdateInput {
                     session_id: session.clone(),
@@ -149,11 +148,7 @@ impl Inner {
                 }
                 Ok::<_, String>(())
             },
-            move |_, result| {
-                if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                    tui.toasts.error(error);
-                }
-            },
+            |_, ()| {},
         );
     }
 
@@ -184,13 +179,7 @@ impl Inner {
             provider_id: ProviderID(selection.model.provider_id),
             variant: selection.variant,
         });
-        let task = tui.data.compact(&self.session, model);
-        let weak = tui.weak();
-        tui.app.spawn(task, move |_, result| {
-            if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()));
-            }
-        });
+        tui.request(tui.data.compact(&self.session, model), |_, _| {});
         tui.dialogs.clear();
     }
 
