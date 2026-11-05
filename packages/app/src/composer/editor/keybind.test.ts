@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { handleComposerKeyDown, resolveComposerKeyAction } from "./keybind"
+import { INITIAL_COMPOSITION_STATE, isComposing, transitionComposition } from "./composition-machine"
 
 const keybinds = {
   alternate: (event: KeyboardEvent) => event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey,
@@ -78,6 +79,22 @@ describe("composer keybind resolution", () => {
 })
 
 describe("composer keybind integration", () => {
+  test("composition lifecycle suppresses submission until end and still guards Safari's confirming Enter", () => {
+    const started = transitionComposition(INITIAL_COMPOSITION_STATE, { type: "composition.start" })
+    expect(transitionComposition(started, { type: "composition.start" })).toBe(started)
+    expect(
+      handle({ event: keyEvent({ key: "s", metaKey: true }), keybinds, composing: isComposing(started) }).submissions,
+    ).toEqual([])
+    const ended = transitionComposition(started, { type: "composition.end" })
+    expect(transitionComposition(ended, { type: "composition.end" })).toBe(ended)
+    expect(
+      handle({ event: keyEvent({ key: "s", metaKey: true }), keybinds, composing: isComposing(ended) }).submissions,
+    ).toEqual([false])
+    expect(
+      handle({ event: keyEvent({ key: "Enter", keyCode: 229 }), composing: isComposing(ended) }).submissions,
+    ).toEqual([])
+  })
+
   test("custom alternate delivery observes composition and repeat suppression", () => {
     const bindings = { ...keybinds, alternate: (event: KeyboardEvent) => event.key === "q" && event.ctrlKey }
     expect(handle({ event: keyEvent({ key: "q", ctrlKey: true }), keybinds: bindings }).submissions).toEqual([true])
