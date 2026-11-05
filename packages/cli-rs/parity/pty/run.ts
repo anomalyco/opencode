@@ -66,8 +66,8 @@ export type PtyCase = {
   exits?: boolean
   // Plan 7.5: line masks for checkpoints. Each match becomes `<masked>`; say why in `reason`.
   masks?: { pattern: RegExp; reason: string }[]
-  // Compare the request log too.
-  requests?: boolean
+  // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
+  requests?: boolean | "writes"
   tsOnly?: boolean
   // As in P-CLI: writes files into the sandbox before the command runs.
   setup?: (root: string, server: string | undefined) => Promise<void>
@@ -171,7 +171,11 @@ export async function runPty(side: Side, value: PtyCase) {
         ),
       ]),
     ),
-    ...(value.requests ? { requests: requestLog(server?.requests ?? [], context) } : {}),
+    ...(value.requests === "writes"
+      ? { requests: { writes: requestLog(server?.requests ?? [], context).writes } }
+      : value.requests
+        ? { requests: requestLog(server?.requests ?? [], context) }
+        : {}),
   }
 }
 
