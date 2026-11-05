@@ -553,8 +553,7 @@
       "checkpoint": "page-up",
       "until": "Jump to latest",
       "deviation": [
-        "V01-plain-transcript",
-        "V15-navigation"
+        "V01-plain-transcript"
       ],
       "fixture": "E.8/navigate/page-up"
     },

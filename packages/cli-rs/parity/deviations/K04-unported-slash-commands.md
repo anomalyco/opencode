@@ -1,19 +1,18 @@
-# K04: slash commands of unported features
+# K04: `/restart` is not offered
 
 ## TypeScript
 
 Typing `/` lists every reachable keymap command with a slash name, its aliases, and the server's commands,
 sorted, each padded to the longest name plus two (`packages/tui/src/component/prompt/autocomplete.tsx:491-521`).
-The TS TUI registers 38 built-in slash commands.
+With a managed background service, `service.restart` adds `/restart` (`packages/tui/src/app.tsx:1083-1098`).
 
 ## Rust
 
-The list, its order, its padding rule, and its fuzzy filter are ported, but only the commands of ported
-features are registered. For `/rev` in `E.3/complete`, TS also lists `/undo`, `/web`, `/pair`, and `/btw`,
-and its longer names pad every row one column wider.
+The list, its order, its padding rule, its fuzzy filter, and every built-in slash command but `/restart` are
+ported; `E.3/complete` matches TS at every checkpoint. `service.restart` is not registered
+(`crates/tui/src/features/system_commands.rs`), so `/restart` never shows, even with a managed service.
 
 ## Reason
 
-Each command is registered by the step that ports its feature (for example `/undo` with revert, E.10a). The
-`slash` checkpoint matches once they land; the `command`, `mention`, and `picked` checkpoints already match in
-the prompt and popup rows.
+Restarting stops the shared background service, which this client never does (orchestrator decision O-21).
+`opencode-rs service restart` restarts it as an explicit command (O-39).
