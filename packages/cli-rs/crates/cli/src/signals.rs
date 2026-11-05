@@ -47,6 +47,49 @@ pub fn on_shutdown(label: impl Into<String>, step: impl FnOnce() + Send + 'stati
     Registration { shutdown, id }
 }
 
+/// Waits for a foreground child, which may own the terminal. On a signal, teardown sends it SIGTERM when
+/// `stop` is set (`less` ignores SIGINT) and waits for it to exit before this process exits, as TS's
+/// scoped `AppProcess` does, so the child restores the terminal first.
+pub fn wait_child(
+    label: impl Into<String>,
+    mut child: std::process::Child,
+    stop: bool,
+) -> std::io::Result<std::process::ExitStatus> {
+    let pid = child.id();
+    let exited = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+    let registration = on_shutdown(label, {
+        let exited = exited.clone();
+        move || {
+            let done = lock(&exited.0);
+            #[cfg(unix)]
+            if stop
+                && !*done
+                && let Some(pid) = rustix::process::Pid::from_raw(pid as i32)
+            {
+                let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
+            }
+            #[cfg(not(unix))]
+            let _ = (pid, stop);
+            let _done = exited
+                .1
+                .wait_while(done, |done| !*done)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+    });
+    let status = child.wait();
+    *lock(&exited.0) = true;
+    exited.1.notify_all();
+    drop(registration);
+    // Teardown owns the exit once it started; returning would race it with the command's own exit code.
+    while SHUTDOWN
+        .get()
+        .is_some_and(|shutdown| shutdown.started.load(Ordering::SeqCst))
+    {
+        std::thread::park();
+    }
+    status
+}
+
 #[cfg(unix)]
 fn listen(shutdown: Arc<Shutdown>, hangup: bool) -> std::io::Result<()> {
     use tokio::signal::unix::{SignalKind, signal};

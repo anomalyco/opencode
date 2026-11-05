@@ -9,7 +9,7 @@
 use std::ffi::OsString;
 use std::io;
 use std::path::Path;
-use std::process::{Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus};
 
 use opencode_local::paths::Paths;
 
@@ -52,24 +52,24 @@ pub fn forward() -> StartError {
     exec(&TsCommand::from_env(), std::env::args_os().skip(1))
 }
 
-/// Runs `command` with `args` as a child that shares this process's stdio and returns its exit code.
-pub fn status(
+/// Starts `command` with `args` as a child that shares this process's stdio. The caller waits for it, so
+/// a signal can wait for the child to finish its own teardown first.
+pub fn spawn(
     command: &TsCommand,
     args: impl IntoIterator<Item = OsString>,
-) -> Result<i32, StartError> {
+) -> Result<Child, StartError> {
     build(command, args)
-        .status()
-        .map(exit_code)
+        .spawn()
         .map_err(|source| start_error(command, source))
 }
 
 /// Turns remote access on through `opencode service set remote true`: it creates the device's
 /// OpenTunnel tunnel in the foreground (printing "Setting up remote access; this can take a
 /// minute..." the first time), stops the service, and writes the route to the service config
-/// (`packages/cli/src/services/service-config.ts:261-270`). Returns the exit code; on failure the
-/// child has already printed its error.
-pub fn enable_remote(command: &TsCommand) -> Result<i32, StartError> {
-    status(
+/// (`packages/cli/src/services/service-config.ts:261-270`). Returns the started child; on failure it
+/// prints its own error before it exits.
+pub fn enable_remote(command: &TsCommand) -> Result<Child, StartError> {
+    spawn(
         command,
         ["service", "set", "remote", "true"].map(OsString::from),
     )
@@ -103,7 +103,7 @@ pub fn tunnel_hostname(paths: &Paths, route: &str) -> io::Result<Option<String>>
     Ok(hostname)
 }
 
-/// The process exit code for `status`: its code, else `128 + signal` as a shell reports it.
+/// The process exit code for a child's status: its code, else `128 + signal` as a shell reports it.
 pub fn exit_code(status: ExitStatus) -> i32 {
     #[cfg(unix)]
     {
@@ -149,25 +149,27 @@ mod tests {
     }
 
     #[test]
-    fn status_passes_the_arguments_and_returns_the_exit_code() {
+    fn the_child_gets_the_arguments_and_reports_its_exit_code() {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("args");
         let command = script(
             dir.path(),
             &format!("printf '%s\\n' \"$@\" > '{}'\nexit 3", log.display()),
         );
-        assert_eq!(enable_remote(&command).unwrap(), 3);
+        let status = enable_remote(&command).unwrap().wait().unwrap();
+        assert_eq!(exit_code(status), 3);
         assert_eq!(
             std::fs::read_to_string(&log).unwrap(),
             "service\nset\nremote\ntrue\n"
         );
         let killed = script(dir.path(), "kill -9 $$");
-        assert_eq!(status(&killed, []).unwrap(), 128 + 9);
+        let status = spawn(&killed, []).unwrap().wait().unwrap();
+        assert_eq!(exit_code(status), 128 + 9);
     }
 
     #[test]
     fn a_missing_binary_names_the_variable() {
-        let error = status(&TsCommand::new("/nonexistent/opencode"), []).unwrap_err();
+        let error = spawn(&TsCommand::new("/nonexistent/opencode"), []).unwrap_err();
         assert!(
             error
                 .to_string()
