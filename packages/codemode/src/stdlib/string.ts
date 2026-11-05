@@ -1,6 +1,4 @@
-import { nativeKind } from "../machine/native-kind.js"
-import { type Hint, Push } from "../interpreter/signals.js"
-import { PENDING } from "../machine/frame.js"
+import { type Hint, Invoke } from "../interpreter/signals.js"
 import { constructor, fn, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
@@ -47,7 +45,7 @@ const replaceWithCallback = <R>(
   value: string,
   name: "replace" | "replaceAll",
   args: Array<Value>,
-): Push => {
+): Invoke => {
   const builtins = ctx.builtins
   const callback = requireCallback(args[1], `String.${name}`)
   const matches: Array<Match> = []
@@ -78,39 +76,19 @@ const replaceWithCallback = <R>(
     if (name === "replace") value.replace(search, collect)
     else value.replaceAll(search, collect)
   }
-  return new Push(ReplaceWithCallback, [value, matches, callback, 0, []])
+  const pieces = matches.map(
+    (match, index) =>
+      new Arr(builtins.Array, [
+        value.slice(index === 0 ? 0 : matches[index - 1]!.offset + matches[index - 1]!.match.length, match.offset),
+        new Arr(builtins.Array, match.args),
+      ]),
+  )
+  const last = matches.at(-1)
+  const rest = value.slice(last === undefined ? 0 : last.offset + last.match.length)
+  return new Invoke(ctx.prelude.fn("replaceWith"), undefined, [new Arr(builtins.Array, pieces), rest, callback], undefined)
 }
 
 type Match = { readonly match: string; readonly offset: number; readonly args: Array<Value> }
-
-// Slots: the string, its matches, the callback, the next match, and the output so far.
-const ReplaceWithCallback = nativeKind("String.prototype.replace callback", (task, frame, input) => {
-  const slots = frame.slots
-  const value = slots[0] as string
-  const matches = slots[1] as Array<Match>
-  const output = slots[4] as Array<string>
-  let index = slots[3] as number
-  if (frame.phase === 1) {
-    output.push(coerceToString(input as Value))
-    index++
-  }
-  for (; index < matches.length; index++) {
-    const match = matches[index]!
-    output.push(
-      value.slice(index === 0 ? 0 : matches[index - 1]!.offset + matches[index - 1]!.match.length, match.offset),
-    )
-    const replacement = task.call(slots[2] as Value, undefined, match.args, frame.node)
-    if (replacement === PENDING) {
-      slots[3] = index
-      frame.phase = 1
-      return PENDING
-    }
-    output.push(coerceToString(replacement))
-  }
-  const last = matches.at(-1)
-  output.push(value.slice(last === undefined ? 0 : last.offset + last.match.length))
-  return output.join("")
-})
 
 export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins

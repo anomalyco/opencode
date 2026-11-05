@@ -44,7 +44,6 @@ import { deleted, OrderedTable } from "../interpreter/table.js"
 import { Frame, kinds, PENDING } from "../machine/frame.js"
 import { AsyncFromSyncIterator } from "../machine/generators.js"
 import { Machine } from "../machine/machine.js"
-import { consumers, EXIT } from "../machine/native-kind.js"
 import { HostCall, Resolving } from "../machine/scheduler.js"
 import { MachineTask } from "../machine/task.js"
 import { TextDecoderObj } from "../stdlib/bytes.js"
@@ -52,7 +51,7 @@ import { ToolError, toolError } from "../tool-error.js"
 import { ToolReference, ToolRuntimeError } from "../tool-runtime.js"
 
 // A graph codec for a run's state: every object reachable from the roots becomes one record, so identity, sharing,
-// and cycles survive, and every value inside a record is tagged JSON. Built-ins, frame kinds, consumers, AST nodes,
+// and cycles survive, and every value inside a record is tagged JSON. Built-ins, frame kinds, AST nodes,
 // and the machine's own objects are named rather than copied; a value with no data form (a live host function, say)
 // becomes a `Lost` placeholder. Nothing here evaluates anything: decoding only allocates and assigns.
 
@@ -63,7 +62,7 @@ export type Json = null | boolean | number | string | ReadonlyArray<Json> | { re
  * A value inside a record: a JSON primitive, or a tag (an array whose first item says what it is):
  * - `["u"]` undefined, `["n", "NaN" | "Infinity" | "-Infinity" | "-0"]` a number JSON cannot spell, `["-"]` an absent
  *   field, `["h"]` an array hole;
- * - `["s", name]` an interpreter symbol, `["k", name]` a frame kind, `["c", name]` a consumer;
+ * - `["s", name]` an interpreter symbol, `["k", name]` a frame kind;
  * - `["i", name]` a built-in or host global, unchanged since the runtime was made;
  * - `["a", source, index]` an AST node, `["A", source, index, key]` an array the AST owns;
  * - `["r", id]` another record.
@@ -109,7 +108,6 @@ const symbols = new Map<string, symbol>([
   ["iterator", IteratorSymbol],
   ["asyncIterator", AsyncIteratorSymbol],
   ["pending", PENDING],
-  ["exit", EXIT],
   ["optionalShortCircuit", OptionalShortCircuit],
   ["slice", Slice],
   ["deleted", deleted],
@@ -308,16 +306,14 @@ const errorClasses = new Map<string, Function>([
 const errorNames = new Map([...errorClasses].map(([name, ctor]) => [ctor, name]))
 
 let kindNames: Map<object, string> | undefined
-let consumerNames: Map<object, string> | undefined
 
 /**
- * The names of every frame kind and consumer, and of every class with a codec: a build that saves a different set
+ * The names of every frame kind, and of every class with a codec: a build that saves a different set
  * cannot read this one's snapshots.
  */
 export const codecShape = (): string =>
   JSON.stringify([
     [...kinds.keys()].sort(),
-    [...consumers.keys()].sort(),
     specs.map((spec) => [spec.name, spec.fields]),
     [...symbols.keys()],
   ])
@@ -345,7 +341,6 @@ class Encoder {
 
   constructor(private readonly env: EncodeEnv) {
     kindNames ??= new Map([...kinds].map(([name, kind]) => [kind, name]))
-    consumerNames ??= new Map([...consumers].map(([name, consumer]) => [consumer, name]))
   }
 
   value(value: unknown): Encoded {
@@ -370,8 +365,6 @@ class Encoder {
     const object = value as object
     const kind = kindNames!.get(object)
     if (kind !== undefined) return ["k", kind]
-    const consumer = consumerNames!.get(object)
-    if (consumer !== undefined) return ["c", consumer]
     if (object instanceof Obj) {
       const name = this.env.nameOf(object)
       if (name !== undefined && this.env.unchanged(object, name)) return ["i", name]
@@ -844,8 +837,6 @@ class Decoder {
         return symbols.get(text(value[1], "a symbol")) ?? invalid(`unknown symbol ${String(value[1])}.`)
       case "k":
         return kinds.get(text(value[1], "a kind")) ?? invalid(`unknown frame kind ${String(value[1])}.`)
-      case "c":
-        return consumers.get(text(value[1], "a consumer")) ?? invalid(`unknown consumer ${String(value[1])}.`)
       case "i": {
         const name = text(value[1], "a built-in name")
         return this.env.named(name) ?? invalid(`this runtime has no built-in or host global named ${name}.`)

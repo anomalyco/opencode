@@ -125,7 +125,7 @@ function setMethod(target, other, name) {
   }
   const iterator = $Call(keys, other)
   if (!$IsObject(iterator)) $Throw("TypeError", "Set." + name + " expects 'keys' to return an iterator object.")
-  for (const item of $Direct(iterator)) {
+  for (const item of $Direct(iterator, true)) {
     found = $Table("has", target, item)
     if (name === "union") $Table("add", result, item)
     else if (name === "intersection") {
@@ -199,5 +199,90 @@ function pairsForEach(target, pairs, callback, thisArg) {
     $Call(callback, thisArg, pairs[index][1], pairs[index][0], target)
     index++
   }
+}
+function Iterator$from(value) {
+  if ($IsObject(value) && $Inherits(value, Iterator.prototype)) return value
+  if (typeof value !== "string" && !$IsObject(value)) $Throw("TypeError", "Iterator.from expects an iterable or iterator, received " + $Describe(value) + ".")
+  const method = value[Symbol.iterator]
+  return $Wrap(method === undefined || method === null ? value : $Call(method, value))
+}
+
+function Iterator$prototype$toArray() {
+  const result = []
+  for (const item of $Direct(this, false)) result[result.length] = item
+  return result
+}
+
+function Iterator$prototype$reduce(callback, ...initial) {
+  const iterator = $Direct(this, false)
+  $Callback(callback, "Iterator.prototype.reduce")
+  let accumulator = initial[0]
+  let started = initial.length > 0
+  let index = 0
+  for (const item of iterator) {
+    if (started) accumulator = callback(accumulator, item, index)
+    else accumulator = item
+    started = true
+    index++
+  }
+  if (!started) $Throw("TypeError", "Iterator.prototype.reduce of an empty iterator with no initial value.")
+  return accumulator
+}
+
+function Iterator$prototype$forEach(callback) {
+  iteratorTest(this, callback, "forEach")
+}
+function Iterator$prototype$some(callback) {
+  return iteratorTest(this, callback, "some")
+}
+function Iterator$prototype$every(callback) {
+  return iteratorTest(this, callback, "every")
+}
+function Iterator$prototype$find(callback) {
+  return iteratorTest(this, callback, "find")
+}
+// Calls the callback with each value and its index until its result decides; leaving early closes the iterator.
+function iteratorTest(self, callback, name) {
+  const iterator = $Direct(self, false)
+  $Callback(callback, "Iterator.prototype." + name)
+  let index = 0
+  let result
+  for (const item of iterator) {
+    result = callback(item, index++)
+    if (name === "some" && result) return true
+    if (name === "every" && !result) return false
+    if (name === "find" && result) return item
+  }
+  return name === "every" ? true : name === "some" ? false : undefined
+}
+
+// JSON.parse's reviver: children are revived first, each replacing (or, when the reviver gives undefined, removing)
+// its property; then the reviver sees the value itself.
+function revive(holder, key, reviver) {
+  const value = holder[key]
+  if ($IsObject(value)) {
+    const names = $Keys(value)
+    let index = 0
+    let revived
+    while (index < names.length) {
+      revived = revive(value, names[index], reviver)
+      if (revived === undefined) delete value[names[index]]
+      else value[names[index]] = revived
+      index++
+    }
+  }
+  return $Call(reviver, holder, key, value)
+}
+
+// String replace with a callback, once the matches are found: each is the text before it and the callback's
+// arguments; the text after the last one follows.
+function replaceWith(matches, rest, callback) {
+  let result = ""
+  let index = 0
+  while (index < matches.length) {
+    result += matches[index][0] + String(callback(...matches[index][1]))
+    index++
+  }
+  return result + rest
 }
 `

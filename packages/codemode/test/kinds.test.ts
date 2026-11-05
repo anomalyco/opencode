@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import "../src/machine/kinds.js"
 import { kind } from "../src/machine/frame.js"
-import { consumer, nativeKind } from "../src/machine/native-kind.js"
+import { nativeKind } from "../src/machine/native-kind.js"
 
-// Frame kinds and consumers are sealed once Code Mode has loaded, so the snapshot build id hashes only the package's
+// Frame kinds are sealed once Code Mode has loaded, so the snapshot build id hashes only the package's
 // own and is the same in every process, whatever it imported first.
 
 const root = path.join(import.meta.dir, "..")
@@ -17,15 +17,12 @@ const output = async (command: Array<string>) => {
 }
 
 describe("sealed frame kinds", () => {
-  test("a kind or consumer registered after Code Mode has loaded throws", () => {
+  test("a kind registered after Code Mode has loaded throws", () => {
     expect(() => kind("late", () => undefined)).toThrow(
       'Frame kinds are sealed: "late" can\'t be registered after Code Mode has loaded.',
     )
     expect(() => nativeKind("late native", () => undefined)).toThrow(
       'Frame kinds are sealed: "late native" can\'t be registered after Code Mode has loaded.',
-    )
-    expect(() => consumer({ name: "late", done: () => undefined })).toThrow(
-      'Consumers are sealed: "late" can\'t be registered after Code Mode has loaded.',
     )
   })
 

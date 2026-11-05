@@ -9,7 +9,6 @@ import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } fr
 import { normal } from "../src/interpreter/signals.js"
 import { Frame, type Kind, kinds } from "../src/machine/frame.js"
 import { Machine } from "../src/machine/machine.js"
-import { type Consumer, consumers } from "../src/machine/native-kind.js"
 import { ScopeStack } from "../src/interpreter/scope.js"
 import { AsyncFromSyncIterator } from "../src/machine/generators.js"
 import { stats } from "../src/machine/task.js"
@@ -70,8 +69,8 @@ const programBinding = (machine: Machine, name: string): Value => {
 }
 
 // Throws unless `value` is plain data: no host function or generator is reachable from it. Program values, scopes,
-// AST nodes, and the machine (a back-reference from what settles a promise) are data of their own; frame kinds and
-// consumers are module constants named once.
+// AST nodes, and the machine (a back-reference from what settles a promise) are data of their own; frame kinds are
+// module constants named once.
 const requireData = (value: unknown, path: string, seen: Set<unknown>): void => {
   if (typeof value === "function") throw new Error(`a host function at ${path}`)
   if (value === null || typeof value !== "object" || seen.has(value)) return
@@ -80,7 +79,7 @@ const requireData = (value: unknown, path: string, seen: Set<unknown>): void => 
   if (ArrayBuffer.isView(value)) return
   const node = value as { type?: unknown; start?: unknown }
   if (typeof node.type === "string" && typeof node.start === "number") return
-  if (kinds.get((value as Kind).name) === value || consumers.get((value as Consumer).name) === value) return
+  if (kinds.get((value as Kind).name) === value) return
   const generator = value as { next?: unknown; throw?: unknown }
   if (typeof generator.next === "function" && typeof generator.throw === "function") {
     throw new Error(`a host generator at ${path}`)
@@ -408,7 +407,6 @@ describe("built-ins as data", () => {
     for (const name of [
       "Array callback",
       "Call",
-      "Drain",
       "Convert",
       "IteratorHelper.next",
       "JSON.stringify walk",
@@ -416,7 +414,6 @@ describe("built-ins as data", () => {
       "Promise combinator",
       "Array sort",
       "PromiseReactionJob",
-      "JSON.parse reviver",
       "search",
     ]) {
       expect(seenKinds).toContain(name)
