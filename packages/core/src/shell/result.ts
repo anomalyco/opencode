@@ -27,7 +27,7 @@ export function output(result: Result): Output {
   }
 }
 
-export function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
+function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
   if (output.timeout) return "Timed out before completion"
   if (output.signal !== undefined) return `Killed by ${output.signal}`
   if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`

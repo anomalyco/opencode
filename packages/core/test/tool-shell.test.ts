@@ -34,6 +34,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { ShellResult } from "@opencode/core/shell/result"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
@@ -1298,10 +1299,13 @@ describe("ShellTool", () => {
         Effect.andThen((settled) =>
           Effect.sync(() => {
             expect(settled.metadata).toMatchObject({ timeout: true })
-            expect(settled.content?.[0]).toEqual({
-              type: "text",
-              text: "[timed out after 0.05s] Retry with a larger timeout if the command is expected to take longer.",
-            })
+            expect(settled.content).toEqual([
+              {
+                type: "text",
+                text: "[timed out after 0.05s] Retry with a larger timeout if the command is expected to take longer.",
+              },
+              { type: "text", text: "(no output)" },
+            ])
           }),
         ),
       )
@@ -1607,6 +1611,15 @@ describe("ShellTool", () => {
         )
       }),
     { timeout: 30_000 },
+  )
+
+  it.live("leads a failed command's output with a one-line status", () =>
+    Effect.sync(() => {
+      expect(ShellResult.status({ exit: 0 })).toBeUndefined()
+      expect(ShellResult.status({ exit: 7 })).toBe("[exit 7]")
+      expect(ShellResult.status({ exit: 143, signal: "SIGTERM" })).toBe("[killed by SIGTERM]")
+      expect(ShellResult.status({ timeout: true })).toStartWith("[timed out]")
+    }),
   )
 
   if (!isWindows) {

@@ -148,14 +148,13 @@ export const Plugin = {
         id: string,
         shellID: string,
         command: string,
-        timeout: number,
         settled: Deferred.Deferred<Output>,
       ) {
         const info = (yield* jobs.wait({ id })).info
         if (!info || info.status === "running") return
         const output = info.status === "completed" ? yield* Deferred.await(settled) : undefined
         const text = output
-          ? resultMessages(output, timeout).join("\n\n")
+          ? (info.output ?? "")
           : info.status === "error"
             ? (info.error ?? "Command failed")
             : "Cancelled"
@@ -185,10 +184,10 @@ export const Plugin = {
           description: description(),
           input: Input,
           output: Output,
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
-              let finalTimeout = timeout
+          execute: (input, context) => {
+            const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+            let finalTimeout = timeout
+            return Effect.gen(function* () {
               const info = yield* shell.create(
                 {
                   command: input.command,
@@ -235,8 +234,8 @@ export const Plugin = {
 
               if (input.background === true) {
                 yield* jobs.background(job.id)
-                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, finalTimeout, settled)
-                return toolResult(backgroundResult(info.id, info.file))
+                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
+                return backgroundResult(info.id, info.file)
               }
 
               const result = yield* jobs
@@ -244,19 +243,22 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, finalTimeout, settled)
-                return toolResult(backgroundResult(info.id, info.file))
+                finalTimeout = 0
+                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
+                return backgroundResult(info.id, info.file)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
               if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
 
-              return toolResult(yield* Deferred.await(settled), finalTimeout)
+              return yield* Deferred.await(settled)
             }).pipe(
+              Effect.map((output) => toolResult(output, finalTimeout)),
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
               ),
-            ),
+            )
+          },
         }),
       )
       .pipe(Effect.orDie)

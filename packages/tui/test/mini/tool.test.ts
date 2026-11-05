@@ -17,6 +17,13 @@ describe("Mini tool presentation", () => {
         { type: "text", text: "Command exited with code 0." },
       ]),
     ).toBe("")
+
+    expect(
+      toolOutputText("shell", [
+        { type: "text", text: "[exit 7]" },
+        { type: "text", text: "build failed\n" },
+      ]),
+    ).toBe("build failed\n")
   })
 
   test("normalizes only persisted tool aliases into current fields", () => {
