@@ -252,6 +252,9 @@ impl Tui {
         if let Some(error) = error {
             self.toasts.theme_error(error);
         }
+        if effects.contains(&Effect::ProbePalette) {
+            self.app.refresh_palette();
+        }
         if let Some(files) = self.files.clone() {
             let effects: Vec<Effect> =
                 effects.into_iter().filter(|effect| !matches!(effect, Effect::ProbePalette)).collect();
@@ -600,6 +603,19 @@ fn install_theme(tui: &Rc<Tui>) {
     tui.app.on_theme_mode(move |_, mode| {
         let Some(tui) = weak.upgrade() else { return };
         tui.theme.borrow_mut().terminal_mode(mode);
+        tui.theme_changed();
+    });
+    // TS reads the palette again on `?997` (`theme.tsx:263-268`), so `system` follows a terminal theme switch.
+    let weak = tui.weak();
+    tui.app.on_color_scheme(move |_| {
+        let Some(tui) = weak.upgrade() else { return };
+        tui.theme.borrow_mut().colors_changed();
+        tui.theme_changed();
+    });
+    let weak = tui.weak();
+    tui.app.on_palette(move |_, palette| {
+        let Some(tui) = weak.upgrade() else { return };
+        tui.theme.borrow_mut().palette(TerminalColors::from_palette(palette));
         tui.theme_changed();
     });
     let weak = tui.weak();
