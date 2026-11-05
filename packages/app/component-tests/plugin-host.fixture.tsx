@@ -1,4 +1,7 @@
 import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionDocument } from "@opencode/session-ui/document"
+import { CurrentSessionProviders } from "@opencode/session-ui/storybook"
+import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { DialogProvider, useDialog } from "@opencode/ui/context/dialog"
 import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
@@ -846,13 +849,17 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const session = value as unknown as MountedSession
 
+  // SAFETY: the test's plugins never read the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = {} as unknown as SessionScreen
+
   function Message() {
     const host = usePluginHost()
     hosts.push(host)
 
     return (
       <Show when={host.ready()}>
-        <PluginLinks session={session}>
+        <PluginLinks session={session} screen={screen}>
           <Markdown text={message.text} streaming={message.streaming} />
         </PluginLinks>
       </Show>
@@ -890,6 +897,104 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
 
   return {
     show: (text: string, streaming = false) => setMessage({ text, streaming }),
+    define: (next: readonly Entry[]) => setDefinitions(next),
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and a timeline of one prompt and its reply inside the session screen's `PluginLinks`, for a
+ * session whose directory is `/repo`. The screen's composer records the text each `insert` reaches; `define` replaces
+ * the plugins, as plugin GUIs join and leave.
+ */
+export function mountMessageMenus(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "message-menus"
+  // Over the story, which fills the page, so the rows can be hovered.
+  Object.assign(container.style, { position: "fixed", inset: "0", zIndex: "10", width: "720px", background: "white" })
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const inserted: string[] = []
+  const [definitions, setDefinitions] = createSignal(input.definitions)
+  const model = { id: "model", providerID: "provider" }
+
+  const transcript: SessionDocument = {
+    sessionID: "ses_menus",
+    messages: [
+      { id: "msg_prompt", type: "user", text: "Explain the cache", time: { created: 1 }, metadata: { model } },
+      {
+        id: "msg_reply",
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [{ type: "text", text: "It keeps rows." }],
+        time: { created: 2, completed: 3 },
+      },
+    ],
+    status: { type: "idle" },
+    diffs: [],
+  }
+
+  const value = { key: "fixture\nses_menus", id: "ses_menus", directory: "/repo", visit: {} }
+
+  // SAFETY: the slot passes the session through; the test's plugins read only `directory`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = value as unknown as MountedSession
+
+  // SAFETY: the test's plugins read only `composer.insert` of the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = { composer: { insert: (text: string) => void inserted.push(text) } } as unknown as SessionScreen
+
+  function Timeline() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <PluginLinks session={session} screen={screen}>
+          <CurrentSessionProviders document={transcript}>
+            <SessionTimeline document={transcript} actions={{ fork: () => undefined }} />
+          </CurrentSessionProviders>
+        </PluginLinks>
+      </Show>
+    )
+  }
+
+  function Host() {
+    const apis = createHostApis()
+
+    return (
+      <PluginHostProvider
+        definitions={definitions}
+        disabled={() => new Set<string>()}
+        apis={apis.apis}
+        whenMounted={apis.whenMounted}
+      >
+        <Timeline />
+      </PluginHostProvider>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <Host />
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    inserted,
     define: (next: readonly Entry[]) => setDefinitions(next),
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),

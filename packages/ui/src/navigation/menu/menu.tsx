@@ -131,6 +131,13 @@ function useMenuContext() {
   return ctx
 }
 
+/** Whether the dropdown `Menu` around the caller is open: false while it animates closed, and in a context menu. */
+export function useMenuOpen() {
+  const ctx = useMenuContext()
+
+  return () => ctx.state().status === "open"
+}
+
 function ItemBody(
   props: ParentProps<{
     shortcut?: JSX.Element | string

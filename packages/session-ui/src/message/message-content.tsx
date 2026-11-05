@@ -24,6 +24,7 @@ import { linkSegments } from "../components/link-segments"
 import { LinkedText } from "../components/linked-text"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
+import { useMessageMenu, type MessageMenuTarget } from "../context/message-menu"
 import { useSources } from "../context/sources"
 import { SourcesChip } from "../sources/sources-chip"
 import type { TurnSources } from "../sources/sources"
@@ -34,7 +35,7 @@ import { CommentCard, commentCardTarget, quoteTooltip } from "./comment-card"
 import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
-import { Menu } from "@opencode/ui/menu"
+import { Menu, useMenuOpen } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
@@ -154,6 +155,11 @@ function MessageActionButton(
       />
     </Tooltip>
   )
+}
+
+/** The host's items for an open More actions menu; rendered only while the menu is mounted. */
+function MessageMenuItems(props: MessageMenuTarget) {
+  return useMessageMenu()?.items(props, useMenuOpen())
 }
 
 function UserMessageTransition(props: { active: boolean; children: JSX.Element }) {
@@ -496,6 +502,7 @@ export function CurrentUserMessageDisplay(props: {
                   {i18n.t("ui.message.copyFullMessage")}
                 </Menu.Item>
               </Show>
+              <MessageMenuItems id={props.message.id} role="user" text={props.text} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>
@@ -1212,6 +1219,8 @@ export function AssistantTextContent(props: {
   )
 
   function copyFooter() {
+    const menu = useMessageMenu()
+
     return (
       <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
         <MessageActionButton
@@ -1222,6 +1231,36 @@ export function AssistantTextContent(props: {
           onClick={() => copy.copy(props.text)}
           aria-label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
         />
+        {/* A reply has no actions of its own beyond Copy, so it offers a menu only for plugin items. */}
+        <Show when={menu?.active()}>
+          <Menu gutter={4} placement="bottom-start">
+            <Tooltip appearance="compact" value={i18n.t("ui.message.moreActions")} placement="top" gutter={4}>
+              <Menu.Trigger
+                as={IconButton}
+                icon={<Icon name="outline-dots" size="small" />}
+                size="small"
+                variant="ghost-muted"
+                onMouseDown={(event: MouseEvent) => event.preventDefault()}
+                aria-label={i18n.t("ui.message.moreActions")}
+              />
+            </Tooltip>
+            <Menu.Portal>
+              <Menu.Content>
+                <Menu.Group>
+                  <Menu.GroupLabel>
+                    <time dateTime={new Date(props.message.time.completed ?? props.message.time.created).toISOString()}>
+                      {new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(
+                        props.message.time.completed ?? props.message.time.created,
+                      )}
+                    </time>
+                  </Menu.GroupLabel>
+                </Menu.Group>
+                <Menu.Separator />
+                <MessageMenuItems id={props.message.id} role="assistant" text={props.text} />
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+        </Show>
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
             <MetaItems items={meta()} slot="text-part" />

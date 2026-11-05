@@ -575,7 +575,8 @@
   }
 
   &:hover [data-slot="text-part-copy-wrapper"],
-  &:focus-within [data-slot="text-part-copy-wrapper"] {
+  &:focus-within [data-slot="text-part-copy-wrapper"],
+  [data-slot="text-part-copy-wrapper"]:has([data-expanded], [data-closing]) {
     opacity: 1;
     pointer-events: auto;
   }

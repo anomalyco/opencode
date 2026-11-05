@@ -21,6 +21,7 @@ import {
   type MarkdownCodeBlock,
   type MarkdownCodeBlocks,
 } from "@opencode/session-ui/context/markdown"
+import { MessageMenuProvider, type MessageMenu } from "@opencode/session-ui/context/message-menu"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
 import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
 import { useTheme } from "@opencode/ui/theme/context"
@@ -32,6 +33,7 @@ import {
   Theme,
   type CodeBlockProps,
   type MountedSession,
+  type SessionScreen,
 } from "@opencode/plugin/gui"
 import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
@@ -41,8 +43,9 @@ import { createLinkCheck } from "./link-check"
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
  * error and renders nothing, then runs `failed`, and the rest of the window keeps working. Contributions render on
- * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete; the
- * session header slot is per timeline.
+ * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete, and as
+ * `session.message.menu` items, only inside a message's open More actions menu; the session header slot is per
+ * timeline.
  */
 export function Contribution(props: { plugin: string; failed?: () => void; children: () => JSX.Element }) {
   const host = usePluginHost()
@@ -147,11 +150,11 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 }
 
 /**
- * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, and hands
- * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions. A turn's sources chip opens its turn
- * through the Sources plugin's handler.
+ * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, hands
+ * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions, and fills each message's More actions menu
+ * with the `session.message.menu` slot. A turn's sources chip opens its turn through the Sources plugin's handler.
  */
-export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
+export function PluginLinks(props: ParentProps<{ session: MountedSession; screen: SessionScreen; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
 
@@ -174,15 +177,39 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 
   const codeBlocks = createCodeBlocks(() => props.session, Links)
 
+  // Rows mount these items only inside an open menu; a reply adds its menu only while one is contributed.
+  const messageMenu: MessageMenu = {
+    active: createMemo(() => host.items(BuiltinSlot).some((item) => item.value.at === "session.message.menu")),
+    items: (message, shown) => (
+      <PluginSlot
+        at="session.message.menu"
+        input={{
+          get screen() {
+            return props.screen
+          },
+          get session() {
+            return props.session
+          },
+          message,
+          get shown() {
+            return shown()
+          },
+        }}
+      />
+    ),
+  }
+
   return (
     <Links codeBlocks={codeBlocks}>
-      <SourcesProvider
-        enabled={sourcesExperiment.enabled}
-        icons={sourcesExperiment.icons}
-        onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
-      >
-        {props.children}
-      </SourcesProvider>
+      <MessageMenuProvider value={messageMenu}>
+        <SourcesProvider
+          enabled={sourcesExperiment.enabled}
+          icons={sourcesExperiment.icons}
+          onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
+        >
+          {props.children}
+        </SourcesProvider>
+      </MessageMenuProvider>
     </Links>
   )
 }
