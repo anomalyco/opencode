@@ -94,3 +94,12 @@ export function signIn(state: ReturnType<typeof fakeConsole>["state"], expires: 
     metadata: { server: base, accountID: "usr_ada", email: "ada@example.com", orgID: "org_acme", orgName: "Acme" },
   }
 }
+
+/** Waits in real time until `condition` holds, failing after `timeout` milliseconds. */
+export async function until(condition: () => boolean, timeout = 5_000) {
+  const deadline = Date.now() + timeout
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("condition not met in time")
+    await Bun.sleep(5)
+  }
+}

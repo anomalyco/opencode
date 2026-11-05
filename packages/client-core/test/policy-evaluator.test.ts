@@ -43,6 +43,26 @@ describe("PolicyEvaluator.check", () => {
     }),
   )
 
+  it.effect("denies everything while a signed-in workspace's policy is unknown", () =>
+    Effect.gen(function* () {
+      const check = { action: "read", resources: ["notes.md"] }
+      expect(yield* PolicyEvaluator.check({ organization: "Acme", policies: undefined }, check)).toEqual({
+        effect: "deny",
+        message: "Blocked until Acme's policy loads from OpenCode Console",
+      })
+      expect(
+        yield* PolicyEvaluator.check(
+          {
+            organization: "Acme",
+            policies: undefined,
+            status: { message: "Sign in with SSO again to use Acme", url: "https://console.test/sso" },
+          },
+          check,
+        ),
+      ).toEqual({ effect: "deny", message: "Sign in with SSO again to use Acme: https://console.test/sso" })
+    }),
+  )
+
   it.effect("decides policy actions per resource with the last match", () =>
     Effect.gen(function* () {
       const workspace = acme(
@@ -114,6 +134,8 @@ describe("PolicyEvaluator.check", () => {
             PolicyEvaluator.check(acme(...policies), { action: "shell", resources: [command], shell })
           expect(yield* check(deny("tool.use", "shell:rm *")), command).toEqual(blocked)
           expect(yield* check(deny("tool.use", "*")), command).toEqual(blocked)
+          // The command might change into a directory the policy keeps it out of.
+          expect(yield* check(deny("tool.use", "external_directory:/etc/*")), command).toEqual(blocked)
           // No statement could deny a shell command, so there is nothing to enforce.
           expect(yield* check(deny("tool.use", "edit:*.env"), deny("mcp.use", "*")), command).toEqual({
             effect: "allow",
@@ -164,6 +186,11 @@ describe("PolicyEvaluator.check", () => {
         expect(yield* check("/etc/hosts")).toEqual(blocked)
         expect(yield* check("../outside/notes.md")).toEqual({ effect: "allow" })
         expect(yield* check("/repo/notes.md")).toEqual({ effect: "allow" })
+        // Without a working directory, this process's stands in.
+        expect(yield* PolicyEvaluator.check(workspace, { action: "read", resources: ["/etc/hosts"] })).toEqual(blocked)
+        expect(yield* PolicyEvaluator.check(workspace, { action: "shell", resources: ["cd /etc && ls"] })).toEqual(
+          blocked,
+        )
       }),
     )
   })

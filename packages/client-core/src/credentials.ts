@@ -1,10 +1,9 @@
 export * as ConsoleCredentials from "./credentials.js"
 
-import { Flock } from "@opencode/util/flock"
 import { Hash } from "@opencode/util/hash"
 import { ConsoleAccess } from "@opencode/core/console-access"
 import { Credential } from "@opencode/schema/credential"
-import { Clock, Effect, Option, Schema } from "effect"
+import { Clock, Duration, Effect, Fiber, Option, Schema } from "effect"
 import type { HttpClient } from "effect/http"
 import { ConnectStore } from "./store.js"
 
@@ -54,10 +53,16 @@ export const login = Effect.fn("ConsoleCredentials.login")(function* (
   const device = yield* ConsoleAccess.authorize(http, input.server, clientID)
   yield* input.prompt(device)
   const credential = yield* device.callback
-  const previous = stored(store)
-  ConnectStore.write(ConnectStore.credentialFile(store), JSON.stringify(credential))
-  // A new sign-in may be another member or workspace; its config is fetched fresh.
-  ConnectStore.remove(ConnectStore.snapshotFile(store))
+  const previous = yield* ConnectStore.locked(
+    store,
+    Effect.sync(() => {
+      const previous = stored(store)
+      ConnectStore.write(ConnectStore.credentialFile(store), JSON.stringify(credential))
+      // Signing in again to the same workspace keeps its config, so its policies hold until the next fetch.
+      if (!previous || owner(previous) !== owner(credential)) ConnectStore.remove(ConnectStore.snapshotFile(store))
+      return previous
+    }),
+  )
   if (previous) yield* ConsoleAccess.revoke(http, previous, clientID).pipe(Effect.ignore)
   return credential
 })
@@ -65,9 +70,10 @@ export const login = Effect.fn("ConsoleCredentials.login")(function* (
 /**
  * The current credential with an access token that won't expire for at least a minute, refreshing it when needed.
  *
- * Console refresh tokens are single-use and reusing one signs the member out everywhere, while harnesses call
- * the connector from many processes at once. Refreshes therefore run under a lock shared across processes, and
- * a process that waited re-reads the credential another one already rotated instead of refreshing again.
+ * Console refresh tokens are single-use and reusing one signs the member out of the connector, while harnesses call
+ * it from many processes at once. A refresh therefore runs under the store's lock, re-reads the credential another
+ * process may already have rotated, and runs detached: a caller that stops waiting, such as a policy check with a
+ * deadline, can't cancel a rotation the Console may already have accepted before the new tokens are saved.
  */
 export const fresh = Effect.fn("ConsoleCredentials.fresh")(function* (
   store: ConnectStore.Info,
@@ -75,23 +81,17 @@ export const fresh = Effect.fn("ConsoleCredentials.fresh")(function* (
 ) {
   const current = read(store)
   if (!current || current.type === "key" || !(yield* expiring(current))) return current
-  return yield* Effect.acquireUseRelease(
-    Effect.tryPromise({
-      // A lock left by a crashed process goes stale after 10 seconds without its heartbeat; a refresh takes far less.
-      try: () => Flock.acquire("refresh", { dir: ConnectStore.lockDir(store), staleMs: 10_000, timeoutMs: 30_000 }),
-      catch: (cause) => new Error("Timed out waiting for another OpenCode Console sign-in refresh", { cause }),
+  const rotation = yield* ConnectStore.locked(
+    store,
+    Effect.gen(function* () {
+      const latest = stored(store)
+      if (!latest || !(yield* expiring(latest))) return latest
+      const refreshed = yield* ConsoleAccess.refresh(http, latest, clientID).pipe(Effect.timeout(Duration.seconds(10)))
+      ConnectStore.write(ConnectStore.credentialFile(store), JSON.stringify(refreshed))
+      return refreshed
     }),
-    () =>
-      Effect.gen(function* () {
-        const latest = stored(store)
-        if (!latest) return undefined
-        if (!(yield* expiring(latest))) return latest
-        const refreshed = yield* ConsoleAccess.refresh(http, latest, clientID)
-        ConnectStore.write(ConnectStore.credentialFile(store), JSON.stringify(refreshed))
-        return refreshed
-      }),
-    (lease) => Effect.promise(() => lease.release()),
-  )
+  ).pipe(Effect.forkDetach)
+  return yield* Fiber.join(rotation)
 })
 
 /** Forgets the stored sign-in and its workspace config, and ends the session on the Console when it can. */
@@ -99,9 +99,15 @@ export const logout = Effect.fn("ConsoleCredentials.logout")(function* (
   store: ConnectStore.Info,
   http: HttpClient.HttpClient,
 ) {
-  const previous = stored(store)
-  ConnectStore.remove(ConnectStore.credentialFile(store))
-  ConnectStore.remove(ConnectStore.snapshotFile(store))
+  const previous = yield* ConnectStore.locked(
+    store,
+    Effect.sync(() => {
+      const previous = stored(store)
+      ConnectStore.remove(ConnectStore.credentialFile(store))
+      ConnectStore.remove(ConnectStore.snapshotFile(store))
+      return previous
+    }),
+  )
   if (!previous) return false
   // Signing out locally must not depend on reaching the Console.
   yield* ConsoleAccess.revoke(http, previous, clientID).pipe(Effect.ignore)

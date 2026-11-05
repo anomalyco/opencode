@@ -5,7 +5,7 @@ import { Clock, Effect, Result, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { ConsoleCredentials } from "./credentials.js"
 import { WorkspaceSnapshot } from "./snapshot.js"
-import type { ConnectStore } from "./store.js"
+import { ConnectStore } from "./store.js"
 
 const encode = Schema.encodeUnknownSync(ConsoleAccess.Config)
 
@@ -43,8 +43,8 @@ export const sync = Effect.fn("WorkspaceSync.sync")(function* (
     return { snapshot: undefined }
   }
   const now = yield* Clock.currentTimeMillis
-  const cached = WorkspaceSnapshot.read(store)
-  const previous = cached?.owner === ConsoleCredentials.owner(signedIn) ? cached : undefined
+  const owner = ConsoleCredentials.owner(signedIn)
+  const previous = current(store, owner)
   if (previous && !options.force && !WorkspaceSnapshot.stale(previous, now)) return { snapshot: previous }
 
   const outcome = yield* ConsoleCredentials.fresh(store, http).pipe(
@@ -56,32 +56,43 @@ export const sync = Effect.fn("WorkspaceSync.sync")(function* (
     Effect.result,
   )
   if (Result.isSuccess(outcome)) {
-    if (!outcome.success) {
-      WorkspaceSnapshot.clear(store)
-      return { snapshot: undefined }
+    if (!outcome.success) return { snapshot: undefined }
+    return {
+      snapshot: yield* publish(store, owner, {
+        owner,
+        organization: ConsoleAccess.organizationName(outcome.success.credential),
+        fetched: now,
+        config: outcome.success.config && encode(outcome.success.config),
+      }),
     }
-    const next: WorkspaceSnapshot.Info = {
-      owner: ConsoleCredentials.owner(outcome.success.credential),
-      organization: ConsoleAccess.organizationName(outcome.success.credential),
-      fetched: now,
-      config: outcome.success.config && encode(outcome.success.config),
-    }
-    WorkspaceSnapshot.write(store, next)
-    return { snapshot: next }
   }
   const status = needsMember(outcome.failure)
   if (!status) return { snapshot: previous, error: outcome.failure }
-  const next: WorkspaceSnapshot.Info = {
-    ...(previous ?? {
-      owner: ConsoleCredentials.owner(signedIn),
-      organization: ConsoleAccess.organizationName(signedIn),
-    }),
-    fetched: now,
-    status,
-  }
-  WorkspaceSnapshot.write(store, next)
-  return { snapshot: next, error: outcome.failure }
+  const fallback = previous ?? { owner, organization: ConsoleAccess.organizationName(signedIn) }
+  return { snapshot: yield* publish(store, owner, { ...fallback, fetched: now, status }), error: outcome.failure }
 })
+
+/**
+ * Stores a snapshot only while the sign-in it was fetched for is still current: a logout or switch while the fetch
+ * ran makes it stale, and writing it would bring back a config the member already left.
+ */
+function publish(store: ConnectStore.Info, owner: string, snapshot: WorkspaceSnapshot.Info) {
+  return ConnectStore.locked(
+    store,
+    Effect.sync(() => {
+      const latest = ConsoleCredentials.read(store)
+      if (!latest || ConsoleCredentials.owner(latest) !== owner) return undefined
+      WorkspaceSnapshot.write(store, snapshot)
+      return snapshot
+    }),
+  )
+}
+
+/** The stored snapshot, when it belongs to `owner`. */
+export function current(store: ConnectStore.Info, owner: string) {
+  const snapshot = WorkspaceSnapshot.read(store)
+  return snapshot?.owner === owner ? snapshot : undefined
+}
 
 // Only these answers are about the sign-in; anything else may be transient.
 function needsMember(cause: unknown) {

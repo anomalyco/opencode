@@ -60,7 +60,7 @@ export const toolPolicyCases: ReadonlyArray<{
     checks: [
       ["external_directory", ["/tmp/*"], "allow"],
       ["external_directory", ["/etc/*"], "deny"],
-      ["read", ["/etc/passwd"], "allow"],
+      ["read", ["src/index.ts"], "allow"],
     ],
   },
 ]

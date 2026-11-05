@@ -16,10 +16,23 @@ import { Effect, Result, Schema } from "effect"
 export interface Input {
   readonly action: string
   readonly resources: readonly string[]
-  /** The working directory. File and shell checks resolve paths against it and treat anything outside it as external. */
+  /**
+   * The harness's working directory, defaulting to this process's. File and shell checks resolve paths against it and
+   * treat anything outside it as external.
+   */
   readonly directory?: string
   /** The shell a `shell` command runs in, such as `bash` or `pwsh`. */
   readonly shell?: string
+}
+
+/**
+ * The workspace a check runs for. `policies` is `undefined` while they are unknown, such as before the first fetch,
+ * and `status` says why the sign-in needs the member, such as an expired SSO session.
+ */
+export interface Workspace {
+  readonly organization?: string
+  readonly policies: readonly ConfigPolicy.Info[] | undefined
+  readonly status?: { readonly message: string; readonly url?: string }
 }
 
 export type Decision = { readonly effect: "allow" } | { readonly effect: "deny"; readonly message: string }
@@ -33,12 +46,11 @@ const FILE_ACTIONS = new Set(["read", "edit"])
  * last match wins, nothing matching allows, and a denial names the workspace.
  *
  * A shell command the portable scanner cannot analyze is denied while any statement could deny a shell command,
- * since its parts can't be checked; OpenCode refuses to run such a command at all.
+ * since its parts can't be checked; OpenCode refuses to run such a command at all. A signed-in workspace whose policy
+ * hasn't loaded denies everything until it does.
  */
-export const check = Effect.fn("PolicyEvaluator.check")(function* (
-  workspace: { readonly organization?: string; readonly policies: readonly ConfigPolicy.Info[] },
-  input: Input,
-) {
+export const check = Effect.fn("PolicyEvaluator.check")(function* (workspace: Workspace, input: Input) {
+  if (!workspace.policies) return pending(workspace)
   if (workspace.policies.length === 0) return allow
   const statements = ManagedPolicy.statements([
     ConfigIntegration.make({
@@ -57,9 +69,8 @@ export const check = Effect.fn("PolicyEvaluator.check")(function* (
     )
   }
   if (input.action === "shell") return yield* shell(statements, input)
-  const directory = input.directory
-  if (directory && FILE_ACTIONS.has(input.action)) {
-    const targets = input.resources.map((resource) => target(directory, resource))
+  if (FILE_ACTIONS.has(input.action)) {
+    const targets = input.resources.map((resource) => target(input.directory ?? process.cwd(), resource))
     return decide(
       ManagedPolicy.denying(
         statements,
@@ -85,12 +96,17 @@ const shell = Effect.fnUntraced(function* (statements: Statement[], input: Input
   )
   if (scanned.some(Result.isFailure))
     return decide(
-      statements.find((policy) => policy.action === "tool.use" && policy.effect === "deny" && couldMatchShell(policy)),
+      statements.find(
+        (policy) =>
+          policy.action === "tool.use" &&
+          policy.effect === "deny" &&
+          (couldMatch(policy, "shell:") || couldMatch(policy, "external_directory:")),
+      ),
     )
   const parsed = scanned.filter(Result.isSuccess).map((item) => item.success)
-  const external = input.directory
-    ? parsed.flatMap((item) => item.directories.flatMap((entry) => target(directory, entry, true).external ?? []))
-    : []
+  const external = parsed.flatMap((item) =>
+    item.directories.flatMap((entry) => target(directory, entry, true).external ?? []),
+  )
   return decide(
     ManagedPolicy.denying(statements, "external_directory", external) ??
       ManagedPolicy.denying(
@@ -100,6 +116,18 @@ const shell = Effect.fnUntraced(function* (statements: Statement[], input: Input
       ),
   )
 })
+
+function pending(workspace: Workspace): Decision {
+  if (workspace.status)
+    return {
+      effect: "deny",
+      message: workspace.status.url ? `${workspace.status.message}: ${workspace.status.url}` : workspace.status.message,
+    }
+  return {
+    effect: "deny",
+    message: `Blocked until ${workspace.organization ?? "your organization"}'s policy loads from OpenCode Console`,
+  }
+}
 
 function decide(policy: { readonly effect: ConfigPolicy.Effect; readonly message: string } | undefined): Decision {
   return policy?.effect === "deny" ? { effect: "deny", message: policy.message } : allow
@@ -119,10 +147,10 @@ function target(directory: string, input: string, isDirectory = false) {
   }
 }
 
-/** Whether a statement's resource pattern could match some `shell:` resource. */
-function couldMatchShell(policy: Statement) {
+/** Whether a statement's resource pattern could match some resource starting with `prefix`. */
+function couldMatch(policy: Statement, prefix: string) {
   const literal = policy.resource.split(/[*?]/, 1)[0]
-  return "shell:".startsWith(literal) || literal.startsWith("shell:")
+  return prefix.startsWith(literal) || literal.startsWith(prefix)
 }
 
 function slash(value: string) {

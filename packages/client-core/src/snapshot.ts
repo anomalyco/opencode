@@ -34,6 +34,7 @@ const Providers = Schema.Record(
   Schema.String,
   Schema.Struct({ models: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
 )
+const Experimental = Schema.Struct({ policies: Schema.optional(Schema.Unknown) })
 
 export function read(store: ConnectStore.Info) {
   return Option.getOrUndefined(decode(ConnectStore.read(ConnectStore.snapshotFile(store)) ?? ""))
@@ -51,9 +52,19 @@ export function stale(snapshot: Info, now: number) {
   return now - snapshot.fetched >= MAX_AGE_MS
 }
 
-/** The workspace's policy statements in order. Statements a newer Console adds that this version can't read drop out. */
+/**
+ * The workspace's policy statements in order, or `undefined` while they are unknown: nothing fetched yet, a sign-in
+ * that needed the member before any config arrived, or statements this version can't read. Callers enforcing policy
+ * treat unknown as deny. Statements with an action or effect a newer Console added drop out.
+ */
 export function policies(snapshot: Info | undefined) {
-  return field(snapshot, "policies", ConfigIntegration.Policies) ?? []
+  if (!snapshot) return undefined
+  const config = snapshot.config
+  if (!config) return snapshot.status ? undefined : []
+  const statements =
+    config.policies ?? Option.getOrUndefined(Schema.decodeUnknownOption(Experimental)(config.experimental))?.policies
+  if (statements === undefined) return []
+  return Option.getOrUndefined(Schema.decodeUnknownOption(ConfigIntegration.Policies)(statements))
 }
 
 /** Workspace Library instructions and skill versions, or `undefined` when the workspace offers none. */
@@ -82,7 +93,7 @@ export function routing(snapshot: Info | undefined, options: { readonly keepProv
   return options.keepProvider || models(snapshot) === 0 ? ("keep-provider" as const) : ("gateway" as const)
 }
 
-// Each field decodes on its own, so one a newer Console changed can't hide the policies.
+// Each field decodes on its own, so one a newer Console changed can't hide the others.
 function field<S extends Schema.Decoder<unknown>>(snapshot: Info | undefined, key: string, schema: S) {
   const value = snapshot?.config?.[key]
   return value === undefined ? undefined : Option.getOrUndefined(Schema.decodeUnknownOption(schema)(value))

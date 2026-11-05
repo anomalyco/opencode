@@ -1,13 +1,14 @@
 import { describe, expect } from "bun:test"
 import type { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConnectStore } from "@opencode/client-core/store"
+import { ConsoleCredentials } from "@opencode/client-core/credentials"
 import { WorkspaceSnapshot } from "@opencode/client-core/snapshot"
 import { WorkspaceSync } from "@opencode/client-core/workspace-sync"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../../core/test/lib/effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
-import { fakeConsole, signIn } from "./fixture/console"
+import { fakeConsole, signIn, until } from "./fixture/console"
 
 const policies: ConfigPolicy.Info[] = [{ action: "tool.use", resource: "shell:rm *", effect: "deny" }]
 // Every test signs in with a token that outlives the test clock, so syncs never refresh.
@@ -99,6 +100,67 @@ describe("WorkspaceSync.sync", () => {
         message: "Sign in with SSO again to use Acme",
         url: "https://console.test/console/auth/sso/conn_okta/start?redirectTo=%2Fconsole%2F",
       })
+    }),
+  )
+
+  it.effect("leaves policy unknown, with the reason, when the first fetch needs SSO", () =>
+    Effect.gen(function* () {
+      const console = fakeConsole({
+        config: () =>
+          Response.json({ _tag: "SsoRequired", orgId: "org_acme", connectionId: "conn_okta" }, { status: 403 }),
+      })
+      const store = yield* signedIn(console)
+
+      const result = yield* WorkspaceSync.sync(store, console.http)
+
+      expect(WorkspaceSnapshot.policies(result.snapshot)).toBeUndefined()
+      expect(result.snapshot?.status?.message).toBe("Sign in with SSO again to use Acme")
+    }),
+  )
+
+  it.effect("leaves policy unknown when the first fetch fails", () =>
+    Effect.gen(function* () {
+      const console = fakeConsole({ config: () => new Response("unavailable", { status: 503 }) })
+      const store = yield* signedIn(console)
+
+      const result = yield* WorkspaceSync.sync(store, console.http)
+
+      expect(result.error).toBeDefined()
+      expect(WorkspaceSnapshot.policies(result.snapshot)).toBeUndefined()
+    }),
+  )
+
+  it.effect("reads policies the Console sends a client it doesn't recognize under experimental", () =>
+    Effect.gen(function* () {
+      const console = fakeConsole({ config: () => Response.json({ experimental: { policies } }) })
+      const store = yield* signedIn(console)
+
+      expect(WorkspaceSnapshot.policies((yield* WorkspaceSync.sync(store, console.http)).snapshot)).toEqual(policies)
+    }),
+  )
+
+  it.effect("treats policies it can't read as unknown rather than none", () =>
+    Effect.gen(function* () {
+      const console = fakeConsole({ config: () => Response.json({ experimental: { policies: [{ action: 1 }] } }) })
+      const store = yield* signedIn(console)
+
+      expect(WorkspaceSnapshot.policies((yield* WorkspaceSync.sync(store, console.http)).snapshot)).toBeUndefined()
+    }),
+  )
+
+  it.live("discards a fetch that finishes after the member signed out", () =>
+    Effect.gen(function* () {
+      const release = Promise.withResolvers<void>()
+      const console = fakeConsole({ config: () => release.promise.then(() => Response.json({ policies })) })
+      const store = yield* signedIn(console)
+
+      const syncing = yield* WorkspaceSync.sync(store, console.http).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.promise(() => until(() => console.state.configs === 1))
+      yield* ConsoleCredentials.logout(store, console.http)
+      release.resolve()
+
+      expect((yield* Fiber.join(syncing)).snapshot).toBeUndefined()
+      expect(WorkspaceSnapshot.read(store)).toBeUndefined()
     }),
   )
 

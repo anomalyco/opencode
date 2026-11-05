@@ -74,13 +74,15 @@ const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 
 /**
- * The Console's config document. `library` and `telemetry` decode where they're used, so a malformed one can't drop
- * its policies.
+ * The Console's config document. `library`, `telemetry` and `experimental` decode where they're used, so a malformed
+ * one can't drop its policies. The Console sends a client it doesn't recognize as current its policies under
+ * `experimental.policies`.
  */
 export const Config = Schema.Struct({
   ...ConfigIntegration.Remote.fields,
   library: Schema.Unknown.pipe(Schema.optional),
   telemetry: Schema.Unknown.pipe(Schema.optional),
+  experimental: Schema.Unknown.pipe(Schema.optional),
 })
 export type Config = typeof Config.Type
 

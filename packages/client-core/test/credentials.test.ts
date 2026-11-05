@@ -3,11 +3,11 @@ import { statSync } from "node:fs"
 import { ConsoleCredentials } from "@opencode/client-core/credentials"
 import { ConnectStore } from "@opencode/client-core/store"
 import { WorkspaceSnapshot } from "@opencode/client-core/snapshot"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { withEnv } from "../../core/test/fixture/env"
-import { fakeConsole, server, signIn } from "./fixture/console"
+import { fakeConsole, server, signIn, until } from "./fixture/console"
 
 const store = tmpdirScoped("opencode-connect-test-").pipe(Effect.map((dir) => ConnectStore.make(dir.path)))
 const save = (target: ConnectStore.Info, credential: ReturnType<typeof signIn>) =>
@@ -43,16 +43,22 @@ describe("ConsoleCredentials", () => {
     }),
   )
 
-  it.live("revokes the sign-in it replaces and drops that workspace's config", () =>
+  it.live("revokes the sign-in it replaces, keeping the config only for the same workspace", () =>
     Effect.gen(function* () {
       const target = yield* store
       const console = fakeConsole()
+      const snapshot = { owner: "acme", fetched: Date.now(), config: {} }
       save(target, { ...signIn(console.state, Date.now() + 3_600_000), refresh: "refresh-old" })
-      WorkspaceSnapshot.write(target, { owner: "previous", fetched: Date.now(), config: {} })
+      WorkspaceSnapshot.write(target, snapshot)
 
       yield* ConsoleCredentials.login(target, console.http, { server, prompt: () => Effect.void })
-
       expect(console.state.revoked).toEqual(["refresh-old"])
+      // Same member and workspace: its policies hold until the next fetch.
+      expect(WorkspaceSnapshot.read(target)).toEqual(snapshot)
+
+      const other = signIn(console.state, Date.now() + 3_600_000)
+      save(target, { ...other, metadata: { ...other.metadata, orgID: "org_other", orgName: "Other" } })
+      yield* ConsoleCredentials.login(target, console.http, { server, prompt: () => Effect.void })
       expect(WorkspaceSnapshot.read(target)).toBeUndefined()
     }),
   )
@@ -73,6 +79,41 @@ describe("ConsoleCredentials", () => {
         new Set(["access-2"]),
       )
       expect(ConsoleCredentials.stored(target)?.refresh).toBe("refresh-2")
+    }),
+  )
+
+  it.live("finishes a refresh the caller stopped waiting for, so its single-use token is never sent twice", () =>
+    Effect.gen(function* () {
+      const target = yield* store
+      const console = fakeConsole()
+      save(target, signIn(console.state, Date.now() + 30_000))
+
+      // The fake Console takes 20ms to rotate, longer than this caller waits.
+      yield* ConsoleCredentials.fresh(target, console.http).pipe(Effect.timeoutOption("5 millis"))
+      yield* Effect.promise(() => until(() => ConsoleCredentials.stored(target)?.refresh === "refresh-2"))
+
+      expect(console.state.refreshes).toBe(1)
+      expect((yield* ConsoleCredentials.fresh(target, console.http))?.type === "oauth").toBe(true)
+      expect(console.state.refreshes).toBe(1)
+    }),
+  )
+
+  it.live("doesn't bring a sign-in back when a refresh finishes after logout started", () =>
+    Effect.gen(function* () {
+      const target = yield* store
+      const console = fakeConsole()
+      save(target, signIn(console.state, Date.now() + 30_000))
+
+      const refreshing = yield* ConsoleCredentials.fresh(target, console.http).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Effect.promise(() =>
+        until(() => console.state.requests.some((request) => request.url.endsWith("/auth/device/token"))),
+      )
+      yield* ConsoleCredentials.logout(target, console.http)
+      yield* Fiber.join(refreshing)
+
+      expect(ConsoleCredentials.stored(target)).toBeUndefined()
     }),
   )
 
