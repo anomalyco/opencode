@@ -6,7 +6,7 @@ The site's heavy media (product videos, arcade sounds, 3D models and download zi
 
 - `src/lib/media.ts` holds the one base path, `mediaBase = "/files/site/2026-11"`, and the file types that live in the bucket (`mediaFile`: `mp4`, `webm`, `mov`, `mp3`, `wav`, `ogg`, `m4a`, `zip`, `glb`, `gltf`).
 - Pages build media URLs with `mediaUrl("/product-videos/heroes/sdk-landscape-dark.mp4")`, which returns `/files/site/2026-11/product-videos/heroes/sdk-landscape-dark.mp4`. Nothing redirects at request time.
-- The build (`services/www/script/build.ts`) drops every `mediaFile` from the Worker's assets, so a local copy in `public/` never ships.
+- The build (`script/build.ts`) drops every `mediaFile` from the Worker's assets, so a local copy in `public/` never ships.
 - In development, `vite dev` proxies `/files` to `https://dev.opencode.ai`, so pages play the dev bucket's copies.
 - Images (`png`, `jpg`, `webp`, `avif`, `svg`), posters, fonts and the 3D decoders (`arcade3d/draco`, `arcade3d/basis`) stay in git and in the static assets.
 - Only the H.264 originals are served. The AV1 and HEVC copies `media-manifest.json` once described were never uploaded, so `videoSources()` offers the original alone.
@@ -25,7 +25,7 @@ The site's heavy media (product videos, arcade sounds, 3D models and download zi
 Put the files in `public/` at their manifest paths, then:
 
 ```sh
-cd services/www/site
+cd services/site
 bun ./script/upload-media.ts --mode dev          # dry run against opencode-dev-files
 bun ./script/upload-media.ts --mode dev --run    # upload to dev
 bun ./script/upload-media.ts --run               # upload to opencode-production-files

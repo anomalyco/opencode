@@ -1,9 +1,6 @@
 .astro/
 .wrangler/
-.cloudflare/
 dist/
 node_modules/
 public/cli.json
 public/openapi.json
-.dev.vars*
-.env*

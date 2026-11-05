@@ -1,13 +1,14 @@
 dist
 .wrangler
 .output
+.cloudflare
 .vercel
 .netlify
 app.config.timestamp_*.js
 
 # Environment
-.env
-.env*.local
+.env*
+.dev.vars*
 
 # dependencies
 /node_modules
@@ -26,13 +27,14 @@ gitignore
 .DS_Store
 Thumbs.db
 
-# Built by services/www/textjs (services/www script/build.ts)
+# Built by textjs/ (script/build.ts)
 /public/textjs
 
 # Written by script/build-stamp.ts (bun run build / dev)
 /src/lib/build-stamp.json
 
-# Written by packages/schema/script/config-schema.ts (services/www bun run generate)
+# Written by `bun run generate` (packages/protocol/openapi.json and packages/schema/script/config-schema.ts)
+/public/openapi.json
 /public/config.json
 
 # Written by script/github-snapshot.ts (bun run build)

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 // SolidStart's own file router, which builds the route manifest the app serves /sitemap-pages.xml from.
-import { DEFAULT_EXTENSIONS } from "../../node_modules/@solidjs/start/dist/config/constants.js"
-import { SolidStartServerFileRouter } from "../../node_modules/@solidjs/start/dist/config/fs-router.js"
+import { DEFAULT_EXTENSIONS } from "../node_modules/@solidjs/start/dist/config/constants.js"
+import { SolidStartServerFileRouter } from "../node_modules/@solidjs/start/dist/config/fs-router.js"
 import { config } from "~/config"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { LOCALES, strip } from "~/lib/language"

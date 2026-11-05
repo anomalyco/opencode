@@ -1,6 +1,6 @@
 # Rules for agents
 
-Design-system rules for the opencode.ai site (`packages/console/app`), compiled from David's reviews and decisions. Read them before you change UI or copy. Every component they mention is live at [/dev/components](/dev/components) on the dev server.
+Design-system rules for the opencode.ai site (`services/site`), compiled from David's reviews and decisions. Read them before you change UI or copy. Every component they mention is live at [/dev/components](/dev/components) on the dev server.
 
 Version 2026-11-05. Last changed 2026-11-05, OpenTUI Mono as the site's mono font, disabled splits share one line at the join, focus rings drawn inside adjacent and split buttons, and split buttons shown only as a pair.
 

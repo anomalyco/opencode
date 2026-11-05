@@ -17,5 +17,6 @@
     "paths": {
       "~/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "textjs", ".output", "dist"]
 }

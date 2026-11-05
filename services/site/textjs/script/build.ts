@@ -12,7 +12,7 @@ import path from "node:path"
 const commit = "760efedde45eb77b786db4c1658a0dd9126f079e"
 const root = path.resolve(import.meta.dir, "..")
 const upstream = path.join(root, ".upstream")
-const out = path.resolve(root, "../site/public/textjs")
+const out = path.resolve(root, "../public/textjs")
 
 const lite = await fetchUpstream().then(
   () => true,

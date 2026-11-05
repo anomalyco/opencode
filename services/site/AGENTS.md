@@ -1,4 +1,4 @@
-# Console app (opencode.ai)
+# opencode.ai site
 
 Read the design-system rules in `DESIGN.md` (also shown at `/dev/components#rules`) before you change UI or copy.
 
@@ -18,3 +18,11 @@ Read the design-system rules in `DESIGN.md` (also shown at `/dev/components#rule
 ## UI states
 
 - A button that opens a menu, popover, dropdown, sheet or dialog sets `aria-expanded="true"` while it is open and is styled from that attribute, not hover: filled and split buttons fill with the link blue (like the product cards' split chevron), neutral buttons keep their pressed grey, and text or nav triggers take the current-item colour with the chevron flipped; Escape closes and returns focus to the trigger.
+
+## Boundaries
+
+- This service is only the website, deployed as its own Worker with `cf` (`cloudflare.config.ts`, `script/build.ts`); the V2 docs at `/v2*` are `services/www`. Never add Wrangler or SST here.
+- Old URLs kept for outside links live in `src/lib/legacy.ts`, each commented with why it exists and who still uses it; nothing may link to them. Short links (`/discord`, `/feishu`, `/desktop-feedback`) are ordinary routes.
+- The site also serves fixed-URL machine files: `/config.json` and `/openapi.json` (written by `bun run generate`), `/tui.json` (`public/`), and `/oauth/opencode/client.json` and `/.well-known/apple-app-site-association` (`src/lib/meta.ts`). Their bytes and headers are a contract with clients.
+- Heavy media (video, audio, zips, 3D models) is never a Worker asset: link it with `mediaUrl()` (`src/lib/media.ts`), which points into the files bucket behind `/files`.
+- The Worker holds no GitHub token (see README.md).
