@@ -91,7 +91,7 @@ impl Previews {
 }
 
 /// The bytes of a `data:` URI.
-fn data_uri(uri: &str) -> Option<Vec<u8>> {
+pub(crate) fn data_uri(uri: &str) -> Option<Vec<u8>> {
     let (meta, payload) = uri.strip_prefix("data:")?.split_once(',')?;
     if !meta.ends_with(";base64") {
         return Some(payload.as_bytes().to_vec());
