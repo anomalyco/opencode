@@ -22,7 +22,11 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     };
     let paths = Paths::from_env()?;
     crate::panic::install();
-    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("opencode-tui").build()?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .thread_name("opencode-tui")
+        .build()?;
     let transport = Arc::new(Reqwest::default());
     let env = Env::from_env();
     let connection = runtime.block_on(connect::resolve(
