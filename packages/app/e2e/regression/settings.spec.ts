@@ -710,6 +710,42 @@ test("a project whose folder is gone opens its settings with a notice", async ({
   await expect(notice).toContainText(directory)
 })
 
+test("a project plugin list that fails to load offers Retry instead of an empty list", async ({ page }) => {
+  const { settings } = await open(page)
+  await openProject(page)
+  const lists = { failing: true }
+
+  // Only the project's list carries a location; the server-wide list still loads.
+  await page.route(/\/api\/plugin\?.*location/, (route) =>
+    route.fulfill(
+      lists.failing
+        ? {
+            status: 500,
+            json: { name: "UnknownError", data: { message: "config is invalid" } },
+            headers: { "access-control-allow-origin": "*" },
+          }
+        : {
+            json: {
+              location: { directory },
+              data: [{ id: "project-plugin", source: { type: "package", target: "project-plugin" } }],
+            },
+            headers: { "access-control-allow-origin": "*" },
+          },
+    ),
+  )
+
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  await settings.getByRole("tab", { name: "Plugins", exact: true }).click()
+  const panel = settings.getByRole("tabpanel", { name: "Plugins", exact: true })
+  await expect(panel.getByRole("status")).toContainText("Could not load plugins")
+  await expect(panel.getByText("No plugins yet", { exact: true })).toHaveCount(0)
+
+  lists.failing = false
+  await panel.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.getByText("project-plugin", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("status")).toHaveCount(0)
+})
+
 for (const field of [
   {
     name: "color",
@@ -1227,6 +1263,52 @@ test("a failed worktree delete restores its row, and the next confirmation still
   await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
   await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toHaveCount(0)
   expect(removals.requests).toBe(2)
+})
+
+test("a failed worktree check offers Retry, and the passing retry enables Delete", async ({ page }) => {
+  const inventory: WorktreeDirectory[] = [
+    { directory },
+    ...sandboxes.map((item) => ({ directory: item, strategy: "git" })),
+  ]
+
+  const { settings } = await open(page, {
+    worktrees: () => inventory,
+    onWorktreeRemove: (body) => {
+      inventory.splice(
+        inventory.findIndex((item) => item.directory === body.directory),
+        1,
+      )
+    },
+  })
+
+  const checks = { failing: true }
+
+  await page.route(/\/api\/vcs\/status(\?|$)/, (route) =>
+    checks.failing
+      ? route.fulfill({
+          status: 500,
+          json: { name: "UnknownError", data: { message: "git is busy" } },
+          headers: { "access-control-allow-origin": "*" },
+        })
+      : route.fallback(),
+  )
+
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText("12 worktrees", { exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: "Delete “workspace-1”?", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: "Delete “workspace-1”?", exact: true })
+  const remove = dialog.getByRole("button", { name: "Delete worktree", exact: true })
+  const retry = dialog.getByRole("button", { name: "Try again", exact: true })
+  await expect(dialog.getByText("Unable to verify git status.", { exact: true })).toBeVisible()
+  await expect(remove).toBeDisabled()
+
+  checks.failing = false
+  await retry.click()
+  await expect(remove).toBeEnabled()
+  await expect(retry).toHaveCount(0)
+  await expect(dialog.getByText("Unable to verify git status.", { exact: true })).toHaveCount(0)
+  await remove.click()
+  await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
 })
 
 test.describe("worktrees prefetch", () => {

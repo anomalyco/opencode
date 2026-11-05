@@ -138,113 +138,79 @@ export function displayInputDirectory(path: string, home: string) {
 }
 
 // `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that
-// never settles cannot keep its slot.
+// never settles cannot keep its slot. The queue order lives in `PriorityQueueState`; this map holds only the I/O.
 export function createPriorityTaskQueue<T>(concurrency: number) {
-  type Job = {
-    key: string
-    priority: "user" | "background"
-    promise: Promise<T | undefined>
+  type Entry = {
     controller: AbortController
-    run: () => void
-    settle: (outcome: { value: T | undefined } | { error: unknown }) => void
+    task: (signal: AbortSignal) => Promise<T>
+    deferred: PromiseWithResolvers<T | undefined>
   }
 
-  const jobs = new Map<string, Job>()
-  const user: Job[] = []
-  const background: Job[] = []
-  let active = 0
+  const entries = new Map<string, Entry>()
+  let queue: PriorityQueueState = { status: "idle" }
 
-  const drain = () => {
-    while (active < concurrency) {
-      const job = user.pop() ?? background.shift()
+  const dispatch = (event: PriorityQueueEvent) => {
+    const result = transitionPriorityQueue(queue, event, concurrency)
+    queue = result.state
+    result.effects.forEach((effect) => {
+      if (effect.type === "start") return start(effect.key)
 
-      if (!job) return
-      active++
-      job.run()
+      effect.keys.forEach((key) => {
+        const entry = entries.get(key)
+
+        if (!entry) return
+        entries.delete(key)
+        entry.controller.abort()
+        entry.deferred.resolve(undefined)
+      })
+    })
+  }
+
+  // A task that settles after it was aborted, or after another task took its key, reports nothing.
+  const start = (key: string) => {
+    const entry = entries.get(key)
+
+    if (!entry) return
+
+    const settle = (outcome: { value: T | undefined } | { error: unknown }) => {
+      if (entries.get(key) !== entry) return
+      entries.delete(key)
+
+      if ("error" in outcome) entry.deferred.reject(outcome.error)
+      else entry.deferred.resolve(outcome.value)
+      dispatch({ type: "settled", key })
     }
+
+    void Promise.resolve()
+      .then(() => (entry.controller.signal.aborted ? undefined : entry.task(entry.controller.signal)))
+      .then(
+        (value) => settle({ value }),
+        (error) => settle({ error }),
+      )
   }
 
-  const schedule = (key: string, priority: Job["priority"], task: (signal: AbortSignal) => Promise<T>) => {
-    const existing = jobs.get(key)
+  const schedule = (key: string, priority: TaskPriority, task: (signal: AbortSignal) => Promise<T>) => {
+    const existing = entries.get(key)
 
     if (existing) {
-      if (priority === "user") promote(key)
+      dispatch({ type: "scheduled", key, priority })
 
-      return existing.promise
+      return existing.deferred.promise
     }
 
-    const deferred = Promise.withResolvers<T | undefined>()
-    const controller = new AbortController()
-    const state = { running: false, settled: false }
+    const entry: Entry = { controller: new AbortController(), task, deferred: Promise.withResolvers() }
+    entries.set(key, entry)
+    dispatch({ type: "scheduled", key, priority })
 
-    const job: Job = {
-      key,
-      priority,
-      promise: deferred.promise,
-      controller,
-      run: () => {
-        state.running = true
-        Promise.resolve()
-          .then(() => (controller.signal.aborted ? undefined : task(controller.signal)))
-          .then(
-            (value) => job.settle({ value }),
-            (error) => job.settle({ error }),
-          )
-      },
-      settle: (outcome) => {
-        if (state.settled) return
-        state.settled = true
-        jobs.delete(key)
-        dequeue(job)
-
-        if (state.running) active--
-
-        if ("error" in outcome) deferred.reject(outcome.error)
-        else deferred.resolve(outcome.value)
-        drain()
-      },
-    }
-
-    jobs.set(key, job)
-    ;(priority === "user" ? user : background).push(job)
-    drain()
-
-    return job.promise
+    return entry.deferred.promise
   }
 
-  const dequeue = (job: Job) => {
-    const queue = job.priority === "user" ? user : background
-    const index = queue.indexOf(job)
-
-    if (index !== -1) queue.splice(index, 1)
+  return {
+    schedule,
+    promote: (key: string) => dispatch({ type: "promoted", key }),
+    abort: (key: string) => dispatch({ type: "aborted", key }),
+    clear: () => dispatch({ type: "cleared" }),
   }
-
-  const abort = (key: string) => {
-    const job = jobs.get(key)
-
-    if (!job) return
-    job.controller.abort()
-    job.settle({ value: undefined })
-  }
-
-  const promote = (key: string) => {
-    const job = jobs.get(key)
-
-    if (!job || job.priority === "user") return
-    const index = background.indexOf(job)
-
-    if (index === -1) return
-    background.splice(index, 1)
-    job.priority = "user"
-    user.push(job)
-  }
-
-  // Queued jobs go first, so aborting a running one never starts a job that is about to be dropped.
-  const clear = () => {
-    ;[...user, ...background, ...jobs.values()].forEach((job) => abort(job.key))
-  }
-
-  return { schedule, promote, abort, clear }
 }
 
 export function nextSuggestionIndex(current: number, delta: -1 | 1, count: number) {
@@ -292,6 +258,16 @@ function nativePickerPath(path: string) {
 import { getFilename } from "@opencode/util/path"
 import fuzzysort from "fuzzysort"
 import { ServerSDK } from "@/runtime/server/client"
+import {
+  createDirectoryCacheState,
+  directoryCacheEntry,
+  transitionDirectoryCache,
+  transitionPriorityQueue,
+  type DirectoryCacheEvent,
+  type PriorityQueueEvent,
+  type PriorityQueueState,
+  type TaskPriority,
+} from "./queue-machine"
 
 export function cleanPickerInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
@@ -446,7 +422,48 @@ export function createDirectorySearch(args: {
   base: () => string | undefined
   home: () => string
 }) {
-  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
+  type Item = { name: string; absolute: string }
+
+  // Reads end with the dialog, not with one search, since later searches reuse what they cached.
+  const lifetime = new AbortController()
+  const waiters = new Map<number, Array<(items: readonly Item[]) => void>>()
+  let cache = createDirectoryCacheState<Item>()
+
+  const dispatch = (event: DirectoryCacheEvent<Item>) => {
+    const result = transitionDirectoryCache(cache, event)
+    cache = result.state
+    result.effects.forEach((effect) => {
+      if (effect.type === "fetch") {
+        const attempt = effect.attempt
+        const key = effect.key
+        void listPickerDirectory(args.sdk, effect.location, effect.directory, lifetime.signal).then(
+          (nodes) =>
+            dispatch({
+              type: "lookup.succeeded",
+              key,
+              attempt,
+              items: nodes.filter((node) => node.type === "directory"),
+            }),
+          () => dispatch({ type: "lookup.failed", key, attempt }),
+        )
+
+        return
+      }
+
+      if (effect.type === "resolve") {
+        const resolve = waiters.get(effect.attempt) ?? []
+        waiters.delete(effect.attempt)
+        resolve.forEach((answer) => answer(effect.items))
+
+        return
+      }
+
+      lifetime.abort()
+      const pending = [...waiters.values()].flat()
+      waiters.clear()
+      pending.forEach((answer) => answer([]))
+    })
+  }
 
   const scoped = (value: string) => {
     const raw = normalizePickerDrive(value)
@@ -467,22 +484,21 @@ export function createDirectorySearch(args: {
     return { directory: trimPickerPath(base), path: raw }
   }
 
-  const directories = async (directory: string) => {
+  const directories = async (directory: string): Promise<readonly Item[]> => {
     const location = args.location()
 
     if (!location) return []
     const key = JSON.stringify([location, trimPickerPath(directory)])
-    const existing = cache.get(key)
+    dispatch({ type: "lookup.requested", key, location, directory })
+    const entry = directoryCacheEntry(cache, key)
 
-    if (existing) return existing
+    if (!entry) return []
 
-    const request = listPickerDirectory(args.sdk, location, directory)
-      .catch(() => [])
-      .then((nodes) => nodes.filter((node) => node.type === "directory"))
+    if (entry.status === "ready") return entry.items
+    const answer = Promise.withResolvers<readonly Item[]>()
+    waiters.set(entry.attempt, [...(waiters.get(entry.attempt) ?? []), answer.resolve])
 
-    cache.set(key, request)
-
-    return request
+    return answer.promise
   }
 
   const match = async (directory: string, query: string, limit: number) => {
@@ -493,7 +509,7 @@ export function createDirectorySearch(args: {
     return fuzzysort.go(query, items, { key: "name", limit }).map((item) => item.obj.absolute)
   }
 
-  return async (filter: string, options?: { signal?: AbortSignal }): Promise<string[]> => {
+  const search = async (filter: string, options?: { signal?: AbortSignal }): Promise<string[]> => {
     const active = () => !options?.signal?.aborted
     const value = cleanPickerInput(filter)
     const input = scoped(value)
@@ -511,7 +527,10 @@ export function createDirectorySearch(args: {
         relative === undefined
           ? []
           : await args.sdk.api.file
-              .find({ location, query: joinPickerPath(relative, query), type: "directory", limit: 50 })
+              .find(
+                { location, query: joinPickerPath(relative, query), type: "directory", limit: 50 },
+                { signal: options?.signal },
+              )
               .then((result) =>
                 result.data
                   .map((entry) => pickerAbsolutePath(entry.path, result.location.directory))
@@ -567,4 +586,6 @@ export function createDirectorySearch(args: {
 
     return Array.from(new Set([base, ...matches, ...children].filter(Boolean))).slice(0, 50)
   }
+
+  return Object.assign(search, { dispose: () => dispatch({ type: "disposed" }) })
 }

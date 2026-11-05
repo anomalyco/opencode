@@ -944,6 +944,7 @@ export const dict = {
   "settings.extensions.availableAll": "Available to all projects",
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
+  "settings.extensions.plugins.loadFailed": "Could not load plugins",
   "project.settings.title": "Edit project",
   "project.settings.autoAccept.description": "Approve this project's permission requests without asking",
   "project.settings.autoAccept.default.on": "Use default (On)",
