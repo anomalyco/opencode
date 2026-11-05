@@ -554,7 +554,7 @@ fn install_keys(tui: &Rc<Tui>) {
                 .palette()
                 .suggested(has_sessions(&tui.weak()))
                 .slash(slash("sessions", &["resume", "continue"])),
-            command("session.new", |tui| tui.navigate(Route::Home))
+            command("session.new", |tui| crate::features::clear::clear(tui, false))
                 .title("New session")
                 .group("Session")
                 .palette()
