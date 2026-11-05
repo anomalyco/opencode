@@ -32,7 +32,6 @@ const messages = turns.flatMap((turn) => {
   ]
 })
 
-const deviation = ["V01-plain-transcript"]
 
 export default defineApp({
   args: { sessionID: "ses_n" },
@@ -42,14 +41,14 @@ export default defineApp({
     { path: "/api/session/ses_n/inbox", json: { data: [] } },
   ],
   steps: [
-    { checkpoint: "open", until: "Answer 8 three.", deviation },
+    { checkpoint: "open", until: "Answer 8 three." },
     { keys: ["pageup"] },
-    { checkpoint: "page-up", until: "Jump to latest", deviation },
+    { checkpoint: "page-up", until: "Jump to latest" },
     { keys: ["ctrl+g"] },
-    { checkpoint: "first", until: "Question 1", deviation },
+    { checkpoint: "first", until: "Question 1" },
     { keys: ["end"] },
-    { checkpoint: "last", until: "Answer 8 three.", deviation },
+    { checkpoint: "last", until: "Answer 8 three." },
     { keys: ["alt+end"] },
-    { checkpoint: "last-user", until: "Jump to latest", deviation },
+    { checkpoint: "last-user", until: "Jump to latest" },
   ],
 })
