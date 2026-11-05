@@ -18,7 +18,6 @@ indexmap.workspace = true
 log = { workspace = true, features = ["kv"] }
 opencode-api.workspace = true
 opencode-service.workspace = true
-opencode-store.workspace = true
 percent-encoding.workspace = true
 regex.workspace = true
 serde.workspace = true
