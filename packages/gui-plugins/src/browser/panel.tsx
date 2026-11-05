@@ -12,7 +12,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
@@ -29,6 +29,15 @@ import { bare, completes, highlight, suggest, type Visit } from "./history"
 import type { Model } from "./model"
 import type { PaneElement } from "./ipc"
 import { PageIcon } from "./page-icon"
+import {
+  initialSiteState,
+  SITE_CLEAR_TIMEOUT_MS,
+  SITE_LOAD_TIMEOUT_MS,
+  siteView,
+  transitionSite,
+  type SiteEffect,
+  type SiteEvent,
+} from "./site-machine"
 
 type PaneState = {
   /** The address field's text while the user edits it, and the submitted address it keeps afterwards. */
@@ -1185,22 +1194,54 @@ function SiteInformation(props: {
   clear: () => Promise<void> | undefined
 }) {
   const plugin = usePlugin()
-
-  // `load` counts openings and clears, so a count for an earlier one never replaces a later one.
-  const [state, setState] = createStore<{
-    open: boolean
-    pointer: boolean
-    cookies?: number
-    clearing: boolean
-    load: number
-  }>({
-    open: false,
-    pointer: false,
-    clearing: false,
-    load: 0,
-  })
-
+  const [siteState, setSiteState] = createSignal(initialSiteState)
+  // Whether a pointer opened the popover, so closing it returns focus without a focus ring.
+  const [pointer, setPointer] = createSignal(false)
+  const view = createMemo(() => siteView(siteState()))
+  let timer: ReturnType<typeof setTimeout> | undefined
   let trigger: HTMLButtonElement | undefined
+
+  const dispatch = (event: SiteEvent) => {
+    const next = transitionSite(siteState(), event)
+    setSiteState(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: SiteEffect) => {
+    if (effect.type === "notify-clear-failed") return showToast({ title: plugin.t("common.requestFailed") })
+    const attempt = effect.attempt
+    const phase = effect.type === "load" ? "loading" : "clearing"
+    clearTimeout(timer)
+    timer = setTimeout(
+      () => dispatch({ type: "timeout", phase, attempt }),
+      effect.type === "load" ? SITE_LOAD_TIMEOUT_MS : SITE_CLEAR_TIMEOUT_MS,
+    )
+
+    if (effect.type === "load") {
+      const pending = props.site()
+
+      if (!pending) return dispatch({ type: "load.failed", attempt })
+      void pending.then(
+        (value) => dispatch({ type: "load.succeeded", attempt, cookies: value.cookies }),
+        () => dispatch({ type: "load.failed", attempt }),
+      )
+
+      return
+    }
+
+    const pending = props.clear()
+
+    if (!pending) return dispatch({ type: "clear.failed", attempt })
+    void pending.then(
+      () => dispatch({ type: "clear.succeeded", attempt }),
+      () => dispatch({ type: "clear.failed", attempt }),
+    )
+  }
+
+  onCleanup(() => {
+    clearTimeout(timer)
+    dispatch({ type: "disposed" })
+  })
 
   const kind = () => {
     const value = connection(props.url)
@@ -1215,47 +1256,30 @@ function SiteInformation(props: {
     return !!value && value !== "file"
   }
 
-  const load = () => {
-    const run = state.load + 1
-    setState({ load: run, cookies: undefined })
-    void props.site()?.then(
-      (value) => {
-        if (state.load === run) setState("cookies", value.cookies)
-      },
-      () => undefined,
-    )
-  }
+  const cookieDetail = () => {
+    const current = view()
 
-  const clear = () => {
-    setState("clearing", true)
-    void (props.clear() ?? Promise.reject(new Error("browser.pane.unavailable")))
-      .catch(() => showToast({ title: plugin.t("common.requestFailed") }))
-      .finally(() => {
-        setState("clearing", false)
-        load()
-      })
+    if (current.failed) return plugin.t("common.requestFailed")
+
+    return current.cookies === undefined ? undefined : plugin.plural("site.cookies.count", current.cookies)
   }
 
   return (
     <Popover
-      open={state.open}
+      open={view().open}
       placement="bottom-start"
       gutter={8}
       shift={-10}
       modal={false}
-      onOpenChange={(open) => {
-        setState("open", open)
-
-        if (open) load()
-      }}
+      onOpenChange={(open) => dispatch({ type: "open.changed", open })}
     >
       <Tooltip placement="top" value={plugin.t("site.info")}>
         <Popover.Trigger
           ref={trigger}
           as={IconButton}
           type="button"
-          onPointerDown={() => setState("pointer", true)}
-          onKeyDown={() => setState("pointer", false)}
+          onPointerDown={() => setPointer(true)}
+          onKeyDown={() => setPointer(false)}
           variant="ghost-muted"
           size="small"
           aria-label={plugin.t("site.info")}
@@ -1273,7 +1297,7 @@ function SiteInformation(props: {
           }}
           // Focus returns to the trigger on close, which Chromium rings after Escape; a pointer opening keeps it unringed.
           onCloseAutoFocus={(event: Event) => {
-            if (!state.pointer) return
+            if (!pointer()) return
             event.preventDefault()
             const active = document.activeElement
 
@@ -1301,18 +1325,14 @@ function SiteInformation(props: {
             )}
           </Show>
           <Show when={web()}>
-            <SiteRow
-              icon="outline-cookie"
-              title={plugin.t("site.cookies")}
-              detail={state.cookies === undefined ? undefined : plugin.plural("site.cookies.count", state.cookies)}
-            >
+            <SiteRow icon="outline-cookie" title={plugin.t("site.cookies")} detail={cookieDetail()}>
               <Button
                 size="small"
                 variant="neutral"
-                disabled={state.clearing || state.cookies === undefined}
-                onClick={clear}
+                disabled={view().actionDisabled}
+                onClick={() => dispatch(view().failed ? { type: "retry" } : { type: "clear.clicked" })}
               >
-                {plugin.t("site.cookies.clear")}
+                {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
               </Button>
             </SiteRow>
             <SiteRow
