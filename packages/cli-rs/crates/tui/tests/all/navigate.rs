@@ -17,10 +17,9 @@ use opentui::testing::TestApp;
 use serde_json::{Value, json};
 use wait::WAIT;
 
-/// Serves one session's messages, newest page first, `limit` at a time, with a cursor that counts the
-/// messages older than the page.
+/// Serves the same messages for every session, newest page first, `limit` at a time, with a cursor that
+/// counts the messages older than the page.
 struct Fixture {
-    id: String,
     messages: Vec<Value>,
     older: Arc<AtomicUsize>,
 }
@@ -30,10 +29,14 @@ impl Transport for Fixture {
         let path = request.url.path().to_owned();
         let query: HashMap<String, String> = request.url.query_pairs().into_owned().collect();
         Box::pin(async move {
-            let session = format!("/api/session/{}", self.id);
+            let id = path
+                .strip_prefix("/api/session/")
+                .and_then(|rest| rest.split('/').next())
+                .unwrap_or_default();
+            let session = format!("/api/session/{id}");
             let (status, body) = match request.method {
                 "GET" if path == "/api/session" => (200, json!({ "data": [], "cursor": {} })),
-                "GET" if path == session => (200, json!({ "data": info(&self.id) })),
+                "GET" if path == session => (200, json!({ "data": info(id) })),
                 "GET" if path == format!("{session}/message") => {
                     let limit: usize = query
                         .get("limit")
@@ -125,7 +128,6 @@ fn open(messages: Vec<Value>, info: Info) -> Harness {
     let last = messages.len() / 2;
     let older = Arc::new(AtomicUsize::new(0));
     let fixture = Fixture {
-        id: "ses_n".into(),
         messages,
         older: older.clone(),
     };
@@ -503,6 +505,73 @@ fn the_scrollbar_toggles_and_the_wheel_moves_three_rows() {
     assert_eq!(thumb(&screen), 0, "{screen}");
     let screen = settle(&h, h.dispatch("session.toggle.scrollbar"));
     assert!(thumb(&screen) > 0, "a bar in the last column:\n{screen}");
+}
+
+#[test]
+fn a_tab_reopens_where_the_reader_left_it() {
+    let h = open(turns(30), Info::default());
+    let transcript = |screen: &str| -> Vec<String> {
+        screen
+            .lines()
+            .skip(TOP)
+            .take(17)
+            .map(str::to_owned)
+            .collect()
+    };
+    let switch = |id: &str| {
+        h.tui.navigate(Route::Session {
+            id: SessionID(id.into()),
+        });
+        h.app.advance(Duration::from_millis(1));
+    };
+    for _ in 0..3 {
+        h.press("pageup");
+    }
+    let screen = h.idle();
+    let left = transcript(&screen);
+    assert!(
+        left.iter().any(|line| line.contains("Jump to latest ↓")),
+        "{screen}"
+    );
+
+    // Another tab opens at its newest rows; back on the first, the reader's rows show where they were
+    // (`sessionTabs.setScrollAnchor`, `restoreScrollPosition`).
+    switch("ses_m");
+    let other = h.app.wait_until(WAIT, || {
+        let screen = h.app.text();
+        screen.contains("Answer 30 three.") && !screen.contains("Jump to latest")
+    });
+    assert!(other, "{}", h.app.text());
+    switch("ses_n");
+    let restored = h.app.wait_until(WAIT, || transcript(&h.app.text()) == left);
+    assert!(
+        restored,
+        "{left:#?}\n=====\n{:#?}",
+        transcript(&h.app.text())
+    );
+
+    // Back at the bottom, the anchor is gone: the tab reopens at its newest rows.
+    h.press("end");
+    let bottom = transcript(&h.wait_for("Answer 30 three."));
+    switch("ses_m");
+    h.wait_for("Answer 30 three.");
+    switch("ses_n");
+    let found = h
+        .app
+        .wait_until(WAIT, || transcript(&h.app.text()) == bottom);
+    assert!(found, "{bottom:#?}\n=====\n{}", h.app.text());
+
+    // The oldest rows, outside the newest window, mount again around the anchor.
+    h.press("ctrl+g");
+    h.wait_for("┃  Question 1\n");
+    let first = transcript(&h.idle());
+    switch("ses_m");
+    h.wait_for("Answer 30 three.");
+    switch("ses_n");
+    let found = h
+        .app
+        .wait_until(WAIT, || transcript(&h.app.text()) == first);
+    assert!(found, "{first:#?}\n=====\n{}", h.app.text());
 }
 
 /// Lets frames and follow-up timers run, then reads the screen.

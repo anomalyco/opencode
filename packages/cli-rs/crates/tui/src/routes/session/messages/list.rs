@@ -45,6 +45,13 @@ pub const BACKFILL_CHUNK: usize = 60;
 #[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
 
+/// Where the reader left a transcript (`ScrollAnchor`): a row and its distance from the view's top.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScrollAnchor {
+    pub row: RowKey,
+    pub screen_y: f64,
+}
+
 #[derive(Clone, Copy, PartialEq)]
 struct RowSettings {
     conceal: bool,
@@ -342,6 +349,85 @@ impl Transcript {
         out.iter_mut().for_each(|(_, y)| *y -= origin);
         out.sort_by(|a, b| a.1.total_cmp(&b.1));
         out
+    }
+
+    /// The row `saveScrollAnchor` keeps: the lowest one that starts at or above the view's top, or one
+    /// row below it for a reply part or a group, else the first mounted row. Footers and token usage do not
+    /// anchor.
+    pub fn anchor(&self) -> Option<ScrollAnchor> {
+        let (_, top) = self.0.scroll.scroll_position();
+        let mut first = None;
+        let mut anchor: Option<ScrollAnchor> = None;
+        for key in self.0.mounted.borrow().iter() {
+            let inset = match key {
+                RowKey::Message(_) => 0.0,
+                RowKey::Part(..) | RowKey::Group(_) => 1.0,
+                _ => continue,
+            };
+            let Some(y) = self.row_y(key) else { continue };
+            let item = ScrollAnchor {
+                row: key.clone(),
+                screen_y: y - top,
+            };
+            if item.screen_y <= inset
+                && anchor
+                    .as_ref()
+                    .is_none_or(|anchor| item.screen_y > anchor.screen_y)
+            {
+                anchor = Some(item.clone());
+            }
+            first.get_or_insert(item);
+        }
+        anchor.or(first)
+    }
+
+    /// The content y of a mounted row that has a height.
+    pub fn row_y(&self, key: &RowKey) -> Option<f64> {
+        if !self.0.mounted.borrow().contains(key) {
+            return None;
+        }
+        let rect = self.0.rows.borrow().get(key)?.wrapper.rect();
+        (rect.height > 0.0).then(|| rect.screen_y - self.0.scroll.content_view().rect().screen_y)
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] rows on each side of `key` (`restoreScrollPosition`). Returns whether
+    /// the row exists.
+    pub fn mount_around(&self, tui: &Tui, key: &RowKey) -> bool {
+        // The rows the store holds now, which the next sync may not have rendered yet.
+        self.0.render(tui, |_| false);
+        let window = {
+            let specs = self.0.specs.borrow();
+            let weights = self.0.weights.borrow();
+            specs
+                .iter()
+                .position(|spec| spec.key() == *key)
+                .map(|index| {
+                    let start = grouping::rows_before(&weights, index, BACKFILL_CHUNK);
+                    let end = grouping::rows_after(&weights, index, BACKFILL_CHUNK);
+                    let start = if start == 0 {
+                        Start::Top
+                    } else {
+                        Start::Row(specs[start].key())
+                    };
+                    (start, (end < specs.len()).then_some(end))
+                })
+        };
+        let Some((start, end)) = window else {
+            return false;
+        };
+        *self.0.start.borrow_mut() = start;
+        self.0.end.set(end);
+        self.0.render(tui, |_| false);
+        true
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] more rows below the window. Returns whether there were any.
+    pub fn mount_newer(&self, tui: &Tui) -> bool {
+        let Some(end) = self.0.end.get() else {
+            return false;
+        };
+        self.0.mount_newer(tui, end);
+        true
     }
 
     /// Loads every older page in one publication (`session.first`). The window stays until `done`
@@ -766,10 +852,15 @@ impl Inner {
         if end >= rows || top + viewport < content - viewport {
             return false;
         }
+        self.mount_newer(tui, end);
+        true
+    }
+
+    fn mount_newer(&self, tui: &Tui, end: usize) {
+        let rows = self.specs.borrow().len();
         let next = grouping::rows_after(&self.weights.borrow(), end, BACKFILL_CHUNK);
         self.end.set((next < rows).then_some(next));
         self.render(tui, |_| false);
-        true
     }
 
     /// `prependHistory`: loads the next older page; the store's flush mounts it.
