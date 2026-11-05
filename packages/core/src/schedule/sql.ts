@@ -27,6 +27,8 @@ export const ScheduleTable = sqliteTable(
     run_count: integer().notNull().default(0),
     checks: integer().notNull().default(0),
     failures: integer().notNull().default(0),
+    /** Consecutive shell action runs that failed; reset by a successful run. */
+    run_failures: integer().notNull().default(0),
     last_fired_at: integer(),
     last_message_id: text().$type<SessionMessage.ID>(),
     last_outcome: text().$type<Schedule.Outcome>(),

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "50aac552-989a-45b8-a078-1b5732517bd2",
-  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
+  "id": "ac122645-b60d-497d-9bf6-f0450022a51a",
+  "prevIds": ["50aac552-989a-45b8-a078-1b5732517bd2"],
   "ddl": [
     {
       "name": "account_state",
@@ -1013,6 +1013,16 @@
       "default": "0",
       "generated": null,
       "name": "failures",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "run_failures",
       "entityType": "columns",
       "table": "schedule"
     },

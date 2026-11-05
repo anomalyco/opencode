@@ -148,6 +148,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`run_count\` integer DEFAULT 0 NOT NULL,
           \`checks\` integer DEFAULT 0 NOT NULL,
           \`failures\` integer DEFAULT 0 NOT NULL,
+          \`run_failures\` integer DEFAULT 0 NOT NULL,
           \`last_fired_at\` integer,
           \`last_message_id\` text,
           \`last_outcome\` text,
