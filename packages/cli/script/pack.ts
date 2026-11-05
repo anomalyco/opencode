@@ -82,7 +82,7 @@ async function packDistribution(input: {
         version,
         license: pkg.license,
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
-        os: ["darwin", "linux", "win32"],
+        os: ["darwin", "linux", "win32", "android"],
         cpu: ["arm64", "x64"],
         optionalDependencies: binaries,
       },

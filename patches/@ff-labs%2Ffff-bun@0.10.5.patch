@@ -88,3 +88,22 @@ index 3b54b82d03bd5d37f3665d59c91273dc62118c1b..17bf456ea78d6b1f432d514f12eb430c
    getTriple,
 -} from "./platform";
 +} from "./platform.js";
+
+diff --git a/src/embedded.ts b/src/embedded.ts
+--- a/src/embedded.ts
++++ b/src/embedded.ts
+@@ -46,6 +46,14 @@
+     );
+   }
+ 
++  if (process.platform === "android") {
++    return importFile(
++      import(`@ff-labs/fff-bin-android-arm64/libfff_c.so`, {
++        with: { type: "file" },
++      }),
++    );
++  }
++
+   return null;
+ }
+ 

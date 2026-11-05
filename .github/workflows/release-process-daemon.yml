@@ -78,6 +78,10 @@ jobs:
             target: x86_64-apple-darwin
           - runner: macos-15
             target: aarch64-apple-darwin
+          - runner: ubuntu-22.04
+            target: aarch64-linux-android
+            android: true
+            api-level: "28"
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
@@ -95,15 +99,36 @@ jobs:
       - name: Install musl toolchain
         if: matrix.musl
         run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Configure Android NDK
+        if: matrix.android
+        run: |
+          ndk="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          test -n "$ndk" || { echo "Android NDK is not installed" >&2; exit 1; }
+          sysroot="$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          lib="$sysroot/usr/lib/aarch64-linux-android/${{ matrix.api-level }}"
+          cat > "$RUNNER_TEMP/android-libc.txt" <<EOF
+          include_dir=$sysroot/usr/include
+          sys_include_dir=$sysroot/usr/include/aarch64-linux-android
+          crt_dir=$lib
+          msvc_lib_dir=
+          kernel32_lib_dir=
+          gcc_dir=$lib
+          darwin_sdk_dir=
+          EOF
+          {
+            echo "ZIG_LIBC=$RUNNER_TEMP/android-libc.txt"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ matrix.api-level }}-clang"
+          } >> "$GITHUB_ENV"
       - name: Install Rust target
         run: rustup toolchain install 1.90.0 --profile minimal --target "${{ matrix.target }}"
       - name: Install glibc baseline linker
         if: endsWith(matrix.target, '-linux-gnu')
         run: cargo install cargo-zigbuild --locked --version "$CARGO_ZIGBUILD_VERSION"
       - name: Test service
+        if: matrix.android != true
         run: cargo test --locked --target "${{ matrix.target }}" --lib --test service --test ownership
       - name: Test CLI integration
-        if: runner.os != 'macOS'
+        if: runner.os != 'macOS' && matrix.android != true
         run: cargo test --locked --target "${{ matrix.target }}" --test playground
       - name: Build
         run: |
@@ -120,6 +145,8 @@ jobs:
           echo "Highest required glibc version: $required"
           test "$(printf '%s\n' "$required" "$GNU_GLIBC_VERSION" | sort -V | tail -n 1)" = "$GNU_GLIBC_VERSION"
       - name: Smoke test
+        # Android binaries only run on a device or emulator.
+        if: matrix.android != true
         run: |
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "opencode-pty") | .version')"
           binary="target/${{ matrix.target }}/release/opencode-pty"

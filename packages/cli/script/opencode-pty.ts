@@ -19,7 +19,7 @@ const core = createRequire(path.resolve(import.meta.dirname, "../../core/package
 const pty = createRequire(core.resolve("@opencode/pty/package.json"))
 
 export async function resolveOpencodePty(target: Target): Promise<OpencodePtyAsset | undefined> {
-  if (target.platform !== "darwin" && target.platform !== "linux" && target.platform !== "win32") return undefined
+  if (!["darwin", "linux", "win32", "android"].includes(target.platform)) return undefined
   if (target.arch !== "arm64" && target.arch !== "x64") return undefined
 
   const suffix = [target.platform, target.arch, target.platform === "linux" ? (target.libc ?? "glibc") : undefined]

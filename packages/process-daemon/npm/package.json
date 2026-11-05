@@ -32,7 +32,8 @@
     "@opencode/pty-linux-x64-gnu": "0.4.0",
     "@opencode/pty-linux-x64-musl": "0.4.0",
     "@opencode/pty-win32-arm64": "0.4.0",
-    "@opencode/pty-win32-x64": "0.4.0"
+    "@opencode/pty-win32-x64": "0.4.0",
+    "@opencode/pty-android-arm64": "0.4.0"
   },
   "publishConfig": {
     "access": "public"
