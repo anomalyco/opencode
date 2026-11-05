@@ -2,7 +2,8 @@
 //! `opencode.plugins` with `plugins.list` (`/plugins`).
 //!
 //! TUI rows come from the plugin registry (`Registry::entries`): built-ins are internal and hidden until
-//! `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the reason as its error (F16). Server rows
+//! `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the reason as its error (F16), and an
+//! external WASM plugin that failed to load or crashed as `failed` with its error (P.4). Server rows
 //! come from `GET /api/plugin`. Enter toggles a TUI plugin through `Registry::set_active`, then the route mounts
 //! again so slots follow; on another row it opens the error, if any.
 
@@ -329,13 +330,15 @@ impl Manager {
                     Status::Active => ("active", None),
                     Status::Inactive => ("inactive", None),
                     Status::Skipped(reason) => ("skipped", Some(reason.clone())),
+                    Status::Failed(error) => ("failed", Some(error.clone())),
                 };
-                let loaded = !matches!(entry.status, Status::Skipped(_));
+                // Only a plugin with a definition can be toggled; an unloaded target cannot.
+                let loaded = entry.source != Source::Configured;
                 Entry::Tui {
-                    key: format!("tui:{}", entry.id),
+                    key: format!("tui:{}", entry.target.as_ref().unwrap_or(&entry.id)),
                     internal: entry.source == Source::Builtin,
                     id: loaded.then(|| entry.id.clone()),
-                    target: entry.id,
+                    target: entry.target.unwrap_or(entry.id),
                     status,
                     error,
                 }

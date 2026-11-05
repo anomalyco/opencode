@@ -47,5 +47,8 @@ opencode-tui.workspace = true
 opencode-ui.workspace = true
 
 [dev-dependencies]
+bytes.workspace = true
+opencode-plugin.workspace = true
+opentui.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

@@ -1,0 +1,22 @@
+# The sample native plugin (P.4): a `cdylib` on `opencode-plugin-abi`. The loader's tests build it with `cargo build`
+# and load the library. Not a workspace member.
+[package]
+name = "opencode-sample-plugin"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# Builds that pretend to target another ABI version, for the version tests.
+abi-1-0 = []
+major-2 = []
+requires-future = []
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+
+[workspace]

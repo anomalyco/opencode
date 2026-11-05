@@ -56,6 +56,8 @@ pub struct Launch {
     pub args: Args,
     /// Kept alive while the TUI runs: dropping a standalone connection stops its server.
     pub keep: Box<dyn std::any::Any>,
+    /// External plugins to discover and load (P.4).
+    pub plugins: Option<crate::plugins::host::External>,
 }
 
 /// The shared context. Held as `Rc<Tui>`; widget callbacks keep a [`Weak`].
@@ -472,6 +474,9 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
         crate::features::system_commands::mouse_tracking(&launch.deps.config);
     let app = App::new(options)?;
     let tui = mount_with(&app, launch.deps, launch.args);
+    if let Some(external) = launch.plugins {
+        crate::plugins::host::external(&tui, external);
+    }
     // Tests start the editor context with their own source; the real TUI reads the environment.
     crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();

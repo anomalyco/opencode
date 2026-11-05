@@ -21,6 +21,7 @@ opencode-mermaid = { path = "crates/mermaid" }
 opencode-mini = { path = "crates/mini" }
 opencode-parity = { path = "crates/parity" }
 opencode-plugin = { path = "crates/plugin" }
+opencode-plugin-abi = { path = "crates/plugin-abi" }
 opencode-service = { path = "crates/service" }
 opencode-store = { path = "crates/store" }
 opencode-tui = { path = "crates/tui" }
