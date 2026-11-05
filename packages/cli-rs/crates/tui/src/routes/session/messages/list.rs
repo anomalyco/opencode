@@ -104,6 +104,8 @@ struct Inner {
     /// Set when rows mount above the window, so the reader's rows stay in place.
     pin: RefCell<Option<Pin>>,
     loading: Cell<bool>,
+    /// How many messages were loaded when the last group-boundary page was asked for.
+    boundary: Cell<Option<usize>>,
     layer: RefCell<Option<Disposer>>,
 }
 
@@ -198,6 +200,7 @@ impl Transcript {
             end: Cell::new(None),
             pin: RefCell::default(),
             loading: Cell::new(false),
+            boundary: Cell::new(None),
             layer: RefCell::default(),
         });
         inner.install(tui);
@@ -617,6 +620,44 @@ impl Inner {
         for stop in stops {
             stop.run(tui);
         }
+        self.complete_group_boundary(tui);
+    }
+
+    /// `completeGroupBoundary`: a page boundary can cut the oldest group in half, so while the oldest row is a
+    /// group, older pages load until something precedes it. The footer's turn duration needs that turn's prompt.
+    fn complete_group_boundary(&self, tui: &Tui) {
+        let Some(session) = self.session.borrow().clone() else {
+            return;
+        };
+        if self.loading.get() || !matches!(self.specs.borrow().first(), Some(Spec::Group(_))) {
+            return;
+        }
+        let count = tui.data.read(|state| {
+            state
+                .has_more_messages(&session)
+                .then(|| state.messages(&session).len())
+        });
+        // A page that adds nothing would otherwise load again forever.
+        let Some(count) = count.filter(|count| self.boundary.get() != Some(*count)) else {
+            return;
+        };
+        self.boundary.set(Some(count));
+        self.loading.set(true);
+        let data = tui.data.clone();
+        let weak = self.this.clone();
+        tui.app.spawn(
+            async move { data.message_load_more(&session, LoadMore::default()).await },
+            move |_, result| {
+                let Some(inner) = weak.upgrade() else { return };
+                inner.loading.set(false);
+                if let Err(error) = result {
+                    log::error!("Failed to load older messages: {error}");
+                }
+                if let Some(tui) = inner.tui.upgrade() {
+                    inner.complete_group_boundary(&tui);
+                }
+            },
+        );
     }
 
     fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(&str) -> bool) {
@@ -750,8 +791,12 @@ impl Inner {
                 let Some(inner) = weak.upgrade() else { return };
                 inner.loading.set(false);
                 inner.hint.visible(false);
-                if let (Err(error), Some(tui)) = (result, inner.tui.upgrade()) {
-                    tui.toasts.error(error.to_string());
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                match result {
+                    Ok(_) => inner.complete_group_boundary(&tui),
+                    Err(error) => tui.toasts.error(error.to_string()),
                 }
             },
         );
