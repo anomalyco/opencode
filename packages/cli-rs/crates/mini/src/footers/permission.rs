@@ -1,5 +1,5 @@
-//! The permission footer (`footer.permission.tsx`, `permission.shared.ts`): the request with Allow once, Allow
-//! always, and Reject; a confirmation before Allow always; a message field for Reject.
+//! The permission footer (`footer.permission.tsx`, `permission.shared.ts`): the request with Allow once, Always
+//! allow, and Reject; a confirmation before Always allow; a message field for Reject.
 
 use opencode_api::generated::{PermissionReply, PermissionRequest};
 use opencode_ui::permission::{Presentation, always_lines, presentation};
@@ -70,7 +70,7 @@ impl State {
         }
     }
 
-    /// `permissionOptions`, less Allow always when the request saves nothing.
+    /// `permissionOptions`, less Always allow when the request saves nothing.
     pub fn choices(&self, saves: bool) -> Vec<Choice> {
         match self.stage {
             Stage::Permission if saves => vec![Choice::Once, Choice::Always, Choice::Reject],

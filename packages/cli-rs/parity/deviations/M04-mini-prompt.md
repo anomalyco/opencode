@@ -22,10 +22,3 @@
   the status row wraps and the footer grows.
 - Rust: the status row stays one row and truncates.
 - Reason: it happens only below about 20 columns; the footer height model stays simpler.
-
-## Hints for later steps
-
-- The `ctrl+x q N pending` and `ctrl+p menu` hints appear once M.3 registers `session.queued_prompts` and
-  `command.palette.show`. Until then the stages after them can fit where TypeScript's do not, so the `queue`
-  scenario masks those status rows.
-- The spinner cell stands still in the agent's color; M.4 animates it.
