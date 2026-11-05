@@ -116,7 +116,7 @@ function SshHost(props: ParentProps) {
   return (
     <PluginServersProvider>
       <PluginStyles />
-      <Show when={host.state.status[plugin.id] === "active"}>{props.children}</Show>
+      <Show when={host.status(plugin.id) === "active"}>{props.children}</Show>
     </PluginServersProvider>
   )
 }

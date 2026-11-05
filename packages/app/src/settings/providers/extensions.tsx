@@ -1,4 +1,4 @@
-import { Predicate } from "effect"
+import type { McpServer } from "@opencode/client/promise"
 import { Component, For, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
@@ -10,7 +10,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useMcpToggle } from "@/providers/connect/mcp"
+import { useMcpController } from "@/providers/connect/mcp"
+import { mcpRowView } from "@/providers/connect/mcp-machine"
 import { DialogMcp } from "@/providers/connect/mcp-dialog"
 import { ExtensionPlugins } from "@/runtime/plugin/extension-plugins"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -41,7 +42,7 @@ export const SettingsExtensions: Component<{
   // MCP connections are per Location, so read and toggle them where the active session runs, as the TUI does. The
   // names come from the default Location so this page lists only the servers available to all projects.
   const location = () => (props.directory ? { directory: props.directory } : data.location.default())
-  const toggleMcp = useMcpToggle(() => props.directory)
+  const mcp = useMcpController(() => props.directory)
 
   // The synced lists follow mcp.status.changed, so a finished sign-in shows up without a refetch.
   createEffect(() => {
@@ -59,10 +60,8 @@ export const SettingsExtensions: Component<{
       .toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  const toggle = (name: string) => {
-    if (toggleMcp.isPending) return
-    toggleMcp.mutate(name)
-  }
+  const toggle = (item: McpServer, enabled: boolean) =>
+    mcp.dispatch({ type: "toggle.requested", name: item.name, enabled, status: item.status.status })
 
   const [pluginList] = createResource(
     () => serverSdk.connection.status() === "connected",
@@ -123,11 +122,8 @@ export const SettingsExtensions: Component<{
               <SettingsList variant="catalog">
                 <For each={mcps()}>
                   {(item) => {
-                    const busy = () => {
-                      const target = toggleMcp.isPending ? toggleMcp.variables : undefined
-
-                      return (Predicate.isString(target) ? target : target?.name) === item.name
-                    }
+                    const row = () => mcpRowView(mcp.state(), item.name, item.status.status)
+                    const busy = () => row().busy
 
                     // The dot shows the status, as in the MCPs dialog; the words stay for assistive technology.
                     const label = () =>
@@ -160,13 +156,10 @@ export const SettingsExtensions: Component<{
                             fallback={
                               <Switch
                                 checked={item.status.status !== "disabled"}
-                                disabled={item.status.status === "pending" || busy()}
+                                disabled={row().pending}
                                 description={label()}
                                 class="[&_[data-slot=switch-description]]:sr-only"
-                                onChange={(enabled) => {
-                                  if (toggleMcp.isPending) return
-                                  toggleMcp.mutate({ name: item.name, enabled })
-                                }}
+                                onChange={(enabled) => toggle(item, enabled)}
                               >
                                 <span class="sr-only">{item.name}</span>
                               </Switch>
@@ -179,7 +172,7 @@ export const SettingsExtensions: Component<{
                               disabled={busy()}
                               aria-busy={busy()}
                               aria-label={language.t("dialog.mcp.signIn.open", { name: item.name })}
-                              onClick={() => toggle(item.name)}
+                              onClick={() => toggle(item, true)}
                             >
                               {language.t(busy() ? "dialog.mcp.signingIn" : "dialog.mcp.signIn")}
                             </Button>

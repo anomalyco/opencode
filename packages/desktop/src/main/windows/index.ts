@@ -29,7 +29,7 @@ import { loadWindow } from "./scheme"
 import { createWindowRegistry } from "./registry"
 import { windowRecovery } from "./recovery"
 import { createRevealDriver } from "./reveal-machine"
-import { takeEarlyWindow, type EarlyWindow } from "./early"
+import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
@@ -132,18 +132,14 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* windowRecovery
 
-  const restore = () => {
-    // The entry module created and showed the first restored window on ready; it is adopted here,
-    // before any renderer loads, so the user never waited for the layers to see a window.
-    const early = takeEarlyWindow()
-    const usable = early && !early.win.isDestroyed() ? early : undefined
-    const ids = registry.persisted()
-    const list = ids.length ? ids : [usable?.id ?? randomUUID()]
-
-    if (usable && !list.includes(usable.id)) usable.win.destroy()
-
-    return list.map((id) => create(id, usable?.id === id ? usable : undefined))
-  }
+  // The entry module created and showed the first restored window on ready; it is adopted here,
+  // before any renderer loads, so the user never waited for the layers to see a window.
+  const restore = () =>
+    restoreEarlyWindow({
+      ids: registry.persisted(),
+      fallbackId: randomUUID(),
+      openExternal: (url) => runFork(openExternalURL(url)),
+    }).map((step) => create(step.id, step.kind === "adopt" ? step.entry : undefined))
 
   const create = (id: string = randomUUID(), early?: EarlyWindow) => {
     const stateFile = path.join(app.getPath("userData"), windowStateFile(id))
@@ -166,10 +162,7 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
         },
       })
 
-    // The early window was secured and loaded when it was created; only its external-URL policy is
-    // upgraded to the logged one.
-    if (early) early.openExternal = (url) => runFork(openExternalURL(url))
-
+    // The early window was secured and loaded when it was created.
     if (!early) {
       allowRendererPermissions(win)
       wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
@@ -246,5 +239,3 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
-

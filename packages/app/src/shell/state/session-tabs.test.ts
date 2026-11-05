@@ -131,8 +131,20 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
   },
   {
     name: "a pane's target places a new tab of another plugin",
-    run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, "split"),
+    run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "split" }),
     expected: { all: [A, T1], active: T1, panes: { [T1]: "split" }, selected: { side: A, split: T1 } },
+  },
+  {
+    name: "a terminal launcher's target leaves a file opened meanwhile in its own pane",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, B], active: B }, { pane: "bottom", plugin: "terminal" }),
+    expected: { all: [A, B], active: B, selected: { side: B } },
+  },
+  {
+    name: "a plugin's target places that plugin's new tab",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "bottom", plugin: "terminal" }),
+    expected: { all: [A, T1], active: T1, panes: { [T1]: "bottom" }, selected: { side: A, bottom: T1 } },
   },
 ])("$name", ({ run, expected }) => {
   expect(run()).toEqual(expected)

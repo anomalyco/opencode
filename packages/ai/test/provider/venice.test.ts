@@ -54,7 +54,8 @@ it.effect("Venice lowers typed options, model defaults, and explicit reasoning o
           "qwen3-6-27b",
         ),
         prompt: "Hello",
-        generation: { maxTokens: 200, topK: 20 },
+        maxTokens: 200,
+        topK: 20,
         providerOptions: {
           reasoningEffort: "future-effort",
           reasoning: { effort: "high", enabled: true, summary: "concise" },

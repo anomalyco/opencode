@@ -55,7 +55,9 @@ const memoryCredentials = (initial: Credential.Info[]) => {
 
 const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
   Effect.runPromise(
-    McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
+    McpOAuth.connectProvider({ config, credential: Array.from(store.rows.values()).at(-1) }).pipe(
+      Effect.provideService(Credential.Service, store.service),
+    ),
   )
 
 // Serves authorization server metadata with the given capabilities and records DCR + token requests.
@@ -287,6 +289,57 @@ describe("MCP OAuth", () => {
     expect(stored?.type === "oauth" && stored.metadata?.issuer).toBe(server.url.href)
   })
 
+  test("refreshes the credential it was made with, not the one signed in since", async () => {
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
+        const refresh = new URLSearchParams(await request.text()).get("refresh_token")
+        return Response.json({ access_token: `next-for-${refresh}`, token_type: "Bearer" })
+      },
+    })
+    const selected = credential({ access: "expired", refresh: "refresh", url: server.url.href })
+    const newer = new Credential.Info({
+      ...credential({
+        access: "other",
+        refresh: "other-refresh",
+        url: server.url.href,
+        expires: Date.now() + 3_600_000,
+      }),
+      id: Credential.ID.make("cred_newer"),
+    })
+    const store = memoryCredentials([selected, newer])
+    const oauthProvider = await Effect.runPromise(
+      McpOAuth.connectProvider({ config: remote(server.url.href), credential: selected }).pipe(
+        Effect.provideService(Credential.Service, store.service),
+      ),
+    )
+
+    const result = await auth(oauthProvider, { serverUrl: server.url.href }).finally(() => server.stop(true))
+
+    expect(result).toBe("AUTHORIZED")
+    expect((await oauthProvider.tokens())?.access_token).toBe("next-for-refresh")
+    const stored = store.rows.get(selected.id)?.value
+    expect(stored?.type === "oauth" && stored.access).toBe("next-for-refresh")
+    const untouched = store.rows.get(newer.id)?.value
+    expect(untouched?.type === "oauth" && untouched.access).toBe("other")
+  })
+
+  test("stays anonymous when made without a credential, even after one is signed in", async () => {
+    const store = memoryCredentials([])
+    const oauthProvider = await Effect.runPromise(
+      McpOAuth.connectProvider({ config: remote(authServer.url.href), credential: undefined }).pipe(
+        Effect.provideService(Credential.Service, store.service),
+      ),
+    )
+    store.rows.set(
+      Credential.ID.make("cred_test"),
+      credential({ access: "late", refresh: "late", url: authServer.url.href }),
+    )
+    expect(await oauthProvider.tokens()).toBeUndefined()
+  })
+
   test("reports needs_auth for an unauthorized server without registering a client", async () => {
     let registrations = 0
     const server = Bun.serve({
@@ -302,10 +355,9 @@ describe("MCP OAuth", () => {
     const oauthProvider = await connectProvider(config, memoryCredentials([]))
 
     const exit = await Effect.runPromise(
-      Effect.scoped(McpClient.connect("test", config, import.meta.dir, oauthProvider)).pipe(
-        Effect.provide(hostEnvironmentLayer),
-        Effect.exit,
-      ),
+      Effect.scoped(
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: oauthProvider }),
+      ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
     ).finally(() => server.stop(true))
 
     const error = Exit.isFailure(exit) && Cause.squash(exit.cause)

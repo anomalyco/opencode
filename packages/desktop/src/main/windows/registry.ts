@@ -1,20 +1,23 @@
+import { Predicate, type Schema } from "effect"
+
+/** The valid ids in the persisted window list. The early window and the registry must agree on them. */
+export function persistedWindowIDs(value: Schema.Json | undefined) {
+  if (!Array.isArray(value)) return []
+
+  return value.filter((id): id is string => Predicate.isString(id) && id.length > 0)
+}
+
 // Tracks open windows and the persisted window id list used to restore
 // windows (and their per-window persisted state) across app launches.
 export function createWindowRegistry<W>(persistence: {
-  read: () => unknown
+  read: () => Schema.Json | undefined
   write: (ids: string[]) => void
 }) {
   const windows = new Map<string, W>()
   let quitting = false
   let lastFocusedID: string | undefined
 
-  const persisted = () => {
-    const value = persistence.read()
-
-    if (!Array.isArray(value)) return []
-
-    return value.filter((id): id is string => typeof id === "string" && id.length > 0)
-  }
+  const persisted = () => persistedWindowIDs(persistence.read())
 
   return {
     persisted,

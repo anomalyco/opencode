@@ -2208,6 +2208,44 @@ test("a pending quote send hides mentions and keeps the comment read-only", asyn
   await expect.poll(() => sent).toEqual(["queue"])
 })
 
+test("a double-clicked quote send sends once and keeps the popup open until it settles", async ({ page }) => {
+  const sent: string[] = []
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_quote_double", "Keep this quoted passage.")])],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
+
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_quote_double")}"] [data-slot="text-part-body"]`,
+  )
+
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await selectQuoteText(answer)
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
+
+  const chip = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await popup.locator("textarea").fill("Only once")
+  const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+  await popup.locator('[data-slot="line-comment-v2-submit"]').dblclick({ modifiers: [modifier] })
+  await admission.arrived
+  // A click on the quote's chip while the send is in flight leaves the popup and its pending send alone.
+  await chip.click()
+  await expect(popup.locator('[data-component="loader-v2"]')).toBeVisible()
+  admission.release()
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent.length).toBe(1)
+  expect(admission.requests).toHaveLength(1)
+})
+
 function selectQuoteText(target: Locator) {
   return target.evaluate((element) => {
     const range = document.createRange()
@@ -3317,6 +3355,16 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await expect(more).not.toBeFocused()
   expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
   await expect(composer).toHaveCount(1)
+
+  // A press that turns into a native drag of the selection ends with dragend, and no pointerup follows.
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await expect(toolbar).toHaveCount(0)
+  await short.hover()
+  await page.mouse.down()
+  await page.evaluate(() => document.dispatchEvent(new Event("dragend")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
 })
 
 function pauseExitAnimations(locator: Locator) {

@@ -96,6 +96,52 @@ test("new tab selection and closing stay in the focused pane", async ({ page }) 
   await expect(sideTabs.nth(0)).toHaveAttribute("aria-selected", "true")
 })
 
+test("closing another pane's tab keeps the side pane's New tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/OtherPaneClose"
+  const key = `local\u0000${base64Encode(directory)}/ses_otherpaneclose`
+
+  await openSession(page, {
+    name: "OtherPaneClose",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_otherpaneclose: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            // The side pane selects nothing of its own, so it shows its fallback tab while the split pane is active.
+            [key]: {
+              all: ["review:changes", "file://README.md", "file://notes.md"],
+              active: "file://notes.md",
+              panes: { "file://notes.md": "split" },
+              selected: { split: "file://notes.md" },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const split = page.locator('[data-pane-content="split"]')
+  const sideNewTab = side.getByRole("tab", { name: "New tab", exact: true })
+  await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await side.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(sideNewTab).toHaveAttribute("aria-selected", "true")
+
+  // The selection falls back to the side pane's first tab, which is already listed there: no launcher opened it.
+  await split.getByRole("tab", { name: "notes.md", exact: true }).hover()
+  await split
+    .locator('div[data-value="file://notes.md"]')
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect(split).toHaveCount(0)
+  await expect(sideNewTab).toHaveCount(1)
+  await expect(sideNewTab).toHaveAttribute("aria-selected", "true")
+})
+
 test("closing the last New tab closes the side region, and only a New tab lists the launchers", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openSession(page, { name: "LastNewTab", seed: { panes: { ses_lastnewtab: { review: true } } } })
@@ -125,6 +171,54 @@ test("closing the last New tab closes the side region, and only a New tab lists 
     await expect(toggle).toHaveAttribute("aria-expanded", "true")
     await expect(newTab).toHaveCount(1)
   }
+})
+
+test("New tabs stay when a launcher in another one opens a tab, or when the tab before them closes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openSession(page, { name: "ManyNewTabs", seed: { panes: { ses_manynewtabs: { review: true } } } })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const newTabs = panel.getByRole("tab", { name: "New tab", exact: true })
+  const review = panel.getByRole("tab", { name: "Review", exact: true })
+
+  await expect(newTabs).toHaveCount(1)
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(newTabs).toHaveCount(3)
+  await expect(newTabs.nth(2)).toHaveAttribute("aria-selected", "true")
+
+  // A launcher in the middle New tab replaces only that one.
+  await newTabs.nth(1).click()
+  await openReviewLauncher(panel)
+  await expect(review).toHaveAttribute("aria-selected", "true")
+  await expect(newTabs).toHaveCount(2)
+
+  // Selecting another tab keeps the New tabs too.
+  await newTabs.nth(0).click()
+  await expect(newTabs.nth(0)).toHaveAttribute("aria-selected", "true")
+  await review.click()
+  await expect(review).toHaveAttribute("aria-selected", "true")
+  await expect(newTabs).toHaveCount(2)
+
+  // Closing the strip's first tab shows a New tab instead of closing the region.
+  await review.hover()
+  await panel
+    .locator('div[data-value="review:changes"]')
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect(review).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(newTabs).toHaveCount(2)
+  await expect(newTabs.nth(1)).toHaveAttribute("aria-selected", "true")
+
+  // The region closes with its last New tab.
+  await newTabs.nth(0).click({ button: "middle" })
+  await expect(newTabs).toHaveCount(1)
+  await newTabs.click({ button: "middle" })
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
 })
 
 test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others", async ({
@@ -238,12 +332,12 @@ test("the new tab view lists recently closed tabs, expands to the rest, and keep
   await expect(recent.getByRole("button", { name: "Show more", exact: true })).toHaveCount(0)
   await expect(recent.getByRole("button", { name: "Show less", exact: true })).toHaveCount(0)
 
-  // Closing the last tab closes the region; it opens on its launchers with that tab listed first.
+  // Closing the last tab keeps the region open on the New tab beside it, which lists that tab first.
   const readme = panel.getByRole("tab", { name: "README.md" })
   await readme.click()
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "false")
   await readme.locator("..").getByRole("button", { name: "Close tab" }).click()
-  await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(rows.first()).toContainText("README.md")
 
