@@ -177,6 +177,44 @@ describe("goal plugin waiting", () => {
     }),
   )
 
+  it.effect("pauses a goal once its owner's heartbeat goes stale, not only at startup", () =>
+    Effect.gen(function* () {
+      // A server restart inside the TTL reads the predecessor's fresh heartbeat as alive, so the startup sweep
+      // leaves the goal alone; once that record goes stale, the next beat's sweep must pause it.
+      const plugin = yield* run(
+        {
+          id: "goal-stale-owner",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "a-stopping-process",
+          updatedAt: 0,
+        },
+        { "process:a-stopping-process": { at: 0 } },
+      )
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+
+      yield* TestClock.adjust(Duration.subtract(GoalPlugin.HEARTBEAT_TTL, GoalPlugin.HEARTBEAT_INTERVAL))
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+      yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
+      expect(plugin.goal()).toMatchObject({
+        status: "paused",
+        reason: "The server restarted while the goal was active",
+      })
+      expect(plugin.stored.has("process:a-stopping-process")).toBe(false)
+    }),
+  )
+
+  it.effect("reads as dead right away after a clean shutdown", () =>
+    Effect.gen(function* () {
+      // A clean shutdown removes this process's heartbeat, so a server that restarts inside the TTL does not
+      // read its predecessor as alive and leave its goals running.
+      const plugin = yield* Effect.scoped(run())
+      expect([...plugin.stored.keys()].some((key) => key.startsWith("process:"))).toBe(false)
+    }),
+  )
+
   it.effect("refreshes its own heartbeat while it runs", () =>
     Effect.gen(function* () {
       const plugin = yield* run()
