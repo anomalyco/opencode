@@ -109,14 +109,16 @@ story("preserves a collapsed context group through count and status updates", as
 story("offers a retry for a turn diff that failed to load", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--turn-change-summary-failed")
   const summary = timeline.locator('[data-slot="session-turn-diffs"]')
+  const counts = summary.locator('[data-component="diff-changes"]')
 
   await expect(summary).toContainText("2 Changed files")
   await expect(summary).toContainText("Diff unavailable")
-  await expect(summary.locator('[data-component="diff-changes"]')).toHaveCount(0)
+  await expect(counts).toHaveCount(0)
 
   const retry = summary.getByRole("button", { name: "Retry", exact: true })
   await retry.click()
-  await expect(summary.locator('[data-component="diff-changes"]')).toHaveText("+2-1")
+  // The header totals the turn; each file row then shows its own counts.
+  await expect(counts.first()).toHaveText("+2-1")
   await expect(summary).not.toContainText("Diff unavailable")
   await expect(retry).toHaveCount(0)
 })
