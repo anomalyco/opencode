@@ -127,6 +127,18 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
     assert!(screen.contains("SAMPLE v1 BACK"), "{screen}");
 }
 
+// Expected: a plugin reads the host's theme mode (ABI 1.2), which follows the host, not the page background.
+#[test]
+fn a_plugin_reads_the_theme_mode() {
+    let host = host();
+    let registry = active(&host, &build(""));
+    let screen = markdown(&host, &registry, "```sample-mode\nx\n```\n");
+    assert!(screen.contains("sample mode dark"), "{screen}");
+    host.mode.set(ThemeMode::Light);
+    let screen = markdown(&host, &registry, "```sample-mode\nx\n```\n");
+    assert!(screen.contains("sample mode light"), "{screen}");
+}
+
 #[test]
 fn a_panicking_command_fails_the_plugin() {
     let host = host();
@@ -138,9 +150,9 @@ fn a_panicking_command_fails_the_plugin() {
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| Backend::<TestHost>::load(&Native, library, options).err();
-    // The current build has the 1.1 entry; a 1.0 build has the shorter table and still loads and works.
+    // The current build is 1.2; a 1.0 build has the shorter table and still loads and works on this 1.2 host.
     let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 1, version: Some("0.1.0".to_owned()) });
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 2, version: Some("0.1.0".to_owned()) });
     let old = build("abi-1-0");
     assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
     let host = host();
@@ -158,12 +170,12 @@ fn versions_follow_the_abi_rules() {
     // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.1); rebuild the \
+        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.2); rebuild the \
          plugin against opencode-plugin-abi 1"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.1; update opencode-rs"
+        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.2; update opencode-rs"
     );
     assert_eq!(load(&current, Some("{\"fail\":true}")).unwrap(), "sample setup failed");
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
