@@ -469,6 +469,66 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
     assert_eq!(h.older.load(Ordering::SeqCst), 4);
 }
 
+/// The timestamps of a recorded reply ("Debugging concurrent speaker mute issue"): one prompt, then 21 steps
+/// (created, streamed, completed) over 24 minutes. The first page of 20 messages starts inside the turn's
+/// exploration group, so TS loads the next page (`completeGroupBoundary`) and its footer measures from the
+/// prompt, not from the last step.
+#[test]
+fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
+    const PROMPT: u64 = 1_787_836_326_838;
+    const STEPS: [(u64, u64, u64); 21] = [
+        (1_787_836_331_139, 1_787_836_333_383, 1_787_836_333_451),
+        (1_787_836_335_619, 1_787_836_345_509, 1_787_836_345_807),
+        (1_787_836_348_535, 1_787_836_363_359, 1_787_836_363_524),
+        (1_787_836_367_308, 1_787_836_377_226, 1_787_836_377_388),
+        (1_787_836_380_215, 1_787_836_395_366, 1_787_836_395_545),
+        (1_787_836_399_666, 1_787_836_408_893, 1_787_836_439_344),
+        (1_787_836_441_786, 1_787_836_449_866, 1_787_836_450_090),
+        (1_787_836_452_390, 1_787_836_472_791, 1_787_836_473_342),
+        (1_787_836_474_857, 1_787_836_483_625, 1_787_837_656_785),
+        (1_787_837_658_445, 1_787_837_665_255, 1_787_837_665_440),
+        (1_787_837_669_331, 1_787_837_684_930, 1_787_837_685_134),
+        (1_787_837_687_891, 1_787_837_694_511, 1_787_837_694_728),
+        (1_787_837_696_321, 1_787_837_701_053, 1_787_837_701_127),
+        (1_787_837_703_042, 1_787_837_705_660, 1_787_837_705_686),
+        (1_787_837_707_749, 1_787_837_717_980, 1_787_837_718_048),
+        (1_787_837_719_638, 1_787_837_725_356, 1_787_837_725_508),
+        (1_787_837_729_516, 1_787_837_737_857, 1_787_837_737_942),
+        (1_787_837_741_970, 1_787_837_746_446, 1_787_837_747_502),
+        (1_787_837_750_419, 1_787_837_757_200, 1_787_837_757_294),
+        (1_787_837_760_314, 1_787_837_768_984, 1_787_837_769_046),
+        (1_787_837_771_391, 1_787_837_777_069, 1_787_837_777_107),
+    ];
+    let last = STEPS.len() - 1;
+    let messages: Vec<Value> = std::iter::once(user("msg_00", PROMPT, "Why are both speakers muted?"))
+        .chain(STEPS.iter().enumerate().map(|(index, (created, streamed, completed))| {
+            let content = if index == last {
+                json!([{ "type": "text", "text": "Both streams play again." }])
+            } else {
+                json!([{
+                    "type": "tool", "id": format!("call_{index}"), "name": "read",
+                    "state": { "status": "completed", "input": { "path": format!("src/{index}.rs") }, "content": [] },
+                    "time": { "created": created, "completed": streamed },
+                }])
+            };
+            json!({
+                "id": format!("msg_{:02}", index + 1), "type": "assistant", "agent": "build",
+                "model": { "providerID": "provider", "id": "model" },
+                "time": { "created": created, "streamed": streamed, "completed": completed },
+                "finish": if index == last { "stop" } else { "tool-calls" },
+                "tokens": { "input": 1200, "output": 50, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                "content": content,
+            })
+        }))
+        .collect();
+    let h = open(100, 30, "ses_t", messages, Info::default());
+    h.gate.add_permits(10);
+    // 1,450,269 ms from the prompt; the last step alone took 5.7s.
+    let screen = h.wait_for("Build · provider/model · 24m 10s");
+    assert!(!screen.contains("5.7s"), "{screen}");
+    assert_eq!(h.older.load(Ordering::SeqCst), 1);
+}
+
 /// The built-in `opencode.latex` plugin (P.2) draws `latex` fences in assistant text as Unicode math.
 #[test]
 fn mermaid_fences_render_as_diagrams() {
