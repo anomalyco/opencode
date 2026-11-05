@@ -13,4 +13,10 @@ export default {
   "settings.wrapLines.title": "Đường quấn",
   "settings.wrapLines.description":
     "Quấn các dòng dài trong các khác biệt trên thiết bị di động thay vì cuộn theo chiều ngang",
+  "menu.count.other": "{{count}} tệp đã thay đổi",
+  "folder.more": "{{count}} · chưa hiển thị hết",
+  "command.open": "Mở xem lại",
+  "load.failed": "Không tải được thay đổi",
+  "load.timeout": "Máy chủ phản hồi quá lâu",
+  "offline": "Không thể truy cập máy chủ này",
 }

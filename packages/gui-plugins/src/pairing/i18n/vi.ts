@@ -1,0 +1,28 @@
+export default {
+  "command.title": "Ghép đôi thiết bị",
+  title: "Ghép đôi",
+  description: "Kết nối thiết bị khác với máy chủ OpenCode của máy này.",
+  "pair.title": "Ghép đôi thiết bị",
+  "pair.description":
+    "Kết nối điện thoại, máy tính bảng hoặc máy tính khác từ bất kỳ đâu qua đường hầm mã hóa đầu cuối.",
+  "pair.open": "Ghép đôi thiết bị",
+  "pair.unavailable": "Hiện không thể ghép đôi.",
+  "dialog.description": "Quét mã bằng ứng dụng OpenCode trên thiết bị khác, hoặc sao chép liên kết.",
+  "remote.title": "Truy cập từ xa",
+  "remote.description":
+    "Các thiết bị đã ghép đôi truy cập máy chủ OpenCode của máy tính này qua internet. Tắt sẽ ngắt kết nối cho đến khi bạn ghép đôi lại.",
+  "remote.error": "Không thể cập nhật truy cập từ xa. Hãy thử lại.",
+  "setup.title": "Đang thiết lập truy cập từ xa…",
+  "setup.description": "Việc này có thể mất một phút.",
+  "setup.error": "Không thể thiết lập truy cập từ xa.",
+  retry: "Thử lại",
+  "screenActive.title": "Giữ màn hình hoạt động",
+  "screenActive.description": "Ngăn màn hình máy tính tắt trong khi OpenCode chạy.",
+  "screenActive.error": "Không thể cập nhật cài đặt màn hình hoạt động. Hãy thử lại.",
+  qr: "Mã QR ghép đôi",
+  copyLink: "Sao chép liên kết",
+  "copy.error": "Không thể sao chép thông tin ghép đôi. Hãy thử lại.",
+  error: "Không thể cập nhật thông tin ghép đôi. Hãy thử lại.",
+  expires: "Hết hạn sau {{time}}",
+  refresh: "Làm mới mã",
+}

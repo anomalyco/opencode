@@ -1,0 +1,17 @@
+export default {
+  "pages.other": "{{count}} trang",
+  "slides.other": "{{count}} trang chiếu",
+  "sheets.other": "{{count}} trang tính",
+  page: "Trang {{number}}",
+  slide: "Trang chiếu {{number}}",
+  hiddenSlide: "Trang chiếu ẩn",
+  slideFailed: "Không thể hiển thị trang chiếu này",
+  speakerNotes: "Ghi chú diễn giả",
+  "sheet.copyTooLarge": "Vùng chọn quá lớn để sao chép",
+  "sheet.copyFailed": "Không thể sao chép các ô",
+  "sheet.openFailed": "Không thể mở trang tính này",
+  "sheet.paintFailed": "Không thể hiển thị phần này của trang tính",
+  "sheet.tabs": "Trang tính",
+  "problem.compound": "Tệp này được bảo vệ bằng mật khẩu hoặc lưu ở định dạng Office cũ.",
+  "problem.format": "Tệp này không phải tài liệu Office hợp lệ.",
+}
