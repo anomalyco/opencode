@@ -180,8 +180,14 @@ export function createSessionTimelineRowRenderer(input: {
   // above them, and rows the virtualizer remounts appear as they are. Every row change syncs here, so the driver reuses
   // its events and skips a sync whose inputs did not change.
   let arrivals = INITIAL_STEER_ARRIVAL_STATE
-  const arrivalSync = { type: "sync" as const, sessionID: "", rows: [] as readonly TimelineRow.TimelineRow[], busy: false }
   const arrivalRendered = { type: "rendered" as const, messageID: "" }
+
+  const arrivalSync: { type: "sync"; sessionID: string; rows: readonly TimelineRow.TimelineRow[]; busy: boolean } = {
+    type: "sync",
+    sessionID: "",
+    rows: [],
+    busy: false,
+  }
 
   const syncArrivals = () => {
     const sessionID = input.sessionID()

@@ -13,9 +13,11 @@ function recordReadiness(page: Page) {
   return page.evaluateHandle(() => {
     const markdown = document.querySelector('[data-testid="markdown-fixture"] [data-component="markdown"]')!
     const changes: boolean[] = []
+
     const observer = new MutationObserver((records) =>
       records.forEach((record) => changes.push(record.oldValue === null)),
     )
+
     observer.observe(markdown, { attributes: true, attributeFilter: ["data-markdown-ready"], attributeOldValue: true })
 
     // `true` adds the attribute, `false` removes it.
@@ -61,6 +63,7 @@ story("does not report a finished stream ready before its settled render checks 
 
     return { requested, resolve: () => exists.resolve(true) }
   }, fixture)
+
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")

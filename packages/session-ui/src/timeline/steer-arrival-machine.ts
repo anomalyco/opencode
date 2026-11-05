@@ -70,6 +70,7 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
   })
 
   if (!unseen && (event.busy || state.arriving.size === 0)) return state
+
   const last = rows.findLastIndex((row) => {
     const anchor = rowAnchor(row)
 

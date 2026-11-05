@@ -46,10 +46,7 @@ describe("transitionSteerArrival", () => {
 
   test("keeps a steer through row updates until its row renders", () => {
     const steered = sync(sync(INITIAL_STEER_ARRIVAL_STATE, page), [...page, user("m51")])
-    const updated = [1, 2, 3].reduce(
-      (state) => sync(state, [...page, user("m51"), assistant("m51", "a51")]),
-      steered,
-    )
+    const updated = [1, 2, 3].reduce((state) => sync(state, [...page, user("m51"), assistant("m51", "a51")]), steered)
 
     // Before the machine, the next row update recomputed the arrivals and dropped the unrendered steer.
     expect(shouldGrowUserMessage(updated, "m51")).toBe(true)

@@ -55,7 +55,10 @@ export function createToolStatusTitleState(input: Shared): ToolStatusTitleState 
   return { status: "idle", active: input.active, mode: input.mode, text: input.text, attempts: 0 }
 }
 
-export function transitionToolStatusTitle(state: ToolStatusTitleState, event: ToolStatusTitleEvent): ToolStatusTitleState {
+export function transitionToolStatusTitle(
+  state: ToolStatusTitleState,
+  event: ToolStatusTitleEvent,
+): ToolStatusTitleState {
   if (state.status === "disposed") return state
 
   if (event.type === "disposed") return DISPOSED_TOOL_STATUS_TITLE_STATE
@@ -104,13 +107,15 @@ export function transitionToolStatusTitle(state: ToolStatusTitleState, event: To
 export function viewToolStatusTitle(state: ToolStatusTitleState) {
   if (state.status === "disposed")
     return { active: false, animating: false, width: undefined, showActive: false, showDone: true }
-  const animating = state.status !== "idle"
+  if (state.status === "idle")
+    return { active: state.active, animating: false, width: undefined, showActive: state.active, showDone: !state.active }
 
+  // Both texts stay mounted so one fades out while the other fades in.
   return {
     active: state.active,
-    animating,
-    width: state.status === "measuring" ? state.from : state.status === "animating" ? state.width : undefined,
-    showActive: animating || state.active,
-    showDone: animating || !state.active,
+    animating: true,
+    width: state.status === "measuring" ? state.from : state.width,
+    showActive: true,
+    showDone: true,
   }
 }

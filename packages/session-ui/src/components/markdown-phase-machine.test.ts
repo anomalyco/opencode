@@ -110,6 +110,7 @@ describe("transitionMarkdownPhase", () => {
     const streaming = createMarkdownPhaseState(true)
     const ready = transitionMarkdownPhase(streaming, rendered())
     const sync: MarkdownPhaseEvent = { type: "props.sync", streaming: true }
+
     const states = Array.from({ length: 100 }, () => [
       transitionMarkdownPhase(ready, stale),
       transitionMarkdownPhase(streaming, rendered()),
@@ -128,8 +129,8 @@ describe("transitionMarkdownPhase", () => {
     expect(markdownMode(streamed)).toBe("settled")
     expect(transitionMarkdownPhase(streamed, DISPOSED_MARKDOWN_PHASE_EVENT)).toBe(DISPOSED_MARKDOWN_PHASE_STATE)
     expect(transitionMarkdownPhase(DISPOSED_MARKDOWN_PHASE_STATE, rendered())).toBe(DISPOSED_MARKDOWN_PHASE_STATE)
-    expect(
-      transitionMarkdownPhase(DISPOSED_MARKDOWN_PHASE_STATE, { type: "props.sync", streaming: true }),
-    ).toBe(DISPOSED_MARKDOWN_PHASE_STATE)
+    expect(transitionMarkdownPhase(DISPOSED_MARKDOWN_PHASE_STATE, { type: "props.sync", streaming: true })).toBe(
+      DISPOSED_MARKDOWN_PHASE_STATE,
+    )
   })
 })
