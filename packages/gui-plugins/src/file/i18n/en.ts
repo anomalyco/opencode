@@ -1,6 +1,8 @@
 export default {
   "tree.all": "All files",
   "tab.notFound": "File not found: {{name}}",
+  "load.failed": "Failed to load file",
+  "load.timeout": "Opening {{name}} took too long.",
   "mobile.title": "Files",
   "mobile.openTabs": "Open files",
   "view.preview": "Preview",

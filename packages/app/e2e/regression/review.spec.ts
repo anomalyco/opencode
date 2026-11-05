@@ -739,7 +739,7 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
 
   // A restored file tab whose file was deleted shows its inline not-found state without a toast; clicking a broken link
-  // when no tab is open for it shows the toast.
+  // when no tab is open for it shows one toast.
   await page.route("**/api/fs/read/shopping.txt*", (route) =>
     route.fulfill({
       status: 404,
@@ -753,6 +753,13 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   const missingTab = panel.getByRole("tab", { name: "File not found: shopping.txt", exact: true })
   await expect(missingTab).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("File not found: shopping.txt", { exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+
+  // Behind another tab, the deleted file's tab is what its link selects: the click never does nothing.
+  await page.getByRole("button", { name: "Toggle session context" }).click()
+  await expect(missingTab).toHaveAttribute("aria-selected", "false")
+  await link.click()
+  await expect(missingTab).toHaveAttribute("aria-selected", "true")
   await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
 
   await missingTab.locator("..").getByRole("button", { name: "Close tab" }).click()
