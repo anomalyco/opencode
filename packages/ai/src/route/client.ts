@@ -31,9 +31,10 @@ import {
   ToolEntry,
   type LLMRequest,
   mergeGeneration,
+  mergeRequestOptions,
   mergeProviderOptions,
   mergeTransport,
-  type LanguageModelDefaults,
+  type RequestOptions,
   withPartial,
 } from "../schema/index.js"
 
@@ -60,7 +61,8 @@ export interface Route<
   /** Deployment headers resolved once for every operation, before transport authentication. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   readonly transport: Transport<Body, Prepared, unknown>
-  readonly defaults: RouteDefaults
+  /** Options every model built on this route starts from. */
+  readonly options?: RequestOptions
   readonly body: RouteBody<Body>
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   readonly sanitizer?: LanguageModelSanitizerCompatibility
@@ -103,11 +105,7 @@ export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "ro
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
-export type RouteDefaults = LanguageModelDefaults
-
-export type RouteDefaultsInput = LanguageModelDefaults
-
-export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
+export interface RoutePatch<Body, Prepared> extends RequestOptions {
   readonly compact?: CompactionOperations
   readonly id?: string
   readonly provider?: string | ProviderID
@@ -136,14 +134,6 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
     route,
   })
 }
-
-const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaultsInput): RouteDefaults => ({
-  ...base,
-  ...patch,
-  ...mergeTransport(base, patch),
-  ...mergeGeneration(base, patch),
-  providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
-})
 
 export interface Interface {
   readonly compact: CompactMethod
@@ -255,17 +245,12 @@ export type Service = LLMClientService
 const resolveRequestOptions = (request: LLMRequest): LLMRequest => {
   const messages = normalizeToolHistory(request.messages)
   const normalized = messages === request.messages ? request : { ...request, messages }
-  const routeDefaults = normalized.model.route.defaults
-  const modelDefaults = normalized.model.defaults
+  const options = normalized.model.options
   return {
     ...normalized,
-    ...mergeGeneration(routeDefaults, modelDefaults, normalized),
-    providerOptions: mergeProviderOptions(
-      routeDefaults.providerOptions,
-      modelDefaults?.providerOptions,
-      normalized.providerOptions,
-    ),
-    ...mergeTransport(routeDefaults, modelDefaults, normalized),
+    ...mergeGeneration(options, normalized),
+    providerOptions: mergeProviderOptions(options?.providerOptions, normalized.providerOptions),
+    ...mergeTransport(options, normalized),
   }
 }
 
@@ -287,8 +272,8 @@ export interface MakeInput<Body, Frame, Event, State> {
   readonly framing: Framing.Definition<Frame>
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-  /** Route/request defaults used when compiling requests for this route. */
-  readonly defaults?: RouteDefaultsInput
+  /** Options every model built on this route starts from. */
+  readonly options?: RequestOptions
 }
 
 export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
@@ -309,8 +294,8 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   /** Runnable transport route. */
   readonly transport: Transport<Body, Prepared, Frame>
-  /** Route/request defaults used when compiling requests for this route. */
-  readonly defaults?: RouteDefaultsInput
+  /** Options every model built on this route starts from. */
+  readonly options?: RequestOptions
 }
 
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
@@ -375,9 +360,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       ),
     )
 
-  type BuiltRouteInput = Omit<MakeTransportInput<Body, Prepared, Frame, Event, State>, "defaults"> & {
-    readonly defaults?: RouteDefaults
-  }
+  type BuiltRouteInput = MakeTransportInput<Body, Prepared, Frame, Event, State>
 
   const build = (routeInput: BuiltRouteInput): Route<Body, Prepared> => {
     const route: Route<Body, Prepared> = {
@@ -390,12 +373,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       auth: routeInput.auth ?? Auth.none,
       headers: routeInput.headers,
       transport: routeInput.transport,
-      defaults: routeInput.defaults ?? {},
+      options: routeInput.options,
       body: protocol.body,
       supportsEffortUpdates: protocol.supportsEffortUpdates,
       sanitizer: protocol.sanitizer,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
+        const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...options } = patch
         return build({
           ...routeInput,
           compact: "compact" in patch ? compact : routeInput.compact,
@@ -407,7 +390,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
-          defaults: mergeRouteDefaults(route.defaults, defaults),
+          options: mergeRequestOptions(route.options, options),
         })
       },
       model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedLanguageModelInput) =>
@@ -507,7 +490,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
     return route
   }
 
-  return build({ ...input, defaults: mergeRouteDefaults(undefined, input.defaults ?? {}) })
+  return build({ ...input, options: mergeRequestOptions(input.options) })
 }
 
 export function make<Body, Prepared, Frame, Event, State, Compact extends CompactionOperations>(
@@ -552,7 +535,7 @@ export function make<Body, Prepared, Frame, Event, State>(
     auth: input.auth,
     headers: input.headers,
     transport: HttpTransport.httpJson({ framing: input.framing }),
-    defaults: input.defaults,
+    options: input.options,
   })
 }
 

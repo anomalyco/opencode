@@ -1,5 +1,6 @@
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { ChangeKind } from "@opencode/plugin/gui/review"
+import { artifactKind } from "@opencode/util/artifact"
 import { Match, Predicate } from "effect"
 
 export type RenderDiff = FileDiffInfo
@@ -18,6 +19,11 @@ export function filterRenderableDiff(value: FileDiffInfo): value is RenderDiff {
 
 export function reviewDiffNeedsLoad(diff: RenderDiff) {
   if (diff.additions === 0 && diff.deletions === 0) return false
+
+  // The preview shows images and audio from the file itself, never from a patch.
+  const kind = artifactKind(diff.file)
+
+  if (kind === "image" || kind === "audio") return false
 
   return !diff.patch || !/^@@ /m.test(diff.patch)
 }

@@ -1155,7 +1155,9 @@ test.describe("background shortcut", () => {
       const capsule = page.getByRole("button", { name: "1 shell", exact: true, includeHidden: true })
       const list = page.getByRole("menu", { name: "1 shell", exact: true })
       const closed = (await capsule.boundingBox())!
-      const inset = (await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox())!.x - closed.x
+
+      const inset =
+        (await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox())!.x - closed.x
 
       await capsule.click()
       // Right placement shares the capsule's end edge and mirrors its inset there; centre placement shares its centre.
@@ -1400,13 +1402,23 @@ test.describe("background shortcut", () => {
     await interrupt
     await expect(list).toBeVisible()
 
-    const kill = page.waitForRequest(
-      (request) => request.method() === "DELETE" && new URL(request.url()).pathname === "/api/shell/shell_backgrounded",
-    )
+    const kill = await holdRoute(page, /\/api\/shell\/shell_backgrounded(\?|$)/, { method: "DELETE" })
+    const shellRow = list.getByRole("menuitem", { name: /sleep 120/ })
 
-    await list.getByRole("menuitem", { name: /sleep 120/ }).hover()
+    await shellRow.hover()
     await page.keyboard.press("Delete")
-    await kill
+    await kill.arrived
+    // A second Delete, or a click on the row's stop button, while the first stop runs sends nothing more.
+    const stopping = shellRow.getByRole("button", { name: "Kill shell command", exact: true })
+    await expect(stopping).toHaveAttribute("aria-busy", "true")
+    await page.keyboard.press("Delete")
+    // aria-disabled leaves a real click through, which Playwright's actionability check would refuse.
+    await stopping.click({ force: true })
+    await expect(stopping).toHaveAttribute("aria-busy", "true")
+    expect(kill.requests).toHaveLength(1)
+    kill.release()
+    await expect(stopping).not.toHaveAttribute("aria-busy")
+    expect(kill.requests).toHaveLength(1)
     await page.keyboard.press("Escape")
     await expect(list).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")

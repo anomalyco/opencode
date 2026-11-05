@@ -7,7 +7,7 @@ export const WSL_PROBE_TIMEOUT_MS = 60_000
 export type WslProbeInput = {
   /** The probe the dialog needs next, if any. */
   readonly plan: AddServerProbePlan | undefined
-  /** Main runs a job the dialog waits for, or the dialog adds a server. */
+  /** Main runs a job the dialog waits for, or the dialog waits for its own call. */
   readonly busy: boolean
   /** WSL's main side answers. */
   readonly available: boolean

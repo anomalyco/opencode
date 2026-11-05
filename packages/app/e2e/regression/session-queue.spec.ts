@@ -170,6 +170,7 @@ async function openQueue(
   revert?: string,
   status: "idle" | "running" = "running",
   model = { id: "queue-model", name: "Queue Model" },
+  config: Pick<MockServerConfig, "beforeAgentsResponse"> = {},
 ) {
   const options: Parameters<typeof openSession>[1] = {
     name: "SessionQueueRegression",
@@ -191,6 +192,7 @@ async function openQueue(
     onBackground: mock.onBackground,
     shellCommands: () => mock.shells,
     events: mock.events,
+    ...config,
   }
 
   if (followUpBehavior) options.seed = { settings: { general: { followUpBehavior } } }
@@ -337,6 +339,37 @@ test("a steer shows as pending in the timeline as the composer clears, before th
   await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["steer while the model commits"])
   await expect(prompt).toHaveCount(1)
   await expect(prompt.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
+})
+
+test("a prompt sent while the session's agents and models load shows as pending at once and sends once they load", async ({
+  page,
+}) => {
+  const mock = createQueueMock(
+    [],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  // The Location's agents load only once released, so the composer has no agent or model to send with yet.
+  const agents = Promise.withResolvers<void>()
+
+  const view = await openQueue(page, mock, "steer", undefined, "idle", undefined, {
+    beforeAgentsResponse: () => agents.promise,
+  })
+
+  const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+    hasText: "read the deploy logs",
+  })
+
+  await expect(userRow(page, "msg_queue_delivered")).toContainText("First prompt")
+  await view.input.fill("read the deploy logs")
+  await view.input.press("Enter")
+  await expect(prompt.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
+  await expect(view.input).toHaveText("")
+  expect(mock.prompts).toEqual([])
+
+  agents.resolve()
+  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["read the deploy logs"])
+  await expect(prompt).toHaveCount(1)
 })
 
 for (const row of [

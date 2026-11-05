@@ -253,6 +253,7 @@ export const dict = {
   "provider.connect.form.open": "Open link",
   "provider.connect.form.openAgain": "Open link again",
   "provider.connect.form.finished": "I finished",
+  "provider.connect.form.browserFailed": "We couldn't open your browser. Open the link below, then select I finished.",
   "provider.connect.form.selectOne": "Select at least one option",
   "provider.connect.form.minItems": "Select at least {{count}}",
   "provider.connect.form.maxItems": "Select at most {{count}}",
@@ -395,6 +396,7 @@ export const dict = {
   "dialog.mcp.signIn.paste.label": "Redirect URL",
   "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
   "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
+  "dialog.mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
@@ -495,6 +497,7 @@ export const dict = {
   "toast.permissions.autoaccept.off.description": "Permission requests will require approval",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "toast.language.loadFailed.title": "Failed to load {{language}}",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",
@@ -504,6 +507,7 @@ export const dict = {
   "toast.session.export.success.description": "Saved session to {{filename}}",
   "toast.session.export.failed.title": "Failed to export session",
   "toast.session.export.failed.description": "An error occurred while exporting the session",
+  "toast.session.import.pending": "Importing session…",
   "toast.session.copyID.failed.title": "Failed to copy session ID",
   "toast.session.copyID.failed.description": "An error occurred while copying the session ID",
   "toast.project.copyID.failed.title": "Failed to copy project ID",
@@ -700,6 +704,7 @@ export const dict = {
   "session.new.project.trigger.tooltip": "Choose project",
   "session.new.worktree.creating": "Creating worktree",
   "session.new.starting": "Starting session",
+  "session.new.timedOut": "The server took too long to respond. Send again to retry.",
   "session.new.workspace.runIn": "Run session in",
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
@@ -981,6 +986,7 @@ export const dict = {
   "settings.extensions.availableAll": "Available to all projects",
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
+  "settings.extensions.plugins.loadFailed": "Could not load plugins",
   "project.settings.title": "Edit project",
   "project.settings.autoAccept.description": "Approve this project's permission requests without asking",
   "project.settings.autoAccept.default.on": "Use default (On)",

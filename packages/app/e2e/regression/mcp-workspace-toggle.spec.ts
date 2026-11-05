@@ -20,7 +20,16 @@ type Surface = "popover" | "dialog" | "settings"
 // Extensions page opened (Ctrl+,) from the session.
 async function open(
   page: Page,
-  input: { surface: Surface } & Pick<MockServerConfig, "mcp" | "onMcpAction" | "integrations" | "onIntegrationOAuth">,
+  input: { surface: Surface } & Pick<
+    MockServerConfig,
+    | "mcp"
+    | "onMcpAction"
+    | "integrations"
+    | "onIntegrationOAuth"
+    | "onIntegrationOAuthStatus"
+    | "onIntegrationOAuthComplete"
+    | "mcpResourceFailures"
+  >,
 ) {
   const requests: { path: string; directory: string }[] = []
   page.on("request", (request) => {
@@ -41,6 +50,9 @@ async function open(
     onMcpAction: input.onMcpAction,
     integrations: input.integrations,
     onIntegrationOAuth: input.onIntegrationOAuth,
+    onIntegrationOAuthStatus: input.onIntegrationOAuthStatus,
+    onIntegrationOAuthComplete: input.onIntegrationOAuthComplete,
+    mcpResourceFailures: input.mcpResourceFailures,
   })
 
   await page.goto(sessionHref(sessionID))
@@ -545,6 +557,74 @@ for (const surface of ["popover", "dialog"] as const) {
         "Connected",
       )
     await expect(view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true })).toHaveCount(0)
+  })
+}
+
+for (const surface of ["popover", "dialog"] as const) {
+  test(`a pasted MCP sign-in from the ${surface} submits once and recovers from a failed refresh`, async ({
+    page,
+    context,
+  }) => {
+    const state = { signedIn: false, recovered: false }
+    const pasted: unknown[] = []
+    await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+
+    const view = await open(page, {
+      surface,
+      mcp: () => [
+        {
+          name: "figma-desktop",
+          integrationID: "figma-oauth",
+          status: state.signedIn ? { status: "connected" } : { status: "needs_auth", error: "Sign in required" },
+        },
+      ],
+      integrations: [{ id: "figma-oauth", name: "Figma", methods: [{ id: "oauth", type: "oauth" }], connections: [] }],
+      onIntegrationOAuth: () => ({ url: "https://auth.example.test/authorize", paste: true }),
+      onIntegrationOAuthStatus: () => (state.signedIn ? "complete" : "pending"),
+      // The server accepts the pasted URL and finishes the sign-in.
+      onIntegrationOAuthComplete: (input) => {
+        pasted.push(input.body)
+        state.signedIn = true
+      },
+      // The MCP lists fail to reload after the sign-in until the user retries.
+      mcpResourceFailures: () => state.signedIn && !state.recovered,
+    })
+
+    const complete = await holdRoute(
+      page,
+      /\/api\/integration\/figma-oauth\/connect\/oauth\/[^/?]+\/complete(?:\?|$)/,
+      {
+        method: "POST",
+      },
+    )
+
+    await view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: "Sign in to figma-desktop", exact: true })
+    const redirect = dialog.getByRole("textbox", { name: "Redirect URL", exact: true })
+
+    // The details popover closes behind the dialog and returns focus to its trigger; type once that settled.
+    if (surface === "popover") await expect(view.panel).toBeHidden()
+
+    await redirect.fill("http://127.0.0.1:19876/callback?code=abc")
+
+    // A second Enter while the paste is in flight does not send it again.
+    await redirect.press("Enter")
+    await expect(redirect).toHaveAttribute("readonly", "")
+    await redirect.press("Enter")
+    await complete.arrived
+    complete.release()
+
+    // The sign-in succeeded but the lists did not reload: the dialog offers a retry instead of waiting forever.
+    const retry = dialog.getByRole("button", { name: "Try again", exact: true })
+    await expect(retry).toBeVisible()
+    await expect(dialog.getByText("Waiting for authorization…", { exact: true })).toHaveCount(0)
+    await expect(redirect).toHaveCount(0)
+
+    state.recovered = true
+    await retry.click()
+    await expect(dialog).toHaveCount(0)
+    expect(pasted).toEqual([expect.objectContaining({ code: "http://127.0.0.1:19876/callback?code=abc" })])
+    expect(complete.requests).toHaveLength(1)
   })
 }
 

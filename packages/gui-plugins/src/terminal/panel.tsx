@@ -207,7 +207,7 @@ export default function TerminalPanel(props: {
                 <div class="text-13-regular text-text-strong">{plugin.t("list.failed")}</div>
                 <div class="text-12-regular text-text-weak break-words">{view().error}</div>
               </div>
-              <Button size="small" variant="outline" onClick={() => void terminal().retry()}>
+              <Button size="small" variant="outline" onClick={() => terminal().retry()}>
                 {plugin.t("common.retry")}
               </Button>
             </div>
@@ -242,7 +242,7 @@ export default function TerminalPanel(props: {
                       <TerminalTab
                         terminal={info}
                         session={terminal()}
-                        rename={(title) => void terminal().rename(info.id, title)}
+                        rename={(title) => terminal().rename(info.id, title)}
                       />
                     )}
                   </For>
@@ -262,6 +262,7 @@ export default function TerminalPanel(props: {
                       <IconButton
                         icon={<Icon name="plus-small" size="large" />}
                         variant="ghost"
+                        disabled={terminal().creating()}
                         onClick={() => void terminal().new()}
                         aria-label={plugin.t("command.new")}
                       />

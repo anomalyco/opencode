@@ -1371,6 +1371,13 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
   await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
   await editor.press("Enter")
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeVisible()
+  // A second /reload while the first runs joins it: no second request and no second toast.
+  await expect(editor).toBeEmpty()
+  await editor.fill("/reload")
+  await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(editor).toBeEmpty()
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toHaveCount(1)
   reloaded.resolve()
   await expect(page.getByText("Configuration reloaded", { exact: true })).toBeVisible()
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()

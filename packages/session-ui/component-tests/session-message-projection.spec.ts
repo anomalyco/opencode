@@ -206,13 +206,16 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   const indicator = timeline.locator('[data-slot="user-message-meta"] [data-slot="user-message-pending"]')
   const text = timeline.locator('[data-slot="user-message-text"]')
 
-  for (const status of ["steering", "stranded", "starting", "queued", "delivered"]) {
+  for (const status of ["steering", "stranded", "sending", "starting", "queued", "delivered"]) {
     await timeline.getByLabel("Delivery state").selectOption(status)
-    const pending = status === "steering" || status === "stranded"
+    const pending = status === "steering" || status === "stranded" || status === "sending"
 
     if (pending) await expect(indicator).toBeVisible()
 
     if (!pending) await expect(indicator).toBeHidden()
+
+    // A prompt still sending has no server row, so it offers no action until the server has it.
+    await expect(timeline.locator('[data-slot="user-message-actions"]')).toHaveCount(status === "sending" ? 0 : 1)
 
     const colors = await timeline.evaluate((element, pending) => {
       const probe = document.createElement("span")
@@ -382,6 +385,20 @@ story("renders user image, file attachment, file reference, and agent reference"
   expect(attachmentsBox).not.toBeNull()
   expect(bodyBox).not.toBeNull()
   expect(bodyBox!.y - (attachmentsBox!.y + attachmentsBox!.height)).toBe(8)
+})
+
+story("a stored image that fails to load shows a failed tile that retries", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "media" } })
+  const tiles = timeline.locator('[data-slot="user-message-attachment"]')
+
+  await expect(timeline.getByAltText("ready.svg")).toBeVisible()
+  // A failed read used to keep the loading placeholder forever.
+  const failed = tiles.first()
+  await expect(failed.getByRole("img", { name: "Unable to load image." })).toBeVisible()
+  await expect(failed).not.toHaveAttribute("data-placeholder")
+
+  await failed.click()
+  await expect(timeline.getByAltText("flaky.svg")).toBeVisible()
 })
 
 story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {

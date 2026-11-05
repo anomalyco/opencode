@@ -74,7 +74,11 @@ const posted = (effects: MarkdownWorkerEffect[]) =>
   effects.flatMap((effect) => (effect.type === "post" && effect.message.type !== "dispose" ? [effect.message.id] : []))
 
 const disposals = (effects: MarkdownWorkerEffect[]) =>
-  effects.flatMap((effect) => (effect.type === "post" && effect.message.type === "dispose" ? [effect.message.key] : []))
+  effects.flatMap((effect) =>
+    effect.type === "post" && effect.message.type === "dispose"
+      ? [`${effect.message.target}:${effect.message.key}`]
+      : [],
+  )
 
 const rejected = (effects: MarkdownWorkerEffect[], kind?: string) =>
   effects.flatMap((effect) => (effect.type === "reject" && (!kind || effect.reason.kind === kind) ? effect.ids : []))
@@ -218,7 +222,7 @@ describe("highlight streams", () => {
     )
 
     expect(rejected(next.effects)).toEqual([])
-    expect(disposals(next.effects)).toEqual(["block:1"])
+    expect(disposals(next.effects)).toEqual(["highlight:block:1"])
     const streams = ready(next.state).highlightStreams
     expect(streams.has("block:0")).toBe(true)
     expect(streams.has("block:1")).toBe(false)
@@ -240,6 +244,7 @@ describe("highlight streams", () => {
     ])
 
     expect(rejected(run.effects, "error")).toEqual([2])
+    expect(disposals(run.effects)).toEqual(["highlight:h"])
     expect(run.effects.slice(-2).map((effect) => effect.type === "post" && effect.message.type)).toEqual([
       "dispose",
       "highlight",
@@ -262,7 +267,7 @@ describe("projections", () => {
     expect(rejected(run.effects, "error")).toEqual([2])
     expect(ready(run.state).projections.has("p")).toBe(false)
     expect(run.effects.slice(-2)).toEqual([
-      { type: "post", attempt: 1, message: { type: "dispose", key: "p" } },
+      { type: "post", attempt: 1, message: { type: "dispose", target: "project", key: "p" } },
       { type: "post", attempt: 1, message: { type: "project", id: 3, key: "p", text: "abc", live: true } },
     ])
   })
@@ -277,7 +282,7 @@ describe("projections", () => {
     ])
 
     expect(rejected(run.effects, "error")).toEqual([2])
-    expect(disposals(run.effects)).toEqual(["p"])
+    expect(disposals(run.effects)).toEqual(["project:p"])
     expect(ready(run.state).projections.has("p")).toBe(false)
 
     const recovered = replay(
@@ -301,18 +306,49 @@ describe("projections", () => {
     ])
 
     const lane = ready(run.state).highlightLanes.get("shared")
+    const next = transitionMarkdownWorker(run.state, reply({ type: "error", id: 1, key: "shared", message: "late" }))
 
-    ;[
-      reply({ type: "error", id: 1, key: "shared", message: "late" }),
-      reply({ type: "superseded", id: 1, key: "shared" }),
-    ].forEach((event) => {
-      const next = transitionMarkdownWorker(run.state, event)
-      // The reply only proves the worker booted.
-      expect(next.state).toEqual({ ...ready(run.state), replied: true })
-      expect(ready(next.state).highlightLanes).toBe(ready(run.state).highlightLanes)
-      expect(next.effects).toBe(EMPTY_WORKER_EFFECTS)
-    })
+    // The reply only proves the worker booted.
+    expect(next.state).toEqual({ ...ready(run.state), replied: true })
+    expect(ready(next.state).highlightLanes).toBe(ready(run.state).highlightLanes)
+    expect(next.effects).toBe(EMPTY_WORKER_EFFECTS)
     expect(lane).toEqual({ active: 2, queued: 3 })
+  })
+})
+
+describe("shared keys", () => {
+  // A projection and a highlight stream may share a key. The worker used to clear both caches for either disposal, so
+  // the other lane lost its live tokenizer or diff base, and a request still queued there was refused as superseded.
+  test.each([
+    ["project.disposed", "project", "highlightLanes"],
+    ["highlight.disposed", "highlight", "projectLanes"],
+  ] as const)("%s tells the worker to clear only the %s cache", (type, target, other) => {
+    const run = replay([project("shared"), highlight("shared"), { type, key: "shared" }])
+
+    expect(disposals(run.effects)).toEqual([`${target}:shared`])
+    expect(rejected(run.effects, "disposed")).toEqual([target === "project" ? 1 : 2])
+    expect(ready(run.state)[other].get("shared")).toEqual({ active: target === "project" ? 2 : 1 })
+  })
+
+  test.each([
+    ["project", 1],
+    ["highlight", 2],
+  ] as const)("a %s error clears only its own cache in the worker", (target, id) => {
+    const run = replay([
+      project("shared"),
+      highlight("shared"),
+      reply({ type: "error", id, key: "shared", message: "boom" }),
+    ])
+
+    expect(disposals(run.effects)).toEqual([`${target}:shared`])
+    expect(ready(run.state)[target === "project" ? "highlightLanes" : "projectLanes"].has("shared")).toBe(true)
+  })
+
+  test("an out-of-sync projection clears only the projection cache", () => {
+    const run = replay([project("shared"), highlight("shared"), reply(projected(1, "shared", 2, [block("b")]))])
+
+    expect(disposals(run.effects)).toEqual(["project:shared"])
+    expect(ready(run.state).highlightLanes.get("shared")).toEqual({ active: 2 })
   })
 })
 
@@ -346,6 +382,16 @@ describe("coalescing lanes", () => {
     ])
 
     expect(posted(run.effects)).toEqual([1, 2])
+    // The worker runs messages in arrival order, so the disposal lands before the reused key's next request.
+    expect(
+      run.effects.flatMap((effect) =>
+        effect.type !== "post"
+          ? []
+          : effect.message.type === "dispose"
+            ? [`dispose:${effect.message.target}`]
+            : [`${effect.message.type}:${effect.message.id}`],
+      ),
+    ).toEqual(["highlight:1", "dispose:highlight", "highlight:2"])
     expect(ready(run.state).highlightLanes.get("code")).toEqual({ active: 2, queued: 3 })
     expect(posted(transitionMarkdownWorker(run.state, reply(highlighted(2, "code"))).effects.slice())).toEqual([3])
   })
@@ -354,7 +400,7 @@ describe("coalescing lanes", () => {
     const run = replay([highlight("code", "1"), highlight("code", "2"), { type: "highlight.disposed", key: "code" }])
 
     expect(rejected(run.effects, "disposed")).toEqual([1, 2])
-    expect(disposals(run.effects)).toEqual(["code"])
+    expect(disposals(run.effects)).toEqual(["highlight:code"])
     expect(ready(run.state).highlightLanes.size).toBe(0)
     expect(ready(run.state).requests.size).toBe(0)
 

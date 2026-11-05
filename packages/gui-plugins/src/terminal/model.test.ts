@@ -1,11 +1,17 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, jest, test } from "bun:test"
 import { createStore, produce } from "solid-js/store"
 import { ClientError, type PersistentPtyInfo } from "@opencode/client"
 import type { Layout, ServerRef, SessionRef, Storage, ToastOptions } from "@opencode/plugin/gui"
-import { PtyFeatureUnsupportedError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { PtyFeatureUnsupportedError, PtyNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { TERMINAL_REQUEST_TIMEOUT_MS } from "./machine"
 import { createTerminalModel } from "./model"
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+// Settles pending promise callbacks while fake timers hold `flush`.
+const ticks = async () => {
+  for (const _ of Array.from({ length: 20 })) await Promise.resolve()
+}
 
 const info = (id: string, title: string, sessionID = "ses_1"): PersistentPtyInfo => ({
   id,
@@ -74,6 +80,7 @@ function fakeServer(options: { capabilities?: { persistentPty?: boolean } } = {}
           },
           create: async (input: { sessionID: string; title: string; cwd?: string }) => {
             calls.create.push(input)
+            await state.create
 
             if (state.createError) throw state.createError
 
@@ -85,6 +92,8 @@ function fakeServer(options: { capabilities?: { persistentPty?: boolean } } = {}
           },
           remove: async (input: { ptyID: string }) => {
             calls.remove.push(input.ptyID)
+
+            if (state.removeError) throw state.removeError
             terminals.forEach((list, sessionID) =>
               terminals.set(
                 sessionID,
@@ -132,6 +141,8 @@ type FakeState = {
   directory: string
   created: number
   createError?: Error
+  removeError?: Error
+  create?: Promise<void>
   listError?: Error
   updateError?: Error
   update?: Promise<void>
@@ -337,7 +348,8 @@ describe("terminal model", () => {
     expect(server.calls.list).toBe(calls)
 
     server.state.listError = undefined
-    await terminal.retry()
+    terminal.retry()
+    await flush()
 
     expect(terminal.view().type).toBe("ready")
     expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
@@ -431,7 +443,8 @@ describe("terminal model", () => {
     await flush()
     terminal.select("pty_1")
 
-    await terminal.close("pty_1")
+    terminal.close("pty_1")
+    await flush()
 
     expect(server.calls.remove).toEqual(["pty_1"])
     expect(terminal.all().map((item) => item.id)).toEqual(["pty_2"])
@@ -471,12 +484,12 @@ describe("terminal model", () => {
     const terminal = model.load(session)
     await flush()
 
-    const renamed = terminal.rename("pty_1", "build")
+    terminal.rename("pty_1", "build")
 
     expect(terminal.get("pty_1")?.title).toBe("build")
 
     update.resolve()
-    await renamed
+    await flush()
 
     expect(server.calls.update).toEqual([{ ptyID: "pty_1", title: "build" }])
     expect(terminal.get("pty_1")).toMatchObject({ title: "build", userTitle: "build" })
@@ -489,8 +502,9 @@ describe("terminal model", () => {
     const terminal = model.load(session)
     await flush()
 
-    await terminal.rename("pty_1", "Terminal 1")
-    await terminal.rename("pty_1", null)
+    terminal.rename("pty_1", "Terminal 1")
+    terminal.rename("pty_1", null)
+    await flush()
 
     expect(server.calls.update).toEqual([])
   })
@@ -502,7 +516,8 @@ describe("terminal model", () => {
     const terminal = model.load(session)
     await flush()
 
-    await terminal.rename("pty_1", null)
+    terminal.rename("pty_1", null)
+    await flush()
 
     expect(server.calls.update).toEqual([{ ptyID: "pty_1", title: null }])
     expect(terminal.get("pty_1")).toMatchObject({ title: "zsh", userTitle: null })
@@ -516,7 +531,8 @@ describe("terminal model", () => {
     const terminal = model.load(session)
     await flush()
 
-    await terminal.rename("pty_1", "build")
+    terminal.rename("pty_1", "build")
+    await flush()
 
     expect(toasts).toEqual([{ variant: "error", title: "rename.unsupported" }])
     expect(terminal.get("pty_1")).toMatchObject({ title: "Terminal 1", userTitle: null })
@@ -530,7 +546,8 @@ describe("terminal model", () => {
     const terminal = model.load(session)
     await flush()
 
-    await terminal.rename("pty_1", "build")
+    terminal.rename("pty_1", "build")
+    await flush()
 
     expect(toasts).toEqual([{ variant: "error", title: "rename.failed", description: "boom" }])
     expect(terminal.get("pty_1")?.title).toBe("Terminal 1")
@@ -548,5 +565,120 @@ describe("terminal model", () => {
         options: { scope: { server: server.ref.id, directory: "/repo" }, from: "workspace:terminal" },
       },
     ])
+  })
+
+  // Double-clicking "+" or pressing the shortcut twice used to create two terminals, both titled "Terminal 1".
+  test("a second new-terminal request joins the create in flight", async () => {
+    const server = fakeServer()
+    const create = Promise.withResolvers<void>()
+    server.state.create = create.promise
+    const { model, session } = setup(server)
+    const terminal = model.load(session)
+    await flush()
+
+    const first = terminal.new()
+    const second = terminal.new()
+
+    expect(terminal.creating()).toBe(true)
+    create.resolve()
+
+    expect(await Promise.all([first, second])).toEqual(["pty_new1", "pty_new1"])
+    expect(server.calls.create).toEqual([{ sessionID: "ses_1", args: [], cwd: "/repo", title: "Terminal 1", env: {} }])
+    expect(terminal.creating()).toBe(false)
+    expect(terminal.focusRequested("pty_new1")).toBe(true)
+  })
+
+  test("a terminal for a session the server is still creating waits for it, and a removal ends the wait", async () => {
+    const server = fakeServer()
+    const { model, session, toasts } = setup(server)
+
+    const pending: SessionRef = {
+      ...session,
+      get pending() {
+        return true
+      },
+    }
+
+    const terminal = model.load(pending)
+    await flush()
+
+    const created = terminal.new()
+    await flush()
+
+    expect(server.calls.create).toEqual([])
+
+    // `pending` can clear without anything to watch; the session's created event answers at once.
+    server.emit("session.created")
+
+    expect(await created).toBe("pty_new1")
+
+    // A removed workspace ends a wait that would never end, quietly.
+    const waiting = terminal.new()
+    model.remove({ server: server.ref.id, directory: "/repo" })
+
+    expect(await waiting).toBeUndefined()
+    expect(server.calls.create).toHaveLength(1)
+    expect(toasts).toEqual([])
+  })
+
+  // A failed close used to end in a console line, with the tab gone and the terminal still running.
+  test("a failed close tells the user and brings the tab back; a terminal already gone closes quietly", async () => {
+    const server = fakeServer()
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1"), info("pty_2", "Terminal 2")])
+    const { model, session, stored, toasts } = setup(server)
+    stored.set(session.key, ["pty_1", "pty_2"])
+    const terminal = model.load(session)
+    await flush()
+
+    // Closing the tab let the strip drop it.
+    stored.set(session.key, ["pty_2"])
+    server.state.removeError = new Error("boom")
+    terminal.close("pty_1")
+    terminal.close("pty_1")
+    await flush()
+
+    expect(server.calls.remove).toEqual(["pty_1"])
+    expect(toasts).toEqual([{ variant: "error", title: "close.failed", description: "boom" }])
+    expect(stored.get(session.key)).toEqual(["pty_2", "pty_1"])
+
+    // A terminal that exited meanwhile is already closed.
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
+    server.state.removeError = new PtyNotFoundError({ ptyID: "pty_2", message: "gone" })
+    terminal.close("pty_2")
+    await flush()
+
+    expect(toasts).toHaveLength(1)
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
+  })
+
+  // A server that accepted the request and never answered used to leave the panel on "Loading terminal." with the
+  // restored tabs hidden and no Retry.
+  test("a list the server never answers fails after the request budget and offers a retry", async () => {
+    jest.useFakeTimers()
+
+    try {
+      const server = fakeServer()
+      server.state.list = new Promise(() => undefined)
+      server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
+      const { model, session } = setup(server)
+      const terminal = model.load(session)
+      await ticks()
+
+      expect(terminal.view()).toEqual({ type: "loading" })
+
+      jest.advanceTimersByTime(TERMINAL_REQUEST_TIMEOUT_MS)
+      await ticks()
+
+      expect(terminal.view()).toEqual({ type: "failed", error: "request.timedOut" })
+      expect(terminal.tabs(["pty_restored"])).toEqual(["pty_restored"])
+
+      server.state.list = undefined
+      terminal.retry()
+      await ticks()
+
+      expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

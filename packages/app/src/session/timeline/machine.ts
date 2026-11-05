@@ -44,8 +44,13 @@ export type FollowEvent =
   /** Wheel, scroll key or page. Only an upward one over overflowing content stops following. */
   | { readonly type: "scroll.intent"; readonly upward: boolean; readonly overflow: boolean }
   | { readonly type: "pointer.down" }
-  /** The pointer is released, cancelled, or the window lost it (blur, hidden). */
+  /** The pointer is released or cancelled. A touch's pointerup also lands here, so it ends only a pointer gesture. */
   | { readonly type: "pointer.up" }
+  /**
+   * The view lost the reader's contact without a release (window blur, hidden document, deactivation): a held pointer
+   * or touch, or momentum, ends. An anchor stays.
+   */
+  | { readonly type: "contact.lost" }
   | { readonly type: "touch.start"; readonly nested: boolean }
   /** The finger drags the content downward, revealing earlier messages. */
   | { readonly type: "touch.drag"; readonly overflow: boolean }
@@ -65,6 +70,8 @@ type Unanchored = Exclude<FollowState, { type: "anchored" }>
 const FOLLOWING: FollowState = Object.freeze({ type: "following" })
 
 const DETACHED: FollowState = Object.freeze({ type: "detached", endPending: false })
+
+export const CONTACT_LOST_EVENT: FollowEvent = Object.freeze({ type: "contact.lost" })
 
 export function createFollowState(): FollowState {
   return FOLLOWING
@@ -104,6 +111,8 @@ export function transitionFollow(state: FollowState, event: FollowEvent): Follow
   if (event.type === "pointer.down") return touchHeld(state.gesture) ? state : withGesture(state, "pointer")
 
   if (event.type === "pointer.up") return state.gesture === "pointer" ? withGesture(state, undefined) : state
+
+  if (event.type === "contact.lost") return withGesture(state, undefined)
 
   if (event.type === "touch.start") return withGesture(state, event.nested ? "nested-touch" : "touch")
 
@@ -174,6 +183,11 @@ export function routeRevealTarget(state: RouteRevealState) {
 // size compensation until then.
 export function defersAdjustments(state: FollowState) {
   return state.type === "detached" && !!state.gesture && state.gesture !== "pointer"
+}
+
+/** The reader's finger is on the timeline. Read on every scroll, so it allocates nothing. */
+export function isTouchHeld(state: FollowState) {
+  return state.type !== "anchored" && touchHeld(state.gesture)
 }
 
 // Probing the zoomed end writes scrollTop, so it waits for a settled scroll and a lifted finger.

@@ -167,7 +167,7 @@ export function createSessionTimelineRowRenderer(input: {
       const presentation = input.presentation(message)
 
       return {
-        kind: status === "steering" || status === "stranded" ? "pending" : "sent",
+        kind: status === "steering" || status === "stranded" || status === "sending" ? "pending" : "sent",
         agent: user.agent,
         model: user.model,
         text: !!(presentation?.displayText ?? message.text),
@@ -887,9 +887,17 @@ export function createSessionTimelineRowRenderer(input: {
 
   function TurnDiff(props: { row: TimelineRow.TurnDiff; onSizeChange?: () => void }) {
     const render = ToolRegistry.render("patch") ?? GenericTool
-    // Until the diff loads, list the paths the turn's steps recorded, without change counts.
+    // Until the diff loads, and if it fails, list the paths the turn's steps recorded, without change counts.
     const turn = () => ({ sessionID: input.sessionID(), from: props.row.from })
-    const diffs = () => data.turnDiff?.get(turn())
+    const state = createMemo(() => data.turnDiff?.state(turn()))
+
+    const diffs = () => {
+      const current = state()
+
+      return current?.status === "ready" ? current.diffs : undefined
+    }
+
+    const failed = () => state()?.status === "failed"
     const paths = () => diffs()?.map((diff) => diff.file) ?? props.row.files
     const showAllKey = () => `turn-diff:${props.row.messageID}`
     const showAll = () => input.disclosure.value(showAllKey()) === true
@@ -897,24 +905,47 @@ export function createSessionTimelineRowRenderer(input: {
     const overflow = () => paths().length > turnDiffFileLimit
     const fileKey = (path: string) => `turn-diff:${props.row.messageID}:file:${path}`
 
+    // Loads once per turn. A failure settles until the row remounts or the reader retries.
     createEffect(() => data.turnDiff?.load(turn()))
 
     return (
       <Show when={data.turnDiff && paths().length > 0}>
         <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
           <div class="flex h-6 min-w-0 items-center gap-2">
-            <span class="text-14-medium text-v2-text-text-base tabular-nums">
+            <span class="shrink-0 text-14-medium text-v2-text-text-base tabular-nums">
               {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
             </span>
             <DiffChanges changes={[...(diffs() ?? [])]} />
-            <Show when={overflow()}>
-              <button
-                type="button"
-                class="ml-auto text-14-regular text-v2-text-text-accent"
-                onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+            <Show when={failed()}>
+              <span
+                data-slot="session-turn-diffs-error"
+                class="min-w-0 truncate text-13-regular leading-text-compact text-v2-text-text-faint"
               >
-                {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
-              </button>
+                {i18n.t("ui.sessionTurn.diffs.failed")}
+              </span>
+            </Show>
+            <Show when={failed() || overflow()}>
+              <div class="ms-auto flex shrink-0 items-center gap-3">
+                <Show when={failed()}>
+                  <button
+                    type="button"
+                    data-slot="session-turn-diffs-retry"
+                    class="text-14-regular text-v2-text-text-accent"
+                    onClick={() => data.turnDiff?.load(turn())}
+                  >
+                    {i18n.t("ui.sessionTurn.diffs.retry")}
+                  </button>
+                </Show>
+                <Show when={overflow()}>
+                  <button
+                    type="button"
+                    class="text-14-regular text-v2-text-text-accent"
+                    onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+                  >
+                    {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
+                  </button>
+                </Show>
+              </div>
             </Show>
           </div>
           <Dynamic

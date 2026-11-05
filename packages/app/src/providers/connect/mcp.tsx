@@ -185,13 +185,13 @@ function createMcpController(
             url={signIn.url}
             lifetime={signIn.lifetime}
             location={ref}
-            onDone={async () => {
+            onSync={async () => {
               const data = input.ctx.data
               data.location.mcp.server.invalidate(ref)
               data.location.mcp.resource.invalidate(ref)
               await Promise.all([data.location.mcp.server.sync(ref), data.location.mcp.resource.sync(ref)])
-              input.dialog.close(dialogID)
             }}
+            onClose={() => input.dialog.close(dialogID)}
           />
         ),
         undefined,

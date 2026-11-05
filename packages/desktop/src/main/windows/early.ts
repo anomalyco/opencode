@@ -14,7 +14,7 @@ import {
   type EarlyWindowCommand,
   type EarlyWindowEvent,
 } from "./early-machine"
-import { registerRendererProtocol } from "./protocol"
+import { cancelRendererAssetsServed, registerRendererProtocol } from "./protocol"
 import { persistedWindowIDs } from "./registry"
 import { loadWindow } from "./scheme"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
@@ -60,7 +60,10 @@ const perform = (command: EarlyWindowCommand<EarlyWindow>) => {
     return
   }
 
-  if (command.type === "quit") app.quit()
+  if (command.type !== "quit") return
+  // Nothing waits for the closed window's assets any more; the entry module sees the close at once.
+  cancelRendererAssetsServed()
+  app.quit()
 }
 
 const displays = {

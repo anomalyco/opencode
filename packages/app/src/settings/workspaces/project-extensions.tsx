@@ -1,15 +1,13 @@
 import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
-import { Button } from "@opencode/ui/button"
-import { useQuery } from "@tanstack/solid-query"
+import { isLocationNotFoundError } from "@opencode/client/promise"
 import {
   type Component,
   For,
   Show,
   createEffect,
   createMemo,
-  createResource,
   createSignal,
   onCleanup,
   type JSX,
@@ -26,6 +24,7 @@ import { ExternalLink } from "@/runtime/platform/external-link"
 import { ProjectFolderMissing } from "./project-folder-missing"
 import { configuredLanguageServers } from "./project-lsp"
 import { SettingsList } from "@/settings/list"
+import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
 import "./project.css"
 
 type SkillItem = {
@@ -126,21 +125,24 @@ const ProjectLanguageServers: Component = () => {
   const server = useServerSDK()
   const location = useWorkspaceLocation()
 
-  const config = useQuery(() => ({
-    queryKey: [server.scope, "settings-project-language-servers", location().directory],
-    enabled: server.connection.status() === "connected",
-    queryFn: () => server.api.config.get({ location: { directory: location().directory } }),
-  }))
+  const config = createExtensionLoad({
+    key: () => location().directory,
+    task: (directory, signal) => server.api.config.get({ location: { directory } }, { signal }),
+  })
 
-  const configured = createMemo(() =>
-    configuredLanguageServers(config.isPending || config.isError ? [] : (config.data ?? [])),
-  )
+  const view = config.view
 
-  const empty = () => !config.isPending && !config.isError && configured().servers.length === 0
+  const configured = createMemo(() => {
+    const current = view()
+
+    return configuredLanguageServers(current.status === "ready" ? current.value : [])
+  })
+
+  const empty = () => view().status === "ready" && configured().servers.length === 0
   onCleanup(
     server.event.on("config.updated", (event) => {
       if (event.location && event.location.directory !== location().directory) return
-      void config.refetch()
+      config.invalidate()
     }),
   )
 
@@ -170,20 +172,17 @@ const ProjectLanguageServers: Component = () => {
         <span>{language.t("project.settings.extensions.lsp.description")}</span>
       </div>
       <Show
-        when={!config.isPending}
+        when={view().status !== "loading"}
         fallback={<p class="project-settings-extension-empty-description">{language.t("common.loading")}</p>}
       >
         <Show
-          when={!config.isError}
+          when={view().status !== "error"}
           fallback={
-            <div class="project-settings-extension-section-copy" role="status">
-              <span class="project-settings-extension-empty-description">
-                {language.t("project.settings.extensions.lsp.loadFailed")}
-              </span>
-              <Button variant="ghost-muted" onClick={() => void config.refetch()}>
-                {language.t("project.settings.extensions.lsp.retry")}
-              </Button>
-            </div>
+            <ExtensionLoadFailed
+              message={language.t("project.settings.extensions.lsp.loadFailed")}
+              retry={language.t("project.settings.extensions.lsp.retry")}
+              onRetry={config.retry}
+            />
           }
         >
           <Show when={configured().servers.length > 0}>
@@ -251,34 +250,42 @@ export const ProjectSettingsExtensions: Component<{
     data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)
       ?.status.status
 
-  // Reading `.latest` rethrows a failed fetch, such as the project's plugin list after its folder is deleted, so these
-  // lists fall back to empty instead of crashing the page.
-  const [globalPluginList] = createResource(
-    () => serverSDK.connection.status() === "connected",
-    () =>
-      serverSDK.api.plugin
-        .list()
-        .then((result) => result.data)
-        .catch(() => []),
-    { initialValue: [] },
+  // Both lists load as one, so a project list that answers first never shows shared plugins as the project's own. A
+  // deleted project folder has no plugins of its own; `ProjectFolderMissing` explains why.
+  const plugins = createExtensionLoad({
+    key: () => directorySDK().directory,
+    task: (directory, signal) =>
+      Promise.all([
+        serverSDK.api.plugin.list(undefined, { signal }).then((result) => result.data),
+        serverSDK.api.plugin
+          .list({ location: { directory } }, { signal })
+          .then((result) => result.data)
+          .catch((error) => {
+            if (isLocationNotFoundError(error)) return []
+            throw error
+          }),
+      ]),
+  })
+
+  onCleanup(
+    serverSDK.event.on("plugin.updated", (event) => {
+      if (event.location && event.location.directory !== directorySDK().directory) return
+      plugins.invalidate()
+    }),
   )
 
-  const [projectPluginList] = createResource(
-    () => (serverSDK.connection.status() === "connected" ? directorySDK().directory : undefined),
-    (directory) =>
-      serverSDK.api.plugin
-        .list({ location: { directory } })
-        .then((result) => result.data)
-        .catch(() => []),
-    { initialValue: [] },
-  )
+  const pluginLists = createMemo(() => {
+    const current = plugins.view()
 
-  const globalPlugins = createMemo(() => pluginLabels(globalPluginList.latest ?? []))
+    return current.status === "ready" ? current.value : undefined
+  })
+
+  const globalPlugins = createMemo(() => pluginLabels(pluginLists()?.[0] ?? []))
 
   const projectPlugins = createMemo(() => {
     const shared = new Set(globalPlugins())
 
-    return pluginLabels(projectPluginList.latest ?? []).filter((name) => !shared.has(name))
+    return pluginLabels(pluginLists()?.[1] ?? []).filter((name) => !shared.has(name))
   })
 
   const serverSkills = createMemo(() => data.location.skill.list() ?? [])
@@ -364,9 +371,19 @@ export const ProjectSettingsExtensions: Component<{
             <div class="project-settings-extension-section">
               <ProjectSectionHeader
                 kind="plugins"
-                empty={projectPlugins().length === 0}
+                empty={pluginLists() !== undefined && projectPlugins().length === 0}
                 action={<span>{language.t("settings.extensions.manageConfig")}</span>}
               />
+              <Show when={plugins.view().status === "loading"}>
+                <p class="project-settings-extension-empty-description">{language.t("common.loading")}</p>
+              </Show>
+              <Show when={plugins.view().status === "error"}>
+                <ExtensionLoadFailed
+                  message={language.t("settings.extensions.plugins.loadFailed")}
+                  retry={language.t("common.retry")}
+                  onRetry={plugins.retry}
+                />
+              </Show>
               <Show when={projectPlugins().length > 0}>
                 <ExtensionCard>{pluginRows(projectPlugins())}</ExtensionCard>
               </Show>

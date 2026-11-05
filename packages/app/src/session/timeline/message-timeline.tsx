@@ -608,7 +608,7 @@ function MessageTimelineView(
                         }}
                       >
                         <Menu.Item onSelect={props.title.chooseRename}>{language.t("common.rename")}</Menu.Item>
-                        <Menu.Item onSelect={() => void props.action.export(id)}>
+                        <Menu.Item disabled={props.action.exporting(id)} onSelect={() => props.action.export(id)}>
                           {language.t("common.export")}…
                         </Menu.Item>
                         <Menu.Separator />
