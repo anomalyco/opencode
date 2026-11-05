@@ -490,7 +490,9 @@ export function createReviewModel(input: {
       }
     },
     undefined,
-    { equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewFolderSource(previous, next)) },
+    {
+      equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewFolderSource(previous, next)),
+    },
   )
 
   // The tree's expanded state belongs to the session screen's file model, which the change tree and the file

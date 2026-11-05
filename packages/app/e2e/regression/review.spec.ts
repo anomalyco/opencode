@@ -1876,7 +1876,9 @@ test("an untracked folder that cannot load says so, and loads once it is opened 
         ? [fileDiff("untracked/notes.ts", { status: "added" })]
         : [fileDiff("src/alpha.ts"), fileDiff("untracked/", { status: "added" })],
   })
+
   const listing = { failing: true, failures: 0 }
+
   await page.route(/\/api\/vcs\/diff\?/, (route) => {
     const directory = new URL(route.request().url()).searchParams.get("location[directory]")
 

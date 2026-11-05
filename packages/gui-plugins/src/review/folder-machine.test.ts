@@ -25,9 +25,12 @@ const git: ReviewFolderSource = {
 
 const format = { more: (count: number) => `${count} · more not shown`, failed: "Couldn't load changes" }
 
-function diff(file: string, more?: boolean): FileDiffInfo {
-  return { file, patch: "", additions: 0, deletions: 0, status: "added", ...(more ? { more } : {}) }
+function diff(file: string): FileDiffInfo {
+  return { file, patch: "", additions: 0, deletions: 0, status: "added" }
 }
+
+// The entry a folder listing ends with when it stopped before listing every entry.
+const more: FileDiffInfo = { ...diff(""), more: true }
 
 const alpha = diff("src/alpha.ts")
 
@@ -81,11 +84,13 @@ describe("expanding an untracked folder", () => {
 
   test("keeps a collapsed folder's entries and label without loading them again", () => {
     const rows = [diff("tmp/")]
+
     const loaded = play(
       INITIAL_REVIEW_FOLDER_STATE,
       context(rows, ["tmp/"]),
-      succeeded("tmp/", 1, [diff("tmp/a.ts"), diff("tmp/b.ts"), diff("", true)]),
+      succeeded("tmp/", 1, [diff("tmp/a.ts"), diff("tmp/b.ts"), more]),
     ).state
+
     const toggled = play(loaded, context(rows, []), context(rows, ["tmp/"]))
 
     expect(toggled.effects).toEqual([])
@@ -96,6 +101,7 @@ describe("expanding an untracked folder", () => {
 
   test("loads a nested folder once its parent's entries list it", () => {
     const rows = [diff("outer/")]
+
     const parent = play(
       INITIAL_REVIEW_FOLDER_STATE,
       context(rows, ["outer/"]),
@@ -104,7 +110,11 @@ describe("expanding an untracked folder", () => {
 
     expect(reviewFolderCandidates(rows, parent.state)).toEqual(["outer/", "outer/inner/"])
 
-    const nested = play(parent.state, context(rows, ["outer/", "outer/inner/"]), succeeded("outer/inner/", 2, [diff("outer/inner/x.ts")]))
+    const nested = play(
+      parent.state,
+      context(rows, ["outer/", "outer/inner/"]),
+      succeeded("outer/inner/", 2, [diff("outer/inner/x.ts")]),
+    )
 
     expect(nested.effects).toEqual([fetch("outer/inner/", 2)])
     expect(files(rows, nested.state)).toEqual(["outer/", "outer/inner/", "outer/inner/x.ts"])
@@ -115,6 +125,7 @@ describe("expanding an untracked folder", () => {
 describe("a folder that leaves the changes", () => {
   test("is forgotten with its nested folders and never requested again", () => {
     const rows = [alpha, diff("tmp/")]
+
     const loaded = play(
       INITIAL_REVIEW_FOLDER_STATE,
       context(rows, ["tmp/"]),
@@ -135,12 +146,14 @@ describe("a folder that leaves the changes", () => {
 
   test("is dropped when its parent's new entries stop listing it", () => {
     const rows = [diff("outer/")]
+
     const nested = play(
       INITIAL_REVIEW_FOLDER_STATE,
       context(rows, ["outer/"]),
       succeeded("outer/", 1, [diff("outer/inner/")]),
       context(rows, ["outer/", "outer/inner/"]),
     ).state
+
     // New rows refresh the parent while the nested folder still loads.
     const refreshed = play(nested, context([...rows], ["outer/", "outer/inner/"]), succeeded("outer/", 3, []))
 
@@ -155,9 +168,16 @@ describe("a folder that cannot load", () => {
 
   test("retries a rejected load with backoff, then shows that it failed", () => {
     const opened = play(INITIAL_REVIEW_FOLDER_STATE, context(rows, ["new-dir/"])).state
-    const retried = play(opened, ...Array.from({ length: REVIEW_FOLDER_RETRIES }, (_, index) => failed("new-dir/", index + 1)))
+    const retried = play(
+      opened,
+      ...Array.from({ length: REVIEW_FOLDER_RETRIES }, (_, index) => failed("new-dir/", index + 1)),
+    )
 
-    expect(retried.effects).toEqual([fetch("new-dir/", 2, git, 1000), fetch("new-dir/", 3, git, 2000), fetch("new-dir/", 4, git, 4000)])
+    expect(retried.effects).toEqual([
+      fetch("new-dir/", 2, git, 1000),
+      fetch("new-dir/", 3, git, 2000),
+      fetch("new-dir/", 4, git, 4000),
+    ])
     expect(reviewFolderLabels(retried.state, format)).toEqual(new Map())
 
     const failure = play(retried.state, failed("new-dir/", 4))
@@ -180,7 +200,11 @@ describe("a folder that cannot load", () => {
 
     expect(reviewFolderLabels(collapsed.state, format)).toEqual(new Map())
 
-    const reopened = play(collapsed.state, context(rows, ["new-dir/"]), succeeded("new-dir/", 2, [diff("new-dir/a.ts")]))
+    const reopened = play(
+      collapsed.state,
+      context(rows, ["new-dir/"]),
+      succeeded("new-dir/", 2, [diff("new-dir/a.ts")]),
+    )
 
     expect(reopened.effects).toEqual([fetch("new-dir/", 2)])
     expect(files(rows, reopened.state)).toEqual(["new-dir/", "new-dir/a.ts"])
@@ -188,7 +212,12 @@ describe("a folder that cannot load", () => {
   })
 
   test("a folder collapsed while it loads forgets the failure", () => {
-    const state = play(INITIAL_REVIEW_FOLDER_STATE, context(rows, ["new-dir/"]), context(rows, []), failed("new-dir/", 1))
+    const state = play(
+      INITIAL_REVIEW_FOLDER_STATE,
+      context(rows, ["new-dir/"]),
+      context(rows, []),
+      failed("new-dir/", 1),
+    )
 
     expect(state.effects).toEqual([fetch("new-dir/", 1)])
     expect(state.state).toMatchObject({ folders: new Map() })
@@ -226,7 +255,10 @@ describe("another source", () => {
 
     const moved = play(switched.state, context(rows, ["tmp/"], { source: { ...branch, directory: "C:/repo/sub" } }))
 
-    expect(moved.effects).toEqual([{ type: "abort", attempt: 2 }, fetch("tmp/", 3, { ...branch, directory: "C:/repo/sub" })])
+    expect(moved.effects).toEqual([
+      { type: "abort", attempt: 2 },
+      fetch("tmp/", 3, { ...branch, directory: "C:/repo/sub" }),
+    ])
   })
 
   test("a turn's changes stop folder loading", () => {

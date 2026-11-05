@@ -171,7 +171,10 @@ function synced(state: Active, context: ReviewScrollContext): ReviewScrollTransi
   if (!context.narrow) {
     if (state.status === "restoring" && !state.restoreQueued) return changed({ ...state, context })
 
-    return { state: { status: "restoring", context, restoreQueued: false, attempt: state.attempt + 1 }, effects: cancel }
+    return {
+      state: { status: "restoring", context, restoreQueued: false, attempt: state.attempt + 1 },
+      effects: cancel,
+    }
   }
 
   if (state.status === "waiting")
@@ -192,7 +195,9 @@ function synced(state: Active, context: ReviewScrollContext): ReviewScrollTransi
   // The list remounted on the same visit, as when the narrow review's tab opens again.
   if (state.status === "settled")
     return changed(
-      context.scroller ? { ...state, context } : { status: "restoring", context, restoreQueued: false, attempt: state.attempt },
+      context.scroller
+        ? { ...state, context }
+        : { status: "restoring", context, restoreQueued: false, attempt: state.attempt },
     )
 
   // The focused comment's position wins over the stored scroll.

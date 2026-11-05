@@ -222,7 +222,10 @@ export function sameReviewFolderSource(a: ReviewFolderSource, b: ReviewFolderSou
   )
 }
 
-function contextChanged(state: Exclude<ReviewFolderState, { status: "disposed" }>, context: ReviewFolderContext) {
+function contextChanged(
+  state: Exclude<ReviewFolderState, { status: "disposed" }>,
+  context: ReviewFolderContext,
+): ReviewFolderTransition {
   if (!context.source) {
     if (state.status === "inactive") return unchanged(state)
 
@@ -260,21 +263,23 @@ function contextChanged(state: Exclude<ReviewFolderState, { status: "disposed" }
 
   const reach = reachable(context.rows, loadedEntries(state))
   const reload = state.rows !== context.rows || (context.connected && !state.connected)
-  const run = { issued: state.issued, effects: [] as ReviewFolderEffect[], folders: new Map<string, ReviewFolderItem>() }
+  const effects: ReviewFolderEffect[] = []
+  const folders = new Map<string, ReviewFolderItem>()
+  const run = { issued: state.issued }
 
   const keep = (folder: string, item: ReviewFolderItem) => {
-    run.folders.set(folder, item)
+    folders.set(folder, item)
   }
 
   const abort = (item: ReviewFolderItem) => {
     if (item.status === "loading" || item.status === "refreshing")
-      run.effects.push({ type: "abort", attempt: item.attempt })
+      effects.push({ type: "abort", attempt: item.attempt })
   }
 
   const start = (folder: string, entries?: readonly FileDiffInfo[]) => {
     run.issued += 1
     keep(folder, entries ? { status: "refreshing", attempt: run.issued, entries } : loading(run.issued))
-    run.effects.push(fetch(state.source, folder, run.issued))
+    effects.push(fetch(state.source, folder, run.issued))
   }
 
   state.folders.forEach((item, folder) => {
@@ -308,7 +313,7 @@ function contextChanged(state: Exclude<ReviewFolderState, { status: "disposed" }
 
   if (context.connected)
     context.expanded.forEach((folder) => {
-      if (!run.folders.has(folder) && reach.has(folder)) start(folder)
+      if (!folders.has(folder) && reach.has(folder)) start(folder)
     })
 
   return {
@@ -318,9 +323,9 @@ function contextChanged(state: Exclude<ReviewFolderState, { status: "disposed" }
       connected: context.connected,
       rows: context.rows,
       expanded: context.expanded,
-      folders: run.folders,
+      folders,
     },
-    effects: run.effects,
+    effects,
   }
 }
 
@@ -376,7 +381,9 @@ function aborts(state: ReviewFolderState): ReviewFolderEffect[] {
   if (state.status !== "active") return []
 
   return [...state.folders.values()].flatMap((item) =>
-    item.status === "loading" || item.status === "refreshing" ? [{ type: "abort", attempt: item.attempt } as const] : [],
+    item.status === "loading" || item.status === "refreshing"
+      ? [{ type: "abort", attempt: item.attempt } as const]
+      : [],
   )
 }
 
