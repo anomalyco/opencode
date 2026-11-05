@@ -321,9 +321,9 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").width)).toBe("14px")
   expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").maskImage)).toContain("data:image/svg+xml")
   await expect(mark.locator("img")).toHaveCount(0)
-  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]")).toHaveCount(
-    1,
-  )
+  await expect(
+    markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]"),
+  ).toHaveCount(1)
 
   for (const name of ["other site", "lookalike"]) {
     await expect(markdown.getByRole("link", { name }).locator(".markdown-link-favicon[data-github]")).toHaveCount(0)
@@ -880,6 +880,26 @@ story("highlights streamed code across comment and string boundaries", async ({ 
   await harness.getByLabel("Markdown text").fill("```unknown-language\n<plain> & text\n```")
   await expect(code).toHaveText("<plain> & text")
   await expect(code.locator("plain")).toHaveCount(0)
+})
+
+story("highlights every block of a streamed answer with more than 200 code blocks", async ({ page }) => {
+  // The worker client used to keep 200 highlight keys and dispose the oldest, rejecting block 1's highlight in flight.
+  const blocks = Array.from({ length: 205 }, (_, index) => `\`\`\`ts\nconst value${index} = ${index}\n\`\`\``)
+  const text = blocks.join("\n\n")
+
+  await page.evaluate(
+    async ({ fixture, text }) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({ text, streaming: true })
+    },
+    { fixture, text },
+  )
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const code = markdown.locator("pre code")
+  await expect(code).toHaveCount(205)
+  await expect(code.first().locator('span[style*="color"]')).not.toHaveCount(0)
+  await expect(code.last().locator('span[style*="color"]')).not.toHaveCount(0)
 })
 
 story("preserves streamed math through completion and a fresh render", async ({ page }) => {

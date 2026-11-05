@@ -71,14 +71,16 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
   try {
     const previous = projections.get(request.key)
     const projection = project(previous, request.text, request.live)
-    projections.set(request.key, projection)
     post({
       type: "project",
       id: request.id,
       key: request.key,
       ...diffProjectionBlocks(previous?.blocks, projection.blocks),
     })
+    // Kept only once posted: the main thread applies the next diff to the blocks it last received.
+    projections.set(request.key, projection)
   } catch (error) {
+    projections.delete(request.key)
     post({
       type: "error",
       id: request.id,
