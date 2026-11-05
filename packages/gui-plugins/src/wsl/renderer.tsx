@@ -1,12 +1,15 @@
 import { showToast } from "@opencode/ui/toast"
-import { lazy, onCleanup, Suspense } from "solid-js"
+import { createSignal, lazy, onCleanup, Suspense, untrack } from "solid-js"
 import { MenuItem, Server, Style, type ServerEntry, type ServerState, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
+import { initialWslAdd, transitionWslAdd, WSL_DIALOG_LOAD_TIMEOUT_MS, type WslAddEffect, type WslAddEvent } from "./add-machine"
 import { Wsl, type WslServerItem } from "./contract"
 import { wslRowView } from "./row-view"
 import type definition from "./index"
 
 const loadDialog = () => import("./dialog")
+
+type DialogModule = Awaited<ReturnType<typeof loadDialog>>
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   if (ctx.app.platform !== "desktop") return
@@ -46,14 +49,47 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const byKey = (key: string) => state()?.servers.find((item) => `wsl:${item.config.distro}` === key)
 
-  const add = () =>
-    void loadDialog().then((module) => {
-      if (ctx.signal.aborted) return
+  const [addState, setAddState] = createSignal(initialWslAdd)
 
-      if (!styled.added) ctx.add(Style, module.css)
-      styled.added = true
-      dialog.open(() => <module.DialogAddWslServer api={client()} state={state()} />)
-    })
+  const dispatchAdd = (event: WslAddEvent<DialogModule>) => {
+    const next = transitionWslAdd(untrack(addState), event)
+
+    if (next.state !== untrack(addState)) setAddState(next.state)
+    next.effects.forEach(runAdd)
+  }
+
+  const runAdd = (effect: WslAddEffect<DialogModule>) => {
+    if (effect.type === "toast-failed")
+      return void showToast({ variant: "error", title: ctx.t("common.requestFailed"), description: effect.error || undefined })
+
+    if (effect.type === "load") {
+      const attempt = effect.attempt
+      const deadline = Promise.withResolvers<never>()
+      const timer = setTimeout(
+        () => deadline.reject(new Error()),
+        WSL_DIALOG_LOAD_TIMEOUT_MS,
+      )
+
+      // A chunk that fails or never loads, such as after an update replaced the app's files, answers the click.
+      return void Promise.race([loadDialog(), deadline.promise])
+        .finally(() => clearTimeout(timer))
+        .then(
+          (module) => dispatchAdd({ type: "add.loaded", attempt, module }),
+          (cause: unknown) =>
+            dispatchAdd({ type: "add.failed", attempt, error: cause instanceof Error ? cause.message : String(cause) }),
+        )
+    }
+
+    const module = effect.module
+
+    if (!styled.added) ctx.add(Style, module.css)
+    styled.added = true
+    dialog.open(() => <module.DialogAddWslServer api={client()} state={state()} />)
+  }
+
+  onCleanup(() => dispatchAdd({ type: "disposed" }))
+
+  const add = () => dispatchAdd({ type: "add.requested" })
 
   const entry = (item: WslServerItem): ServerEntry => {
     const runtime = item.runtime

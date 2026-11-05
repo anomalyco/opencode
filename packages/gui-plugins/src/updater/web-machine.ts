@@ -24,6 +24,7 @@ type Meta = {
  * - `applying`: the newer build was asked to take over; every window reloads once it does.
  * - `reloading`: this window is reloading into the newer build (or a reset).
  * - `error`: the user's last check or download failed.
+ * - `disposed`: the window let the updater go; nothing runs after it.
  */
 export type WebUpdateState =
   | { readonly status: "unavailable" }
@@ -35,12 +36,15 @@ export type WebUpdateState =
   | (Meta & { readonly status: "applying" })
   | { readonly status: "reloading" }
   | (Meta & { readonly status: "error"; readonly message: string })
+  | { readonly status: "disposed" }
 
 export type WebUpdateEvent =
   | { readonly type: "registered"; readonly worker: WebWorker }
   | { readonly type: "check.requested"; readonly manual: boolean; readonly at: number }
   | { readonly type: "check.settled"; readonly attempt: number; readonly worker: WebWorker }
   | { readonly type: "check.failed"; readonly attempt: number; readonly message: string }
+  /** The browser's update request ran past `CHECK_TIMEOUT_MS` without settling. */
+  | { readonly type: "check.timeout"; readonly attempt: number }
   | { readonly type: "worker.installing" }
   | { readonly type: "worker.installed" }
   | { readonly type: "worker.redundant" }
@@ -50,9 +54,10 @@ export type WebUpdateEvent =
   /** Another window dropped the saved app, including the files this window still loads. */
   | { readonly type: "reset.elsewhere" }
   | { readonly type: "controller.changed" }
+  | { readonly type: "disposed" }
 
 export type WebUpdateEffect =
-  /** Ask the server for a newer service worker. */
+  /** Ask the server for a newer service worker; `check.timeout` answers once `CHECK_TIMEOUT_MS` passes. */
   | { readonly type: "update"; readonly attempt: number }
   /** Tell the waiting worker to take over now. */
   | { readonly type: "skip-waiting" }
@@ -70,9 +75,19 @@ export type WebUpdateTransition = { readonly state: WebUpdateState; readonly eff
 /** Automatic checks (focus, network, timer) closer together than this ask once. A user's check always runs. */
 export const AUTO_CHECK_SPACING_MS = 60_000
 
+/**
+ * How long a check waits for the browser's update request, as the desktop updater does. The service worker's request
+ * has no deadline of its own, and a check in flight holds every later one.
+ */
+export const CHECK_TIMEOUT_MS = 60_000
+
 export const initialWebUpdate: WebUpdateState = { status: "unavailable" }
 
 export function transitionWebUpdate(state: WebUpdateState, event: WebUpdateEvent): WebUpdateTransition {
+  if (state.status === "disposed") return unchanged(state)
+
+  if (event.type === "disposed") return unchanged({ status: "disposed" })
+
   if (state.status === "reloading") return unchanged(state)
 
   // Another window applied the update or dropped the saved app, or this one applied it: the old build's files are
@@ -98,15 +113,18 @@ export function transitionWebUpdate(state: WebUpdateState, event: WebUpdateEvent
 
       return found(meta, event.worker, state.manual)
     case "check.failed":
+    case "check.timeout": {
       if (state.status !== "checking" || event.attempt !== state.attempt) return unchanged(state)
 
       // An automatic check fails whenever the device is offline; only the user's own check says so.
       if (!state.manual) return unchanged({ ...meta, status: "idle" })
+      const message = event.type === "check.failed" ? event.message : ""
 
       return {
-        state: { ...meta, status: "error", message: event.message },
-        effects: [{ type: "report", result: "failed", message: event.message }],
+        state: { ...meta, status: "error", message },
+        effects: [{ type: "report", result: "failed", message }],
       }
+    }
     case "worker.installing":
       if (state.status === "downloading" || state.status === "ready" || state.status === "applying")
         return unchanged(state)
@@ -153,6 +171,7 @@ export function webUpdateAction(state: WebUpdateState) {
     case "reloading":
       return { label: "action.reloading" as const }
     case "unavailable":
+    case "disposed":
       return { label: "action.checkNow" as const }
     default:
       return { label: "action.checkNow" as const, run: "check" as const }
@@ -165,7 +184,7 @@ export function webUpdatePending(state: WebUpdateState) {
 }
 
 function checkRequested(
-  state: Exclude<WebUpdateState, { status: "unavailable" | "reloading" }>,
+  state: Exclude<WebUpdateState, { status: "unavailable" | "reloading" | "disposed" }>,
   event: Extract<WebUpdateEvent, { type: "check.requested" }>,
 ): WebUpdateTransition {
   if (state.status === "checking" || state.status === "downloading")

@@ -4,9 +4,11 @@ import {
   initialState,
   serverAvailable,
   sessionConnection,
+  sessionCreating,
   sessionView,
   tabHidden,
   transition,
+  viewItems,
   viewTabs,
   type Event,
   type State,
@@ -100,7 +102,10 @@ describe("terminal machine", () => {
       { type: "server.connected" },
     ])
 
-    expect(rechecked.commands).toEqual([{ type: "check-capability", attempt: 2 }])
+    expect(rechecked.commands).toEqual([
+      { type: "abort", attempts: [1] },
+      { type: "check-capability", attempt: 2 },
+    ])
 
     const stale = replay(
       [
@@ -183,7 +188,11 @@ describe("terminal machine", () => {
 
     const rechecking = transition(supported.state, { type: "server.connected" })
 
-    expect(rechecking.commands).toEqual([{ type: "check-capability", attempt: 4 }])
+    // The reconnect stops the list it no longer waits for.
+    expect(rechecking.commands).toEqual([
+      { type: "abort", attempts: [3] },
+      { type: "check-capability", attempt: 4 },
+    ])
     expect(sessionView(rechecking.state, "ses_1")).toEqual({ type: "ready", items: [info("pty_1")] })
     expect(sessionView(rechecking.state, "ses_2")).toEqual({ type: "loading" })
 
@@ -216,51 +225,209 @@ describe("terminal machine", () => {
 
     expect(unknown.commands).toEqual([{ type: "load-list", sessionID: "ses_1", attempt: 3 }])
 
-    // A local change to a terminal the list doesn't have, or an update for a session never loaded, changes nothing.
-    expect(transition(state, { type: "terminal.replaced", sessionID: "ses_1", terminal: info("pty_9") }).state).toBe(
-      state,
-    )
+    // An update for a session never loaded changes nothing.
     expect(transition(state, { type: "terminal.updated", sessionID: "ses_9", terminal: info("pty_9") }).state).toBe(
       state,
     )
   })
 
-  // The create answer and the server's `persistent-pty.added` race: the creator's refresh can lose to the one the event
-  // started, which answers later. The new tab is listed meanwhile, so selecting it settles focus at once.
+  // The create answer and the server's `persistent-pty.added` race: the refresh the event started can answer without
+  // the new terminal. The new tab is listed at once, so selecting it settles focus.
   test("a terminal this client created is listed before a newer refresh answers", () => {
-    const own = transition(listed(), { type: "session.refresh", sessionID: "ses_1" }).state
-    const added = transition(own, { type: "session.refresh", sessionID: "ses_1" }).state
-    const lost = transition(added, { type: "list.loaded", sessionID: "ses_1", attempt: 3, items: [info("pty_1")] })
+    const requested = transition(listed(), { type: "create.requested", sessionID: "ses_1" })
 
-    expect(lost.state).toBe(added)
+    expect(requested.commands).toEqual([
+      { type: "create-terminal", sessionID: "ses_1", attempt: 3, known: [info("pty_1")] },
+    ])
 
-    const created = transition(lost.state, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") })
+    const added = transition(requested.state, { type: "session.refresh", sessionID: "ses_1" }).state
 
-    expect(created.commands).toEqual([])
+    const created = transition(added, {
+      type: "create.succeeded",
+      sessionID: "ses_1",
+      attempt: 3,
+      terminal: info("pty_2"),
+    })
+
+    expect(created.commands).toEqual([
+      { type: "settle-create", sessionID: "ses_1", outcome: { ok: true, terminal: info("pty_2") } },
+      { type: "abort", attempts: [4] },
+      { type: "load-list", sessionID: "ses_1", attempt: 5 },
+    ])
     expect(sessionView(created.state, "ses_1")).toEqual({ type: "ready", items: [info("pty_1"), info("pty_2")] })
+    expect(sessionCreating(created.state, "ses_1")).toBe(false)
 
-    const settled = transition(created.state, {
+    // The refresh it replaced answers without the new terminal; it is stale.
+    const stale = transition(created.state, {
       type: "list.loaded",
       sessionID: "ses_1",
       attempt: 4,
-      items: [info("pty_1"), info("pty_2")],
+      items: [info("pty_1")],
     })
 
-    expect(sessionView(settled.state, "ses_1")).toEqual({ type: "ready", items: [info("pty_1"), info("pty_2")] })
+    expect(stale.state).toBe(created.state)
+  })
 
-    // A terminal already listed, or a list not known yet, changes nothing.
-    expect(
-      transition(created.state, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") }).state,
-    ).toBe(created.state)
+  // Double-clicking "+" or pressing the shortcut twice used to send two creates, both titled "Terminal 1".
+  test("a second new-terminal request joins the create in flight", () => {
+    const first = transition(listed(), { type: "create.requested", sessionID: "ses_1" })
+    const second = transition(first.state, { type: "create.requested", sessionID: "ses_1" })
 
-    const loading = replay([
-      { type: "session.loaded", sessionID: "ses_1" },
-      { type: "capability.checked", attempt: 1, supported: true },
-    ]).state
+    expect(first.commands).toEqual([
+      { type: "create-terminal", sessionID: "ses_1", attempt: 3, known: [info("pty_1")] },
+    ])
+    expect(second.state).toBe(first.state)
+    expect(second.commands).toEqual([])
+    expect(sessionCreating(first.state, "ses_1")).toBe(true)
 
-    expect(transition(loading, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") }).state).toBe(
-      loading,
+    // A failed or timed-out create answers every request it joined once, and the next request creates again.
+    const failed = transition(first.state, {
+      type: "create.failed",
+      sessionID: "ses_1",
+      attempt: 3,
+      kind: "failed",
+      error: "timed out",
+    })
+
+    expect(failed.commands).toEqual([
+      { type: "settle-create", sessionID: "ses_1", outcome: { ok: false, kind: "failed", error: "timed out" } },
+    ])
+    expect(sessionCreating(failed.state, "ses_1")).toBe(false)
+    expect(transition(failed.state, { type: "create.requested", sessionID: "ses_1" }).commands).toEqual([
+      { type: "create-terminal", sessionID: "ses_1", attempt: 4, known: [info("pty_1")] },
+    ])
+  })
+
+  test("a create while support is checked lists first, and a server without terminals answers it at once", () => {
+    const checking = replay([{ type: "server.connected" }, { type: "session.loaded", sessionID: "ses_1" }]).state
+    const requested = transition(checking, { type: "create.requested", sessionID: "ses_1" })
+
+    expect(requested.commands).toEqual([{ type: "create-terminal", sessionID: "ses_1", attempt: 2, known: undefined }])
+
+    // Losing support ends the create in flight and tells the user why.
+    const unsupported = transition(requested.state, { type: "capability.checked", attempt: 1, supported: false })
+
+    expect(unsupported.commands).toEqual([
+      { type: "abort", attempts: [2] },
+      { type: "settle-create", sessionID: "ses_1", outcome: { ok: false, kind: "unsupported" } },
+    ])
+    expect(transition(unsupported.state, { type: "create.requested", sessionID: "ses_1" }).commands).toEqual([
+      { type: "settle-create", sessionID: "ses_1", outcome: { ok: false, kind: "unsupported" } },
+    ])
+  })
+
+  // An older rename that answered after a newer one used to put the older title back; two failed renames rolled back
+  // to the first one's unconfirmed title.
+  test("only the newest rename settles a terminal's title", () => {
+    const alpha = transition(listed(), { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "alpha" })
+    const beta = transition(alpha.state, { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "beta" })
+
+    expect(beta.commands).toEqual([
+      { type: "abort", attempts: [3] },
+      { type: "rename-terminal", sessionID: "ses_1", ptyID: "pty_1", title: "beta", attempt: 4 },
+    ])
+    expect(viewItems(sessionView(beta.state, "ses_1"))[0]).toMatchObject({ title: "beta", userTitle: "beta" })
+
+    const renamed = (title: string) => ({ ...info("pty_1", title), userTitle: title })
+
+    const settled = replay(
+      [
+        { type: "rename.succeeded", sessionID: "ses_1", ptyID: "pty_1", attempt: 4, terminal: renamed("beta") },
+        { type: "rename.succeeded", sessionID: "ses_1", ptyID: "pty_1", attempt: 3, terminal: renamed("alpha") },
+      ],
+      beta.state,
     )
+
+    expect(viewItems(sessionView(settled.state, "ses_1"))).toEqual([renamed("beta")])
+
+    const failed = replay(
+      [
+        { type: "rename.failed", sessionID: "ses_1", ptyID: "pty_1", attempt: 3, kind: "failed", error: "old" },
+        { type: "rename.failed", sessionID: "ses_1", ptyID: "pty_1", attempt: 4, kind: "failed", error: "boom" },
+      ],
+      beta.state,
+    )
+
+    // The confirmed title shows again, not the first rename's.
+    expect(viewItems(sessionView(failed.state, "ses_1"))).toEqual([info("pty_1")])
+    expect(failed.commands).toEqual([{ type: "toast-rename-failed", kind: "failed", error: "boom" }])
+
+    // Asking for the title a pending rename already sends, or the current title, sends nothing.
+    expect(
+      transition(beta.state, { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "beta" }).state,
+    ).toBe(beta.state)
+    expect(
+      transition(listed(), { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "pty_1" }).commands,
+    ).toEqual([])
+  })
+
+  // A failed close used to end in a console line: the tab stayed gone with its terminal still running.
+  test("a close runs once, ends a pending rename, and brings the tab back when it fails", () => {
+    const renaming = transition(listed(), {
+      type: "rename.requested",
+      sessionID: "ses_1",
+      ptyID: "pty_1",
+      title: "alpha",
+    }).state
+    const closing = transition(renaming, { type: "close.requested", sessionID: "ses_1", ptyID: "pty_1" })
+
+    expect(closing.commands).toEqual([
+      { type: "abort", attempts: [3] },
+      { type: "close-terminal", sessionID: "ses_1", ptyID: "pty_1", attempt: 4 },
+    ])
+    expect(transition(closing.state, { type: "close.requested", sessionID: "ses_1", ptyID: "pty_1" }).state).toBe(
+      closing.state,
+    )
+    expect(
+      transition(closing.state, { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "beta" }).state,
+    ).toBe(closing.state)
+
+    const failed = transition(closing.state, {
+      type: "close.failed",
+      sessionID: "ses_1",
+      ptyID: "pty_1",
+      attempt: 4,
+      error: "boom",
+    })
+
+    expect(failed.commands).toEqual([
+      { type: "sync-tabs", sessionID: "ses_1", items: [info("pty_1")] },
+      { type: "toast-close-failed", error: "boom" },
+    ])
+
+    const closed = transition(closing.state, { type: "close.succeeded", sessionID: "ses_1", ptyID: "pty_1", attempt: 4 })
+
+    expect(viewItems(sessionView(closed.state, "ses_1"))).toEqual([])
+    expect(closed.commands).toEqual([{ type: "load-list", sessionID: "ses_1", attempt: 5 }])
+  })
+
+  test("removing a session or stopping the model ends its changes in flight and keeps confirmed lists", () => {
+    const busy = replay(
+      [
+        { type: "create.requested", sessionID: "ses_1" },
+        { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "alpha" },
+        { type: "session.refresh", sessionID: "ses_1" },
+      ],
+      listed(),
+    ).state
+
+    const removed = transition(busy, { type: "sessions.removed", sessionIDs: ["ses_1"] })
+
+    expect(removed.commands).toEqual([
+      { type: "abort", attempts: [5, 3, 4] },
+      { type: "settle-create", sessionID: "ses_1", outcome: { ok: false, kind: "cancelled" } },
+    ])
+    expect(sessionCreating(removed.state, "ses_1")).toBe(false)
+
+    const stopped = transition(busy, { type: "instance.stopped" })
+
+    expect(stopped.commands).toEqual([
+      { type: "settle-create", sessionID: "ses_1", outcome: { ok: false, kind: "cancelled" } },
+    ])
+    expect(sessionCreating(stopped.state, "ses_1")).toBe(false)
+    // The pending rename's title leaves with it; the confirmed list stays for the next instance.
+    expect(viewItems(sessionView(stopped.state, "ses_1"))).toEqual([info("pty_1")])
+    expect(transition(stopped.state, { type: "instance.stopped" }).state).toBe(stopped.state)
   })
 
   test("answers for a removed session are ignored", () => {
