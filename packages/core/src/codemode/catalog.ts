@@ -59,7 +59,9 @@ const INLINE_BUDGET = 2_000
 // over budget: dropping them would send the model another change on every turn.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? INLINE_BUDGET
-  const listed = new Set(options.previous?.namespaces.flatMap((namespace) => namespace.entries.map((entry) => entry.path)))
+  const listed = new Set(
+    options.previous?.namespaces.flatMap((namespace) => namespace.entries.map((entry) => entry.path)),
+  )
   const flattened = flatten(inventory.tools)
   const namespaces = [...Map.groupBy(flattened.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
     .sort(([left], [right]) => {
@@ -90,17 +92,11 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
           .filter((listing) => listing !== undefined),
       )
       const selected = new Set([...pinned, ...listings.filter((listing) => listed.has(listing.path))])
+      const described = description === undefined ? {} : { description }
       return {
         name,
-        ...(description === undefined ? {} : { description }),
-        header: cost(
-          namespaceLine({
-            name,
-            ...(description === undefined ? {} : { description }),
-            count: listings.length,
-            entries: [],
-          }),
-        ),
+        ...described,
+        header: cost(namespaceLine({ name, ...described, count: listings.length, entries: [] })),
         listings,
         selectionOrder: ranked.filter((candidate) => !selected.has(candidate.listing)),
         selectedListings: selected,

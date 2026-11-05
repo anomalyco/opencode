@@ -45,9 +45,10 @@ ${render(current)}`
     previous.namespaces,
     current.namespaces,
     (namespace) => namespace.name,
-    (before, after) => before.count !== after.count || before.description !== after.description,
+    (before, after) => CodeModeCatalog.namespaceLine(before) !== CodeModeCatalog.namespaceLine(after),
   )
-  if (namespaces.changed.some((change) => change.previous.description !== change.current.description)) return replacement
+  if (namespaces.changed.some((change) => change.previous.description !== change.current.description))
+    return replacement
   const kept = new Set(current.namespaces.map((namespace) => namespace.name))
   const entries = Instructions.diffByKey(
     previous.namespaces.filter((namespace) => kept.has(namespace.name)).flatMap((namespace) => namespace.entries),
@@ -55,51 +56,45 @@ ${render(current)}`
     (entry) => entry.path,
     (before, after) => before.line !== after.line,
   )
-  const added = new Set(namespaces.added.map((namespace) => namespace.name))
+  const arrived = new Set(namespaces.added.flatMap((namespace) => namespace.entries.map((entry) => entry.path)))
   const complete = current.shown === current.total
   const wasComplete = previous.shown === previous.total
+  const recounted = namespaces.changed.some((change) => change.previous.count !== change.current.count)
 
   const parts = [
     ...(wasComplete && !complete
       ? [
-          `The catalog is now partial. Before calling a tool that is not listed, find it with the global \`search(...)\` function. Do not guess tool names. ${pathRule}\n\n- ${searchSignature}`,
+          `The catalog is now partial. \`search\`, like the listed tools, only works as JavaScript inside \`execute\`. Before calling a tool that is not listed, find it with the global \`search(...)\` function. Do not guess tool names. ${pathRule}\n\n- ${searchSignature}`,
         ]
       : []),
-    ...(!wasComplete && complete ? ["The catalog is now complete: every Code Mode tool is listed. Do not guess tool names."] : []),
-    ...(namespaces.added.length === 0
-      ? []
-      : [
-          [
-            "New tool namespaces are available:",
-            ...namespaces.added.flatMap((namespace) => [
-              CodeModeCatalog.namespaceLine(namespace),
-              ...namespace.entries.map((entry) => entry.line),
-            ]),
-          ].join("\n"),
-        ]),
-    ...listed(
+    ...(!wasComplete && complete
+      ? ["The catalog is now complete: every Code Mode tool is listed. Do not guess tool names."]
+      : []),
+    ...section(
+      "New tool namespaces are available:",
+      namespaces.added.flatMap((namespace) => [
+        CodeModeCatalog.namespaceLine(namespace),
+        ...namespace.entries.map((entry) => entry.line),
+      ]),
+    ),
+    ...section(
       "New tools are available in addition to those previously listed:",
-      entries.added.filter((entry) => !added.has(entry.path.split(".", 1)[0]!)),
+      entries.added.filter((entry) => !arrived.has(entry.path)).map((entry) => entry.line),
     ),
-    ...listed(
+    ...section(
       "Changed tool listings supersede the previously listed ones:",
-      entries.changed.map((change) => change.current),
+      entries.changed.map((change) => change.current.line),
     ),
-    // A complete catalog lists every change; only a partial one can hide changed tools.
-    ...(complete || namespaces.changed.length === 0
-      ? []
-      : [
-          `The following namespace inventories changed; search them again before relying on previous results: ${namespaces.changed
-            .map((change) => `\`${change.current.name}\` now has ${change.current.count} tools`)
-            .join(", ")}.`,
-        ]),
+    // Counts in the namespace lines the model saw are stale once tools are added, removed or newly listed.
+    ...section(
+      !complete && recounted
+        ? "These namespaces changed; search them again before relying on previous results:"
+        : "These namespaces now read:",
+      namespaces.changed.map((change) => CodeModeCatalog.namespaceLine(change.current)),
+    ),
     ...(entries.removed.length === 0
       ? []
-      : [
-          complete
-            ? `The following tools are no longer available and must not be called: ${expressions(entries.removed)}.`
-            : `The following tools are no longer listed: ${expressions(entries.removed)}. They may have been removed; find any you still need with \`search\` before calling it.`,
-        ]),
+      : [`The following tools are no longer available and must not be called: ${expressions(entries.removed)}.`]),
     ...(namespaces.removed.length === 0
       ? []
       : [
@@ -113,8 +108,8 @@ ${render(current)}`
   return delta.length < replacement.length ? delta : replacement
 }
 
-function listed(heading: string, entries: ReadonlyArray<{ readonly line: string }>) {
-  return entries.length === 0 ? [] : [[heading, ...entries.map((entry) => entry.line)].join("\n")]
+function section(heading: string, lines: ReadonlyArray<string>) {
+  return lines.length === 0 ? [] : [[heading, ...lines].join("\n")]
 }
 
 function expressions(entries: ReadonlyArray<{ readonly path: string }>) {

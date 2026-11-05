@@ -86,6 +86,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
@@ -2377,7 +2378,9 @@ describe("SessionRunnerLLM", () => {
             name: `${name}_${index}`,
             description: `${name} tool ${index}`,
             input: Schema.Struct({
-              [`${name}_${index}_${"argument".repeat(index % 4)}`]: Schema.String.annotate({ description: "x".repeat(120) }),
+              [`${name}_${index}_${"argument".repeat(index % 4)}`]: Schema.String.annotate({
+                description: "x".repeat(120),
+              }),
             }),
             output: Schema.String,
             execute: () => Effect.succeed({ output: "ok" }),
@@ -2440,6 +2443,48 @@ describe("SessionRunnerLLM", () => {
     expect(codeModeUpdates(s.requests.at(-1))).toEqual([])
   })
 
+  scenario("turns a complete Code Mode catalog partial with a delta and restates it at compaction", function* (s) {
+    const registry = yield* Tool.Service
+    const tools = (name: string, count: number) =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [
+          `${name}_${index}`,
+          {
+            name: `${name}_${index}`,
+            description: `${name} tool ${index}`,
+            input: Schema.Struct({ value: Schema.String.annotate({ description: "x".repeat(200) }) }),
+            output: Schema.String,
+            execute: () => Effect.succeed({ output: "ok" }),
+          } satisfies ToolInfo,
+        ]),
+      )
+    const catalogOf = (request: LLMRequest | undefined) =>
+      request?.system.map((part) => part.text).find((text) => text.includes("# Code Mode")) ?? ""
+    yield* transformTools(registry, tools("small", 2), { namespace: "small" })
+    yield* s.runPrompt("First")
+    expect(catalogOf(s.requests.at(-1))).toContain("The catalog is complete.")
+
+    // A server that finishes connecting after the first step makes the catalog partial.
+    yield* transformTools(registry, tools("late", 60), { namespace: "late" })
+    yield* s.runPrompt("Second")
+    const flipped = systemTexts(s.requests.at(-1)!).filter((text) => text.startsWith("The Code Mode tool catalog"))
+    expect(flipped).toHaveLength(1)
+    expect(flipped[0]).toContain(
+      "The catalog is now partial. `search`, like the listed tools, only works as JavaScript inside `execute`.",
+    )
+    expect(flipped[0]).toContain("- late (60 tools")
+    expect(flipped[0]).not.toContain("This catalog supersedes")
+
+    yield* s.llm.push(TestLLM.text("## Objective\n- summary", "flip-summary"))
+    yield* s.session.compact({ sessionID })
+    yield* s.resume
+    yield* s.runPrompt("Third")
+    const compacted = catalogOf(s.requests.at(-1))
+    expect(compacted).toContain("The catalog is partial.")
+    expect(compacted).toContain("- late (60 tools")
+    expect(systemTexts(s.requests.at(-1)!).filter((text) => text.startsWith("The Code Mode tool catalog"))).toEqual([])
+  })
+
   scenario("rebuilds a consistent Code Mode catalog when a revert removes its update", function* (s) {
     const registry = yield* Tool.Service
     const tools = (name: string, count: number) =>
@@ -2464,8 +2509,16 @@ describe("SessionRunnerLLM", () => {
     // The beta update is delivered with "Third", after the boundary, so the revert drops it and resyncs.
     yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
     yield* s.runPrompt("Fourth")
-    const system = s.requests.at(-1)?.system.map((part) => part.text).find((text) => text.includes("# Code Mode")) ?? ""
-    expect(system).toContain("- beta (10 tools")
+    // The revert cleared the stored catalog, so the baseline is a fresh catalog of the tools as they are now.
+    const snapshot = yield* registry.snapshot()
+    const fresh = CodeModeInstructions.render(CodeModeCatalog.summarize(snapshot.codeModeCatalog!))
+    expect(
+      s.requests
+        .at(-1)
+        ?.system.map((part) => part.text)
+        .join("\n\n"),
+    ).toContain(fresh)
+    expect(fresh).toContain("- beta (10 tools")
     expect(systemTexts(s.requests.at(-1)!).filter((text) => text.includes("Code Mode tool catalog"))).toEqual([])
   })
 
