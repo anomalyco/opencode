@@ -116,14 +116,9 @@ export function transitionLabStage(state: LabStageState, event: LabStageEvent): 
   return { state: { ...state, motionQueued: false }, effects: [{ type: "motion.sync" }] }
 }
 
-export function labStageView(state: LabStageState) {
-  if (state.status === "disposed") return { index: 0, canPlay: false, canPause: false }
-
-  return {
-    index: state.index,
-    canPlay: state.status === "paused" && state.names.length > 1,
-    canPause: state.status === "playing",
-  }
+/** The state the stage shows. */
+export function labStageIndex(state: LabStageState) {
+  return state.status === "disposed" ? 0 : state.index
 }
 
 /** A hand's choice of state stops Play. */

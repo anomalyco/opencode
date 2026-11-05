@@ -49,7 +49,7 @@ import {
 } from "./catalog"
 import {
   createLabStageState,
-  labStageView,
+  labStageIndex,
   transitionLabStage,
   type LabStageEffect,
   type LabStageEvent,
@@ -331,13 +331,12 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
   const names = entry.states.map((state) => state.name)
   const [args, setArgs] = createStore<StoryArgs>(stateArgs(entry, 0))
   const [stageState, setStageState] = createSignal(createLabStageState(names))
-  const view = createMemo(() => labStageView(stageState()))
+  const index = createMemo(() => labStageIndex(stageState()))
   const [canvas, setCanvas] = createSignal<HTMLDivElement>()
-  const [panel, setPanel] = createSignal<HTMLElement>()
   const component = entry.component
   const fallback = component && ((values: StoryArgs) => <Dynamic component={component} {...values} />)
   // Switching to a state that shares the current render function keeps the mounted instance, so its transitions play.
-  const render = () => entry.states[view().index]?.render ?? entry.render ?? fallback
+  const render = () => entry.states[index()]?.render ?? entry.render ?? fallback
   let timer: ReturnType<typeof setTimeout> | undefined
 
   // A state is a variant: its chip, a digit, `[` and `]` and Play all apply it, so the panel shows where it is.
@@ -466,32 +465,15 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
         session: false,
         empty: language.t("lab.noControls"),
         hints: { digits: "always" },
-        onReady: (handle) => setPanel(handle.element),
       }),
     )
 
     // A rebuild stays on the state it was showing, and its fresh knobs show that state's args.
     if (rest.length > 0)
       untrack(() => {
-        setArgs(reconcile(stateArgs(entry, view().index)))
-        preset(view().index)
+        setArgs(reconcile(stateArgs(entry, index())))
+        preset(index())
       })
-  })
-
-  // Toolbar items take a fixed `disabled`, so the buttons follow Play here, again whenever the panel mounts.
-  createEffect(() => {
-    const element = panel()
-    const stage = view()
-
-    const button = (id: string) =>
-      element?.querySelector<HTMLButtonElement>(`[data-field="play"] button[data-item="${id}"]`)
-
-    const play = button("play")
-    const pause = button("pause")
-
-    if (play) play.disabled = !stage.canPlay
-
-    if (pause) pause.disabled = !stage.canPause
   })
 
   onCleanup(motionTuning.subscribe(() => dispatch({ type: "motion.changed" })))

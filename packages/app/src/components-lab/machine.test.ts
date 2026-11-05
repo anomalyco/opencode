@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   createLabStageState,
-  labStageView,
+  labStageIndex,
   transitionLabStage,
   type LabStageEvent,
   type LabStageState,
@@ -28,13 +28,13 @@ test("an inspector rebuild after an advance keeps Play running", () => {
   const rebuilt = transitionLabStage(advanced.state, { type: "panel.state", name: "Opening", fromPreset: true })
   expect(rebuilt.state).toBe(advanced.state)
   expect(rebuilt.effects).toEqual([])
-  expect(labStageView(rebuilt.state).canPause).toBe(true)
+  expect(rebuilt.state.status).toBe("playing")
 })
 
 test("Play advances even when the panel reports no change, and a later hand still stops it", () => {
   const twins = createLabStageState(["Open", "Open"])
   const advanced = run(twins, { type: "play" }, { type: "tick", attempt: 1 })
-  expect(labStageView(advanced.state).index).toBe(1)
+  expect(labStageIndex(advanced.state)).toBe(1)
   expect(advanced.effects.at(-1)).toEqual({ type: "timer.schedule", attempt: 2 })
 
   const stepped = transitionLabStage(advanced.state, { type: "step", delta: 1 })
@@ -48,13 +48,15 @@ test("the digit of the state shown pauses Play", () => {
   expect(paused.effects).toEqual([{ type: "timer.clear" }, { type: "state.apply", index: 0, preset: "now" }])
 })
 
-test("the toolbar offers Play while paused and Pause while playing", () => {
+test("Play while playing, Pause while paused and Play with one state do nothing", () => {
   const paused = createLabStageState(names)
-  expect(labStageView(paused)).toEqual({ index: 0, canPlay: true, canPause: false })
-  expect(labStageView(run(paused, { type: "play" }).state)).toEqual({ index: 0, canPlay: false, canPause: true })
-  expect(labStageView(createLabStageState(["Only"]))).toEqual({ index: 0, canPlay: false, canPause: false })
-  expect(transitionLabStage(createLabStageState(["Only"]), { type: "play" }).effects).toEqual([])
-  expect(labStageView(run(paused, { type: "disposed" }).state)).toEqual({ index: 0, canPlay: false, canPause: false })
+  expect(transitionLabStage(paused, { type: "pause" })).toEqual({ state: paused, effects: [] })
+
+  const playing = run(paused, { type: "play" }).state
+  expect(transitionLabStage(playing, { type: "play" })).toEqual({ state: playing, effects: [] })
+
+  const single = createLabStageState(["Only"])
+  expect(transitionLabStage(single, { type: "play" })).toEqual({ state: single, effects: [] })
 })
 
 test("motion registrations coalesce, and a sync queued before unmount never runs", () => {
@@ -71,7 +73,7 @@ test("a timer from an earlier Play is ignored", () => {
   const replayed = run(createLabStageState(names), { type: "play" }, { type: "pause" }, { type: "play" })
   expect(replayed.effects).toEqual([{ type: "timer.schedule", attempt: 2 }])
   expect(transitionLabStage(replayed.state, { type: "tick", attempt: 1 }).state).toBe(replayed.state)
-  expect(labStageView(transitionLabStage(replayed.state, { type: "tick", attempt: 2 }).state).index).toBe(1)
+  expect(labStageIndex(transitionLabStage(replayed.state, { type: "tick", attempt: 2 }).state)).toBe(1)
 })
 
 test("Undo or Reset moving the state stops Play and syncs the knobs afterwards", () => {
