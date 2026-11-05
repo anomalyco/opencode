@@ -54,6 +54,7 @@ import {
   DestinationNotDirectoryError,
   DestinationUnavailableError,
 } from "./session/move.js"
+import { ForkNotice } from "./session/fork-notice.js"
 import { SessionModelTransport } from "./session/model-transport.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
@@ -339,7 +340,7 @@ const layer = Layer.effect(
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
         const boundary = yield* db
-          .select({ id: SessionMessageTable.id })
+          .select({ id: SessionMessageTable.id, time: SessionMessageTable.time_created })
           .from(SessionMessageTable)
           .where(
             and(
@@ -379,7 +380,24 @@ const layer = Layer.effect(
             ...inherited,
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
-        return yield* result.get(sessionID).pipe(Effect.orDie)
+        const forked = yield* result.get(sessionID).pipe(Effect.orDie)
+        // Append-only: the notice is a new admission after the copied rows, so the
+        // copied prompt-cache prefix stays byte-identical. It waits in the inbox as a
+        // steer and never wakes this fork's runner on creation.
+        const copied = yield* store.messages({ sessionID, order: "asc" }).pipe(Effect.orDie)
+        const children = yield* store.list({ parentID: parent.id }).pipe(Effect.orDie)
+        const subagents = yield* ForkNotice.collect({ messages: copied, children, jobs })
+        yield* result
+          .synthetic({
+            sessionID,
+            description: "Fork notice",
+            text: ForkNotice.text({ forkOf: parent.id, title: parent.title, time: boundary.time, subagents }),
+            metadata: { source: "fork", forkOf: parent.id },
+            resume: false,
+          })
+          // A fresh message ID cannot conflict; keep the public error channel unchanged.
+          .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
+        return forked
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
       environment: Effect.fn("Session.environment")(function* (input) {

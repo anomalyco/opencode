@@ -163,7 +163,10 @@ export const Plugin = {
                       )
               if (existing !== undefined && existing.parentID !== context.sessionID)
                 return yield* new ToolFailure({
-                  message: `Session ${existing.id} is not a child of the current session`,
+                  message:
+                    existing.parentID !== undefined && parent.fork?.sessionID === existing.parentID
+                      ? `Session ${existing.id} belongs to the original session ${existing.parentID}; this session is a fork of it, so that subagent reports there. Start a new subagent here instead.`
+                      : `Session ${existing.id} is not a child of the current session`,
                 })
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
