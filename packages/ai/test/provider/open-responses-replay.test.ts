@@ -71,6 +71,52 @@ for (const model of [
       }),
     )
 
+    it.effect("merges legacy reasoning items that cannot be replayed", () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          ai.request({
+            model,
+            messages: [
+              Message.user("Earlier"),
+              Message.assistant([
+                {
+                  type: "reasoning",
+                  text: "First legacy thought",
+                  providerMetadata: { [key]: { reasoningField: "reasoning" } },
+                },
+                {
+                  type: "reasoning",
+                  text: "Second legacy thought",
+                  providerMetadata: { [key]: { reasoningField: "reasoning" } },
+                },
+                { type: "text", text: "Answer" },
+              ]),
+              Message.user("Continue"),
+            ],
+          }),
+        )
+
+        expect(prepared.body.input).toEqual([
+          { type: "message", role: "user", id: undefined, status: undefined, content: [{ type: "input_text", text: "Earlier" }] },
+          {
+            type: "reasoning",
+            summary: [
+              { type: "summary_text", text: "First legacy thought" },
+              { type: "summary_text", text: "Second legacy thought" },
+            ],
+            encrypted_content: undefined,
+          },
+          {
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "Answer" }],
+          },
+          { type: "message", role: "user", id: undefined, status: undefined, content: [{ type: "input_text", text: "Continue" }] },
+        ])
+      }),
+    )
+
     it.effect("replays truncated text as completed while retaining the response finish reason", () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(ai.request({ model, prompt: "Respond" })).pipe(
