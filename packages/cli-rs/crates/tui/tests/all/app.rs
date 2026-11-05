@@ -2,7 +2,7 @@
 //! through the whole Rust TUI in a `TestApp`, over the in-memory transport, and compares each checkpoint's
 //! cells and the requests with what the TS TUI did. `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 
-use crate::support::ide;
+use crate::support::{self, ide};
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -11,11 +11,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
-use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::pty;
-use opencode_local::cli_config::{self, Resolved};
+use opencode_local::cli_config;
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
 use opencode_plugin::{Definition, Placement, Setup, slot};
@@ -49,7 +48,6 @@ fn scenarios() {
 fn run(recording: &Recording) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).expect("client");
     let config = cli_config::decode_text(&recording.config.to_string()).unwrap_or_default();
     let args = &recording.args;
     // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
@@ -57,10 +55,8 @@ fn run(recording: &Recording) -> (bool, String) {
     let tui = opencode_tui::mount_with(
         &app,
         Deps {
-            client,
             directory: recording.directory.clone(),
-            config: Resolved::new(config, |_| None),
-            roots: None,
+            config: support::config(config),
             route: match &session {
                 Some(id) if !args.fork => Route::Session { id: id.clone() },
                 _ => recording
@@ -71,6 +67,7 @@ fn run(recording: &Recording) -> (bool, String) {
             },
             continue_: args.continue_,
             events: true,
+            ..support::deps(Arc::new(memory.clone()))
         },
         Args {
             // The TS fixture's `app.version`.
