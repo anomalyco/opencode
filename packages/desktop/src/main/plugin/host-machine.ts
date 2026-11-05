@@ -107,7 +107,6 @@ export type HostCommand<Listing, Owner = unknown> =
       readonly owner: Owner
       readonly attempt: number
       readonly load: HostCatalogLoader
-      readonly english: Messages
       readonly timeoutMs: number
     }
   | { readonly type: "cancel-catalog-timer"; readonly owner: Owner }

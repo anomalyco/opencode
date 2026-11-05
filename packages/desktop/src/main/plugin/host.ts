@@ -552,8 +552,8 @@ export function createHost(input: {
     )
 
     const event = await readListing(endpoint, controller.signal).then(
-      (listing): HostEvent<Listing> => ({ type: "list.succeeded", attempt, listing, quitting: quitting() }),
-      (cause: unknown): HostEvent<Listing> => ({ type: "list.failed", attempt, cause, quitting: quitting() }),
+      (listing): HostEvent<Listing, Instance> => ({ type: "list.succeeded", attempt, listing, quitting: quitting() }),
+      (cause: unknown): HostEvent<Listing, Instance> => ({ type: "list.failed", attempt, cause, quitting: quitting() }),
     )
 
     // Cancelled or timed out: the machine already moved on.
