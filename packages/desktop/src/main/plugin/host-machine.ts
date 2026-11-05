@@ -115,7 +115,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 
       return {
         state: { status: "stopped", nextAttempt: state.nextAttempt, menubarQueued: state.menubarQueued },
-        commands: [{ type: "unsubscribe-credentials" }, ...cancelled(state)],
+        commands: [{ type: "unsubscribe-credentials" }, ...cancelled<Listing>(state)],
       }
   }
 

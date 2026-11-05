@@ -14,6 +14,8 @@ import {
   type MigrationProgress,
 } from "./migration-status-machine"
 
+type ToastHandle = { id: number; closed: boolean; dispose: (() => void) | undefined }
+
 export function MigrationStatus(props: { server: ServerReadyData }) {
   const language = useLanguage()
   const initial = createMigrationState()
@@ -23,7 +25,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   let timer: ReturnType<typeof setTimeout> | undefined
   let controller: AbortController | undefined
   // One handle per shown toast: a render that lands after the dismissal disposes its own root at once.
-  let toast: { id: number; closed: boolean; dispose: (() => void) | undefined } | undefined
+  let toast: ToastHandle | undefined
 
   const format = (progress: MigrationProgress | undefined) => {
     if (!progress) return ""
@@ -66,7 +68,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
 
   const show = () => {
     if (toast) return
-    const handle: NonNullable<typeof toast> = { id: 0, closed: false, dispose: undefined }
+    const handle: ToastHandle = { id: 0, closed: false, dispose: undefined }
     toast = handle
     handle.id = toaster.show(
       ({ toastId }) => {

@@ -403,7 +403,7 @@ export function createHost(input: {
 
   const clientFor = (module: NonNullable<SidecarClient["module"]>, endpoint: HostEndpoint) => {
     if (sidecar.active && sameHostEndpoint(sidecar.active.endpoint, endpoint)) return sidecar.active.client
-    const headers = endpoint.authorization ? { authorization: endpoint.authorization } : {}
+    const headers: Record<string, string> = endpoint.authorization ? { authorization: endpoint.authorization } : {}
     const client = module.OpenCode.make({ baseUrl: endpoint.url, headers })
     sidecar.active = { endpoint, client }
 
