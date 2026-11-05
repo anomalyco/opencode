@@ -10,8 +10,6 @@
 use std::cell::RefCell;
 
 use opencode_api::generated::{PromptAgentAttachment, PromptInputSkillAttachment};
-use opentui::native::SelectionColors;
-use opentui::prelude::*;
 use opentui::widget::{ExtmarkId, ExtmarkOptions};
 use serde_json::{Value, json};
 
@@ -254,21 +252,7 @@ pub fn skills(entry: &Value) -> Option<Vec<PromptInputSkillAttachment>> {
         .filter(|skills| !skills.is_empty())
 }
 
-/// Replaces offsets `start..end` with `text` as one edit through the widget, so marks move.
-pub fn replace(textarea: &Textarea, start: u32, end: u32, text: &str) {
-    if start < end {
-        let _ = textarea
-            .view()
-            .select_range(start, end, SelectionColors::default());
-        if text.is_empty() {
-            textarea.perform(EditorAction::Backspace);
-            return;
-        }
-    }
-    if !text.is_empty() {
-        textarea.insert(text);
-    }
-}
+pub use opencode_ui::prompt_input::replace;
 
 /// An atomic mark in the kind's `extmark.*` style.
 fn options(prompt: &Inner, kind: Kind) -> ExtmarkOptions {
