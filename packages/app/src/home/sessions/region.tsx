@@ -15,7 +15,8 @@ export function HomeSessions(props: {
         <HomeSessionsView
           language={props.sessions.copy.language}
           groups={props.sessions.data.groups()}
-          loading={props.sessions.data.loading()}
+          listView={props.sessions.data.listView()}
+          onRetry={props.sessions.data.retry}
           desktop={props.sessions.platform.desktop}
           location={props.sessions.location.value}
           onRevealLocations={props.sessions.location.sync}
@@ -46,6 +47,7 @@ export function HomeSessions(props: {
           onSetSearchInput={props.search.element.setInput}
           onSetSearchList={props.search.element.setList}
           onSearchFocus={props.search.query.focus}
+          onSearchBlur={props.search.query.blur}
           onSearchInput={props.search.query.input}
           onSearchClose={props.search.query.close}
           onSearchMove={props.search.result.move}

@@ -131,6 +131,7 @@ const Group = HttpApiGroup.make("mock")
       params: { integrationID: Schema.String },
       payload: JsonPayload,
       success: NoContent,
+      error: MockBadRequest.pipe(HttpApiSchema.status(400)),
     }),
   )
   .add(
@@ -146,6 +147,19 @@ const Group = HttpApiGroup.make("mock")
       params: { integrationID: Schema.String, attemptID: Schema.String },
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("integrationOAuthCancel", "/api/integration/:integrationID/connect/oauth/:attemptID", {
+      params: { integrationID: Schema.String, attemptID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("integrationConnectExternal", "/api/integration/:integrationID/connect/external", {
+      params: { integrationID: Schema.String },
+      payload: JsonPayload,
+      success: NoContent,
     }),
   )
   .add(
@@ -276,7 +290,7 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.get("persistentPtyList", "/api/experimental/session/:sessionID/terminal", {
       params: SessionParams,
       success: Json,
-      error: PersistentPtyUnavailable,
+      error: [PersistentPtyUnavailable, MockInternal.pipe(HttpApiSchema.status(500))],
     }),
   )
   .add(
@@ -411,6 +425,13 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.post("sessionCompact", "/api/session/:sessionID/compact", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionFork", "/api/session/:sessionID/fork", {
       params: SessionParams,
       payload: JsonPayload,
       success: Json,

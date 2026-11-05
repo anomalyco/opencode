@@ -58,6 +58,67 @@ export const StreamingReasoningAndText = {
   ),
 }
 
+export const ResponseSpeed = {
+  args: { measured: true, steered: false },
+  render: (args: { measured: boolean; steered: boolean }) => (
+    <CurrentSessionTimelineStory
+      title="Response speed"
+      description="Hover the response to reveal tokens per second across both model steps."
+      width="720px"
+      document={{
+        sessionID: CURRENT_SESSION_ID,
+        status: { type: "idle" },
+        diffs: [],
+        messages: [
+          {
+            id: "msg_speed_user",
+            type: "user",
+            text: "Check the timeline performance.",
+            time: { created: STORY_TIME },
+          },
+          {
+            id: "msg_speed_inspect",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [{ type: "text", text: "I'll inspect the timeline before checking the results." }],
+            tokens: { input: 1000, output: 270, reasoning: 30, cache: { read: 0, write: 0 } },
+            time: {
+              created: STORY_TIME + 100,
+              streamed: args.measured ? STORY_TIME + 3100 : undefined,
+              completed: STORY_TIME + 290_000,
+            },
+          },
+          ...(args.steered
+            ? [
+                {
+                  id: "msg_speed_steer",
+                  type: "user" as const,
+                  text: "Include narrow layouts in the check.",
+                  time: { created: STORY_TIME + 290_000 },
+                },
+              ]
+            : []),
+          {
+            id: "msg_speed_reply",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [{ type: "text", text: "The timeline checks passed. No performance regressions were found." }],
+            tokens: { input: 2000, output: 500, reasoning: 100, cache: { read: 0, write: 0 } },
+            time: {
+              created: STORY_TIME + 290_000,
+              streamed: STORY_TIME + 302_000,
+              completed: STORY_TIME + 302_000,
+            },
+          },
+          { id: "msg_speed_idle", type: "idle", outcome: "succeeded", time: { created: STORY_TIME + 302_000 } },
+        ],
+      }}
+    />
+  ),
+}
+
 function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
   const content = [
     ...(props.reasoning === "none"

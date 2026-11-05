@@ -225,7 +225,7 @@ it.live(
       expect(commands).toEqual([first.id, second.id])
       expect(
         (yield* llm.requests()).map((request) => ({
-          temperature: request.generation?.temperature,
+          temperature: request.temperature,
           tools: request.tools?.filter((tool) => tool.name.startsWith("instance_")).map((tool) => tool.name),
         })),
       ).toEqual(

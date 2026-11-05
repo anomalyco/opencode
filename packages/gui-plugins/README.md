@@ -527,7 +527,7 @@ import en from "./i18n/en"
 export default Plugin.define({ i18n: { en } })
 ```
 
-3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, with the caller's signal for a read and `ctx.signal` for a change a closing window must not cancel. `ctx.onCleanup` releases the blocker when the instance goes away.
+3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, one command at a time through the machine in `main-machine.ts`, with the same `createDispatch` loop as the settings page: a read stops when its caller goes away, a change goes on when the window closes, and every command has a timeout, so a hung one never holds the queue. `ctx.onCleanup` disposes the machine, which releases the blocker.
 
 <!-- source: src/pairing/main.ts -->
 
@@ -538,12 +538,17 @@ import { Schema } from "effect"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import type { Plugin } from "@opencode/plugin/gui/main"
 import { Pairing } from "./contract"
+import { createDispatch } from "./dispatch"
+import {
+  createPairingMainState,
+  pairingMainEffectFailed,
+  selectBlocker,
+  transitionPairingMain,
+  type PairingMainEffect,
+  type ServiceRequest,
+} from "./main-machine"
 
-/** The display sleep blocker this instance holds, if any. */
-type Blocker = { id?: number }
-
-/** The last `opencode service` command; the next one starts after it settles. */
-type Queue = { tail: Promise<unknown> }
+type Waiter = { resolve: (value: boolean | undefined) => void; reject: (error: Error) => void }
 
 const setup: Plugin.MainSetup = (ctx) => {
   // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
@@ -555,59 +560,104 @@ const setup: Plugin.MainSetup = (ctx) => {
 
   const cli = ctx.cli
   const log = ctx.log
-  const blocker: Blocker = {}
-  const queue: Queue = { tail: Promise.resolve() }
+  const current = { state: createPairingMainState(), waiter: 0 }
+  // Each running command's abort controller, and each caller waiting on a command.
+  const commands = new Map<number, AbortController>()
+  const waiters = new Map<number, Waiter>()
 
-  const release = () => {
-    if (blocker.id === undefined) return
-    powerSaveBlocker.stop(blocker.id)
-    blocker.id = undefined
+  const dispatch = createDispatch({
+    read: () => current.state,
+    write: (state) => {
+      current.state = state
+    },
+    transition: transitionPairingMain,
+    run: (effect: PairingMainEffect) => run(effect),
+    failed: pairingMainEffectFailed,
+  })
+
+  // The OS can drop the blocker, so whether main holds it is asked each time.
+  const screenActive = () => {
+    const id = selectBlocker(current.state)
+
+    return id !== undefined && powerSaveBlocker.isStarted(id)
   }
 
-  const keepScreenActive = (enabled: boolean) => {
-    if (enabled && blocker.id === undefined) blocker.id = powerSaveBlocker.start("prevent-display-sleep")
+  const run = (effect: PairingMainEffect) => {
+    if (effect.type === "blocker.start")
+      return dispatch({ type: "blocker.started", id: powerSaveBlocker.start("prevent-display-sleep") })
 
-    if (!enabled) release()
-    stored.set(enabled)
-  }
+    if (effect.type === "blocker.stop") {
+      if (powerSaveBlocker.isStarted(effect.id)) powerSaveBlocker.stop(effect.id)
 
-  // Remote access is a setting of the background service, so it changes through the CLI the app runs, as with
-  // `opencode pair --remote`. A change restarts the service, so commands run one at a time.
-  const service = (args: readonly string[], signal: AbortSignal) => {
-    const run = queue.tail.then(
-      () =>
-        new Promise<string>((resolve, reject) => {
-          execFile(
-            cli.command[0] ?? "opencode",
-            [...cli.command.slice(1), "service", ...args],
-            { signal, windowsHide: true },
-            (error, stdout, stderr) => {
-              if (!error) return resolve(stdout.trim())
-              log.write("error", "pairing service command failed", { args, error: error.message, stderr })
-              reject(error)
-            },
-          )
-        }),
+      return
+    }
+
+    if (effect.type === "persist.screen") return stored.set(effect.enabled)
+
+    if (effect.type === "service.abort") {
+      commands.get(effect.attempt)?.abort()
+      commands.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "waiter.resolve" || effect.type === "waiter.reject") {
+      const waiter = waiters.get(effect.waiter)
+
+      waiters.delete(effect.waiter)
+
+      if (effect.type === "waiter.resolve") return waiter?.resolve(effect.value)
+
+      return waiter?.reject(new Error(effect.message))
+    }
+
+    // Remote access is a setting of the background service, so it changes through the CLI the app runs, as with
+    // `opencode pair --remote`. A hung command ends at its timeout, so the next one always runs.
+    const attempt = effect.attempt
+    const controller = new AbortController()
+
+    commands.set(attempt, controller)
+    execFile(
+      cli.command[0] ?? "opencode",
+      [...cli.command.slice(1), "service", ...effect.args],
+      { signal: AbortSignal.any([ctx.signal, controller.signal]), timeout: effect.timeoutMs, windowsHide: true },
+      (error, stdout, stderr) => {
+        commands.delete(attempt)
+
+        if (!error) return dispatch({ type: "service.succeeded", attempt, stdout: stdout.trim() })
+        log.write("error", "pairing service command failed", { args: effect.args, error: error.message, stderr })
+        dispatch({ type: "service.failed", attempt, message: error.message })
+      },
     )
-
-    queue.tail = run.catch(() => undefined)
-
-    return run
   }
 
-  if (stored.value) keepScreenActive(true)
-  ctx.onCleanup(release)
+  // Queues a command. A read stops when its caller goes away; a change goes on.
+  const service = (request: ServiceRequest, signal?: AbortSignal) => {
+    current.waiter += 1
+    const waiter = current.waiter
+    const cancel = () => dispatch({ type: "waiter.cancelled", waiter })
+
+    return new Promise<boolean | undefined>((resolve, reject) => {
+      waiters.set(waiter, { resolve, reject })
+      signal?.addEventListener("abort", cancel, { once: true })
+      dispatch({ type: "service.requested", waiter, request })
+
+      if (signal?.aborted) cancel()
+    }).finally(() => signal?.removeEventListener("abort", cancel))
+  }
+
+  if (stored.value) dispatch({ type: "screen.set", enabled: true, started: false })
+  ctx.onCleanup(() => dispatch({ type: "disposed" }))
 
   ctx.provide(Pairing, {
-    remote: async (_, caller) => (await service(["get", "remote"], caller.signal)) === "true",
-    // Changing the setting stops the service. Starting it here brings it back, with the tunnel when remote access is
-    // on. A window that closes meanwhile does not cancel the change.
+    remote: async (_, caller) => (await service({ kind: "get-remote" }, caller.signal)) === true,
+    // Changing the setting stops the service, and starting it again brings it back. A window that closes meanwhile
+    // does not cancel the change.
     setRemote: async (enabled) => {
-      await service(["set", "remote", String(enabled)], ctx.signal)
-      await service(["start"], ctx.signal)
+      await service({ kind: "set-remote", enabled })
     },
-    screenActive: () => blocker.id !== undefined && powerSaveBlocker.isStarted(blocker.id),
-    setScreenActive: (enabled) => keepScreenActive(enabled),
+    screenActive,
+    setScreenActive: (enabled) => dispatch({ type: "screen.set", enabled, started: screenActive() }),
   })
 }
 
@@ -643,7 +693,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   ctx.add(SettingsPage, {
     id: "pairing",
-    icon: "server",
+    icon: "outline-pair",
     get title() {
       return ctx.t("title")
     },

@@ -14,8 +14,10 @@ import type {
 
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
-  reconnectService(): Promise<ServerReadyData>
-  consumeInitialDeepLinks(): Promise<string[]>
+  reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
+  onSidecarChanged(cb: (data: ServerReadyData) => void): () => void
+  readyDeepLinks(): void
+  acknowledgeDeepLinks(attempt: number): void
   isFirstLaunchOnboardingPending(): Promise<boolean>
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
@@ -35,7 +37,7 @@ export type ElectronAPI = {
   getWindowBootstrap(): WindowBootstrap
   themeReady(): Promise<void>
   onMenuCommand(cb: (id: string) => void): () => void
-  onDeepLink(cb: (urls: string[]) => void): () => void
+  onDeepLink(cb: (delivery: { attempt: number; urls: string[] }) => void): () => void
   openDirectoryPicker(opts?: DirectoryPickerOptions): Promise<string | string[] | null>
   openFilePicker(opts?: FilePickerOptions): Promise<PickedFiles | null>
   readPickedFile(token: string, path: string): Promise<ArrayBuffer>

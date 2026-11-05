@@ -51,7 +51,8 @@ const clearAuthToken = () => {
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
 }
 
-const web = createWebPlatform(pkg.version)
+// package.json carries the last stable version on every channel, so the server's build passes its own release.
+const web = createWebPlatform(import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version)
 
 const base = basePath()
 

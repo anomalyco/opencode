@@ -80,7 +80,7 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
           ai.request({
             model: provider.chat(modelID),
             prompt: "Hello",
-            generation: { maxTokens: 123 },
+            maxTokens: 123,
             tools: [tool],
             providerOptions: { thinking: { type: "enabled", clear_thinking: false } },
           }),
