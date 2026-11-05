@@ -15,7 +15,7 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::support::wait::WAIT;
+use crate::support::WAIT;
 
 type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 

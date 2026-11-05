@@ -3,87 +3,47 @@
 //! where the server does. The dialogs' cells are compared with the TypeScript ones in
 //! `parity/component/E.10a-actions.tsx` (`dialogs_match_typescript`).
 
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+
+use std::sync::Arc;
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
 use opencode_api::generated::{SessionID, SessionMessageInfo};
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
 use opencode_parity::assert_fixture;
-use opencode_tui::{Deps, Route, Tui};
-use opentui::prelude::*;
-use opentui::testing::TestApp;
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
-
-/// A request the fixture saw: method, path with query, and JSON body.
-type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 
 const LOCATION: &str = "/project";
 
 /// One session `ses_a` with its messages and inbox, the location catalog, and every write the actions send.
-struct Fixture {
-    session: Value,
-    messages: Vec<Value>,
-    inbox: Vec<Value>,
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        let full = match request.url.query() {
-            Some(query) => format!("{path}?{query}"),
-            None => path.clone(),
-        };
-        self.seen.lock().unwrap().push((request.method.to_owned(), full, body.clone()));
-        let location = json!({ "directory": LOCATION });
-        let id = self.session["id"].as_str().unwrap().to_owned();
+fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
+    Fake::new(move |seen| {
+        let body = &seen.body;
+        let id = session["id"].as_str().unwrap().to_owned();
         let base = format!("/api/session/{id}");
-        let (status, body) = match (request.method, path.as_str()) {
+        match (seen.method.as_str(), seen.path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", p) if p == base => (200, json!({ "data": self.session })),
+            ("GET", p) if p == base => (200, json!({ "data": session })),
             ("GET", p) if p == format!("{base}/message") => {
-                let page: Vec<_> = self.messages.iter().rev().cloned().collect();
+                let page: Vec<_> = messages.iter().rev().cloned().collect();
                 (200, json!({ "data": page, "cursor": {} }))
             }
-            ("GET", p) if p == format!("{base}/inbox") => (200, json!({ "data": self.inbox })),
+            ("GET", p) if p == format!("{base}/inbox") => (200, json!({ "data": inbox })),
             ("GET", p) if p.ends_with("/permission") => (200, json!({ "data": [] })),
             ("GET", p) if p.starts_with("/api/session/ses_") => {
                 let other = p.trim_start_matches("/api/session/");
                 match other.split_once('/') {
                     Some((_, "message")) => (200, json!({ "data": [], "cursor": {} })),
                     Some(_) => (200, json!({ "data": [] })),
-                    None => (200, json!({ "data": session(other, json!({})) })),
+                    None => (200, json!({ "data": self::session(other, json!({})) })),
                 }
             }
             ("GET", p) if p == format!("/api/experimental/session/{id}/export") => {
-                (200, json!({ "data": { "info": self.session, "messages": self.messages } }))
+                (200, json!({ "data": { "info": session, "messages": messages } }))
             }
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-                    "request": { "settings": {}, "headers": {}, "body": {} },
-                }] }),
-            ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "m", "modelID": "m", "providerID": "p", "name": "Model M",
-                    "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-                    "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-                    "enabled": true, "limit": { "context": 1000, "output": 100 },
-                }] }),
-            ),
-            ("GET", "/api/provider" | "/api/command") => (200, json!({ "location": location, "data": [] })),
             ("PATCH", p) if p == base => (204, Value::Null),
             ("POST", p) if p == format!("{base}/fork") => {
-                (200, json!({ "data": session("ses_fork", json!({ "title": "Forked" })) }))
+                (200, json!({ "data": self::session("ses_fork", json!({ "title": "Forked" })) }))
             }
             ("POST", p) if p == format!("{base}/compact") => (
                 200,
@@ -100,39 +60,20 @@ impl Transport for Fixture {
             ("DELETE", p) if p == format!("{base}/revert") => (204, Value::Null),
             ("POST", p) if p == format!("{base}/revert/commit") => (204, Value::Null),
             ("DELETE", p) if p.starts_with(&format!("{base}/inbox/")) => (204, Value::Null),
-            ("POST", p) if p == format!("{base}/prompt") => (
-                200,
-                json!({ "data": {
-                    "id": body["id"], "sessionID": id, "time": { "created": 1 }, "type": "user",
-                    "payload": { "text": body["text"] }, "delivery": "steer",
-                } }),
-            ),
-            ("POST", p) if p.ends_with("/model") || p.ends_with("/agent") => (204, Value::Null),
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+            _ => support::base(seen, LOCATION),
+        }
+    })
 }
 
 fn session(id: &str, extra: Value) -> Value {
-    let mut session = json!({
+    let session = json!({
         "id": id, "title": "Fix the parser", "projectID": "project", "cost": 0, "agent": "build",
         "model": { "providerID": "p", "id": "m" },
         "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
         "time": { "created": 1_772_539_200_000_u64, "updated": 1_772_542_800_000_u64 },
         "location": { "directory": LOCATION },
     });
-    for (key, value) in extra.as_object().unwrap() {
-        session[key] = value.clone();
-    }
-    session
+    support::merge(session, extra)
 }
 
 fn user(id: &str, created: u64, text: &str) -> Value {
@@ -174,10 +115,11 @@ fn turns() -> Vec<Value> {
 }
 
 struct Kit {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
 }
+
+deref_harness!(Kit);
 
 impl Kit {
     fn new(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Self {
@@ -190,42 +132,21 @@ impl Kit {
                 panic!("{message} does not decode: {error}");
             }
         }
-        let seen = Seen::default();
         let id = SessionID(session["id"].as_str().unwrap().to_owned());
-        let fixture = Fixture { session, messages, inbox, seen: seen.clone() };
-        let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
-        let app = TestApp::new(width, height);
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: LOCATION.into(),
-                config: Resolved::new(Info { animations: Some(false), ..Info::default() }, |_| None),
-                roots: None,
-                route: Route::Session { id },
-                continue_: false,
-                events: false,
-            },
-        );
-        Self { app, tui, seen }
-    }
-
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}\nrequests: {:?}", self.seen.lock().unwrap());
-        screen
+        let fake = fake(session, messages, inbox);
+        let seen = fake.log();
+        let deps = Deps {
+            config: support::config(support::still()),
+            route: Route::Session { id },
+            ..support::deps(Arc::new(fake))
+        };
+        Self { harness: support::mount(width, height, deps), seen }
     }
 
     /// The transcript and the prompt's catalog are in.
     fn ready(&self) {
         self.wait_for("Fixed it.");
         self.wait_for("Model M");
-    }
-
-    fn leader(&self, key: &str) {
-        self.app.press("ctrl+x");
-        self.app.press(key);
     }
 
     /// Mutating requests, in order, as `METHOD path body`.
@@ -235,19 +156,21 @@ impl Kit {
             .unwrap()
             .iter()
             // The goal footer's RPC `get` is a read, as P-REQ counts it.
-            .filter(|(method, path, _)| method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get")))
-            .map(|(method, path, body)| format!("{method} {path} {body}"))
+            .filter(|seen| {
+                seen.method != "GET" && !(seen.url().starts_with("/api/rpc/") && seen.url().ends_with("/get"))
+            })
+            .map(|seen| format!("{} {} {}", seen.method, seen.url(), seen.body))
             .collect()
     }
 
     fn wait_writes(&self, count: usize) -> Vec<String> {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.writes().len() >= count);
+        let found = self.app.wait_until(WAIT, || self.writes().len() >= count);
         assert!(found, "expected {count} writes: {:?}\n{}", self.writes(), self.app.text());
         self.writes()
     }
 
     fn reads(&self, path: &str) -> usize {
-        self.seen.lock().unwrap().iter().filter(|(method, seen, _)| method == "GET" && seen == path).count()
+        self.seen.lock().unwrap().iter().filter(|seen| seen.method == "GET" && seen.url() == path).count()
     }
 
     fn clear(&self) {
@@ -256,15 +179,6 @@ impl Kit {
 
     fn prompt_text(&self) -> String {
         self.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default()
-    }
-
-    fn only_dialog(&self) {
-        let host = self.tui.dialogs.host().id();
-        for child in self.app.root().children() {
-            if child.id() != host {
-                child.visible(false);
-            }
-        }
     }
 }
 
@@ -287,17 +201,13 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
     kit.app.type_text("/rename");
     // The first Enter takes the slash completion, as in TS; the second submits.
     kit.app.press("return");
-    let completed = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() != "/rename");
+    let completed = kit.app.wait_until(WAIT, || kit.prompt_text() != "/rename");
     assert!(completed, "{:?}", kit.prompt_text());
     if kit.writes().is_empty() {
         kit.app.press("return");
     }
     assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a {"title":""}"#]);
-    assert!(
-        kit.app.wait_until(Duration::from_secs(5), || kit.reads("/api/session/ses_a") == 1),
-        "{:?}",
-        kit.seen.lock().unwrap()
-    );
+    assert!(kit.app.wait_until(WAIT, || kit.reads("/api/session/ses_a") == 1), "{:?}", kit.seen.lock().unwrap());
 }
 
 #[test]
@@ -322,7 +232,7 @@ fn timeline_lists_prompts_newest_first_and_moving_jumps_the_transcript() {
 
     kit.app.press("down");
     kit.app.press("escape");
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
+    let found = kit.app.wait_until(WAIT, || {
         // Below the tab strip: the bar row above the prompt, then the prompt.
         kit.app.text().lines().nth(2).is_some_and(|line| line.contains("First question"))
     });
@@ -355,7 +265,7 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/fork {"before":"msg_03"}"#]);
     kit.wait_for("Forked session");
     // The fork's composer holds the prompt it was forked before.
-    let found = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() == "Fix the bug\nin parse");
+    let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "Fix the bug\nin parse");
     assert!(found, "{:?}\n{}", kit.prompt_text(), kit.app.text());
 }
 
@@ -364,8 +274,7 @@ fn compact_commits_the_model_then_admits_one_compaction() {
     let kit = Kit::new(session("ses_a", json!({})), turns(), vec![]);
     kit.ready();
     kit.leader("c");
-    let found =
-        kit.app.wait_until(Duration::from_secs(5), || kit.writes().iter().any(|write| write.contains("/compact")));
+    let found = kit.app.wait_until(WAIT, || kit.writes().iter().any(|write| write.contains("/compact")));
     let writes = kit.writes();
     assert!(found, "{writes:?}");
     let compact = writes.iter().position(|write| write.contains("/compact")).unwrap();
@@ -393,7 +302,7 @@ fn undo_reverts_to_the_last_prompt_and_puts_it_back_in_the_prompt() {
             r#"POST /api/session/ses_a/revert/stage {"messageID":"msg_03"}"#,
         ]
     );
-    let found = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() == "Fix the bug\nin parse");
+    let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "Fix the bug\nin parse");
     assert!(found, "{:?}", kit.prompt_text());
 
     // Nothing before the staged revert: nothing to undo, and no request.
@@ -417,7 +326,7 @@ fn undo_cancels_a_prompt_still_in_the_inbox() {
     kit.app.type_text("draft");
     kit.leader("u");
     assert_eq!(kit.wait_writes(1), ["DELETE /api/session/ses_a/inbox/msg_05 null"]);
-    let found = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() == "draft\n\nQueued question");
+    let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "draft\n\nQueued question");
     assert!(found, "{:?}", kit.prompt_text());
 }
 
@@ -443,8 +352,7 @@ fn a_prompt_commits_a_staged_revert_before_it_is_sent() {
     kit.wait_for("Model M");
     kit.app.type_text("Try again");
     kit.app.press("return");
-    let found =
-        kit.app.wait_until(Duration::from_secs(5), || kit.writes().iter().any(|write| write.contains("/prompt")));
+    let found = kit.app.wait_until(WAIT, || kit.writes().iter().any(|write| write.contains("/prompt")));
     let writes = kit.writes();
     assert!(found, "{writes:?}");
     let commit = writes

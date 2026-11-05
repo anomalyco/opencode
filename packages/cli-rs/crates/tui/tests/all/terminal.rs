@@ -19,7 +19,7 @@ use opentui::keymap::RunResult;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::support::wait::WAIT;
+use crate::support::WAIT;
 
 const CHANNEL: &str = "test";
 
