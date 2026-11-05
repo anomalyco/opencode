@@ -437,6 +437,31 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("flags images returned by tools in Responses requests", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* httpRequest(
+        new Request("https://api.githubcopilot.com/responses", {
+          method: "POST",
+          headers: { authorization: "Bearer token" },
+          body: JSON.stringify({
+            input: [
+              { role: "user", content: [{ type: "input_text", text: "Take a screenshot." }] },
+              { type: "function_call", call_id: "call_1", name: "screenshot", arguments: "{}" },
+              {
+                type: "function_call_output",
+                call_id: "call_1",
+                output: [{ type: "input_image", image_url: "data:image/png;base64,AAAA" }],
+              },
+            ],
+          }),
+        }),
+      )
+      expect(event.request.headers.get("copilot-vision-request")).toBe("true")
+      expect(event.request.headers.get("x-initiator")).toBe("agent")
+    }),
+  )
+
   it.effect("keeps a declared agent initiator when the body looks user-initiated", () =>
     Effect.gen(function* () {
       yield* addPlugin()

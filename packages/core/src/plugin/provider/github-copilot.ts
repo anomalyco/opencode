@@ -465,11 +465,13 @@ function requestMetadata(url: string, body: unknown) {
     const last = body.input.at(-1)
     return {
       agent: !isRecord(last) || last.role !== "user",
+      // Tool results carry their images in `output`, user messages in `content`.
       vision: body.input.some(
         (item) =>
           isRecord(item) &&
-          Array.isArray(item.content) &&
-          item.content.some((part) => isRecord(part) && part.type === "input_image"),
+          [item.content, item.output].some(
+            (parts) => Array.isArray(parts) && parts.some((part) => isRecord(part) && part.type === "input_image"),
+          ),
       ),
     }
   }
