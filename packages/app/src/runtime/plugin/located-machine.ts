@@ -62,6 +62,7 @@ export function transitionLocatedWrites(state: LocatedWritesState, event: Locate
     const id = state.nextId + 1
     const overflow = state.queue.length >= LOCATED_WRITE_MAX_QUEUE ? state.queue.slice(0, 1) : []
     const queue = [...state.queue.slice(overflow.length), { id, key: event.key, run: event.run }]
+
     const evicted: LocatedWritesEffect[] =
       overflow.length > 0 ? [{ type: "cancel.expire", ids: overflow.map((item) => item.id) }] : []
 

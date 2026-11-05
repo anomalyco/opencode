@@ -31,6 +31,7 @@ function harness() {
 
         return
       }
+
       timers.push(effect)
     })
 
