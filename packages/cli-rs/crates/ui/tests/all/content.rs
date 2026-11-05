@@ -188,6 +188,22 @@ fn numbered_code_matches_typescript() {
 }
 
 #[test]
+fn code_wraps_at_a_word_as_core_does() {
+    let (app, theme) = app(20, 3);
+    let syntax = code::syntax_theme(&theme);
+    app.root().add(&code::view(
+        &app,
+        &theme,
+        &syntax,
+        None,
+        "const alpha = betagamma",
+    ));
+    let frame = app.render().text();
+    let rows: Vec<_> = frame.lines().map(str::trim_end).collect();
+    assert_eq!(rows[..2], ["const alpha =", "betagamma"], "{frame}");
+}
+
+#[test]
 fn patch_matches_typescript() {
     let (app, theme) = app(60, 14);
     let syntax = code::syntax_theme(&theme);
