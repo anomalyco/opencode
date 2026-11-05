@@ -302,17 +302,19 @@ impl pty::Connector for Sockets {
     }
 }
 
-/// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`.
+/// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`, and one to `session.composer.top`.
 fn slot_plugin() -> Definition<Tui> {
     Definition::new("parity.slot", |cx: &mut Setup<'_, Tui>| {
-        cx.slot(Placement::append(slot::HOME_FOOTER), |tui, _| {
-            let app = &tui.app;
-            Box::new(
-                View::new(app)
-                    .padding_edge(Edge::Left, 2)
-                    .child(&Text::new(app, "slot plugin: home.footer").fg(tui.page().text.muted)),
-            )
-        });
+        for path in [slot::HOME_FOOTER, slot::SESSION_COMPOSER_TOP] {
+            cx.slot(Placement::append(path), move |tui, _| {
+                let app = &tui.app;
+                Box::new(
+                    View::new(app)
+                        .padding_edge(Edge::Left, 2)
+                        .child(&Text::new(app, format!("slot plugin: {path}")).fg(tui.page().text.muted)),
+                )
+            });
+        }
     })
 }
 
