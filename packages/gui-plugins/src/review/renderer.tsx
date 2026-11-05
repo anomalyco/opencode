@@ -243,7 +243,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
                 when={frame.placement() === "mobile"}
                 fallback={
                   <div class="flex flex-col h-full overflow-hidden bg-v2-background-bg-base contain-strict">
-                    <Show when={model.panelRendered()}>
+                    <Show when={model.panelReady()}>
                       <Suspense>
                         <ReviewPanel
                           review={model}
