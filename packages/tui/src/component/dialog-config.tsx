@@ -66,6 +66,14 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "MCP summary",
+    category: "Session",
+    path: ["session", "mcp_summary"],
+    default: "default",
+    values: ["default", "collapsed", "always", "never"],
+    keywords: ["mcp", "sidebar", "status", "count"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],
