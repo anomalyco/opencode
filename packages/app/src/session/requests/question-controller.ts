@@ -1,7 +1,6 @@
-import { createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { createMemo, createSignal, onCleanup, runWithOwner, untrack } from "solid-js"
 import type { FormInfo } from "@opencode/client/promise"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useServerSDK } from "@/runtime/server/client"
+import type { ServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
 import { showToast } from "@/shell/notifications/toast"
 import {
@@ -20,9 +19,13 @@ import { questionCache } from "./question-state"
 
 // The answers, the question shown and the reply of one question dock, shared by both dock variants. Focus, the
 // custom field's editing and minimizing stay with each variant.
-export function createQuestionDock(input: { request: () => FormInfo; onSubmit: () => void }) {
-  const serverSDK = useServerSDK()
-  const language = useLanguage()
+export function createQuestionDock(input: {
+  sdk: Pick<ServerSDK, "scope" | "api" | "event">
+  language: { t: (key: "common.requestFailed") => string }
+  request: () => FormInfo
+  onSubmit: () => void
+}) {
+  const serverSDK = input.sdk
   const cacheKey = ScopedKey.from(serverSDK.scope, untrack(input.request).id)
   const questions = createMemo(() => questionSpecs(input.request()))
 
@@ -45,6 +48,8 @@ export function createQuestionDock(input: { request: () => FormInfo; onSubmit: (
     const result = transitionQuestionDock(prev, event)
 
     if (result.state !== prev) setDockState(result.state)
+
+    if (result.state.status === "disposed" && !result.state.unsent) unlisten()
     result.effects.forEach((effect) => {
       if (effect.type === "notify.submit") return input.onSubmit()
 
@@ -55,7 +60,7 @@ export function createQuestionDock(input: { request: () => FormInfo; onSubmit: (
       if (effect.type === "request.abort") return abort()
 
       if (effect.type === "toast.fail")
-        return showToast({ title: language.t("common.requestFailed"), description: effect.error })
+        return showToast({ title: input.language.t("common.requestFailed"), description: effect.error })
 
       abort()
       const current = new AbortController()
@@ -81,8 +86,16 @@ export function createQuestionDock(input: { request: () => FormInfo; onSubmit: (
     if (event.data.id === untrack(input.request).id) dispatch({ type: "resolved" })
   }
 
-  onCleanup(serverSDK.event.on("form.replied", settled))
-  onCleanup(serverSDK.event.on("form.cancelled", settled))
+  // The form's settling events are heard until the reply settles, not only while the dock is mounted: a reply whose
+  // response stalls after the server accepted it ends on `form.replied`, not on a false timeout. Subscribed outside the
+  // owner, since the event bus otherwise drops the listeners when the dock unmounts.
+  const listeners = runWithOwner(null, () => [
+    serverSDK.event.on("form.replied", settled),
+    serverSDK.event.on("form.cancelled", settled),
+  ])
+
+  const unlisten = () => listeners?.forEach((off) => off())
+
   // A reply already sent keeps going without the dock, with its timeout, so a failure still reports and keeps the draft.
   onCleanup(() => dispatch({ type: "disposed" }))
 

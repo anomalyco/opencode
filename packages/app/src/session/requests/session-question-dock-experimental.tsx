@@ -17,6 +17,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useCommand } from "@/shell/commands/command"
 import { questionKey, type QuestionKeyZone } from "./question-keys"
 import { questionMotion } from "./question-motion"
+import { useServerSDK } from "@/runtime/server/client"
 import { createQuestionDock } from "./question-controller"
 import {
   FRAME_MOVING_EVENT,
@@ -272,7 +273,14 @@ function Option(props: {
 export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
   const language = useLanguage()
   const command = useCommand()
-  const form = createQuestionDock({ request: () => props.request, onSubmit: () => props.onSubmit() })
+
+  const form = createQuestionDock({
+    sdk: useServerSDK(),
+    language,
+    request: () => props.request,
+    onSubmit: () => props.onSubmit(),
+  })
+
   const questions = form.questions
 
   const total = createMemo(() => questions().length)

@@ -15,6 +15,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useCommand } from "@/shell/commands/command"
+import { useServerSDK } from "@/runtime/server/client"
 import { createQuestionDock } from "./question-controller"
 
 const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
@@ -116,7 +117,14 @@ function Option(props: {
 export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
   const language = useLanguage()
   const command = useCommand()
-  const form = createQuestionDock({ request: () => props.request, onSubmit: () => props.onSubmit() })
+
+  const form = createQuestionDock({
+    sdk: useServerSDK(),
+    language,
+    request: () => props.request,
+    onSubmit: () => props.onSubmit(),
+  })
+
   const questions = form.questions
 
   const total = createMemo(() => questions().length)
