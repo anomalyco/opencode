@@ -563,6 +563,8 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
     if (pending) {
       await pending.arrived
       await expect(connected).toBeDisabled()
+      // Each row toggles its own server: the others stay free meanwhile.
+      await expect(disabled).toBeEnabled()
       pending.release()
     }
 

@@ -21,6 +21,7 @@ export default {
   configure: "Configuration file",
   copyConfigPath: "Copy configuration file path",
   configFileMissing: "No configuration file found",
+  timedOut: "The server took too long to respond",
   "setup.mcp": "Add a server with OpenCode",
   "setup.mcp.prompt":
     "Help me add an MCP server to my global OpenCode config. Ask me which service I want to connect, then set it up and check that it connects.",
@@ -59,5 +60,6 @@ export default {
   "mcp.error.copy": "Copy details",
   "mcp.error.copyFailed": "Couldn't copy error details",
   "mcp.error.disable": "Disable",
+  "mcp.timedOut": "{{name}} took too long to respond",
   "mcp.error.details": "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
 }
