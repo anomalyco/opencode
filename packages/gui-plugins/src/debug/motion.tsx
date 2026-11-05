@@ -60,6 +60,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
   const ctx = usePlugin()
   let container!: HTMLDivElement
   const saved = load()
+
   // Where the panel sits, written straight to its style so a drag or resize never re-renders; `start*` and the bounds
   // are read once when a handle is pressed.
   const frame = {
@@ -74,9 +75,11 @@ export default function Motion(props: { title: string; onClose: () => void }) {
     minY: 0,
     maxY: 0,
   }
+
   const [motion, setMotion] = createSignal(
     createMotionState({ wide: saved.width >= MOTION_WIDE_AT, selected: saved.feature }),
   )
+
   const [stack, setStack] = createSignal<HTMLDivElement>()
   // The registry isn't reactive; this ticks on every registration and edit, including the debug bar's.
   const [live, setLive] = createSignal(0)
@@ -109,6 +112,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
       // Shown now rather than on the spring's next frame, so focus can land in the page.
       stack()?.removeAttribute("data-home")
       container.querySelector<HTMLElement>("[data-motion-page] button")?.focus({ preventScroll: true })
+
       return
     }
 
@@ -116,6 +120,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
       container
         .querySelector<HTMLElement>(`[data-motion-feature="${CSS.escape(effect.key)}"]`)
         ?.focus({ preventScroll: true })
+
       return
     }
 
@@ -124,6 +129,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
 
       if (active !== document.body && !active?.closest("[data-motion-page]")) return
       container.querySelector<HTMLElement>("[data-motion-feature]")?.focus({ preventScroll: true })
+
       return
     }
 
@@ -135,6 +141,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
       document.querySelector(effect.target)?.scrollIntoView({ block: "nearest", inline: "nearest" })
       show.frame(effect.target)
       show.expire(() => dispatch({ type: "outline.expired", attempt: effect.attempt }), effect.delay)
+
       return
     }
 
@@ -216,7 +223,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
     )
     container.style.width = `${frame.width}px`
 
-    if ((frame.width >= MOTION_WIDE_AT) !== wide()) dispatch({ type: "resized", wide: frame.width >= MOTION_WIDE_AT })
+    if (frame.width >= MOTION_WIDE_AT !== wide()) dispatch({ type: "resized", wide: frame.width >= MOTION_WIDE_AT })
   }
 
   // Lost capture also covers a capture taken away, so a gesture always ends; the first of the three wins.
@@ -224,10 +231,12 @@ export default function Motion(props: { title: string; onClose: () => void }) {
 
   onMount(() => {
     place()
+
     // A gesture settles once it ends rather than on every frame of a resize.
     const resized = () => {
       if (selectMotionIdle(motion())) settle()
     }
+
     const observer = new ResizeObserver(resized)
     observer.observe(container)
     window.addEventListener("resize", resized)
@@ -619,7 +628,8 @@ function descriptor(
 function outline() {
   const frames: HTMLElement[] = []
   const leaving = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
-  const focus: { timer?: ReturnType<typeof setTimeout> } = {}
+  // At most one: a newer Focus clears the older timer.
+  const focusing = new Set<ReturnType<typeof setTimeout>>()
 
   const clear = () =>
     frames.splice(0).forEach((frame) => {
@@ -654,11 +664,12 @@ function outline() {
     },
     // A newer Focus replaces the timer; an older one that fires anyway is ignored by its attempt.
     expire: (done: () => void, delay: number) => {
-      clearTimeout(focus.timer)
-      focus.timer = setTimeout(done, delay)
+      focusing.forEach(clearTimeout)
+      focusing.clear()
+      focusing.add(setTimeout(done, delay))
     },
     dispose: () => {
-      clearTimeout(focus.timer)
+      focusing.forEach(clearTimeout)
       leaving.forEach((timer, frame) => {
         clearTimeout(timer)
         frame.remove()
@@ -670,9 +681,7 @@ function outline() {
 }
 
 function load() {
-  const saved = Option.getOrUndefined(
-    Schema.decodeUnknownOption(SavedPanel)(localStorage.getItem(key) ?? "{}"),
-  )
+  const saved = Option.getOrUndefined(Schema.decodeUnknownOption(SavedPanel)(localStorage.getItem(key) ?? "{}"))
 
   return { x: saved?.x ?? 0, y: saved?.y ?? 0, width: saved?.width || 360, feature: saved?.feature || undefined }
 }

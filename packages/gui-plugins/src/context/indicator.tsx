@@ -20,6 +20,7 @@ export function SessionContextUsage(props: {
   const ctx = usePlugin()
   const layout = ctx.layout
   const i18n = useI18n()
+
   const catalog = syncCatalog(
     () => props.session,
     () => props.active !== false,

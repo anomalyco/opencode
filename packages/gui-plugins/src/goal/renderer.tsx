@@ -57,7 +57,9 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
         running.delete(effect.attempt)
         dispatch({ type: "retry.due", attempt: effect.attempt })
       }, effect.delay)
+
       running.set(effect.attempt, () => clearTimeout(timer))
+
       return
     }
 
@@ -79,6 +81,7 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
           }),
         ),
       )
+
       return
     }
 
@@ -157,6 +160,7 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
       const session = ctx.sessions.current()
 
       if (!session?.id || !session.server.connected) return
+
       return { key: session.key, serverID: session.server.id, sessionID: session.id, directory: session.directory }
     },
     (target) => dispatch({ type: "target.attached", ...target }),

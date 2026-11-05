@@ -118,7 +118,9 @@ describe("motion panel outline", () => {
   test("leaving a row keeps a Focus frame until it expires", () => {
     const focused = play(narrow(), { type: "target.focused", target: "#composer" })
 
-    expect(focused.effects).toEqual([{ type: "outline.focus", target: "#composer", attempt: 1, delay: MOTION_FOCUS_MS }])
+    expect(focused.effects).toEqual([
+      { type: "outline.focus", target: "#composer", attempt: 1, delay: MOTION_FOCUS_MS },
+    ])
     expect(play(focused.state, { type: "row.left" }).state).toBe(focused.state)
 
     const expired = play(focused.state, { type: "outline.expired", attempt: 1 })

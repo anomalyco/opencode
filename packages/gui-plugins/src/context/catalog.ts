@@ -33,6 +33,7 @@ export function syncCatalog(session: Accessor<MountedSession>, active: Accessor<
     if (effect.type === "cancel") {
       pending.get(effect.attempt)?.()
       pending.delete(effect.attempt)
+
       return
     }
 
@@ -41,7 +42,9 @@ export function syncCatalog(session: Accessor<MountedSession>, active: Accessor<
         pending.delete(effect.attempt)
         dispatch({ type: "retry.due", attempt: effect.attempt })
       }, effect.delay)
+
       pending.set(effect.attempt, () => clearTimeout(timer))
+
       return
     }
 
@@ -71,7 +74,7 @@ export function syncCatalog(session: Accessor<MountedSession>, active: Accessor<
           }),
     ).then(
       () => settle({ type: "load.succeeded", attempt }),
-      (error: unknown) => settle({ type: "load.failed", attempt, retryable: isServiceUnavailableError(error) }),
+      (error) => settle({ type: "load.failed", attempt, retryable: isServiceUnavailableError(error) }),
     )
   }
 

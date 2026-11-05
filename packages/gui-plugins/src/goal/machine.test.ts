@@ -63,6 +63,7 @@ describe("goal snapshot and subscription", () => {
       { type: "snapshot.failed", attempt },
       { type: "retry.due", attempt: attempt + 1 },
     ])
+
     const retried = play(createGoalState(), { type: "target.attached", ...s1 }, ...events)
 
     expect(retried.effects.filter((effect) => effect.type === "fetch")).toHaveLength(4)
@@ -135,9 +136,9 @@ describe("goal commands", () => {
   test("a failed or timed-out command frees the buttons and shows an error", () => {
     const first = play(liveS1(), { type: "command.requested", ...s1, action: "clear" }).state
 
-    expect(play(first, { type: "command.failed", key: s1.key, attempt: 3, message: "No goal is set." }).effects).toEqual(
-      [{ type: "toast-error", message: "No goal is set." }],
-    )
+    expect(
+      play(first, { type: "command.failed", key: s1.key, attempt: 3, message: "No goal is set." }).effects,
+    ).toEqual([{ type: "toast-error", message: "No goal is set." }])
 
     const timedOut = play(first, { type: "command.failed", key: s1.key, attempt: 3 })
 
@@ -154,6 +155,7 @@ describe("goal lifetime", () => {
       { type: "command.requested", ...s1, action: "pause" },
       { type: "target.attached", ...s2 },
     ).state
+
     const pruned = play(state, { type: "sessions.pruned", keep: new Set([s2.key]) })
 
     expect(pruned.effects).toEqual([{ type: "cancel", attempt: 3 }])
@@ -167,6 +169,7 @@ describe("goal lifetime", () => {
       { type: "target.attached", ...s1 },
       { type: "command.requested", ...s1, action: "pause" },
     ).state
+
     const disposed = play(state, { type: "disposed" })
 
     expect(disposed.effects).toEqual([

@@ -56,10 +56,7 @@ export function createCatalogState<Data>(): CatalogState<Data> {
   return { status: "open", issued: 0, active: false, target: undefined, phase: { kind: "idle" } }
 }
 
-export function transitionCatalog<Data>(
-  state: CatalogState<Data>,
-  event: CatalogEvent<Data>,
-): CatalogTransition<Data> {
+export function transitionCatalog<Data>(state: CatalogState<Data>, event: CatalogEvent<Data>): CatalogTransition<Data> {
   if (state.status === "disposed") return { state, effects: [] }
 
   if (event.type === "disposed") return { state: { status: "disposed" }, effects: cancel<Data>(state.phase) }
@@ -110,7 +107,10 @@ function inputChanged<Data>(
   if (!target) {
     if (state.active === active && !state.target) return { state, effects: [] }
 
-    return { state: { ...state, active, target: undefined, phase: { kind: "idle" } }, effects: cancel<Data>(state.phase) }
+    return {
+      state: { ...state, active, target: undefined, phase: { kind: "idle" } },
+      effects: cancel<Data>(state.phase),
+    }
   }
 
   // Another session of the same directory on the same server keeps the catalog it loaded.

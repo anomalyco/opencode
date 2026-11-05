@@ -55,6 +55,7 @@ describe("catalog sync", () => {
       { type: "load.failed", attempt: index + 1, retryable: true },
       { type: "retry.due", attempt: index + 2 },
     ]).flat()
+
     const result = play(createCatalogState(), { type: "input.changed", active: true, target: repo }, ...events)
 
     expect(
@@ -142,6 +143,7 @@ describe("catalog sync", () => {
       { type: "input.changed", active: true, target: repo },
       { type: "load.failed", attempt: 1, retryable: true },
     )
+
     const detached = play(retrying.state, { type: "input.changed", active: false, target: repo })
 
     expect(detached.effects).toEqual([{ type: "cancel", attempt: 2 }])

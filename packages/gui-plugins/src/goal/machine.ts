@@ -17,7 +17,12 @@ export type GoalAction = "pause" | "resume" | "clear"
  */
 export type GoalEntry =
   /** Fetching the snapshot. `cached` is the goal the session showed before, shown until the answer lands. */
-  | { readonly status: "loading"; readonly attempt: number; readonly retries: number; readonly cached: Goal.State | undefined }
+  | {
+      readonly status: "loading"
+      readonly attempt: number
+      readonly retries: number
+      readonly cached: Goal.State | undefined
+    }
   /** The last fetch failed; refetches when the timer of `attempt` fires. Shows no goal. */
   | { readonly status: "retrying"; readonly attempt: number; readonly retries: number }
   /** The snapshot or a later change: authoritative while subscribed. */
@@ -106,6 +111,8 @@ export type GoalTransition = { readonly state: GoalState; readonly effects: read
 
 type Active = Extract<GoalState, { status: "active" }>
 
+type ActiveTransition = { readonly state: Active; readonly effects: readonly GoalEffect[] }
+
 export function createGoalState(): GoalState {
   return { status: "active", issued: 0, target: undefined, sessions: new Map(), commands: new Map() }
 }
@@ -150,7 +157,12 @@ export function transitionGoal(state: GoalState, event: GoalEvent): GoalTransiti
     if (!target || entry?.status !== "retrying" || entry.attempt !== event.attempt) return { state, effects: [] }
 
     return {
-      state: put(state, target.key, { status: "loading", attempt: entry.attempt, retries: entry.retries, cached: undefined }),
+      state: put(state, target.key, {
+        status: "loading",
+        attempt: entry.attempt,
+        retries: entry.retries,
+        cached: undefined,
+      }),
       effects: [fetch(entry.attempt, target)],
     }
   }
@@ -198,9 +210,7 @@ export function selectGoal(state: GoalState, key: string) {
   if (state.status !== "active") return
   const entry = state.sessions.get(key)
 
-  if (entry?.status === "live") return entry.goal ?? undefined
-
-  if (entry?.status === "loading") return entry.cached
+  return entry ? shown(entry) : undefined
 }
 
 /** Whether a pause, resume or clear for the session is in flight; its buttons wait meanwhile. */
@@ -214,6 +224,7 @@ function attach(state: Active, event: Extract<GoalEvent, { type: "target.attache
   const previous = left.state.sessions.get(event.key)
   const subscription = left.state.issued + 1
   const attempt = subscription + 1
+
   const target = {
     subscription,
     key: event.key,
@@ -221,6 +232,7 @@ function attach(state: Active, event: Extract<GoalEvent, { type: "target.attache
     sessionID: event.sessionID,
     directory: event.directory,
   }
+
   const entry: GoalEntry = {
     status: "loading",
     attempt,
@@ -235,13 +247,13 @@ function attach(state: Active, event: Extract<GoalEvent, { type: "target.attache
 }
 
 // Leaving the routed session closes its subscription and keeps only a goal it showed, as `stale`.
-function leave(state: Active): { readonly state: Active; readonly effects: GoalEffect[] } {
+function leave(state: Active): ActiveTransition {
   const target = state.target
 
   if (!target) return { state, effects: [] }
   const entry = state.sessions.get(target.key)
   const sessions = new Map(state.sessions)
-  const goal = entry?.status === "live" ? entry.goal : entry?.status === "loading" ? entry.cached : undefined
+  const goal = entry ? shown(entry) : undefined
 
   if (goal) sessions.set(target.key, { status: "stale", goal })
 
@@ -289,7 +301,10 @@ function snapshotFailed(state: Active, attempt: number): GoalTransition {
   const next = state.issued + 1
 
   return {
-    state: { ...put(state, entry.key, { status: "retrying", attempt: next, retries: entry.retries + 1 }), issued: next },
+    state: {
+      ...put(state, entry.key, { status: "retrying", attempt: next, retries: entry.retries + 1 }),
+      issued: next,
+    },
     effects: [{ type: "schedule-retry", attempt: next, delay }],
   }
 }
@@ -328,6 +343,13 @@ function fetch(attempt: number, target: GoalTarget): GoalEffect {
     sessionID: target.sessionID,
     directory: target.directory,
   }
+}
+
+// The goal an entry puts on screen: a live answer, or the cached one while its refetch runs.
+function shown(entry: GoalEntry) {
+  if (entry.status === "live") return entry.goal ?? undefined
+
+  if (entry.status === "loading") return entry.cached
 }
 
 function put(state: Active, key: string, entry: GoalEntry): Active {

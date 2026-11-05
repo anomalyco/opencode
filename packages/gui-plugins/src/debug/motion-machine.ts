@@ -75,7 +75,12 @@ export type MotionTransition = { readonly state: MotionState; readonly effects: 
 
 type Open = Extract<MotionState, { status: "open" }>
 
-export function createMotionState(input: { readonly wide: boolean; readonly selected: string | undefined }): MotionState {
+type OpenTransition = { readonly state: Open; readonly effects: readonly MotionEffect[] }
+
+export function createMotionState(input: {
+  readonly wide: boolean
+  readonly selected: string | undefined
+}): MotionState {
   return {
     status: "open",
     wide: input.wide,
@@ -217,7 +222,7 @@ function pop(state: Open): MotionTransition {
   return { state: { ...state, nav: { kind: "list" } }, effects: [{ type: "focus.row", key: state.nav.key }] }
 }
 
-function clearOutline(state: Open): { readonly state: Open; readonly effects: MotionEffect[] } {
+function clearOutline(state: Open): OpenTransition {
   if (state.outline.kind === "none") return { state, effects: [] }
 
   return { state: { ...state, outline: { kind: "none" } }, effects: [{ type: "outline.frame", target: undefined }] }
