@@ -10,6 +10,7 @@ import {
 import type { CellRange } from "@betteroffice/xlsx/headless"
 import { anchorRange, attempt, lastCell, parseRange, parseSpans } from "./sheet-cells"
 import { drawFrame, paintFrame } from "./sheet-frame"
+import { activateSheet, showSheet } from "./sheet-activate"
 import { frozenSize } from "./sheet-paint"
 import type { SheetLayout, SheetMethods, SheetTab } from "./sheet-protocol"
 import { serveWorker, Transfer } from "./worker-rpc"
@@ -55,21 +56,16 @@ serveWorker<SheetMethods>({
   },
   show: (input) => {
     const opened = required()
-    const current = opened.info.activeSheet
-    const layout = attempt(() => show(opened, input.sheet))
+    const shown = showSheet(opened, input.sheet, (info) => ({ info, ...layout(opened.workbook, input.sheet) }))
 
-    if (layout) return layout
-
-    // One sheet that fails to open leaves the others readable: go back to the sheet on show. Its metadata is still the
-    // one on record, since it is replaced only once the new sheet's reads, so its layout is not read again.
-    attempt(() => opened.workbook.setActiveSheet(current))
+    if (shown) return shown
 
     throw new Error(`Sheet ${input.sheet} could not open`)
   },
   frame: (input) => {
     const opened = required()
     // A frame from a grid that has since given way to another sheet still draws its own sheet.
-    const info = activate(opened, input.sheet)
+    const info = activateSheet(opened, input.sheet)
     const frozen = { rows: info.frozenRows, cols: info.frozenCols }
     const viewport = { x: input.x, y: input.y, width: input.width, height: input.height }
     const drawn = drawFrame(opened.workbook, viewport, frozen, input.wider)
@@ -141,19 +137,9 @@ function required() {
   return state.opened
 }
 
-/** Makes a sheet the active one, without reading its layout, and returns its metadata. */
-function activate(opened: Opened, sheet: number) {
-  if (opened.info.activeSheet === sheet) return opened.info
-
-  opened.workbook.setActiveSheet(sheet)
-  opened.info = opened.workbook.sheetInfo()
-
-  return opened.info
-}
-
 /** Makes a sheet the active one and reads what its grid needs. */
 function show(opened: Opened, sheet: number): SheetLayout {
-  return { info: activate(opened, sheet), ...layout(opened.workbook, sheet) }
+  return { info: activateSheet(opened, sheet), ...layout(opened.workbook, sheet) }
 }
 
 /**
