@@ -81,7 +81,7 @@ fn new_location(tui: &Tui) -> Location {
     let unavailable = crate::features::location::error(tui);
     match current {
         Some(current)
-            if tui.config.new_location == NewLocation::Inherit
+            if tui.config().new_location == NewLocation::Inherit
                 && Some(&current) != unavailable.as_ref() =>
         {
             current

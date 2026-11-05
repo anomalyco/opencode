@@ -113,13 +113,13 @@ impl Tabs {
 
     /// `config.tabs.enabled`.
     pub fn enabled(tui: &Tui) -> bool {
-        tui.config.tabs.enabled
+        tui.config().tabs.enabled
     }
 
     /// The open tabs of the configured scope.
     pub fn tabs(&self, tui: &Tui) -> Vec<Tab> {
         let file = self.file.borrow();
-        let scope = match tui.config.tabs.scope {
+        let scope = match tui.config().tabs.scope {
             opencode_local::cli_config::TabsScope::Cwd => file.cwd.get(self.cwd.borrow().as_str()),
             _ => Some(&file.global),
         };
@@ -671,7 +671,7 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let mutation: Mutation = Arc::new(mutation);
     let cwd = tui.tabs.cwd.borrow().clone();
     let scoped = matches!(
-        tui.config.tabs.scope,
+        tui.config().tabs.scope,
         opencode_local::cli_config::TabsScope::Cwd
     );
     let apply = {

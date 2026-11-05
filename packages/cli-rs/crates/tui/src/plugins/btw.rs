@@ -75,7 +75,7 @@ impl Pending {
         let spinner = Spinner::new(&tui.app)
             .color(tui.page().interactive().step(200))
             .label("/btw")
-            .animations(opencode_ui::motion::enabled(tui.config.info.animations));
+            .animations(opencode_ui::motion::enabled(tui.config().info.animations));
         let root = View::new(&tui.app)
             .shrink(0.0)
             .child(&spinner)
@@ -168,7 +168,7 @@ fn answer(tui: &Tui, question: String, text: String) {
     let renderers = crate::plugins::host::code_blocks(tui);
     let page = tui.page();
     let conceal = tui
-        .config
+        .config()
         .info
         .session
         .as_ref()

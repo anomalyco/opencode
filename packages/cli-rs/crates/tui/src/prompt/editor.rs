@@ -231,7 +231,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let background = prompt_background(&theme);
     let (width, height) = app.size();
     let padding = if width < 44 { 1 } else { 2 };
-    let cursor = crate::features::system_commands::cursor(&tui.config);
+    let cursor = crate::features::system_commands::cursor(&tui.config());
     let textarea = Textarea::new(app)
         .set_keymap(Keymap::new())
         .colors(theme.text.base, background)
@@ -290,7 +290,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .frames(&scanner_frames(&scanner(theme.border.base)))
         .interval(Duration::from_millis(40))
         .still("[⋯]")
-        .animations(opencode_ui::motion::enabled(tui.config.info.animations));
+        .animations(opencode_ui::motion::enabled(tui.config().info.animations));
     let running = View::new(app)
         .margin_edge(Edge::Left, 1)
         .shrink(0.0)
@@ -299,7 +299,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let footer = Text::new(app, "").truncate(true).wrap(WrapMode::None);
     let staging = super::r#move::Move::new(
         app,
-        opencode_ui::motion::enabled(tui.config.info.animations),
+        opencode_ui::motion::enabled(tui.config().info.animations),
     );
     let editor_file = Text::new(app, "")
         .truncate(true)
@@ -419,6 +419,17 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         }
     });
     inner.layers.borrow_mut().push(mentions);
+    // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does.
+    let weak = Rc::downgrade(&inner);
+    tui.settings.on_change(move |tui| {
+        let Some(inner) = weak.upgrade() else { return };
+        let cursor = crate::features::system_commands::cursor(&tui.config());
+        inner.textarea.cursor_style(cursor.0, cursor.1);
+        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+        inner.spinner.set_animations(animations);
+        inner.staging.set_animations(animations);
+        inner.refresh(tui);
+    });
     // Home drops the last session's selection; a session follows its directory (`editor.reconnect`).
     match session {
         None => tui.prompt.editor.clear_selection(),
@@ -536,7 +547,7 @@ impl Inner {
     /// dismissed it (`editorContext`).
     pub(crate) fn editor_context(&self, tui: &Tui) -> Option<Selection> {
         let enabled = tui
-            .config
+            .config()
             .info
             .prompt
             .as_ref()
@@ -637,7 +648,7 @@ impl Inner {
         self.frame.border_color(highlight);
         self.bottom.border_color(highlight);
         self.spinner.set_color(
-            if opencode_ui::motion::enabled(tui.config.info.animations) {
+            if opencode_ui::motion::enabled(tui.config().info.animations) {
                 scanner_colors(&scanner(agent_color.unwrap_or(theme.border.base)))
             } else {
                 SpinnerColor::from(theme.text.muted)
@@ -649,7 +660,7 @@ impl Inner {
                 let (model, provider) = catalog.labels(selection.model.as_ref());
                 Display {
                     agent: Some(metadata::titlecase(selection.agent.id.as_str())),
-                    auto: tui.config.permissions == Permissions::Autoaccept,
+                    auto: tui.config().permissions == Permissions::Autoaccept,
                     model,
                     provider,
                     variant: selection

@@ -509,7 +509,7 @@ impl Workspaces {
         };
         let session = matches!(tui.route(), Route::Session { .. });
         let current = self.current_value();
-        let animations = opencode_ui::motion::enabled(tui.config.info.animations);
+        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
         let height = i64::from(tui.app.size().1);
         let full_height = (height - height / 4 - 2).clamp(8, 16) as u32;
         let built = self.clone();

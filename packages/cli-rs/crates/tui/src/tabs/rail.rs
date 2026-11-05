@@ -194,9 +194,9 @@ impl Component for Rail {
         let width = painter.width();
         let height = painter.height() as i32;
         let compact = self.compact(width);
-        let animations = opencode_ui::motion::enabled(tui.config.info.animations);
+        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
         let numbers = matches!(
-            tui.config.tabs.indicators,
+            tui.config().tabs.indicators,
             opencode_local::cli_config::TabsIndicators::Numbers
         );
         let background = theme.background.raised.base;

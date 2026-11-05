@@ -121,7 +121,7 @@ pub fn show(tui: &Tui) {
             let tabs = list
                 .tui
                 .upgrade()
-                .is_some_and(|tui| tui.config.tabs.enabled);
+                .is_some_and(|tui| tui.config().tabs.enabled);
             props.actions = vec![
                 SelectAction {
                     hidden: tabs,
@@ -374,7 +374,7 @@ impl List {
         if let Some(tui) = self.tui.upgrade()
             && let Some(storage) = tui.storage()
         {
-            let initial = json!({ "allProjects": tui.config.tabs.scope != TabsScope::Cwd });
+            let initial = json!({ "allProjects": tui.config().tabs.scope != TabsScope::Cwd });
             tui.app.runtime().spawn_blocking(move || {
                 let result = storage.update("session-list", &initial, |draft| {
                     if let Value::Object(map) = draft {
@@ -585,7 +585,7 @@ impl List {
             return Vec::new();
         };
         let theme = dialog_theme(&tui);
-        let tabs = tui.config.tabs.enabled;
+        let tabs = tui.config().tabs.enabled;
         let pinned_ids = if tabs { Vec::new() } else { pins::list(&tui) };
         let slots: HashMap<SessionID, usize> = if tabs {
             HashMap::new()
@@ -748,7 +748,7 @@ fn picker_directory(tui: &Tui) -> String {
 
 /// `prefs.allProjects` from the `session-list` storage key.
 fn load_all_projects(tui: &Tui) -> bool {
-    let initial = tui.config.tabs.scope != TabsScope::Cwd;
+    let initial = tui.config().tabs.scope != TabsScope::Cwd;
     tui.storage()
         .and_then(|storage| storage.load("session-list", &json!({})).ok())
         .and_then(|value| value.get("allProjects").and_then(Value::as_bool))

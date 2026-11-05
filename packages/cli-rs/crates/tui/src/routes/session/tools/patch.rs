@@ -203,7 +203,8 @@ fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {
     };
     let files = parse_files(props.metadata.get("files"));
     if !files.is_empty() {
-        let diffs = cx.tui.config.info.diffs.as_ref();
+        let diffs = cx.tui.config().info.diffs.clone();
+        let diffs = diffs.as_ref();
         let view = match diffs.and_then(|diffs| diffs.view) {
             Some(ConfigDiffView::Unified) => DiffView::Unified,
             Some(ConfigDiffView::Split) => DiffView::Split,

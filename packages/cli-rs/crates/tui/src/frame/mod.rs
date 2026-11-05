@@ -210,7 +210,7 @@ fn visible(tui: &Tui) -> bool {
 }
 
 fn vertical(tui: &Tui) -> bool {
-    tui.config.tabs.layout == TabsLayout::Vertical
+    tui.config().tabs.layout == TabsLayout::Vertical
         && layout::tabs_fit_vertically(i64::from(tui.app.size().0), tui.frame.tabs_resize.size(tui))
 }
 
