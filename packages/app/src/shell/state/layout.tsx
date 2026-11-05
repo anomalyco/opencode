@@ -294,7 +294,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         clearTimeout(navTimer)
         navTimer =
           effect.type === "nav-timer.start"
-            ? setTimeout(() => dispatchIntent({ type: "navigation.expired", attempt: effect.attempt }), effect.timeoutMs)
+            ? setTimeout(
+                () => dispatchIntent({ type: "navigation.expired", attempt: effect.attempt }),
+                effect.timeoutMs,
+              )
             : undefined
 
         return
@@ -354,7 +357,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               "closed",
               closed.filter((entry) => !placed.all.includes(entry.key)),
             )
-
         })
 
         if (target && placed.all.some((tab) => !previous.all.includes(tab) && paneTargetMatches(target, tab)))

@@ -86,33 +86,43 @@ export function transitionPanelMotion(state: PanelMotionState, event: PanelMotio
       // A landed spring already rests where it lands; a timed-out one jumps there.
       return land(state, state.open, event.type === "flight.timed-out" ? [{ type: "snap", open: state.open }] : [])
     }
+
     case "pending.expired": {
       if (state.status === "flying")
-        return state.sync === undefined ? { state, effects: NO_EFFECTS } : { state: { ...state, sync: undefined }, effects: NO_EFFECTS }
+        return state.sync === undefined
+          ? { state, effects: NO_EFFECTS }
+          : { state: { ...state, sync: undefined }, effects: NO_EFFECTS }
 
       if (state.sync === undefined && state.waiters.length === 0) return { state, effects: NO_EFFECTS }
 
       // No change arrived, so work queued for one runs where the panel rests.
       return {
         state: { ...state, sync: undefined, waiters: NO_WAITERS },
-        effects: state.waiters.length ? [{ type: "run", waiters: state.waiters.map((waiter) => waiter.run) }] : NO_EFFECTS,
+        effects: state.waiters.length
+          ? [{ type: "run", waiters: state.waiters.map((waiter) => waiter.run) }]
+          : NO_EFFECTS,
       }
     }
+
     case "waiter.queued": {
-      if (state.status === "rest" && state.open === event.open) return { state, effects: [{ type: "run", waiters: [event.run] }] }
+      if (state.status === "rest" && state.open === event.open)
+        return { state, effects: [{ type: "run", waiters: [event.run] }] }
 
       return {
         state: { ...state, waiters: [...state.waiters, { open: event.open, run: event.run }] },
         effects: state.status === "rest" ? EXPIRE : NO_EFFECTS,
       }
     }
+
     case "sync.requested": {
-      if (state.status === "flying" && event.current === event.open) return land(state, event.open, [{ type: "snap", open: event.open }])
+      if (state.status === "flying" && event.current === event.open)
+        return land(state, event.open, [{ type: "snap", open: event.open }])
 
       if (state.sync === event.open) return { state, effects: NO_EFFECTS }
 
       return { state: { ...state, sync: event.open }, effects: EXPIRE }
     }
+
     case "target.changed":
       return retarget(state, event)
   }
@@ -143,7 +153,9 @@ function retarget(
     return land(state, open, [{ type: "snap", open }], !instant && open ? [{ type: "reveal" }] : NO_EFFECTS)
 
   if (state.status === "flying" && state.open === open)
-    return state.sync === undefined ? { state, effects: NO_EFFECTS } : { state: { ...state, sync: undefined }, effects: NO_EFFECTS }
+    return state.sync === undefined
+      ? { state, effects: NO_EFFECTS }
+      : { state: { ...state, sync: undefined }, effects: NO_EFFECTS }
 
   // Retargeting keeps the spring's position and velocity, so a turnaround mid-flight is smooth. Work queued for the
   // other direction no longer applies.

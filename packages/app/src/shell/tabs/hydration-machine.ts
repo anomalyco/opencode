@@ -65,8 +65,12 @@ export function transitionTabsHydration(state: TabsHydrationState, event: TabsHy
 
       if (state.recent.written && state.recent.key === event.key) return { state, effects: NO_EFFECTS }
 
-      return { state: { ...state, recent: { status: "hydrating", written: true, key: event.key } }, effects: NO_EFFECTS }
+      return {
+        state: { ...state, recent: { status: "hydrating", written: true, key: event.key } },
+        effects: NO_EFFECTS,
+      }
     }
+
     case "recent.hydrated": {
       const recent = state.recent
 
@@ -80,6 +84,7 @@ export function transitionTabsHydration(state: TabsHydrationState, event: TabsHy
             : NO_EFFECTS,
       }
     }
+
     case "closed.op": {
       if (state.closed.status === "ready") return { state, effects: [{ type: "closed.apply", ops: [event.op] }] }
 
@@ -88,6 +93,7 @@ export function transitionTabsHydration(state: TabsHydrationState, event: TabsHy
         effects: NO_EFFECTS,
       }
     }
+
     case "closed.hydrated": {
       const closed = state.closed
 

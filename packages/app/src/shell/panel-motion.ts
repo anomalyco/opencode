@@ -329,6 +329,7 @@ export function createPanelMotion(input: {
 
         return
       }
+
       case "land":
         stop?.()
         stop = undefined

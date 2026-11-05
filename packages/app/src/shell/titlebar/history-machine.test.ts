@@ -7,11 +7,13 @@ import {
   type TitlebarHistoryState,
 } from "./history-machine"
 
-const visit = (current: HistoryLocation | string, max?: number): TitlebarHistoryEvent => ({
+const arrive = (current: HistoryLocation, max?: number): TitlebarHistoryEvent => ({
   type: "location.changed",
-  current: typeof current === "string" ? { url: current } : current,
+  current,
   max,
 })
+
+const visit = (url: string, max?: number) => arrive({ url }, max)
 
 const replay = (events: TitlebarHistoryEvent[], state = INITIAL_TITLEBAR_HISTORY_STATE) =>
   events.reduce<{ state: TitlebarHistoryState; effects: unknown[] }>(
@@ -59,6 +61,7 @@ describe("titlebar history", () => {
       attempt: back.attempt!,
       currentUrl: "/b",
     })
+
     expect(timedOut.state.status).toBe("idle")
     expect(at(timedOut.state)).toBe("/b")
 
@@ -68,6 +71,7 @@ describe("titlebar history", () => {
 
   test("a timer that fires after the router arrived lands on the target", () => {
     const back = step(replay([visit("/"), visit("/a"), visit("/b")]).state, "back")
+
     const timedOut = transitionTitlebarHistory(back.state, {
       type: "traverse.timed-out",
       attempt: back.attempt!,
@@ -87,6 +91,7 @@ describe("titlebar history", () => {
       attempt: first.attempt!,
       currentUrl: "/b",
     })
+
     expect(stale.state).toBe(second.state)
 
     const arrived = transitionTitlebarHistory(second.state, visit("/"))
@@ -121,9 +126,9 @@ describe("titlebar history", () => {
   test("settings visits retain their own route state", () => {
     const first = { url: "/settings", state: { settings: { type: "draft", draftID: "a" } } }
     const second = { url: "/settings", state: { settings: { type: "draft", draftID: "b" } } }
-    const state = replay([visit(first), visit("/b"), visit(second)]).state
+    const state = replay([arrive(first), visit("/b"), arrive(second)]).state
     const back = step(state, "back")
-    const onB = transitionTitlebarHistory(back.state, visit(back.to!)).state
+    const onB = transitionTitlebarHistory(back.state, arrive(back.to!)).state
 
     expect(step(onB, "back").to).toEqual(first)
     expect(step(onB, "forward").to).toEqual(second)
@@ -131,19 +136,23 @@ describe("titlebar history", () => {
 
   test("settings pages and settings state replace one history entry", () => {
     const updated = replay([
-      visit({ url: "/settings", state: { tab: "general" } }),
-      visit({ url: "/settings", state: { tab: "models" } }),
+      arrive({ url: "/settings", state: { tab: "general" } }),
+      arrive({ url: "/settings", state: { tab: "models" } }),
     ]).state
+
     expect(urls(updated)).toEqual(["/", "/settings"])
     const back = step(updated, "back")
     expect(back.to?.url).toBe("/")
-    expect(step(transitionTitlebarHistory(back.state, visit("/")).state, "forward").to?.state).toEqual({ tab: "models" })
+    expect(step(transitionTitlebarHistory(back.state, visit("/")).state, "forward").to?.state).toEqual({
+      tab: "models",
+    })
 
     const project = replay([
       visit("/settings"),
       visit("/settings?tab=models"),
       visit("/settings?server=local&project=%2Fwork&tab=extensions"),
     ]).state
+
     expect(urls(project)).toEqual(["/", "/settings?server=local&project=%2Fwork&tab=extensions"])
   })
 

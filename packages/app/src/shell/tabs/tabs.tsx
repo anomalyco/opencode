@@ -134,7 +134,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         Promise.try(() => {
           if (op.kind === "update") return setClosed((stack) => op.update(stack))
           reopenClosedTabNow(op.target, op.options)
-        }).catch((error: unknown) => console.error("[tabs] closed tab operation failed", error)),
+        }).catch((error) => console.error("[tabs] closed tab operation failed", error)),
       )
     }
 

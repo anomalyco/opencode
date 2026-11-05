@@ -48,7 +48,12 @@ export type LayoutIntentEvent =
 export type LayoutIntentEffect =
   | { readonly type: "nav-timer.start"; readonly attempt: number; readonly timeoutMs: number }
   | { readonly type: "nav-timer.clear" }
-  | { readonly type: "pane-timer.start"; readonly session: string; readonly attempt: number; readonly timeoutMs: number }
+  | {
+      readonly type: "pane-timer.start"
+      readonly session: string
+      readonly attempt: number
+      readonly timeoutMs: number
+    }
   | { readonly type: "pane-timer.clear"; readonly sessions: readonly string[] }
 
 export type LayoutIntentTransition = {
@@ -81,8 +86,10 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
     case "home-search.requested":
     case "draft-search.requested": {
       const attempt = state.nextAttempt
+
       const target: LayoutRoute =
         event.type === "home-search.requested" ? { type: "home" } : { type: "draft", draftID: event.draftID }
+
       const entered = sameRoute(event.currentRoute, target)
 
       return {
@@ -100,6 +107,7 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
         effects: entered ? CLEAR_NAV : [{ type: "nav-timer.start", attempt, timeoutMs: NAVIGATION_INTENT_TIMEOUT_MS }],
       }
     }
+
     case "navigation.taken":
     case "navigation.expired": {
       if (state.navigation.kind === "none" || state.navigation.attempt !== event.attempt)
@@ -110,6 +118,7 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
         effects: event.type === "navigation.taken" ? CLEAR_NAV : NO_EFFECTS,
       }
     }
+
     case "route.synced": {
       const navigation = state.navigation
 
@@ -126,6 +135,7 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
 
       return { state: { ...state, navigation: NONE }, effects: CLEAR_NAV }
     }
+
     case "pane.targeted": {
       const attempt = state.nextAttempt
 
@@ -138,15 +148,18 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
         effects: [{ type: "pane-timer.start", session: event.session, attempt, timeoutMs: PANE_TARGET_TTL_MS }],
       }
     }
+
     case "pane.consumed":
     case "pane.expired": {
       if (state.paneTargets[event.session]?.attempt !== event.attempt) return { state, effects: NO_EFFECTS }
 
       return {
         state: { ...state, paneTargets: omit(state.paneTargets, [event.session]) },
-        effects: event.type === "pane.consumed" ? [{ type: "pane-timer.clear", sessions: [event.session] }] : NO_EFFECTS,
+        effects:
+          event.type === "pane.consumed" ? [{ type: "pane-timer.clear", sessions: [event.session] }] : NO_EFFECTS,
       }
     }
+
     case "sessions.pruned": {
       const sessions = event.keys.filter((key) => key in state.paneTargets)
 

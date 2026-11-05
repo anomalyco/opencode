@@ -47,6 +47,7 @@ describe("draft project search", () => {
       draftID: "a",
       currentRoute: ORIGIN,
     })
+
     expect(requested.effects).toEqual([{ type: "nav-timer.start", attempt: 1, timeoutMs: 5_000 }])
 
     const committing = replay([route(ORIGIN)], requested.state)
@@ -99,10 +100,20 @@ describe("pane targets", () => {
     const targeted = replay([{ type: "pane.targeted", session: "s", pane: "bottom", plugin: "terminal" }])
     const target = selectPaneTarget(targeted, "s")
 
-    const file = placeSessionTabs({ all: ["file:a"] }, { all: ["file:a", "file://b.ts"], active: "file://b.ts" }, target)
+    const file = placeSessionTabs(
+      { all: ["file:a"] },
+      { all: ["file:a", "file://b.ts"], active: "file://b.ts" },
+      target,
+    )
+
     expect(file.panes).toBeUndefined()
 
-    const terminal = placeSessionTabs({ all: ["file:a"] }, { all: ["file:a", "terminal:1"], active: "terminal:1" }, target)
+    const terminal = placeSessionTabs(
+      { all: ["file:a"] },
+      { all: ["file:a", "terminal:1"], active: "terminal:1" },
+      target,
+    )
+
     expect(terminal.panes).toEqual({ "terminal:1": "bottom" })
   })
 
@@ -118,6 +129,7 @@ describe("pane targets", () => {
       session: "s",
       attempt: selectPaneTarget(second, "s")!.attempt,
     })
+
     expect(selectPaneTarget(consumed.state, "s")).toBeUndefined()
     expect(consumed.effects).toEqual([{ type: "pane-timer.clear", sessions: ["s"] }])
 

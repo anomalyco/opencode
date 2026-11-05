@@ -8,7 +8,7 @@ import {
   type PanelMotionState,
 } from "./panel-motion-machine"
 
-const target = (open: boolean, identity: unknown = "a", reduced = false): PanelMotionEvent => ({
+const target = (open: boolean, identity = "a", reduced = false): PanelMotionEvent => ({
   type: "target.changed",
   open,
   identity,

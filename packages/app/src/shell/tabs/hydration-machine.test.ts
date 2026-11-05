@@ -5,19 +5,21 @@ import {
   selectRecentTabKey,
   transitionTabsHydration,
   type ClosedTabOp,
+  type TabsHydrationEffect,
   type TabsHydrationEvent,
+  type TabsHydrationState,
 } from "./hydration-machine"
 
 const HYDRATING = createTabsHydrationState({ recent: false, closed: false })
 
 const replay = (events: TabsHydrationEvent[], state = HYDRATING) =>
-  events.reduce(
+  events.reduce<{ state: TabsHydrationState; effects: TabsHydrationEffect[] }>(
     (current, event) => {
       const next = transitionTabsHydration(current.state, event)
 
       return { state: next.state, effects: [...current.effects, ...next.effects] }
     },
-    { state, effects: [] as unknown[] },
+    { state, effects: [] },
   )
 
 test("a recent key written before the store loads reads back at once and lands once it loads", () => {
@@ -34,6 +36,7 @@ test("clearing the recent key before the store loads wins over the stored key", 
     { type: "recent.set", key: "tab-a", persistedKey: undefined },
     { type: "recent.set", key: undefined, persistedKey: undefined },
   ])
+
   expect(selectRecentTabKey(cleared.state, "tab-old")).toBeUndefined()
 
   expect(replay([{ type: "recent.hydrated", persistedKey: "tab-old" }], cleared.state).effects).toEqual([
@@ -61,6 +64,7 @@ test("closed tab operations queued before the store loads apply in order once it
     { type: "closed.op", op: reopen },
     { type: "closed.op", op: remove },
   ])
+
   expect(queued.effects).toEqual([])
 
   // A failed load also settles `ready()`, and the store runs from its initial value.
