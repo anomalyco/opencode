@@ -272,6 +272,7 @@ export function createVoiceCall(input: {
 
     if (effect.type === "hold") {
       gates = transitionVoiceGate(gates, { type: "hold", now: Date.now() })
+
       // The gates move with speech, so each wait ends by asking them again.
       const check = () => {
         const ms = voiceGateDelay(gates, Date.now())

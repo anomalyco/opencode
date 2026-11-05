@@ -31,6 +31,7 @@ test("a held reply caps agent chatter but never interrupts the user", () => {
     tick(6000, true, false),
     tick(60_000, true, false),
   )
+
   expect(voiceGateDelay(user, 60_000)).toBe(900)
 
   const done = transitionVoiceGate(user, tick(60_000, false, false))
@@ -60,6 +61,7 @@ test("an abandoned hold does not let the next reply cut the agent off at once", 
   const abandoned = run(tick(1000, true, false), { type: "hold", now: 1000 }, tick(1500, false, false), {
     type: "release",
   })
+
   expect(abandoned.status).toBe("open")
 
   // The agent starts talking and the next reply holds.

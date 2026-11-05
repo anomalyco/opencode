@@ -12,10 +12,12 @@ import {
 
 // The panel's home is the bottom-right of a 1280x800 window.
 const home = { left: 900, right: 1200, top: 600, bottom: 780 }
+
 const bounds = (rect = home, x = 0, y = 0) =>
   fillVoicePanelBounds({ minX: 0, maxX: 0, minY: 0, maxY: 0 }, rect, { x, y }, 1280, 800)
 
 const run = (...events: VoicePanelEvent[]) => events.reduce(transitionVoicePanel, HYDRATING_VOICE_PANEL_STATE)
+
 const down = (pointerId: number, clientX: number, clientY: number, at: PanelBounds = bounds()): VoicePanelEvent => ({
   type: "pointer.down",
   pointerId,
@@ -23,6 +25,7 @@ const down = (pointerId: number, clientX: number, clientY: number, at: PanelBoun
   clientY,
   bounds: at,
 })
+
 const hydrated = (x = 0, y = 0): VoicePanelEvent => ({ type: "hydrated", x, y, bounds: bounds() })
 
 test("nothing moves the panel or its captions before the saved position loads", () => {
@@ -66,6 +69,7 @@ test("a panel that grows mid-drag keeps later moves on screen", () => {
     type: "resize",
     bounds: bounds({ left: 900, right: 1200, top: 620, bottom: 900 }, 0, 20),
   })
+
   expect(taller).toBe(dragging)
   expect(voicePanelTransform(taller)).toBe("translate(0px, -80px)")
   transitionVoicePanel(taller, { type: "pointer.move", pointerId: 1, clientX: 1000, clientY: 1000 })

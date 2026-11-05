@@ -49,7 +49,9 @@ export type VoicePanelEvent =
   | { readonly type: "disposed" }
 
 export const HYDRATING_VOICE_PANEL_STATE: VoicePanelState = Object.freeze({ status: "hydrating" })
+
 const DISPOSED: VoicePanelState = Object.freeze({ status: "disposed" })
+
 const ORIGIN = Object.freeze({ x: 0, y: 0 })
 
 export function transitionVoicePanel(state: VoicePanelState, event: VoicePanelEvent): VoicePanelState {

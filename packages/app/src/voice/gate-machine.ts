@@ -2,16 +2,19 @@
 // interrupt only the agent, and only after holding for five seconds.
 
 /** Quiet after either side speaks before an announcement may start. */
-export const USER_QUIET_MS = 900
+const QUIET_MS = 900
+
 /** Quiet after the user speaks last, so they can carry on their turn. */
-export const USER_TURN_QUIET_MS = 1_500
-export const ASSISTANT_QUIET_MS = 900
+const USER_TURN_QUIET_MS = 1_500
+
 /** Assistant speech starting this soon after a delegation answer is that answer. */
-export const ANSWER_START_MS = 1_200
+const ANSWER_START_MS = 1_200
+
 /** How long an answer that started is protected from the chatter cap. */
-export const ANSWER_PROTECT_MS = 15_000
+const ANSWER_PROTECT_MS = 15_000
+
 /** How long a held announcement waits on assistant chatter before it may interrupt. */
-export const CHATTER_CAP_MS = 5_000
+const CHATTER_CAP_MS = 5_000
 
 export type VoiceSpeechActivity =
   /** `endedAt` is when speech last stopped. */
@@ -53,6 +56,7 @@ export type VoiceGateEvent =
   | { readonly type: "reset" }
 
 const SILENT: VoiceSpeechActivity = Object.freeze({ status: "silent", endedAt: -Infinity })
+
 const NO_ANSWER: VoiceAnswerWindow = Object.freeze({ status: "none" })
 
 export const INITIAL_VOICE_GATE_STATE: VoiceGateState = Object.freeze({
@@ -98,10 +102,10 @@ export function transitionVoiceGate(state: VoiceGateState, event: VoiceGateEvent
 
 /** How long an announcement must still wait; reading it changes nothing. */
 export function voiceGateDelay(state: VoiceGateState, now: number) {
-  if (state.user.status === "speaking") return USER_QUIET_MS
+  if (state.user.status === "speaking") return QUIET_MS
   const userAt = state.user.endedAt
   const assistantAt = state.assistant.status === "speaking" ? state.assistant.at : state.assistant.endedAt
-  const user = (userAt > assistantAt ? USER_TURN_QUIET_MS : USER_QUIET_MS) - (now - userAt)
+  const user = (userAt > assistantAt ? USER_TURN_QUIET_MS : QUIET_MS) - (now - userAt)
 
   if (user > 0) return user
   const window = state.answer
@@ -113,9 +117,9 @@ export function voiceGateDelay(state: VoiceGateState, now: number) {
 
   if (state.status === "holding" && now - state.heldAt >= CHATTER_CAP_MS) return 0
 
-  if (state.assistant.status === "speaking") return ASSISTANT_QUIET_MS
+  if (state.assistant.status === "speaking") return QUIET_MS
 
-  return Math.max(0, ASSISTANT_QUIET_MS - (now - assistantAt))
+  return Math.max(0, QUIET_MS - (now - assistantAt))
 }
 
 function activity(current: VoiceSpeechActivity, speaking: boolean, now: number): VoiceSpeechActivity {

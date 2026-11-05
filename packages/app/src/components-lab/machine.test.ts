@@ -80,6 +80,7 @@ test("Undo or Reset moving the state stops Play and syncs the knobs afterwards",
     { type: "play" },
     { type: "panel.state", name: "Open", fromPreset: false },
   )
+
   expect(undone.state.status).toBe("paused")
   expect(undone.effects).toEqual([{ type: "timer.clear" }, { type: "state.apply", index: 2, preset: "later" }])
 

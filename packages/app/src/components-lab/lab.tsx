@@ -445,6 +445,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
 
             return setArgs(Object.fromEntries(Object.entries(patch).filter(([key]) => key in fields)))
           }
+
           dispatch({ type: "panel.state", name: String(values.state), fromPreset: meta.source === "preset" })
         },
       },
@@ -481,8 +482,10 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
   createEffect(() => {
     const element = panel()
     const stage = view()
+
     const button = (id: string) =>
       element?.querySelector<HTMLButtonElement>(`[data-field="play"] button[data-item="${id}"]`)
+
     const play = button("play")
     const pause = button("pause")
 
