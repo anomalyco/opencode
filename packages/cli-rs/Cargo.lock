@@ -970,6 +970,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
+name = "libloading"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
+
+[[package]]
 name = "libsqlite3-sys"
 version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1266,9 +1276,23 @@ dependencies = [
 name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
+ "libloading",
  "log",
+ "opencode-plugin-abi",
  "opencode-ui",
  "opentui",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "unicode-width",
+]
+
+[[package]]
+name = "opencode-plugin-abi"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
