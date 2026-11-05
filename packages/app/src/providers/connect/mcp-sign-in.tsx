@@ -54,7 +54,9 @@ export function DialogMcpSignIn(props: {
     const next = transitionMcpSignIn(previous, event)
 
     if (next.state !== previous) setSignInState(next.state)
-    next.effects.forEach((effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => console.error(cause)))
+    next.effects.forEach(
+      (effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => console.error(cause)),
+    )
   }
 
   const run = (effect: McpSignInEffect) => {
@@ -82,19 +84,21 @@ export function DialogMcpSignIn(props: {
       submitController?.abort()
       const controller = new AbortController()
       submitController = controller
-      void serverSDK.api.integration.oauth.complete({ ...attempt, code: effect.code }, { signal: controller.signal }).then(
-        () => {
-          if (!controller.signal.aborted) dispatch({ type: "submit.succeeded", submitAttempt: effect.submitAttempt })
-        },
-        (error) => {
-          if (controller.signal.aborted) return
-          dispatch({
-            type: "submit.failed",
-            submitAttempt: effect.submitAttempt,
-            message: formatServerError(error, language.t),
-          })
-        },
-      )
+      void serverSDK.api.integration.oauth
+        .complete({ ...attempt, code: effect.code }, { signal: controller.signal })
+        .then(
+          () => {
+            if (!controller.signal.aborted) dispatch({ type: "submit.succeeded", submitAttempt: effect.submitAttempt })
+          },
+          (error) => {
+            if (controller.signal.aborted) return
+            dispatch({
+              type: "submit.failed",
+              submitAttempt: effect.submitAttempt,
+              message: formatServerError(error, language.t),
+            })
+          },
+        )
 
       return
     }
@@ -131,8 +135,7 @@ export function DialogMcpSignIn(props: {
 
     if (effect.type === "open-external") return platform.openExternal(effect.url)
 
-    if (effect.type === "cancel")
-      return void serverSDK.api.integration.oauth.cancel(attempt).catch(() => undefined)
+    if (effect.type === "cancel") return void serverSDK.api.integration.oauth.cancel(attempt).catch(() => undefined)
 
     props.onClose()
   }
@@ -147,7 +150,8 @@ export function DialogMcpSignIn(props: {
         dispatch({
           type: "polled",
           pollAttempt,
-          outcome: status.status === "failed" ? { status: "failed", message: status.message } : { status: status.status },
+          outcome:
+            status.status === "failed" ? { status: "failed", message: status.message } : { status: status.status },
         })
       },
       (error) => {

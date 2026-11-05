@@ -160,7 +160,8 @@ export function transitionProviderForm(state: ProviderActiveForm, event: Provide
   if (event.type !== "step.submitted") return unchanged(state)
   const text = step.text.trim()
 
-  if (!text) return step.field.required ? unchanged({ ...state, step: { ...step, error: "required" } }) : next(state, undefined)
+  if (!text)
+    return step.field.required ? unchanged({ ...state, step: { ...step, error: "required" } }) : next(state, undefined)
 
   if (step.field.type === "string") return next(state, text)
   const value = Number(text)
@@ -217,7 +218,7 @@ export function selectProviderFormView(state: ProviderActiveForm) {
       ...base,
       kind: step.kind,
       field: step.field,
-      selected: choice.mode === "custom" ? "custom" : choice.mode === "preset" ? choice.value : undefined,
+      selected: selected(choice),
       custom: step.field.type === "string" && !!step.field.custom,
       placeholder: step.field.type === "string" ? step.field.placeholder : undefined,
       customText: choice.mode === "custom" ? choice.text : "",
@@ -383,6 +384,13 @@ function select(step: Extract<ProviderFormStep, { kind: "choice" }>, value: stri
   if (!known || (choice.mode === "preset" && choice.value === value)) return
 
   return { mode: "preset", value, customDraft: choice.mode === "custom" ? choice.text : choice.customDraft }
+}
+
+// The radio value: a preset, "custom" while typing an own answer, or none.
+function selected(choice: ProviderFormChoice) {
+  if (choice.mode === "preset") return choice.value
+
+  if (choice.mode === "custom") return "custom"
 }
 
 function choiceValue(step: Extract<ProviderFormStep, { kind: "choice" }>): FormValue | undefined {

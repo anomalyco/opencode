@@ -122,9 +122,17 @@ export interface MockServerConfig {
   onMcpAction?: (input: { server: string; action: "connect" | "disconnect"; directory: string }) => void | MockMcpStatus
   // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
   // Without it, OAuth connects answer 501 MockUnsupported.
-  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  // `paste` starts a sign-in that also accepts the redirect URL pasted from the browser.
+  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => {
+    url: string
+    paste?: boolean
+  }
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
+  // Accepts a pasted redirect URL (POST .../connect/oauth/:attemptID/complete). Without it, pastes answer 501.
+  onIntegrationOAuthComplete?: (input: { attemptID: string; body: unknown }) => void
+  // Returning true fails the next `/api/mcp/resource` listing with a 500.
+  mcpResourceFailures?: () => boolean
   // Runs on DELETE .../connect/oauth/:attemptID, which closes an OAuth attempt the dialog left.
   onIntegrationOAuthCancel?: (attemptID: string) => void
   plugins?: Resolvable<unknown[]>
@@ -841,6 +849,7 @@ function mockHandlers(
                 url: started.url,
                 instructions: "",
                 mode: "auto",
+                ...(started.paste ? { paste: true } : {}),
                 time: { created, expires: created + 600_000 },
               },
             }
@@ -860,6 +869,15 @@ function mockHandlers(
               },
             })
           }),
+        integrationOAuthComplete: (ctx) => {
+          const complete = config.onIntegrationOAuthComplete
+
+          if (!complete) return unsupported("complete pasted OAuth sign-ins", "onIntegrationOAuthComplete")
+
+          return Effect.sync(() => complete({ attemptID: ctx.params.attemptID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          )
+        },
         integrationOAuthCancel: (ctx) =>
           Effect.sync(() => config.onIntegrationOAuthCancel?.(ctx.params.attemptID)).pipe(Effect.andThen(noContent)),
         integrationConnectExternal: () => noContent,
@@ -886,10 +904,14 @@ function mockHandlers(
         mcpConnect: (ctx) => mcpAction(ctx.params.server, "connect", ctx.request),
         mcpDisconnect: (ctx) => mcpAction(ctx.params.server, "disconnect", ctx.request),
         mcpResource: (ctx) =>
-          Effect.succeed({
-            location: location(config, requestDirectory(config, ctx.request)),
-            data: { resources: [], templates: [] },
-          }),
+          Effect.suspend(() =>
+            config.mcpResourceFailures?.()
+              ? Effect.fail(new MockInternal({ message: "MCP resource list failed" }))
+              : Effect.succeed({
+                  location: location(config, requestDirectory(config, ctx.request)),
+                  data: { resources: [], templates: [] },
+                }),
+          ),
         projectList: () =>
           Effect.sync(() => {
             if (config.projects) return resolve(config.projects)

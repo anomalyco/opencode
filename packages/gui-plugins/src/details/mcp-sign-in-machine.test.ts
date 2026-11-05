@@ -11,6 +11,7 @@ import {
 } from "./mcp-sign-in-machine"
 
 const AUTH_URL = "https://auth.example/authorize"
+
 const REDIRECT = "http://127.0.0.1:19876/callback?code=abc"
 
 function replay(events: McpSignInEvent[], state = startMcpSignIn({ url: AUTH_URL, lifetimeMs: 600_000 }).state) {
@@ -169,9 +170,9 @@ describe("MCP sign-in machine", () => {
     // A pending answer in between clears the request error.
     const recovered = transitionMcpSignIn(unreachable.state, polled(2, { status: "pending" }))
 
-    expect(selectMcpSignInView(transitionMcpSignIn(recovered.state, { type: "waiting.timed-out" }).state).failure).toEqual(
-      { type: "auth-expired" },
-    )
+    expect(
+      selectMcpSignInView(transitionMcpSignIn(recovered.state, { type: "waiting.timed-out" }).state).failure,
+    ).toEqual({ type: "auth-expired" })
   })
 
   test("an empty paste asks for the URL and typing clears the error", () => {
@@ -179,8 +180,9 @@ describe("MCP sign-in machine", () => {
 
     expect(empty.effects).toEqual([])
     expect(selectMcpSignInView(empty.state).entryError).toEqual({ type: "required" })
-    expect(selectMcpSignInView(transitionMcpSignIn(empty.state, { type: "paste.changed", value: "h" }).state).entryError)
-      .toBeUndefined()
+    expect(
+      selectMcpSignInView(transitionMcpSignIn(empty.state, { type: "paste.changed", value: "h" }).state).entryError,
+    ).toBeUndefined()
   })
 
   test("closing while waiting cancels the attempt; nothing applies after", () => {
@@ -189,7 +191,11 @@ describe("MCP sign-in machine", () => {
     expect(disposed.effects).toEqual([{ type: "deadline.clear" }, { type: "poll.abort" }, { type: "cancel" }])
     expect(transitionMcpSignIn(disposed.state, polled(1, { status: "complete" })).state).toBe(disposed.state)
 
-    const submitting = replay([{ type: "paste.changed", value: REDIRECT }, { type: "paste.submitted" }, { type: "disposed" }])
+    const submitting = replay([
+      { type: "paste.changed", value: REDIRECT },
+      { type: "paste.submitted" },
+      { type: "disposed" },
+    ])
 
     expect(submitting.effects).toEqual([
       { type: "deadline.clear" },

@@ -273,7 +273,8 @@ function polled(
       status: "failed",
       url: state.url,
       issued: state.issued,
-      failure: outcome.status === "expired" ? { type: "auth-expired" } : { type: "auth-failed", message: outcome.message },
+      failure:
+        outcome.status === "expired" ? { type: "auth-expired" } : { type: "auth-failed", message: outcome.message },
     },
     effects: stop(state),
   }
@@ -288,14 +289,16 @@ function completing(
 
   if (event.syncAttempt !== state.syncAttempt) return unchanged(state)
 
-  if (event.type === "sync.succeeded") return { state: { status: "done" }, effects: [{ type: "sync.clear" }, { type: "close" }] }
+  if (event.type === "sync.succeeded")
+    return { state: { status: "done" }, effects: [{ type: "sync.clear" }, { type: "close" }] }
 
   return {
     state: {
       status: "failed",
       url: state.url,
       issued: state.issued,
-      failure: event.type === "sync.failed" ? { type: "sync-failed", message: event.message } : { type: "sync-timed-out" },
+      failure:
+        event.type === "sync.failed" ? { type: "sync-failed", message: event.message } : { type: "sync-timed-out" },
     },
     effects: [{ type: "sync.clear" }],
   }

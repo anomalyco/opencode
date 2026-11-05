@@ -18,10 +18,10 @@ function active(state: ProviderFormState) {
 }
 
 function replay(fields: FormField[], events: ProviderFormEvent[]) {
-  return events.reduce<ProviderFormTransition>(
-    (result, event) => transitionProviderForm(active(result.state), event),
-    { state: createProviderFormState(fields), effects: [] },
-  )
+  return events.reduce<ProviderFormTransition>((result, event) => transitionProviderForm(active(result.state), event), {
+    state: createProviderFormState(fields),
+    effects: [],
+  })
 }
 
 const view = (state: ProviderFormState) => selectProviderFormView(active(state))
@@ -87,8 +87,21 @@ describe("provider form machine", () => {
 
   test("a hidden default whose condition depends on an earlier answer applies once that answer matches", () => {
     const fields: FormField[] = [
-      { key: "region", type: "string", options: [{ value: "eu", label: "EU" }, { value: "us", label: "US" }] },
-      { key: "endpoint", type: "string", hidden: true, default: "eu.example", when: [{ key: "region", op: "eq", value: "eu" }] },
+      {
+        key: "region",
+        type: "string",
+        options: [
+          { value: "eu", label: "EU" },
+          { value: "us", label: "US" },
+        ],
+      },
+      {
+        key: "endpoint",
+        type: "string",
+        hidden: true,
+        default: "eu.example",
+        when: [{ key: "region", op: "eq", value: "eu" }],
+      },
       { key: "tenant", type: "string", when: [{ key: "endpoint", op: "eq", value: "eu.example" }] },
     ]
 
@@ -116,9 +129,7 @@ describe("provider form machine", () => {
 
     expect(transitionProviderForm(active(flag), { type: "choice.selected", value: "custom" }).state).toBe(flag)
 
-    const fields: FormField[] = [
-      { key: "model", type: "string", custom: true, options: [{ value: "a", label: "A" }] },
-    ]
+    const fields: FormField[] = [{ key: "model", type: "string", custom: true, options: [{ value: "a", label: "A" }] }]
 
     const typed = replay(fields, [
       { type: "choice.selected", value: "custom" },
@@ -143,12 +154,13 @@ describe("provider form machine", () => {
     const fraction = replay(fields, [{ type: "text.changed", value: "1.5" }, { type: "step.submitted" }])
 
     expect(view(fraction.state)).toMatchObject({ error: "number" })
-    expect(view(transitionProviderForm(active(fraction.state), { type: "text.changed", value: "8" }).state)).toMatchObject(
-      { error: undefined },
-    )
     expect(
-      replay(fields, [{ type: "text.changed", value: " 8080 " }, { type: "step.submitted" }]).state,
-    ).toEqual({ status: "completed", answer: { port: 8080 } })
+      view(transitionProviderForm(active(fraction.state), { type: "text.changed", value: "8" }).state),
+    ).toMatchObject({ error: undefined })
+    expect(replay(fields, [{ type: "text.changed", value: " 8080 " }, { type: "step.submitted" }]).state).toEqual({
+      status: "completed",
+      answer: { port: 8080 },
+    })
   })
 
   test("a multiselect answers only within its limits", () => {

@@ -1571,8 +1571,6 @@ function McpSignInDialog(props: {
   let pollController: AbortController | undefined
   let submitController: AbortController | undefined
 
-  const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
   const dispatch = (event: McpSignInEvent) => {
     const previous = untrack(signInState)
     const next = transitionMcpSignIn(previous, event)
@@ -1614,7 +1612,11 @@ function McpSignInDialog(props: {
           },
           (error) => {
             if (controller.signal.aborted) return
-            dispatch({ type: "submit.failed", submitAttempt: effect.submitAttempt, message: message(error) })
+            dispatch({
+              type: "submit.failed",
+              submitAttempt: effect.submitAttempt,
+              message: error instanceof Error ? error.message : String(error),
+            })
           },
         )
 
@@ -1636,7 +1638,12 @@ function McpSignInDialog(props: {
       )
       void Promise.try(props.onSync).then(
         () => dispatch({ type: "sync.succeeded", syncAttempt: effect.syncAttempt }),
-        (error) => dispatch({ type: "sync.failed", syncAttempt: effect.syncAttempt, message: message(error) }),
+        (error) =>
+          dispatch({
+            type: "sync.failed",
+            syncAttempt: effect.syncAttempt,
+            message: error instanceof Error ? error.message : String(error),
+          }),
       )
 
       return
@@ -1664,12 +1671,17 @@ function McpSignInDialog(props: {
         dispatch({
           type: "polled",
           pollAttempt,
-          outcome: status.status === "failed" ? { status: "failed", message: status.message } : { status: status.status },
+          outcome:
+            status.status === "failed" ? { status: "failed", message: status.message } : { status: status.status },
         })
       },
       (error) => {
         if (controller.signal.aborted) return
-        dispatch({ type: "polled", pollAttempt, outcome: { status: "unreachable", message: message(error) } })
+        dispatch({
+          type: "polled",
+          pollAttempt,
+          outcome: { status: "unreachable", message: error instanceof Error ? error.message : String(error) },
+        })
       },
     )
   }
