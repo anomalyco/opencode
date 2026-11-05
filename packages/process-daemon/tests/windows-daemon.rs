@@ -5,6 +5,7 @@
 #[path = "support/terminal_fixture.rs"]
 mod terminal_fixture;
 
+use std::env;
 use std::io::Write;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
@@ -21,6 +22,7 @@ use opencode_pty::protocol::{
 use opencode_pty::service::{CreateTerminal, TerminalInfo, TerminalLifecycle};
 use terminal_fixture::{Command as FixtureCommand, Deadline, Fixture, TempDir};
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
+use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
 use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
     WaitForSingleObject,
@@ -39,6 +41,21 @@ impl Daemon {
         let directory = root.0.join("runtime");
         let mut child = spawn(&directory);
         let registration = registration(&mut child, &directory);
+        Self {
+            child,
+            registration,
+            directory,
+            root,
+        }
+    }
+
+    fn start_ignoring_ctrl_c() -> Self {
+        assert_ne!(unsafe { SetConsoleCtrlHandler(None, 1) }, 0);
+        let root = TempDir::new();
+        let directory = root.0.join("runtime");
+        let mut child = spawn(&directory);
+        let registration = registration(&mut child, &directory);
+        assert_ne!(unsafe { SetConsoleCtrlHandler(None, 0) }, 0);
         Self {
             child,
             registration,
@@ -241,6 +258,66 @@ fn wait(child: &mut Child) -> std::process::ExitStatus {
         assert!(Instant::now() < deadline, "daemon did not exit");
         thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[test]
+fn daemon_clears_an_inherited_ignore_ctrl_c_flag() {
+    let status = Command::new(env::current_exe().unwrap())
+        .arg("--ignored")
+        .arg("--exact")
+        .arg("inherited_ignore_ctrl_c_child")
+        .arg("--test-threads=1")
+        .env("OPENCODE_PTY_TEST_IGNORE_CTRL_C", "1")
+        .status()
+        .unwrap();
+    assert!(status.success(), "Ctrl+C remained ignored in a PTY child");
+}
+
+#[test]
+#[ignore = "subprocess fixture; the parent test launches it"]
+fn inherited_ignore_ctrl_c_child() {
+    if env::var("OPENCODE_PTY_TEST_IGNORE_CTRL_C").is_err() {
+        return;
+    }
+    let _deadline = Deadline::new();
+    let mut daemon = Daemon::start_ignoring_ctrl_c();
+    let (owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    let terminal = daemon.create(CreateTerminal {
+        program: "powershell.exe".into(),
+        args: [
+            "-NoLogo".into(),
+            "-NoProfile".into(),
+            "-NoExit".into(),
+            "-Command".into(),
+            "Write-Output ('PTY_' + 'BUSY'); Start-Sleep -Seconds 30; Write-Output ('PTY_' + 'COMPLETED')"
+                .into(),
+        ]
+        .into(),
+        cwd: env::current_dir().unwrap(),
+        title: "ctrl-c".into(),
+        group_id: "ses_windows_daemon".into(),
+        env: std::collections::HashMap::new(),
+        cols: 120,
+        rows: 30,
+        mode: Default::default(),
+    });
+    daemon.wait_text(terminal.id, "PTY_BUSY");
+    for data in ["\x03", "Write-Output ('PTY_' + 'REUSED')\r"] {
+        assert!(matches!(
+            daemon.request(Request::Write {
+                id: terminal.id,
+                attachment_id: None,
+                data_base64: base64::engine::general_purpose::STANDARD.encode(data),
+            }),
+            Response::Ok
+        ));
+    }
+    let snapshot = daemon.wait_text(terminal.id, "PTY_REUSED");
+    assert!(!snapshot.1.contains("PTY_COMPLETED"));
+    assert!(matches!(daemon.request(Request::Shutdown), Response::Ok));
+    drop(owner);
+    daemon.wait();
 }
 
 #[test]
