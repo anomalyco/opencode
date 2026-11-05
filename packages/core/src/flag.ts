@@ -9,8 +9,6 @@ import { Config } from "./config.js"
 export type Key = ConfigFlag.Key
 
 export interface State {
-  readonly key: Key
-  readonly description: string
   readonly enabled: boolean
   /** Where `enabled` came from, highest priority first. */
   readonly source: "env" | "config" | "default"
@@ -42,7 +40,7 @@ export function resolve(input: {
       .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
   )
   const experimental = Config.latest(input.entries, "experimental")
-  return Record.map(ConfigFlag.registry, (description, key): State => {
+  return Record.map(ConfigFlag.registry, (_, key): State => {
     const override = env.get(key)
     const configured = experimental?.[key]
     const [enabled, source]: [boolean, State["source"]] =
@@ -51,7 +49,7 @@ export function resolve(input: {
         : configured !== undefined
           ? [configured, "config"]
           : [onByDefault(input.channel), "default"]
-    return { key, description, enabled, source }
+    return { enabled, source }
   })
 }
 

@@ -4,7 +4,6 @@ import { Config } from "@opencode/core/config"
 import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
-import { ConfigFlag } from "@opencode/schema/config/flag"
 import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -66,12 +65,7 @@ describe("Flag.enabled", () => {
       expect(yield* Flag.enabled("artifacts")).toBe(true)
       expect(yield* Flag.enabled("schedules")).toBe(true)
       expect(yield* Flag.enabled("todo")).toBe(false)
-      expect((yield* Flag.all).schedules).toEqual({
-        key: "schedules",
-        description: ConfigFlag.registry.schedules,
-        enabled: true,
-        source: "env",
-      })
+      expect((yield* Flag.all).schedules).toEqual({ enabled: true, source: "env" })
     }),
   )
 })
