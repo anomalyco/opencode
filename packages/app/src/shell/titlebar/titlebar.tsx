@@ -726,7 +726,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           currentTab={currentTab()}
                           onNavigate={(tab, el) => {
                             tabs.select(tab)
-                            el?.scrollIntoView({ behavior: "instant" })
+                            el?.scrollIntoView({ behavior: "instant", block: "nearest", inline: "nearest" })
                           }}
                           onClose={(tab) => {
                             const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
