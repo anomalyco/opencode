@@ -297,22 +297,9 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-
-  // Quotes follow the text as Markdown blockquotes, the order the model receives them in.
-  const copyText = createMemo(() => {
-    const parts = props.text ? [props.text] : []
-
-    for (const comment of comments()) {
-      if (comment.type !== "quote") continue
-      const quote = comment.text
-        .split("\n")
-        .map((line) => `> ${line}`)
-        .join("\n")
-      parts.push(comment.comment ? `${quote}\n\n${comment.comment}` : quote)
-    }
-
-    return parts.join("\n\n")
-  })
+  // Copy the full prompt the model received, with quotes, comments and attachments. A Voice message
+  // copies the spoken words here and offers the full prompt under "Copy full message".
+  const copyText = () => (props.voice ? props.text : props.message.text)
 
   const sent = createMemo(() =>
     new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(

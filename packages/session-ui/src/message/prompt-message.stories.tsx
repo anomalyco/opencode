@@ -1,7 +1,7 @@
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import type { SessionUserActions, SessionUserComment } from "../actions"
+import type { SessionUserActions } from "../actions"
 import { CurrentUserMessageDisplay } from "./message-content"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
@@ -20,7 +20,6 @@ export const Pending = {
       status: (typeof statuses)[number]
       voice: boolean
       text: boolean
-      quotes: boolean
       grouped: boolean
       changed: boolean
       fails: boolean
@@ -29,7 +28,6 @@ export const Pending = {
       status: "steering",
       voice: false,
       text: true,
-      quotes: false,
       grouped: false,
       changed: false,
       fails: false,
@@ -58,15 +56,6 @@ export const Pending = {
         ? []
         : [{ name: "notes.json", mime: "application/json", data: "e30=", source: { type: "inline" } }],
     }))
-
-    const comments = createMemo<SessionUserComment[]>(() =>
-      state.quotes
-        ? [
-            { type: "quote", text: "The menu is hovered.\nIt stays open.", comment: "Keep it open on blur" },
-            { type: "quote", text: "Timeline rows reuse the prompt styling." },
-          ]
-        : [],
-    )
 
     const document = createMemo(() => ({
       sessionID: CURRENT_SESSION_ID,
@@ -123,14 +112,6 @@ export const Pending = {
           <label>
             <input
               type="checkbox"
-              checked={state.quotes}
-              onChange={(event) => setState("quotes", event.currentTarget.checked)}
-            />{" "}
-            Quotes
-          </label>
-          <label>
-            <input
-              type="checkbox"
               checked={state.grouped}
               onChange={(event) => setState("grouped", event.currentTarget.checked)}
             />{" "}
@@ -175,7 +156,6 @@ export const Pending = {
             model={STORY_MODEL}
             previousSelection={previousSelection()}
             voice={state.voice}
-            comments={comments()}
             actions={actions}
             run={{ above: state.grouped && state.text, below: false }}
           />
