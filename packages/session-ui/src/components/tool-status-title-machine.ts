@@ -107,6 +107,7 @@ export function transitionToolStatusTitle(
 export function viewToolStatusTitle(state: ToolStatusTitleState) {
   if (state.status === "disposed")
     return { active: false, animating: false, width: undefined, showActive: false, showDone: true }
+
   if (state.status === "idle")
     return { active: state.active, animating: false, width: undefined, showActive: state.active, showDone: !state.active }
 

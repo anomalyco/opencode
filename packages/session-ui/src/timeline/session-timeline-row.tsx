@@ -182,12 +182,8 @@ export function createSessionTimelineRowRenderer(input: {
   let arrivals = INITIAL_STEER_ARRIVAL_STATE
   const arrivalRendered = { type: "rendered" as const, messageID: "" }
 
-  const arrivalSync: { type: "sync"; sessionID: string; rows: readonly TimelineRow.TimelineRow[]; busy: boolean } = {
-    type: "sync",
-    sessionID: "",
-    rows: [],
-    busy: false,
-  }
+  const noRows: readonly TimelineRow.TimelineRow[] = []
+  const arrivalSync = { type: "sync" as const, sessionID: "", rows: noRows, busy: false }
 
   const syncArrivals = () => {
     const sessionID = input.sessionID()
