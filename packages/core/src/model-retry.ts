@@ -35,18 +35,51 @@ const schedule = Schedule.max([
   }),
 )
 
+// The request never left this machine: the host name didn't resolve or there is no route to it. Sending again costs
+// nothing, and the outage behind these (a router restart, a dropped VPN, a laptop between networks) usually outlasts
+// the general allowance, so they retry on their own budget: exponential from 2s capped at 30s per gap, for up to an
+// hour after the first one. A refused connection is left out: something answered, so it is the server's state.
+const UNREACHABLE_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH", "ENETDOWN"])
+export const UNREACHABLE_WINDOW = Duration.hours(1)
+
+/** Whether the provider's host could not be reached at all, so the request was never sent. */
+export const isUnreachable = (error: AIError) => {
+  if (error.reason._tag !== "Transport") return false
+  // A WebSocket error event carries the system code only on its underlying error.
+  const cause = error.reason.cause
+  const code =
+    error.reason.code ??
+    (typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+      ? cause.code
+      : undefined)
+  return code !== undefined && UNREACHABLE_CODES.has(code)
+}
+
+const unreachableSchedule = Schedule.max([
+  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced("30 seconds")]),
+  Schedule.during(UNREACHABLE_WINDOW),
+]).pipe(
+  Schedule.jittered,
+  Schedule.setInputType<Input>(),
+  Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))),
+)
+
 // A timed-out attempt already waited minutes before failing, so the general allowance would let a
 // dead provider hold a call for most of an hour. Cap those attempts well below it.
 const MAX_TIMEOUT_RETRIES = 3
 
 export const policy = Effect.gen(function* () {
   const step = yield* Schedule.toStep(schedule)
+  const unreachable = yield* Schedule.toStep(unreachableSchedule)
   let attempt = 1
   let timeouts = 0
   return (input: Input) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis
-      const next = yield* step(now, input).pipe(Pull.catchDone(() => Effect.succeed(undefined)))
+      // Unreachable failures don't spend the general allowance, so a flaky link that also drops streams keeps it.
+      const next = yield* (input.retry && isUnreachable(input.cause) ? unreachable : step)(now, input).pipe(
+        Pull.catchDone(() => Effect.succeed(undefined)),
+      )
       if (!next) return undefined
       const [, duration] = next
       attempt++
@@ -75,7 +108,7 @@ export const retry = <A, R>(effect: Effect.Effect<A, AIError, R>) =>
 // One-shot generations (stateless text, images, decisions) can be billed per attempt, so they retry only failures
 // the provider never ran, a few times, with the same backoff and retry-after handling.
 const ONE_SHOT_RETRIES = 3
-const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"])
+const NOT_SENT_CODES = new Set(["ECONNREFUSED", ...UNREACHABLE_CODES])
 
 const notRun = (error: AIError) => {
   const override = error.reason.http?.headers["x-should-retry"]
