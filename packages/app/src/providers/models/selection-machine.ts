@@ -293,12 +293,15 @@ export function persistedSelection(entry: SessionSelectionEntry | undefined): Se
 
 function hydrate(state: Active, stored: Readonly<Record<string, Selection | undefined>>): ModelSelectionTransition {
   if (state.status === "ready") return { state, effects: NO_EFFECTS }
-  const loaded = storedSessions(stored)
-  state.deleted.forEach((sessionID) => delete loaded[sessionID])
+  const loaded = Object.entries(storedSessions(stored)).filter(([sessionID]) => !state.deleted.includes(sessionID))
 
   // Selections made while loading are newer than the stored ones, so they win and are written back.
   return {
-    state: { status: "ready", attempt: state.attempt, sessions: { ...loaded, ...state.sessions } },
+    state: {
+      status: "ready",
+      attempt: state.attempt,
+      sessions: { ...Object.fromEntries(loaded), ...state.sessions },
+    },
     effects: [
       ...Object.entries(state.sessions).map(
         ([sessionID, entry]) =>
