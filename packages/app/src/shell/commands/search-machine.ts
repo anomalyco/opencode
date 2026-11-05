@@ -90,7 +90,10 @@ export function transitionPaletteSearch(state: PaletteSearchState, event: Palett
     const previous: readonly PaletteSourceState[] =
       state.status === "active"
         ? state.sources
-        : Array.from({ length: state.count }, () => ({ status: "ready", settled: EMPTY_SETTLED, seen: [] }))
+        : Array.from(
+            { length: state.count },
+            (): PaletteSourceState => ({ status: "ready", settled: EMPTY_SETTLED, seen: [] }),
+          )
     const issued = state.status === "active" ? state.issued : 0
 
     return {
@@ -98,12 +101,14 @@ export function transitionPaletteSearch(state: PaletteSearchState, event: Palett
         status: "active",
         query: event.query,
         issued: issued + previous.length,
-        sources: previous.map((source, index) => ({
-          status: "loading",
-          attempt: issued + index + 1,
-          settled: source.settled,
-          seen: source.seen,
-        })),
+        sources: previous.map(
+          (source, index): PaletteSourceState => ({
+            status: "loading",
+            attempt: issued + index + 1,
+            settled: source.settled,
+            seen: source.seen,
+          }),
+        ),
       },
       effects: [
         ...aborts(previous),
@@ -220,7 +225,8 @@ export const INITIAL_SESSION_SOURCE_STATE: SessionSourceState = Object.freeze({
 
 export function transitionSessionSource(state: SessionSourceState, event: SessionSourceEvent): SessionSourceTransition {
   if (state.status === "disposed") return { state, effects: [] }
-  const cancel: SessionSourceEffect[] = state.status === "idle" ? [] : [{ type: "attempt.cancel", attempt: state.attempt }]
+  const cancel: SessionSourceEffect[] =
+    state.status === "idle" ? [] : [{ type: "attempt.cancel", attempt: state.attempt }]
 
   if (event.type === "disposed") return { state: { status: "disposed", loaded: state.loaded }, effects: cancel }
 
@@ -254,8 +260,11 @@ export function transitionSessionSource(state: SessionSourceState, event: Sessio
 
   return {
     state: {
-      ...idle,
-      loaded: [...new Map([...state.loaded, ...event.sessions].map((session) => [session.id, session] as const)).values()],
+      status: "idle",
+      issued: state.issued,
+      loaded: [
+        ...new Map([...state.loaded, ...event.sessions].map((session) => [session.id, session] as const)).values(),
+      ],
     },
     effects: [{ type: "attempt.resolve", attempt: state.attempt, query: state.query, sessions: event.sessions }],
   }

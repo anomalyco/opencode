@@ -17,7 +17,12 @@ import {
   type SessionSourceState,
 } from "./search-machine"
 
-const local: CommandPaletteEntry = { id: "session:a:ses_a", type: "session", title: "Server A match", category: "Session" }
+const local: CommandPaletteEntry = {
+  id: "session:a:ses_a",
+  type: "session",
+  title: "Server A match",
+  category: "Session",
+}
 
 function search(events: PaletteSearchEvent[], state: PaletteSearchState = createPaletteSearchState(2)) {
   return events.reduce<{ state: PaletteSearchState; effects: PaletteSearchEffect[] }>(
@@ -89,7 +94,10 @@ describe("palette search machine", () => {
   })
 
   test("a source that hangs times out, aborts and stops the loading state", () => {
-    const result = search([{ type: "query.changed", query: "abc" }, { type: "source.timed-out", index: 1, attempt: 2 }])
+    const result = search([
+      { type: "query.changed", query: "abc" },
+      { type: "source.timed-out", index: 1, attempt: 2 },
+    ])
 
     expect(result.effects.at(-1)).toEqual({ type: "source.abort", attempt: 2 })
     expect(selectPaletteSearchSources(result.state)[1]?.status).toBe("failed")

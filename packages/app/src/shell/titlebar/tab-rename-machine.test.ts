@@ -42,10 +42,16 @@ describe("tab rename machine", () => {
       { attempt: 2, title: "B" },
     ])
 
-    const first = replay([{ type: "save.failed", attempt: 1, currentTitle: "B", error: new Error("first") }], saving.state)
+    const first = replay(
+      [{ type: "save.failed", attempt: 1, currentTitle: "B", error: new Error("first") }],
+      saving.state,
+    )
     expect(first.effects).toEqual([])
 
-    const second = replay([{ type: "save.failed", attempt: 2, currentTitle: "B", error: new Error("second") }], first.state)
+    const second = replay(
+      [{ type: "save.failed", attempt: 2, currentTitle: "B", error: new Error("second") }],
+      first.state,
+    )
     expect(remembered(second.effects)).toEqual(["Original"])
     expect(second.effects.at(-1)).toMatchObject({ type: "toast.failed" })
     expect(second.state).toMatchObject({ status: "idle", save: { status: "idle", settledAttempt: 2 } })
@@ -190,7 +196,8 @@ describe("tab rename machine", () => {
     expect(disposed.state).toEqual({ status: "disposed" })
     expect(disposed.effects).toEqual([{ type: "editor.disarm" }, { type: "save.clear-timers" }])
     expect(
-      replay([{ type: "save.failed", attempt: 1, currentTitle: "A", error: new Error("late") }], disposed.state).effects,
+      replay([{ type: "save.failed", attempt: 1, currentTitle: "A", error: new Error("late") }], disposed.state)
+        .effects,
     ).toEqual([])
   })
 })

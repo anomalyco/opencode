@@ -449,7 +449,13 @@ export function TitlebarTabStrip(props: {
     loadTimers.set(
       effect.attempt,
       setTimeout(
-        () => dispatchTabLoads({ type: "load.timed-out", key: effect.key, attempt: effect.attempt, connected: connected() }),
+        () =>
+          dispatchTabLoads({
+            type: "load.timed-out",
+            key: effect.key,
+            attempt: effect.attempt,
+            connected: connected(),
+          }),
         effect.timeoutMs,
       ),
     )

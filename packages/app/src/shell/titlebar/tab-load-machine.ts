@@ -111,13 +111,20 @@ export function transitionSessionTabLoads(
     return { state: { ...state, entries: without(state.entries, event.key) }, effects: [clear] }
 
   return {
-    state: { ...state, entries: { ...state.entries, [event.key]: { phase: "unavailable", connected: event.connected } } },
+    state: {
+      ...state,
+      entries: { ...state.entries, [event.key]: { phase: "unavailable", connected: event.connected } },
+    },
     effects: [clear],
   }
 }
 
 /** How a session tab shows, derived in the same pass as the tab strip's visible order. */
-export function selectSessionTabView(state: SessionTabLoadsState, key: string, input: SessionTabViewInput): SessionTabView {
+export function selectSessionTabView(
+  state: SessionTabLoadsState,
+  key: string,
+  input: SessionTabViewInput,
+): SessionTabView {
   const persisted = input.persisted?.title ? "persisted" : undefined
 
   if (input.pending)

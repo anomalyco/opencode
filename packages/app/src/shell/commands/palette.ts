@@ -319,7 +319,7 @@ export function createServerSessionEntries(props: {
   function run(effect: SessionSourceEffect) {
     if (effect.type === "debounce.start") {
       runs.set(effect.attempt, {
-        result: Promise.withResolvers(),
+        result: Promise.withResolvers<CommandPaletteEntry[]>(),
         timer: setTimeout(() => dispatch({ type: "debounce.fired", attempt: effect.attempt }), effect.delayMs),
       })
 

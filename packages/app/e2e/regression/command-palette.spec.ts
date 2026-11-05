@@ -138,7 +138,11 @@ test("titlebar search shows one server's matches while another server's search f
   // Only typed searches fail, so the remote server still lists its recent sessions.
   await page.route(new RegExp(`^${escape(REMOTE_SERVER)}/api/session\\?.*search=[^&]`), (route) =>
     route.request().method() === "GET"
-      ? route.fulfill({ status: 500, json: { message: "Search failed" }, headers: { "access-control-allow-origin": "*" } })
+      ? route.fulfill({
+          status: 500,
+          json: { message: "Search failed" },
+          headers: { "access-control-allow-origin": "*" },
+        })
       : route.fallback(),
   )
   // A session only the local server's search returns, so no list the app already holds can show it.

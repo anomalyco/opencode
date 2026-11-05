@@ -119,14 +119,13 @@ export function transitionTabRename(state: TabRenameState, event: TabRenameEvent
   if (event.type === "disposed")
     return {
       state: DISPOSED,
-      effects: [
-        ...disarm(state),
-        ...(state.save.status === "saving" ? [{ type: "save.clear-timers" } as const] : []),
-      ],
+      effects: [...disarm(state), ...(state.save.status === "saving" ? [{ type: "save.clear-timers" } as const] : [])],
     }
 
   if (event.type === "menu.changed")
-    return state.menuOpen === event.open ? unchanged(state) : { state: { ...state, menuOpen: event.open }, effects: NONE }
+    return state.menuOpen === event.open
+      ? unchanged(state)
+      : { state: { ...state, menuOpen: event.open }, effects: NONE }
 
   if (event.type === "edit.start") {
     // A rename already open keeps its title, its draft and its blur handling.
@@ -253,7 +252,8 @@ function saveSucceeded(state: LiveState, attempt: number, title: string): TabRen
 
   if (save.status !== "saving" || attempt <= save.settledAttempt || attempt > save.attempt) return unchanged(state)
 
-  if (attempt === save.attempt) return { state: { ...state, save: { status: "idle", settledAttempt: attempt } }, effects: NONE }
+  if (attempt === save.attempt)
+    return { state: { ...state, save: { status: "idle", settledAttempt: attempt } }, effects: NONE }
 
   // An older save landed while a newer one is in flight: its title is now the one to restore.
   return { state: { ...state, save: { ...save, settledAttempt: attempt, confirmed: title } }, effects: NONE }

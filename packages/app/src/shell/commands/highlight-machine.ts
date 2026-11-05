@@ -13,7 +13,9 @@ export type PaletteHighlightEvent =
   | { readonly type: "entry.selected"; readonly entryID: string }
   | { readonly type: "disposed" }
 
-export type PaletteHighlightEffect = { readonly type: "preview.apply"; readonly entryID: string } | { readonly type: "preview.revert" }
+export type PaletteHighlightEffect =
+  | { readonly type: "preview.apply"; readonly entryID: string }
+  | { readonly type: "preview.revert" }
 
 export type PaletteHighlightTransition = {
   readonly state: PaletteHighlightState

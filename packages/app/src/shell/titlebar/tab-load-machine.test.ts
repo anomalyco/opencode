@@ -134,7 +134,10 @@ describe("session tab load machine", () => {
       { type: "sync", tabs: [{ ...tab, connected: false }] },
       { type: "sync", tabs: [tab] },
     ])
-    expect(offline.effects.filter((effect) => effect.type === "load.start")).toMatchObject([{ attempt: 1 }, { attempt: 2 }])
+    expect(offline.effects.filter((effect) => effect.type === "load.start")).toMatchObject([
+      { attempt: 1 },
+      { attempt: 2 },
+    ])
 
     const missing = replay([
       { type: "sync", tabs: [tab] },
@@ -143,7 +146,7 @@ describe("session tab load machine", () => {
       { type: "sync", tabs: [{ ...tab, missing: true }] },
     ])
     expect(missing.effects.filter((effect) => effect.type === "load.start")).toHaveLength(1)
-    expect(missing.state).toBe(INITIAL_SESSION_TAB_LOADS_STATE)
+    expect(missing.state).toEqual({ status: "active", issued: 1, entries: {} })
   })
 
   test("closing a loading tab or unmounting the strip clears its fetch and ignores its late answer", () => {
