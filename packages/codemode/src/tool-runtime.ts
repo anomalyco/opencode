@@ -2,6 +2,7 @@ import { Cause, Effect, Exit, Formatter, Schema } from "effect"
 import type { Json } from "./data.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
+import { SuspendError } from "./suspend-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -23,7 +24,10 @@ type ServicesOf<T, Depth extends ReadonlyArray<unknown>> = Depth["length"] exten
   ? never
   : T extends {
         readonly _tag: "CodeModeTool"
-        readonly execute: (input: unknown, context?: { readonly key: string }) => Effect.Effect<unknown, unknown, infer R>
+        readonly execute: (
+          input: unknown,
+          context?: { readonly key: string },
+        ) => Effect.Effect<unknown, unknown, infer R>
       }
     ? R
     : T extends object
@@ -391,7 +395,13 @@ export type ToolRuntime<R = never> = {
   /** The tool at `path`, if there is one, so a caller can see whether it is durable. */
   readonly tool: (path: ReadonlyArray<string>) => Tool<R> | undefined
   /** Admits a call to a durable tool, as `execute` does, and starts its work under `key`: its handle. */
-  readonly start: (path: ReadonlyArray<string>, args: Array<Json | undefined>, key: string) => Effect.Effect<Handle, unknown, R>
+  /** `suspend` is what the tool's `ctx.suspend` does: suspends the run for this call. */
+  readonly start: (
+    path: ReadonlyArray<string>,
+    args: Array<Json | undefined>,
+    key: string,
+    suspend: Effect.Effect<never, SuspendError>,
+  ) => Effect.Effect<Handle, unknown, R>
   /**
    * Waits for a durable tool's work: its output, as `execute` gives it. Interrupting it detaches. `detaching` says
    * whether an interruption detaches to suspend the run, which `tool.after` doesn't see, or ends the call, which it
@@ -403,10 +413,13 @@ export type ToolRuntime<R = never> = {
     key: string,
     handle: Handle,
     detaching: () => boolean,
+    suspend: Effect.Effect<never, SuspendError>,
   ) => Effect.Effect<Json | undefined, unknown, R>
   /** Stops a durable tool's work. */
   readonly cancel: (path: ReadonlyArray<string>, handle: Handle) => Effect.Effect<void, unknown, R>
 }
+
+const notDurable = Effect.fail(new SuspendError({ message: "Only a durable tool can suspend its run.", running: [] }))
 
 /** Per-execution call state over tools prepared once for the runtime. */
 export const make = <R>(
@@ -474,7 +487,9 @@ export const make = <R>(
         hooks["tool.before"],
         hooks["tool.after"],
         Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => tool.execute(input, { key })))
+          // Only a durable tool can suspend its run; the context type leaves `suspend` out, and calling it fails.
+          const context = { key, suspend: notDurable }
+          const raw = yield* failure(Effect.suspend(() => tool.execute(input, context)))
           return yield* output(name, tool, raw)
         }),
       )
@@ -500,7 +515,7 @@ export const make = <R>(
         return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, key)
       }),
     tool: (path) => lookup(root, canonicalSegments(path))?.tool,
-    start: (path, args, key) =>
+    start: (path, args, key, suspend) =>
       Effect.suspend(() => {
         const found = durableTool(path)
         return Effect.gen(function* () {
@@ -508,15 +523,15 @@ export const make = <R>(
           yield* Effect.sync(() => recordCall({ name: found.name }))
           const before = hooks["tool.before"]
           if (before !== undefined) yield* before({ name: found.name, input, key })
-          return yield* failure(Effect.suspend(() => found.durable.start(input, { key })))
+          return yield* failure(Effect.suspend(() => found.durable.start(input, { key, suspend })))
         })
       }),
-    attach: (path, args, key, handle, detaching) =>
+    attach: (path, args, key, handle, detaching, suspend) =>
       Effect.suspend(() => {
         const found = durableTool(path)
         const after = hooks["tool.after"]
         const run = Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => found.durable.attach(handle)))
+          const raw = yield* failure(Effect.suspend(() => found.durable.attach(handle, { key, suspend })))
           return yield* output(found.name, found.tool, raw)
         })
         if (after === undefined) return run
@@ -525,7 +540,8 @@ export const make = <R>(
           Effect.onExit(run, (exit) => {
             const call = { name: found.name, input, key }
             if (Exit.isSuccess(exit)) return after(call, { status: "success", value: exit.value })
-            if (Cause.hasInterruptsOnly(exit.cause)) return detaching() ? Effect.void : after(call, { status: "interrupted" })
+            if (Cause.hasInterruptsOnly(exit.cause))
+              return detaching() ? Effect.void : after(call, { status: "interrupted" })
             return after(call, { status: "failure", error: Cause.squash(exit.cause) })
           }),
         )

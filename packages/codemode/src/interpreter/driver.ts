@@ -4,6 +4,7 @@ import type { Machine } from "../machine/machine.js"
 import type { HostCall } from "../machine/scheduler.js"
 import type { ToolRuntime } from "../tool-runtime.js"
 import { toolError } from "../tool-error.js"
+import type { SuspendError } from "../suspend-error.js"
 import { locate } from "./errors.js"
 import { PendingThrow } from "./model.js"
 import { abrupt, type Completion, Interruption, normal } from "./signals.js"
@@ -35,6 +36,13 @@ export class Driver<R> {
   private interrupted: Cause.Cause<unknown> | undefined
   /** Called at every slice and host stop, before queued calls start: the round-trip test mode swaps the machine. */
   checkpoint: Effect.Effect<void, unknown, R> | undefined
+  /**
+   * Suspends the run for a durable call that asked to, by id: why it couldn't, or undefined once it is suspended
+   * (`detach` has run). Set by the execution.
+   */
+  suspendFor: ((id: number) => SuspendError | undefined) | undefined
+  // Durable calls' `ctx.suspend` requests, by call id, served once the call's fiber is registered.
+  private readonly requests = new Map<number, (effect: Effect.Effect<never, SuspendError>) => void>()
 
   constructor(
     public machine: Machine,
@@ -69,7 +77,11 @@ export class Driver<R> {
           if (self.checkpoint !== undefined) yield* self.checkpoint
           // Suspended now: the calls stay queued, and start on resume.
           if (self.suspending) continue
-          for (const handed of stop.calls) self.launch(self.machine.call(handed.id) ?? handed)
+          for (const handed of stop.calls) {
+            self.launch(self.machine.call(handed.id) ?? handed)
+            // A call that suspended the run as it started leaves the rest queued, to start on resume.
+            if (self.suspending) break
+          }
           continue
         }
         if (stop.kind === "stuck") {
@@ -146,7 +158,8 @@ export class Driver<R> {
     call.status = "starting"
     const request = call.request
     if (request.kind === "tool" && this.tools.tool(request.path)?.durable !== undefined) {
-      return this.fork(call.id, this.tools.start(request.path, request.args, call.key), (handle) => {
+      const started = this.tools.start(request.path, request.args, call.key, this.suspension(call.id))
+      return this.fork(call.id, started, (handle) => {
         const current = this.machine.call(call.id)
         if (current === undefined) return
         current.status = "started"
@@ -165,8 +178,36 @@ export class Driver<R> {
     if (request.kind !== "tool") return
     this.fork(
       call.id,
-      this.tools.attach(request.path, request.args, call.key, call.handle!, () => this.suspending),
+      this.tools.attach(
+        request.path,
+        request.args,
+        call.key,
+        call.handle!,
+        () => this.suspending,
+        this.suspension(call.id),
+      ),
     )
+  }
+
+  // A durable call's `ctx.suspend`. It is served once the call's fiber is registered, so one made synchronously, as
+  // the call starts, sees the same running calls as one made later. Once the run is suspended it never returns: the
+  // fiber is detached, and interrupted.
+  private suspension(id: number): Effect.Effect<never, SuspendError> {
+    return Effect.callback<never, SuspendError>((resume) => {
+      this.requests.set(id, resume)
+      if (this.fibers.has(id)) this.serve(id)
+      return Effect.sync(() => {
+        this.requests.delete(id)
+      })
+    })
+  }
+
+  private serve(id: number): void {
+    const resume = this.requests.get(id)
+    if (resume === undefined) return
+    this.requests.delete(id)
+    const failure = this.suspendFor?.(id)
+    if (failure !== undefined) resume(Effect.fail(failure))
   }
 
   // Forks `work` with the caller's services; it starts synchronously, so admission and hooks happen before the machine
@@ -174,6 +215,7 @@ export class Driver<R> {
   private fork(id: number, work: Effect.Effect<unknown, unknown, R>, next?: (value: unknown) => void): void {
     const fiber = Effect.runForkWith(this.services)(work)
     this.fibers.set(id, fiber)
+    this.serve(id)
     fiber.addObserver((exit) => {
       if (this.fibers.get(id) === fiber) this.fibers.delete(id)
       // Interrupted to end or suspend the run: nothing is left to settle.

@@ -229,6 +229,14 @@ class Running<R> {
       self.ctx = prepared
       self.driver = new Driver(prepared.machine, prepared.tools, yield* Effect.context<R>())
       if (roundTrip) self.driver.checkpoint = Effect.sync(() => self.trip())
+      self.driver.suspendFor = (id) => {
+        if (self.finished)
+          return new SuspendError({ message: "The run has already ended or been suspended.", running: [] })
+        const saved = self.save(self.ctx.machine.call(id))
+        if (saved instanceof SuspendError) return saved
+        self.stop(saved)
+        return undefined
+      }
       self.startedAt = Date.now()
       yield* Effect.forkScoped(self.execute().pipe(Effect.onExit((exit) => Deferred.done(self.done, exit))))
       return {
@@ -237,9 +245,7 @@ class Running<R> {
           if (self.finished) return Deferred.await(self.done)
           const saved = self.save()
           if (saved instanceof SuspendError) return Effect.fail(saved)
-          self.finished = true
-          self.suspended = saved
-          self.driver.detach()
+          self.stop(saved)
           return Deferred.await(self.done)
         }),
       } satisfies Execution
@@ -339,14 +345,22 @@ class Running<R> {
     )
   }
 
+  // Suspends the run once its state is saved: the driver stops and detaches the durable calls' work.
+  private stop(saved: Suspended): void {
+    this.finished = true
+    this.suspended = saved
+    this.driver.detach()
+  }
+
   /**
    * Saves the run's state, with no effect on the run: the calls that block a suspend, or the state as it is now and
    * the durable calls it waits on. The program shares this thread with the caller, so it is at a step boundary.
+   * `asking` is a durable call suspending the run from its `start` or `attach`: it is saved as pending.
    */
-  private save(): Suspended | SuspendError {
+  private save(asking?: HostCall): Suspended | SuspendError {
     const ctx = this.ctx
     const machine = ctx.machine
-    const blocking = this.driver.blocking()
+    const blocking = this.driver.blocking().filter((call) => call !== asking)
     if (blocking.length > 0) {
       const running = blocking.map((call) => ({ key: call.key, path: callPath(call) }))
       return new SuspendError({
@@ -355,6 +369,8 @@ class Running<R> {
       })
     }
     const limits = this.setup.limits
+    const status = asking?.status
+    if (asking !== undefined) asking.status = "started"
     const saved = attempt(() =>
       capture(ctx as Interpreter<unknown>, {
         bare: bare(),
@@ -369,22 +385,30 @@ class Running<R> {
         strict: false,
       }),
     )
+    const restored = (failure: SuspendError) => {
+      if (asking !== undefined && status !== undefined) asking.status = status
+      return failure
+    }
     if (!saved.ok) {
       const error = saved.error
-      return new SuspendError({
-        message: `The run's state couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
-        running: [],
-      })
+      return restored(
+        new SuspendError({
+          message: `The run's state couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
+          running: [],
+        }),
+      )
     }
     const snapshot = saved.value.snapshot
     const maxBytes = this.setup.suspend?.maxBytes
     if (maxBytes !== undefined) {
       const size = toBytes(snapshot).byteLength
       if (size > maxBytes) {
-        return new SuspendError({
-          message: `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`,
-          running: [],
-        })
+        return restored(
+          new SuspendError({
+            message: `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`,
+            running: [],
+          }),
+        )
       }
     }
     const pending = machine.calls().flatMap((call): Array<Pending> => {
@@ -395,7 +419,7 @@ class Running<R> {
           key: call.key,
           path: callPath(call),
           args: request.args.map((arg): Json => arg ?? null),
-          handle: call.handle!,
+          ...(call.handle === undefined ? {} : { handle: call.handle }),
         },
       ]
     })

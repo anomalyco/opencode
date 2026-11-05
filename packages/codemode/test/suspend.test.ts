@@ -388,6 +388,157 @@ describe("suspend", () => {
   })
 })
 
+describe("ctx.suspend", () => {
+  /**
+   * A durable tool that asks for approval: it suspends the run from `start` or from `attach`, for the host to give the
+   * answer on resume. A refused suspend is caught, and the call answers with who blocked it.
+   */
+  const approval = (from: "start" | "attach") => {
+    const log: Array<string> = []
+    const suspend = (ctx: Tool.DurableContext, handle: Tool.Handle) =>
+      ctx.suspend.pipe(
+        Effect.catch((error: CodeMode.SuspendError) =>
+          Effect.sync(() => {
+            log.push(`refused ${ctx.key}`)
+            return { refused: error.running.map((call) => call.path), handle }
+          }),
+        ),
+      )
+    const tool = Tool.make({
+      description: "Asks for approval",
+      input: Schema.Struct({ question: Schema.String }),
+      output: Schema.Unknown,
+      durable: {
+        start: (input, ctx) => {
+          log.push(`start ${ctx.key}`)
+          return from === "start" ? suspend(ctx, null) : Effect.succeed({ asked: input.question })
+        },
+        attach: (handle, ctx) => {
+          log.push(`attach ${ctx.key}`)
+          return from === "attach" ? suspend(ctx, handle) : Effect.succeed(handle)
+        },
+        cancel: () => Effect.sync(() => void log.push("cancel")),
+      },
+    })
+    return { tool, log }
+  }
+
+  for (const from of ["start", "attach"] as const) {
+    test(`a durable tool suspends its run from ${from}, and resume gives the call its value`, async () => {
+      const ask = approval(from)
+      const run = start(
+        CodeMode.make({ tools: { ask: ask.tool } }).execute(
+          `const answer = await tools.ask({ question: "ship it?" }); return "answer: " + answer`,
+          undefined,
+          { runId: "a" },
+        ),
+      )
+      const suspended = suspendedOf(await Effect.runPromise(run.result))
+      expect(suspended.pending).toEqual([
+        {
+          key: "a:0",
+          path: "tools.ask",
+          args: [{ question: "ship it?" }],
+          ...(from === "attach" ? { handle: { asked: "ship it?" } } : {}),
+        },
+      ])
+      expect(ask.log).toEqual(from === "start" ? ["start a:0"] : ["start a:0", "attach a:0"])
+      const outcome = await Effect.runPromise(
+        start(
+          CodeMode.make({ tools: { ask: ask.tool } }).resume(CodeMode.toBytes(suspended.state), {
+            "a:0": { ok: true, value: "yes" },
+          }),
+        ).result,
+      )
+      expect(outcome).toEqual({ ok: true, value: "answer: yes", toolCalls: [{ name: "ask" }] })
+      expect(ask.log).not.toContain("cancel")
+    })
+  }
+
+  test("a call that suspends as it starts leaves the calls after it queued, and they start on resume", async () => {
+    const ask = approval("start")
+    const echoed: Array<number> = []
+    const echo = Tool.make({
+      description: "Echoes",
+      input: Value,
+      output: Value,
+      execute: (input) => Effect.sync(() => (echoed.push(input.value), input)),
+    })
+    const tools = { ask: ask.tool, echo }
+    const run = start(
+      CodeMode.make({ tools }).execute(
+        `const [answer, echoed] = await Promise.all([tools.ask({ question: "q" }), tools.echo({ value: 5 })])
+         return [answer, echoed.value]`,
+        undefined,
+        { runId: "q" },
+      ),
+    )
+    const suspended = suspendedOf(await Effect.runPromise(run.result))
+    expect(suspended.pending.map((call) => call.key)).toEqual(["q:0"])
+    expect(echoed).toEqual([])
+    const outcome = await Effect.runPromise(
+      start(CodeMode.make({ tools }).resume(suspended.state, { "q:0": { ok: true, value: "yes" } })).result,
+    )
+    expect(outcome).toEqual({ ok: true, value: ["yes", 5], toolCalls: [{ name: "ask" }, { name: "echo" }] })
+    expect(echoed).toEqual([5])
+  })
+
+  test("a durable call's suspend fails inside the tool while another call blocks it, and the run goes on", async () => {
+    const ask = approval("start")
+    const slow = manual()
+    const fetched = latch<string>()
+    const extension = Extension.make({ name: "web", globals: { fetch: async () => fetched.promise } })
+    const runtime = CodeMode.make({ tools: { ask: ask.tool, slow: slow.tool }, extensions: [extension] })
+
+    const run = start(
+      runtime.execute(
+        `const pending = tools.slow({ value: 1 })
+         const answer = await tools.ask({ question: "q" })
+         return [answer, (await pending).value]`,
+        undefined,
+        { runId: "w" },
+      ),
+    )
+    await slow.called()
+    slow.calls[0]!.answer(2)
+    expect(await Effect.runPromise(run.result)).toMatchObject({
+      ok: true,
+      value: [{ refused: ["tools.slow"], handle: null }, 2],
+    })
+
+    // A queued extension call holds live host values, so it blocks too.
+    const queued = start(
+      runtime.execute(
+        `const answer = tools.ask({ question: "q" })
+         const page = fetch("https://a.test/")
+         return [await answer, await page]`,
+        undefined,
+        { runId: "x" },
+      ),
+    )
+    fetched.resolve("page")
+    expect(await Effect.runPromise(queued.result)).toMatchObject({
+      ok: true,
+      value: [{ refused: ["fetch"], handle: null }, "page"],
+    })
+  })
+
+  test("a tool that isn't durable can't suspend its run", async () => {
+    const tool = Tool.make({
+      description: "Tries to suspend",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: (_, ctx) =>
+        (ctx as unknown as Tool.DurableContext).suspend.pipe(
+          Effect.catch((error: CodeMode.SuspendError) => Effect.succeed(`${error._tag}: ${error.message}`)),
+        ),
+    })
+    expect(
+      await Effect.runPromise(start(CodeMode.make({ tools: { tool } }).execute(`return await tools.tool({})`)).result),
+    ).toMatchObject({ ok: true, value: "SuspendError: Only a durable tool can suspend its run." })
+  })
+})
+
 describe("resume", () => {
   /** A run suspended while waiting on a durable call: its saved state, and the call's key. */
   const suspendAt = async (code: string, extensions: ReadonlyArray<Extension.Extension> = []) => {

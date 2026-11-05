@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import type { Namespace } from "./namespace.js"
 import type { Tools } from "./tools.js"
+import { SuspendError } from "./suspend-error.js"
 
 /**
  * JSON Schema subset for model-visible signatures. CodeMode does not validate values against
@@ -45,6 +46,17 @@ export type SchemaType = Schema.Decoder<unknown> | JsonSchema
 export type Handle = Schema.Json
 
 /**
+ * What a durable call's `start` and `attach` get: its idempotency key, and `suspend`, which suspends the run with this
+ * call pending, for the host to finish and give its outcome to `resume`. It never succeeds: the call's fiber is
+ * detached and interrupted. It fails with a `SuspendError`, leaving the run running, while another host call blocks a
+ * suspend (see `Runtime.execute`), or outside a run.
+ */
+export type DurableContext = {
+  readonly key: string
+  readonly suspend: Effect.Effect<never, SuspendError>
+}
+
+/**
  * How a durable tool runs work that can outlive a suspended run: `start` launches it under the idempotency `key` and
  * returns a handle quickly; `attach` waits for its result (interrupting it detaches, never cancels); `cancel` stops
  * the work. A run can be suspended while a durable call's work runs, once `start` returned its handle; the host then
@@ -52,8 +64,8 @@ export type Handle = Schema.Json
  * `key`, is for the host: the runtime doesn't call it.
  */
 export type Durable<Input = unknown, Output = unknown, R = never> = {
-  readonly start: (input: Input, context: { readonly key: string }) => Effect.Effect<Handle, unknown, R>
-  readonly attach: (handle: Handle) => Effect.Effect<Output, unknown, R>
+  readonly start: (input: Input, context: DurableContext) => Effect.Effect<Handle, unknown, R>
+  readonly attach: (handle: Handle, context: DurableContext) => Effect.Effect<Output, unknown, R>
   readonly lookup?: ((key: string) => Effect.Effect<Handle | undefined, unknown, R>) | undefined
   readonly cancel: (handle: Handle) => Effect.Effect<void, unknown, R>
 }
@@ -92,6 +104,10 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   | { readonly execute?: undefined; readonly durable: Durable<InputType<I>, ResultType<O>, R> }
 )
 
+const outsideRun = Effect.fail(
+  new SuspendError({ message: "This call isn't part of a run, so it can't suspend one.", running: [] }),
+)
+
 export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | undefined): value is Tool<R> =>
   value !== undefined && Object.hasOwn(value, "_tag") && value._tag === "CodeModeTool"
 
@@ -115,10 +131,11 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
     description: options.description,
     input: options.input,
     output: options.output,
-    execute: (input, context = { key: crypto.randomUUID() }) =>
-      execute !== undefined
-        ? execute(input, context)
-        : Effect.flatMap(durable!.start(input, context), (handle) => durable!.attach(handle)),
+    execute: (input, context = { key: crypto.randomUUID() }) => {
+      if (execute !== undefined) return execute(input, context)
+      const durableContext = { key: context.key, suspend: outsideRun }
+      return Effect.flatMap(durable!.start(input, durableContext), (handle) => durable!.attach(handle, durableContext))
+    },
     ...(durable === undefined ? {} : { durable }),
   }
 }

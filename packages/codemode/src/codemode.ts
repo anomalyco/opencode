@@ -155,8 +155,8 @@ export type Pending = {
   /** The tool's path, as the program called it: `tools.x.y`. */
   readonly path: string
   readonly args: ReadonlyArray<Json>
-  /** The handle the durable tool's `start` returned. */
-  readonly handle: Handle
+  /** The handle the durable tool's `start` returned; none when the call suspended the run from its `start`. */
+  readonly handle?: Handle
 }
 
 /** A run stopped by `execution.suspend`: its whole state, to resume with `Runtime.resume`, and the calls it waits on. */
