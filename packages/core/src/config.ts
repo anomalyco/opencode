@@ -143,7 +143,7 @@ export const layer = (options?: Options) =>
         const errors: ParseError[] = []
         const input: unknown = parse(text, errors, { allowTrailingComma: true })
         if (errors.length) {
-          yield* Effect.logDebug("configuration normalization diagnostic", {
+          yield* Effect.logWarning("configuration normalization diagnostic", {
             source,
             path: "$",
             kind: "invalid",
@@ -163,7 +163,7 @@ export const layer = (options?: Options) =>
         if (result.type === "rejected") return
         const info = Option.getOrUndefined(decodeInfo(result.encoded))
         if (info) return info
-        yield* Effect.logDebug("configuration normalization diagnostic", {
+        yield* Effect.logWarning("configuration normalization diagnostic", {
           source,
           path: "$",
           kind: "invalid",

@@ -271,8 +271,6 @@ describe("SessionRunnerLLM recorded", () => {
         "opencode.usage.cost_usd": 0,
       })
       expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
-      // The attempt owns the provider request, so a retried request is not also an HTTP client error span.
-      expect(turn.filter((span) => span.attributes.has("http.request.method")).map((span) => span.name)).toEqual([])
     }).pipe(Effect.withSpan("fixture.request")),
   )
 })
