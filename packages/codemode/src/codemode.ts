@@ -1,9 +1,9 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, type Scope } from "effect"
 import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
 import type { Json } from "./data.js"
 import type { Outcome } from "./interpreter/driver.js"
-import { executeSetup, resumeProgram, type Run, type Setup, startProgram } from "./interpreter/execute.js"
+import { type Execution, resumeProgram, type Setup, startProgram } from "./interpreter/execute.js"
 import type { Snapshot } from "./snapshot/snapshot.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
@@ -13,8 +13,9 @@ import type { Tools } from "./tools.js"
 
 export { scanTools }
 export { fromBytes, SnapshotError, toBytes } from "./snapshot/snapshot.js"
+import type { SnapshotError } from "./snapshot/snapshot.js"
 export type { Header as SnapshotHeader, Snapshot } from "./snapshot/snapshot.js"
-export type { Outcome, Run }
+export type { Execution, Outcome }
 
 /** A tool call admitted during an execution. */
 export type {
@@ -60,7 +61,7 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   extensions?: Extensions
   /** Resource limits enforced on each execution. Time counts active time only, across every resume of a run. */
   limits?: ExecutionLimits
-  /** How `run.suspend` saves a run; see `Runtime.start`. */
+  /** How `execution.suspend` saves a run; see `Runtime.execute`. */
   suspend?: SuspendOptions
 }
 
@@ -172,22 +173,25 @@ export type Suspended = {
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
-  readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
   /**
-   * Starts a program as a run that can be suspended: `run.result` runs it, and `run.suspend` stops it at the next step
-   * boundary and saves its state. `runId` names its host calls' idempotency keys; a random one by default.
+   * Starts a program in the current scope and returns at once: `execution.result` waits for its outcome, and
+   * `execution.suspend` saves its state. Closing the scope interrupts the program and cancels its pending durable work.
+   * `runId` names its host calls' idempotency keys; a random one by default.
    */
-  readonly start: (
+  readonly execute: (
     code: string,
     bindings?: Readonly<Record<string, DataValue>>,
     options?: { readonly runId?: string },
-  ) => Run<R>
+  ) => Effect.Effect<Execution, never, R | Scope.Scope>
   /**
    * Continues a suspended run (its `state`, or that state as bytes) in this runtime, which must be the same build with
-   * the same extensions. `outcomes` settles pending calls whose outcome the host knows, by key. Throws a
-   * `SnapshotError` when the state can't be resumed here.
+   * the same extensions, as `execute` starts one. `outcomes` settles pending calls whose outcome the host knows, by
+   * key. Fails with a `SnapshotError` when the state can't be resumed here.
    */
-  readonly resume: (state: Snapshot | Uint8Array, outcomes?: Readonly<Record<string, Outcome>>) => Run<R>
+  readonly resume: (
+    state: Snapshot | Uint8Array,
+    outcomes?: Readonly<Record<string, Outcome>>,
+  ) => Effect.Effect<Execution, SnapshotError, R | Scope.Scope>
 }
 
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
@@ -203,13 +207,13 @@ const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimi
   maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
 })
 
-/** Executes one Effect-native CodeMode program without constructing a reusable runtime. */
+/** Starts one Effect-native CodeMode program without constructing a reusable runtime; see `Runtime.execute`. */
 export const execute = <
   const Provided extends Record<string, unknown>,
   const Extensions extends ReadonlyArray<Extension> = [],
 >(
   options: ExecuteOptions<Provided, Extensions>,
-): Effect.Effect<Result, never, Environment<Provided, Extensions>> =>
+): Effect.Effect<Execution, never, Environment<Provided, Extensions> | Scope.Scope> =>
   make(options).execute(options.code, options.bindings)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
@@ -253,8 +257,7 @@ export const make = <
     get catalog() {
       return prepared.catalog
     },
-    execute: (code, bindings) => executeSetup(setup, code, data(bindings)),
-    start: (code, bindings, runOptions) => startProgram(setup, code, data(bindings), runOptions?.runId),
+    execute: (code, bindings, runOptions) => startProgram(setup, code, data(bindings), runOptions?.runId),
     resume: (state, outcomes) => resumeProgram(setup, state, outcomes),
   }
 }

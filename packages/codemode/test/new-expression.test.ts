@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
+import { finished } from "./finished.js"
 
 // `new` is supported syntax; only the callee decides whether construction succeeds. A callee without
 // construction support is a TypeError naming it, like JS, rather than an unsupported-syntax diagnostic
@@ -13,7 +14,7 @@ const tools = {
     execute: () => Effect.succeed({}),
   }),
 }
-const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools }))
+const run = (code: string) => Effect.runPromise(finished(CodeMode.execute({ code, tools })))
 const value = async (code: string) => {
   const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Namespace, Tool } from "../src/index.js"
+import { finished } from "./finished.js"
 
 const echo = (description: string, result: string) =>
   Tool.make({
@@ -11,13 +12,13 @@ const echo = (description: string, result: string) =>
   })
 
 const value = async (runtime: CodeMode.Runtime, code: string) => {
-  const result = await Effect.runPromise(runtime.execute(code))
+  const result = await Effect.runPromise(finished(runtime.execute(code)))
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
 
 const failure = async (runtime: CodeMode.Runtime, code: string) => {
-  const result = await Effect.runPromise(runtime.execute(code))
+  const result = await Effect.runPromise(finished(runtime.execute(code)))
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
+import { finished } from "./finished.js"
 
 // Runs a CodeMode program with no host tools and returns the CodeMode.Result. These tests pin the
 // JS-parity behaviors for the "99% of ordinary defensive JavaScript just works" goal: cases where
@@ -9,7 +10,7 @@ import { CodeMode } from "../src/index.js"
 // Note on the result boundary: this package normalizes a bare `undefined` result to `null` when
 // it crosses out of CodeMode (results are JSON data), so tests asserting an in-CodeMode
 // `undefined` read check `=== undefined` inside the program and `null` at the boundary.
-const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+const run = (code: string) => Effect.runPromise(finished(CodeMode.execute({ code, tools: {} })))
 const value = async (code: string) => {
   const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)

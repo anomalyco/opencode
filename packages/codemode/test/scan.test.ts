@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Result } from "effect"
 import { CodeMode } from "../src/index.js"
+import { finished } from "./finished.js"
 
 describe("CodeMode.scanTools", () => {
   test("extracts dotted, bracketed and nested static tool calls in first-seen order", () => {
@@ -41,18 +42,18 @@ describe("CodeMode.scanTools", () => {
 
   test("binds outer globals that programs can read or shadow while keeping line numbers", async () => {
     const read = await Effect.runPromise(
-      CodeMode.execute({
+      finished(CodeMode.execute({
         code: "return { prev: state.count, runs, same: input.state.count }",
         bindings: { state: { count: 4 }, runs: 2, input: { state: { count: 4 } } },
-      }),
+      })),
     )
     expect(read).toMatchObject({ ok: true, value: { prev: 4, runs: 2, same: 4 } })
 
     const shadowed = await Effect.runPromise(
-      CodeMode.execute({
+      finished(CodeMode.execute({
         code: "const state = 9\nreturn { wake: true, state }",
         bindings: { state: { count: 4 } },
-      }),
+      })),
     )
     expect(shadowed).toMatchObject({ ok: true, value: { wake: true, state: 9 } })
   })

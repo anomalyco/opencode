@@ -15,8 +15,9 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
+import { finished } from "./finished.js"
 
-const execute = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+const execute = (code: string) => Effect.runPromise(finished(CodeMode.execute({ code, tools: {} })))
 
 const value = async (code: string) => {
   const result = await execute(code)

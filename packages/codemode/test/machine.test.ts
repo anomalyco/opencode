@@ -13,6 +13,7 @@ import { ScopeStack } from "../src/interpreter/scope.js"
 import { AsyncFromSyncIterator } from "../src/machine/generators.js"
 import { stats } from "../src/machine/task.js"
 import { ToolRuntime } from "../src/tool-runtime.js"
+import { finished } from "./finished.js"
 
 // The machine (`src/machine`) runs programs as explicit frames, and keeps the jobs, promises, and host calls they wait
 // on as data. The Effect driver only does what the machine's stops ask.
@@ -28,7 +29,7 @@ const runtimeTools = {
 
 const runtime = CodeMode.make({ tools: runtimeTools })
 
-const run = (code: string) => Effect.runPromise(runtime.execute(code))
+const run = (code: string) => Effect.runPromise(finished(runtime.execute(code)))
 
 const value = async (code: string) => {
   const before = stats.steps

@@ -42,14 +42,20 @@ const runtime = CodeMode.make({
 })
 
 const result = await Effect.runPromise(
-  runtime.execute(`
-    const order = await tools.orders.lookup({ id: "order_42" })
-    return { id: order.id, needsAttention: order.status !== "complete" }
-  `),
+  Effect.scoped(
+    Effect.flatMap(
+      runtime.execute(`
+        const order = await tools.orders.lookup({ id: "order_42" })
+        return { id: order.id, needsAttention: order.status !== "complete" }
+      `),
+      (execution) => execution.result,
+    ),
+  ),
 )
 ```
 
-`result` is always a [`CodeMode.Result`](#results).
+`result` is a [`CodeMode.Result`](#results), or a suspended run's saved state when something
+[suspends](#suspending-and-resuming-a-run) it.
 
 ## API
 
@@ -86,8 +92,13 @@ bracket notation, such as `tools.context7["resolve-library-id"](...)`.
 const runtime = CodeMode.make({ tools, limits: { timeoutMs: 30_000 } })
 
 runtime.catalog() // structured tool descriptions
-runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
+const execution = yield * runtime.execute(source) // Effect<CodeMode.Execution, never, ToolServices | Scope>
+const result = yield * execution.result // CodeMode.Result | CodeMode.Suspended
 ```
+
+`execute` starts the program in the current scope and returns at once. `execution.result` waits for its outcome, and
+`execution.suspend` saves its state (see below). Closing the scope interrupts the program and cancels its pending
+durable work.
 
 The Effect environment is inferred from the supplied tools. `hooks` surround every call the program makes into the
 host: `tool.before`/`tool.after` receive `{ name, input }` with decoded input, `extension.before`/`extension.after`
@@ -99,8 +110,8 @@ throws.
 
 ### Suspending and resuming a run
 
-`runtime.start(code, bindings?, { runId? })` starts a run that can be suspended: `run.result` runs it, and
-`run.suspend` stops it at the next step boundary and saves its state. Both give the same outcome, a `Result` or:
+`runtime.execute(code, bindings?, { runId? })` starts a run that can be suspended: `execution.suspend` stops it at the
+next step boundary and saves its state. It and `execution.result` give the same outcome, a `Result` or:
 
 ```ts
 type Suspended = {
@@ -109,11 +120,11 @@ type Suspended = {
   pending: Array<{ id; path; args; key; status: "queued" | "starting" | "started" }>
 }
 
-const run = runtime.start(source)
-const fiber = yield* Effect.forkChild(run.result)
-const suspended = yield* run.suspend
+const execution = yield * runtime.execute(source)
+const suspended = yield * execution.suspend
 // later, in this process or another one built from the same version:
-const result = yield* runtime.resume(suspended.state, { [key]: { ok: true, value } }).result
+const resumed = yield * runtime.resume(suspended.state, { [key]: { ok: true, value } })
+const result = yield * resumed.result
 ```
 
 Suspending waits briefly (`suspend.graceMs`, 50 ms by default) for running tool calls to finish, so their outcomes are
@@ -122,7 +133,7 @@ outcome: on resume it runs again if its tool declares `retry: "safe"`, and other
 the program can catch. `resume`'s second argument settles pending calls whose outcome the host already knows, by key.
 Every call has an idempotency key, `<runId>:<id>`.
 
-A state resumes only on the same build of this package, with the same extensions; `resume` throws a
+A state resumes only on the same build of this package, with the same extensions; `resume` fails with a
 `CodeMode.SnapshotError` otherwise, or when the state is malformed. A state larger than `suspend.maxBytes` fails the run
 instead of suspending it. Built-ins are saved by name and only their changes are copied. Functions an extension returned have no data form: after a resume, calling one
 throws a `TypeError`. `timeoutMs` counts active time across every resume, and `maxToolCalls` counts every call of the run.
@@ -186,7 +197,11 @@ const web = Extension.make({
     ),
   },
 })
-const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))
+const execution =
+  yield *
+  CodeMode.make({ extensions: [web] })
+    .execute(code)
+    .pipe(Effect.provideService(Session, session))
 ```
 
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as

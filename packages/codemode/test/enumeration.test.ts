@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
+import { finished } from "./finished.js"
 
 // Key enumeration: Object.keys and for...in share one surface over plain objects, arrays
 // (index strings), and tool references (namespace/tool names from the supplied tools), so a
@@ -22,7 +23,7 @@ const tools = {
   playwright: { navigate: echo("Navigate somewhere") },
 }
 
-const run = (code: string) => Effect.runPromise(CodeMode.execute({ tools, code }))
+const run = (code: string) => Effect.runPromise(finished(CodeMode.execute({ tools, code })))
 const value = async (code: string) => {
   const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)

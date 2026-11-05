@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Fiber } from "effect"
 import { CodeMode } from "../src/index.js"
 import { MAX_ARRAY_LENGTH, MAX_PENDING_PROMISES, MAX_STRING_LENGTH } from "../src/interpreter/limits.js"
+import { finished } from "./finished.js"
 
 const runtime = CodeMode.make({ tools: {} })
 
 const value = async (code: string) => {
-  const result = await Effect.runPromise(runtime.execute(code))
+  const result = await Effect.runPromise(finished(runtime.execute(code)))
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
 
 const failure = async (code: string) => {
-  const result = await Effect.runPromise(runtime.execute(code))
+  const result = await Effect.runPromise(finished(runtime.execute(code)))
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error.message
 }
@@ -85,7 +86,7 @@ describe("the host stays in control", () => {
             ),
           ),
         )
-        const result = yield* runtime.execute(`let t = 0; for (let i = 0; i < 1_000_000; i++) t += i % 3; return t`)
+        const result = yield* finished(runtime.execute(`let t = 0; for (let i = 0; i < 1_000_000; i++) t += i % 3; return t`))
         yield* Fiber.interrupt(counter)
         return result
       }),
@@ -109,7 +110,7 @@ describe("the host stays in control", () => {
       `const a = Array(10_000).fill(0); for (let i = 0; i < 20_000; i++) Promise.reject(a); return 1`,
     ],
   ])("%s still times out", async (_, code) => {
-    const result = await Effect.runPromise(CodeMode.make({ limits: { timeoutMs: 100 } }).execute(code))
+    const result = await Effect.runPromise(finished(CodeMode.make({ limits: { timeoutMs: 100 } }).execute(code)))
     expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
   })
 

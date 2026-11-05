@@ -3,6 +3,7 @@ import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { CodeMode, OpenAPI, Tool } from "../src/index.js"
 import { inputTypeScript, outputTypeScript } from "../src/tool-schema.js"
+import { finished } from "./finished.js"
 
 const baseUrl = "http://localhost:4096"
 type Document = OpenAPI.Document
@@ -162,7 +163,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(outputTypeScript(remove)).toBe("null")
 
     const result = await Effect.runPromise(
-      CodeMode.make({ tools: { api: api.tools } })
+      finished(CodeMode.make({ tools: { api: api.tools } })
         .execute(
           `
           const user = await tools.api.users.get({
@@ -183,7 +184,7 @@ describe("OpenAPI.fromSpec", () => {
           const removed = await tools.api.users.remove({ userId: "user-1" })
           return { user, created, summary, removed }
         `,
-        )
+        ))
         .pipe(Effect.provide(client.layer)),
     )
 
@@ -971,12 +972,12 @@ describe("OpenAPI.fromSpec", () => {
       tools: { api: OpenAPI.fromSpec({ spec: await happyPathSpec(), baseUrl }).tools },
     })
     const result = await Effect.runPromise(
-      runtime
+      finished(runtime
         .execute(
           `
         return search({ query: "get a user", namespace: "api", limit: 1 })
       `,
-        )
+        ))
         .pipe(Effect.provide(layer)),
     )
 
@@ -1402,7 +1403,7 @@ describe("OpenAPI.fromSpec", () => {
     })
 
     const result = await Effect.runPromise(
-      runtime.execute("return await tools.api.records.get({})").pipe(Effect.provide(layer)),
+      finished(runtime.execute("return await tools.api.records.get({})")).pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({ ok: false })
@@ -1468,14 +1469,14 @@ describe("OpenAPI.fromSpec", () => {
 
     const runtime = CodeMode.make({ tools })
     const result = await Effect.runPromise(
-      runtime
+      finished(runtime
         .execute(
           `
             const updated = await tools.things.update({ path_id: "path", query_id: "query", path_id_2: "literal", header_id: "header", body_id: "body" })
             const echoed = await tools.echo({ body: "hello" })
             return { updated, echoed }
           `,
-        )
+        ))
         .pipe(Effect.provide(layer)),
     )
 

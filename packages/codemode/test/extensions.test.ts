@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Effect, Schema } from "effect"
 import { CodeMode, Extension, Tool } from "../src/index.js"
+import { finished } from "./finished.js"
 
 const held: Array<unknown> = []
 const config = { retries: 3, nested: { deep: true } }
@@ -34,13 +35,13 @@ const extension = Extension.make({
 const runtime = CodeMode.make({ tools: {}, extensions: [extension] })
 
 const value = async (code: string, target = runtime) => {
-  const result = await Effect.runPromise(target.execute(code))
+  const result = await Effect.runPromise(finished(target.execute(code)))
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
 
 const failure = async (code: string, target = runtime) => {
-  const result = await Effect.runPromise(target.execute(code))
+  const result = await Effect.runPromise(finished(target.execute(code)))
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error
 }
@@ -441,8 +442,8 @@ describe("Effect globals", () => {
   test("an Effect global is a promise that runs with the execution's services", async () => {
     sent.length = 0
     const result = await Effect.runPromise(
-      CodeMode.make({ extensions: [web] })
-        .execute(`const pending = fetch("https://a.test/"); return [pending instanceof Promise, await pending]`)
+      finished(CodeMode.make({ extensions: [web] })
+        .execute(`const pending = fetch("https://a.test/"); return [pending instanceof Promise, await pending]`))
         .pipe(Effect.provideService(Session, { id: "ses_1" })),
     )
     expect(result).toMatchObject({ ok: true, value: [true, { url: "https://a.test/", session: "ses_1" }] })
@@ -451,8 +452,8 @@ describe("Effect globals", () => {
 
   test("a failing Effect rejects with the host's error", async () => {
     const result = await Effect.runPromise(
-      CodeMode.make({ extensions: [web] })
-        .execute(`try { await fail() } catch (e) { return [e instanceof RangeError, e.message] }`)
+      finished(CodeMode.make({ extensions: [web] })
+        .execute(`try { await fail() } catch (e) { return [e instanceof RangeError, e.message] }`))
         .pipe(Effect.provideService(Session, { id: "ses_1" })),
     )
     expect(result).toMatchObject({ ok: true, value: [true, "denied"] })
@@ -465,8 +466,8 @@ describe("Effect globals", () => {
       hooks: { "extension.before": (call) => Effect.fail(new Error(`${call.name} is not allowed`)) },
     })
     const result = await Effect.runPromise(
-      runtime
-        .execute(`try { await fetch("https://a.test/") } catch (e) { return e.message }`)
+      finished(runtime
+        .execute(`try { await fetch("https://a.test/") } catch (e) { return e.message }`))
         .pipe(Effect.provideService(Session, { id: "ses_1" })),
     )
     expect(result).toMatchObject({ ok: true, value: "fetch is not allowed" })
@@ -616,7 +617,7 @@ describe("configuration", () => {
   test("extension calls are not tool calls", async () => {
     const limited = CodeMode.make({ extensions: [extension], limits: { maxToolCalls: 0 } })
     const result = await Effect.runPromise(
-      limited.execute(`(await fetch("https://a.test/")).json(); return await later(1)`),
+      finished(limited.execute(`(await fetch("https://a.test/")).json(); return await later(1)`)),
     )
     expect(result.ok).toBe(true)
     expect(result.toolCalls).toEqual([])

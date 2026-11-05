@@ -1,13 +1,6 @@
 import { parse, type Program } from "acorn"
-import { Cause, Deferred, Effect, Option, Schema } from "effect"
-import type {
-  DataValue,
-  Diagnostic,
-  Pending,
-  ResolvedExecutionLimits,
-  Result,
-  Suspended,
-} from "../codemode.js"
+import { Cause, Deferred, Effect, Option, Schema, type Scope } from "effect"
+import type { DataValue, Diagnostic, Pending, ResolvedExecutionLimits, Result, Suspended } from "../codemode.js"
 import type { Json } from "../data.js"
 import { capture, fromBytes, restore, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
 import { ToolRuntime } from "../tool-runtime.js"
@@ -35,10 +28,10 @@ export type Setup<R> = {
   readonly suspend?: { readonly graceMs?: number | undefined; readonly maxBytes?: number | undefined }
 }
 
-/** A running execution: its outcome, and a way to suspend it. */
-export type Run<R> = {
-  /** Runs the program: its result, or its saved state once suspended. Run it once. */
-  readonly result: Effect.Effect<Result | Suspended, never, R>
+/** A started program: its outcome, and a way to suspend it. */
+export type Execution = {
+  /** Waits for the program's result, or its saved state once suspended. */
+  readonly result: Effect.Effect<Result | Suspended>
   /**
    * Stops the run at the next step boundary, settles its host calls, and saves its state; what `result` gives. A run
    * that already ended gives its result.
@@ -56,53 +49,59 @@ export const executeProgram = <R>(
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
   bindings?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
 ): Effect.Effect<Result, never, R> =>
-  executeSetup({ prepared, limits, hooks, globals }, code, bindings)
+  Effect.scoped(
+    Effect.flatMap(
+      startProgram({ prepared, limits, hooks, globals }, code, bindings),
+      // Nothing suspends this run, so it ends with a result.
+      (execution) => execution.result as Effect.Effect<Result>,
+    ),
+  )
 
-/** Runs one program to its end; nothing can suspend it. */
-export const executeSetup = <R>(
-  setup: Setup<R>,
-  code: string,
-  bindings?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
-): Effect.Effect<Result, never, R> =>
-  // Allocate execution state inside suspension so reused Effects never share it.
-  Effect.suspend(() => startProgram(setup, code, bindings).result as Effect.Effect<Result, never, R>)
-
-/** Starts a program: a handle whose `result` runs it, and whose `suspend` saves its state. */
+/** Starts a program in the current scope; closing the scope interrupts it. */
 export const startProgram = <R>(
   setup: Setup<R>,
   code: string,
   bindings?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
   runId: string = crypto.randomUUID(),
-): Run<R> => {
-  if (code.trim().length === 0) {
-    return ended({ ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] })
-  }
-  return new Execution(setup, runId, 0, () => {
-    const parsed = parseProgram(code)
-    if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
-    const ctx = instantiate(setup, bindings)
-    ctx.machine.runId = runId
-    ctx.start(parsed.source)
-    return ctx
-  }).run
-}
+): Effect.Effect<Execution, never, R | Scope.Scope> =>
+  Effect.suspend(() => {
+    if (code.trim().length === 0) {
+      return Effect.succeed(
+        ended({ ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] }),
+      )
+    }
+    return new Running(setup, runId, 0, () => {
+      const parsed = parseProgram(code)
+      if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
+      const ctx = instantiate(setup, bindings)
+      ctx.machine.runId = runId
+      ctx.start(parsed.source)
+      return ctx
+    }).start()
+  })
 
 /**
- * Resumes a saved run in this runtime: a handle like `startProgram`'s. `outcomes` completes pending host calls by
- * key. Throws a `SnapshotError` when the state can't be read or belongs to another build, other host globals, or
- * other sources.
+ * Resumes a saved run in this runtime, in the current scope, as `startProgram` starts one. `outcomes` completes
+ * pending host calls by key. Fails with a `SnapshotError` when the state can't be read or belongs to another build,
+ * other host globals, or other sources.
  */
 export const resumeProgram = <R>(
   setup: Setup<R>,
   saved: Snapshot | Uint8Array | unknown,
   outcomes: Readonly<Record<string, Outcome>> = {},
-): Run<R> => {
-  const fresh = instantiate(setup)
-  const snapshot = restoreInto(setup, saved instanceof Uint8Array ? fromBytes(saved) : saved, fresh)
-  return new Execution(setup, snapshot.header.runId, snapshot.header.budget.activeMs, () => fresh, outcomes).run
-}
+): Effect.Effect<Execution, SnapshotError, R | Scope.Scope> =>
+  Effect.suspend(() => {
+    const fresh = instantiate(setup)
+    const snapshot = Effect.try({
+      try: () => restoreInto(setup, saved instanceof Uint8Array ? fromBytes(saved) : saved, fresh),
+      catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
+    })
+    return Effect.flatMap(snapshot, (restored) =>
+      new Running(setup, restored.header.runId, restored.header.budget.activeMs, () => fresh, outcomes).start(),
+    )
+  })
 
-const ended = (result: Result): Run<never> => ({ result: Effect.succeed(result), suspend: Effect.succeed(result) })
+const ended = (result: Result): Execution => ({ result: Effect.succeed(result), suspend: Effect.succeed(result) })
 
 // Sources restored recently, by text: the AST is never changed, so runs restored from the same program share it.
 const restoredSources = new Map<string, Source>()
@@ -140,7 +139,8 @@ const instantiate = <R>(
 
 let bareRuntime: Interpreter<unknown> | undefined
 // The intrinsics alone, which the build id is taken from.
-const bare = () => (bareRuntime ??= instantiate<unknown>({ prepared: ToolRuntime.prepare({}), limits: noLimits, hooks: {} }))
+const bare = () =>
+  (bareRuntime ??= instantiate<unknown>({ prepared: ToolRuntime.prepare({}), limits: noLimits, hooks: {} }))
 const noLimits: ResolvedExecutionLimits = { timeoutMs: undefined, maxToolCalls: undefined, maxOutputBytes: undefined }
 
 const pristines = new WeakMap<object, Interpreter<unknown>>()
@@ -174,11 +174,10 @@ if (roundTrip) {
 }
 
 /** One run's state: the runtime it is in now (restoring swaps it), its driver, and how much active time it used. */
-class Execution<R> {
+class Running<R> {
   private ctx: Interpreter<R> | undefined
   private driver: Driver<R> | undefined
   private suspendAsked = false
-  private started = false
   private trips = 0
   // Checkpoints to let pass before the next round trip, so a large state is not saved at every one.
   private skip = 0
@@ -193,19 +192,16 @@ class Execution<R> {
     private readonly outcomes?: Readonly<Record<string, Outcome>>,
   ) {}
 
-  get run(): Run<R> {
-    return {
-      result: Effect.suspend(() => {
-        if (this.started) return Deferred.await(this.done)
-        this.started = true
-        return this.execute().pipe(Effect.onExit((exit) => Deferred.done(this.done, exit)))
-      }),
+  // Runs the program in a fiber of the current scope.
+  start(): Effect.Effect<Execution, never, R | Scope.Scope> {
+    return Effect.as(Effect.forkScoped(this.execute().pipe(Effect.onExit((exit) => Deferred.done(this.done, exit)))), {
+      result: Deferred.await(this.done),
       suspend: Effect.suspend(() => {
         this.suspendAsked = true
         this.driver?.suspend()
         return Deferred.await(this.done)
       }),
-    }
+    })
   }
 
   private execute(): Effect.Effect<Result | Suspended, never, R> {

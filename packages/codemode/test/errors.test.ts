@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
+import { finished } from "./finished.js"
 
 // One failure is one program error object, and rethrowing it keeps the diagnostic it started with.
-const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+const run = (code: string) => Effect.runPromise(finished(CodeMode.execute({ code, tools: {} })))
 const value = async (code: string) => {
   const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)

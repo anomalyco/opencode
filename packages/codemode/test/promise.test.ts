@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Schema } from "effect"
 import { CodeMode, Tool, toolError } from "../src/index.js"
+import { finished } from "./finished.js"
 
 // Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly as
 // host work, `await` settles them, Promise.all/allSettled/race/resolve/reject are
@@ -149,7 +150,7 @@ const run = (
     return created
   }
   return Effect.runPromise(
-    CodeMode.execute({
+    finished(CodeMode.execute({
       tools: {
         host: {
           echo: echoTool(trace),
@@ -164,7 +165,7 @@ const run = (
       },
       code,
       ...(options.limits ? { limits: options.limits } : {}),
-    }),
+    })),
   )
 }
 
@@ -1649,7 +1650,7 @@ describe("host results", () => {
 
   test("an awaited interruption passes catch and finally and interrupts the program", async () => {
     const exit = await Effect.runPromiseExit(
-      CodeMode.execute({
+      finished(CodeMode.execute({
         tools: { host: { interrupt: interruptedTool } },
         code: `
           const inner = async () => {
@@ -1657,7 +1658,7 @@ describe("host results", () => {
           }
           return await inner().catch(() => "handled")
         `,
-      }),
+      })),
     )
     expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
   })

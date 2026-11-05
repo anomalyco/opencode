@@ -12,5 +12,7 @@ const slow = Tool.make({
 })
 const [file, key] = process.argv.slice(2)
 const bytes = new Uint8Array(await Bun.file(file!).arrayBuffer())
-const run = CodeMode.make({ tools: { slow } }).resume(bytes, { [key!]: { ok: true, value: { value: 20 } } })
-console.log(JSON.stringify(await Effect.runPromise(run.result)))
+const resumed = CodeMode.make({ tools: { slow } }).resume(bytes, { [key!]: { ok: true, value: { value: 20 } } })
+console.log(
+  JSON.stringify(await Effect.runPromise(Effect.scoped(Effect.flatMap(resumed, (execution) => execution.result)))),
+)

@@ -8,6 +8,7 @@ import {
   jsonSchemaToTypeScript,
   outputTypeScript,
 } from "../src/tool-schema.js"
+import { finished } from "./finished.js"
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
 // whose property descriptions and constraints must surface as JSDoc in pretty signatures.
@@ -863,7 +864,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
     ].join("\n")
     const signature = `tools.constrained(${type}): Promise<${type}>`
     expect(runtime.catalog[0]?.signature).toBe(signature)
-    const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.constrained" })'))
+    const result = await Effect.runPromise(finished(runtime.execute('return search({ query: "tools.constrained" })')))
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
     expect(result.value).toMatchObject({ items: [{ signature }] })
@@ -872,7 +873,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 
   const search = async (query: string) => {
-    const result = await Effect.runPromise(runtime.execute(`return search({ query: ${JSON.stringify(query)} })`))
+    const result = await Effect.runPromise(finished(runtime.execute(`return search({ query: ${JSON.stringify(query)} })`)))
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
     return result.value as { items: Array<{ path: string; signature: string }>; remaining: number }
@@ -955,11 +956,11 @@ describe("empty input signatures agree with decoding", () => {
     })
     const signature = "tools.ping(): Promise<string>"
     expect(runtime.catalog[0]?.signature).toBe(signature)
-    const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.ping" })'))
+    const result = await Effect.runPromise(finished(runtime.execute('return search({ query: "tools.ping" })')))
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
     expect(result.value).toMatchObject({ items: [{ signature }] })
-    expect(await Effect.runPromise(runtime.execute("return await tools.ping()"))).toMatchObject({
+    expect(await Effect.runPromise(finished(runtime.execute("return await tools.ping()")))).toMatchObject({
       ok: true,
       value: "pong",
     })
@@ -981,7 +982,7 @@ describe("empty input signatures agree with decoding", () => {
       },
     })
     expect(runtime.catalog[0]?.signature).not.toBe("tools.take(): Promise<string>")
-    expect(await Effect.runPromise(runtime.execute(`return await tools.take(${call})`))).toMatchObject({
+    expect(await Effect.runPromise(finished(runtime.execute(`return await tools.take(${call})`)))).toMatchObject({
       ok: true,
       value: "taken",
     })
@@ -1003,15 +1004,15 @@ describe("empty input signatures agree with decoding", () => {
     const signature = "tools.consume({\n  token: string,\n}): Promise<string>"
     expect(() => decodeInput(consume, {})).toThrow()
     expect(runtime.catalog[0]?.signature).toBe(signature)
-    const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.consume" })'))
+    const result = await Effect.runPromise(finished(runtime.execute('return search({ query: "tools.consume" })')))
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
     expect(result.value).toMatchObject({ items: [{ signature }] })
-    expect(await Effect.runPromise(runtime.execute("return await tools.consume()"))).toMatchObject({
+    expect(await Effect.runPromise(finished(runtime.execute("return await tools.consume()")))).toMatchObject({
       ok: false,
       error: { kind: "InvalidToolInput" },
     })
-    expect(await Effect.runPromise(runtime.execute('return await tools.consume({ token: "t" })'))).toMatchObject({
+    expect(await Effect.runPromise(finished(runtime.execute('return await tools.consume({ token: "t" })')))).toMatchObject({
       ok: true,
       value: "consumed",
     })
@@ -1074,7 +1075,7 @@ describe("non-identifier tool paths", () => {
   })
 
   test("search results return callable bracket-notation paths and signatures", async () => {
-    const result = await Effect.runPromise(runtime.execute(`return search({ query: "resolve library" })`))
+    const result = await Effect.runPromise(finished(runtime.execute(`return search({ query: "resolve library" })`)))
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
 

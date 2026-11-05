@@ -17,13 +17,14 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
+import { finished } from "./finished.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
 // values. JSON.stringify keeps Date -> ISO string (invalid -> null), URL -> href, and
 // RegExp/Map/Set/URLSearchParams -> {}. The host boundary matches that except URLSearchParams,
 // which cross as their query string, and Set, which crosses as an array.
-const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+const run = (code: string) => Effect.runPromise(finished(CodeMode.execute({ code, tools: {} })))
 const value = async (code: string) => {
   const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
@@ -427,18 +428,18 @@ describe("RegExp", () => {
       execute: (input) => Effect.succeed(`[${input}]`),
     })
     const result = await Effect.runPromise(
-      CodeMode.execute({
+      finished(CodeMode.execute({
         tools: { host: { decorate } },
         code: `return "a1b22".replace(/\\d+/g, async (match) => await tools.host.decorate(match))`,
-      }),
+      })),
     )
     expect(result.ok && result.value).toBe("a[object Promise]b[object Promise]")
 
     const missingAwait = await Effect.runPromise(
-      CodeMode.execute({
+      finished(CodeMode.execute({
         tools: { host: { decorate } },
         code: `return "a1".replace(/\\d/, (match) => tools.host.decorate(match))`,
-      }),
+      })),
     )
     expect(missingAwait.ok && missingAwait.value).toBe("a[object Promise]")
   })
@@ -1975,10 +1976,10 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
         }),
     })
     const result = await Effect.runPromise(
-      CodeMode.execute({
+      finished(CodeMode.execute({
         tools: { host: { capture } },
         code: `return await tools.host.capture({ when: new Date(0), tags: new Map([["a", 1]]) })`,
-      }),
+      })),
     )
     expect(result.ok).toBe(true)
     expect(observed).toStrictEqual([{ when: "1970-01-01T00:00:00.000Z", tags: {} }])

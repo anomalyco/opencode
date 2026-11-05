@@ -95,15 +95,17 @@ const median = (values: Array<number>) => {
   return sorted[Math.floor(sorted.length / 2)]!
 }
 
+const run = (code: string) => Effect.scoped(Effect.flatMap(runtime.execute(code), (execution) => execution.result))
+
 for (const [name, code] of cases) {
   if (filter !== undefined && !name.includes(filter)) continue
   // One warm-up run, which also checks the program succeeds.
-  const warm = await Effect.runPromise(runtime.execute(code))
-  if (!warm.ok) throw new Error(`${name} failed: ${warm.error.message}`)
+  const warm = await Effect.runPromise(run(code))
+  if (warm.ok !== true) throw new Error(`${name} failed: ${JSON.stringify(warm)}`)
   const times = Array.from({ length: iterations }, () => 0)
   for (const index of times.keys()) {
     const start = performance.now()
-    await Effect.runPromise(runtime.execute(code))
+    await Effect.runPromise(run(code))
     times[index] = performance.now() - start
   }
   console.log(
