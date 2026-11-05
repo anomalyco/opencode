@@ -1,7 +1,8 @@
-import { createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
+import { For, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Loader } from "@opencode/ui/loader"
-import { createKeyed, createLatest, usePlugin } from "@opencode/plugin/gui"
+import { createLatest, usePlugin } from "@opencode/plugin/gui"
+import { createOfficeWorker, type WorkerClient } from "./office-worker"
 import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
 import {
   layerFont,
@@ -11,7 +12,7 @@ import {
   type WordPageSize,
   type WordSpan,
 } from "./word-protocol"
-import { createWorkerClient, movableBuffer } from "./worker-rpc"
+import { WorkerClosedError } from "./worker-rpc"
 import type { FileViewerProps } from "@opencode/plugin/gui/file"
 
 type Opened = {
@@ -27,7 +28,7 @@ type Opened = {
   readonly finish: () => Promise<number>
 }
 
-type Client = ReturnType<typeof createWorkerClient<WordMethods>>
+type Client = WorkerClient<WordMethods>
 
 /** Scrolls the page column; set once the column mounts. */
 type Scroll = { to: ScrollToPage | undefined }
@@ -44,102 +45,98 @@ type Lazy<T> = { value: T | undefined }
  * each page makes its text selectable, findable and readable, and its links followable.
  */
 export default function OfficeDocument(props: FileViewerProps) {
-  const ctx = usePlugin()
-  const [opened, setOpened] = createSignal<Opened>()
-
-  // Syncs one document worker with the loaded bytes. Terminating it is what frees the engine's memory.
-  createKeyed(
-    () => props.bytes,
-    (bytes) => {
-      const controller = new AbortController()
-      const worker = new Worker(new URL("./document.worker.ts", import.meta.url), { type: "module" })
-      const client = createWorkerClient<WordMethods>(worker)
-
-      const fail = () => {
-        if (controller.signal.aborted) return
-
-        controller.abort()
-        props.onError()
-      }
-
-      // A worker that dies after the pages showed takes them with it.
-      worker.addEventListener("error", fail)
-      worker.addEventListener("messageerror", fail)
-      onCleanup(() => {
-        controller.abort()
-        client.close()
-        setOpened(undefined)
-      })
-
-      void open(client, bytes)
-        .then((value) => {
-          if (controller.signal.aborted) return
-
-          setOpened(value)
-
-          // The worker runs calls in order, so the full layout waits until the first pages have asked for their paints:
-          // they do once the column is laid out and its observer reports them, which takes up to two frames.
-          return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-            .then(() => (controller.signal.aborted ? undefined : value.finish()))
-            .then((count) => {
-              if (count !== undefined && !controller.signal.aborted) props.onDetails([ctx.plural("pages", count)])
-            })
-        })
-        .catch(fail)
-    },
-  )
+  // A worker that dies after the pages showed takes them with it.
+  const viewer = createOfficeWorker<WordMethods, Opened>({
+    bytes: () => props.bytes,
+    createWorker: () => new Worker(new URL("./document.worker.ts", import.meta.url), { type: "module" }),
+    open: async (client, buffer, signal) => ({ value: await open(client, buffer, signal) }),
+    onDetails: (details) => props.onDetails(details),
+    onError: () => props.onError(),
+  })
 
   return (
     <Show
-      when={opened()}
+      when={viewer.opened()}
+      keyed
       fallback={
-        <div class="flex min-h-0 flex-1 items-center justify-center">
-          <Loader />
-        </div>
+        <Show when={viewer.loading()}>
+          <div class="flex min-h-0 flex-1 items-center justify-center">
+            <Loader />
+          </div>
+        </Show>
       }
     >
-      {(opened) => {
-        const scroll: Scroll = { to: undefined }
-
-        const follow = (link: WordLink) => {
-          if (link.kind === "external") return ctx.system.openExternal(link.url)
-
-          void opened()
-            .bookmark(link.bookmark)
-            .then(
-              (target) => {
-                if (target) scroll.to?.(target.index, target.y)
-              },
-              () => undefined,
-            )
-        }
-
-        return (
-          <OfficePages
-            pages={opened().pages()}
-            paint={opened().paint}
-            label={(index) => ctx.t("page", { number: index + 1 })}
-            overlay={(input) => (
-              <WordTextLayer
-                index={input.index}
-                page={opened().pages()[input.index]}
-                text={opened().text}
-                follow={follow}
-              />
-            )}
-            text
-            footer={(index) => (
-              <Show when={opened().loading() && index === opened().pages().length - 1}>
-                <Loader />
-              </Show>
-            )}
-            onScrollTo={(scrollTo) => {
-              scroll.to = scrollTo
-            }}
-          />
-        )
-      }}
+      {(opened) => (
+        <DocumentContent
+          opened={opened.value}
+          onDetails={(details) => props.onDetails(details)}
+          onError={() => props.onError()}
+        />
+      )}
     </Show>
+  )
+}
+
+/** One opened document's pages. A reloaded file mounts a new one. */
+function DocumentContent(props: {
+  opened: Opened
+  onDetails: (details: readonly string[]) => void
+  onError: () => void
+}) {
+  const ctx = usePlugin()
+  const scroll: Scroll = { to: undefined }
+  const controller = new AbortController()
+
+  onCleanup(() => controller.abort())
+
+  // The worker runs calls in order, so the full layout waits until the first pages have asked for their paints: they
+  // do once the column is laid out and its observer reports them, which takes up to two frames.
+  void new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    .then(() => (controller.signal.aborted ? undefined : props.opened.finish()))
+    .then(
+      (count) => {
+        if (count !== undefined && !controller.signal.aborted) props.onDetails([ctx.plural("pages", count)])
+      },
+      (error: Error) => {
+        // A worker that stopped reports itself through the viewer's worker.
+        if (!controller.signal.aborted && !(error instanceof WorkerClosedError)) props.onError()
+      },
+    )
+
+  const follow = (link: WordLink) => {
+    if (link.kind === "external") return ctx.system.openExternal(link.url)
+
+    void props.opened.bookmark(link.bookmark).then(
+      (target) => {
+        if (target) scroll.to?.(target.index, target.y)
+      },
+      () => undefined,
+    )
+  }
+
+  return (
+    <OfficePages
+      pages={props.opened.pages()}
+      paint={props.opened.paint}
+      label={(index) => ctx.t("page", { number: index + 1 })}
+      overlay={(input) => (
+        <WordTextLayer
+          index={input.index}
+          page={props.opened.pages()[input.index]}
+          text={props.opened.text}
+          follow={follow}
+        />
+      )}
+      text
+      footer={(index) => (
+        <Show when={props.opened.loading() && index === props.opened.pages().length - 1}>
+          <Loader />
+        </Show>
+      )}
+      onScrollTo={(scrollTo) => {
+        scroll.to = scrollTo
+      }}
+    />
   )
 }
 
@@ -221,10 +218,8 @@ function place(span: WordSpan) {
 }
 
 /** Opens the bytes in the worker and returns as soon as the document's first pages can show. */
-async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
-  // The view owns its bytes, so they move to the worker rather than being copied.
-  const buffer = movableBuffer(bytes)
-  const first = await client.call("open", { bytes: buffer }, { transfer: [buffer] })
+async function open(client: Client, buffer: ArrayBuffer, signal: AbortSignal): Promise<Opened> {
+  const first = await client.call("open", { bytes: buffer }, { transfer: [buffer], signal })
   const [layout, setLayout] = createStore({ pages: first.pages, loading: first.loading })
 
   const layOut = async (): Promise<number> => {

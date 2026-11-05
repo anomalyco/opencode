@@ -36,12 +36,14 @@ import {
   type Painted,
 } from "./sheet-paint"
 import type { SheetFrameRequest, SheetLayout, SheetMethods, SheetTab, SheetViewport } from "./sheet-protocol"
-import { createWorkerClient, movableBuffer, SupersededError, WorkerClosedError } from "./worker-rpc"
+import { createOfficeWorker, type WorkerClient } from "./office-worker"
+import { SupersededError, WorkerClosedError } from "./worker-rpc"
 
 /** The workbook worker's end in the window. */
-type Client = ReturnType<typeof createWorkerClient<SheetMethods>>
+type Client = WorkerClient<SheetMethods>
 
-type Opened = { readonly client: Client; readonly tabs: readonly SheetTab[] }
+/** An opened workbook: its worker, its visible sheets and the layout of the sheet it opened on. */
+type Opened = { readonly client: Client; readonly tabs: readonly SheetTab[]; readonly layout: SheetLayout }
 
 /** The sheet on show, and the cell a link asked for when one opened it. */
 type Shown = { readonly layout: SheetLayout; readonly target: CellAddr | undefined }
@@ -70,80 +72,77 @@ const settleDelay = 150
 /** A read-only Excel workbook with a tab per visible sheet. */
 export default function OfficeSpreadsheet(props: FileViewerProps) {
   const ctx = usePlugin()
+
+  const viewer = createOfficeWorker<SheetMethods, Opened>({
+    bytes: () => props.bytes,
+    createWorker: () => new Worker(new URL("./spreadsheet.worker.ts", import.meta.url), { type: "module" }),
+    open: async (client, buffer, signal) => {
+      const opened = await client.call("open", { bytes: buffer }, { transfer: [buffer], signal })
+
+      if (!opened) return undefined
+
+      return {
+        value: { client, tabs: opened.tabs, layout: opened.layout },
+        details: [ctx.plural("sheets", opened.tabs.length)],
+      }
+    },
+    onDetails: (details) => props.onDetails(details),
+    onError: () => props.onError(),
+  })
+
+  return (
+    <Show
+      when={viewer.opened()}
+      keyed
+      fallback={
+        <Show when={viewer.loading()}>
+          <div class="flex min-h-0 flex-1 items-center justify-center">
+            <Loader />
+          </div>
+        </Show>
+      }
+    >
+      {(opened) => <SpreadsheetWorkbook opened={opened.value} />}
+    </Show>
+  )
+}
+
+/** One opened workbook: its sheet tabs and the grid of the sheet on show. A reloaded file mounts a new one. */
+function SpreadsheetWorkbook(props: { opened: Opened }) {
+  const ctx = usePlugin()
   const panel = createUniqueId()
 
   // `selecting` is the tab the user picked while its sheet opens in the worker.
-  const [state, setState] = createStore<{
-    opened: Opened | undefined
-    shown: Shown | undefined
-    selecting: number | undefined
-  }>({
-    opened: undefined,
-    shown: undefined,
+  const [state, setState] = createStore<{ shown: Shown; selecting: number | undefined }>({
+    shown: { layout: props.opened.layout, target: undefined },
     selecting: undefined,
   })
 
-  // Syncs one workbook worker with the loaded bytes. Terminating it, when they change or the view closes, is what frees
-  // the engine's memory.
-  createKeyed(
-    () => props.bytes,
-    (bytes) => {
-      const controller = new AbortController()
-      const worker = new Worker(new URL("./spreadsheet.worker.ts", import.meta.url), { type: "module" })
-      const client = createWorkerClient<SheetMethods>(worker)
-
-      const crash = () => {
-        if (!controller.signal.aborted) props.onError()
-      }
-
-      worker.addEventListener("error", crash)
-      worker.addEventListener("messageerror", crash)
-
-      onCleanup(() => {
-        controller.abort()
-        client.close()
-        setState({ opened: undefined, shown: undefined, selecting: undefined })
-      })
-
-      // The view owns its bytes, so they move to the worker rather than being copied.
-      const buffer = movableBuffer(bytes)
-
-      void client.call("open", { bytes: buffer }, { transfer: [buffer], signal: controller.signal }).then((opened) => {
-        if (controller.signal.aborted) return
-
-        if (!opened) return props.onError()
-
-        setState({ opened: { client, tabs: opened.tabs }, shown: { layout: opened.layout, target: undefined } })
-        props.onDetails([ctx.plural("sheets", opened.tabs.length)])
-      }, crash)
-    },
-  )
-
-  const active = () => state.selecting ?? state.shown?.layout.info.activeSheet
+  const active = () => state.selecting ?? state.shown.layout.info.activeSheet
   const picking: Picking = { controller: undefined }
 
-  const show = (index: number, target?: CellAddr) => {
-    const opened = state.opened
+  onCleanup(() => picking.controller?.abort())
 
-    if (!opened || (index === active() && !target)) return
+  const show = (index: number, target?: CellAddr) => {
+    if (index === active() && !target) return
 
     picking.controller?.abort()
 
     // Back to the sheet on show: the pick that was opening is withdrawn, and the grid stays.
-    if (index === state.shown?.layout.info.activeSheet && !target) return void setState("selecting", undefined)
+    if (index === state.shown.layout.info.activeSheet && !target) return void setState("selecting", undefined)
 
     const controller = new AbortController()
 
     picking.controller = controller
     setState("selecting", index)
 
-    void opened.client.call("show", { sheet: index }, { signal: controller.signal }).then(
+    void props.opened.client.call("show", { sheet: index }, { signal: controller.signal }).then(
       (layout) => {
         // Replaced, not merged as a path setter would, so the grid below mounts afresh for the sheet.
-        if (state.opened === opened) setState({ shown: { layout, target }, selecting: undefined })
+        setState({ shown: { layout, target }, selecting: undefined })
       },
       (error: Error) => {
-        if (state.opened !== opened || error instanceof WorkerClosedError) return
+        if (error instanceof WorkerClosedError) return
 
         // One sheet that fails to open leaves the others readable: the sheet on show stays.
         setState("selecting", undefined)
@@ -154,14 +153,14 @@ export default function OfficeSpreadsheet(props: FileViewerProps) {
 
   // A link to a hidden or missing sheet goes nowhere, as in Excel.
   const navigate = (name: string, cell: CellAddr) => {
-    const tab = state.opened?.tabs.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
+    const tab = props.opened.tabs.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
 
     if (tab) show(tab.index, cell)
   }
 
   // The arrow keys move between the sheet tabs and open the one they reach; only the open tab is in the Tab order.
   const roam = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
-    const tabs = state.opened?.tabs ?? []
+    const tabs = props.opened.tabs
     const current = tabs.findIndex((tab) => tab.index === active())
     const forward = getComputedStyle(event.currentTarget).direction === "rtl" ? "ArrowLeft" : "ArrowRight"
     const backward = forward === "ArrowRight" ? "ArrowLeft" : "ArrowRight"
@@ -190,62 +189,51 @@ export default function OfficeSpreadsheet(props: FileViewerProps) {
   const tabID = (index: number | undefined) => `${panel}-tab-${index}`
 
   return (
-    <Show
-      when={state.opened}
-      fallback={
-        <div class="flex min-h-0 flex-1 items-center justify-center">
-          <Loader />
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div
+        id={panel}
+        role={props.opened.tabs.length > 1 ? "tabpanel" : undefined}
+        aria-labelledby={props.opened.tabs.length > 1 ? tabID(state.shown.layout.info.activeSheet) : undefined}
+        class="flex min-h-0 flex-1"
+      >
+        {/* Each sheet gets its own grid, so its selection and scroll position start fresh. */}
+        <Show when={state.shown} keyed>
+          {(shown) => (
+            <SpreadsheetGrid
+              client={props.opened.client}
+              layout={shown.layout}
+              target={shown.target}
+              onNavigate={navigate}
+            />
+          )}
+        </Show>
+      </div>
+      <Show when={props.opened.tabs.length > 1}>
+        <div
+          role="tablist"
+          aria-label={ctx.t("sheet.tabs")}
+          class="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-v2-border-border-muted px-2"
+          onKeyDown={roam}
+        >
+          <For each={props.opened.tabs}>
+            {(tab) => (
+              <button
+                type="button"
+                role="tab"
+                id={tabID(tab.index)}
+                aria-controls={panel}
+                aria-selected={tab.index === active()}
+                tabIndex={tab.index === active() ? 0 : -1}
+                class="h-7 shrink-0 rounded-md px-2.5 text-13-regular text-text-weak hover:bg-v2-background-bg-layer-02 aria-selected:bg-v2-background-bg-layer-02 aria-selected:text-text-strong"
+                onClick={() => show(tab.index)}
+              >
+                {tab.name}
+              </button>
+            )}
+          </For>
         </div>
-      }
-    >
-      {(opened) => (
-        <div class="flex min-h-0 flex-1 flex-col">
-          <div
-            id={panel}
-            role={opened().tabs.length > 1 ? "tabpanel" : undefined}
-            aria-labelledby={opened().tabs.length > 1 ? tabID(state.shown?.layout.info.activeSheet) : undefined}
-            class="flex min-h-0 flex-1"
-          >
-            {/* Each sheet gets its own grid, so its selection and scroll position start fresh. */}
-            <Show when={state.shown} keyed>
-              {(shown) => (
-                <SpreadsheetGrid
-                  client={opened().client}
-                  layout={shown.layout}
-                  target={shown.target}
-                  onNavigate={navigate}
-                />
-              )}
-            </Show>
-          </div>
-          <Show when={opened().tabs.length > 1}>
-            <div
-              role="tablist"
-              aria-label={ctx.t("sheet.tabs")}
-              class="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-v2-border-border-muted px-2"
-              onKeyDown={roam}
-            >
-              <For each={opened().tabs}>
-                {(tab) => (
-                  <button
-                    type="button"
-                    role="tab"
-                    id={tabID(tab.index)}
-                    aria-controls={panel}
-                    aria-selected={tab.index === active()}
-                    tabIndex={tab.index === active() ? 0 : -1}
-                    class="h-7 shrink-0 rounded-md px-2.5 text-13-regular text-text-weak hover:bg-v2-background-bg-layer-02 aria-selected:bg-v2-background-bg-layer-02 aria-selected:text-text-strong"
-                    onClick={() => show(tab.index)}
-                  >
-                    {tab.name}
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
-      )}
-    </Show>
+      </Show>
+    </div>
   )
 }
 
