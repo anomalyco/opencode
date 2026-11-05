@@ -23,6 +23,7 @@ use opencode_api::generated::{
     FormID, FormInfo, PermissionListInput, PermissionReplyInput, PermissionRequest, SessionFormCancelInput,
     SessionFormListInput, SessionFormReplyInput, SessionID, SessionMessageGetInput, V2Event,
 };
+use opencode_local::cli_config::Visibility;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::input::KeyEvent;
 use opentui::keymap::{Condition, Disposer};
@@ -33,7 +34,9 @@ use self::menu::{Item, Tone};
 use self::panel::{Entry, Outcome, Panel, Spec};
 use crate::prompt::status::mono_shortcut;
 use crate::prompt::{Delivery, Prompt};
+use crate::settings::{Change, Key, MiniSettings};
 use crate::theme::RunTheme;
+use crate::variants::{ModelSelection, Provider};
 
 /// `PERMISSION_ROWS`.
 const PERMISSION_ROWS: u16 = 12;
@@ -44,6 +47,8 @@ const BASE: u16 = 3;
 
 type Action = Option<Box<dyn Fn()>>;
 type TextAction = Option<Box<dyn Fn(&str)>>;
+/// Called once a change was saved or failed.
+pub type Done = Box<dyn FnOnce()>;
 
 /// What the footer views ask of mini around them. Each returns at once.
 #[derive(Default)]
@@ -62,6 +67,28 @@ pub struct Hooks {
     pub clear_screen: Action,
     /// `onExit`.
     pub exit: Action,
+    /// What the model and variant panels list.
+    pub models: Option<Box<dyn Fn() -> Models>>,
+    /// `onModelSelect`.
+    pub model: Option<Box<dyn Fn(ModelSelection)>>,
+    /// `onVariantSelect`.
+    pub variant: Option<Box<dyn Fn(Option<String>)>>,
+    /// `onCycleVariant`.
+    pub cycle_variant: Action,
+    /// The current settings, for the settings panel.
+    pub settings: Option<Box<dyn Fn() -> MiniSettings>>,
+    /// `onMiniSettingChange`: saves a change, then calls the callback.
+    pub setting: Option<Box<dyn Fn(Change, Done)>>,
+}
+
+/// What the model and variant panels list (`providers`, `currentModel`, `variants`, `currentVariant`).
+#[derive(Clone, Debug, Default)]
+pub struct Models {
+    /// `None` while the catalog loads.
+    pub providers: Option<Vec<Provider>>,
+    pub current: Option<ModelSelection>,
+    pub variants: Vec<String>,
+    pub variant: Option<String>,
 }
 
 /// The view that replaces the composer (`FooterView`).
@@ -78,6 +105,8 @@ enum Route {
     Command,
     Agent,
     Model,
+    Variant,
+    Settings,
     Queued,
 }
 
@@ -88,6 +117,8 @@ impl Route {
             Self::Command => "command",
             Self::Agent => "agent",
             Self::Model => "model",
+            Self::Variant => "variant",
+            Self::Settings => "settings",
             Self::Queued => "queued-menu",
         }
     }
@@ -110,6 +141,10 @@ enum Pick {
     Exit,
     Agent(String),
     Pending(String, Delivery),
+    Variants,
+    Model(ModelSelection),
+    Variant(Option<String>),
+    Setting(Key),
 }
 
 /// The session the requests belong to.
@@ -133,6 +168,8 @@ struct State {
     panel: Option<Panel<Pick>>,
     terminal: (u16, u16),
     running: bool,
+    /// The setting being saved (`saving`).
+    saving: Option<Key>,
 }
 
 /// The widgets of the request shown, which keys reach into.
@@ -233,7 +270,7 @@ impl Footers {
             (Some(Shown::Permission(_)), _) => BASE + PERMISSION_ROWS,
             (Some(Shown::Form(_)), _) => BASE + FORM_ROWS,
             (_, Some(Route::Queued)) => 1 + state.panel.as_ref().map_or(0, |panel| panel.rows(rows)) as u16,
-            (_, Some(Route::Command | Route::Agent | Route::Model)) => {
+            (_, Some(Route::Command | Route::Agent | Route::Model | Route::Variant | Route::Settings)) => {
                 let layout = panel::layout(rows, panel::LIST_ROWS);
                 1 + (layout.frame + layout.limit) as u16
             }
@@ -610,6 +647,26 @@ impl Inner {
                 background: true,
                 close_on_first_up: false,
             },
+            Route::Variant => Spec {
+                title: "Select variant",
+                count: true,
+                empty: "No results found",
+                rows: panel::LIST_ROWS,
+                fixed: true,
+                grouped: false,
+                background: true,
+                close_on_first_up: false,
+            },
+            Route::Settings => Spec {
+                title: "Settings",
+                count: false,
+                empty: "No settings found",
+                rows: panel::LIST_ROWS,
+                fixed: true,
+                grouped: true,
+                background: true,
+                close_on_first_up: false,
+            },
             Route::Model => Spec {
                 title: "Select model",
                 count: true,
@@ -683,7 +740,36 @@ impl Inner {
                 queued.iter().map(|item| item.prompt.text.as_str()).collect(),
                 keymap.shortcut_all("variant.cycle").map(|key| mono_shortcut(&key, self.mono)),
                 shortcut("app.clear"),
+                &self.models().variants,
             ),
+            Route::Variant => {
+                let models = self.models();
+                let current = models.variant.clone();
+                std::iter::once(None)
+                    .chain(models.variants.iter().cloned().map(Some))
+                    .map(|variant| {
+                        let selected = current == variant;
+                        let display = variant.clone().unwrap_or_else(|| "Default".to_owned());
+                        Entry {
+                            keywords: variant.clone().unwrap_or_else(|| "default".to_owned()),
+                            item: Item {
+                                display,
+                                footer: selected.then(|| "current".to_owned()),
+                                tone: Some(Tone::Selection),
+                                current: selected,
+                                ..Item::default()
+                            },
+                            action: Pick::Variant(variant),
+                        }
+                    })
+                    .collect()
+            }
+            Route::Model => model_entries(&self.models(), self.query()),
+            Route::Settings => {
+                let settings = self.hooks().settings.as_ref().map(|settings| settings());
+                let saving = self.state.borrow().saving;
+                settings.map(|settings| setting_entries(&settings, saving)).unwrap_or_default()
+            }
             Route::Agent => {
                 let current = self.current_agent();
                 self.prompt
@@ -712,8 +798,6 @@ impl Inner {
                     })
                     .collect()
             }
-            // M.4 loads the provider catalog the model panel lists.
-            Route::Model => Vec::new(),
             Route::Queued => queued
                 .iter()
                 .map(|item| Entry {
@@ -735,6 +819,13 @@ impl Inner {
         let Some(panel) = state.panel.as_mut() else {
             return;
         };
+        if route == Route::Model {
+            let loading = self.models_loading();
+            panel.spec.empty = if loading { "Models loading" } else { "No results found" };
+        }
+        if route == Route::Settings {
+            panel.hint = Some("left/right change".to_owned());
+        }
         panel.set_entries(entries, rows);
         if opening {
             panel.reveal_current(rows);
@@ -816,6 +907,20 @@ impl Inner {
             }
             Pick::Agents => self.open_route(Route::Agent),
             Pick::Models => self.open_route(Route::Model),
+            Pick::Variants => self.open_route(Route::Variant),
+            Pick::Model(model) => {
+                if let Some(select) = &hooks.model {
+                    select(model);
+                }
+                self.close_route();
+            }
+            Pick::Variant(variant) => {
+                if let Some(select) = &hooks.variant {
+                    select(variant);
+                }
+                self.close_route();
+            }
+            Pick::Setting(key) => self.change_setting(key, true),
             Pick::Queued => self.open_queued(),
             Pick::VariantCycle => {
                 self.cycle_variant();
@@ -827,10 +932,7 @@ impl Inner {
                     clear();
                 }
             }
-            Pick::Settings => {
-                self.close_route();
-                self.prompt.submit_text("/settings");
-            }
+            Pick::Settings => self.open_route(Route::Settings),
             Pick::Exit => {
                 if let Some(exit) = &hooks.exit {
                     exit();
@@ -854,9 +956,55 @@ impl Inner {
         }
     }
 
-    /// `handleCycle` without variants: M.4 cycles them.
+    /// `handleCycle`.
     fn cycle_variant(&self) {
-        self.notice("no variants available");
+        if let Some(cycle) = &self.hooks().cycle_variant {
+            cycle();
+        }
+    }
+
+    fn models(&self) -> Models {
+        self.hooks().models.as_ref().map(|models| models()).unwrap_or_default()
+    }
+
+    fn models_loading(&self) -> bool {
+        self.models().providers.is_none()
+    }
+
+    fn query(&self) -> String {
+        self.state.borrow().panel.as_ref().map(|panel| panel.query().to_owned()).unwrap_or_default()
+    }
+
+    /// `change` in the settings panel: Enter and right step forward, left back. One change saves at a time.
+    fn change_setting(self: &Rc<Self>, key: Key, forward: bool) {
+        let hooks = self.hooks();
+        let (Some(settings), Some(save)) = (&hooks.settings, &hooks.setting) else { return };
+        if self.state.borrow().saving.is_some() {
+            return;
+        }
+        let Some(change) = settings().change(key, forward) else { return };
+        self.state.borrow_mut().saving = Some(key);
+        self.paint();
+        let weak = Rc::downgrade(self);
+        save(
+            change,
+            Box::new(move || {
+                if let Some(inner) = weak.upgrade() {
+                    inner.state.borrow_mut().saving = None;
+                    inner.paint();
+                }
+            }),
+        );
+    }
+
+    /// Left and right in the settings panel.
+    fn setting_key(self: &Rc<Self>, name: &str) -> bool {
+        let selected =
+            self.state.borrow().panel.as_ref().and_then(|panel| panel.selected()).map(|entry| entry.action.clone());
+        if let Some(Pick::Setting(key)) = selected {
+            self.change_setting(key, name == "right");
+        }
+        true
     }
 
     /// `openQueuedMenu`.
@@ -1284,7 +1432,12 @@ fn open_url(url: &str) -> bool {
 
 /// `RunCommandMenuBody`'s entries, without the subagent and variant-list rows, which need the subagent stream and
 /// M.4's variants.
-fn command_entries(queued: Vec<&str>, variant_cycle: Option<String>, clear: Option<String>) -> Vec<Entry<Pick>> {
+fn command_entries(
+    queued: Vec<&str>,
+    variant_cycle: Option<String>,
+    clear: Option<String>,
+    variants: &[String],
+) -> Vec<Entry<Pick>> {
     let entry = |category: &str, display: &str, footer: Option<String>, keywords: &str, action: Pick| Entry {
         item: Item { display: display.to_owned(), category: Some(category.to_owned()), footer, ..Item::default() },
         keywords: keywords.to_owned(),
@@ -1307,8 +1460,12 @@ fn command_entries(queued: Vec<&str>, variant_cycle: Option<String>, clear: Opti
             Pick::Queued,
         ));
     }
+    entries.push(entry("Agent", "Variant cycle", variant_cycle, "variant cycle", Pick::VariantCycle));
+    if !variants.is_empty() {
+        let keywords = format!("variant variants {}", variants.join(" "));
+        entries.push(entry("Agent", "Switch model variant", None, &keywords, Pick::Variants));
+    }
     entries.extend([
-        entry("Agent", "Variant cycle", variant_cycle, "variant cycle", Pick::VariantCycle),
         entry("System", "Clear screen", clear, "clear screen cls redraw", Pick::Clear),
         entry(
             "System",
@@ -1320,6 +1477,139 @@ fn command_entries(queued: Vec<&str>, variant_cycle: Option<String>, clear: Opti
         entry("System", "Exit", Some("/exit".into()), "/exit exit", Pick::Exit),
     ]);
     entries
+}
+
+/// `RunModelSelectBody`'s entries: every model but the deprecated, opencode first, then by provider and model name.
+/// A query shows each model's provider in the footer.
+fn model_entries(models: &Models, query: String) -> Vec<Entry<Pick>> {
+    let current = models.current.as_ref();
+    let searching = !query.trim().is_empty();
+    let mut entries: Vec<(String, Entry<Pick>)> = models
+        .providers
+        .iter()
+        .flatten()
+        .flat_map(|provider| {
+            provider.models.iter().filter(|(_, model)| !model.deprecated).map(move |(id, model)| {
+                let title = if model.name.is_empty() { id.clone() } else { model.name.clone() };
+                let selected =
+                    current.is_some_and(|current| current.provider_id == provider.id && current.model_id == *id);
+                let footer = if selected {
+                    Some("current".to_owned())
+                } else if model.cost == Some(0.0) && provider.id == "opencode" {
+                    Some("Free".to_owned())
+                } else {
+                    (title != *id).then(|| id.clone())
+                };
+                let keywords =
+                    format!("{} {} {id} {title} {}", provider.id, provider.name, footer.clone().unwrap_or_default());
+                let (footer, tone) = if searching {
+                    (Some(provider.name.clone()), None)
+                } else {
+                    (footer, selected.then_some(Tone::Selection))
+                };
+                let entry = Entry {
+                    keywords,
+                    item: Item {
+                        display: title,
+                        category: Some(provider.name.clone()),
+                        footer,
+                        tone,
+                        current: selected,
+                        ..Item::default()
+                    },
+                    action: Pick::Model(ModelSelection { provider_id: provider.id.clone(), model_id: id.clone() }),
+                };
+                (provider.id.clone(), entry)
+            })
+        })
+        .collect();
+    entries.sort_by(|(a_id, a), (b_id, b)| {
+        (a_id != "opencode")
+            .cmp(&(b_id != "opencode"))
+            .then_with(|| {
+                opencode_api::js::locale_compare(
+                    a.item.category.as_deref().unwrap_or_default(),
+                    b.item.category.as_deref().unwrap_or_default(),
+                )
+            })
+            .then_with(|| opencode_api::js::locale_compare(&a.item.display, &b.item.display))
+    });
+    entries.into_iter().map(|(_, entry)| entry).collect()
+}
+
+/// `RunSettingsBody`'s entries.
+fn setting_entries(settings: &MiniSettings, saving: Option<Key>) -> Vec<Entry<Pick>> {
+    let visibility = |value: Visibility| if value == Visibility::Show { "show" } else { "hide" };
+    let rows = [
+        (
+            "Transcript",
+            "Verbosity",
+            Key::Verbosity,
+            settings.verbosity_label().to_owned(),
+            "verbosity quiet default everything custom noise",
+        ),
+        ("Transcript", "Thinking", Key::Thinking, visibility(settings.thinking).to_owned(), "thinking reasoning"),
+        (
+            "Transcript",
+            "Tools",
+            Key::Tools,
+            visibility(settings.tools).to_owned(),
+            "tools files skills activity work steps intermediate",
+        ),
+        (
+            "Transcript",
+            "Shell",
+            Key::ShellOutput,
+            visibility(settings.shell_output).to_owned(),
+            "shell tool command output",
+        ),
+        (
+            "Transcript",
+            "Turn summary",
+            Key::TurnSummary,
+            visibility(settings.turn_summary).to_owned(),
+            "turn summary agent model duration",
+        ),
+        (
+            "Terminal",
+            "Footer details",
+            Key::Footer,
+            visibility(settings.footer).to_owned(),
+            "footer status activity model context usage",
+        ),
+        ("Terminal", "Splash", Key::Splash, visibility(settings.splash).to_owned(), "splash entry exit banner"),
+        (
+            "Terminal",
+            "Monochrome UI",
+            Key::Mono,
+            if settings.mono { "on" } else { "off" }.to_owned(),
+            "mono monochrome ascii legacy compat terminal",
+        ),
+        (
+            "Terminal",
+            "Work spinner",
+            Key::WorkSpinner,
+            settings.work_spinner.as_str().replace("block-", "").replace('-', " "),
+            "work spinner animation",
+        ),
+    ];
+    rows.into_iter()
+        .map(|(category, display, key, value, words)| {
+            let saved = saving == Some(key);
+            let word = if key == Key::WorkSpinner { settings.work_spinner.as_str().to_owned() } else { value.clone() };
+            Entry {
+                keywords: format!("{words} {word}"),
+                item: Item {
+                    display: display.to_owned(),
+                    category: Some(category.to_owned()),
+                    footer: Some(if saved { "saving".to_owned() } else { value }),
+                    tone: Some(if saved { Tone::Running } else { Tone::Selection }),
+                    ..Item::default()
+                },
+                action: Pick::Setting(key),
+            }
+        })
+        .collect()
 }
 
 /// The footer's layers (`footer.view.tsx:560-613`, the panels' and the request bodies' keys).
@@ -1382,6 +1672,9 @@ fn install_layers(inner: &Rc<Inner>) {
         ))
         .enabled(when(|inner| route(inner).is_some()))
         .priority(2),
+        KeymapLayer::new(keys(&["left", "right"], Inner::setting_key))
+            .enabled(when(|inner| route(inner) == Some(Route::Settings)))
+            .priority(3),
         KeymapLayer::new(vec![
             TuiCommand::new("queued_prompt.undo", {
                 let weak = Rc::downgrade(inner);
@@ -1450,6 +1743,20 @@ impl Inner {
 }
 
 impl Footers {
+    /// `/settings`: the settings panel over the composer.
+    pub fn open_settings(&self) {
+        self.0.open_route(Route::Settings);
+    }
+
+    /// The provider catalog, the model, or its variants changed: an open model, variant, or command panel follows.
+    pub fn models_changed(&self) {
+        let route = self.0.state.borrow().route;
+        if matches!(route, Some(Route::Model | Route::Variant | Route::Command)) {
+            self.0.paint();
+            self.0.layout();
+        }
+    }
+
     /// The session's pending prompts changed (an inbox event or an admission).
     pub fn queue_changed(&self) {
         self.0.queue_changed();
