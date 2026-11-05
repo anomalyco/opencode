@@ -615,10 +615,15 @@ export async function load(scriptPath: string): Promise<LoadedScript> {
   } catch (cause) {
     // 已是 WorkflowError（如 resolveExecute 在顶层 await 路径中复抛）时原样上抛。
     if (isWorkflowError(cause)) throw cause
-    throw new WorkflowError("SCRIPT_SYNTAX_ERROR", `脚本加载失败（语法错误或导入异常）：${scriptPath}`, {
-      filePath: scriptPath,
-      reason: cause instanceof Error ? cause.message : String(cause),
-    })
+    // message 拼入原始错误（bun 的编译期错误质量高、含变量名与定位，如 const 重复赋值
+    // "This assignment will throw because \"x\" is a constant"）——笼统串无诊断价值，
+    // 用户在 TUI 只看得到 message，原始错误必须直达。
+    const rawReason = cause instanceof Error ? cause.message : String(cause)
+    throw new WorkflowError(
+      "SCRIPT_SYNTAX_ERROR",
+      `脚本加载失败（语法错误或导入异常）：${scriptPath}——${rawReason}`,
+      { filePath: scriptPath, reason: rawReason },
+    )
   }
 
   // ---- 4. 解析 execute 主体（缺失 → SCRIPT_SYNTAX_ERROR）----

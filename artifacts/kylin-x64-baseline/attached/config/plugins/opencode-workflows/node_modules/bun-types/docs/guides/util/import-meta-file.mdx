@@ -1,0 +1,15 @@
+---
+title: Get the file name of the current file
+sidebarTitle: import.meta.file
+mode: center
+---
+
+Bun provides a handful of module-specific utilities on the [`import.meta`](/docs/runtime/module-resolution#import-meta) object. Use `import.meta.file` to retrieve the name of the current file.
+
+```ts /a/b/c.ts icon="/icons/typescript.svg"
+import.meta.file; // => "c.ts"
+```
+
+---
+
+See [Docs > API > import.meta](/docs/runtime/module-resolution#import-meta) for complete documentation.

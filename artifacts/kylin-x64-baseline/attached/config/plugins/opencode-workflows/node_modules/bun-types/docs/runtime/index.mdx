@@ -1,0 +1,223 @@
+---
+title: Bun Runtime
+description: Execute JavaScript/TypeScript files, package.json scripts, and executable packages with Bun's fast runtime.
+---
+
+import Run from "/snippets/cli/run.mdx";
+
+The Bun Runtime is designed to start fast and run fast.
+
+Under the hood, Bun uses the [JavaScriptCore engine](https://developer.apple.com/documentation/javascriptcore), which is developed by Apple for Safari. In most cases, the startup and running performance is faster than V8, the engine used by Node.js and Chromium-based browsers. Its transpiler and runtime are written in Zig, a modern, high-performance language. On Linux, this translates into startup times [4x faster](https://twitter.com/jarredsumner/status/1499225725492076544) than Node.js.
+
+| Command         | Time     |
+| --------------- | -------- |
+| `bun hello.js`  | `5.2ms`  |
+| `node hello.js` | `25.1ms` |
+
+This benchmark is based on running a Hello World script on Linux
+
+## Run a file
+
+Use `bun run` to execute a source file.
+
+```bash terminal icon="terminal"
+bun run index.js
+```
+
+Bun supports TypeScript and JSX out of the box. Every file is transpiled on the fly by Bun's fast native transpiler before being executed.
+
+```bash terminal icon="terminal"
+bun run index.js
+bun run index.jsx
+bun run index.ts
+bun run index.tsx
+```
+
+Alternatively, you can omit the `run` keyword and use the "naked" command; it behaves identically.
+
+```bash terminal icon="terminal"
+bun index.tsx
+bun index.js
+```
+
+### `--watch`
+
+To run a file in watch mode, use the `--watch` flag.
+
+```bash terminal icon="terminal"
+bun --watch run index.tsx
+```
+
+<Note>
+When using `bun run`, put Bun flags like `--watch` immediately after `bun`.
+
+```bash
+bun --watch run dev # ✔️ do this
+bun run dev --watch # ❌ don't do this
+```
+
+Flags that occur at the end of the command will be ignored and passed through to the `"dev"` script itself.
+
+</Note>
+
+## Run a `package.json` script
+
+<Note>
+Compare to `npm run <script>` or `yarn <script>`
+</Note>
+
+```sh
+bun [bun flags] run <script> [script flags]
+```
+
+Your `package.json` can define a number of named `"scripts"` that correspond to shell commands.
+
+```json package.json icon="file-json"
+{
+  // ... other fields
+  "scripts": {
+    "clean": "rm -rf dist && echo 'Done.'",
+    "dev": "bun server.ts"
+  }
+}
+```
+
+Use `bun run <script>` to execute these scripts.
+
+```bash terminal icon="terminal"
+bun run clean
+rm -rf dist && echo 'Done.'
+```
+
+```txt
+Cleaning...
+Done.
+```
+
+Bun executes the script command in a subshell. On Linux & macOS, it checks for the following shells in order, using the first one it finds: `bash`, `sh`, `zsh`. On Windows, it uses [bun shell](/docs/runtime/shell) to support bash-like syntax and many common commands.
+
+<Note>⚡️ The startup time for `npm run` on Linux is roughly 170ms; with Bun it is `6ms`.</Note>
+
+Scripts can also be run with the shorter command `bun <script>`, however if there is a built-in bun command with the same name, the built-in command takes precedence. In this case, use the more explicit `bun run <script>` command to execute your package script.
+
+```bash terminal icon="terminal"
+bun run dev
+```
+
+To see a list of available scripts, run `bun run` without any arguments.
+
+```bash terminal icon="terminal"
+bun run
+```
+
+```txt
+quickstart scripts:
+
+ bun run clean
+   rm -rf dist && echo 'Done.'
+
+ bun run dev
+   bun server.ts
+
+2 scripts
+```
+
+Bun respects lifecycle hooks. For instance, `bun run clean` will execute `preclean` and `postclean`, if defined. If the `pre<script>` fails, Bun will not execute the script itself.
+
+### `--bun`
+
+It's common for `package.json` scripts to reference locally-installed CLIs like `vite` or `next`. These CLIs are often JavaScript files marked with a [shebang](<https://en.wikipedia.org/wiki/Shebang_(Unix)>) to indicate that they should be executed with `node`.
+
+```js cli.js icon="/icons/javascript.svg"
+#!/usr/bin/env node
+
+// do stuff
+```
+
+By default, Bun respects this shebang and executes the script with `node`. However, you can override this behavior with the `--bun` flag. For Node.js-based CLIs, this will run the CLI with Bun instead of Node.js.
+
+```bash terminal icon="terminal"
+bun run --bun vite
+```
+
+### Filtering
+
+In monorepos containing multiple packages, you can use the `--filter` argument to execute scripts in many packages at once.
+
+Use `bun run --filter <name_pattern> <script>` to execute `<script>` in all packages whose name matches `<name_pattern>`.
+For example, if you have subdirectories containing packages named `foo`, `bar` and `baz`, running
+
+```bash terminal icon="terminal"
+bun run --filter 'ba*' <script>
+```
+
+will execute `<script>` in both `bar` and `baz`, but not in `foo`.
+
+Find more details in the docs page for [filter](/docs/pm/filter#running-scripts-with-filter).
+
+## `bun run -` to pipe code from stdin
+
+`bun run -` lets you read JavaScript, TypeScript, TSX, or JSX from stdin and execute it without writing to a temporary file first.
+
+```bash terminal icon="terminal"
+echo "console.log('Hello')" | bun run -
+```
+
+```txt
+Hello
+```
+
+You can also use `bun run -` to redirect files into Bun. For example, to run a `.js` file as if it were a `.ts` file:
+
+```bash terminal icon="terminal"
+echo "console.log!('This is TypeScript!' as any)" > secretly-typescript.js
+bun run - < secretly-typescript.js
+```
+
+```txt
+This is TypeScript!
+```
+
+For convenience, all code is treated as TypeScript with JSX support when using `bun run -`.
+
+## `bun run --console-depth`
+
+Control the depth of object inspection in console output with the `--console-depth` flag.
+
+```bash terminal icon="terminal"
+bun --console-depth 5 run index.tsx
+```
+
+This sets how deeply nested objects are displayed in `console.log()` output. The default depth is `2`. Higher values show more nested properties but may produce verbose output for complex objects.
+
+```ts console.ts icon="/icons/typescript.svg"
+const nested = { a: { b: { c: { d: "deep" } } } };
+console.log(nested);
+// With --console-depth 2 (default): { a: { b: [Object] } }
+// With --console-depth 4: { a: { b: { c: { d: 'deep' } } } }
+```
+
+## `bun run --smol`
+
+In memory-constrained environments, use the `--smol` flag to reduce memory usage at a cost to performance.
+
+```bash terminal icon="terminal"
+bun --smol run index.tsx
+```
+
+This causes the garbage collector to run more frequently, which can slow down execution. However, it can be useful in environments with limited memory. Bun automatically adjusts the garbage collector's heap size based on the available memory (accounting for cgroups and other memory limits) with and without the `--smol` flag, so this is mostly useful for cases where you want to make the heap size grow more slowly.
+
+## Resolution order
+
+Absolute paths and paths starting with `./` or `.\\` are always executed as source files. Unless using `bun run`, running a file with an allowed extension will prefer the file over a package.json script.
+
+When there is a package.json script and a file with the same name, `bun run` prioritizes the package.json script. The full resolution order is:
+
+1. package.json scripts, eg `bun run build`
+2. Source files, eg `bun run src/main.js`
+3. Binaries from project packages, eg `bun add eslint && bun run eslint`
+4. (`bun run` only) System commands, eg `bun run ls`
+
+---
+
+<Run />

@@ -1,0 +1,41 @@
+{
+  "name": "bun-ffi-structs",
+  "version": "0.2.4",
+  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sst/bun-ffi-structs.git"
+  },
+  "scripts": {
+    "test": "bun test",
+    "bench": "bun run bench/structs.bench.ts",
+    "prettier:check": "bun prettier --check .",
+    "prettier:write": "bun prettier --write .",
+    "build": "./scripts/build.sh"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "3.6.2",
+    "tinybench": "^5.0.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "prettier": {
+    "semi": false,
+    "printWidth": 120
+  }
+}

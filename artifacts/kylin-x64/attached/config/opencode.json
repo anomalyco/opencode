@@ -30,5 +30,12 @@
   "subagent_depth": 2,
   "model": "enterprise-llm/your-model-name",
   "autoupdate": false,
+  "plugin": [
+    ["./plugins/opencode-workflows", {
+      "maxConcurrency": 4,
+      "agentTimeout": 86400000,
+      "storageRoot": ".opencode/workflows"
+    }]
+  ],
   "$schema": "https://opencode.ai/config.json"
 }

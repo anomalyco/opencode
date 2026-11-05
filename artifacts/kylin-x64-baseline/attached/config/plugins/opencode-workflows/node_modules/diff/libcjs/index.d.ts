@@ -1,0 +1,20 @@
+import Diff from './diff/base.js';
+import { diffChars, characterDiff } from './diff/character.js';
+import { diffWords, diffWordsWithSpace, wordDiff, wordsWithSpaceDiff } from './diff/word.js';
+import { diffLines, diffTrimmedLines, lineDiff } from './diff/line.js';
+import { diffSentences, sentenceDiff } from './diff/sentence.js';
+import { diffCss, cssDiff } from './diff/css.js';
+import { diffJson, canonicalize, jsonDiff } from './diff/json.js';
+import { diffArrays, arrayDiff } from './diff/array.js';
+import { applyPatch, applyPatches } from './patch/apply.js';
+import type { ApplyPatchOptions, ApplyPatchesOptions } from './patch/apply.js';
+import { parsePatch } from './patch/parse.js';
+import { reversePatch } from './patch/reverse.js';
+import { structuredPatch, createTwoFilesPatch, createPatch, formatPatch, INCLUDE_HEADERS, FILE_HEADERS_ONLY, OMIT_HEADERS } from './patch/create.js';
+import type { StructuredPatchOptionsAbortable, StructuredPatchOptionsNonabortable, CreatePatchOptionsAbortable, CreatePatchOptionsNonabortable, HeaderOptions } from './patch/create.js';
+import { convertChangesToDMP } from './convert/dmp.js';
+import { convertChangesToXML } from './convert/xml.js';
+import type { ChangeObject, Change, ArrayChange, DiffArraysOptionsAbortable, DiffArraysOptionsNonabortable, DiffCharsOptionsAbortable, DiffCharsOptionsNonabortable, DiffLinesOptionsAbortable, DiffLinesOptionsNonabortable, DiffWordsOptionsAbortable, DiffWordsOptionsNonabortable, DiffSentencesOptionsAbortable, DiffSentencesOptionsNonabortable, DiffJsonOptionsAbortable, DiffJsonOptionsNonabortable, DiffCssOptionsAbortable, DiffCssOptionsNonabortable, StructuredPatch, StructuredPatchHunk } from './types.js';
+export { Diff, diffChars, characterDiff, diffWords, wordDiff, diffWordsWithSpace, wordsWithSpaceDiff, diffLines, lineDiff, diffTrimmedLines, diffSentences, sentenceDiff, diffCss, cssDiff, diffJson, jsonDiff, diffArrays, arrayDiff, structuredPatch, createTwoFilesPatch, createPatch, formatPatch, INCLUDE_HEADERS, FILE_HEADERS_ONLY, OMIT_HEADERS, applyPatch, applyPatches, parsePatch, reversePatch, convertChangesToDMP, convertChangesToXML, canonicalize };
+export type { ChangeObject, Change, ArrayChange, DiffArraysOptionsAbortable, DiffArraysOptionsNonabortable, DiffCharsOptionsAbortable, DiffCharsOptionsNonabortable, DiffLinesOptionsAbortable, DiffLinesOptionsNonabortable, DiffWordsOptionsAbortable, DiffWordsOptionsNonabortable, DiffSentencesOptionsAbortable, DiffSentencesOptionsNonabortable, DiffJsonOptionsAbortable, DiffJsonOptionsNonabortable, DiffCssOptionsAbortable, DiffCssOptionsNonabortable, StructuredPatch, StructuredPatchHunk, ApplyPatchOptions, ApplyPatchesOptions, StructuredPatchOptionsAbortable, StructuredPatchOptionsNonabortable, CreatePatchOptionsAbortable, CreatePatchOptionsNonabortable, HeaderOptions };
+//# sourceMappingURL=index.d.ts.map

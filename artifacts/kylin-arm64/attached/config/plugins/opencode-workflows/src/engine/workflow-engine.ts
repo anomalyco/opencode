@@ -91,6 +91,21 @@ function defaultConcurrency(): number {
   return Math.max(1, Math.min(16, cores - 2))
 }
 
+/**
+ * 提取脚本加载错误的原始原因（日志 reason 字段用）。
+ *
+ * WorkflowError 的 message 是面向用户的完整描述（含笼统前缀），其 context.reason 承载
+ * **结构化的原始错误**（如 bun 编译期的 `This assignment will throw because "x" is a
+ * constant`）——日志记录优先取后者（排障直接看到根因），非 WorkflowError 回退 message。
+ */
+function extractScriptErrorReason(error: unknown): string {
+  if (isWorkflowError(error)) {
+    const reason = error.context?.reason
+    if (typeof reason === "string" && reason.length > 0) return reason
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
 // ============================================================================
 // 公开接口与依赖
 // ============================================================================
@@ -523,11 +538,12 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     } catch (error) {
       // 脚本加载失败（R4.1）：记 ERROR(SCRIPT_LOAD_FAILED) 恰一条后向上抛出，保持既有行为
       // （调用方 Promise 照常 reject、不创建 Run）。此路径尚未 createRun，故无 runId（归一为
-      // 占位 "unknown"），但 scriptPath 与失败原因摘要齐备。
+      // 占位 "unknown"），但 scriptPath 与失败原因摘要齐备。reason 优先取 WorkflowError
+      // context 的结构化原始错误（如 bun 编译期的 const 重复赋值详情），message 仅兜底。
       log.error("unknown", "脚本加载失败（execute）", {
         eventCode: WORKFLOW_EVENT_CODES.SCRIPT_LOAD_FAILED,
         scriptPath,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: extractScriptErrorReason(error),
       })
       throw error
     }
@@ -619,10 +635,11 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       } else {
         // 脚本加载失败（R4.1，resume 路径）：记 ERROR(SCRIPT_LOAD_FAILED) 恰一条后向上抛出，
         // 保持既有行为（调用方 Promise 照常 reject、不复活 Run）。此路径 runId 已知。
+        // reason 优先取 context 的结构化原始错误（同 execute 路径）。
         log.error(runId, "脚本加载失败（resume）", {
           eventCode: WORKFLOW_EVENT_CODES.SCRIPT_LOAD_FAILED,
           scriptPath: snapshot.scriptPath,
-          reason: error instanceof Error ? error.message : String(error),
+          reason: extractScriptErrorReason(error),
         })
         throw error
       }

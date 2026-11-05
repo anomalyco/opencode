@@ -1,0 +1,47 @@
+---
+title: Build an HTTP server using Hono and Bun
+sidebarTitle: Hono with Bun
+mode: center
+---
+
+[Hono](https://github.com/honojs/hono) is a lightweight ultrafast web framework designed for the edge.
+
+```ts server.ts icon="/icons/typescript.svg"
+import { Hono } from "hono";
+const app = new Hono();
+
+app.get("/", c => c.text("Hono!"));
+
+export default app;
+```
+
+---
+
+Use `create-hono` to get started with one of Hono's project templates. Select `bun` when prompted for a template.
+
+```sh terminal icon="terminal"
+bun create hono myapp
+```
+
+```txt
+✔ Which template do you want to use? › bun
+cloned honojs/starter#main to /path/to/myapp
+✔ Copied project files
+```
+
+```sh terminal icon="terminal"
+cd myapp
+bun install
+```
+
+---
+
+Then start the dev server and visit [localhost:3000](http://localhost:3000).
+
+```sh terminal icon="terminal"
+bun run dev
+```
+
+---
+
+Refer to Hono's guide on [getting started with Bun](https://hono.dev/getting-started/bun) for more information.

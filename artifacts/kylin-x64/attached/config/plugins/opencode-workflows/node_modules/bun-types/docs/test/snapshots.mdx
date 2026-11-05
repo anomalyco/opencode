@@ -1,0 +1,434 @@
+---
+title: "Snapshots"
+description: "Learn how to use snapshot testing in Bun to save and compare output between test runs"
+---
+
+Snapshot testing saves the output of a value and compares it against future test runs. This is particularly useful for UI components, complex objects, or any output that needs to remain consistent.
+
+## Basic Snapshots
+
+Snapshot tests are written using the `.toMatchSnapshot()` matcher:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("snap", () => {
+  expect("foo").toMatchSnapshot();
+});
+```
+
+The first time this test is run, the argument to `expect` will be serialized and written to a special snapshot file in a `__snapshots__` directory alongside the test file.
+
+### Snapshot Files
+
+After running the test above, Bun will create:
+
+```text title="directory structure" icon="file-directory"
+your-project/
+├── snap.test.ts
+└── __snapshots__/
+    └── snap.test.ts.snap
+```
+
+The snapshot file contains:
+
+```ts title="__snapshots__/snap.test.ts.snap" icon="file-code"
+// Bun Snapshot v1, https://bun.com/docs/test/snapshots
+
+exports[`snap 1`] = `"foo"`;
+```
+
+On future runs, the argument is compared against the snapshot on disk.
+
+## Updating Snapshots
+
+Snapshots can be re-generated with the following command:
+
+```bash terminal icon="terminal"
+bun test --update-snapshots
+```
+
+This is useful when:
+
+- You've intentionally changed the output
+- You're adding new snapshot tests
+- The expected output has legitimately changed
+
+## Inline Snapshots
+
+For smaller values, you can use inline snapshots with `.toMatchInlineSnapshot()`. These snapshots are stored directly in your test file:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("inline snapshot", () => {
+  // First run: snapshot will be inserted automatically
+  expect({ hello: "world" }).toMatchInlineSnapshot();
+});
+```
+
+After the first run, Bun automatically updates your test file:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("inline snapshot", () => {
+  expect({ hello: "world" }).toMatchInlineSnapshot(`
+{
+  "hello": "world",
+}
+`);
+});
+```
+
+### Using Inline Snapshots
+
+1. Write your test with `.toMatchInlineSnapshot()`
+2. Run the test once
+3. Bun automatically updates your test file with the snapshot
+4. On subsequent runs, the value will be compared against the inline snapshot
+
+Inline snapshots are particularly useful for small, simple values where it's helpful to see the expected output right in the test file.
+
+## Error Snapshots
+
+You can also snapshot error messages using `.toThrowErrorMatchingSnapshot()` and `.toThrowErrorMatchingInlineSnapshot()`:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("error snapshot", () => {
+  expect(() => {
+    throw new Error("Something went wrong");
+  }).toThrowErrorMatchingSnapshot();
+
+  expect(() => {
+    throw new Error("Another error");
+  }).toThrowErrorMatchingInlineSnapshot();
+});
+```
+
+After running, the inline version becomes:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+test("error snapshot", () => {
+  expect(() => {
+    throw new Error("Something went wrong");
+  }).toThrowErrorMatchingSnapshot();
+
+  expect(() => {
+    throw new Error("Another error");
+  }).toThrowErrorMatchingInlineSnapshot(`"Another error"`);
+});
+```
+
+## Advanced Snapshot Usage
+
+### Complex Objects
+
+Snapshots work well with complex nested objects:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("complex object snapshot", () => {
+  const user = {
+    id: 1,
+    name: "John Doe",
+    email: "john@example.com",
+    profile: {
+      age: 30,
+      preferences: {
+        theme: "dark",
+        notifications: true,
+      },
+    },
+    tags: ["developer", "javascript", "bun"],
+  };
+
+  expect(user).toMatchSnapshot();
+});
+```
+
+### Array Snapshots
+
+Arrays are also well-suited for snapshot testing:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("array snapshot", () => {
+  const numbers = [1, 2, 3, 4, 5].map(n => n * 2);
+  expect(numbers).toMatchSnapshot();
+});
+```
+
+### Function Output Snapshots
+
+Snapshot the output of functions:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+function generateReport(data: any[]) {
+  return {
+    total: data.length,
+    summary: data.map(item => ({ id: item.id, name: item.name })),
+    timestamp: "2024-01-01", // Fixed for testing
+  };
+}
+
+test("report generation", () => {
+  const data = [
+    { id: 1, name: "Alice", age: 30 },
+    { id: 2, name: "Bob", age: 25 },
+  ];
+
+  expect(generateReport(data)).toMatchSnapshot();
+});
+```
+
+## React Component Snapshots
+
+Snapshots are particularly useful for React components:
+
+```tsx title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+import { render } from "@testing-library/react";
+
+function Button({ children, variant = "primary" }) {
+  return <button className={`btn btn-${variant}`}>{children}</button>;
+}
+
+test("Button component snapshots", () => {
+  const { container: primary } = render(<Button>Click me</Button>);
+  const { container: secondary } = render(<Button variant="secondary">Cancel</Button>);
+
+  expect(primary.innerHTML).toMatchSnapshot();
+  expect(secondary.innerHTML).toMatchSnapshot();
+});
+```
+
+## Property Matchers
+
+For values that change between test runs (like timestamps or IDs), use property matchers:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+test("snapshot with dynamic values", () => {
+  const user = {
+    id: Math.random(), // This changes every run
+    name: "John",
+    createdAt: new Date().toISOString(), // This also changes
+  };
+
+  expect(user).toMatchSnapshot({
+    id: expect.any(Number),
+    createdAt: expect.any(String),
+  });
+});
+```
+
+The snapshot will store:
+
+```txt title="snapshot file" icon="file-code"
+exports[`snapshot with dynamic values 1`] = `
+{
+  "createdAt": Any<String>,
+  "id": Any<Number>,
+  "name": "John",
+}
+`;
+```
+
+## Custom Serializers
+
+You can customize how objects are serialized in snapshots:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { test, expect } from "bun:test";
+
+// Custom serializer for Date objects
+expect.addSnapshotSerializer({
+  test: val => val instanceof Date,
+  serialize: val => `"${val.toISOString()}"`,
+});
+
+test("custom serializer", () => {
+  const event = {
+    name: "Meeting",
+    date: new Date("2024-01-01T10:00:00Z"),
+  };
+
+  expect(event).toMatchSnapshot();
+});
+```
+
+## Best Practices
+
+### Keep Snapshots Small
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+// Good: Focused snapshots
+test("user name formatting", () => {
+  const formatted = formatUserName("john", "doe");
+  expect(formatted).toMatchInlineSnapshot(`"John Doe"`);
+});
+
+// Avoid: Huge snapshots that are hard to review
+test("entire page render", () => {
+  const page = renderEntirePage();
+  expect(page).toMatchSnapshot(); // This could be thousands of lines
+});
+```
+
+### Use Descriptive Test Names
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+// Good: Clear what the snapshot represents
+test("formats currency with USD symbol", () => {
+  expect(formatCurrency(99.99)).toMatchInlineSnapshot(`"$99.99"`);
+});
+
+// Avoid: Unclear what's being tested
+test("format test", () => {
+  expect(format(99.99)).toMatchInlineSnapshot(`"$99.99"`);
+});
+```
+
+### Group Related Snapshots
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+import { describe, test, expect } from "bun:test";
+
+describe("Button component", () => {
+  test("primary variant", () => {
+    expect(render(<Button variant="primary">Click</Button>))
+      .toMatchSnapshot();
+  });
+
+  test("secondary variant", () => {
+    expect(render(<Button variant="secondary">Cancel</Button>))
+      .toMatchSnapshot();
+  });
+
+  test("disabled state", () => {
+    expect(render(<Button disabled>Disabled</Button>))
+      .toMatchSnapshot();
+  });
+});
+```
+
+### Handle Dynamic Data
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+// Good: Normalize dynamic data
+test("API response format", () => {
+  const response = {
+    data: { id: 1, name: "Test" },
+    timestamp: Date.now(),
+    requestId: generateId(),
+  };
+
+  expect({
+    ...response,
+    timestamp: "TIMESTAMP",
+    requestId: "REQUEST_ID",
+  }).toMatchSnapshot();
+});
+
+// Or use property matchers
+test("API response with matchers", () => {
+  const response = getApiResponse();
+
+  expect(response).toMatchSnapshot({
+    timestamp: expect.any(Number),
+    requestId: expect.any(String),
+  });
+});
+```
+
+## Managing Snapshots
+
+### Reviewing Snapshot Changes
+
+When snapshots change, carefully review them:
+
+```bash terminal icon="terminal"
+# See what changed
+git diff __snapshots__/
+
+# Update if changes are intentional
+bun test --update-snapshots
+
+# Commit the updated snapshots
+git add __snapshots__/
+git commit -m "Update snapshots after UI changes"
+```
+
+### Cleaning Up Unused Snapshots
+
+Bun will warn about unused snapshots:
+
+```txt title="warning" icon="warning"
+Warning: 1 unused snapshot found:
+  my-test.test.ts.snap: "old test that no longer exists 1"
+```
+
+Remove unused snapshots by deleting them from the snapshot files or by running tests with cleanup flags if available.
+
+### Organizing Large Snapshot Files
+
+For large projects, consider organizing tests to keep snapshot files manageable:
+
+```text title="directory structure" icon="file-directory"
+tests/
+├── components/
+│   ├── Button.test.tsx
+│   └── __snapshots__/
+│       └── Button.test.tsx.snap
+├── utils/
+│   ├── formatters.test.ts
+│   └── __snapshots__/
+│       └── formatters.test.ts.snap
+```
+
+## Troubleshooting
+
+### Snapshot Failures
+
+When snapshots fail, you'll see a diff:
+
+```diff title="diff" icon="file-code"
+- Expected
++ Received
+
+  Object {
+-   "name": "John",
++   "name": "Jane",
+  }
+```
+
+Common causes:
+
+- Intentional changes (update with `--update-snapshots`)
+- Unintentional changes (fix the code)
+- Dynamic data (use property matchers)
+- Environment differences (normalize the data)
+
+### Platform Differences
+
+Be aware of platform-specific differences:
+
+```ts title="test.ts" icon="/icons/typescript.svg"
+// Paths might differ between Windows/Unix
+test("file operations", () => {
+  const result = processFile("./test.txt");
+
+  expect({
+    ...result,
+    path: result.path.replace(/\\/g, "/"), // Normalize paths
+  }).toMatchSnapshot();
+});
+```

@@ -1,0 +1,198 @@
+## CLI Usage
+
+```bash terminal icon="terminal"
+bun publish dist
+```
+
+### Publishing Options
+
+<ParamField path="--access" type="string">
+  The `--access` flag can be used to set the access level of the package being published. The access level can be one of `public` or `restricted`. Unscoped packages are always public, and attempting to publish an unscoped package with `--access restricted` will result in an error.
+
+```sh terminal icon="terminal"
+bun publish --access public
+```
+
+`--access` can also be set in the `publishConfig` field of your `package.json`.
+
+```json package.json icon="file-json"
+{
+  "publishConfig": {
+    "access": "restricted" // [!code ++]
+  }
+}
+```
+
+</ParamField>
+
+<ParamField path="--tag" type="string" default="latest">
+Set the tag of the package version being published. By default, the tag is `latest`. The initial version of a package is always given the `latest` tag in addition to the specified tag.
+
+```sh terminal icon="terminal"
+bun publish --tag alpha
+```
+
+`--tag` can also be set in the `publishConfig` field of your `package.json`.
+
+```json package.json icon="file-json"
+{
+  "publishConfig": {
+    "tag": "next" // [!code ++]
+  }
+}
+```
+
+</ParamField>
+
+<ParamField path="--dry-run=<val>" type="string">
+The `--dry-run` flag can be used to simulate the publish process without actually publishing the package. This is useful for verifying the contents of the published package without actually publishing the package.
+
+```sh
+bun publish --dry-run
+```
+
+</ParamField>
+
+<ParamField path="--gzip-level" type="string" default="9">
+  Specify the level of gzip compression to use when packing the package. Only applies to `bun publish` without a tarball
+  path argument. Values range from `0` to `9` (default is `9`).
+</ParamField>
+
+<ParamField path="--auth-type" type="string" default="web">
+
+If you have 2FA enabled for your npm account, `bun publish` will prompt you for a one-time password. This can be done through a browser or the CLI. The `--auth-type` flag can be used to tell the npm registry which method you prefer. The possible values are `web` and `legacy`, with `web` being the default.
+
+```sh terminal icon="terminal"
+bun publish --auth-type legacy
+...
+This operation requires a one-time password.
+Enter OTP: 123456
+...
+```
+
+</ParamField>
+
+<ParamField path="--otp" type="string" default="web">
+
+Provide a one-time password directly to the CLI. If the password is valid, this will skip the extra prompt for a one-time password before publishing. Example usage:
+
+```sh terminal icon="terminal"
+bun publish --otp 123456
+```
+
+<Note>
+  `bun publish` respects the `NPM_CONFIG_TOKEN` environment variable which can be used when publishing in github actions
+  or automated workflows.
+</Note>
+
+</ParamField>
+
+### Registry Configuration
+
+#### Custom Registry
+
+<ParamField path="--registry" type="string">
+  Specify registry URL, overriding .npmrc and bunfig.toml
+</ParamField>
+
+```bash
+bun publish --registry https://my-private-registry.com
+```
+
+#### SSL Certificates
+
+<ParamField path="--ca" type="string">
+  Provide Certificate Authority signing certificate
+</ParamField>
+
+<ParamField path="--cafile" type="string">
+  Path to Certificate Authority certificate file
+</ParamField>
+
+<CodeGroup>
+```bash Inline Certificate
+bun publish --ca "-----BEGIN CERTIFICATE-----..."
+```
+
+```bash Certificate File
+bun publish --cafile ./ca-cert.pem
+```
+
+</CodeGroup>
+
+### Publishing Options
+
+#### Dependency Management
+
+<ParamField path="-p, --production" type="boolean">
+  Don't install devDependencies
+</ParamField>
+
+<ParamField path="--omit" type="string">
+  Exclude dependency types: `dev`, `optional`, or `peer`
+</ParamField>
+
+<ParamField path="-f, --force" type="boolean">
+  Always request the latest versions from the registry & reinstall all dependencies
+</ParamField>
+
+#### Script Control
+
+<ParamField path="--ignore-scripts" type="boolean">
+  Skip lifecycle scripts during packing and publishing
+</ParamField>
+
+<ParamField path="--trust" type="boolean">
+  Add packages to trustedDependencies and run their scripts
+</ParamField>
+
+<Note>
+  **Lifecycle Scripts** — When providing a pre-built tarball, lifecycle scripts (prepublishOnly, prepack, etc.) are not
+  executed. Scripts only run when Bun packs the package itself.
+</Note>
+
+#### File Management
+
+<ParamField path="--no-save" type="boolean">
+  Don't update package.json or lockfile
+</ParamField>
+
+<ParamField path="--frozen-lockfile" type="boolean">
+  Disallow changes to lockfile
+</ParamField>
+
+<ParamField path="--yarn" type="boolean">
+  Generate yarn.lock file (yarn v1 compatible)
+</ParamField>
+
+#### Performance
+
+<ParamField path="--backend" type="string">
+  Platform optimizations: `clonefile` (default), `hardlink`, `symlink`, or `copyfile`
+</ParamField>
+
+<ParamField path="--network-concurrency" type="number" default="48">
+  Maximum concurrent network requests
+</ParamField>
+
+<ParamField path="--concurrent-scripts" type="number" default="5">
+  Maximum concurrent lifecycle scripts
+</ParamField>
+
+#### Output Control
+
+<ParamField path="--silent" type="boolean">
+  Suppress all output
+</ParamField>
+
+<ParamField path="--verbose" type="boolean">
+  Show detailed logging
+</ParamField>
+
+<ParamField path="--no-progress" type="boolean">
+  Hide progress bar
+</ParamField>
+
+<ParamField path="--no-summary" type="boolean">
+  Don't print publish summary
+</ParamField>

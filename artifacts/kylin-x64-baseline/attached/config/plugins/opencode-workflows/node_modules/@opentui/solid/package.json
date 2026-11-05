@@ -1,0 +1,82 @@
+{
+  "name": "@opentui/solid",
+  "module": "index.js",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "module",
+  "version": "0.4.5",
+  "description": "SolidJS renderer for OpenTUI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opentui",
+    "directory": "packages/solid"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "bun": "./index.bun.js",
+      "node": "./index.js",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./preload": {
+      "bun": "./scripts/preload.js",
+      "node": "./scripts/preload.node.js",
+      "default": "./scripts/preload.node.js"
+    },
+    "./bun-plugin": {
+      "types": "./scripts/solid-plugin.d.ts",
+      "bun": "./scripts/solid-plugin.js",
+      "node": "./scripts/solid-plugin.node.js",
+      "default": "./scripts/solid-plugin.node.js"
+    },
+    "./runtime-plugin-support": {
+      "types": "./scripts/runtime-plugin-support.d.ts",
+      "bun": "./scripts/runtime-plugin-support.js",
+      "node": "./scripts/runtime-plugin-support.node.js",
+      "default": "./scripts/runtime-plugin-support.node.js"
+    },
+    "./runtime-plugin-support/configure": {
+      "types": "./scripts/runtime-plugin-support-configure.d.ts",
+      "bun": "./scripts/runtime-plugin-support-configure.js",
+      "node": "./scripts/runtime-plugin-support-configure.node.js",
+      "default": "./scripts/runtime-plugin-support-configure.node.js"
+    },
+    "./components": {
+      "types": "./components.d.ts",
+      "import": "./components.js",
+      "require": "./components.js"
+    },
+    "./jsx-runtime": {
+      "types": "./jsx-runtime.d.ts",
+      "import": "./jsx-runtime.js",
+      "default": "./jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./jsx-dev-runtime.d.ts",
+      "import": "./jsx-dev-runtime.js",
+      "default": "./jsx-dev-runtime.js"
+    }
+  },
+  "dependencies": {
+    "@babel/core": "7.28.0",
+    "@babel/preset-typescript": "7.27.1",
+    "@opentui/core": "0.4.5",
+    "babel-plugin-module-resolver": "5.0.2",
+    "babel-preset-solid": "1.9.12",
+    "entities": "7.0.1",
+    "s-js": "^0.4.9"
+  },
+  "devDependencies": {
+    "@opentui/keymap": "workspace:*",
+    "@types/babel__core": "7.20.5",
+    "@types/bun": "latest",
+    "@types/node": "^24.0.0",
+    "solid-js": "1.9.12",
+    "typescript": "^5"
+  },
+  "peerDependencies": {
+    "solid-js": "1.9.12"
+  }
+}

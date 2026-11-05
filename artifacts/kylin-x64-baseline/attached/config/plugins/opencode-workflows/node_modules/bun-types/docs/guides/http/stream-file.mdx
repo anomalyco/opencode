@@ -1,0 +1,50 @@
+---
+title: Stream a file as an HTTP Response
+sidebarTitle: Stream file response
+mode: center
+---
+
+This snippet reads a file from disk using [`Bun.file()`](/docs/runtime/file-io#reading-files-bun-file). This returns a `BunFile` instance, which can be passed directly into the `new Response` constructor.
+
+```ts server.ts icon="/icons/typescript.svg"
+const path = "/path/to/file.txt";
+const file = Bun.file(path);
+const resp = new Response(file);
+```
+
+---
+
+The `Content-Type` is read from the file and automatically set on the `Response`.
+
+```ts server.ts icon="/icons/typescript.svg"
+new Response(Bun.file("./package.json")).headers.get("Content-Type");
+// => application/json;charset=utf-8
+
+new Response(Bun.file("./test.txt")).headers.get("Content-Type");
+// => text/plain;charset=utf-8
+
+new Response(Bun.file("./index.tsx")).headers.get("Content-Type");
+// => text/javascript;charset=utf-8
+
+new Response(Bun.file("./img.png")).headers.get("Content-Type");
+// => image/png
+```
+
+---
+
+Putting it all together with [`Bun.serve()`](/docs/runtime/http/server).
+
+```ts server.ts icon="/icons/typescript.svg"
+// static file server
+Bun.serve({
+  async fetch(req) {
+    const path = new URL(req.url).pathname;
+    const file = Bun.file(path);
+    return new Response(file);
+  },
+});
+```
+
+---
+
+See [Docs > API > File I/O](/docs/runtime/file-io#writing-files-bun-write) for complete documentation of `Bun.write()`.

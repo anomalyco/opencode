@@ -1,0 +1,251 @@
+---
+title: Quickstart
+description: Build your first app with Bun
+---
+
+## Overview
+
+Build a minimal HTTP server with `Bun.serve`, run it locally, then evolve it by installing a package.
+
+<Info>Prerequisites: Bun installed and available on your `PATH`. See [installation](/docs/installation) for setup.</Info>
+
+---
+
+<Steps>
+  <Step title="Step 1">
+
+    Initialize a new project with `bun init`.
+
+    ```bash terminal icon="terminal"
+    bun init my-app
+    ```
+
+    It'll prompt you to pick a template, either `Blank`, `React`, or `Library`. For this guide, we'll pick `Blank`.
+
+    ```bash terminal icon="terminal"
+    bun init my-app
+    ```
+    ```txt
+    ✓ Select a project template: Blank
+
+    - .gitignore
+    - CLAUDE.md
+    - .cursor/rules/use-bun-instead-of-node-vite-npm-pnpm.mdc -> CLAUDE.md
+    - index.ts
+    - tsconfig.json (for editor autocomplete)
+    - README.md
+    ```
+
+    This automatically creates a `my-app` directory with a basic Bun app.
+
+  </Step>
+  <Step title="Step 2">
+
+    Run the `index.ts` file using `bun run index.ts`.
+
+    ```bash terminal icon="terminal"
+    cd my-app
+    bun run index.ts
+    ```
+    ```txt
+    Hello via Bun!
+    ```
+
+    You should see a console output saying `"Hello via Bun!"`.
+
+  </Step>
+  <Step title="Step 3">
+
+    Replace the contents of `index.ts` with the following code:
+
+    ```ts index.ts icon="/icons/typescript.svg"
+    const server = Bun.serve({
+      port: 3000,
+      routes: {
+        "/": () => new Response('Bun!'),
+      }
+    });
+
+    console.log(`Listening on ${server.url}`);
+    ```
+
+    Run the `index.ts` file again using `bun run index.ts`.
+
+    ```bash terminal icon="terminal"
+    bun run index.ts
+    ```
+    ```txt
+    Listening on http://localhost:3000
+    ```
+
+    Visit [`http://localhost:3000`](http://localhost:3000) to test the server. You should see a page that says `"Bun!"`.
+
+    <Accordion title="Seeing TypeScript errors on Bun?">
+
+      If you used `bun init`, Bun will have automatically installed Bun's TypeScript declarations and configured your `tsconfig.json`. If you're trying out Bun in an existing project, you may see a type error on the `Bun` global.
+
+      To fix this, first install `@types/bun` as a dev dependency.
+
+      ```bash terminal icon="terminal"
+      bun add -d @types/bun
+      ```
+
+      Then add the following to your `compilerOptions` in `tsconfig.json`:
+
+      ```json tsconfig.json icon="file-json"
+      {
+        "compilerOptions": {
+          "lib": ["ESNext"],
+          "target": "ESNext",
+          "module": "Preserve",
+          "moduleDetection": "force",
+          "moduleResolution": "bundler",
+          "allowImportingTsExtensions": true,
+          "verbatimModuleSyntax": true,
+          "noEmit": true
+        }
+      }
+      ```
+
+    </Accordion>
+
+  </Step>
+  <Step title="Step 4">
+
+    Install the `figlet` package and its type declarations. Figlet is a utility for converting strings into ASCII art.
+
+    ```bash terminal icon="terminal"
+    bun add figlet
+    bun add -d @types/figlet # TypeScript users only
+    ```
+
+    Update `index.ts` to use `figlet` in `routes`.
+
+    ```ts index.ts icon="/icons/typescript.svg"
+    import figlet from 'figlet'; // [!code ++]
+
+    const server = Bun.serve({
+      port: 3000,
+      routes: {
+        "/": () => new Response('Bun!'),
+        "/figlet": () => { // [!code ++]
+          const body = figlet.textSync('Bun!'); // [!code ++]
+          return new Response(body); // [!code ++]
+        } // [!code ++]
+      }
+    });
+
+    console.log(`Listening on ${server.url}`);
+    ```
+
+    Run the `index.ts` file again using `bun run index.ts`.
+
+    ```bash terminal icon="terminal"
+    bun run index.ts
+    ```
+    ```txt
+    Listening on http://localhost:3000
+    ```
+
+    Visit [`http://localhost:3000/figlet`](http://localhost:3000/figlet) to test the server. You should see a page that says `"Bun!"` in ASCII art.
+
+    ```txt
+    ____              _
+    | __ ) _   _ _ __ | |
+    |  _ \| | | | '_ \| |
+    | |_) | |_| | | | |_|
+    |____/ \__,_|_| |_(_)
+    ```
+
+  </Step>
+  <Step title="Step 5">
+
+    Let's add some HTML. Create a new file called `index.html` and add the following code:
+
+    ```html index.html icon="file-code"
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Bun</title>
+      </head>
+      <body>
+        <h1>Bun!</h1>
+      </body>
+    </html>
+    ```
+
+    Then, import this file in `index.ts` and serve it from the root `/` route.
+
+    ```ts index.ts icon="/icons/typescript.svg"
+    import figlet from 'figlet';
+    import index from './index.html'; // [!code ++]
+
+    const server = Bun.serve({
+      port: 3000,
+      routes: {
+        "/": index, // [!code ++]
+        "/figlet": () => {
+          const body = figlet.textSync('Bun!');
+          return new Response(body);
+        }
+      }
+    });
+
+    console.log(`Listening on ${server.url}`);
+    ```
+
+    Run the `index.ts` file again using `bun run index.ts`.
+
+    ```bash terminal icon="terminal"
+    bun run index.ts
+    ```
+    ```txt
+    Listening on http://localhost:3000
+    ```
+
+    Visit [`http://localhost:3000`](http://localhost:3000) to test the server. You should see the static HTML page.
+
+  </Step>
+
+</Steps>
+
+🎉 Congratulations! You've built an HTTP server with Bun and installed a package.
+
+---
+
+## Run a script
+
+Bun can also execute `"scripts"` from your `package.json`. Add the following script:
+
+{/* prettier-ignore */}
+```json package.json icon="file-json"
+{
+  "name": "quickstart",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": { // [!code ++]
+    "start": "bun run index.ts" // [!code ++]
+  }, // [!code ++]
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
+```
+
+Then run it with `bun run start`.
+
+```bash terminal icon="terminal"
+bun run start
+```
+
+```txt
+Listening on http://localhost:3000
+```
+
+<Note>⚡️ **Performance** — `bun run` is roughly 28x faster than `npm run` (6ms vs 170ms of overhead).</Note>

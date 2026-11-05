@@ -1,0 +1,62 @@
+---
+title: Read from stdin
+sidebarTitle: Read from stdin
+mode: center
+---
+
+For CLI tools, it's often useful to read from `stdin`. In Bun, the `console` object is an `AsyncIterable` that yields lines from `stdin`.
+
+```ts index.ts icon="/icons/typescript.svg"
+const prompt = "Type something: ";
+process.stdout.write(prompt);
+for await (const line of console) {
+  console.log(`You typed: ${line}`);
+  process.stdout.write(prompt);
+}
+```
+
+---
+
+Running this file results in a never-ending interactive prompt that echoes whatever the user types.
+
+```sh terminal icon="terminal"
+bun run index.ts
+```
+
+```txt
+Type something: hello
+You typed: hello
+Type something: hello again
+You typed: hello again
+```
+
+---
+
+Bun also exposes stdin as a `BunFile` via `Bun.stdin`. This is useful for incrementally reading large inputs that are piped into the `bun` process.
+
+There is no guarantee that the chunks will be split line-by-line.
+
+```ts stdin.ts icon="/icons/typescript.svg"
+for await (const chunk of Bun.stdin.stream()) {
+  // chunk is Uint8Array
+  // this converts it to text (assumes ASCII encoding)
+  const chunkText = Buffer.from(chunk).toString();
+  console.log(`Chunk: ${chunkText}`);
+}
+```
+
+---
+
+This will print the input that is piped into the `bun` process.
+
+```sh terminal icon="terminal"
+echo "hello" | bun run stdin.ts
+```
+
+```txt
+Chunk: hello
+```
+
+---
+
+See [Docs > API > Utils](/docs/runtime/utils) for more useful utilities.
