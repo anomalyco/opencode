@@ -1405,7 +1405,7 @@ impl Inner {
             .iter()
             .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()));
         let weak = Rc::downgrade(self);
-        self.app.release_terminal(move |_| {
+        let task = move |_: &mut Cx<'_>| {
             let Some(inner) = weak.upgrade() else { return };
             let result = command
                 .ok_or_else(|| "Set $VISUAL or $EDITOR to open an external editor".to_owned())
@@ -1455,7 +1455,8 @@ impl Inner {
                 }
             }
             inner.app.request_redraw();
-        });
+        };
+        self.app.release_terminal(task);
     }
 
     /// `paste`: a terminal paste (`Some`), or the clipboard (`None`).
