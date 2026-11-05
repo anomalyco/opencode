@@ -1,7 +1,8 @@
 //! `session/load` history replay (`packages/cli/src/acp/replay.ts`). Messages stay JSON, as the server
 //! sends them.
 
-use opencode_api::client::{Call, Client, path_param};
+use opencode_api::client::Client;
+use opencode_api::generated::{MessageListInput, MessageListInputOrder};
 use serde_json::{Map, Value, json};
 
 use crate::capabilities::Capabilities;
@@ -43,13 +44,14 @@ pub async fn history(
 
 // The page stays JSON: the generated message types would drop fields the updates forward as they are.
 async fn list(client: &Client, session_id: &str, cursor: Option<&str>) -> Result<Value, Failure> {
-    let path = path_param(session_id).map_err(|error| classify(&error))?;
-    let mut call = Call::new("GET", format!("/api/session/{path}/message"), 200, &[400, 401, 404, 500]);
-    let query = match cursor {
-        Some(cursor) => call.query("limit", &PAGE_SIZE).and_then(|()| call.query("cursor", cursor)),
-        None => call.query("limit", &PAGE_SIZE).and_then(|()| call.query("order", "asc")),
+    let input = MessageListInput {
+        session_id: session_id.into(),
+        limit: Some(PAGE_SIZE),
+        order: cursor.is_none().then_some(MessageListInputOrder::Asc),
+        cursor: cursor.map(str::to_owned),
+        r#type: None,
     };
-    query.map_err(|error| classify(&error))?;
+    let call = Client::message_list_call(&input).map_err(|error| classify(&error))?;
     client.json::<Value>(call).await.map_err(|error| classify(&error))
 }
 

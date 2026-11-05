@@ -8,16 +8,16 @@ use std::io::{IsTerminal, Read};
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use opencode_api::client::{Call, Client};
+use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::{
-    ConnectionInfo, CredentialActivateInput, CredentialRemoveInput, ExperimentalIntegrationWellknownAddInput,
-    FormAnswer, FormField, FormValue, FormWhenOp, FormWhenValue, IntegrationAttemptMode, IntegrationAttemptStatus,
-    IntegrationCommandAttemptStatus, IntegrationCommandCancelInput, IntegrationCommandConnectInput,
-    IntegrationCommandStatusInput, IntegrationConnectExternalInput, IntegrationConnectKeyInput, IntegrationInfo,
-    IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod, IntegrationOauthCancelInput,
-    IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
-    ModelDefaultInput, SessionMessageShellExit,
+    ConnectionInfo, CredentialActivateInput, CredentialCreateInput, CredentialRemoveInput, CredentialValue,
+    ExperimentalIntegrationWellknownAddInput, FormAnswer, FormField, FormValue, FormWhenOp, FormWhenValue,
+    IntegrationAttemptMode, IntegrationAttemptStatus, IntegrationCommandAttemptStatus, IntegrationCommandCancelInput,
+    IntegrationCommandConnectInput, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
+    IntegrationConnectKeyInput, IntegrationInfo, IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod,
+    IntegrationOauthCancelInput, IntegrationOauthCompleteInput, IntegrationOauthConnectInput,
+    IntegrationOauthStatusInput, LocationQueryInput, ModelDefaultInput, SessionMessageShellExit,
 };
 use opencode_api::js::{number_to_string, parse_number};
 use opencode_ui::form;
@@ -171,7 +171,7 @@ fn export(context: &Context, args: &AuthExportArgs) -> anyhow::Result<()> {
         None => None,
     };
     // The credentials as the server sent them; `JSON.stringify` keeps every field.
-    let mut credentials = server.run(get(server.client(), "/api/credential"))?;
+    let mut credentials = server.run(server.client().json::<Value>(Client::credential_list_call()?))?;
     let credentials: Vec<Value> = match credentials["data"].take() {
         Value::Array(items) => items,
         _ => Vec::new(),
@@ -199,7 +199,7 @@ fn import(context: &Context, args: &AuthImportArgs) -> anyhow::Result<()> {
     };
     let credentials = legacy::decode(&text).map_err(|error| anyhow::anyhow!("{error}"))?;
     let server = Server::connect(context)?;
-    let existing = server.run(get(server.client(), "/api/credential"))?;
+    let existing = server.run(server.client().json::<Value>(Client::credential_list_call()?))?;
     let existing = existing["data"].as_array().cloned().unwrap_or_default();
     let ids: HashSet<&str> = existing.iter().filter_map(|credential| credential["id"].as_str()).collect();
     let integrations: HashSet<&str> =
@@ -210,16 +210,15 @@ fn import(context: &Context, args: &AuthImportArgs) -> anyhow::Result<()> {
             continue;
         }
         // Keep the destination's selections; only integrations new to it adopt the exported one.
-        let body = json!({
-            "id": credential.id,
-            "integrationID": credential.integration_id,
-            "label": credential.label,
-            "value": credential.value,
-            "activate": credential.active && !integrations.contains(credential.integration_id.as_str()),
-        });
-        let mut call = Call::new("POST", "/api/credential".to_owned(), 200, &[400, 401, 409]);
-        call.json(&body)?;
-        match server.run(server.client().json::<Value>(call)) {
+        // The value goes as it was exported, and the created credential is not read.
+        let input = CredentialCreateInput {
+            id: Some(credential.id.clone().into()),
+            integration_id: credential.integration_id.clone().into(),
+            label: Some(credential.label.clone()),
+            value: CredentialValue::Unknown(credential.value.clone()),
+            activate: Some(credential.active && !integrations.contains(credential.integration_id.as_str())),
+        };
+        match server.run(server.client().json::<Value>(Client::credential_create_call(&input)?)) {
             Ok(_) => imported += 1,
             Err(ApiError::Declared(error)) if error.status == 409 => {}
             Err(error) => return Err(error.into()),
@@ -245,10 +244,6 @@ fn read_file(file: &str) -> anyhow::Result<String> {
         }
         _ => error.into(),
     })
-}
-
-async fn get(client: &Client, path: &str) -> Result<Value, ApiError> {
-    client.json(Call::new("GET", path.to_owned(), 200, &[400, 401])).await
 }
 
 /// `CredentialLegacy.Entry` decoding of an `auth export` file, with Effect Schema's messages. Entries come

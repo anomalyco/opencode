@@ -1,7 +1,8 @@
 //! `debug`: debugging and troubleshooting tools (`packages/cli/src/commands/handlers/debug/*.ts`).
 
+use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
-use opencode_api::generated::types::DebugHeapDumpInput;
+use opencode_api::generated::types::{AgentListInput, ConfigGetInput, DebugHeapDumpInput};
 use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::channel::Channels;
 use opencode_local::paths::Paths;
@@ -14,7 +15,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use super::Context;
-use super::client::{block_on, connect, get_located, locale_compare, pretty};
+use super::client::{block_on, connect, here, locale_compare, pretty};
 use crate::args::{DebugArgs, DebugCommand, HeapDumpArgs, PathName, PathsArgs};
 use crate::output::{Exit, print};
 
@@ -31,7 +32,8 @@ pub fn run(context: &Context, args: &DebugArgs) -> anyhow::Result<()> {
 fn agents(context: &Context) -> anyhow::Result<()> {
     let response = block_on(async {
         let server = connect(context).await?;
-        get_located(&server.client, "/api/agent", &[400, 401, 404, 503]).await
+        let input = AgentListInput { location: Some(here()?) };
+        anyhow::Ok(server.client.json::<Value>(Client::agent_list_call(&input)?).await?)
     })??;
     let mut agents = super::models::data(&response).to_vec();
     agents.sort_by(|a, b| locale_compare(a["id"].as_str().unwrap_or_default(), b["id"].as_str().unwrap_or_default()));
@@ -41,7 +43,8 @@ fn agents(context: &Context) -> anyhow::Result<()> {
 fn config(context: &Context) -> anyhow::Result<()> {
     let entries = block_on(async {
         let server = connect(context).await?;
-        get_located(&server.client, "/api/config", &[400, 401, 404]).await
+        let input = ConfigGetInput { location: Some(here()?) };
+        anyhow::Ok(server.client.json::<Value>(Client::config_get_call(&input)?).await?)
     })??;
     print(&pretty(&redact(&entries, false))?)
 }
