@@ -23,7 +23,12 @@ export type SoundPreviewEvent<Stop = () => void> =
 
 export type SoundPreviewEffect<Stop = () => void> =
   /** Replaces any running timer; dispatches `debounce.elapsed` or `load.timed-out` with `attempt`. */
-  | { readonly type: "timer.start"; readonly kind: "debounce" | "load"; readonly attempt: number; readonly delayMs: number }
+  | {
+      readonly type: "timer.start"
+      readonly kind: "debounce" | "load"
+      readonly attempt: number
+      readonly delayMs: number
+    }
   | { readonly type: "timer.stop" }
   | { readonly type: "audio.load"; readonly attempt: number; readonly id: string }
   | { readonly type: "audio.stop"; readonly active: Stop }

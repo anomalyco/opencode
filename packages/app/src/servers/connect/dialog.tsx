@@ -211,9 +211,7 @@ export const DialogServer: Component<{
                 {language.t("server.connect.scan")}
               </Button>
             </Show>
-            <Show when={view().cameraHint}>
-              {(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}
-            </Show>
+            <Show when={view().cameraHint}>{(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}</Show>
             <ConnectMethodSwitch
               method={view().draft.method}
               disabled={view().disabled}

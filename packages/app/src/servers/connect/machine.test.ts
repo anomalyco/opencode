@@ -201,7 +201,11 @@ describe("server connect form", () => {
   })
 
   test("after a cancelled scan, Scan waits for the new camera check and follows its answer", () => {
-    const cancelled = replay({ kind: "add" }, [{ type: "scan.started" }, { type: "scan.cancelled" }], withCamera({ kind: "add" }))
+    const cancelled = replay(
+      { kind: "add" },
+      [{ type: "scan.started" }, { type: "scan.cancelled" }],
+      withCamera({ kind: "add" }),
+    )
 
     expect(selectServerConnectView(cancelled.state, context).canScan).toBe(false)
     expect(transitionServerConnect(cancelled.state, { type: "scan.started" }).state).toBe(cancelled.state)

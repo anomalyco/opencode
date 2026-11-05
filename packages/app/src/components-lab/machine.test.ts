@@ -53,9 +53,9 @@ test.each([{ type: "key.ended" }, { type: "window.blurred" }] as const)(
 
 test("a Space press outside the tree and arrow keys in it never toggle folders", () => {
   expect(selectShouldToggleFolder(INITIAL_LAB_BROWSE_STATE)).toBe(false)
-  expect(
-    browse(INITIAL_LAB_BROWSE_STATE, { type: "key.down", key: " ", inTree: false }).state,
-  ).toBe(INITIAL_LAB_BROWSE_STATE)
+  expect(browse(INITIAL_LAB_BROWSE_STATE, { type: "key.down", key: " ", inTree: false }).state).toBe(
+    INITIAL_LAB_BROWSE_STATE,
+  )
   expect(
     selectShouldToggleFolder(
       browse(
