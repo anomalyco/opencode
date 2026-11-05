@@ -149,19 +149,24 @@ const testEnvironment = Layer.effect(
               : undefined,
         )
         if (shellState.die !== undefined) return yield* Effect.die(new Error(shellState.die))
-        if (shellState.hangMs > 0)
-          yield* Effect.sleep(shellState.hangMs).pipe(
-            Effect.onInterrupt(() =>
-              Effect.sync(() => {
-                shellState.interrupts++
-              }),
-            ),
-          )
         const outBytes = new TextEncoder().encode(shellState.stdout)
         const errBytes = new TextEncoder().encode(shellState.stderr)
+        // The hang belongs to the exit code, not to spawn, so a command that writes before it keeps running still
+        // produces output and a timeout keeps it.
+        const hang = shellState.hangMs
         return makeHandle({
           pid: ProcessId(1),
-          exitCode: Effect.succeed(ExitCode(shellState.exitCode)),
+          exitCode:
+            hang > 0
+              ? Effect.sleep(hang).pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.sync(() => {
+                      shellState.interrupts++
+                    }),
+                  ),
+                  Effect.as(ExitCode(shellState.exitCode)),
+                )
+              : Effect.succeed(ExitCode(shellState.exitCode)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
@@ -1683,6 +1688,8 @@ describe("Schedule", () => {
           yield* schedules.tick
         }
         expect(shellState.runs).toEqual(["echo tick", "echo tick"])
+        expect(shellState.envs.map((env) => env?.OPENCODE_SCHEDULE_RUN)).toEqual(["1", "2"])
+        expect(shellState.envs.map((env) => env?.OPENCODE_SCHEDULE_ID)).toEqual([schedule.id, schedule.id])
         expect(yield* schedules.get(schedule.id)).toMatchObject({
           status: "active",
           runCount: 2,
@@ -1770,18 +1777,25 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("leaves no exit code when the command times out, keeping partial output", () =>
+    it.effect("keeps the output of a command that is still running when it times out", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
-        shellState.hangMs = 60_000
-        shellState.stdout = "partial"
+        shellState.hangMs = 30_000
+        shellState.stdout = "started\n"
         const schedule = yield* schedules.create({
           sessionID,
-          when: { type: "in", in: "1 minute" },
-          action: { type: "shell", run: "sleep 60", timeout: "1 second" },
+          when: { type: "every", every: "1 minute" },
+          action: { type: "shell", run: "echo started; sleep 30", timeout: "1 second" },
         })
         yield* TestClock.adjust("1 minute")
         const ticking = yield* Effect.forkChild(schedules.tick)
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+        // The start marker and the FiberMap entry are written before the command finishes its exit code sleep.
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "active",
+          runCount: 1,
+          lastRun: { durationMs: 0, output: "" },
+        })
         // Give the run time to register its sleep and timeout before moving the clock past them.
         yield* Effect.forEach(
           [1, 2, 3],
@@ -1790,11 +1804,14 @@ describe("Schedule", () => {
         )
         yield* Fiber.join(ticking)
         const info = yield* schedules.get(schedule.id)
+        expect(info.lastRun).toMatchObject({
+          output: "started\n",
+          error: "Timed out after 1 second",
+          durationMs: 1000,
+        })
         expect(info.lastRun?.exitCode).toBeUndefined()
-        expect(info.lastRun?.error).toBe("Timed out after 1 second")
-        expect(info.lastRun?.durationMs).toBe(1000)
         expect(shellState.interrupts).toBe(1)
-        expect(info).toMatchObject({ status: "done", lastOutcome: "fired" })
+        expect(info).toMatchObject({ status: "active", lastOutcome: "fired", runCount: 1 })
         expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 1 })
       }),
     )
@@ -1968,10 +1985,12 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("keeps the last 32 KB of captured output", () =>
+    it.effect("keeps the last 32 KB of verbose output after the marker and drops the earliest lines", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
-        shellState.stdout = "first\n" + "x".repeat(40 * 1024) + "\nlast"
+        const early = "an early line that must be dropped"
+        const last = "line 4000, the last line"
+        shellState.stdout = `${early}\n${"x".repeat(40 * 1024)}\n${last}`
         const schedule = yield* schedules.create({
           sessionID,
           when: { type: "in", in: "1 minute" },
@@ -1982,10 +2001,10 @@ describe("Schedule", () => {
 
         const info = yield* schedules.get(schedule.id)
         expect(info.lastRun?.output.startsWith("[output truncated at 32 KB]\n")).toBe(true)
-        expect(info.lastRun?.output.endsWith("last")).toBe(true)
-        expect(info.lastRun?.output).not.toContain("first")
+        expect(info.lastRun?.output.endsWith(last)).toBe(true)
+        expect(info.lastRun?.output).not.toContain(early)
         expect(info.lastRun?.output).toHaveLength("[output truncated at 32 KB]\n".length + 32 * 1024)
-        expect(info.lastRun?.output.slice(-32 * 1024)).toBe("x".repeat(32 * 1024 - 5) + "\nlast")
+        expect(info.lastRun?.output.slice(-32 * 1024)).toBe("x".repeat(32 * 1024 - last.length - 1) + "\n" + last)
         expect(info.lastRun?.exitCode).toBe(0)
         expect(info.lastRun?.error).toBeUndefined()
       }),
