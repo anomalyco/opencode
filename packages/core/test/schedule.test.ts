@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
@@ -664,7 +665,8 @@ describe("Schedule", () => {
       yield* TestClock.adjust("5 minutes")
       yield* schedules.tick
       expect(shellState.runs).toEqual(["echo hi"])
-      expect(shellState.cwds).toEqual([globalDirectory])
+      // The runtime resolves the Location directory with path.resolve, so Windows expands "/global" to "C:\\global".
+      expect(shellState.cwds).toEqual([path.resolve(globalDirectory)])
       expect(shellState.envs[0]).toMatchObject({
         OPENCODE_SCHEDULE_ID: schedule.id,
         OPENCODE_SCHEDULE_RUN: "1",
@@ -1748,8 +1750,9 @@ describe("Schedule", () => {
         })
         yield* TestClock.adjust("1 minute")
         yield* schedules.tick
-        expect(shellState.cwds).toContain(enabledDirectory)
-        expect(shellState.cwds).toContain(`${enabledDirectory}/sub`)
+        const directory = path.resolve(enabledDirectory)
+        expect(shellState.cwds).toContain(directory)
+        expect(shellState.cwds).toContain(path.join(directory, "sub"))
       }),
     )
 
