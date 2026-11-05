@@ -593,6 +593,8 @@ export const dict = {
   "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "Nothing here yet",
   "home.sessions.empty.description": "Create a session to get started",
+  "home.sessions.load.failed": "Couldn't load sessions",
+  "home.sessions.load.timeout": "The server took too long to answer",
   "home.sessions.group.today": "Today",
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
@@ -833,7 +835,8 @@ export const dict = {
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description": "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.foldUserMessages.description":
+    "Fold your messages past 12 lines behind a Read more button",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
@@ -898,7 +901,8 @@ export const dict = {
   "settings.appearance.row.tabs.horizontal": "Horizontal",
   "settings.appearance.row.tabs.vertical": "Vertical",
   "settings.general.row.interfaceMode.title": "Interface layout",
-  "settings.general.row.interfaceMode.description": "Choose how you switch between sessions and keep track of what's running",
+  "settings.general.row.interfaceMode.description":
+    "Choose how you switch between sessions and keep track of what's running",
   "settings.general.row.interfaceMode.top": "Top tabs",
   "settings.general.row.interfaceMode.side": "Side tabs",
   "settings.general.row.interfaceMode.inbox": "Inbox",
