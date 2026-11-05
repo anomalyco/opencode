@@ -80,7 +80,16 @@ test("keeps a value shown for the minimum duration", () => {
   const view = createRoot((dispose) => {
     const [value, setValue] = createSignal<string | undefined>("hint")
 
-    return { dispose, setValue, presence: createAnimatedPresence(value, () => null, () => "ses_A", 1000) }
+    return {
+      dispose,
+      setValue,
+      presence: createAnimatedPresence(
+        value,
+        () => null,
+        () => "ses_A",
+        1000,
+      ),
+    }
   })
 
   setSystemTime(new Date(250))

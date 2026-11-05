@@ -206,7 +206,14 @@ export function transitionAnimatedPresence<T>(
     if (event.value === undefined)
       return { status: "hidden", attempt, identity: event.identity, value: undefined, animate: false }
 
-    return { status: "shown", attempt, identity: event.identity, value: event.value, animate: false, shownAt: event.now }
+    return {
+      status: "shown",
+      attempt,
+      identity: event.identity,
+      value: event.value,
+      animate: false,
+      shownAt: event.now,
+    }
   }
 
   if (state.status === "hidden") {

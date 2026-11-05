@@ -182,22 +182,28 @@ const view = <T>(state: AnimatedPresenceState<T>) => ({
 describe("transitionAnimatedPresence", () => {
   test("lingers for the rest of the minimum duration and hides once it elapses", () => {
     const shown = createAnimatedPresenceState("hint", "ses_A", 100)
-    const lingering = transitionAnimatedPresence(shown, sync(undefined, 250.3, { identity: "ses_A", minimumDuration: 1000 }))
+    const lingering = transitionAnimatedPresence(
+      shown,
+      sync(undefined, 250.3, { identity: "ses_A", minimumDuration: 1000 }),
+    )
     expect(lingering).toMatchObject({ status: "lingering", attempt: 1 })
     expect(lingering.status === "lingering" && lingering.delayMs).toBeCloseTo(849.7)
     expect(view(lingering)).toEqual({ show: true, animate: false, value: "hint" })
 
     // Further syncs with no value keep the running linger rather than starting another.
-    expect(transitionAnimatedPresence(lingering, sync(undefined, 1099.3, { identity: "ses_A", minimumDuration: 1000 }))).toBe(
-      lingering,
-    )
+    expect(
+      transitionAnimatedPresence(lingering, sync(undefined, 1099.3, { identity: "ses_A", minimumDuration: 1000 })),
+    ).toBe(lingering)
     const hidden = transitionAnimatedPresence(lingering, { type: "linger.elapsed", attempt: 1 })
     expect(view(hidden)).toEqual({ show: false, animate: true, value: "hint" })
   })
 
   test("a value returning mid-linger cancels it, and its timer cannot end the next linger", () => {
     const options = { identity: "ses_A", minimumDuration: 1000 }
-    const first = transitionAnimatedPresence(createAnimatedPresenceState("hint", "ses_A", 0), sync(undefined, 100, options))
+    const first = transitionAnimatedPresence(
+      createAnimatedPresenceState("hint", "ses_A", 0),
+      sync(undefined, 100, options),
+    )
     const back = transitionAnimatedPresence(first, sync("hint", 200, options))
     expect(view(back)).toEqual({ show: true, animate: false, value: "hint" })
     expect(transitionAnimatedPresence(back, { type: "linger.elapsed", attempt: 1 })).toBe(back)
@@ -208,7 +214,10 @@ describe("transitionAnimatedPresence", () => {
   })
 
   test("an identity switch mid-exit drops the exit and the previous value", () => {
-    const hiding = transitionAnimatedPresence(createAnimatedPresenceState("val", "ses_A", 0), sync(undefined, 10, { identity: "ses_A" }))
+    const hiding = transitionAnimatedPresence(
+      createAnimatedPresenceState("val", "ses_A", 0),
+      sync(undefined, 10, { identity: "ses_A" }),
+    )
     expect(view(hiding)).toEqual({ show: false, animate: true, value: "val" })
 
     const switched = transitionAnimatedPresence(hiding, sync(undefined, 20, { identity: "ses_B" }))
@@ -218,7 +227,10 @@ describe("transitionAnimatedPresence", () => {
       createAnimatedPresenceState("val", "ses_A", 0),
       sync(undefined, 10, { identity: "ses_A", minimumDuration: 1000 }),
     )
-    const moved = transitionAnimatedPresence(lingering, sync(undefined, 20, { identity: "ses_B", minimumDuration: 1000 }))
+    const moved = transitionAnimatedPresence(
+      lingering,
+      sync(undefined, 20, { identity: "ses_B", minimumDuration: 1000 }),
+    )
     expect(view(moved)).toEqual({ show: false, animate: false, value: undefined })
     expect(transitionAnimatedPresence(moved, { type: "linger.elapsed", attempt: 1 })).toBe(moved)
   })
@@ -229,7 +241,11 @@ describe("transitionAnimatedPresence", () => {
     const hidden = transitionAnimatedPresence(shown, sync(undefined, 1))
     expect(view(hidden)).toEqual({ show: false, animate: true, value: "steer" })
     expect(transitionAnimatedPresence(hidden, sync(undefined, 2))).toBe(hidden)
-    expect(view(transitionAnimatedPresence(hidden, sync("queue", 2)))).toEqual({ show: true, animate: true, value: "queue" })
+    expect(view(transitionAnimatedPresence(hidden, sync("queue", 2)))).toEqual({
+      show: true,
+      animate: true,
+      value: "queue",
+    })
   })
 })
 
