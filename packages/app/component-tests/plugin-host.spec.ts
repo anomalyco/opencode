@@ -179,6 +179,30 @@ story("a dialog handle closes its own dialog, and a dialog closes with the scope
   })
 })
 
+story("Escape closes the top dialog while a dialog below it plays its exit animation", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPluginHost, until } = await import(fixture)
+    const host = mountPluginHost()
+    const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+    const shown = () => ["below", "middle", "top"].filter((value) => document.body.textContent?.includes(value))
+    const handles: DialogHandle[] = []
+    host.load((ctx: Context) => {
+      handles.push(ctx.dialogs.open(text("below")), ctx.dialogs.open(text("middle")), ctx.dialogs.open(text("top")))
+    }, 0)
+    await until(() => shown().length === 3)
+    handles[1]?.close()
+    // In the same tick, so the middle dialog is still playing its exit animation.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await until(() => shown().length === 1)
+    const outcome = shown()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual(["below"])
+})
+
 story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
   const shown = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)

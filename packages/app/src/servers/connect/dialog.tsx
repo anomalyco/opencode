@@ -53,6 +53,7 @@ export const DialogServer: Component<{
     target: edited ? { kind: "edit", original: untrack(original) ?? originalOf(edited) } : { kind: "add" },
     original,
     removeTabs: (key) => tabs.removeServer(key),
+    closing: () => dialog.closing,
     // Close first: onSave may open the next dialog, such as the folder picker an interrupted action continues with.
     onClose: (saved) => {
       dialog.close()
