@@ -5,6 +5,7 @@
 use opencode_api::client::{Call, Client, RequestOptions};
 use opencode_api::generated::{
     SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxUpdateInput, SessionMessageID,
+    SessionShellInput,
 };
 use serde_json::{Map, Value, json};
 
@@ -144,9 +145,12 @@ pub async fn admit(client: &Client, session: &str, prompt: &RunPrompt, delivery:
 
 /// `runShellTurn`: `session.shell`, which answers once the command ran.
 pub async fn shell(client: &Client, session: &str, id: &str, command: &str) -> Result<(), String> {
-    let mut call = Call::new("POST", format!("/api/session/{}/shell", encode(session)), 204, &[400, 401, 404, 409]);
-    call.json(&json!({ "id": id, "command": command })).map_err(error)?;
-    client.empty(call, &RequestOptions::default()).await.map_err(error)
+    let input = SessionShellInput {
+        session_id: SessionID(session.to_owned()),
+        id: Some(SessionMessageID(id.to_owned())),
+        command: command.to_owned(),
+    };
+    client.session_shell(&input, &RequestOptions::default()).await.map_err(error)
 }
 
 /// `session.compact`.

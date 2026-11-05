@@ -209,20 +209,22 @@ fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
         let location = location(&server.client, &directory).await?;
         // A `location` in the file keeps its place and takes the new value, as the TS spread does.
         body.insert("location".to_owned(), serde_json::json!({ "directory": location["directory"] }));
-        let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[]);
+        let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[400, 401, 404, 409]);
         call.json(&body)?;
-        match get(&server.client, call).await {
-            Err(ApiError::UnexpectedStatus { status: 409 }) => anyhow::Ok(None),
-            Err(ApiError::UnexpectedStatus { status }) => anyhow::bail!(
-                "Failed to import session: {}",
-                reqwest::StatusCode::from_u16(status)
-                    .ok()
-                    .and_then(|status| status.canonical_reason())
-                    .unwrap_or_default()
-            ),
-            Err(error) => Err(error.into()),
-            Ok(response) => Ok(Some(text_of(&response["data"]["id"])?)),
+        // TS reads the raw response, so a declared error prints its status text, as an undeclared one does.
+        let status = match get(&server.client, call).await {
+            Ok(response) => return anyhow::Ok(Some(text_of(&response["data"]["id"])?)),
+            Err(ApiError::UnexpectedStatus { status }) => status,
+            Err(ApiError::Declared(error)) => error.status,
+            Err(error) => return Err(error.into()),
+        };
+        if status == 409 {
+            return Ok(None);
         }
+        anyhow::bail!(
+            "Failed to import session: {}",
+            reqwest::StatusCode::from_u16(status).ok().and_then(|status| status.canonical_reason()).unwrap_or_default()
+        )
     })??;
     match imported {
         Some(id) => print(&format!("Imported session: {id}\n")),
