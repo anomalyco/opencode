@@ -128,6 +128,7 @@ export const SettingsAppearance: Component = () => {
                 value={(option) => option.id}
                 label={(option) => option.name}
                 onSelect={appearance.theme.select}
+                selectOnNavigate
               />
             </SettingsRow>
 
