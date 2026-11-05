@@ -77,6 +77,12 @@ impl AbsolutePath {
     }
 }
 
+impl std::borrow::Borrow<str> for AbsolutePath {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for AbsolutePath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -102,6 +108,12 @@ pub struct ProjectID(pub String);
 
 impl ProjectID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ProjectID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -162,6 +174,12 @@ impl AgentID {
     }
 }
 
+impl std::borrow::Borrow<str> for AgentID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for AgentID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -187,6 +205,12 @@ pub struct ProviderID(pub String);
 
 impl ProviderID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ProviderID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -289,6 +313,12 @@ pub struct ProviderCacheTTL(pub String);
 
 impl ProviderCacheTTL {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ProviderCacheTTL {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -516,6 +546,12 @@ impl AgentColor {
     }
 }
 
+impl std::borrow::Borrow<str> for AgentColor {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for AgentColor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -640,6 +676,12 @@ pub struct PluginID(pub String);
 
 impl PluginID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for PluginID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -891,6 +933,12 @@ impl SessionID {
     }
 }
 
+impl std::borrow::Borrow<str> for SessionID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for SessionID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -920,6 +968,12 @@ impl RelativePath {
     }
 }
 
+impl std::borrow::Borrow<str> for RelativePath {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for RelativePath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -945,6 +999,12 @@ pub struct SessionsCursor(pub String);
 
 impl SessionsCursor {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for SessionsCursor {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -988,6 +1048,12 @@ pub struct SessionMessageID(pub String);
 
 impl SessionMessageID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for SessionMessageID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -1154,6 +1220,12 @@ pub struct SnapshotID(pub String);
 
 impl SnapshotID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for SnapshotID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -1496,6 +1568,12 @@ impl SkillID {
     }
 }
 
+impl std::borrow::Borrow<str> for SkillID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for SkillID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -1552,6 +1630,12 @@ impl PromptBase64 {
     }
 }
 
+impl std::borrow::Borrow<str> for PromptBase64 {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for PromptBase64 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -1590,6 +1674,12 @@ pub struct SkillName(pub String);
 
 impl SkillName {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for SkillName {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -1874,6 +1964,12 @@ pub struct ShellID(pub String);
 
 impl ShellID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ShellID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -2660,6 +2756,12 @@ impl FormID {
     }
 }
 
+impl std::borrow::Borrow<str> for FormID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for FormID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -3383,6 +3485,12 @@ impl InstructionEntryKey {
     }
 }
 
+impl std::borrow::Borrow<str> for InstructionEntryKey {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for InstructionEntryKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -3447,6 +3555,12 @@ impl EventID {
     }
 }
 
+impl std::borrow::Borrow<str> for EventID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for EventID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -3480,6 +3594,12 @@ pub struct WorkspaceID(pub String);
 
 impl WorkspaceID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for WorkspaceID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -3767,6 +3887,12 @@ pub struct InstructionHash(pub String);
 
 impl InstructionHash {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for InstructionHash {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -5631,6 +5757,12 @@ impl GenerateImageAspect {
     }
 }
 
+impl std::borrow::Borrow<str> for GenerateImageAspect {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for GenerateImageAspect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -6136,6 +6268,12 @@ impl IntegrationID {
     }
 }
 
+impl std::borrow::Borrow<str> for IntegrationID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for IntegrationID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -6275,6 +6413,12 @@ impl IntegrationMethodID {
     }
 }
 
+impl std::borrow::Borrow<str> for IntegrationMethodID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for IntegrationMethodID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -6382,6 +6526,12 @@ pub struct CredentialID(pub String);
 
 impl CredentialID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for CredentialID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -6571,6 +6721,12 @@ pub struct IntegrationAttemptID(pub String);
 
 impl IntegrationAttemptID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for IntegrationAttemptID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -7337,6 +7493,12 @@ impl ProjectVcs {
     }
 }
 
+impl std::borrow::Borrow<str> for ProjectVcs {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for ProjectVcs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -7441,6 +7603,12 @@ impl PermissionID {
     }
 }
 
+impl std::borrow::Borrow<str> for PermissionID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for PermissionID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -7503,6 +7671,12 @@ pub struct PermissionSavedID(pub String);
 
 impl PermissionSavedID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for PermissionSavedID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -8365,6 +8539,12 @@ pub struct PtyID(pub String);
 
 impl PtyID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for PtyID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -9618,6 +9798,12 @@ impl MediaHash {
     }
 }
 
+impl std::borrow::Borrow<str> for MediaHash {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for MediaHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -9649,6 +9835,12 @@ pub struct ScheduleDuration(pub String);
 
 impl ScheduleDuration {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ScheduleDuration {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -9798,6 +9990,12 @@ pub struct ScheduleID(pub String);
 
 impl ScheduleID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ScheduleID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -10216,6 +10414,12 @@ impl ArtifactProviderID {
     }
 }
 
+impl std::borrow::Borrow<str> for ArtifactProviderID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for ArtifactProviderID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -10249,6 +10453,12 @@ pub struct ArtifactID(pub String);
 
 impl ArtifactID {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ArtifactID {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -11127,6 +11337,12 @@ impl WebSearchID {
     }
 }
 
+impl std::borrow::Borrow<str> for WebSearchID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl std::fmt::Display for WebSearchID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -11813,6 +12029,12 @@ pub struct ConfigCompactionPercent(pub String);
 
 impl ConfigCompactionPercent {
     pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for ConfigCompactionPercent {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
