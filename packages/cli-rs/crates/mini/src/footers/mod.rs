@@ -520,7 +520,8 @@ impl Inner {
     fn paint(self: &Rc<Self>) {
         let (width, _) = self.terminal();
         let rows = self.rows();
-        let theme = self.theme.borrow().footer.clone();
+        let run = self.theme.borrow().clone();
+        let theme = run.footer.clone();
         let mut widgets = Widgets::default();
         let shown = self.state.borrow().shown.clone();
         match shown {
@@ -545,6 +546,7 @@ impl Inner {
                         state: current,
                         info: &info,
                         theme: &theme,
+                        run: &run,
                         mono: self.mono,
                         width,
                         height: rows.saturating_sub(1),
