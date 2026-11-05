@@ -31,7 +31,13 @@ const header: OpenInAppEvent = {
   reveal: false,
 }
 
-const tree: OpenInAppEvent = { type: "launch.requested", app: "cursor", target: "/repo/a.ts", openWith: "Cursor", reveal: false }
+const tree: OpenInAppEvent = {
+  type: "launch.requested",
+  app: "cursor",
+  target: "/repo/a.ts",
+  openWith: "Cursor",
+  reveal: false,
+}
 
 describe("launching", () => {
   test("one launch at a time across the header and a file tree's menu", () => {
@@ -104,7 +110,8 @@ describe("launching", () => {
 })
 
 describe("installed checks", () => {
-  const listed = () => play(createOpenInAppState(), { type: "apps.requested", openWith: ["Visual Studio Code", "Cursor"] })
+  const listed = () =>
+    play(createOpenInAppState(), { type: "apps.requested", openWith: ["Visual Studio Code", "Cursor"] })
 
   test("each app lists once its own check answers, while another still runs", () => {
     const state = listed()

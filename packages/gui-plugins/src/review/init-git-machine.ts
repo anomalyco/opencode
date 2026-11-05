@@ -62,10 +62,7 @@ export function createReviewInitGitState(): ReviewInitGitState {
   return { status: "active", issued: 0, sessions: {} }
 }
 
-export function transitionReviewInitGit(
-  state: ReviewInitGitState,
-  event: ReviewInitGitEvent,
-): ReviewInitGitTransition {
+export function transitionReviewInitGit(state: ReviewInitGitState, event: ReviewInitGitEvent): ReviewInitGitTransition {
   if (state.status === "disposed") return unchanged(state)
 
   if (event.type === "disposed")
@@ -89,9 +86,7 @@ export function transitionReviewInitGit(
         issued: attempt,
         sessions: { ...state.sessions, [event.sessionKey]: { status: "initializing", attempt } },
       },
-      effects: [
-        { type: "vcs.init", sessionKey: event.sessionKey, attempt, timeoutMs: REVIEW_INIT_GIT_TIMEOUT_MS },
-      ],
+      effects: [{ type: "vcs.init", sessionKey: event.sessionKey, attempt, timeoutMs: REVIEW_INIT_GIT_TIMEOUT_MS }],
     }
   }
 

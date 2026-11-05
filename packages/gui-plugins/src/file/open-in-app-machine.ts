@@ -85,7 +85,9 @@ export function transitionOpenInApp(state: OpenInAppState, event: OpenInAppEvent
         ...Object.values(state.apps).flatMap((check) =>
           check.status === "checking" ? [{ type: "clear-timer" as const, attempt: check.attempt }] : [],
         ),
-        ...(state.launch.status === "launching" ? [{ type: "clear-timer" as const, attempt: state.launch.attempt }] : []),
+        ...(state.launch.status === "launching"
+          ? [{ type: "clear-timer" as const, attempt: state.launch.attempt }]
+          : []),
       ],
     }
 

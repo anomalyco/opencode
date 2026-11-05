@@ -100,7 +100,11 @@ describe("restoring", () => {
   })
 
   test("waits for the desktop layout to load before restoring", () => {
-    const waiting = play(createFileScrollState(), synced({ ...shown, layoutReady: false }), FILE_SCROLL_RESTORE_REQUESTED)
+    const waiting = play(
+      createFileScrollState(),
+      synced({ ...shown, layoutReady: false }),
+      FILE_SCROLL_RESTORE_REQUESTED,
+    )
 
     expect(waiting.effects).toEqual([])
 
@@ -115,11 +119,19 @@ describe("restoring", () => {
       synced(shown),
     )
 
-    expect(restored.effects).toEqual([{ type: "frame.restore", attempt: 1 }, { type: "frame.restore", attempt: 2 }])
+    expect(restored.effects).toEqual([
+      { type: "frame.restore", attempt: 1 },
+      { type: "frame.restore", attempt: 2 },
+    ])
   })
 
   test("several renders in one frame queue one restore", () => {
-    const state = play(createFileScrollState(), synced(shown), FILE_SCROLL_RESTORE_REQUESTED, FILE_SCROLL_RESTORE_REQUESTED)
+    const state = play(
+      createFileScrollState(),
+      synced(shown),
+      FILE_SCROLL_RESTORE_REQUESTED,
+      FILE_SCROLL_RESTORE_REQUESTED,
+    )
 
     expect(state.effects).toEqual([{ type: "frame.restore", attempt: 1 }])
   })
@@ -178,7 +190,12 @@ describe("saving", () => {
   })
 
   test("a remounted code view restores again", () => {
-    const remounted = play(unsaved(), { type: "save.stepped", attempt: 3 }, synced({ ...shown, scroller: false }), synced(shown))
+    const remounted = play(
+      unsaved(),
+      { type: "save.stepped", attempt: 3 },
+      synced({ ...shown, scroller: false }),
+      synced(shown),
+    )
 
     expect(remounted.effects).toEqual([write(420), { type: "frame.restore", attempt: 5 }])
   })

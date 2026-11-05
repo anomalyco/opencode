@@ -151,6 +151,37 @@ test("a rejected Git init releases its session's button without showing an error
   await expect(init).toBeEnabled()
 })
 
+test("a created Git repository whose project refresh fails still refreshes the session without an error", async ({
+  page,
+}) => {
+  await openSession(page, {
+    name: "ReviewInitRefresh",
+    project: { vcs: undefined },
+    sessions: [{ id: "ses_init_refresh", title: "Initialize Refresh" }],
+    seed: {
+      panes: { ses_init_refresh: { review: true } },
+      storage: reviewTabs("C:/OpenCode/ReviewInitRefresh", "ses_init_refresh"),
+    },
+  })
+  const panel = page.locator("#review-panel")
+  const init = panel.getByRole("button", { name: "Create Git repository", exact: true })
+  await expect(init).toBeEnabled()
+
+  // The repository is created; the project list refresh after it fails.
+  await page.route(/\/api\/project(\?|$)/, (route) =>
+    route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} }),
+  )
+  const created = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
+  const project = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/project")
+  const session = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/session/ses_init_refresh")
+  await init.click()
+  expect((await created).status()).toBe(204)
+  expect((await project).status()).toBe(500)
+  expect((await session).status()).toBe(200)
+  await expect(panel.getByRole("button", { name: "Creating Git repository…", exact: true })).toHaveCount(0)
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+})
+
 test("opens file picker launchers when randomUUID is unavailable on insecure HTTP origins", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(globalThis, "isSecureContext", { configurable: true, value: false })

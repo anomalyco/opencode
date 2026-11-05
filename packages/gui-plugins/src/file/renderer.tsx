@@ -221,7 +221,9 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
       if (!effect.reveal) return desktop.launch(target, effect.openWith)
 
-      return desktop.reveal(target).then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
+      return desktop
+        .reveal(target)
+        .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
     }).then(
       () => dispatchOpenInApp({ type: "launch.succeeded", attempt }),
       (cause: unknown) =>

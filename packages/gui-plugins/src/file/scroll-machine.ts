@@ -107,7 +107,8 @@ export function transitionFileScroll(state: FileScrollState, event: FileScrollEv
   if (state.status === "disposed") return unchanged(state)
 
   // An unmount or a hidden tab still stores the user's last offset.
-  if (event.type === "disposed") return { state: { status: "disposed", attempt: state.attempt + 1 }, effects: stop(state) }
+  if (event.type === "disposed")
+    return { state: { status: "disposed", attempt: state.attempt + 1 }, effects: stop(state) }
 
   if (event.type === "context.synced") return synced(state, event.context)
 

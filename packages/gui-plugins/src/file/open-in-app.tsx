@@ -209,13 +209,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
             </Show>
           </SplitButtonAction>
         </Tooltip>
-        <Menu
-          gutter={4}
-          modal={false}
-          placement="bottom-end"
-          open={menu()}
-          onOpenChange={setMenu}
-        >
+        <Menu gutter={4} modal={false} placement="bottom-end" open={menu()} onOpenChange={setMenu}>
           <Menu.Trigger
             as={SplitButtonMenuTrigger}
             disabled={state.opening()}

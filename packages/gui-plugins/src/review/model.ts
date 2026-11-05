@@ -608,8 +608,7 @@ export function createReviewModel(input: {
       initGitRequests.set(attempt, {
         controller,
         timer: setTimeout(
-          () =>
-            dispatchInitGit({ type: "init.timed-out", sessionKey, attempt, routedSessionKey: untrack(view).key }),
+          () => dispatchInitGit({ type: "init.timed-out", sessionKey, attempt, routedSessionKey: untrack(view).key }),
           effect.timeoutMs,
         ),
       })
