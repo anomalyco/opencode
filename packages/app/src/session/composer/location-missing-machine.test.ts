@@ -10,6 +10,7 @@ import {
 } from "./location-missing-machine"
 
 const missing = "/repo/.worktrees/gone"
+
 const sibling: WorktreeDirectory = { directory: "/repo/.worktrees/sibling", strategy: "git" }
 
 function replay(events: LocationMissingEvent[], from = createLocationMissingState([])) {
@@ -33,6 +34,7 @@ test("an open directory picker refuses a second picker or a worktree move, and i
   ).toBe(picking.state)
 
   const disposed = transitionLocationMissing(picking.state, { type: "disposed" })
+
   const late = transitionLocationMissing(disposed.state, {
     type: "picker.settled",
     attempt: attempt(picking.state),

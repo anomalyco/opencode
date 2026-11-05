@@ -77,7 +77,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
       // Creating the worktree is not aborted on unmount: cutting it off kills the project's setup script midway.
       void moveSession(effect.directory).then(
         () => dispatch({ type: "move.succeeded", attempt: effect.attempt }),
-        (error: unknown) => dispatch({ type: "move.failed", attempt: effect.attempt, error, dialogOpen: !!dialog.active }),
+        (error) => dispatch({ type: "move.failed", attempt: effect.attempt, error, dialogOpen: !!dialog.active }),
       )
 
       return
