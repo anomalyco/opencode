@@ -8,14 +8,13 @@ export const useSessionHashScroll = (input: {
   sessionID: () => string | undefined
   messagesReady: () => boolean
   visibleUserMessages: () => SessionMessageUser[]
-  historyMore: () => boolean
-  historyLoading: () => boolean
-  loadMore: (sessionID: string) => Promise<void>
+  historySeekable: () => boolean
+  seekHistory: () => void
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: SessionMessageUser | undefined) => void
-  follow: { unpin: () => void; toBottom: () => void }
+  follow: { detach: () => void; toBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   revealMessage?: (id: string) => void
@@ -131,7 +130,7 @@ export const useSessionHashScroll = (input: {
     const messageId = messageIdFromHash(hash)
 
     if (messageId) {
-      input.follow.unpin()
+      input.follow.detach()
       const msg = messageById().get(messageId)
 
       if (msg) {
@@ -146,7 +145,7 @@ export const useSessionHashScroll = (input: {
     const target = document.getElementById(hash)
 
     if (target) {
-      input.follow.unpin()
+      input.follow.detach()
       scrollToElement(target, behavior)
 
       return
@@ -202,29 +201,21 @@ export const useSessionHashScroll = (input: {
 
     if (input.currentMessageId() === targetId && !pending) return
 
-    input.follow.unpin()
+    input.follow.detach()
     cancel()
     queue(() => scrollToMessage(msg, "auto"))
   })
 
+  // Pages toward a target that is not loaded yet. History paging stops it once a page fails or history runs out.
   createEffect(() => {
-    const sessionID = input.sessionID()
-
-    if (!sessionID || !input.messagesReady()) return
-
-    visibleUserMessages()
+    if (!input.sessionID() || !input.messagesReady()) return
 
     let targetId = input.pendingMessage()
 
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
 
-    if (!targetId) return
-
-    if (messageById().has(targetId)) return
-
-    if (!input.historyMore() || input.historyLoading()) return
-
-    void input.loadMore(sessionID)
+    if (!targetId || messageById().has(targetId) || !input.historySeekable()) return
+    input.seekHistory()
   })
 
   onMount(() => {

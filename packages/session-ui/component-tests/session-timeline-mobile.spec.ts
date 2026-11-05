@@ -4,7 +4,7 @@ story.describe("touch timeline", () => {
   story.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
 
   story("keeps message actions and metadata visible without hover", async ({ mount, page }) => {
-    const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
+    const timeline = await mount("current-session-timeline-rows--response-speed")
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
 
     for (const action of [
@@ -25,6 +25,8 @@ story.describe("touch timeline", () => {
     await expect(responseMeta).not.toBeEmpty()
     await expect(responseMeta).not.toContainText("Build")
     await expect(responseMeta).not.toContainText("Sonnet")
+    await expect(responseMeta.locator('[data-slot="text-part-meta-speed"]')).toHaveText("·60.0 tok/s")
+    await expect(responseMeta.locator('[data-slot="text-part-meta-speed"]')).toBeHidden()
   })
 
   story("keeps shell copy visible without hover", async ({ mount }) => {

@@ -110,6 +110,7 @@ function SessionScreenContent(props: {
   const bottomOpen = createMemo(() => bottomTabs() && session.layout.view().bottom.opened())
 
   const drag = createPaneDrag({
+    identity: session.layout.tabKey,
     shown: (pane) => (pane === "bottom" ? bottomOpen() : region.pane(pane).keys().length > 0),
     drop: (key, target) =>
       batch(() => {
@@ -131,7 +132,7 @@ function SessionScreenContent(props: {
     sessionID: session.identity.sessionID,
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
-    pauseAutoScroll: timeline.view.unpin,
+    pauseAutoScroll: () => timeline.follow.dispatch({ type: "detach" }),
   })
 
   const messagesReady = timeline.ready
@@ -311,12 +312,9 @@ function SessionScreenContent(props: {
             onResumeScroll={timeline.actions.resume}
             setScrollRef={timeline.view.setScrollRef}
             onScheduleScrollState={timeline.view.scheduleScrollState}
-            onPin={timeline.view.pin}
-            onUnpin={timeline.view.unpin}
+            follow={timeline.follow}
             onUserScroll={timeline.view.markUserScroll}
             onHistoryScroll={timeline.view.onHistoryScroll}
-            onSelectionInteraction={timeline.view.selectionInteraction}
-            pinned={timeline.view.pinned()}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
             onContentResize={timeline.view.contentResized}

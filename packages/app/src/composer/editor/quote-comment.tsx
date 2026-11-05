@@ -4,6 +4,7 @@ import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import type { ComposerDelivery } from "../adapter"
@@ -155,9 +156,8 @@ export function QuoteCommentEditor(props: {
           opacity: state.height === 0 ? 0 : undefined,
         }}
       >
-        <div
-          data-scrollable
-          class="overflow-y-auto rounded-[8px] shadow-[var(--v2-elevation-floating)]"
+        <MenuScroll
+          class="rounded-[8px] shadow-[var(--v2-elevation-floating)]"
           style={{ "max-height": `${availableHeight()}px` }}
         >
           <LineCommentEditor
@@ -189,7 +189,7 @@ export function QuoteCommentEditor(props: {
               {language.t("session.quote.sendFailed")}
             </p>
           </Show>
-        </div>
+        </MenuScroll>
       </div>
     </Portal>
   )

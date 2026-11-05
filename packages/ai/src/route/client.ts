@@ -19,7 +19,6 @@ import {
   CompactionResponse,
   CompactionCheckpointResponse,
   AIErrorReason,
-  GenerationOptions,
   LLMResponse,
   ResponseFold,
   LanguageModel,
@@ -31,10 +30,10 @@ import {
   ToolChoice,
   ToolEntry,
   type LLMRequest,
-  mergeGenerationOptions,
+  mergeGeneration,
   mergeProviderOptions,
   mergeTransport,
-  type TransportOptions,
+  type LanguageModelDefaults,
   withPartial,
 } from "../schema/index.js"
 
@@ -104,15 +103,9 @@ export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "ro
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
-export interface RouteDefaults extends TransportOptions {
-  readonly generation?: GenerationOptions
-  readonly providerOptions?: ProviderOptions
-}
+export type RouteDefaults = LanguageModelDefaults
 
-export interface RouteDefaultsInput extends TransportOptions {
-  readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: ProviderOptions
-}
+export type RouteDefaultsInput = LanguageModelDefaults
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly compact?: CompactionOperations
@@ -148,7 +141,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   ...base,
   ...patch,
   ...mergeTransport(base, patch),
-  generation: mergeGenerationOptions(base?.generation, patch.generation),
+  ...mergeGeneration(base, patch),
   providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
 })
 
@@ -264,10 +257,9 @@ const resolveRequestOptions = (request: LLMRequest): LLMRequest => {
   const normalized = messages === request.messages ? request : { ...request, messages }
   const routeDefaults = normalized.model.route.defaults
   const modelDefaults = normalized.model.defaults
-  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized.generation)
   return {
     ...normalized,
-    generation: generation ?? new GenerationOptions({}),
+    ...mergeGeneration(routeDefaults, modelDefaults, normalized),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
       modelDefaults?.providerOptions,
@@ -585,7 +577,6 @@ const restoreClasses = (request: LLMRequest): LLMRequest => ({
   messages: request.messages.map(Message.make),
   tools: request.tools.map(ToolEntry.make),
   toolChoice: request.toolChoice === undefined ? undefined : ToolChoice.make(request.toolChoice),
-  generation: request.generation === undefined ? undefined : GenerationOptions.make(request.generation),
 })
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {

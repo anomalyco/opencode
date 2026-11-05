@@ -5,6 +5,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { SessionTurn } from "@opencode/util/session-turn"
 import { Option, Predicate, Schema } from "effect"
 import {
   For,
@@ -58,6 +59,7 @@ import {
   type PartRef,
   type ReasoningMode,
 } from "./projection"
+import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "./turn-phase-machine"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
@@ -108,6 +110,16 @@ export function createSessionTimelineRowRenderer(input: {
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
+
+  const turns = createMemo(() => {
+    const messages = [...input.projection.messageByID().values()]
+
+    return {
+      messages,
+      legacy: SessionTurn.legacy(messages),
+      indexes: new Map(messages.map((message, index) => [message.id, index])),
+    }
+  })
 
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
@@ -186,29 +198,28 @@ export function createSessionTimelineRowRenderer(input: {
       equals: (a, b) => a?.above === b?.above && a?.below === b?.below,
     })
 
-  const workingTurn = (messageID: string) =>
-    input.status().type !== "idle" && input.projection.activeMessageID() === messageID
+  const phase = (messageID: string) => viewTurnPhase(input.projection.turnPhaseByID().get(messageID) ?? IDLE_TURN_PHASE)
 
   const duration = (messageID: string) => {
     const user = input.projection.messageByID().get(messageID)
 
     if (user?.type !== "user") return null
 
-    const completed = (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages).reduce<
-      number | undefined
-    >((latest, message) => {
-      if (message.time.completed === undefined) return latest
+    const message = input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.time.completed !== undefined)
 
-      return latest === undefined ? message.time.completed : Math.max(latest, message.time.completed)
-    }, undefined)
+    if (message?.time.completed === undefined || message.time.completed < user.time.created) return undefined
 
-    if (completed === undefined || completed < user.time.created) return undefined
-
-    return completed - user.time.created
+    return SessionTurn.duration(turns().messages, message, {
+      index: turns().indexes.get(message.id),
+      legacy: turns().legacy,
+    })
   }
 
   const copyContentID = (messageID: string) => {
-    if (workingTurn(messageID)) return null
+    if (phase(messageID).hideCopy) return null
 
     const message = input.projection
       .assistantMessagesByParent()
@@ -251,7 +262,7 @@ export function createSessionTimelineRowRenderer(input: {
 
         if (group.type !== "context") return []
         const contents = indexGroupContents(group.refs)
-        const lastAssistant = input.projection.assistantMessagesByParent().get(row().userMessageID)?.at(-1)
+        const streaming = phase(row().userMessageID).streamingReasoningRef
 
         return group.refs.flatMap<ContextGroupPart>((ref) => {
           const content = contents.get(ref.messageID)?.get(ref.partID)
@@ -267,15 +278,7 @@ export function createSessionTimelineRowRenderer(input: {
               {
                 ...content,
                 id: ref.partID,
-                streaming:
-                  workingTurn(row().userMessageID) &&
-                  input.status().type === "busy" &&
-                  lastAssistant?.id === ref.messageID &&
-                  lastAssistant.time.completed === undefined &&
-                  !lastAssistant.error &&
-                  !lastAssistant.retry &&
-                  lastAssistant.content.at(-1) === content &&
-                  content.time?.completed === undefined,
+                streaming: sameRef(streaming, ref),
               },
             ]
           const message = input.projection.messageByID().get(ref.messageID)
@@ -338,7 +341,7 @@ export function createSessionTimelineRowRenderer(input: {
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
             busy={
-              workingTurn(row().userMessageID) &&
+              phase(row().userMessageID).live &&
               input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
             }
             onOpenChange={(open) => input.disclosure.set(key(), open)}
@@ -455,6 +458,23 @@ export function createSessionTimelineRowRenderer(input: {
       return value.steps.length > 0 ? value : undefined
     })
 
+    const turnTokensPerSecond = createMemo(() => {
+      const current = ref()
+
+      if (!current || copyContentID(row().userMessageID) !== current.partID) return undefined
+
+      const messages = input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages
+
+      const last = messages.at(-1)
+
+      if (!last) return undefined
+
+      return SessionTurn.tokensPerSecond(turns().messages, last, {
+        index: turns().indexes.get(last.id),
+        legacy: turns().legacy,
+      })
+    })
+
     const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
 
     return (
@@ -468,6 +488,7 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}
@@ -1065,7 +1086,7 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(current().userMessageID)}>
+            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
               {content}
             </div>
           </div>
@@ -1146,20 +1167,13 @@ export function createSessionTimelineRowRenderer(input: {
         return value
       }
 
-      const status = createMemo(() => {
-        const retry = (
-          input.projection.assistantMessagesByParent().get(current().userMessageID) ?? emptyAssistantMessages
-        ).at(-1)?.retry
-
-        if (!retry) return input.status()
-
-        return { type: "retry" as const, attempt: retry.attempt, message: retry.error.message, next: retry.at }
-      })
-
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <SessionRetry status={status()} show={input.projection.activeMessageID() === current().userMessageID} />
+            <SessionRetry
+              status={{ type: "retry", attempt: current().attempt, message: current().message, next: current().next }}
+              show={input.projection.activeMessageID() === current().userMessageID}
+            />
           </div>
         </Frame>
       )

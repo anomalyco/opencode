@@ -6,6 +6,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { createDisclosure } from "./disclosure"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
@@ -22,13 +23,15 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
 
-  const [state, setState] = createStore({
-    open: props.defaultOpen ?? false,
-    copied: false,
-    clipped: false,
+  const [state, setState] = createStore({ copied: false, clipped: false })
+
+  const disclosure = createDisclosure({
+    open: () => props.open,
+    defaultOpen: () => props.defaultOpen ?? false,
+    onOpenChange: (open) => props.onOpenChange?.(open),
   })
 
-  const open = () => props.open ?? state.open
+  const open = disclosure.open
   const copied = () => state.copied
   let subtitle: HTMLSpanElement | undefined
 
@@ -56,9 +59,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
   const setOpen = (value: boolean) => {
     if (value) measure()
-
-    if (props.open === undefined) setState("open", value)
-    props.onOpenChange?.(value)
+    disclosure.setOpen(value)
   }
 
   const name = createMemo(() => {
@@ -140,7 +141,13 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   )
 
   return (
-    <Card {...rest} data-kind="tool-error-card" data-tool={split.tool} data-open={open() ? "true" : "false"} variant="error">
+    <Card
+      {...rest}
+      data-kind="tool-error-card"
+      data-tool={split.tool}
+      data-open={open() ? "true" : "false"}
+      variant="error"
+    >
       <Collapsible class="tool-collapsible" data-open={open() ? "true" : "false"} open={open()} onOpenChange={setOpen}>
         <Collapsible.Trigger>
           <div data-component="tool-trigger">

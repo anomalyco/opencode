@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { ActiveComposerAdapter, ComposerSession } from "@/composer/adapter"
 import { createMemoryComposerState } from "@/composer/state"
+import { composerSubmitView } from "@/composer/machine"
 import { createComposerSubmit } from "@/composer/submit"
 import type { ModelSelection } from "@/providers/models/selection"
 
@@ -109,7 +110,7 @@ test.each([
     // Pressing send again while it waits neither sends twice nor asks for a selection.
     await submission.submit(new Event("submit"))
 
-    expect(submission.held()).toBe(true)
+    expect(composerSubmitView(submission.state()).held).toBe(true)
     expect(toasts).toEqual([])
 
     if (row.edit !== undefined) state.set([{ type: "text", content: row.edit, start: 0, end: row.edit.length }])
@@ -119,13 +120,13 @@ test.each([
     // A cancelled hold settles before loading finishes, and loading afterwards sends nothing.
     if (row.agent === undefined) {
       await held
-      expect(submission.held()).toBe(false)
+      expect(composerSubmitView(submission.state()).held).toBe(false)
     }
 
     setAgent(row.agent ?? "build")
     await held
 
-    expect(submission.held()).toBe(false)
+    expect(composerSubmitView(submission.state()).held).toBe(false)
     expect(toasts).toEqual(row.toasts)
     expect(sent).toEqual([])
     expect(text(state)).toBe(row.left)

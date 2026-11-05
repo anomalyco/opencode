@@ -23,7 +23,9 @@ import type { BuiltinLayout, BuiltinLocale } from "@opencode/plugin/gui/builtin"
 import {
   createComponent,
   createMemo,
+  createRoot,
   createSignal,
+  ErrorBoundary,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -36,10 +38,9 @@ import { render } from "solid-js/web"
 import { PlatformProvider, type Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
-import { PluginHostProvider, usePluginHost, type HostApiFactories } from "../src/runtime/plugin/host"
+import { PluginHostProvider, usePluginHost, type HostApiFactories, type PluginInput } from "../src/runtime/plugin/host"
 import { createHostApis } from "../src/runtime/plugin/host-apis"
-import { createInstalled } from "../src/runtime/plugin/installed"
-import { pluginEnabled, type Entry } from "@opencode/plugin/gui/host"
+import type { Bridge, Entry } from "@opencode/plugin/gui/host"
 import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createSessionScreenLayout } from "../src/session/screen-layout"
 import type { SessionModel } from "../src/session/model"
@@ -81,7 +82,7 @@ type Captured = { apis?: ReturnType<typeof createHostApis> }
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
-export { createComponent, createMemo, createSignal, getOwner, onCleanup, runWithOwner }
+export { createComponent, createMemo, createRoot, createSignal, getOwner, onCleanup, runWithOwner }
 
 const layout: BuiltinLayout = {
   narrow: () => false,
@@ -218,7 +219,7 @@ export function mountPluginHost() {
     reload: () => hosts[0]?.reload("fixture"),
     disable: () => setDisabled(new Set(["fixture"])),
     enable: () => setDisabled(new Set<string>()),
-    status: () => hosts[0]?.state.status.fixture,
+    status: () => hosts[0]?.status("fixture"),
     /** Contributions the host holds for a registry; readable after the host unmounts. */
     entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
   }
@@ -232,12 +233,16 @@ export function mountPluginHost() {
 export function mountPlugins(input: {
   definitions: readonly Entry[]
   disabled?: readonly string[]
-  bridge?: Parameters<typeof createInstalled>[0]
+  bridge?: Bridge
   stored?: Readonly<Record<string, Json>>
   /** Shows the production Extensions › Plugins rows of the desktop app's own server, which lists these plugins. */
   plugins?: readonly PluginInfo[]
   /** The client of an Ipc while main provides it, as a desktop window's bridge reports it. Omitted: the web. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
+  /** Whether main failed to answer the window's subscribe to an Ipc. */
+  ipcFailed?: (token: Ipc) => boolean
+  /** What a plugin's GUI reads of its server plugin. Omitted: every plugin is a built-in. */
+  plugin?: (id: string) => PluginInput | undefined
 }) {
   const held = Promise.withResolvers<void>()
   const saved = { ...input.stored }
@@ -282,36 +287,6 @@ export function mountPlugins(input: {
     remove() {},
   })
 
-  function MountedHost() {
-    const installed = input.bridge ? createInstalled(input.bridge) : undefined
-
-    const disabledState = createMemo(() => {
-      if (!installed) return disabled()
-
-      const state = installed.enableState()
-
-      if (!state) return undefined
-
-      return new Set(
-        definitions().flatMap((definition) =>
-          pluginEnabled({ id: definition.id, builtin: false }, state) ? [] : [definition.id],
-        ),
-      )
-    })
-
-    return (
-      <PluginHostProvider
-        definitions={definitions}
-        disabled={disabledState}
-        apis={fakeApis(storage)}
-        whenMounted={mounted}
-        ipc={input.ipc}
-      >
-        <Capture />
-      </PluginHostProvider>
-    )
-  }
-
   function Capture() {
     const host = usePluginHost()
     hosts.push(host)
@@ -330,15 +305,38 @@ export function mountPlugins(input: {
     )
   }
 
+  // Errors that escape the host to the boundary above it, which in the app replaces the whole window.
+  const escaped: string[] = []
+
   const dispose = render(
     () => (
-      <PlatformProvider value={platform}>
-        <LanguageProvider locale="en">
-          <DialogProvider>
-            <MountedHost />
-          </DialogProvider>
-        </LanguageProvider>
-      </PlatformProvider>
+      <ErrorBoundary
+        fallback={(error) => {
+          escaped.push(String(error))
+
+          return null
+        }}
+      >
+        <PlatformProvider value={platform}>
+          <LanguageProvider locale="en">
+            <DialogProvider>
+              {/* With a bridge, main's plugin manager holds the enable settings, as in a desktop window. */}
+              <PluginHostProvider
+                definitions={definitions}
+                disabled={input.bridge ? undefined : disabled}
+                bridge={input.bridge}
+                apis={fakeApis(storage)}
+                whenMounted={mounted}
+                ipc={input.ipc}
+                ipcFailed={input.ipcFailed}
+                plugin={input.plugin}
+              >
+                <Capture />
+              </PluginHostProvider>
+            </DialogProvider>
+          </LanguageProvider>
+        </PlatformProvider>
+      </ErrorBoundary>
     ),
     container,
   )
@@ -358,9 +356,11 @@ export function mountPlugins(input: {
     define: (next: readonly Entry[]) => setDefinitions(next),
     reload: (id: string) => hosts[0]?.reload(id),
     ready: () => hosts[0]?.ready() ?? false,
-    status: (id: string) => hosts[0]?.state.status[id],
-    failure: (id: string) => hosts[0]?.state.failures[id],
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
+    /** Errors that reached the error boundary above the host. */
+    escaped: () => [...escaped],
   }
 }
 
@@ -694,7 +694,7 @@ export function mountSessionRegion(input: {
     leave: () => setRouted(false),
     /** The session each composer attachment reached, in order. */
     attached,
-    status: (id: string) => hosts[0]?.state.status[id],
+    status: (id: string) => hosts[0]?.status(id),
     unmount: () => {
       dispose()
       container.remove()
@@ -746,7 +746,7 @@ export function mountThemes(input: { definitions: readonly Entry[]; pending?: tr
   )
 
   return {
-    status: (id: string) => hosts[0]?.state.status[id],
+    status: (id: string) => hosts[0]?.status(id),
     options: () => themes[0]?.ids().map((id) => ({ id, name: themes[0]?.name(id) })) ?? [],
     select: (id: string) => themes[0]?.setTheme(id),
     selected: () => themes[0]?.themeId(),
@@ -811,8 +811,8 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   )
 
   return {
-    status: (id: string) => hosts[0]?.state.status[id],
-    failure: (id: string) => hosts[0]?.state.failures[id],
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
       dispose()
       container.remove()
@@ -885,8 +885,8 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   return {
     show: (text: string, streaming = false) => setMessage({ text, streaming }),
     define: (next: readonly Entry[]) => setDefinitions(next),
-    status: (id: string) => hosts[0]?.state.status[id],
-    failure: (id: string) => hosts[0]?.state.failures[id],
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
       dispose()
       container.remove()
@@ -951,7 +951,7 @@ export function mountHostApis(input: { definitions: readonly Entry[] }) {
     /** Mounts the interface. */
     attach: () => void captured.apis?.attach(mounted),
     reload: (id: string) => hosts[0]?.reload(id),
-    status: (id: string) => hosts[0]?.state.status[id],
+    status: (id: string) => hosts[0]?.status(id),
     unmount: () => {
       dispose()
       container.remove()

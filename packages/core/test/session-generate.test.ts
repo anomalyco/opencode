@@ -392,7 +392,7 @@ it.effect(
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Answer briefly.")
       expect(userTexts(requests[0])).toEqual(["[redacted]"])
-      expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+      expect(requests[0]?.maxTokens).toBe(32)
       expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
     }),
   { timeout: 15_000 },

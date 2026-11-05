@@ -9,6 +9,7 @@ import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -47,7 +48,7 @@ const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -329,7 +330,7 @@ function HomeSessionSearch(
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <div class="max-h-[min(20rem,40dvh)] overflow-y-auto" data-scrollable ref={props.onSetSearchList}>
+                      <MenuScroll class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
                             {(record) => (
@@ -341,7 +342,7 @@ function HomeSessionSearch(
                             )}
                           </For>
                         </div>
-                      </div>
+                      </MenuScroll>
                     </div>
                   </Show>
                 </Show>

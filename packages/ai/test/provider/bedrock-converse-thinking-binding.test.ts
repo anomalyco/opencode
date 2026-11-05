@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, GenerationOptions, LanguageModel } from "../../src/effect.js"
+import { ai, LanguageModel, type GenerationOptionsFields } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -11,7 +11,7 @@ const beta = ["thinking-binding-controls-2026-08-01"]
 const bedrock = (id: string, settings: Parameters<typeof AmazonBedrock.model>[1] = {}) =>
   AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
 
-const fields = (model: LanguageModel, generation?: GenerationOptions) =>
+const fields = (model: LanguageModel, generation?: GenerationOptionsFields) =>
   compileRequest(
     ai.request({
       id: "req_1",
@@ -19,7 +19,7 @@ const fields = (model: LanguageModel, generation?: GenerationOptions) =>
       system: "You are concise.",
       prompt: "Say hello.",
       cache: "none",
-      generation,
+      ...generation,
     }),
   ).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
 
@@ -66,7 +66,7 @@ describe("Bedrock Converse thinking block binding", () => {
       expect(
         yield* fields(
           bedrock("global.anthropic.claude-fable-5-1", { thinking: { type: "enabled", budgetTokens: 4_000 } }),
-          GenerationOptions.make({ maxTokens: 64_000, topK: 40 }),
+          { maxTokens: 64_000, topK: 40 },
         ),
       ).toEqual({
         top_k: 40,

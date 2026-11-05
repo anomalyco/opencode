@@ -7,6 +7,7 @@ import {
   type BridgeLayout,
   type BridgeMenubarItem,
   type Entry,
+  type Scope,
 } from "@opencode/plugin/gui/host"
 import {
   MenubarItem,
@@ -47,6 +48,7 @@ import {
 } from "../../shared/ipc-rpc/events"
 import { CHANNEL, VERSION } from "../constants"
 import { emitIpcEvent } from "../ipc-events"
+import { isQuitting, type Handoff, type State } from "../lifecycle/machine"
 import { refreshMenu, setMenubarProvider } from "../native/menu"
 import {
   formatNativeTemplate,
@@ -167,7 +169,10 @@ export function createHost(input: {
   readonly subscriptions: Map<string, Set<number>>
   /** The server endpoints each window last pushed. */
   readonly servers: Map<number, readonly PluginEndpoint[]>
-  readonly restart: (handoff?: () => void | Promise<void>) => Promise<void>
+  /** Where the app stands between running and exiting; plugins start only while it is not quitting. */
+  readonly appState: () => State
+  /** Stops every plugin but the one whose scope is `keep`, then runs the handoff or relaunches. */
+  readonly restart: (keep: Scope, handoff?: Handoff) => Promise<void>
   readonly log: ErrorLog
   /** Plugin logs at their own level. */
   readonly write: <Data extends Readonly<Record<string, unknown>>>(
@@ -204,7 +209,7 @@ export function createHost(input: {
   // Each live instance's catalog and messages, so a locale change reaches them.
   const translations = new Set<Translation>()
   const closed = new Set<(win: BrowserWindow) => void>()
-  const status = { sequence: 0, disposed: false, menubarQueued: false, listing: false, relist: false }
+  const status = { sequence: 0, menubarQueued: false, listing: false, relist: false }
 
   const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
   const changed = () => broadcast(new PluginsChanged({ list: installed() }))
@@ -262,7 +267,8 @@ export function createHost(input: {
   const publishMenubar = () => {
     status.menubarQueued = false
 
-    if (status.disposed) return
+    // While quitting the menu keeps its items, a kept plugin's among them; resuming publishes it again.
+    if (isQuitting(input.appState())) return
     refreshMenu()
     broadcast(new PluginMenubarItemsChanged({ items: listMenubarItems() }))
   }
@@ -340,6 +346,8 @@ export function createHost(input: {
     loader: (id) => loader(id),
     enabled: (id) => manager.enabled(id),
     changed: () => changed(),
+    state: input.appState,
+    restart: input.restart,
     log: input.log,
   })
 
@@ -404,7 +412,7 @@ export function createHost(input: {
     sidecar.module ??= await loadClient()
     const client = sidecarClient()
 
-    if (!client || status.disposed) return
+    if (!client || isQuitting(input.appState())) return
     inventory.watch?.abort()
     const watch = new AbortController()
     inventory.watch = watch
@@ -435,7 +443,7 @@ export function createHost(input: {
     sidecar.module ??= await loadClient()
     const client = sidecarClient()
 
-    if (!client || status.disposed) return
+    if (!client || isQuitting(input.appState())) return
 
     const listed = await client.plugin.list().then(
       (result) => result.data,
@@ -458,7 +466,7 @@ export function createHost(input: {
       shipped.filter((plugin) => !reserved.includes(plugin.id)).map((plugin) => readPlugin(client, plugin.id, parts)),
     )
 
-    if (status.disposed) return
+    if (isQuitting(input.appState())) return
     applyPlugins(new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved, parts)
   }
 
@@ -487,7 +495,7 @@ export function createHost(input: {
 
     if (skipped.get(id) === bundle.revision) return void parts.unsupported.add(id)
 
-    if (status.disposed) return undefined
+    if (isQuitting(input.appState())) return undefined
 
     const loaded = await evaluateMain(bundle.code).then(
       (value) => ({ ok: true as const, value }),
@@ -719,7 +727,7 @@ export function createHost(input: {
       },
       get lifecycle() {
         return (created.lifecycle ??= {
-          restart: (handoff) => lifecycle.restart(instance.scope, () => input.restart(handoff)),
+          restart: (handoff) => lifecycle.restart(instance.scope, handoff),
         } satisfies Lifecycle)
       },
       get app() {
@@ -847,10 +855,11 @@ export function createHost(input: {
     })
   }
 
+  // The host lives as long as the app, so it never stops following windows and the locale.
   getMainWindows().forEach(wire)
-  const stopWindows = onMainWindow(wire)
+  onMainWindow(wire)
 
-  const stopLocale = onNativeTranslations(() => {
+  onNativeTranslations(() => {
     const locale = nativeLocale()
     void Promise.all(
       [...translations].map(async (translation) => {
@@ -872,15 +881,33 @@ export function createHost(input: {
     })),
   )
 
+  // Plugins listed from the server before a stop are known already; the listing that follows reconciles the rest.
+  const start = async () => {
+    inventory.stop ??= SidecarCredentials.onChange(follow)
+    follow()
+    await Promise.all(
+      [...local.map((definition) => definition.id), ...plugins.keys()].map((id) => lifecycle.activate(id)),
+    )
+  }
+
   return {
     /**
      * Activates every enabled main plugin, then follows the app's own server for plugin GUIs. The app calls this once
      * its first window is up.
      */
-    async start() {
-      inventory.stop ??= SidecarCredentials.onChange(follow)
-      follow()
-      await Promise.all(local.map((definition) => lifecycle.activate(definition.id)))
+    start,
+    /** Starts again what `stop` stopped, once a restart handoff failed. */
+    async resume() {
+      scheduleMenubar()
+      await start()
+    },
+    /** Stops every main plugin but one a restart handoff keeps, and the follow of the server; awaits their cleanups. */
+    async stop() {
+      inventory.stop?.()
+      inventory.stop = undefined
+      inventory.watch?.abort()
+      inventory.watch = undefined
+      await lifecycle.stop()
     },
     /** Activates the plugin whose id the Ipc's id names, ahead of `start`. */
     demand(ipc: string) {
@@ -977,17 +1004,6 @@ export function createHost(input: {
 
     /** The plugin GUIs main runs, which windows load; `PluginGuisChanged` brings each change. */
     pluginGuis,
-
-    /** Disposes every main plugin but one a restart handoff keeps; quitting awaits their async cleanups. */
-    async dispose() {
-      status.disposed = true
-      inventory.stop?.()
-      inventory.watch?.abort()
-      stopWindows()
-      stopLocale()
-      // The menu is not rebuilt from here on (`publishMenubar`), so a kept plugin's items stay in it.
-      await lifecycle.dispose()
-    },
   }
 }
 
