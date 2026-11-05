@@ -693,11 +693,15 @@ const ICON_MAPS: IconMaps = {
 const toOpenVariant = (icon: IconName): IconName => {
   if (!icon.startsWith("Folder")) return icon
 
-  // SAFETY: the icon generator writes an `Open` variant for every folder icon, light ones included.
-  if (icon.endsWith("_light")) return icon.replace("_light", "Open_light") as IconName
+  if (icon.endsWith("_light")) {
+    // SAFETY: the icon generator writes an `Open` variant for every folder icon, light ones included.
+    return icon.replace("_light", "Open_light") as IconName
+  }
 
-  // SAFETY: as above, every dark folder icon has its `Open` variant.
-  if (!icon.endsWith("Open")) return (icon + "Open") as IconName
+  if (!icon.endsWith("Open")) {
+    // SAFETY: the icon generator writes an `Open` variant for every folder icon.
+    return (icon + "Open") as IconName
+  }
 
   return icon
 }
