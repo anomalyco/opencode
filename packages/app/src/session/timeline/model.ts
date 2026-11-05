@@ -1,7 +1,6 @@
 import { createMemo, createResource, type Accessor } from "solid-js"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { useData } from "@/runtime/server/current"
-import { getSessionMessageHandoff } from "@/session/handoff"
+import { useServer } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
 
 const leadingTurnPageDelay = 200
@@ -13,7 +12,8 @@ const leadingTurnPageLimit = 3
 const enrichmentTurns = new WeakMap<SessionMessageInfo[], string>()
 
 export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
-  const data = useData()
+  const server = useServer()
+  const data = server.ctx.data
 
   const [resource] = createResource(
     () => input.session.identity.sessionID(),
@@ -44,7 +44,7 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
     // load with the inbox, not the transcript, so alone they are no tail; a first prompt shows through its handoff.
     return (
       data.session.message.list(id).some((message) => !data.session.input.has(id, message.id)) ||
-      !!getSessionMessageHandoff(input.session.identity.sessionKey())
+      !!server.ctx.handoff.get(id)
     )
   })
 

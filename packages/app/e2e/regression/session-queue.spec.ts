@@ -3,9 +3,11 @@ import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo, ShellInfo } f
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { Schema } from "effect"
-import { holdRoute, provider } from "../utils/app"
+import { holdRoute, provider, seed, SERVER } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
+import { installSseTransport } from "../utils/sse-transport"
 import { openSession } from "../utils/workspace"
 
 const sessionID = "ses_session_queue_regression"
@@ -336,6 +338,67 @@ test("a steer shows as pending in the timeline as the composer clears, before th
   await expect(prompt).toHaveCount(1)
   await expect(prompt.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
 })
+
+for (const row of [
+  { case: "a missed admission echo", reconnect: false },
+  { case: "an event stream reconnect", reconnect: true },
+]) {
+  test(`a steer stops projecting its selection after ${row.case}`, async ({ page }) => {
+    const transport = await installSseTransport(page, { server: SERVER })
+
+    const mock = createQueueMock(
+      [],
+      [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+    )
+
+    const admit = mock.onPrompt
+
+    // The server admits the steer, but its session.inbox.enqueued echo never reaches the client.
+    mock.onPrompt = (input) => {
+      admit(input)
+      mock.events()
+    }
+
+    await seed(page, { settings: { general: { timelineDetail: timelinePresets[0].value } } })
+    const view = await openQueue(page, mock, "steer")
+    const connection = await transport.waitForConnection()
+    const commit = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+    const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+      hasText: "use the staging database",
+    })
+
+    await expect(userRow(page, "msg_queue_delivered")).toContainText("First prompt")
+    await view.input.fill("use the staging database")
+    await view.input.press("Enter")
+    await commit.arrived
+    await expect(prompt).toBeVisible()
+
+    if (row.reconnect) await transport.disconnect()
+    commit.release()
+    await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["use the staging database"])
+
+    if (row.reconnect) await transport.waitForConnection({ after: connection.id })
+    // Another client switches the agent. Only its own notice shows: the admitted steer no longer projects one.
+    mock.messages.push({
+      id: "msg_queue_agent_plan",
+      type: "agent-switched",
+      agent: "plan",
+      previous: "build",
+      time: { created: Date.now() },
+    })
+    await transport.send({
+      id: "evt_queue_agent_plan",
+      type: "session.agent.selected",
+      created: Date.now(),
+      durable: { aggregateID: sessionID, seq: 100, version: 1 },
+      data: { sessionID, agent: "plan" },
+    })
+    const notices = page.locator('[data-slot="session-timeline-notice"]')
+    await expect(notices).toHaveText([/^Agent changed\s*Build → Plan$/])
+    await expect(prompt).toHaveCount(1)
+  })
+}
 
 test("a steer into an idle session leaves the finished turn finished until delivery", async ({ page }) => {
   const mock = createQueueMock(

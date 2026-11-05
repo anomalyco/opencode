@@ -29,6 +29,7 @@ import { createServerSyncContext } from "./sync"
 import { createData, createSessionRetention } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
+import { createSessionMessageHandoffs } from "@/session/handoff"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { useCurrentRoute } from "@/shell/state/layout"
@@ -254,6 +255,8 @@ function createServerController(
   const sync = createServerSyncContext(sdk, data)
   const autoApprove = createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
+  // Owned by the server, so a first prompt's handoff outlives the draft that sent it.
+  const handoff = createSessionMessageHandoffs({ sdk, data })
 
   // Projects whose repository has no root commit share the `global` ID; their name and icon stay local to the
   // directory because the server cannot tell them apart.
@@ -360,6 +363,7 @@ function createServerController(
     },
     notification,
     autoApprove,
+    handoff,
   }
 }
 
