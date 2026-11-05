@@ -589,6 +589,78 @@ fn stash_file_is_shared_with_typescript() {
     again.wait_stash_file(str::is_empty);
 }
 
+/// The TypeScript TUI's `push`: one appended line, without a lock.
+fn ts_stash(state: &Path, text: &str) {
+    use std::io::Write;
+    let line = json!({
+        "prompt": { "text": text, "files": [], "agents": [], "skills": [], "pasted": [] },
+        "timestamp": 1,
+    });
+    std::fs::create_dir_all(state).unwrap();
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(state.join("prompt-stash.jsonl"))
+        .unwrap()
+        .write_all(format!("{line}\n").as_bytes())
+        .unwrap();
+}
+
+#[test]
+fn a_stash_another_tui_made_survives_pop() {
+    let setup = Setup::new();
+    setup.app.type_text("mine");
+    setup.dispatch("prompt.stash");
+    setup.wait_stash_file(|file| file.contains("\"mine\""));
+    ts_stash(&setup.home.path().join("state"), "ts-important-draft");
+    // Pop takes this TUI's newest entry, and drops only its line.
+    setup.dispatch("prompt.stash.pop");
+    setup.wait_text("mine");
+    let file = setup.wait_stash_file(|file| !file.contains("\"mine\""));
+    assert!(file.contains("ts-important-draft"), "{file:?}");
+}
+
+#[test]
+fn a_stash_made_while_the_stash_loads_is_kept() {
+    let home = tempfile::TempDir::new().unwrap();
+    let state = home.path().join("state");
+    ts_stash(&state, "old");
+    // Broken lines keep the load busy past the first frames; it heals them away.
+    let file = state.join("prompt-stash.jsonl");
+    let mut text = std::fs::read_to_string(&file).unwrap();
+    text.push_str(&"broken\n".repeat(2_000_000));
+    std::fs::write(&file, text).unwrap();
+    let setup = Setup::with(home, Info::default(), false);
+    assert!(
+        setup.tui.prompt.stash.is_empty(),
+        "the load finished too early for this test"
+    );
+    // Without advancing the app: the load finishes on its thread, but the UI has not taken its result.
+    let healed = (0..500).any(|_| {
+        std::thread::sleep(Duration::from_millis(10));
+        std::fs::read_to_string(&file).is_ok_and(|text| text.lines().count() == 1)
+    });
+    assert!(healed);
+    std::thread::sleep(Duration::from_millis(50));
+    let early = json!({ "text": "early", "files": [], "agents": [], "skills": [], "pasted": [] });
+    setup.tui.prompt.stash.push(&setup.tui.app, early);
+    let texts = || {
+        setup
+            .tui
+            .prompt
+            .stash
+            .list()
+            .iter()
+            .map(|entry| entry["prompt"]["text"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let merged = setup
+        .app
+        .wait_until(Duration::from_secs(5), || texts() == ["old", "early"]);
+    assert!(merged, "the stash is {:?}", texts());
+    setup.wait_stash_file(|file| file.lines().count() == 2 && file.contains("\"early\""));
+}
+
 /// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
 fn ts_root() -> Option<std::path::PathBuf> {
     let root = std::env::var_os("OPENCODE_TS_ROOT")
