@@ -88,7 +88,7 @@ type ServiceSource = {
   Footer: Component
 }
 
-export function SessionServerPanel(props: ServiceProps & { mobile?: boolean }) {
+export function SessionServerPanel(props: ServiceProps & { mobile?: boolean; mcp: McpControllers }) {
   const ctx = usePlugin()
   const name = () => (ctx.servers.list().length < 2 ? ctx.t("server") : props.session.server.name)
 
@@ -103,7 +103,7 @@ export function SessionServerPanel(props: ServiceProps & { mobile?: boolean }) {
       }
     >
       {(directory) => (
-        // Another server starts its lists, toggles and flyout afresh.
+        // Another server starts its lists and flyout afresh.
         <Show when={props.session.server.id} keyed>
           <ServiceMenu
             session={props.session}
@@ -111,6 +111,7 @@ export function SessionServerPanel(props: ServiceProps & { mobile?: boolean }) {
             shown={props.shown}
             mobile={props.mobile}
             name={name()}
+            mcp={props.mcp}
             onClose={props.onClose}
           />
         </Show>
@@ -129,7 +130,7 @@ function ServerHeading(props: { name: string }) {
   )
 }
 
-function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
+function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp: McpControllers }) {
   const ctx = usePlugin()
   const drawer = useDrawer()
   const id = createUniqueId()
@@ -144,7 +145,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   }>({ heights: {}, overflow: {} })
 
   const sources: Record<Service, ServiceSource> = {
-    mcp: useMcp(props, () => dispatch({ type: "close", focusRow: false })),
+    mcp: useMcp(props, props.mcp, () => dispatch({ type: "close", focusRow: false })),
     plugins: useCatalog(props, "plugins"),
     skills: useCatalog(props, "skills"),
   }
@@ -545,10 +546,10 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   )
 }
 
-function useMcp(props: ServiceProps, close: () => void): ServiceSource {
+function useMcp(props: ServiceProps, controllers: McpControllers, close: () => void): ServiceSource {
   const ctx = usePlugin()
   const data = () => props.session.server.data
-  const mcp = createMcpController(props.session.server, props.directory)
+  const mcp = useMcpController(controllers, props.session.server, props.directory)
 
   const [load, { refetch }] = createResource(
     () => props.shown && data(),
@@ -1124,9 +1125,35 @@ type McpController = {
   dismiss: (attempt: number) => void
 }
 
+/**
+ * The plugin instance's MCP controllers, by server and directory, so a popover or drawer that mounts again finds the
+ * toggles and the error dialog the previous one left running.
+ */
+export type McpControllers = Map<string, McpController>
+
+// The controller for the server and directory, shared with every other mount and the error dialog, for as long as
+// this mount lives.
+function useMcpController(controllers: McpControllers, server: ServerRef, directory: string) {
+  const key = JSON.stringify([server.id, directory])
+  const current = controllers.get(key)
+
+  const mcp =
+    current && untrack(current.state).status !== "disposed"
+      ? current
+      : createMcpController(server, directory, () => {
+          if (controllers.get(key) === mcp) controllers.delete(key)
+        })
+
+  controllers.set(key, mcp)
+  mcp.dispatch({ type: "mounted" })
+  onCleanup(() => mcp.dispatch({ type: "unmounted" }))
+
+  return mcp
+}
+
 // Connects, disconnects, or starts sign-in for one server's MCPs in one directory, like the app's MCP toggle, and shows
-// their errors. It outlives the popover that created it until its last toggle settles and its error dialog closes.
-function createMcpController(server: ServerRef, directory: string): McpController {
+// their errors. It ends once no popover lists it, no toggle runs and no error dialog shows, or with the plugin.
+function createMcpController(server: ServerRef, directory: string, release: () => void): McpController {
   const ctx = usePlugin()
   const [mcpState, setMcpState] = createSignal<McpState>(initialMcpState)
   const runs = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
@@ -1139,7 +1166,11 @@ function createMcpController(server: ServerRef, directory: string): McpControlle
 
     if (next.state !== previous) setMcpState(next.state)
 
-    if (next.state.status === "disposed") ctx.signal.removeEventListener("abort", dispose)
+    if (next.state.status === "disposed" && previous.status !== "disposed") {
+      ctx.signal.removeEventListener("abort", dispose)
+      release()
+    }
+
     next.effects.forEach(run)
   }
 
@@ -1297,7 +1328,6 @@ function createMcpController(server: ServerRef, directory: string): McpControlle
 
   // The plugin's end ends the toggles and dialogs that outlived the popover.
   ctx.signal.addEventListener("abort", dispose, { once: true })
-  onCleanup(() => dispatch({ type: "detached" }))
 
   return mcp
 }

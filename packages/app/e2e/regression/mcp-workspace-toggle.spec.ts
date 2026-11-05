@@ -215,15 +215,26 @@ test("the MCP popover shows a failed server and reconnects it from its details",
   // A retry that fails again shows its new error in place.
   await expect(details.getByText(again, { exact: true })).toBeVisible()
   await expect(retry).toBeEnabled()
+  const reconnect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, {
+    method: "POST",
+  })
   await retry.click()
+  await reconnect.arrived
+  await page.keyboard.press("Escape")
   await expect(details).toBeHidden()
+
+  // The details closed and opened again still show the retry the dialog started, and take no second connect.
+  if (await view.panel.isVisible()) await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await expect(view.panel).toBeHidden()
+  await view.show()
+  await expect(view.toggle).toBeDisabled()
+  reconnect.release()
+  await expect(view.toggle).toHaveAccessibleDescription("Connected")
+  await expect(view.toggle).toBeEnabled()
   expect(view.requests.filter((request) => request.path.endsWith("/connect"))).toEqual([
     { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
     { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
   ])
-
-  if (!(await view.panel.isVisible())) await view.show()
-  await expect(view.toggle).toHaveAccessibleDescription("Connected")
 })
 
 for (const surface of ["dialog"] as const) {

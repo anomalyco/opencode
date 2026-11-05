@@ -10,8 +10,11 @@ import {
   type McpTransition,
 } from "./mcp-machine"
 
+// The state once a popover lists the servers, as every controller starts.
+const mounted = transitionMcp(initialMcpState, { type: "mounted" }).state
+
 // Folds the events in order and returns the last transition.
-const replay = (events: readonly McpEvent[], state: McpState = initialMcpState) =>
+const replay = (events: readonly McpEvent[], state: McpState = mounted) =>
   events.reduce<McpTransition>((last, event) => transitionMcp(last.state, event), { state, effects: [] })
 
 const toggle = (
@@ -29,7 +32,7 @@ const opened: McpEvent = { type: "error.opened", name: "playwright", error: "Con
 
 describe("transitionMcp", () => {
   test("toggling one server leaves every other row free to toggle", () => {
-    const figma = transitionMcp(initialMcpState, toggle("figma", false))
+    const figma = transitionMcp(mounted, toggle("figma", false))
 
     expect(figma.effects).toEqual([
       { type: "run-toggle", name: "figma", attempt: 1, enabled: false, timeoutMs: MCP_TOGGLE_TIMEOUT_MS },
@@ -63,15 +66,15 @@ describe("transitionMcp", () => {
   })
 
   test("a server that is still connecting takes no toggle", () => {
-    const result = transitionMcp(initialMcpState, {
+    const result = transitionMcp(mounted, {
       type: "toggle.requested",
       name: "waiting",
       enabled: false,
       status: "pending",
     })
 
-    expect(result).toEqual({ state: initialMcpState, effects: [] })
-    expect(mcpRowView(initialMcpState, "waiting", "pending")).toEqual({ busy: false, pending: true })
+    expect(result).toEqual({ state: mounted, effects: [] })
+    expect(mcpRowView(mounted, "waiting", "pending")).toEqual({ busy: false, pending: true })
   })
 
   test("the error dialog stays open while a retry connects and shows the retry's new failure", () => {
@@ -166,7 +169,7 @@ describe("transitionMcp", () => {
   })
 
   test("the server list decides when the dialog closes", () => {
-    const open = transitionMcp(initialMcpState, opened).state
+    const open = transitionMcp(mounted, opened).state
 
     expect(open).toMatchObject({ dialog: { status: "open", attempt: 1 } })
 
@@ -230,7 +233,7 @@ describe("transitionMcp", () => {
   })
 
   test("a closed or replaced dialog ignores its late events", () => {
-    const first = transitionMcp(initialMcpState, opened).state
+    const first = transitionMcp(mounted, opened).state
     const second = transitionMcp(first, { type: "error.opened", name: "figma", error: "Timeout" })
 
     expect(second.effects).toEqual([
@@ -261,19 +264,39 @@ describe("transitionMcp", () => {
     expect(mcpDialogView(changed.state, 1, "failed")).toMatchObject({ error: "Port 9222 unreachable", copied: false })
   })
 
-  test("a list whose popover closed lives until its last toggle settles and its dialog closes", () => {
-    const detached = replay([toggle("figma", false), opened, { type: "detached" }])
+  test("a popover that closes and reopens keeps the toggle its dialog's retry started", () => {
+    const retrying = replay([opened, toggle("playwright", true, "failed"), { type: "error.dismissed", attempt: 1 }])
+    const reopened = replay([{ type: "unmounted" }, { type: "mounted" }], retrying.state)
 
-    expect(detached.state).toMatchObject({ status: "detached" })
+    expect(reopened.state).toMatchObject({ status: "active", mounts: 1, toggles: [{ name: "playwright", attempt: 2 }] })
+    expect(mcpRowView(reopened.state, "playwright", "failed")).toEqual({ busy: true, pending: true })
 
-    const settled = transitionMcp(detached.state, { type: "toggle.succeeded", name: "figma", attempt: 1 })
+    // The reopened row and a dialog opened again cannot start a second connect for the same server.
+    const again = replay([opened, toggle("playwright", true, "failed")], reopened.state)
 
-    expect(settled.state).toMatchObject({ status: "detached" })
+    expect(again.effects).toEqual([])
+    expect(mcpDialogView(again.state, 3, "failed")?.busy).toBe(true)
+    expect(transitionMcp(reopened.state, toggle("playwright", false, "failed")).state).toBe(reopened.state)
+  })
+
+  test("a list ends once no popover lists it, no toggle runs and no dialog shows", () => {
+    const closed = replay([toggle("figma", false), opened, { type: "unmounted" }])
+
+    expect(closed.state).toMatchObject({ status: "active", mounts: 0 })
+
+    const settled = transitionMcp(closed.state, { type: "toggle.succeeded", name: "figma", attempt: 1 })
+
+    expect(settled.state).toMatchObject({ status: "active", mounts: 0 })
 
     const dismissed = transitionMcp(settled.state, { type: "error.dismissed", attempt: 2 })
 
     expect(dismissed.state).toEqual({ status: "disposed" })
-    expect(transitionMcp(initialMcpState, { type: "detached" }).state).toEqual({ status: "disposed" })
+    expect(transitionMcp(mounted, { type: "unmounted" }).state).toEqual({ status: "disposed" })
+
+    // A second popover or drawer keeps it while the first one closes.
+    const both = transitionMcp(mounted, { type: "mounted" }).state
+
+    expect(transitionMcp(both, { type: "unmounted" }).state).toMatchObject({ status: "active", mounts: 1 })
   })
 
   test("disposal aborts every toggle and closes the dialog", () => {

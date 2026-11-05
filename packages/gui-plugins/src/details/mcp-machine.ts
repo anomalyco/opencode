@@ -33,16 +33,15 @@ export type McpErrorDialog =
     }
 
 /**
- * The MCP list of one server and directory: its toggles in flight and its error dialog. Toggles and dialogs take
+ * The MCP list of one server and directory: its toggles in flight and its error dialog, shared by every popover or
+ * drawer that lists it. It lives while one is mounted, a toggle runs or the dialog shows. Toggles and dialogs take
  * attempt numbers from `issued`, so a result whose attempt the state no longer holds is stale.
  */
 export type McpState =
   | {
-      /**
-       * - `attached`: the popover that lists the servers is mounted.
-       * - `detached`: the popover closed; the state lives until its last toggle settles and its dialog closes.
-       */
-      readonly status: "attached" | "detached"
+      readonly status: "active"
+      /** The popovers and drawers that list the servers. */
+      readonly mounts: number
       readonly issued: number
       readonly toggles: readonly McpToggle[]
       readonly dialog: McpErrorDialog
@@ -86,8 +85,9 @@ export type McpEvent =
       readonly loaded: boolean
       readonly status: McpServerStatus | undefined
     }
-  /** The popover that lists the servers unmounted. */
-  | { readonly type: "detached" }
+  /** A popover or drawer that lists the servers mounted or unmounted. */
+  | { readonly type: "mounted" }
+  | { readonly type: "unmounted" }
   | { readonly type: "disposed" }
 
 export type McpEffect =
@@ -110,7 +110,13 @@ export type McpEffect =
 
 export type McpTransition = { readonly state: McpState; readonly effects: readonly McpEffect[] }
 
-export const initialMcpState: McpState = { status: "attached", issued: 0, toggles: [], dialog: { status: "closed" } }
+export const initialMcpState: McpState = {
+  status: "active",
+  mounts: 0,
+  issued: 0,
+  toggles: [],
+  dialog: { status: "closed" },
+}
 
 const NONE: readonly McpEffect[] = []
 
@@ -153,11 +159,9 @@ export function mcpDialogView(state: McpState, attempt: number, status: McpServe
 }
 
 function step(state: Live, event: Exclude<McpEvent, { type: "disposed" }>): McpTransition {
-  if (event.type === "detached") {
-    if (state.status === "detached") return { state, effects: NONE }
+  if (event.type === "mounted") return { state: { ...state, mounts: state.mounts + 1 }, effects: NONE }
 
-    return { state: { ...state, status: "detached" }, effects: NONE }
-  }
+  if (event.type === "unmounted") return { state: { ...state, mounts: Math.max(0, state.mounts - 1) }, effects: NONE }
 
   if (event.type === "toggle.requested") {
     // One toggle per server at a time, from its row and its dialog alike.
@@ -255,11 +259,12 @@ function settled(
   }
 }
 
-// A detached list ends once nothing of it is left: no toggle runs and no dialog shows.
+// The list ends once nothing uses it: no popover or drawer lists it, no toggle runs and no dialog shows.
 function release(transition: McpTransition): McpTransition {
   const state = transition.state
 
-  if (state.status !== "detached" || state.toggles.length > 0 || state.dialog.status === "open") return transition
+  if (state.status !== "active" || state.mounts > 0 || state.toggles.length > 0 || state.dialog.status === "open")
+    return transition
 
   return { state: { status: "disposed" }, effects: transition.effects }
 }

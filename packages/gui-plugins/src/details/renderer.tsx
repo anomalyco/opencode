@@ -3,11 +3,14 @@ import { Panel, Slot, Style, usePanel, type Plugin } from "@opencode/plugin/gui"
 import type Details from "./index"
 import { DetailsHeader, type DetailsMenus } from "./popover"
 import { BuiltinSlot, onIdle } from "@opencode/plugin/gui/builtin"
+import type { McpControllers } from "./server-panel"
 
 const setup: Plugin.Setup<typeof Details> = (ctx) => {
   const sessions = ctx.sessions
 
   const menus: DetailsMenus = new Set()
+  // MCP toggles and error dialogs outlive the popover or drawer that started them.
+  const mcp: McpControllers = new Map()
 
   const DetailsPanel = lazy(() =>
     Promise.all([import("./panel"), import("./details.css?inline")]).then(([panel, css]) => {
@@ -33,7 +36,7 @@ const setup: Plugin.Setup<typeof Details> = (ctx) => {
     at: "session.header",
     order: 20,
     render: (input) => (
-      <DetailsHeader menus={menus} session={input.session} active={input.active} panel={DetailsPanel} />
+      <DetailsHeader menus={menus} session={input.session} active={input.active} panel={DetailsPanel} mcp={mcp} />
     ),
   })
 
@@ -74,7 +77,7 @@ const setup: Plugin.Setup<typeof Details> = (ctx) => {
       return (
         <Show when={props.session.project}>
           <Suspense>
-            <DetailsPanel mobile shown={frame.visible()} session={props.session} />
+            <DetailsPanel mobile shown={frame.visible()} session={props.session} mcp={mcp} />
           </Suspense>
         </Show>
       )
