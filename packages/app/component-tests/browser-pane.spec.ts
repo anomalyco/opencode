@@ -613,6 +613,14 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   await expect(address).toHaveValue("https://example.com/")
   await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
 
+  // Focusing and leaving the field before the browser reports keeps the submitted address.
+  await address.focus()
+  await expect(address).toHaveValue("https://example.com/")
+  await address.press("Escape")
+  await expect(address).not.toBeFocused()
+  await expect(address).toHaveValue("https://example.com/")
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
+
   await root.getByRole("button", { name: "Complete navigation", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   await expect(address).toHaveValue("https://example.com/")
