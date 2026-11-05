@@ -215,7 +215,9 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
             .align_items(Align::Center);
     }
     if let Some(url) = value.links.first() {
-        code.add(&Text::new(app, opencode_ui::qr::render_unicode_compact(url, 1)).fg(theme.text.base));
+        code.add(
+            &Text::new(app, opencode_ui::qr::render_unicode_compact(url, 1)).fg(theme.text.base),
+        );
     }
 
     let row = View::new(app).gap(2).child(&side).child(&code);
