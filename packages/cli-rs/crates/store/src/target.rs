@@ -73,7 +73,10 @@ impl std::fmt::Display for TargetError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TargetError::SessionNotFound => f.write_str("Session not found"),
-            TargetError::Mutation(error) | TargetError::Request(error) => error.fmt(f),
+            // `SessionTargetMutationError` and a rethrown client error both read as `errorMessage`.
+            TargetError::Mutation(error) | TargetError::Request(error) => {
+                f.write_str(&error.error_message())
+            }
             TargetError::Prepare(message) => f.write_str(message),
         }
     }
