@@ -15,7 +15,6 @@ opencode-api.workspace = true
 opencode-local.workspace = true
 opencode-ui.workspace = true
 opencode-store.workspace = true
-opencode-service.workspace = true
 opencode-plugin.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
@@ -37,9 +36,6 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-rusqlite.workspace = true
 bytes.workspace = true
-futures-util.workspace = true
 opencode-parity.workspace = true
 tempfile.workspace = true
-tokio.workspace = true

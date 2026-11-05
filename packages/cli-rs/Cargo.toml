@@ -40,8 +40,6 @@ clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4"
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
 indexmap = { version = "2", features = ["serde"] }
-jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
-libc = "0.2"
 libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
 notify = "8"
@@ -65,7 +63,6 @@ tokio-util = { version = "0.7", features = ["io", "codec"] }
 unicode-width = "0.2"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
-which = "8"
 
 # Tree-sitter grammars for opencode-ui's `grammars` and `grammars-all` features (crates/ui/src/grammars), pinned to
 # the WASM releases packages/tui/src/parsers-config.ts loads where crates.io has them. The five opentui bundles take
