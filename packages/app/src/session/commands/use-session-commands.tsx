@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on } from "solid-js"
+import { createEffect, createSignal, on, onCleanup } from "solid-js"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
@@ -19,6 +19,23 @@ import type { SessionRevert } from "@/session/revert"
 import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
 import type { Region } from "@/runtime/plugin/panels"
 import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
+import {
+  createCloseTabGuardState,
+  createSessionCommandsState,
+  selectCloseTabSwallowed,
+  transitionCloseTabGuard,
+  transitionSessionCommands,
+  type CloseTabGuardEvent,
+  type SessionCommandsEffect,
+  type SessionCommandsEvent,
+} from "@/session/commands/machine"
+
+// Shared by every dispatch: pointer, focus and key events arrive constantly while the guard is disarmed.
+const POINTER_DOWN: CloseTabGuardEvent = { type: "pointer.down" }
+
+const FOCUS_IN: CloseTabGuardEvent = { type: "focus.in" }
+
+const WINDOW_BLUR: CloseTabGuardEvent = { type: "window.blur" }
 
 type SessionCommandSource = {
   identity: SessionModel["identity"]
@@ -84,28 +101,45 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
   const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
   // ⌘W on the side panel's last tab, or on a panel with nothing left to close, closes the panel and moves focus out of
-  // it, where one press too many would close the session tab. Until the user moves on, by clicking, focusing, another
-  // key, or another session, ⌘W closes nothing.
-  // The close moves focus synchronously, before this is set, so its own focusin does not clear it.
-  const [emptied, setEmptied] = createSignal(false)
-  const resetEmptied = () => setEmptied(false)
-  createEventListener(document, ["pointerdown", "focusin"], resetEmptied, { capture: true })
-  createEventListener(window, "blur", resetEmptied)
+  // it, where one press too many would close the session tab; the guard swallows that press.
+  const [closeGuard, setCloseGuard] = createSignal(createCloseTabGuardState())
+  let settleFrame: number | undefined
+
+  const dispatchCloseGuard = (event: CloseTabGuardEvent) => {
+    const next = transitionCloseTabGuard(closeGuard(), event)
+
+    if (next.state !== closeGuard()) setCloseGuard(next.state)
+    next.effects.forEach((effect) => {
+      if (settleFrame !== undefined) cancelAnimationFrame(settleFrame)
+      settleFrame = undefined
+
+      if (effect.type === "settle.cancel") return
+      const attempt = effect.attempt
+      settleFrame = requestAnimationFrame(() => {
+        settleFrame = undefined
+        dispatchCloseGuard({ type: "settle.completed", attempt })
+      })
+    })
+  }
+
+  createEventListener(document, "pointerdown", () => dispatchCloseGuard(POINTER_DOWN), { capture: true })
+  createEventListener(document, "focusin", () => dispatchCloseGuard(FOCUS_IN), { capture: true })
+  createEventListener(window, "blur", () => dispatchCloseGuard(WINDOW_BLUR))
   createEventListener(
     document,
     "keydown",
-    (event) => {
-      if (["Meta", "Control", "Shift", "Alt"].includes(event.key)) return
-
-      if (!command.matches("file.close", event)) resetEmptied()
-    },
+    (event) =>
+      dispatchCloseGuard({ type: "key.down", key: event.key, matchesClose: command.matches("file.close", event) }),
     { capture: true },
   )
   createEffect(
-    on(() => [actions.session.layout.tabKey(), actions.session.layout.view().side.opened()], resetEmptied, {
-      defer: true,
-    }),
+    on(
+      () => [actions.session.layout.tabKey(), actions.session.layout.view().side.opened()] as const,
+      ([tabKey, sideOpened]) => dispatchCloseGuard({ type: "layout.synced", tabKey, sideOpened }),
+      { defer: true },
+    ),
   )
+  onCleanup(() => dispatchCloseGuard({ type: "disposed" }))
   const cycleSideTabs = () => actions.session.layout.view().side.opened() && actions.region.keys().length > 1
 
   const sideFocused = (target: EventTarget | null) => {
@@ -149,33 +183,142 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
-  const exportSession = async () => {
-    const sessionID = actions.session.identity.params.id
+  const [commandsState, setCommandsState] = createSignal(createSessionCommandsState())
+  const exportFetches = new Map<number, AbortController>()
+  let forkModule: typeof import("@/session/commands/fork-dialog") | undefined
 
-    if (!sessionID) return
+  const dispatchCommands = (event: SessionCommandsEvent) => {
+    const next = transitionSessionCommands(commandsState(), event)
 
-    try {
-      const data = await fetchSessionExport({
-        sessionID,
-        api: serverSDK.api,
-      })
+    if (next.state !== commandsState()) setCommandsState(next.state)
+    next.effects.forEach((effect) =>
+      Promise.try(() => runCommandEffect(effect)).catch((cause: unknown) => console.error("[session.commands]", cause)),
+    )
+  }
 
-      const filename = sessionExportFilename(data.info)
+  const runCommandEffect = (effect: SessionCommandsEffect) => {
+    if (effect.type === "compact.run") {
+      data.session.compact({ sessionID: effect.sessionID, model: actions.model() }).then(
+        () => dispatchCommands({ type: "compact.succeeded", attempt: effect.attempt, sessionID: effect.sessionID }),
+        (cause: unknown) =>
+          dispatchCommands({ type: "compact.failed", attempt: effect.attempt, sessionID: effect.sessionID, cause }),
+      )
 
-      if (!(await saveSessionExport(filename, data, platform))) return
+      return
+    }
+
+    if (effect.type === "export.fetch") {
+      const controller = new AbortController()
+      exportFetches.set(effect.attempt, controller)
+      fetchSessionExport({ sessionID: effect.sessionID, api: serverSDK.api, signal: controller.signal })
+        .finally(() => exportFetches.delete(effect.attempt))
+        .then(
+          (exported) =>
+            dispatchCommands({
+              type: "export.fetched",
+              attempt: effect.attempt,
+              sessionID: effect.sessionID,
+              data: exported,
+            }),
+          (cause: unknown) =>
+            dispatchCommands({
+              type: "export.failed",
+              attempt: effect.attempt,
+              sessionID: effect.sessionID,
+              message: cause instanceof Error ? cause.message : undefined,
+            }),
+        )
+
+      return
+    }
+
+    if (effect.type === "export.abort") {
+      exportFetches.get(effect.attempt)?.abort()
+      exportFetches.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "export.save") {
+      const filename = sessionExportFilename(effect.data.info)
+      Promise.try(() => saveSessionExport(filename, effect.data, platform)).then(
+        (saved) =>
+          dispatchCommands({
+            type: "export.saved",
+            attempt: effect.attempt,
+            sessionID: effect.sessionID,
+            filename,
+            saved,
+          }),
+        (cause: unknown) =>
+          dispatchCommands({
+            type: "export.failed",
+            attempt: effect.attempt,
+            sessionID: effect.sessionID,
+            message: cause instanceof Error ? cause.message : undefined,
+          }),
+      )
+
+      return
+    }
+
+    if (effect.type === "fork.load") {
+      import("@/session/commands/fork-dialog").then(
+        (mod) => {
+          forkModule = mod
+          dispatchCommands({ type: "fork.loaded", attempt: effect.attempt })
+        },
+        (cause: unknown) => dispatchCommands({ type: "fork.load-failed", attempt: effect.attempt, cause }),
+      )
+
+      return
+    }
+
+    if (effect.type === "fork.show") {
+      const mod = forkModule
+
+      if (mod) dialog.show(() => <mod.DialogFork />)
+
+      return
+    }
+
+    if (effect.type === "toast.request-failed") {
+      showToast({ title: formatServerError(effect.cause, language.t, language.t("common.requestFailed")) })
+
+      return
+    }
+
+    if (effect.type === "toast.exported") {
       showToast({
         variant: "success",
         icon: "circle-check",
         title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
+        description: language.t("toast.session.export.success.description", { filename: effect.filename }),
       })
-    } catch (err) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
-      })
+
+      return
     }
+
+    showToast({
+      variant: "error",
+      title: language.t("toast.session.export.failed.title"),
+      description: effect.message ?? language.t("toast.session.export.failed.description"),
+    })
+  }
+
+  createEffect(
+    on(
+      () => actions.session.identity.params.id,
+      (sessionID) => dispatchCommands({ type: "session.changed", sessionID }),
+      { defer: true },
+    ),
+  )
+  onCleanup(() => dispatchCommands({ type: "disposed" }))
+
+  const exportSession = () => {
+    const sessionID = actions.session.identity.params.id
+
+    if (sessionID) dispatchCommands({ type: "export.requested", sessionID })
   }
 
   const copySessionID = async () => {
@@ -345,24 +488,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const undo = actions.revert.undo
   const redo = actions.revert.redo
 
-  const compact = async () => {
+  const compact = () => {
     const sessionID = actions.session.identity.params.id
 
-    if (!sessionID) return
-
-    await data.session.compact({ sessionID, model: actions.model() }).catch((cause: unknown) => {
-      showToast({ title: formatServerError(cause, language.t, language.t("common.requestFailed")) })
-    })
+    if (sessionID) dispatchCommands({ type: "compact.requested", sessionID })
   }
 
   const fork = () => {
     const sessionID = actions.session.identity.params.id
 
-    if (!sessionID) return
-    void openDialog(
-      () => import("@/session/commands/fork-dialog"),
-      (x) => dialog.show(() => <x.DialogFork />),
-    )
+    if (sessionID) dispatchCommands({ type: "fork.requested", sessionID })
   }
 
   const sessionCmds = () => [
@@ -447,11 +582,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keybind: "mod+w",
         follows: "tab.close",
         hidden: !tab,
-        when: (event) => (side ? sideKey(event) : emptied()),
+        when: (event) => (side ? sideKey(event) : selectCloseTabSwallowed(closeGuard())),
         onSelect: (source) => {
           if (!side) return
           closeTab()
-          setEmptied(source === "keybind" && !actions.session.layout.view().side.opened())
+          dispatchCloseGuard({
+            type: "close.completed",
+            keybind: source === "keybind",
+            tabKey: actions.session.layout.tabKey(),
+            sideOpened: actions.session.layout.view().side.opened(),
+          })
         },
       }),
       side &&

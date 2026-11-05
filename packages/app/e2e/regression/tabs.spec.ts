@@ -1450,6 +1450,39 @@ test("⌘W past the side panel's last tab keeps the session tab", async ({ page 
   await expect(sessions.alphaTab).toHaveCount(0)
 })
 
+test("⌘W past the side panel's last tab keeps the session tab when focus leaves the panel just after", async ({
+  page,
+}) => {
+  // Stands in for a panel that hands focus back after its close rather than during it.
+  await page.addInitScript(() => {
+    const observer = new MutationObserver((records) => {
+      const hidden = records.some(
+        (record) =>
+          record.target instanceof Element &&
+          record.target.id === "review-panel" &&
+          record.target.getAttribute("aria-hidden") === "true",
+      )
+
+      if (!hidden) return
+      observer.disconnect()
+      document.querySelector<HTMLElement>('[data-component="composer-editor"]')?.focus()
+    })
+
+    observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["aria-hidden"] })
+  })
+
+  const sessions = await emptySidePanel(page)
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  await expect(composer).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+
+  // Only a swallowed press above leaves Beta for this one to land on.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
 test("⌘W closes the session tab again once the window loses focus after the side panel empties", async ({ page }) => {
   const sessions = await emptySidePanel(page)
   // ⌘Tab away and back sends no click or key the page sees.

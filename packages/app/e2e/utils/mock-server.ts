@@ -145,6 +145,9 @@ export interface MockServerConfig {
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  // POST /api/session/:id/fork creates `<id>_fork` in the same directory. The hook may hold the request, or return an
+  // answer to replace the response.
+  onFork?: (input: { sessionID: string; body: Schema.JsonObject }) => void | MockAnswer | Promise<void | MockAnswer>
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
@@ -731,6 +734,27 @@ function mockHandlers(
           config.sessions.push(created)
 
           return HttpServerResponse.jsonUnsafe({ data: created })
+        }),
+      )
+      .handleRaw("sessionFork", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const body = Option.getOrElse(decodeJsonObject(input), (): Schema.JsonObject => ({}))
+          const answer = yield* Effect.promise(async () => config.onFork?.({ sessionID: ctx.params.sessionID, body }))
+
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+
+          const parent = config.sessions.find((item) => item.id === ctx.params.sessionID)
+          const id = `${ctx.params.sessionID}_fork`
+
+          const forked = currentSession(
+            { ...parent, id, title: `${parent?.title ?? ctx.params.sessionID} (fork)` },
+            config.directory,
+          )
+
+          if (!config.sessions.some((item) => item.id === id)) config.sessions.push(forked)
+
+          return HttpServerResponse.jsonUnsafe({ data: forked })
         }),
       )
       .handleAll({
