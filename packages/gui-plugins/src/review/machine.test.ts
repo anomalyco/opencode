@@ -250,13 +250,46 @@ describe("background refreshes", () => {
     ])
   })
 
-  test("a change during a request restarts it", () => {
-    const state = play(INITIAL_REVIEW_DIFF_STATE, ready(git), { type: "refresh", source: "vcs" })
+  test("files that keep changing during the first load cannot hold it off: it keeps its request, then loads once more", () => {
+    const changing = play(
+      INITIAL_REVIEW_DIFF_STATE,
+      ready(git),
+      ...Array.from({ length: 5 }, (): ReviewDiffEvent => ({ type: "refresh", source: "vcs" })),
+    )
+
+    expect(changing.effects).toEqual([{ type: "fetch", target: git, attempt: 1 }])
+
+    const settled = play(changing.state, { type: "fetch.succeeded", attempt: 1, rows: { rows: alpha, version: 10 } })
+
+    expect(settled.effects).toEqual([{ type: "fetch", target: git, attempt: 2 }])
+    expect(reviewDiffView(settled.state)).toEqual({ status: "ready", rows: alpha, version: 10 })
+
+    const final = play(settled.state, { type: "fetch.succeeded", attempt: 2, rows: { rows: beta, version: 20 } })
+
+    expect(final.effects).toEqual([])
+    expect(reviewDiffView(final.state)).toEqual({ status: "ready", rows: beta, version: 20 })
+  })
+
+  test("the first load still times out while files keep changing", () => {
+    const state = play(
+      INITIAL_REVIEW_DIFF_STATE,
+      ready(git),
+      { type: "refresh", source: "vcs" },
+      { type: "refresh", source: "vcs" },
+      { type: "fetch.timed-out", attempt: 1 },
+    )
+
+    expect(state.effects).toEqual([{ type: "fetch", target: git, attempt: 1 }])
+    expect(reviewDiffView(state.state)).toEqual({ status: "error", failure: { type: "timeout" } })
+  })
+
+  test("a change while shown diffs refresh restarts the refresh", () => {
+    const state = play(loaded(), { type: "refresh", source: "vcs" }, { type: "refresh", source: "vcs" })
 
     expect(state.effects).toEqual([
-      { type: "fetch", target: git, attempt: 1 },
-      { type: "abort" },
       { type: "fetch", target: git, attempt: 2 },
+      { type: "abort" },
+      { type: "fetch", target: git, attempt: 3 },
     ])
   })
 })

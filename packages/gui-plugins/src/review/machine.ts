@@ -52,7 +52,8 @@ export type ReviewDiffState =
   | { readonly status: "offline"; readonly attempt: number }
   /** Nothing loaded and no request running: the server is disconnected, or nothing shows the changes. */
   | (Link & { readonly status: "idle" })
-  | (Link & { readonly status: "loading" })
+  /** `stale`: files changed while it loads; one more request follows its answer. */
+  | (Link & { readonly status: "loading"; readonly stale: boolean })
   | (Link & { readonly status: "ready" } & ReviewDiffRows)
   /** Loads again while the diffs already loaded stay shown. */
   | (Link & { readonly status: "refreshing" } & ReviewDiffRows)
@@ -120,18 +121,34 @@ export function transitionReviewDiff(state: ReviewDiffState, event: ReviewDiffEv
       ? fetch(state, state, rowsOf(state))
       : unchanged(state)
 
-  // Changed files restart a running request, so its answer cannot predate the change.
-  if (event.type === "refresh")
-    return enabled && state.target.kind === event.source ? fetch(state, state, rowsOf(state)) : unchanged(state)
+  if (event.type === "refresh") {
+    if (!enabled || state.target.kind !== event.source) return unchanged(state)
+
+    // The first load keeps its request and deadline, so files that keep changing cannot hold it off forever.
+    if (state.status === "loading") return state.stale ? unchanged(state) : changed({ ...state, stale: true })
+
+    // Shown diffs refresh at once, so the answer cannot predate the change.
+    return fetch(state, state, rowsOf(state))
+  }
 
   if (event.type === "retry")
     return state.status === "error" && state.connected ? fetch(state, state, undefined) : unchanged(state)
 
   if (!inFlight(state) || event.attempt !== state.attempt) return unchanged(state)
 
-  if (event.type === "fetch.succeeded") return changed({ ...link(state), status: "ready", ...event.rows })
+  if (event.type === "fetch.succeeded") {
+    if (state.status !== "loading" || !state.stale) return changed({ ...link(state), status: "ready", ...event.rows })
+    const attempt = state.attempt + 1
 
-  // A failed refresh keeps the diffs already shown.
+    // The changes that arrived meanwhile load once more, with the first answer shown.
+    return {
+      state: { ...link(state), attempt, status: "refreshing", ...event.rows },
+      effects: [{ type: "fetch", target: state.target, attempt }],
+    }
+  }
+
+  // A failed refresh keeps the diffs already shown. A failed first load shows the failure; Try again loads the changes
+  // that arrived meanwhile too.
   if (state.status === "refreshing")
     return changed({ ...link(state), status: "ready", rows: state.rows, version: state.version })
 
@@ -220,7 +237,7 @@ function fetch(state: ReviewDiffState, next: Link, rows: ReviewDiffRows | undefi
   return {
     state: rows
       ? { ...link(next), attempt, status: "refreshing", ...rows }
-      : { ...link(next), attempt, status: "loading" },
+      : { ...link(next), attempt, status: "loading", stale: false },
     effects: inFlight(state) ? [...ABORT, start] : [start],
   }
 }
