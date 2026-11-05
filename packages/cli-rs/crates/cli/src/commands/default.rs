@@ -56,7 +56,9 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     let session = match &args.session {
         Some(id) => {
             let id = SessionID(id.clone());
-            let found = runtime.block_on(opencode_store::target::find_session(&client, &id))?;
+            let found = runtime
+                .block_on(opencode_store::target::find_session(&client, &id))
+                .map_err(|error| anyhow::anyhow!(error.error_message()))?;
             Some((id, found.is_some()))
         }
         None => None,
