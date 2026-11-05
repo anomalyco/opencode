@@ -36,7 +36,6 @@ import { artifactKind } from "@opencode/util/artifact"
 import { uuid } from "@opencode/util/uuid"
 import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
-import type { OpenApp } from "./apps"
 import {
   FileTree,
   OpenInApp,
@@ -61,7 +60,15 @@ import {
   type LinkResolution,
   type LinkRoute,
 } from "./link-open-machine"
-import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import {
+  createOpenInAppState,
+  isOpenAppInstalled,
+  isOpenInAppLaunching,
+  transitionOpenInApp,
+  type OpenInAppEffect,
+  type OpenInAppEvent,
+} from "./open-in-app-machine"
+import { fileTabId, fileTabPath, isFileTab, openInAppParentPath, workspaceFileUrl } from "./path"
 import {
   createPickerState,
   pickerBrowsing,
@@ -115,7 +122,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const desktop = ctx.desktop
   const [handoff, setHandoff] = storage.memory<Handoff>("handoff", { initial: { sessions: {} } })
   const preference = desktop ? ctx.stores.app : undefined
-  const [request, setRequest] = createStore<{ app?: OpenApp }>({})
+  const [openInApp, setOpenInApp] = createSignal(createOpenInAppState())
+  const openInAppTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
   const [machines, setMachines] = createStore({ linkOpen: createLinkOpenState(), picker: createPickerState() })
 
@@ -164,6 +172,67 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
           ? setTimeout(() => dispatchPicker({ type: "focus.ended", request: effect.request }), effect.timeoutMs)
           : undefined
     })
+  }
+
+  const dispatchOpenInApp = (event: OpenInAppEvent) => {
+    const next = transitionOpenInApp(untrack(openInApp), event)
+
+    setOpenInApp(next.state)
+    next.effects.forEach(runOpenInApp)
+  }
+
+  const runOpenInApp = (effect: OpenInAppEffect) => {
+    if (effect.type === "clear-timer") {
+      clearTimeout(openInAppTimers.get(effect.attempt))
+      openInAppTimers.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "toast-failed") {
+      ctx.toast.show({ variant: "error", title: ctx.t("common.requestFailed"), description: effect.error })
+
+      return
+    }
+
+    const attempt = effect.attempt
+
+    if (effect.type === "check-app") {
+      const openWith = effect.openWith
+      const drop = () => dispatchOpenInApp({ type: "app.check-dropped", attempt, openWith })
+
+      openInAppTimers.set(attempt, setTimeout(drop, effect.timeoutMs))
+      void Promise.try(() => desktop?.installed(openWith)).then(
+        (installed) => dispatchOpenInApp({ type: "app.checked", attempt, openWith, installed: Boolean(installed) }),
+        drop,
+      )
+
+      return
+    }
+
+    openInAppTimers.set(
+      attempt,
+      setTimeout(() => dispatchOpenInApp({ type: "launch.timed-out", attempt }), effect.timeoutMs),
+    )
+    const target = effect.target
+
+    void Promise.try(() => {
+      if (!desktop) throw new Error(ctx.t("common.requestFailed"))
+
+      if (!effect.reveal) return desktop.launch(target, effect.openWith)
+
+      return desktop
+        .reveal(target)
+        .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
+    }).then(
+      () => dispatchOpenInApp({ type: "launch.succeeded", attempt }),
+      (cause: unknown) =>
+        dispatchOpenInApp({
+          type: "launch.failed",
+          attempt,
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+    )
   }
 
   // Opens on the session screen, whose file model serves the routed session `session` is.
@@ -231,7 +300,6 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       focusRequest: (view) => pickerFocusRequest(machines.picker, view),
       focused: (request) => dispatchPicker({ type: "focus.ended", request }),
     },
-    installed: new Map(),
     app: preference && {
       current: () => preference.value.app,
       set: (app) =>
@@ -239,9 +307,11 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
           draft.app = app
         }),
     },
-    request: {
-      app: () => request.app,
-      set: (app) => setRequest("app", app),
+    openInApp: {
+      check: (openWith) => dispatchOpenInApp({ type: "apps.requested", openWith }),
+      installed: (openWith) => isOpenAppInstalled(openInApp(), openWith),
+      opening: () => isOpenInAppLaunching(openInApp()),
+      launch: (input) => dispatchOpenInApp({ type: "launch.requested", ...input }),
     },
     handoff: {
       get: (session, path) => handoff.sessions[session]?.[path],
@@ -856,6 +926,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   onCleanup(() => {
     dispatchLink({ type: "disposed" })
     dispatchPicker({ type: "disposed" })
+    dispatchOpenInApp({ type: "disposed" })
   })
 
   // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
