@@ -584,6 +584,25 @@ describe("transitionUpdater", () => {
     expect(failed.effects).toEqual([{ type: "installs.reject", waiters: [3], failure: { kind: "error", error } }])
   })
 
+  test("an install or check while the app quits into the installer answers at once", () => {
+    const quitting = run(
+      ready(),
+      { type: "install.requested", waiter: 3 },
+      { type: "check.succeeded", attempt: 3, target: undefined },
+      { type: "restart.succeeded", attempt: 4 },
+    ).state
+
+    const install = transitionUpdater(quitting, { type: "install.requested", waiter: 5 })
+    expect(install.state).toBe(quitting)
+    expect(install.effects).toEqual([{ type: "installs.resolve", waiters: [5] }])
+
+    const check = transitionUpdater(quitting, { type: "check.requested", waiter: 6 })
+    expect(check.state).toBe(quitting)
+    expect(check.effects).toEqual([
+      { type: "checks.resolve", waiters: [6], state: { status: "installing", version: "2.0.0" } },
+    ])
+  })
+
   test.each([
     { name: "checking", state: () => run(idle(), { type: "check.requested", waiter: 1 }).state },
     {

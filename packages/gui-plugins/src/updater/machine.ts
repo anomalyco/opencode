@@ -506,6 +506,10 @@ function checkRequested(state: Active, waiter: number): UpdaterMachineTransition
 // The installation claims the updater in the same event, so a check that starts meanwhile never runs a second
 // platform check. A silent check or download already running becomes the installation's own.
 function installRequested(state: Active, waiter: number): UpdaterMachineTransition {
+  // The app is already quitting into the installer, and nothing settles this step again: answer at once.
+  if (state.status === "installing" && state.plan.step === "quitting")
+    return unchanged(state, [{ type: "installs.resolve", waiters: [waiter] }])
+
   if (state.status === "installing") return unchanged({ ...state, installWaiters: [...state.installWaiters, waiter] })
 
   const attempt = state.issued + 1
