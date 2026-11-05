@@ -24,5 +24,7 @@ story("shows a title that finished in a hidden tab at once when the tab shows ag
   expect(width).toBe("")
   const title = page.getByTestId("tool-status-title-fixture").locator('[data-component="tool-status-title"]')
   await expect(title).toHaveAttribute("data-ready", "false")
-  await expect(title.getByText("Explored", { exact: true })).toBeVisible()
+  await expect(title).toHaveAttribute("aria-label", "Explored")
+  await expect(title.locator('[data-slot="tool-status-done"]')).toBeVisible()
+  await expect(title.locator('[data-slot="tool-status-active"]')).toHaveCount(0)
 })
