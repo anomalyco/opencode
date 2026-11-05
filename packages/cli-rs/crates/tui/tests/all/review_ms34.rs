@@ -3,16 +3,14 @@
 //! limits that load, refresh, show in the prompt, and warn by themselves (carbon-6), `--agent` and `--model`, and
 //! groups that stay open across a remount of the session view (V15).
 
+use crate::support::{self, WAIT};
+
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{self, Resolved};
 use opencode_local::model_pref::Model;
 use opencode_tui::{Args, Deps, Route, Tui};
 use opentui::testing::TestApp;
@@ -36,13 +34,7 @@ impl Transport for Server {
         // Logged with the rest, so the P-REQ checks see it.
         drop(self.memory.send(request));
         let body = json!({ "location": location(), "data": *self.limits.lock().unwrap() });
-        Box::pin(async move {
-            Ok(Response {
-                status: 200,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(serde_json::to_vec(&body).unwrap()))])),
-            })
-        })
+        Box::pin(async move { Ok(support::respond(200, &body)) })
     }
 }
 
@@ -178,22 +170,13 @@ struct Harness {
 
 fn mount(route: Route, args: Args, config: Value) -> Harness {
     let server = Arc::new(Server { memory: Memory::new(routes()), limits: Mutex::new(limits(5.0)) });
-    let client = Client::with_transport("http://opencode.local", server.clone()).unwrap();
-    let app = TestApp::new(100, 30);
-    let info = cli_config::decode_text(&config.to_string()).unwrap();
-    let tui = opencode_tui::mount_with(
-        &app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route,
-            continue_: false,
-            events: true,
-        },
-        args,
-    );
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        route,
+        events: true,
+        ..support::deps(server.clone())
+    };
+    let support::Harness { app, tui } = support::mount_on(TestApp::new(100, 30), deps, args);
     let h = Harness { app, tui, server };
     let local = h.tui.local.clone();
     h.wait("the catalog", || local.catalog_ready() && !local.agents().is_empty());
@@ -204,13 +187,11 @@ fn animations_off() -> Value {
     json!({ "animations": false })
 }
 
-fn session_route(id: &str) -> Route {
-    Route::Session { id: SessionID(id.into()) }
-}
+use support::session_route;
 
 impl Harness {
     fn wait(&self, what: &str, check: impl Fn() -> bool) {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
+        let found = self.app.wait_until(WAIT, || {
             self.app.render();
             check()
         });

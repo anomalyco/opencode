@@ -1,23 +1,17 @@
 //! The prompt (E.2) over a fixture server that records requests: editing through the `input.*`
 //! layer, submit, queue, history, drafts, shell mode, clear, interrupt, and a new session from home.
 
+use crate::support::{self, Harness, WAIT, deref_harness, list};
+
 use std::path::Path;
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::support::WAIT;
-use bytes::Bytes;
-use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::{Deps, Route};
 use opentui::prelude::*;
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 /// A request the fixture saw: method, path, and JSON body.
@@ -44,19 +38,29 @@ impl Transport for Fixture {
         self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
         let created = (request.method == "POST" && path == "/api/session")
             .then(|| (self.created.clone(), body["id"].as_str().unwrap_or_default().to_owned()));
-        let location = json!({ "directory": "/project" });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [session("ses_a")], "cursor": {} })),
             ("GET", "/api/session/ses_a") => (200, json!({ "data": session("ses_a") })),
             ("GET", "/api/session/ses_a/message") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/agent") => (
                 200,
-                json!({ "location": location, "data": [agent("build", "primary"), agent("plan", "primary"), agent("general", "subagent")] }),
+                list(
+                    "/project",
+                    json!([
+                        support::agent("build", "primary", false),
+                        support::agent("plan", "primary", false),
+                        support::agent("general", "subagent", false),
+                    ]),
+                ),
             ),
-            ("GET", "/api/model") => (200, json!({ "location": location, "data": [model("p", "m", "Model M")] })),
-            ("GET", "/api/provider") => (200, json!({ "location": location, "data": [] })),
+            ("GET", "/api/model") => {
+                let model =
+                    support::merge(support::model("p", "m", "Model M"), json!({ "variants": [{ "id": "high" }] }));
+                (200, list("/project", json!([model])))
+            }
+            ("GET", "/api/provider") => (200, list("/project", json!([]))),
             ("GET", "/api/config") => (200, json!([])),
-            ("GET", "/api/command") => (200, json!({ "location": location, "data": [{ "name": "review" }] })),
+            ("GET", "/api/command") => (200, list("/project", json!([{ "name": "review" }]))),
             ("POST", "/api/session") => (200, json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) })),
             ("POST", path) if path.ends_with("/prompt") => (
                 200,
@@ -85,9 +89,8 @@ impl Transport for Fixture {
             {
                 (204, Value::Null)
             }
-            _ => (404, json!({})),
+            _ => support::not_found(),
         };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         let catalog = ["/api/agent", "/api/model"].contains(&path.as_str()).then(|| self.catalog.clone());
         Box::pin(async move {
             while catalog.as_ref().is_some_and(|catalog| !catalog.load(Ordering::SeqCst)) {
@@ -97,49 +100,24 @@ impl Transport for Fixture {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 created.lock().unwrap().push(id);
             }
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
+            Ok(support::respond(status, &body))
         })
     }
 }
 
 fn session(id: &str) -> Value {
-    json!({
-        "id": id, "title": "Fix the parser", "projectID": "project", "cost": 0,
-        "agent": "build", "model": { "providerID": "p", "id": "m" },
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
-}
-
-fn agent(id: &str, mode: &str) -> Value {
-    json!({
-        "id": id, "name": id, "mode": mode, "hidden": false, "permissions": [],
-        "request": { "settings": {}, "headers": {}, "body": {} },
-    })
-}
-
-fn model(provider: &str, id: &str, name: &str) -> Value {
-    json!({
-        "id": id, "modelID": id, "providerID": provider, "name": name,
-        "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-        "variants": [{ "id": "high" }], "time": { "released": 0 }, "cost": [], "status": "active",
-        "enabled": true, "limit": { "context": 1000, "output": 100 },
-    })
+    support::merge(support::catalog_session(), json!({ "id": id }))
 }
 
 struct Setup {
-    app: TestApp,
-    tui: Rc<Tui>,
+    harness: Harness,
     seen: Seen,
     /// Lets the agent and model reads answer.
     catalog: Arc<AtomicBool>,
     _home: tempfile::TempDir,
 }
+
+deref_harness!(Setup);
 
 impl Setup {
     fn new(route: Route) -> Self {
@@ -159,41 +137,18 @@ impl Setup {
     fn build(route: Route, home: tempfile::TempDir, catalog: bool) -> Self {
         let seen = Seen::default();
         let catalog = Arc::new(AtomicBool::new(catalog));
-        let client = Client::with_transport(
-            "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone() }),
-        )
-        .unwrap();
-        let app = TestApp::new(90, 24);
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: "/project".into(),
-                config: Resolved::new(Info::default(), |_| None),
-                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
-                route,
-                continue_: false,
-                events: false,
-            },
-        );
-        Self { app, tui, seen, catalog, _home: home }
-    }
-
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
+        let fixture = Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone() };
+        let deps = Deps {
+            roots: support::roots(support::paths(home.path()), "latest"),
+            route,
+            ..support::deps(Arc::new(fixture))
+        };
+        Self { harness: support::mount(90, 24, deps), seen, catalog, _home: home }
     }
 
     /// Waits for the catalog, which shows the agent and model under the prompt.
     fn ready(&self) {
         self.wait_for("Model M");
-    }
-
-    fn textarea(&self) -> Textarea {
-        self.tui.textarea.borrow().clone().expect("the prompt fills Tui::textarea")
     }
 
     fn requests(&self, method: &str, suffix: &str) -> Vec<Value> {
@@ -223,22 +178,8 @@ impl Setup {
     }
 }
 
-fn paths(home: &Path) -> Paths {
-    Paths {
-        home: home.to_owned(),
-        data: home.join("data"),
-        cache: home.join("cache"),
-        config: home.join("config"),
-        state: home.join("state"),
-        tmp: home.join("tmp"),
-        bin: home.join("bin"),
-        log: home.join("log"),
-        repos: home.join("repos"),
-    }
-}
-
 fn session_route() -> Route {
-    Route::Session { id: SessionID("ses_a".into()) }
+    support::session_route("ses_a")
 }
 
 #[test]
@@ -501,19 +442,6 @@ fn an_early_enter_is_dropped_when_the_text_changes_before_the_catalog_loads() {
     assert_eq!(setup.textarea().text(), "Reply with ok");
 }
 
-/// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
-fn ts_root() -> Option<std::path::PathBuf> {
-    let root = std::env::var_os("OPENCODE_TS_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let present =
-        root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
-    if !present {
-        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
-    }
-    present.then_some(root)
-}
-
 /// Runs `parity/oracle/E.2-history.ts`: the real `PromptHistoryProvider` on `state`.
 fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
     use std::io::Write;
@@ -541,7 +469,7 @@ fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
 /// and the Rust prompt reads what TypeScript appends.
 #[test]
 fn history_file_is_shared_with_typescript() {
-    let Some(root) = ts_root() else { return };
+    let Some(root) = support::ts_root() else { return };
     let setup = Setup::new(session_route());
     setup.ready();
     setup.app.type_text("first");
