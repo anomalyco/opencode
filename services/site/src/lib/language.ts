@@ -226,14 +226,19 @@ export function strip(pathname: string) {
   return `/${next}`
 }
 
+/**
+ * True for an address that takes a locale prefix. Other apps on the domain (the V1 and V2 docs, the
+ * Console, the old dashboard) and the English-only pages (the changelog and the font) have one
+ * address in every language: route() leaves them unprefixed, and their prefixed addresses redirect
+ * there (middleware.ts).
+ */
+export function localized(pathname: string) {
+  return !/^\/(v1|v2|docs|console|auth|workspace|changelog|font)(?=$|[/.?#])/.test(strip(pathname))
+}
+
 export function route(locale: Locale, pathname: string) {
   const next = strip(pathname)
-  if (next.startsWith("/auth")) return next
-  if (next.startsWith("/workspace")) return next
-  // English-only pages (the changelog and the font) live at their unprefixed URLs; their locale
-  // URLs redirect there.
-  if (/^\/(changelog|font)(?=$|[/.?#])/.test(next)) return next
-  if (locale === "en") return next
+  if (locale === "en" || !localized(next)) return next
   if (next === "/") return `/${locale}`
   return `/${locale}${next}`
 }
