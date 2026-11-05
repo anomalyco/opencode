@@ -168,6 +168,7 @@ describe("a folder that cannot load", () => {
 
   test("retries a rejected load with backoff, then shows that it failed", () => {
     const opened = play(INITIAL_REVIEW_FOLDER_STATE, context(rows, ["new-dir/"])).state
+
     const retried = play(
       opened,
       ...Array.from({ length: REVIEW_FOLDER_RETRIES }, (_, index) => failed("new-dir/", index + 1)),
