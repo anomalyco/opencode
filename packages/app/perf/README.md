@@ -69,10 +69,21 @@ strobe bench packages/desktop/perf/startup.bench.ts --target desktop --base app:
 bun packages/core/perf/snapshot.ts medium opencode
 strobe bench packages/core/perf/snapshot.bench.ts --base origin/dev --head .
 
-# The interactive report, and the tables and rerun command for a pull request body.
+# The interactive report, and the results block in pull request <n> (see "In a pull request").
 strobe report experiment <exp_…> --open
-strobe report experiment <exp_…> --format pr
+strobe report experiment <exp_…> --format pr --update-pr <n>
 ```
+
+### In a pull request
+
+Write the PR's own text: what strobe showed that led to the change (the command and recording id), and what the change
+does. Then `strobe report experiment <exp_…> --format pr --update-pr <n>` adds strobe's generated results block to PR
+`n`'s body, or replaces that experiment's block after a rerun, and leaves the rest of the body alone. Don't edit inside
+the block (strobe refuses to update a hand-edited one); put your reading of the numbers above or below it. Without
+`--update-pr`, the block goes to stdout for pasting.
+
+Every page target expects the `OpenCode` title (`expect`): a block that lands on another page (an error page, a blank
+document) is refused `WrongScreen` instead of timed, and the block's `On screen:` line says what each block showed.
 
 `bunx strobe` runs the strobe version pinned in the root catalog (`@hona/strobe`), which ships builds for Windows x64,
 macOS (arm64, x64) and Linux (x64, arm64); a `strobe` on your PATH also works. Script cases (core, ui) run the same on
