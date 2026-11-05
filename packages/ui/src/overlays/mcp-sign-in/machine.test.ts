@@ -8,7 +8,7 @@ import {
   type McpSignInEffect,
   type McpSignInEvent,
   type McpSignInState,
-} from "./mcp-sign-in-machine"
+} from "./machine"
 
 const AUTH_URL = "https://auth.example/authorize"
 

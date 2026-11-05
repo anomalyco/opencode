@@ -6,9 +6,9 @@ import {
   type McpSignInAttemptStatus,
   type McpSignInEffect,
   type McpSignInEvent,
-} from "./mcp-sign-in-machine"
+} from "./machine"
 
-export type { McpSignInAttemptStatus, McpSignInFailure, McpSignInView } from "./mcp-sign-in-machine"
+export type { McpSignInAttemptStatus, McpSignInFailure, McpSignInView } from "./machine"
 
 /** The server and host calls of one MCP sign-in; the app and the details plugin bind them to their own SDK. */
 export type McpSignInHost = {
