@@ -1198,9 +1198,11 @@ function mockHandlers(
                 ...Object.entries(config.sessionPermissions ?? {}).flatMap(([id, list]) =>
                   currentPermissions(list).length > 0 && status[id]?.type !== "idle" ? [id] : [],
                 ),
+                // Location elicitations (`sessionID: "global"`) belong to no Session.
                 ...resolve(config.forms ?? []).flatMap((form) =>
                   Predicate.isObject(form) &&
                   Predicate.isString(form.sessionID) &&
+                  form.sessionID !== "global" &&
                   status[form.sessionID]?.type !== "idle"
                     ? [form.sessionID]
                     : [],
