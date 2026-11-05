@@ -60,6 +60,7 @@ import { createImagePreview } from "./image-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 import { markdownClipboardHtml } from "./markdown-clipboard"
+import { createCopyFeedback } from "./copy"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -136,7 +137,7 @@ type CopyLabels = {
 
 type CopyButtonState = {
   setLabels: Setter<CopyLabels>
-  setCopied: Setter<boolean>
+  copy: (text: string) => void
   dispose: () => void
 }
 
@@ -166,15 +167,19 @@ function createCopyButton(labels: CopyLabels) {
 
   const dispose = render(() => {
     const [labelState, setLabels] = createSignal(labels, { equals: false })
-    const [copied, setCopied] = createSignal(false)
+    const copy = createCopyFeedback()
     state.setLabels = setLabels
-    state.setCopied = setCopied
+    state.copy = copy.copy
+    createEffect(() => {
+      if (copy.copied()) return host.setAttribute("data-copied", "true")
+      host.removeAttribute("data-copied")
+    })
 
-    return <MarkdownCopyButton labels={labelState()} copied={copied()} />
+    return <MarkdownCopyButton labels={labelState()} copied={copy.copied()} />
   }, host)
 
   state.dispose = dispose
-  // SAFETY: `render` runs its function synchronously, so both setters are assigned before this line.
+  // SAFETY: `render` runs its function synchronously, so `setLabels` and `copy` are assigned before this line.
   copyButtonState.set(host, state as CopyButtonState)
 
   return host
@@ -199,20 +204,6 @@ function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
       />
     </Tooltip>
   )
-}
-
-function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
-  const state = copyButtonState.get(host)
-  state?.setLabels(labels)
-  state?.setCopied(copied)
-
-  if (copied) {
-    host.setAttribute("data-copied", "true")
-
-    return
-  }
-
-  host.removeAttribute("data-copied")
 }
 
 const codeHostSelector = '[data-slot="markdown-copy-button"], [data-component="markdown-code"]'
@@ -627,16 +618,9 @@ function setupLocalLinks(root: HTMLDivElement, open: () => OpenMarkdownLocalFile
   }
 }
 
-function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
-  const timeouts = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
-
-  const updateLabel = (button: HTMLElement) => {
-    const labels = getLabels()
-    const copied = button.getAttribute("data-copied") === "true"
-    setCopyState(button, labels, copied)
-  }
-
-  const handleClick = async (event: MouseEvent) => {
+// Each button owns its feedback, so a block replaced mid-feedback drops its reset timer with its host.
+function setupCodeCopy(root: HTMLDivElement) {
+  const handleClick = (event: MouseEvent) => {
     const target = event.target
 
     if (!(target instanceof Element)) return
@@ -645,37 +629,13 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
 
     if (!(button instanceof HTMLElement)) return
     const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
-    const content = code?.textContent ?? ""
-
-    if (!content) return
-    const clipboard = navigator?.clipboard
-
-    if (!clipboard) return
-    await clipboard.writeText(content)
-    const labels = getLabels()
-    setCopyState(button, labels, true)
-    const existing = timeouts.get(button)
-
-    if (existing) clearTimeout(existing)
-    const timeout = setTimeout(() => setCopyState(button, labels, false), 2000)
-    timeouts.set(button, timeout)
-  }
-
-  const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
-
-  for (const button of buttons) {
-    if (button instanceof HTMLElement) updateLabel(button)
+    copyButtonState.get(button)?.copy(code?.textContent ?? "")
   }
 
   root.addEventListener("click", handleClick)
 
   return () => {
     root.removeEventListener("click", handleClick)
-
-    for (const timeout of timeouts.values()) {
-      clearTimeout(timeout)
-    }
-
     disposeCodeHosts(root)
   }
 }
@@ -1051,15 +1011,11 @@ export function Markdown(
     if (appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied)
       container
         .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+        .forEach((button) => copyButtonState.get(button)?.setLabels(labels))
 
     appliedLabels = labels
 
-    if (!copyCleanup)
-      copyCleanup = setupCodeCopy(container, () => ({
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      }))
+    if (!copyCleanup) copyCleanup = setupCodeCopy(container)
 
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
 

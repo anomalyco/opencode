@@ -6,6 +6,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { createCopyFeedback } from "./copy"
 import { createDisclosure } from "./disclosure"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
@@ -23,7 +24,8 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
 
-  const [state, setState] = createStore({ copied: false, clipped: false })
+  const [state, setState] = createStore({ clipped: false })
+  const copy = createCopyFeedback()
 
   const disclosure = createDisclosure({
     open: () => props.open,
@@ -32,7 +34,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
 
   const open = disclosure.open
-  const copied = () => state.copied
+  const copied = copy.copied
   let subtitle: HTMLSpanElement | undefined
 
   // Measured in the collapsed layout: a clipped subtitle moves from the one-line header into the open body.
@@ -110,15 +112,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     return head[0].toUpperCase() + head.slice(1)
   })
 
-  const copy = async () => {
-    const text = cleaned()
-
-    if (!text) return
-    await navigator.clipboard.writeText(text)
-    setState("copied", true)
-    setTimeout(() => setState("copied", false), 2000)
-  }
-
   const copyButton = () => (
     <Tooltip
       appearance="compact"
@@ -133,7 +126,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={(e) => {
           e.stopPropagation()
-          void copy()
+          copy.copy(cleaned())
         }}
         aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
       />
