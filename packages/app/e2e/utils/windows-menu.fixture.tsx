@@ -68,6 +68,7 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
 
         return input.holdOpen ? new Promise<void>(() => undefined) : Promise.resolve()
       }
+
       platform.revealPath = async () => true
     }
 
