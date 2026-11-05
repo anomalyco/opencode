@@ -42,4 +42,4 @@ To run one sync pass on your machine against a stage's resources, run `bun sst s
 
 Stats HTML, JSON, and Markdown use a one-minute browser cache and a five-minute shared cache. Expired responses must revalidate instead of serving stale snapshots.
 
-The Worker has no custom domain. `infra/stats.ts` routes `/data`, `/data/*`, `/<locale>/data` and `/<locale>/data/*` on the main host straight to it, so its responses skip the Cloudflare cache and reach browsers with these headers unchanged. Static assets are uploaded under `/data`, and the build moves Nitro's `_headers` to the assets root so they stay immutable.
+The Worker has no custom domain. `infra/stats.ts` routes `/data*` and `/<locale>/data*` on the main host straight to it, so its responses skip the Cloudflare cache and reach browsers with these headers unchanged. Static assets are uploaded under `/data`, and the build moves Nitro's `_headers` to the assets root so they stay immutable.

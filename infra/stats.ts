@@ -80,22 +80,16 @@ const app = new sst.cloudflare.x.SolidStart("Stats", {
 })
 
 // The site serves itself under /data and /<locale>/data, and these routes are its only way in: it has no custom domain
-// or workers.dev URL. Route patterns can't wildcard the middle of a path, hence one pair per locale. `sst dev` deploys
-// no Worker.
+// or workers.dev URL. An exact `/data` pattern misses `/data?query`, so each pattern is a `/data*` prefix. Route patterns
+// can't wildcard the middle of a path, hence one per locale. `sst dev` deploys no Worker.
 const appServer = app.nodes.server
 if (appServer) {
   for (const prefix of ["data", ...LOCALES.map((locale) => `${locale}/data`)]) {
-    const name = prefix.replaceAll("/", "")
-    for (const [suffix, pattern] of [
-      ["", `${domain}/${prefix}`],
-      ["Path", `${domain}/${prefix}/*`],
-    ]) {
-      new cloudflare.WorkersRoute(`StatsRoute${name}${suffix}`, {
-        zoneId: zoneID,
-        pattern,
-        script: appServer.nodes.worker.scriptName,
-      })
-    }
+    new cloudflare.WorkersRoute(`StatsRoute${prefix.replaceAll("/", "")}`, {
+      zoneId: zoneID,
+      pattern: `${domain}/${prefix}*`,
+      script: appServer.nodes.worker.scriptName,
+    })
   }
 }
 
