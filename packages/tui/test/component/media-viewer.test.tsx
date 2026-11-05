@@ -8,7 +8,7 @@ import {
 } from "@opentui/core"
 import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
-import { descendants, image, longVideoFixture, renderMedia, video } from "../fixture/media"
+import { descendants, image, longVideoFixture, renderMedia, seekVideoFixture, video } from "../fixture/media"
 
 type Viewer = Awaited<ReturnType<typeof renderMedia>>
 
@@ -212,6 +212,19 @@ test("keys held on a paused video add up into one throttled seek, which the seek
   clock.advance(120)
   expect(seeks).toBe(3)
   expect(player.currentTime).toBeCloseTo((10 / (bar.width - 1)) * 2, 1)
+})
+
+test("held arrows add up from where the pending seek is headed", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  viewer.media().openViewer([video("clip", { path: seekVideoFixture })], 0)
+  await viewer.until(() => viewer.videos("media-viewer-stage")[0]?.playing === true)
+  const player = viewer.videos("media-viewer-stage")[0]!
+  // "0" seeks at once, so the arrows after it wait out the interval while the player stays at 0 s.
+  for (const key of [" ", "0", "right", "right", "right"]) await viewer.press(key)
+  expect(player.currentTime).toBe(0)
+  clock.advance(120)
+  expect(player.currentTime).toBeCloseTo(15, 1)
 })
 
 test("the info shows the Kitty transport's file state and reads it again every second", async () => {

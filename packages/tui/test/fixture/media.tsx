@@ -19,6 +19,8 @@ import { createTuiResolvedConfig } from "./tui-runtime"
 // 2 s and 4 s 160x90 H.264 clips without audio: ffmpeg -f lavfi -i testsrc2=size=160x90:rate=10 -t 2 -c:v libx264 -an
 export const videoFixture = path.join(import.meta.dir, "media", "video-only.mp4")
 export const longVideoFixture = path.join(import.meta.dir, "media", "video-long.mp4")
+/** A 20 s 64x36 clip at 2 fps, long enough for 5 s seeks to add up: testsrc2=size=64x36:rate=2 -t 20, as above. */
+export const seekVideoFixture = path.join(import.meta.dir, "media", "video-seek.mp4")
 /** A 96x48 PNG, the bytes of `diffImageFixture`. */
 export const imageFixture = path.join(import.meta.dir, "media", "image.png")
 

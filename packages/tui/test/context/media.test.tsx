@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import { CliRenderEvents, type BoxRenderable } from "@opentui/core"
-import { setRendererCapabilities } from "@opentui/core/testing"
+import { CliRenderEvents, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
+import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { expect, jest, test } from "bun:test"
 import { For } from "solid-js"
 import { image, renderMedia, video } from "../fixture/media"
@@ -73,33 +73,72 @@ test("sends Kitty frames through files while rich media is on, and stops when th
   expect(renderer.kittyImageTransport).toBe("raw")
 })
 
-test("lets the four video tiles that came on screen last keep a poster player, the next in line once one leaves", async () => {
+test("players go to the four tiles showing the most of themselves, and stay two seconds with tiles that drop out", async () => {
+  const clock = new ManualClock()
   const boxes: BoxRenderable[] = []
-  await using host = await renderMedia(() => (
-    <box flexDirection="column">
-      <For each={[0, 1, 2, 3, 4]}>{() => <box ref={(element: BoxRenderable) => boxes.push(element)} height={1} />}</For>
-    </box>
-  ))
+  let scroll: ScrollBoxRenderable | undefined
+  // A 9-row scroll box over twelve 2-row tiles: four show whole, and the fifth shows its first row.
+  await using host = await renderMedia(
+    () => (
+      <scrollbox ref={(element: ScrollBoxRenderable) => (scroll = element)} height={9}>
+        <For each={Array.from({ length: 12 })}>
+          {() => <box ref={(element: BoxRenderable) => boxes.push(element)} height={2} flexShrink={0} />}
+        </For>
+      </scrollbox>
+    ),
+    false,
+    clock,
+  )
   const media = host.media()
-  const keys = ["a", "b", "c", "d", "e"]
+  const keys = boxes.map((_, index) => String(index))
   const untrack = keys.map((key, index) => media.trackPoster(key, boxes[index]!))
-  // The tiles hidden at each step, and the tiles on screen then that keep a player.
-  const steps: [string[], string][] = [
-    [[], "b,c,d,e"],
-    [["e"], "a,b,c,d"],
-    // Back on screen, a tile is the latest to come on screen, and the tile on screen longest gives up its player.
-    [[], "b,c,d,e"],
-    [["a"], "b,c,d,e"],
-    [[], "a,c,d,e"],
-  ]
-  for (const [hidden, open] of steps) {
-    boxes.forEach((box, index) => (box.visible = !hidden.includes(keys[index]!)))
+  let opened = 0
+  let open: string[] = []
+  const settle = async () => {
     await host.app.renderOnce()
-    expect(keys.filter(media.posterShown)).toEqual(keys.filter((key) => !hidden.includes(key)))
-    expect(keys.filter(media.posterOpen).join()).toBe(open)
+    const next = keys.filter(media.posterOpen)
+    opened += next.filter((key) => !open.includes(key)).length
+    open = next
   }
+  await settle()
+  // Tiles within half the box's height show before they scroll in.
+  expect(keys.filter(media.posterShown).join()).toBe("0,1,2,3,4,5,6")
+  expect(open.join()).toBe("0,1,2,3")
 
-  untrack[2]!()
-  await host.app.renderOnce()
-  expect(keys.filter(media.posterOpen).join()).toBe("a,b,d,e")
+  // Scrolled a row, tile 4 shows whole and takes a player from tile 0, now half hidden, which keeps its own for now.
+  // Scrolling back and forth over that edge opens no player again.
+  for (const top of [1, 0, 1, 0, 1]) {
+    scroll!.scrollTo(top)
+    clock.advance(500)
+    await settle()
+    expect(open.join()).toBe("0,1,2,3,4")
+  }
+  expect(opened).toBe(5)
+  clock.advance(2_000)
+  await settle()
+  expect(open.join()).toBe("1,2,3,4")
+
+  // Under the viewer, every tile keeps its player only as long, so a quick look opens no player again.
+  media.openViewer([image("image")], 0)
+  clock.advance(1_000)
+  await settle()
+  media.closeViewer()
+  await settle()
+  expect(open.join()).toBe("1,2,3,4")
+  media.openViewer([image("image")], 0)
+  await settle()
+  clock.advance(2_000)
+  await settle()
+  expect(open).toEqual([])
+  media.closeViewer()
+  await settle()
+  expect(open.join()).toBe("1,2,3,4")
+  expect(opened).toBe(9)
+
+  // With no tile left, nothing follows the scroll box.
+  untrack.forEach((stop) => stop())
+  await settle()
+  expect(keys.filter(media.posterShown)).toEqual([])
+  expect(scroll!.verticalScrollBar.listenerCount("change")).toBe(0)
+  expect(scroll!.content.listenerCount("resize")).toBe(0)
 })

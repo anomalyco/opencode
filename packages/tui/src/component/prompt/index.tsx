@@ -11,7 +11,6 @@ import {
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import path from "path"
-import { fileURLToPath } from "node:url"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
@@ -31,7 +30,15 @@ import { useExit } from "../../context/exit"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
 import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
-import { emptyPrompt, usePromptHistory, type ChipData, type PromptInfo, type PromptPartRef } from "../../prompt/history"
+import {
+  emptyPrompt,
+  promptMediaDirectory,
+  usePromptHistory,
+  type ChipData,
+  type PromptFile,
+  type PromptInfo,
+  type PromptPartRef,
+} from "../../prompt/history"
 import { appendToSessionPrompt, registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { usePromptRestore } from "../../prompt/restore"
 import { Skill } from "@opencode/schema/skill"
@@ -54,8 +61,10 @@ import { useConfig, useCursorStyle, useNewDesigns, useRichMedia } from "../../co
 import { usePromptMove } from "./move"
 import {
   oversizedPastedVideo,
+  isKeptAttachment,
   promptFilesForServer,
   readKeptAttachments,
+  videoFilePath,
   resolvePastedAttachments,
 } from "./local-attachment"
 import { useMedia } from "../../context/media"
@@ -876,29 +885,21 @@ export function Prompt(props: PromptProps) {
     localizeVideos(prompt)
   }
 
-  // A local server's `file://` video, such as one restored from history or the stash, gets its path, so sending reads it
-  // again and notices when it is gone. An `@` mention keeps the server's read, as an `@` image does.
+  // A local server's unmentioned `file://` video, such as one an undo restored, gets its path at once, so history and the
+  // stash keep the file and sending reads it again and notices when it is gone. An `@` mention keeps the server's read,
+  // as an `@` image does.
   function localizeVideos(prompt: PromptInfo) {
-    if (!richMedia()) return
-    prompt.files?.forEach((file) => {
-      if (file.path || file.mention?.text.startsWith("@")) return
-      const uri = file.uri
-      const local =
-        uri.startsWith("file:") && terminalEnvironment.localServer && mediaMime(uri)?.startsWith("video/")
-          ? Promise.resolve(uri).then((value) => fileURLToPath(value))
-          : undefined
-      if (!local) return
-      void local.then(
-        (value) => {
-          if (disposed) return
-          // A new array, so the entry the prompt came from is left as it was.
-          setStore("prompt", "files", (files) =>
-            files?.map((item) => (item.uri === uri && !item.path ? { ...item, path: value } : item)),
-          )
-        },
-        () => {},
-      )
-    })
+    if (terminalEnvironment.localServer !== true) return
+    const local = (file: PromptFile) =>
+      file.path || file.mention?.text.startsWith("@") ? undefined : videoFilePath(file.uri)
+    if (!prompt.files?.some(local)) return
+    // A new array, so the entry the prompt came from is left as it was.
+    setStore("prompt", "files", (files) =>
+      files?.map((file) => {
+        const value = local(file)
+        return value ? { ...file, path: value } : file
+      }),
+    )
   }
 
   // Undo restores a deleted chip's mark, with its data, after its part left the prompt.
@@ -1427,8 +1428,9 @@ export function Prompt(props: PromptProps) {
     }
     history.append(entry)
     // Files history or the stash kept as local paths are sent as the bytes read now, never as this machine's paths.
-    const kept = entry.files?.some((file) => file.path && file.uri.startsWith("file:"))
-      ? await readKeptAttachments(entry.files)
+    const localServer = terminalEnvironment.localServer === true
+    const kept = entry.files?.some((file) => isKeptAttachment(file, localServer))
+      ? await readKeptAttachments(entry.files, localServer)
       : undefined
     if (kept?.unreadable.length)
       toast.show({
@@ -1451,7 +1453,7 @@ export function Prompt(props: PromptProps) {
           sessionID: target,
           name: slashHead.name,
           text: slashHead.arguments,
-          files: promptFilesForServer(kept?.files ?? entry.files, terminalEnvironment.localServer === true),
+          files: promptFilesForServer(kept?.files ?? entry.files, localServer, promptMediaDirectory(paths.state)),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1492,7 +1494,7 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID: target,
           text: inputText,
-          files: promptFilesForServer(kept?.files ?? entry.files, terminalEnvironment.localServer === true),
+          files: promptFilesForServer(kept?.files ?? entry.files, localServer, promptMediaDirectory(paths.state)),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,

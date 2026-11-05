@@ -138,7 +138,18 @@ describe("SessionModelRequest.unsupportedParts", () => {
     })
 
     test("Bedrock Converse keeps the video types it lowers and degrades the rest", async () => {
-      const lowered = ["video/mp4", "video/quicktime", "video/webm", "video/x-matroska", "video/3gpp", "video/x-ms-wmv"]
+      const lowered = [
+        "video/x-matroska",
+        "video/quicktime",
+        "video/mp4",
+        "video/webm",
+        "video/x-flv",
+        "video/mpeg",
+        "video/mpg",
+        "video/wmv",
+        "video/x-ms-wmv",
+        "video/3gpp",
+      ]
       for (const mime of lowered) expect(await send(bedrock, mime)).toContain('"video":{')
       for (const mime of ["video/x-msvideo", "video/ogg", "video/x-m4v"]) {
         const body = await send(bedrock, mime)

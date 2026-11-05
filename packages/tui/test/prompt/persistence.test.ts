@@ -21,3 +21,21 @@ test("persistence creates parent directories and supports text, append, and JSON
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test("a reader sees the old or the new text while it is rewritten, never part of it", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
+  try {
+    const file = path.join(root, "prompt-history.jsonl")
+    const [old, next] = ["a", "b"].map((line) => `${line.repeat(1023)}\n`.repeat(16 * 1024))
+    await writeText(file, old!)
+    let done = false
+    const write = writeText(file, next!).finally(() => (done = true))
+    const reads: string[] = []
+    while (!done) reads.push(await readText(file))
+    await write
+    expect(reads.filter((text) => text !== old && text !== next).length).toBe(0)
+    expect(await readText(file)).toBe(next!)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

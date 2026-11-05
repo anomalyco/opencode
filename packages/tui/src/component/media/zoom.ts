@@ -3,7 +3,7 @@ type Point = Readonly<{ x: number; y: number }>
 type Region = Readonly<{ left: number; top: number; width: number; height: number }>
 
 /** The source shown in a stage of cells, each `cellAspect` times taller than wide. */
-export type ZoomGeometry = Readonly<{ source: Size; stage: Size; cellAspect: number }>
+type ZoomGeometry = Readonly<{ source: Size; stage: Size; cellAspect: number }>
 
 /** Zoom 1 fits the whole source in the stage; `x` and `y` are the source pixel at the center of the view. */
 export type ZoomView = Readonly<{ zoom: number; x: number; y: number }>
@@ -11,7 +11,7 @@ export type ZoomView = Readonly<{ zoom: number; x: number; y: number }>
 /** `crop` is whole source pixels inside the source; `rect` the cells it covers; `scale` columns per source pixel. */
 type ZoomLayout = Readonly<{ view: ZoomView; crop: Region; rect: Region; scale: number }>
 
-export const MAX_ZOOM = 32
+const MAX_ZOOM = 32
 
 export function initialView(source: Size): ZoomView {
   return { zoom: 1, x: source.width / 2, y: source.height / 2 }
@@ -86,7 +86,7 @@ export function sourcePoint(layout: ZoomLayout, point: Point, source: Size): Poi
 }
 
 /** The cells a source region of this size takes in the stage, as OpenTUI's `fit="fit"` sizes and centers it. */
-export function fittedRect(stage: Size, region: Size, cellAspect: number): Region {
+function fittedRect(stage: Size, region: Size, cellAspect: number): Region {
   if (stage.width <= 0 || stage.height <= 0 || region.width <= 0 || region.height <= 0)
     return { left: 0, top: 0, width: 0, height: 0 }
   const aspect = (region.width / region.height) * cellAspect

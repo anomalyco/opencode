@@ -1,4 +1,10 @@
-import { CliRenderEvents, resolveImageRenderProtocol, ScrollBoxRenderable, type Renderable } from "@opentui/core"
+import {
+  CliRenderEvents,
+  resolveImageRenderProtocol,
+  ScrollBoxRenderable,
+  type Renderable,
+  type TimerHandle,
+} from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createContext, createEffect, createSignal, on, onCleanup, Show, useContext, type JSX } from "solid-js"
 import { createMediaFiles } from "../component/media/file"
@@ -22,14 +28,15 @@ export const MEDIA_VIEWER_Z_INDEX = 2500
 const THUMBNAIL_FPS = { kitty: 15, sixel: 10, blocks: 12 }
 // Each poster player holds a decoder of about 86 MB and a dozen threads.
 const POSTER_LIMIT = 4
+// A tile that drops out keeps its player this long: opening one and seeking it to the poster blocks for about 70 ms
+// on a 1080p clip, so a tile scrolled out and back would stall each time.
+const POSTER_GRACE_MS = 2_000
 
 let views: MediaViews = {}
 
-/** Sets the components `MediaHost` renders. Returns a function that restores the previous views. */
+/** Sets the components `MediaHost` renders. */
 export function registerMediaViews(next: MediaViews) {
-  const previous = views
-  views = { ...previous, ...next }
-  return () => (views = previous)
+  views = { ...views, ...next }
 }
 
 const MediaContext = createContext<ReturnType<typeof init>>()
@@ -40,8 +47,8 @@ function init(directory: string) {
   const [viewer, setViewer] = createSignal<MediaViewerRequest>()
   const [activeTile, setActiveTile] = createSignal<string>()
   const [pip, setPip] = createSignal<MediaPipRequest>()
-  // The inline video tiles on screen, in the order they came on screen.
-  const [posters, setPosters] = createSignal<readonly string[]>([])
+  const [shown, setShown] = createSignal<ReadonlySet<string>>(new Set(), { equals: sameKeys })
+  const [open, setOpen] = createSignal<ReadonlySet<string>>(new Set(), { equals: sameKeys })
   const read = () => {
     const resolution = renderer.resolution
     const protocol = resolveImageRenderProtocol("auto", renderer.capabilities, resolution !== null)
@@ -84,15 +91,73 @@ function init(directory: string) {
   createEffect(() => (renderer.kittyImageTransport = richMedia() ? "file" : transport))
   onCleanup(() => (renderer.kittyImageTransport = transport))
 
-  // Scrolling or a layout change moves a tile without an event, so each frame checks where the tracked tiles are.
+  // A tile moves when a scroll box around it scrolls or resizes, the terminal resizes, or tiles come and go, so the
+  // frame after one of those measures the tracked tiles again.
   const tracked = new Map<string, Renderable>()
-  const place = () => {
-    const shown = [...tracked.keys()].filter((key) => onScreen(tracked.get(key)!, renderer))
-    // Tiles that stay on screen keep their place; those that came on screen go last.
-    const next = [...posters().filter((key) => shown.includes(key)), ...shown.filter((key) => !posters().includes(key))]
-    if (next.length !== posters().length || next.some((key, index) => key !== posters()[index])) setPosters(next)
+  let boxes = new Set<ScrollBoxRenderable>()
+  // The tiles keeping a player, each with when it dropped out of the ranking; Infinity while it ranks.
+  let players = new Map<string, number>()
+  let measuring = false
+  let expiry: TimerHandle | undefined
+  const invalidate = () => {
+    if (measuring) return
+    measuring = true
+    renderer.once(CliRenderEvents.FRAME, place)
   }
-  onCleanup(() => renderer.off(CliRenderEvents.FRAME, place))
+  const watch = (box: ScrollBoxRenderable, method: "on" | "off") => {
+    box.verticalScrollBar[method]("change", invalidate)
+    box.horizontalScrollBar[method]("change", invalidate)
+    box.viewport[method]("resize", invalidate)
+    box.content[method]("resize", invalidate)
+  }
+  const place = () => {
+    measuring = false
+    const now = renderer.clock.now()
+    const seen = new Set<ScrollBoxRenderable>()
+    const near = [...tracked]
+      .map(([key, element]) => ({ key, ...measure(element, renderer, seen) }))
+      .filter((tile) => tile.near)
+    // Fully visible tiles rank first, then those showing more of themselves. Tiles under the viewer do not rank.
+    const ranked = viewer() ? [] : near.toSorted((a, b) => b.share - a.share).slice(0, POSTER_LIMIT)
+    const kept = [...players]
+      .map(([key, since]) => [key, Math.min(since, now)] as const)
+      .filter(
+        ([key, since]) => tracked.has(key) && now - since < POSTER_GRACE_MS && !ranked.some((tile) => tile.key === key),
+      )
+      .toSorted((a, b) => b[1] - a[1])
+      .slice(0, POSTER_LIMIT)
+    players = new Map([...ranked.map((tile) => [tile.key, Infinity] as const), ...kept])
+    setShown(new Set(near.map((tile) => tile.key)))
+    setOpen(new Set(players.keys()))
+
+    for (const box of boxes) if (!seen.has(box)) watch(box, "off")
+    for (const box of seen) if (!boxes.has(box)) watch(box, "on")
+    boxes = seen
+    if (expiry) renderer.clock.clearTimeout(expiry)
+    expiry = undefined
+    if (kept.length === 0) return
+    expiry = renderer.clock.setTimeout(
+      () => {
+        expiry = undefined
+        invalidate()
+        renderer.requestRender()
+      },
+      Math.min(...kept.map(([, since]) => since + POSTER_GRACE_MS - now)),
+    )
+  }
+  createEffect(
+    on(
+      () => viewer() !== undefined,
+      () => tracked.size > 0 && invalidate(),
+      { defer: true },
+    ),
+  )
+  onCleanup(() => {
+    renderer.off(CliRenderEvents.FRAME, place)
+    renderer.off(CliRenderEvents.RESIZE, invalidate)
+    for (const box of boxes) watch(box, "off")
+    if (expiry) renderer.clock.clearTimeout(expiry)
+  })
 
   createEffect(
     on(
@@ -127,19 +192,25 @@ function init(directory: string) {
     /** The key of the one inline tile allowed to play. */
     activeTile,
     setActiveTile,
-    /** Follows whether an inline video tile is on screen after each frame, until the returned function stops it. */
+    /** Follows where an inline video tile is, until the returned function stops it. */
     trackPoster(key: string, element: Renderable) {
-      if (tracked.size === 0) renderer.on(CliRenderEvents.FRAME, place)
+      if (tracked.size === 0) renderer.on(CliRenderEvents.RESIZE, invalidate)
       tracked.set(key, element)
+      invalidate()
       return () => {
         tracked.delete(key)
-        if (tracked.size === 0) renderer.off(CliRenderEvents.FRAME, place)
+        if (tracked.size === 0) renderer.off(CliRenderEvents.RESIZE, invalidate)
+        invalidate()
       }
     },
-    /** Whether any of the tile is inside the screen and every scroll box around it. */
-    posterShown: (key: string) => posters().includes(key),
-    /** Whether the tile is among the last few to come on screen, which keep a player open for their poster frame. */
-    posterOpen: (key: string) => posters().slice(-POSTER_LIMIT).includes(key),
+    /** Whether the tile is on screen, or within half a scroll box of it, so it shows before it scrolls in. */
+    posterShown: (key: string) => shown().has(key),
+    /**
+     * Whether the tile keeps a player open for its poster frame: one of the POSTER_LIMIT tiles showing the most of
+     * themselves, or one of up to POSTER_LIMIT more that dropped out of those less than POSTER_GRACE_MS ago, so
+     * scrolling back and forth opens no player again. Under the viewer, tiles only keep the players they had.
+     */
+    posterOpen: (key: string) => open().has(key),
     pip,
     openPip: (item: MediaItem, playback?: MediaPlayback) => setPip({ item, ...playback }),
     closePip: () => setPip(undefined),
@@ -157,17 +228,32 @@ export function useMedia() {
   return value
 }
 
-function onScreen(element: Renderable, screen: { width: number; height: number }) {
+/**
+ * The share of the tile inside the screen and every scroll box around it, and whether it is within half a scroll box
+ * of them. Adds those scroll boxes to `boxes`.
+ */
+function measure(element: Renderable, screen: { width: number; height: number }, boxes: Set<ScrollBoxRenderable>) {
   const clips = [{ x: 0, y: 0, width: screen.width, height: screen.height }]
   for (let node: Renderable | null = element; node; node = node.parent) {
-    if (!node.visible) return false
-    if (node !== element && node instanceof ScrollBoxRenderable) clips.push(node.viewport)
+    if (!node.visible) return { share: 0, near: false }
+    if (node === element || !(node instanceof ScrollBoxRenderable)) continue
+    boxes.add(node)
+    const viewport = node.viewport
+    clips.push({ x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height })
   }
-  return clips.every(
-    (clip) =>
-      Math.max(element.x, clip.x) < Math.min(element.x + element.width, clip.x + clip.width) &&
-      Math.max(element.y, clip.y) < Math.min(element.y + element.height, clip.y + clip.height),
-  )
+  const rect = { x: element.x, y: element.y, width: element.width, height: element.height }
+  const area = (grow: number) => {
+    const left = Math.max(rect.x, ...clips.map((clip) => clip.x - clip.width * grow))
+    const top = Math.max(rect.y, ...clips.map((clip) => clip.y - clip.height * grow))
+    const right = Math.min(rect.x + rect.width, ...clips.map((clip) => clip.x + clip.width * (1 + grow)))
+    const bottom = Math.min(rect.y + rect.height, ...clips.map((clip) => clip.y + clip.height * (1 + grow)))
+    return Math.max(0, right - left) * Math.max(0, bottom - top)
+  }
+  return { share: area(0) / (rect.width * rect.height || 1), near: area(0.5) > 0 }
+}
+
+function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>) {
+  return a.size === b.size && [...a].every((key) => b.has(key))
 }
 
 /** Renders the registered viewer and PiP. Mount it once, inside the dialog provider and above the routes. */

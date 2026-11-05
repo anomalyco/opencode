@@ -200,10 +200,55 @@ describe("prompt local attachments", () => {
     const image = { uri: "data:image/png;base64,AAAA", path: path.join(tmp.path, "missing.png") }
     const kept = (file: string) => ({ uri: pathToFileURL(file).href, path: file })
     const gone = path.join(tmp.path, "gone.mov")
-    expect(await readKeptAttachments([image, kept(clips[0]!), kept(gone), kept(large)])).toEqual({
+    expect(await readKeptAttachments([image, kept(clips[0]!), kept(gone)], true)).toEqual({
       files: [image, { ...kept(clips[0]!), uri: "data:video/mp4;base64,AQID" }],
-      unreadable: ["gone.mov", "large.m4v"],
+      unreadable: ["gone.mov"],
     })
+  })
+
+  test("reads a kept file again up to the attachment limit, not the paste cap, and names one it leaves out", async () => {
+    await using tmp = await tmpdir()
+    // A restored video is kept under a content hash; its name is the one the user knows.
+    const restored = path.join(tmp.path, "0f".repeat(32) + ".mp4")
+    const large = path.join(tmp.path, "large.mp4")
+    await Promise.all([
+      Bun.write(restored, new Uint8Array(MAX_LOCAL_VIDEO_BYTES + 1)),
+      Bun.write(large, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1)),
+    ])
+    const kept = (file: string, name?: string) => ({ uri: pathToFileURL(file).href, path: file, name })
+
+    const result = await readKeptAttachments([kept(restored, "clip.mp4"), kept(large, "big clip.mp4")], true)
+    expect(result.files.map((file) => file.name)).toEqual(["clip.mp4"])
+    expect(result.files[0]?.uri.startsWith("data:video/mp4;base64,")).toBe(true)
+    expect(result.unreadable).toEqual(["big clip.mp4"])
+  })
+
+  test("never sends a remote server this machine's file uri unless an @ mention names the server's file", async () => {
+    await using tmp = await tmpdir()
+    const clip = path.join(tmp.path, "clip.webm")
+    await Bun.write(clip, new Uint8Array([1, 2, 3]))
+    const restored = {
+      uri: pathToFileURL(clip).href,
+      name: "clip.webm",
+      mention: { start: 0, end: 9, text: "[Video 1]" },
+    }
+    const mentioned = { uri: pathToFileURL(clip).href, mention: { start: 10, end: 20, text: "@clip.webm" } }
+
+    // A local server reads a restored file itself.
+    expect(await readKeptAttachments([restored, mentioned], true)).toEqual({
+      files: [restored, mentioned],
+      unreadable: [],
+    })
+    expect(await readKeptAttachments([restored, mentioned], false)).toEqual({
+      files: [mentioned],
+      unreadable: ["clip.webm"],
+    })
+    // With its path, the file is sent as the bytes read here, to either server.
+    const localized = { ...restored, path: clip }
+    for (const localServer of [true, false])
+      expect((await readKeptAttachments([localized], localServer)).files).toEqual([
+        { ...localized, uri: "data:video/webm;base64,AQID" },
+      ])
   })
 
   test("names the video that takes a paste of attachable files over the limit, and pastes it as text", async () => {
@@ -268,9 +313,10 @@ describe("prompt local attachments", () => {
     ]
 
     const mentions = files.map((file) => file.mention)
+    const kept = path.join(tmp.path, "prompt-media")
 
     await Bun.write(image, new Uint8Array([10, 11, 12]))
-    expect(promptFilesForServer(files, true)).toEqual([
+    expect(promptFilesForServer(files, true, kept)).toEqual([
       {
         uri: "data:image/png;base64,AQID",
         source: { type: "uri", uri: pathToFileURL(image).href },
@@ -291,7 +337,7 @@ describe("prompt local attachments", () => {
       },
       { uri: "data:image/png;base64,Cg==", name: "clipboard" },
     ])
-    expect(promptFilesForServer(files, false)).toEqual([
+    expect(promptFilesForServer(files, false, kept)).toEqual([
       { uri: "data:image/png;base64,AQID", name: "scrëen shot.png", mention: mentions[0] },
       { uri: "data:image/jpeg;base64,BwgJ", name: "photo.jpg", mention: mentions[1] },
       { uri: "data:application/pdf;base64,BAUG", name: "report.pdf", mention: mentions[2] },
@@ -299,11 +345,15 @@ describe("prompt local attachments", () => {
     ])
 
     await Bun.file(image).delete()
-    expect(promptFilesForServer(files, true)?.[0]).toEqual({
+    expect(promptFilesForServer(files, true, kept)?.[0]).toEqual({
       uri: "data:image/png;base64,AQID",
       source: { type: "uri", uri: pathToFileURL(image).href },
       name: "scrëen shot.png",
       mention: mentions[0],
     })
+
+    // The TUI's own copy of a restored video is no source the model should hear about.
+    const restored = { uri: "data:video/mp4;base64,AQID", name: "clip.mp4", path: path.join(kept, "0f.mp4") }
+    expect(promptFilesForServer([restored], true, kept)).toEqual([{ uri: restored.uri, name: "clip.mp4" }])
   })
 })

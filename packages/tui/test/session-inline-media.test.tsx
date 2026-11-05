@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { copyFile, rm } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { takeDraft } from "../src/component/prompt/draft-stash"
+import { appendToSessionPrompt, takeDraft } from "../src/component/prompt/draft-stash"
 import { MAX_LOCAL_VIDEO_BYTES } from "../src/component/prompt/local-attachment"
 import type { Config } from "../src/config"
 import { createAppFixture } from "./fixture/app"
@@ -252,7 +252,7 @@ test("a restored video reaches history as a file at once", async () => {
   const files = [{ uri: videoURI, mention: { start: 5, end: 14, text: "[Video 1]" } }]
   const prompt = { text: "Look [Video 1]", files, agents: [], skills: [], pasted: [] }
   await Bun.write(path.join(temporary.path, "prompt-stash.jsonl"), JSON.stringify({ prompt, timestamp: 1 }) + "\n")
-  await using app = await openSession({}, { state: temporary.path })
+  await using app = await openSession({}, { state: temporary.path, localServer: true })
   await app.palette("Stash pop")
   await app.waitForFrame(() => app.composer() === prompt.text)
   // Straight after the restore, before anything asynchronous could give the video a file.
@@ -263,6 +263,34 @@ test("a restored video reaches history as a file at once", async () => {
   expect(file.uri).toBe(pathToFileURL(file.path).href)
   expect(path.extname(file.path)).toBe(".mp4")
   expect(Buffer.from(await Bun.file(file.path).arrayBuffer()).toString("base64")).toBe(videoBase64)
+
+  // Sent again, even to a local server, the kept file is no source the model should hear about.
+  app.mockInput.pressArrow("up")
+  await app.waitForFrame(() => app.composer() === prompt.text)
+  app.mockInput.pressEnter()
+  await app.until(() => app.prompts.length === 1)
+  expect(app.prompts[0]?.files).toEqual(files)
+}, 20000)
+
+test("a local server's restored file video of any type gets its path at once, with the experiment off", async () => {
+  await using temporary = await tmpdir()
+  const video = path.join(temporary.path, "held.webm")
+  const image = path.join(temporary.path, "held.png")
+  await Promise.all([copyFile(videoFixture, video), copyFile(imageFixture, image)])
+  const files = [
+    { uri: pathToFileURL(video).href, name: "held.webm", mention: { start: 5, end: 14, text: "[Video 1]" } },
+    { uri: pathToFileURL(image).href, name: "held.png", mention: { start: 15, end: 24, text: "[Image 1]" } },
+  ]
+  await using app = await openSession({}, { state: temporary.path, localServer: true })
+  // As an undo puts the sent prompt back. The server reads the image itself, as before.
+  const prompt = { text: "Look [Video 1] [Image 1]", files, agents: [], skills: [], pasted: [] }
+  const composer = appendToSessionPrompt(session.id, prompt, app.renderer.widthMethod)
+  expect(composer?.current.files).toEqual([{ ...files[0], path: video }, files[1]])
+
+  app.mockInput.pressKey("c", { ctrl: true })
+  const history = path.join(temporary.path, "prompt-history.jsonl")
+  await app.until(() => Bun.file(history).size > 0)
+  expect(JSON.parse((await Bun.file(history).text()).trim()).files).toEqual([{ ...files[0], path: video }, files[1]])
 }, 20000)
 
 test("a local server's restored files show as tiles, and a video that is gone is left out with a warning", async () => {
@@ -291,7 +319,7 @@ test("a local server's restored files show as tiles, and a video that is gone is
   ])
 }, 20000)
 
-test("a remote server's restored file video gets no tile, as this terminal cannot read it", async () => {
+test("a remote server's restored file video gets no tile and is not sent, as this terminal cannot read it", async () => {
   await using temporary = await tmpdir()
   const held = path.join(temporary.path, "held.mp4")
   await copyFile(videoFixture, held)
@@ -301,6 +329,12 @@ test("a remote server's restored file video gets no tile, as this terminal canno
   await app.renderOnce()
   expect(app.videos()).toHaveLength(transcriptTiles.videos)
   expect(app.captureCharFrame()).not.toContain("held.mp4")
+
+  // Nor does the server get the uri, which would name this terminal's file.
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Could not read held.mp4 again"))
+  await app.until(() => app.prompts.length === 1)
+  expect(app.prompts[0]?.files ?? []).toEqual([])
 }, 20000)
 
 test("keeps the old image previews with the experiment off", async () => {
