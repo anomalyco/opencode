@@ -2,18 +2,19 @@
 
 ## Structure
 
-- This is a standard Astro website with a fully owned frontend.
-- Only `base` in `astro.config.ts` should know the deployment subpath. Use `import.meta.env.BASE_URL` everywhere else.
-- The documentation feature is self-contained under `src/docs/` and renders through the thin route in `src/pages/docs/`.
-- Do not add a documentation frontend framework; this package owns the UI directly.
-- Keep the installer route dynamic. The API reference imports `packages/protocol/openapi.json` directly, and `bun run generate` copies it to the gitignored `public/openapi.json`.
+- One Worker serves opencode.ai: the site in `site/` (SolidStart; its own `AGENTS.md` and `DESIGN.md`) and the V2 docs in `src/` (Astro, under `/v2`). `worker.ts` routes between them; `cloudflare.config.ts` is the only Cloudflare config. Deploy with `cf`, never Wrangler or SST.
+- www is only the website (the changelog, including `/changelog.json`, counts as site). Other endpoints belong to their own Workers: Console, update, files, stats, V1 docs, and `services/meta` for the schema and OAuth files. Legacy redirects live in `site/src/lib/legacy.ts`, each marked with why it exists; nothing may link to them.
+- Docs: only `base` in `astro.config.ts` knows the `/v2` subpath; use `import.meta.env.BASE_URL` everywhere else. The documentation feature is self-contained under `src/docs/` and renders through the thin route in `src/pages/docs/`. Do not add a documentation frontend framework.
+- Keep the installer route dynamic. The API reference imports `packages/protocol/openapi.json` directly, and `bun run generate` copies it to the gitignored `public/openapi.json`, which is served at `/v2/openapi.json` and `/openapi.json`.
+- Heavy media (video, audio, zips, 3D models) is never a Worker asset: link it with `mediaUrl()` (`site/src/lib/media.ts`), which points into the files bucket behind `/files`. The build fails if any reaches the assets.
+- The Worker holds no GitHub token. Repo numbers come from the build-time snapshot; the changelog fetches releases unauthenticated with caching and the snapshot as fallback.
 
 ## Local development
 
-- Run `bun dev` from this package and use the local URL printed by Astro.
-- Do not run `bun typecheck`, `bun run build`, or another Astro process while the dev server is running. They share the Vite dependency cache and can break the active dev server. Leave validation to the user when the dev server is active.
+- Run `bun dev` (docs) or `bun dev:site` (site) from this package and use the local URL printed.
+- Do not run `bun typecheck`, `bun run build`, or another Astro process while the docs dev server is running. They share the Vite dependency cache and can break the active dev server. Leave validation to the user when the dev server is active.
 
 ## Validation
 
-- Run `bun typecheck` and `bun run build` from this package after changes.
+- Run `bun typecheck`, `bun test` and `bun run build -- --mode dev` from this package after changes.
 - Treat validation and build errors as blockers.

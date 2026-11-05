@@ -5,7 +5,7 @@ and clients live in `packages/`.
 
 | Service                    | Purpose                                | Deployment                       |
 | -------------------------- | -------------------------------------- | -------------------------------- |
-| [`www`](./www)             | Website and V2 documentation           | `deploy-www.yml`, Wrangler       |
+| [`www`](./www)             | Website and V2 documentation           | `deploy-www.yml`, `cf`           |
 | [`updates`](./updates)     | Release metadata and update selection  | `release.yml`, Wrangler          |
 | [`files`](./files)         | Public file distribution at `/files/*` | `deploy-files.yml`, Wrangler     |
 | [`changelog`](./changelog) | Release notes at `/changelog`          | `deploy-changelog.yml`, Wrangler |
