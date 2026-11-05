@@ -45,6 +45,10 @@ export type SshWindowState = {
   readonly attempts: ReadonlyMap<string, SshAttemptState>
   /** Saved servers this window has seen, each restored once. */
   readonly restored: ReadonlySet<string>
+  /** The routed path of this visit; routing another page starts a new visit. */
+  readonly visit: string | undefined
+  /** Servers whose cover offered authentication on this visit, each once. */
+  readonly offered: ReadonlySet<string>
 }
 
 export type SshWindowEvent =
@@ -74,6 +78,15 @@ export type SshWindowEvent =
   | { readonly type: "dialog.failed"; readonly id: string; readonly attempt: number; readonly saved: boolean }
   | { readonly type: "cancel.requested"; readonly id: string; readonly saved: boolean }
   | { readonly type: "items.synced"; readonly ipcActive: boolean; readonly items: readonly SshItem[] }
+  | { readonly type: "visit.changed"; readonly path: string }
+  | {
+      readonly type: "cover.offered"
+      readonly id: string
+      readonly path: string
+      readonly dialogActive: boolean
+      readonly ipcActive: boolean
+      readonly item?: SshItem
+    }
   | { readonly type: "disposed" }
 
 export type SshWindowEffect =
@@ -103,7 +116,7 @@ export type SshWindowTransition = {
 }
 
 export function createSshWindowState(): SshWindowState {
-  return { status: "open", issued: 0, attempts: new Map(), restored: new Set() }
+  return { status: "open", issued: 0, attempts: new Map(), restored: new Set(), visit: undefined, offered: new Set() }
 }
 
 export function transitionSshWindow(state: SshWindowState, event: SshWindowEvent): SshWindowTransition {
@@ -132,6 +145,34 @@ export function transitionSshWindow(state: SshWindowState, event: SshWindowEvent
   if (event.type === "items.synced") return synced(state, event.ipcActive, event.items)
 
   if (event.type === "connect.requested") return connect(state, event)
+
+  if (event.type === "visit.changed") {
+    if (state.visit === event.path) return unchanged(state)
+
+    return { state: { ...state, visit: event.path, offered: new Set() }, effects: [] }
+  }
+
+  if (event.type === "cover.offered") {
+    if (!event.item || !selectSshCanOffer(state, event.id, event.path, event.dialogActive, event.ipcActive, event.item))
+      return unchanged(state)
+
+    // The offer is spent only here, where it starts an attempt or joins the one that already shows the prompt.
+    const next = connect(state, {
+      type: "connect.requested",
+      config: event.item.config,
+      ipcActive: true,
+      item: event.item,
+    })
+
+    return {
+      state: {
+        ...next.state,
+        visit: event.path,
+        offered: new Set([...(state.visit === event.path ? state.offered : []), event.id]),
+      },
+      effects: next.effects,
+    }
+  }
 
   const current = state.attempts.get(event.id)
 
@@ -259,11 +300,44 @@ export function selectSshError(state: SshWindowState, id: string) {
   return attempt?.status === "failed" || (attempt?.status === "waiting" && attempt.error)
 }
 
-/** This window answered the prompt main shows now. */
-export function selectSshAnswered(state: SshWindowState, id: string, item: SshItem | undefined) {
+/** The prompt this window answers now, or answered last in the attempt. */
+export function selectSshAnsweredPrompt(state: SshWindowState, id: string) {
   const attempt = state.attempts.get(id)
 
-  return !!item?.prompt && attempt?.status === "waiting" && !attempt.error && attempt.answered === item.prompt.id
+  if (attempt?.status === "answering") return attempt.prompt
+
+  if (attempt?.status === "waiting" && !attempt.error) return attempt.answered
+
+  return undefined
+}
+
+/** This window runs an attempt for the server that has not failed. */
+export function selectSshActiveAttempt(state: SshWindowState, id: string) {
+  const attempt = state.attempts.get(id)
+
+  return !!attempt && isActive(attempt)
+}
+
+/**
+ * The server's cover may offer authentication: the server waits for a sign-in nobody else answers, no dialog shows,
+ * main can answer, and the cover has not offered it on this visit.
+ */
+export function selectSshCanOffer(
+  state: SshWindowState,
+  id: string,
+  path: string,
+  dialogActive: boolean,
+  ipcActive: boolean,
+  item: SshItem | undefined,
+) {
+  return (
+    state.status === "open" &&
+    ipcActive &&
+    !dialogActive &&
+    item?.stage === "authentication" &&
+    !item.authenticatingElsewhere &&
+    !(state.visit === path && state.offered.has(id))
+  )
 }
 
 /** The server connects, here or in another window, and a new connect would only join it. */

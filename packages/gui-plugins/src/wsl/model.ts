@@ -343,26 +343,3 @@ export function addServerProbePlan(input: {
 
   if (addable) return { kind: "addable", key: `addable:${addable.key}`, plan: addable } satisfies AddServerProbePlan
 }
-
-export function createProbeFailureGate() {
-  let failed: string | undefined
-
-  return {
-    accepts(key: string) {
-      return key !== failed
-    },
-    settle(key: string, succeeded: boolean) {
-      if (!succeeded) failed = key
-    },
-    reset() {
-      failed = undefined
-    },
-  }
-}
-
-export async function runAddableProbePlan(input: {
-  plan: AddableProbePlan
-  probeAddable: (distros: string[]) => Promise<void>
-}) {
-  await input.probeAddable(input.plan.distros)
-}
