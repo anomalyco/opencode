@@ -40,9 +40,8 @@ const replay = (events: readonly OfficePagesEvent[], state: OfficePagesState = I
 describe("transitionOfficePages", () => {
   // Bug: a scroll deferred after the growth finished was never flushed.
   test("a scroll that waits for its row runs once the row mounts, after the growth finished", () => {
-    const list = pages(3)
     const waiting = replay([
-      { type: "pages.changed", pages: list },
+      { type: "pages.changed", pages: pages(3) },
       measured(800),
       { type: "scroll.requested", index: 2, y: 100, rowMounted: false },
     ])
@@ -92,6 +91,7 @@ describe("transitionOfficePages", () => {
     const first = page()
     const second = page()
     const third = page()
+
     const waiting = replay([
       { type: "pages.changed", pages: [first, second, third] },
       { type: "scroll.requested", index: 2, y: 10, rowMounted: false },

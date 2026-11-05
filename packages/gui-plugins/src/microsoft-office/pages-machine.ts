@@ -160,17 +160,15 @@ export function transitionOfficePages(state: OfficePagesState, event: OfficePage
 
   if (event.type === "row.mounted") return state.scroll?.index === event.index ? flush(state) : { state, effects: NONE }
 
+  if (event.type === "zoom.fit")
+    return { state: state.zoom === 1 ? state : { ...state, zoom: 1 }, effects: SCROLL_START }
+
   const zoom =
     event.type === "zoom.in"
       ? Math.min(PAGES_MAX_ZOOM, state.zoom * PAGES_ZOOM_STEP)
-      : event.type === "zoom.out"
-        ? Math.max(PAGES_MIN_ZOOM, state.zoom / PAGES_ZOOM_STEP)
-        : 1
+      : Math.max(PAGES_MIN_ZOOM, state.zoom / PAGES_ZOOM_STEP)
 
-  return {
-    state: zoom === state.zoom ? state : { ...state, zoom },
-    effects: event.type === "zoom.fit" ? SCROLL_START : NONE,
-  }
+  return { state: zoom === state.zoom ? state : { ...state, zoom }, effects: NONE }
 }
 
 /** The pages the column holds. */
