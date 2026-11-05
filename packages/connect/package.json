@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/connect",
+  "version": "2.2.5",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/connect"
+  },
+  "bin": {
+    "opencode-connect": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun run script/build.ts",
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@opencode/client-core": "workspace:*",
+    "@opencode/core": "workspace:*",
+    "@opencode/util": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:"
+  }
+}

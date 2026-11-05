@@ -224,6 +224,24 @@
         "@typescript/native": "catalog:",
       },
     },
+    "packages/connect": {
+      "name": "@opencode/connect",
+      "version": "2.2.5",
+      "bin": {
+        "opencode-connect": "./src/index.ts",
+      },
+      "dependencies": {
+        "@opencode/client-core": "workspace:*",
+        "@opencode/core": "workspace:*",
+        "@opencode/util": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+      },
+    },
     "packages/console/app": {
       "name": "@opencode/console-app",
       "version": "2.2.5",
@@ -1939,6 +1957,8 @@
     "@opencode/client-core": ["@opencode/client-core@workspace:packages/client-core"],
 
     "@opencode/codemode": ["@opencode/codemode@workspace:packages/codemode"],
+
+    "@opencode/connect": ["@opencode/connect@workspace:packages/connect"],
 
     "@opencode/console-app": ["@opencode/console-app@workspace:packages/console/app"],
 
