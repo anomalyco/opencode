@@ -249,7 +249,10 @@ impl Component for SpinnerView {
                 SpinnerColor::Solid(color) => *color,
                 SpinnerColor::Each(color) => color(index, char, self.glyphs.len(), glyphs.len()),
             };
-            painter.text(x, 0, glyph, Style::new().fg(color));
+            // An explicit transparent background makes OpenTUI blend an alpha glyph into the cell
+            // (`spinner-renderable.ts` draws on `"transparent"`); without one the alpha reaches the terminal
+            // as a full-strength color.
+            painter.text(x, 0, glyph, Style::new().fg(color).bg(Color::TRANSPARENT));
             x += painter.text_width(glyph) as i32;
         }
         if let Some(label) = &self.label {
