@@ -1,12 +1,13 @@
 //! Server-driven events (E.1, rows T10 to T12, `app.tsx:556-584,1338-1377`):
 //!
-//! - `tui.command.execute`, `tui.toast.show`, and `tui.session.select`, for the current location only;
+//! - `tui.command.execute`, `tui.toast.show`, `tui.session.select`, and `tui.prompt.append`
+//!   (`prompt/index.tsx:341-352`), for the current location only;
 //! - `session.deleted` of the open session goes home with a toast;
+//! - `session.execution.succeeded` of the open session reloads the usage limits (`usage.tsx:219-223`);
 //! - a toast when an MCP server of the default location fails or needs authentication, once per state.
 //!
-//! `tui.prompt.append` belongs to the prompt (E.2); `session.moved` updates the open dialog's cache, which
-//! E.11a replaced with the store's sessions. `app::mount` calls [`install`] once and `Tui::sync` calls
-//! [`sync`].
+//! `session.moved` updates the open dialog's cache, which E.11a replaced with the store's sessions.
+//! `app::mount` calls [`install`] once and `Tui::sync` calls [`sync`].
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -59,6 +60,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     if changes.location(&default) {
         mcp_toasts(tui);
     }
+    crate::dialogs::model::usage_alerts(&tui.local);
 }
 
 fn handle(tui: &Tui, event: &V2Event) {
@@ -86,6 +88,22 @@ fn handle(tui: &Tui, event: &V2Event) {
                 .duration
                 .map(|duration| Duration::from_millis(duration.max(0) as u64));
             tui.toasts.show(toast);
+        }
+        V2Event::TuiPromptAppend(event) if here(tui, event.location.as_ref()) => {
+            let prompt = tui.prompt.current.borrow().upgrade();
+            if let Some(prompt) = prompt {
+                prompt.textarea.insert(&event.data.text);
+                prompt.textarea.set_cursor_offset(prompt.text_end());
+            }
+        }
+        V2Event::SessionExecutionSucceeded(event)
+            if tui.route()
+                == (Route::Session {
+                    id: event.data.session_id.clone(),
+                })
+                && matches!(tui.local.usage(), Some(Some(_))) =>
+        {
+            tui.local.load_usage(true);
         }
         V2Event::TuiSessionSelect(event) if here(tui, event.location.as_ref()) => {
             tui.navigate(Route::Session {

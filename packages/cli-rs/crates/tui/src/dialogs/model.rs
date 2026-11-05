@@ -8,7 +8,7 @@
 //! drafts that commit sent. `model.json` writes run in order on one worker thread, because its file lock blocks.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc;
@@ -102,6 +102,10 @@ pub struct Local {
     listeners: Listeners,
     next_listener: Cell<u64>,
     usage_loading: Cell<bool>,
+    /// The usage warnings shown, once per model and level while the TUI runs (`usage.tsx` `warned`).
+    warned: RefCell<HashSet<String>>,
+    /// `--agent`, which a session without an agent draft shows over its own agent (`local.tsx:90-96`).
+    startup_agent: RefCell<Option<String>>,
     watch: RefCell<Option<Watch>>,
     layers: RefCell<Vec<Disposer>>,
     /// The in-memory `go-upsell` record (`storage.memory`).
@@ -177,6 +181,8 @@ impl Local {
             listeners: Rc::default(),
             next_listener: Cell::new(0),
             usage_loading: Cell::new(false),
+            warned: RefCell::default(),
+            startup_agent: RefCell::default(),
             watch: RefCell::new(None),
             layers: RefCell::new(Vec::new()),
             go_memory: RefCell::default(),
@@ -458,6 +464,41 @@ impl Local {
         self.state.borrow().usage.clone()
     }
 
+    /// The selected model and what the usage limits leave it, when some limit applies (`limits.usage(model)`).
+    fn current_usage(&self) -> Option<(ModelInfo, crate::dialogs::usage::ModelUsage)> {
+        let model = self.model_info(&self.current()?)?;
+        let info = self.usage().flatten()?;
+        let provider = self.provider(&model.provider_id.0);
+        let usage = crate::dialogs::usage::model_usage(&info, &model, provider.as_ref())?;
+        Some((model, usage))
+    }
+
+    /// `limitLabel` of the selected model for the prompt's metadata row: `$x left` while it runs low, in the error
+    /// color (`true`) when it cannot take another request, or `Limit reached`.
+    pub fn limit_label(&self) -> Option<(String, bool)> {
+        use crate::dialogs::usage::{Level, format_dollars, level};
+        let (model, usage) = self.current_usage()?;
+        match level(&usage, &model) {
+            Level::Plenty => None,
+            Level::Reached => Some(("Limit reached".to_owned(), true)),
+            level => Some((
+                format!("{} left", format_dollars(usage.left)),
+                level == Level::Out,
+            )),
+        }
+    }
+
+    /// The prompt's effect (`prompt/index.tsx:1578-1582`): loads the limits once when OpenCode Console serves the
+    /// selected model.
+    fn load_served_usage(&self) {
+        let served = self.current().is_some_and(|model| {
+            crate::dialogs::usage::served_by_console(self.provider(&model.provider_id).as_ref())
+        });
+        if served && self.usage().is_none() {
+            self.load_usage(false);
+        }
+    }
+
     /// `useConnected`: some integration has a connection.
     pub fn connected(&self) -> bool {
         self.state
@@ -508,6 +549,11 @@ impl Local {
                     .get(&routed.id.0)
                     .cloned()
                     .flatten()
+                    .or_else(|| {
+                        let draft = state.agent_drafts.contains_key(&routed.id.0);
+                        let startup = self.startup_agent.borrow().clone();
+                        startup.filter(|_| !draft)
+                    })
                     .or_else(|| {
                         routed
                             .session
@@ -1647,7 +1693,104 @@ pub fn install(tui: &Rc<Tui>) {
             Err(error) => log::error!("model keymap layer: {error}"),
         }
     }
+    let weak = Rc::downgrade(&local);
+    let listener = local.subscribe(move || {
+        if let Some(local) = weak.upgrade() {
+            local.load_served_usage();
+            usage_alerts(&local);
+        }
+    });
+    local.layers.borrow_mut().push(listener);
     local.load();
+}
+
+/// Applies `--agent` and `--model` once the agents, the models, and `model.json` have loaded (`app.tsx:666-678`).
+/// `model` is already parsed; an invalid one only got its toast.
+pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
+    if agent.is_none() && model.is_none() {
+        return;
+    }
+    local.startup_agent.replace(agent.clone());
+    let pending = Rc::new(RefCell::new(Some((agent, model))));
+    let listener: Rc<RefCell<Option<Disposer>>> = Rc::default();
+    let apply = {
+        let weak = Rc::downgrade(local);
+        let pending = pending.clone();
+        let listener = listener.clone();
+        move || {
+            let Some(local) = weak.upgrade() else { return };
+            if !local.ready() || !local.catalog_ready() || local.agents().is_empty() {
+                return;
+            }
+            let Some((agent, model)) = pending.borrow_mut().take() else {
+                return;
+            };
+            drop(listener.borrow_mut().take());
+            if let Some(agent) = agent {
+                local.set_agent(&agent);
+            }
+            if let Some(model) = model {
+                local.set(&model, true);
+            }
+        }
+    };
+    *listener.borrow_mut() = Some(local.subscribe(apply.clone()));
+    apply();
+}
+
+/// `useUsageAlerts` (`usage.tsx:224-251`): on a session, warns once per model as the selected model runs low and once
+/// as it reaches its limit.
+pub fn usage_alerts(local: &Local) {
+    use crate::dialogs::usage::{Level, format_dollars, format_reset, level};
+    if (local.route)().is_none() {
+        return;
+    }
+    let Some((model, usage)) = local.current_usage() else {
+        return;
+    };
+    let level = level(&usage, &model);
+    if level == Level::Plenty {
+        return;
+    }
+    let reached = level == Level::Reached;
+    let key = format!(
+        "{}/{}:{}",
+        model.provider_id.0,
+        model.id,
+        if reached { "reached" } else { "low" }
+    );
+    if !local.warned.borrow_mut().insert(key) {
+        return;
+    }
+    let weak = local.this.clone();
+    let toast = if reached {
+        ToastOptions::new(
+            Variant::Error,
+            format!("Resets {}", format_reset(usage.resets_at)),
+        )
+        .title(format!("{} limit reached", model.name))
+        .action("Switch model", move || {
+            if let Some(local) = weak.upgrade() {
+                show(&local, None);
+            }
+        })
+    } else {
+        ToastOptions::new(
+            Variant::Warning,
+            format!(
+                "{} left · resets {}",
+                format_dollars(usage.left),
+                format_reset(usage.resets_at)
+            ),
+        )
+        .title(format!("Running low on {}", model.name))
+        .action("View usage", move || {
+            if let Some(local) = weak.upgrade() {
+                crate::dialogs::usage::show(&local);
+            }
+        })
+    };
+    local.toasts.show(toast);
 }
 
 /// The agent and model the prompt shows and submits: what the user chose here (`useLocal`) once this
