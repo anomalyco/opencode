@@ -1,7 +1,8 @@
 export * as ConfigExperimental from "./experimental.js"
 
-import { Schema } from "effect"
+import { Record, Schema } from "effect"
 import { NonNegativeInt, optional } from "../schema.js"
+import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
 
@@ -9,17 +10,11 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
-  todo: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable the experimental todowrite tool. Defaults to false.",
-  }),
-  background_compaction: Schema.Boolean.pipe(optional).annotate({
-    description:
-      "Enable experimental background compaction: summarize the conversation in the background as it nears the compaction threshold, so automatic compaction does not wait for the summary. Background summaries that are never used still cost tokens. Defaults to false.",
-  }),
-  media_blob: Schema.Boolean.pipe(optional).annotate({
-    description:
-      "Store new session media once in a deduplicated blob table instead of inline in every message row. Defaults to false.",
-  }),
+  ...Record.map(ConfigFlag.registry, (description) =>
+    Schema.Boolean.pipe(optional).annotate({
+      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+    }),
+  ),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
@@ -38,12 +33,6 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description:
         "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
     }),
-  schedules: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
-  }),
-  artifacts: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
-  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

@@ -16664,6 +16664,12 @@
               "media_blob": {
                 "type": "boolean"
               },
+              "schedules": {
+                "type": "boolean"
+              },
+              "artifacts": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
@@ -16706,12 +16712,6 @@
                     "additionalProperties": false
                   }
                 ]
-              },
-              "schedules": {
-                "type": "boolean"
-              },
-              "artifacts": {
-                "type": "boolean"
               },
               "subagent_depth": {
                 "type": "integer",
