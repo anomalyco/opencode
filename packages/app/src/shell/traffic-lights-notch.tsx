@@ -88,12 +88,8 @@ export function TrafficLightsNotch(props: { ref: (element: SVGSVGElement) => voi
       style={{ display: "none" }}
     >
       <path class="fill-[var(--v2-background-bg-deep)]" />
-      {/* The hairline the panels' raised elevation draws around them. */}
-      <path
-        fill="none"
-        stroke-width="0.5"
-        class="stroke-[var(--v2-alpha-dark-12)] [[data-color-scheme=dark]_&]:stroke-[var(--v2-alpha-light-16)]"
-      />
+      {/* Matches the hairline the panels' raised elevation draws around them. */}
+      <path fill="none" stroke-width="0.5" class="stroke-[var(--v2-border-border-base)]" />
     </svg>
   )
 }
