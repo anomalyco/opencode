@@ -116,7 +116,9 @@ impl RouteView for Home {
         self.prompt.sync(tui, changes);
         self.slot.sync(tui, changes);
         // The last form closed: the prompt takes the keys back, after any open dialog.
-        if !self.forms.sync(tui, changes) {
+        let closed = self.forms.sync(tui, changes);
+        self.prompt.set_disabled(self.forms.active());
+        if !closed {
             return;
         }
         if tui.dialogs.is_open() {

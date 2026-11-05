@@ -333,6 +333,20 @@ impl SessionFrame {
             active: Cell::new(Pane::Session),
         });
         *tui.frame.session.borrow_mut() = Some(Rc::downgrade(&state));
+        // `session-frame.tsx:300-322`: while the right pane has the input, a click on the session pane gives it back.
+        let weak = Rc::downgrade(&state);
+        let owner = tui.weak();
+        state.pane.on_mouse(move |_, event| {
+            if event.kind != MouseEventKind::Up(MouseButton::Left) {
+                return;
+            }
+            if let (Some(state), Some(tui)) = (weak.upgrade(), owner.upgrade())
+                && state.active.get() == Pane::Right
+                && !tui.frame.pane_resize.resizing()
+            {
+                state.focus_session(&tui);
+            }
+        });
         state.layout(tui);
         crate::terminal::session_mounted(tui, session);
         Self { root, state }
@@ -372,6 +386,15 @@ impl SessionState {
             if let Some(target) = panel.clone() {
                 let width = if fullscreen { available as u16 } else { size };
                 let host = Host::new(tui, target, width, self.active.get() == Pane::Right);
+                // `PanelHost`'s `onMouseDown={props.onFocus}`.
+                let weak = tui.weak();
+                host.root.on_mouse(move |_, event| {
+                    if let (MouseEventKind::Down(_), Some(tui)) = (event.kind, weak.upgrade())
+                        && let Some(session) = tui.frame.session()
+                    {
+                        session.focus_right(&tui);
+                    }
+                });
                 self.right.add(&host.root);
                 *self.host.borrow_mut() = Some(host);
                 focus = true;
