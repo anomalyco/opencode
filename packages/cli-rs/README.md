@@ -44,6 +44,9 @@ cd ~/src/my-project
 ~/src/opencode/packages/cli-rs/target/release/opencode-rs -c     # continue the last session here
 ```
 
+For a smaller, faster binary to ship or measure, build with `cargo build --profile dist --bin opencode-rs` (fat
+LTO; the link takes about 10 minutes). The output is in `target/dist/`.
+
 `opencode-rs` reads the same `cli.json` (keybinds, theme, session settings) as the TypeScript TUI.
 Main keys, with the default leader `ctrl+x`:
 
