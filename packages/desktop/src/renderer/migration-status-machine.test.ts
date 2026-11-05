@@ -25,7 +25,11 @@ function poll(state: MigrationState, answer: (attempt: number) => MigrationEvent
 
 describe("migration status poll", () => {
   test("keeps the running toast and retries with backoff after a transport failure", () => {
-    const first = poll(createMigrationState().state, (attempt) => ({ type: "poll.succeeded", attempt, output: running }))
+    const first = poll(createMigrationState().state, (attempt) => ({
+      type: "poll.succeeded",
+      attempt,
+      output: running,
+    }))
 
     expect(selectMigrationToastVisible(first.state)).toBe(true)
 
@@ -45,12 +49,20 @@ describe("migration status poll", () => {
 
     expect(delays.delays).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 32_000])
 
-    const recovered = poll(delays.state, (attempt) => ({ type: "poll.succeeded", attempt, output: { status: "required" } }))
+    const recovered = poll(delays.state, (attempt) => ({
+      type: "poll.succeeded",
+      attempt,
+      output: { status: "required" },
+    }))
 
     expect(recovered.effects).toContainEqual({ type: "start-wait", attempt: expect.any(Number), delayMs: 1_000 })
     expect(selectMigrationToastVisible(recovered.state)).toBe(false)
 
-    const done = poll(recovered.state, (attempt) => ({ type: "poll.succeeded", attempt, output: { status: "completed" } }))
+    const done = poll(recovered.state, (attempt) => ({
+      type: "poll.succeeded",
+      attempt,
+      output: { status: "completed" },
+    }))
 
     expect(done.state).toEqual({ status: "completed" })
     expect(done.effects).toEqual([{ type: "cancel-timer" }])
@@ -76,7 +88,8 @@ describe("migration status poll", () => {
     expect(timedOut.effects).toEqual([{ type: "abort-poll" }, { type: "start-wait", attempt: 3, delayMs: 1_000 }])
     expect(transitionMigration(timedOut.state, { type: "poll.failed", attempt: 2 }).state).toBe(timedOut.state)
     expect(
-      transitionMigration(timedOut.state, { type: "poll.succeeded", attempt: 2, output: { status: "completed" } }).state,
+      transitionMigration(timedOut.state, { type: "poll.succeeded", attempt: 2, output: { status: "completed" } })
+        .state,
     ).toBe(timedOut.state)
   })
 

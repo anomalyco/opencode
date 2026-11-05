@@ -133,7 +133,14 @@ describe("plugin host menubar", () => {
       { type: "menubar.flushed", quitting: false },
     ])
 
-    expect(run.commands).toEqual([[{ type: "queue-menubar" }], [], [{ type: "publish-menubar" }], [{ type: "queue-menubar" }], [], []])
+    expect(run.commands).toEqual([
+      [{ type: "queue-menubar" }],
+      [],
+      [{ type: "publish-menubar" }],
+      [{ type: "queue-menubar" }],
+      [],
+      [],
+    ])
   })
 
   test("does not start following while the app quits, and drops a listing that lands during the quit", () => {

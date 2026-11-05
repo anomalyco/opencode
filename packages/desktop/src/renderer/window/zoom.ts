@@ -84,31 +84,23 @@ const run = (effect: ZoomEffect) => {
     return
   }
 
+  // The caller's promise follows main's answer, after the machine has seen it.
   if (effect.type === "set-zoom-level") {
-    void api.setZoomLevel(effect.level).then(
-      () => {
-        dispatch({ type: "level.succeeded", attempt: effect.attempt })
-        effect.reply.resolve()
-      },
-      (error: unknown) => {
-        dispatch({ type: "level.failed", attempt: effect.attempt })
-        effect.reply.reject(error)
-      },
+    const call = api.setZoomLevel(effect.level)
+    void call.then(
+      () => dispatch({ type: "level.succeeded", attempt: effect.attempt }),
+      () => dispatch({ type: "level.failed", attempt: effect.attempt }),
     )
 
-    return
+    return effect.reply.resolve(call)
   }
 
-  void api.setPinchZoomEnabled(effect.enabled).then(
-    () => {
-      dispatch({ type: "pinch.succeeded", attempt: effect.attempt })
-      effect.reply.resolve()
-    },
-    (error: unknown) => {
-      dispatch({ type: "pinch.failed", attempt: effect.attempt })
-      effect.reply.reject(error)
-    },
+  const call = api.setPinchZoomEnabled(effect.enabled)
+  void call.then(
+    () => dispatch({ type: "pinch.succeeded", attempt: effect.attempt }),
+    () => dispatch({ type: "pinch.failed", attempt: effect.attempt }),
   )
+  effect.reply.resolve(call)
 }
 
 // A renderer reload keeps the window's zoom, so seed it from main unless something newer already set it.
@@ -131,12 +123,20 @@ void api.getPinchZoomEnabled().then(
 
 api.onPinchZoomEnabledChanged((enabled) => dispatch({ type: "pinch.changed", enabled }))
 
-const setPinchZoomEnabled = (enabled: boolean) =>
-  new Promise<void>((resolve, reject) => dispatch({ type: "pinch.requested", enabled, reply: { resolve, reject } }))
+const setPinchZoomEnabled = (enabled: boolean) => {
+  const reply = Promise.withResolvers<void>()
+  dispatch({ type: "pinch.requested", enabled, reply })
+
+  return reply.promise
+}
 
 // Main saves the level and applies it to every window, then reports the new zoom back.
-const setZoomLevel = (level: DesktopZoomLevel) =>
-  new Promise<void>((resolve, reject) => dispatch({ type: "level.requested", level, reply: { resolve, reject } }))
+const setZoomLevel = (level: DesktopZoomLevel) => {
+  const reply = Promise.withResolvers<void>()
+  dispatch({ type: "level.requested", level, reply })
+
+  return reply.promise
+}
 
 // A refused step was already rolled back by the machine; the keyboard shortcuts have no caller to report it to.
 const stepZoom = (level: DesktopZoomLevel) => void setZoomLevel(level).catch(() => undefined)

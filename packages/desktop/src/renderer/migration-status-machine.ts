@@ -1,7 +1,9 @@
 import type { ExperimentalMigrationV1StatusOutput } from "@opencode/client/promise"
 
 export const MIGRATION_POLL_MS = 1_000
+
 export const MIGRATION_POLL_TIMEOUT_MS = 10_000
+
 const MAX_RETRY_EXPONENT = 5
 
 export type MigrationProgress = Extract<ExperimentalMigrationV1StatusOutput, { status: "running" }>["progress"]
@@ -47,7 +49,9 @@ export function createMigrationState(): MigrationTransition {
 export function transitionMigration(state: MigrationState, event: MigrationEvent): MigrationTransition {
   if (event.type === "disposed") {
     if (state.status === "disposed") return unchanged(state)
+
     if (state.status === "waiting") return { state: { status: "disposed" }, effects: [{ type: "cancel-timer" }] }
+
     if (state.status === "polling")
       return { state: { status: "disposed" }, effects: [{ type: "cancel-timer" }, { type: "abort-poll" }] }
 
@@ -70,17 +74,21 @@ export function transitionMigration(state: MigrationState, event: MigrationEvent
     const output = event.output
 
     if (output.status === "completed") return { state: { status: "completed" }, effects: [{ type: "cancel-timer" }] }
+
     if (output.status === "error")
       return {
         state: { status: "failed", error: output.error },
         effects: [{ type: "cancel-timer" }, { type: "show-error", error: output.error }],
       }
 
-    return wait(state.attempt + 1, 0, output.status === "running" ? output.progress : undefined, [{ type: "cancel-timer" }])
+    return wait(state.attempt + 1, 0, output.status === "running" ? output.progress : undefined, [
+      { type: "cancel-timer" },
+    ])
   }
 
   // A transport failure or a hung request says nothing about the migration: keep the toast and retry with backoff.
   const delay = MIGRATION_POLL_MS * 2 ** Math.min(state.failures, MAX_RETRY_EXPONENT)
+
   const before: MigrationEffect[] =
     event.type === "poll.timed-out" ? [{ type: "abort-poll" }] : [{ type: "cancel-timer" }]
 

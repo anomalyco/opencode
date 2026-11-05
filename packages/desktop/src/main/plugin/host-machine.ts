@@ -1,4 +1,5 @@
 export const WATCH_RETRY_MS = 1_000
+
 export const LIST_TIMEOUT_MS = 30_000
 
 /** The app's own server as main reaches it. */
@@ -51,7 +52,12 @@ export type HostCommand<Listing> =
   | { readonly type: "start-watch"; readonly attempt: number; readonly endpoint: HostEndpoint }
   | { readonly type: "schedule-watch-retry"; readonly attempt: number; readonly delayMs: number }
   | { readonly type: "cancel-watch" }
-  | { readonly type: "start-list"; readonly attempt: number; readonly endpoint: HostEndpoint; readonly timeoutMs: number }
+  | {
+      readonly type: "start-list"
+      readonly attempt: number
+      readonly endpoint: HostEndpoint
+      readonly timeoutMs: number
+    }
   | { readonly type: "cancel-list" }
   | { readonly type: "apply-listing"; readonly listing: Listing }
   | { readonly type: "log-list-error"; readonly cause: unknown }
@@ -94,6 +100,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 
     case "started":
       if (state.status === "following") return follow(state, event.endpoint, event.quitting)
+
       if (event.quitting) return unchanged(state)
 
       return follow(
@@ -127,6 +134,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 
     case "watch.ended": {
       if (state.watch.status !== "streaming" || state.watch.attempt !== event.attempt) return unchanged(state)
+
       if (event.quitting) return { state: { ...state, watch: IDLE_WATCH }, commands: [] }
       const attempt = state.nextAttempt
 
@@ -138,6 +146,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 
     case "watch.retry-due": {
       if (state.watch.status !== "retrying" || state.watch.attempt !== event.attempt) return unchanged(state)
+
       if (event.quitting || !state.endpoint) return { state: { ...state, watch: IDLE_WATCH }, commands: [] }
       const attempt = state.nextAttempt
 
@@ -149,7 +158,9 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 
     case "relist.requested": {
       if (event.quitting || !state.endpoint) return unchanged(state)
+
       if (state.watch.status !== "streaming" || state.watch.attempt !== event.watchAttempt) return unchanged(state)
+
       if (state.list.status === "listing")
         return state.list.queued
           ? unchanged(state)
@@ -160,6 +171,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 
     case "list.succeeded":
       if (!currentList(state, event.attempt)) return unchanged(state)
+
       if (event.quitting) return settleList(state, [], true)
 
       return settleList(state, [{ type: "apply-listing", listing: event.listing }], false)
@@ -193,6 +205,7 @@ export function sameHostEndpoint(a: HostEndpoint | undefined, b: HostEndpoint | 
 }
 
 const IDLE_WATCH: HostWatch = Object.freeze({ status: "idle" })
+
 const IDLE_LIST: HostList = Object.freeze({ status: "idle" })
 
 function currentList(state: Following, attempt: number) {
@@ -212,6 +225,7 @@ function follow<Listing>(
   if (quitting && same && state.watch.status === "idle" && state.list.status === "idle" && before.length === 0)
     return unchanged(state)
   const stopsList = quitting || !same
+
   const commands: HostCommand<Listing>[] = [
     ...before,
     ...(state.watch.status === "idle" ? [] : [{ type: "cancel-watch" as const }]),

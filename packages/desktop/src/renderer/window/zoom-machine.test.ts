@@ -9,7 +9,7 @@ import {
   type ZoomState,
 } from "./zoom-machine"
 
-const reply = { resolve: () => {}, reject: () => {} }
+const reply = Promise.withResolvers<void>()
 
 function replay(events: readonly ZoomEvent[], from = createZoomState()) {
   return events.reduce((state, event) => transitionZoom(state, event).state, from)

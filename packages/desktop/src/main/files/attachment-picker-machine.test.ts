@@ -96,7 +96,10 @@ describe("picked file authorizations", () => {
       { type: "read.requested", sender: 2, token: "u", path: "b.txt" },
     ])
 
-    expect(run.commands[0]).toEqual([{ type: "watch-sender", sender: 1 }, { type: "picker-opened", picker: 1 }])
+    expect(run.commands[0]).toEqual([
+      { type: "watch-sender", sender: 1 },
+      { type: "picker-opened", picker: 1 },
+    ])
     expect(run.commands.slice(6)).toEqual([
       [{ type: "unwatch-sender", sender: 1 }],
       [{ type: "reject", reason: "not-selected" }],

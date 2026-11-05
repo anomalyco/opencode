@@ -98,6 +98,7 @@ export function transitionPickedFiles(state: PickedFileState, event: PickedFileE
       const paths = [...new Set(event.paths)]
 
       if (paths.length === 0) return watched(state, { ...state, pickers }, [sender], [])
+
       const selection: PickedSelection = {
         sender,
         remaining: event.budget,

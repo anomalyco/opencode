@@ -1,16 +1,17 @@
 import type { DesktopZoomLevel } from "@opencode/app/desktop-menu"
 
 const MAX_ZOOM_LEVEL = 10
+
 const MIN_ZOOM_LEVEL = 0.2
+
 const WHEEL_PINCH_THRESHOLD = 20
+
 const WHEEL_PINCH_STEP = 0.2
 
 export const WHEEL_PINCH_END_DELAY = 160
 
-export type ZoomReply = {
-  readonly resolve: () => void
-  readonly reject: (error: unknown) => void
-}
+/** Settles the caller's promise once main answers. */
+export type ZoomReply = PromiseWithResolvers<void>
 
 // Whether a Ctrl+wheel gesture zooms the page. `updating` keeps the previous value to restore if main refuses it.
 export type PinchSetting =
@@ -158,6 +159,7 @@ export function transitionZoom(state: ZoomState, event: ZoomEvent): ZoomTransiti
     case "zoom.changed": {
       // Main reports each level it applies; a newer level this renderer asked for may still be on its way.
       const pending = state.request?.kind === "level" && state.request.target !== event.level
+
       const next: IdleZoom = {
         ...idle(state),
         factor: clampZoom(event.factor),
@@ -173,6 +175,7 @@ export function transitionZoom(state: ZoomState, event: ZoomEvent): ZoomTransiti
     case "level.requested": {
       const attempt = state.nextAttempt
       const effect: ZoomEffect = { type: "set-zoom-level", attempt, level: event.level, reply: event.reply }
+
       const next: IdleZoom = {
         ...idle(state),
         factorSeeded: true,
@@ -233,9 +236,13 @@ function clampZoom(value: number) {
 
 // Frozen effect lists keep wheel frames free of allocations beyond the next state.
 const NO_EFFECTS: readonly ZoomEffect[] = Object.freeze([])
+
 const ARM_PINCH_TIMER: ZoomEffect = Object.freeze({ type: "arm-pinch-timer" })
+
 const CANCEL_PINCH_TIMER: ZoomEffect = Object.freeze({ type: "cancel-pinch-timer" })
+
 const ARM_TIMER: readonly ZoomEffect[] = Object.freeze([ARM_PINCH_TIMER])
+
 const CANCEL_TIMER: readonly ZoomEffect[] = Object.freeze([CANCEL_PINCH_TIMER])
 
 function wheel(state: ZoomState, delta: number): ZoomTransition {

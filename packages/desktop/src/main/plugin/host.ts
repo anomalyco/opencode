@@ -135,6 +135,15 @@ type SidecarClient = {
   unavailable?: OpenCodeClient
 }
 
+/** What following the app's own server holds open: its credential subscription, stream, listing and timers. */
+type HostResources = {
+  unfollow?: () => void
+  watch?: AbortController
+  watchTimer?: ReturnType<typeof setTimeout>
+  list?: AbortController
+  listTimer?: ReturnType<typeof setTimeout>
+}
+
 /** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
 type Method = IpcImpl<IpcSpec>[string]
 
@@ -421,14 +430,7 @@ export function createHost(input: {
   // Follows the app's own server, as the TUI does: lists its plugins on each connection and each `plugin.updated`.
   // Every connection and reconnect of the server starts a new follow, so a new endpoint is followed at once.
   let following = createHostState()
-
-  const resources: {
-    unfollow?: () => void
-    watch?: AbortController
-    watchTimer?: ReturnType<typeof setTimeout>
-    list?: AbortController
-    listTimer?: ReturnType<typeof setTimeout>
-  } = {}
+  const resources: HostResources = {}
 
   const quitting = () => isQuitting(input.appState())
 
