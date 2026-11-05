@@ -38,7 +38,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
   // in order even when a flush for a project the page left is still queued when the page comes back to it.
   const inflight = new Map<string, Promise<void>>()
 
-  const enqueue = (target: ProjectTarget, send: () => Promise<unknown>) => {
+  const enqueue = (target: ProjectTarget, send: () => Promise<void>) => {
     const key = `${target.id ?? ""}\n${target.worktree}`
     const next = (inflight.get(key) ?? Promise.resolve()).then(send, send)
     inflight.set(
@@ -60,13 +60,13 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     )
   }
 
-  const request = (target: ProjectTarget, patch: ProjectPatch, signal: AbortSignal) => {
+  const request = (target: ProjectTarget, patch: ProjectPatch, signal: AbortSignal): Promise<void> => {
     if (target.id && target.id !== "global") {
       const projectID = target.id
 
-      return serverCtx.sdk.api.project
-        .update({ projectID, ...patch }, { signal })
-        .then((project) => serverCtx.sync.project.update(project))
+      return serverCtx.sdk.api.project.update({ projectID, ...patch }, { signal }).then((project) => {
+        serverCtx.sync.project.update(project)
+      })
     }
 
     return Promise.try(() => serverCtx.sync.project.meta(target.worktree, patch))
