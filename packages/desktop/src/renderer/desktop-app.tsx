@@ -271,7 +271,7 @@ function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void })
 
 function DesktopEffects(props: { api: ElectronAPI }) {
   const command = useCommand()
-  bindDesktopMenu((id) => command.trigger(id))
+  onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
 
   createEffect(() => {
