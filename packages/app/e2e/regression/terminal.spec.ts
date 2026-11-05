@@ -327,7 +327,7 @@ test("a terminal list the server never answers says so, and Try again lists the 
   await page.clock.install()
   await page.reload()
   await list.arrived
-  await expect(side(page).getByText("Loading terminal.", { exact: true })).toBeVisible()
+  await expect(side(page).getByText("Loading terminal…", { exact: true })).toBeVisible()
   // The request budget, `TERMINAL_REQUEST_TIMEOUT_MS`.
   await page.clock.fastForward(15_000)
 
