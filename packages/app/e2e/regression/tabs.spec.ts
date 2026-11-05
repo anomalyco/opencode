@@ -1856,6 +1856,22 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
+test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
+  const time = { created: T0, updated: T0, idle: T0 + 1 }
+
+  await mockWorkspace(page, {
+    name: "FailedTabs",
+    sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
+  })
+  await page.goto(sessionHref(a.id))
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  await expect(tab(b.id).locator('[data-mark="failed"]')).toBeVisible()
+  await expect(tab(b.id).locator('[data-mark="unread"]')).toBeHidden()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-mark="failed"]')).toBeHidden()
+})
+
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"

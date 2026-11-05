@@ -25,6 +25,10 @@
   background: var(--v2-state-fg-warning);
 }
 
+[data-titlebar-tab] :is([data-mark="failed"], [data-status="failed"] [data-slot="tab-avatar-unread-dot"]) {
+  background: var(--v2-state-fg-danger);
+}
+
 [data-titlebar-tab] [data-slot="tab-avatar-unread-dot"] {
   position: absolute;
   display: none;
@@ -52,8 +56,14 @@
 
 [data-titlebar-tab][data-status="busy"] [data-mark="busy"],
 [data-titlebar-tab][data-status="attention"] [data-mark="attention"],
-[data-titlebar-tab][data-status="unread"] [data-mark="unread"] {
+[data-titlebar-tab][data-status="unread"] [data-mark="unread"],
+[data-titlebar-tab][data-status="failed"] [data-mark="failed"] {
   display: block;
+}
+
+/* The muted spinner's dim dots vanish against the dark tab, leaving only the head visible. */
+[data-color-scheme="dark"] [data-titlebar-tab] [data-mark="busy"] {
+  color: var(--v2-icon-icon-base);
 }
 
 [data-titlebar-tab] [data-slot="tab-close"] > button {
@@ -392,13 +402,17 @@
     height: 6px;
   }
 
-  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"])
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"], [data-status="failed"]):not(
+      [data-orientation="vertical"]
+    )
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
   }
 
-  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"]):dir(rtl)
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"], [data-status="failed"]):not(
+      [data-orientation="vertical"]
+    ):dir(rtl)
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
