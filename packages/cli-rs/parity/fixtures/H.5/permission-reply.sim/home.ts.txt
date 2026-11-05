@@ -18,7 +18,7 @@
              ┃
              ┃  Build · Simulated Model Simulation
              ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-             /…/.cac…/tmp/                      /work  shift+tab agents  ctrl+p commands
+             /…/opencode…/                      /work  shift+tab agents  ctrl+p commands
 
 
 
