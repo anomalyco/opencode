@@ -15,6 +15,7 @@ use opencode_api::generated::SessionID;
 use opencode_local::cli_config::TabsLayout;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -128,12 +129,7 @@ pub fn install(tui: &Rc<Tui>, shell: &View) {
     if let Some(storage) = tui.storage() {
         reload(tui, &storage);
     }
-    let weak = tui.weak();
-    tui.app.on_resize(move |_, _, _| {
-        if let Some(tui) = weak.upgrade() {
-            refresh(&tui);
-        }
-    });
+    tui.app.on_resize(bind!(tui, |tui, _, _, _| refresh(&tui)));
     install_commands(tui);
     refresh(tui);
 }
@@ -224,14 +220,15 @@ fn tick(tui: &Tui) {
         return;
     }
     frame.ticking.set(true);
-    let weak = tui.weak();
-    tui.app.set_timeout(crate::tabs::pulse::FRAME, move |_| {
-        let Some(tui) = weak.upgrade() else { return };
-        tui.frame.ticking.set(false);
-        strip::tick(&tui.frame.strip, crate::tabs::pulse::FRAME);
-        rail::tick(&tui.frame.rail, crate::tabs::pulse::FRAME);
-        tick(&tui);
-    });
+    tui.app.set_timeout(
+        crate::tabs::pulse::FRAME,
+        bind!(tui, |tui, _| {
+            tui.frame.ticking.set(false);
+            strip::tick(&tui.frame.strip, crate::tabs::pulse::FRAME);
+            rail::tick(&tui.frame.rail, crate::tabs::pulse::FRAME);
+            tick(&tui);
+        }),
+    );
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -399,12 +396,7 @@ impl SessionState {
     fn set_active(&self, tui: &Tui, pane: Pane) -> Pane {
         let before = self.active.replace(pane);
         if before != pane {
-            let weak = tui.weak();
-            tui.app.defer(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    tui.resync();
-                }
-            });
+            tui.app.defer(bind!(tui, |tui, _| tui.resync()));
         }
         before
     }
@@ -484,13 +476,11 @@ pub(crate) fn focus_session(tui: &Tui) {
 fn install_commands(tui: &Rc<Tui>) {
     let weak = tui.weak();
     let run = |focus: fn(&SessionState, &Tui)| {
-        let weak = weak.clone();
-        move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(weak, |tui, _: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
             if let Some(session) = tui.frame.session() {
                 focus(&session, &tui);
             }
-        }
+        })
     };
     let right_pane = {
         let weak = weak.clone();

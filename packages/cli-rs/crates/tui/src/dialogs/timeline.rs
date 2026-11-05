@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use chrono::{Local, TimeZone};
 use opencode_api::generated::{SessionID, SessionMessageInfo};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::select::{self, SelectOption, SelectProps};
 
@@ -21,14 +22,11 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
         .into_iter()
         .rev()
         .map(|(id, title, created)| {
-            let weak = tui.weak();
             let session = session.clone();
             let message = id.clone();
-            SelectOption::new(title, id).footer(time(created)).on_select(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    crate::dialogs::message::show(&tui, session.clone(), message.clone());
-                }
-            })
+            SelectOption::new(title, id)
+                .footer(time(created))
+                .on_select(bind!(tui, |tui, _| crate::dialogs::message::show(&tui, session.clone(), message.clone())))
         })
         .collect();
     let weak = tui.weak();
@@ -37,11 +35,8 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
             let mut props = SelectProps::new("Timeline", options);
             props.search_in_title = true;
             props.title_placeholder = Some("Search timeline".to_owned());
-            props.on_move = Some(Rc::new(move |option: &SelectOption<String>| {
-                if let Some(tui) = weak.upgrade() {
-                    on_move(&tui, option.value.clone());
-                }
-            }));
+            props.on_move =
+                Some(Rc::new(bind!(weak, |tui, option: &SelectOption<String>| on_move(&tui, option.value.clone()))));
             select::select(cx, props).0
         },
         None,

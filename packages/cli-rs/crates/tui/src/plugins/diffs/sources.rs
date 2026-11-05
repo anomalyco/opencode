@@ -5,6 +5,7 @@
 use std::rc::{Rc, Weak};
 
 use opencode_store::SessionStatus;
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::select::{self, SelectOption, SelectProps};
 
@@ -40,14 +41,11 @@ pub fn open(viewer: &Viewer) {
             props.skip_filter = true;
             props.render_filter = false;
             props.current = Some(current);
-            props.on_select = Some(Rc::new(move |option: &SelectOption<Choice>| {
-                let Some(viewer) = weak.upgrade() else { return };
+            props.on_select = Some(Rc::new(bind!(weak, |viewer, option: &SelectOption<Choice>| {
                 let Some(tui) = viewer.tui() else { return };
                 let choice = option.value;
-                let weak = weak.clone();
                 // The select's handler returns before the dialog it runs in closes or is replaced.
-                tui.app.defer(move |_| {
-                    let Some(viewer) = weak.upgrade() else { return };
+                tui.app.defer(bind!(weak, |viewer, _| {
                     match choice {
                         Choice::Source(mode) => {
                             if let Some(tui) = viewer.tui() {
@@ -58,8 +56,8 @@ pub fn open(viewer: &Viewer) {
                         }
                         Choice::Base => super::base_branch::open(&viewer),
                     }
-                });
-            }));
+                }));
+            })));
             select::select(cx, props).0
         },
         None,

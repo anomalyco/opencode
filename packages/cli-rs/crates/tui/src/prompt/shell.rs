@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
@@ -17,12 +18,7 @@ pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {
         Condition::when(move || weak.upgrade().is_some_and(|prompt| check(&prompt)))
     };
     let set = |mode: Mode| {
-        let weak = Rc::downgrade(inner);
-        move |_: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| {
-            if let Some(prompt) = weak.upgrade() {
-                prompt.set_mode(mode);
-            }
-        }
+        bind!(inner, |prompt, _: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| prompt.set_mode(mode))
     };
     let inline = |key: &str, title: &str, mode: Mode| TuiCommand::inline(key, set(mode)).title(title).group("Prompt");
     vec![

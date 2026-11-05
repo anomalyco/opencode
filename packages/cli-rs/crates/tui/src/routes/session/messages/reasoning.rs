@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantReasoning};
+use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
@@ -86,23 +87,18 @@ impl Reasoning {
             painted: RefCell::new(Painted::None),
             animations: cx.animations,
         });
-        let weak = Rc::downgrade(&inner);
-        inner.header.on_click(move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.header.on_click(bind!(inner, |inner, _, _| {
             if !inner.state.borrow().hide {
                 return;
             }
             inner.expanded.set(!inner.expanded.get());
             inner.layout();
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.header.on_hover(move |_, hovered| {
-            if let Some(inner) = weak.upgrade() {
-                inner.header.mouse_pointer(opencode_ui::click_pointer(inner.state.borrow().hide));
-                inner.hover.set(hovered);
-                inner.layout();
-            }
-        });
+        }));
+        inner.header.on_hover(bind!(inner, |inner, _, hovered| {
+            inner.header.mouse_pointer(opencode_ui::click_pointer(inner.state.borrow().hide));
+            inner.hover.set(hovered);
+            inner.layout();
+        }));
         Self(inner)
     }
 

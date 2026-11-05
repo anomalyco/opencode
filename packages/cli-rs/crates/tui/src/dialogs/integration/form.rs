@@ -11,6 +11,7 @@ use opencode_api::generated::{
     FormAnswer, FormBooleanField, FormExternalField, FormField, FormMultiselectField, FormStringField, FormValue,
     FormWhen, FormWhenOp, FormWhenValue,
 };
+use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
@@ -546,14 +547,13 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
             cx,
             HeaderProps {
                 title: title.clone(),
-                on_close: Some(Rc::new(move || {
-                    let Some(state) = back.upgrade() else { return };
+                on_close: Some(Rc::new(bind!(back, |state| {
                     if state.editing.get() {
                         state.back();
                         return;
                     }
                     state.cx.dialogs.clear();
-                })),
+                }))),
                 ..HeaderProps::default()
             },
         );
@@ -572,14 +572,7 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
 impl Choice {
     fn layers(self: &Rc<Self>) {
         let command = |id: &str, title: &str, run: fn(&Rc<Choice>)| {
-            let weak = Rc::downgrade(self);
-            TuiCommand::new(id, move |_, _| {
-                if let Some(state) = weak.upgrade() {
-                    run(&state);
-                }
-            })
-            .title(title)
-            .group("Form")
+            TuiCommand::new(id, bind!(self, |state, _, _| run(&state))).title(title).group("Form")
         };
         let not_editing = {
             let weak = Rc::downgrade(self);
@@ -605,13 +598,9 @@ impl Choice {
             priority: 1,
             commands: vec![
                 command("dialog.prompt.submit", "Submit answer", Choice::submit_text),
-                TuiCommand::inline("escape", move |_, _| {
-                    if let Some(state) = back.upgrade() {
-                        state.back();
-                    }
-                })
-                .title("Back to answers")
-                .group("Form"),
+                TuiCommand::inline("escape", bind!(back, |state, _, _| state.back()))
+                    .title("Back to answers")
+                    .group("Form"),
             ],
             ..KeymapLayer::default()
         });
@@ -737,12 +726,7 @@ impl Choice {
 
     fn render_footer(self: &Rc<Self>) {
         let action = |title: &str, key: &str, run: fn(&Rc<Choice>)| {
-            let weak = Rc::downgrade(self);
-            FooterAction::new(title).key(key).on_trigger(move || {
-                if let Some(state) = weak.upgrade() {
-                    run(&state);
-                }
-            })
+            FooterAction::new(title).key(key).on_trigger(bind!(self, |state| run(&state)))
         };
         let secondary = if self.editing.get() {
             vec![action("submit", "enter", Choice::submit_text), action("back", "esc", Choice::back)]

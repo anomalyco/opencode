@@ -5,6 +5,7 @@
 use std::rc::Rc;
 
 use opencode_api::generated::SessionID;
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::select::{self, SelectOption, SelectProps};
 
@@ -20,14 +21,13 @@ pub fn show(tui: &Tui, session: SessionID, message: String) {
             // `renderFilter={!newDesigns()}`.
             props.render_filter = false;
             let (weak, session, message) = (weak.clone(), session.clone(), message.clone());
-            props.on_select = Some(Rc::new(move |option: &SelectOption<Action>| {
-                let Some(tui) = weak.upgrade() else { return };
+            props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<Action>| {
                 queued::mutate(&tui, &session, option.value, &message, None, |tui, done| {
                     if done {
                         tui.dialogs.clear();
                     }
                 });
-            }));
+            })));
             select::select(cx, props).0
         },
         None,

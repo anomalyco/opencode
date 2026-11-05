@@ -4,6 +4,7 @@
 
 use std::rc::Weak;
 
+use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -122,11 +123,7 @@ fn close(viewer: &Weak<Viewer>) {
         return;
     };
     let viewer = viewer.clone();
-    tui.app.defer(move |_| {
-        if let Some(viewer) = viewer.upgrade() {
-            drop(viewer.menu.take());
-        }
-    });
+    tui.app.defer(bind!(viewer, |viewer, _| drop(viewer.menu.take())));
 }
 
 /// The menu's one action: closes it, then toggles the file's mark (`run`).
@@ -135,11 +132,8 @@ fn run(viewer: &Weak<Viewer>, file: usize) {
         return;
     };
     let viewer = viewer.clone();
-    tui.app.defer(move |_| {
-        let Some(viewer) = viewer.upgrade() else {
-            return;
-        };
+    tui.app.defer(bind!(viewer, |viewer, _| {
         drop(viewer.menu.take());
         viewer.toggle_reviewed(Some(file));
-    });
+    }));
 }

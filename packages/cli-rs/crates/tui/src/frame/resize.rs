@@ -6,6 +6,7 @@ use std::cell::Cell;
 use std::rc::{Rc, Weak};
 use std::time::{Duration, Instant};
 
+use opencode_ui::bind;
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use opentui::prelude::*;
 
@@ -151,11 +152,7 @@ impl Component for Handle {
             _ => return false,
         }
         let weak = self.tui.clone();
-        cx.defer(move |_| {
-            if let Some(tui) = weak.upgrade() {
-                super::refresh(&tui);
-            }
-        });
+        cx.defer(bind!(weak, |tui, _| super::refresh(&tui)));
         true
     }
 }

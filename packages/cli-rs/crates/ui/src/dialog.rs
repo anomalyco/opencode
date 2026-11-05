@@ -9,6 +9,7 @@
 //! The kit draws the dialogs as the TUI does with the `new-designs` experiment on (`config/index.tsx:394-397`),
 //! the only design the Rust client implements.
 
+use crate::bind;
 use crate::keymap::{KeymapLayer, TuiKeymap};
 use crate::theme::{Surface, Theme};
 use opentui::keymap::{Condition, Disposer};
@@ -126,8 +127,7 @@ impl Dialogs {
             Condition::When(Rc::new(move || weak.upgrade().is_some_and(|inner| !inner.stack.borrow().is_empty())))
         };
         let close = |ctrl_c: bool, weak: Weak<Inner>| {
-            move |_: Option<&str>, _: Option<&KeyEvent>| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(weak, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
                 let dialogs = Dialogs(inner);
                 if dialogs.0.app.selected_text().is_some() {
                     dialogs.0.app.clear_selection();
@@ -137,7 +137,7 @@ impl Dialogs {
                     return;
                 }
                 dialogs.pop();
-            }
+            })
         };
         let layer = self.0.keymap.layer(KeymapLayer {
             mode: Some(MODAL_MODE.to_owned()),
@@ -155,10 +155,7 @@ impl Dialogs {
         *self.0.layer.borrow_mut() = layer.ok();
 
         let backdrop_weak = weak.clone();
-        self.0.backdrop.on_mouse(move |_cx, event| {
-            let Some(inner) = backdrop_weak.upgrade() else {
-                return;
-            };
+        self.0.backdrop.on_mouse(bind!(backdrop_weak, |inner, _cx, event| {
             match event.kind {
                 // TS asks whether a selection exists. A press on text has started a drag by now, so a drag that
                 // starts inside the panel keeps the dialog open.
@@ -173,9 +170,8 @@ impl Dialogs {
                 }
                 _ => {}
             }
-        });
-        self.0.panel.on_mouse(move |cx, event| {
-            let Some(inner) = weak.upgrade() else { return };
+        }));
+        self.0.panel.on_mouse(bind!(weak, |inner, cx, event| {
             if !matches!(event.kind, MouseEventKind::Up(_)) {
                 return;
             }
@@ -185,13 +181,9 @@ impl Dialogs {
             }
             inner.dismiss.set(false);
             cx.stop_propagation();
-        });
+        }));
         let resize = Rc::downgrade(&self.0);
-        self.0.app.on_resize(move |_cx, _, _| {
-            if let Some(inner) = resize.upgrade() {
-                Dialogs(inner).layout_frame();
-            }
-        });
+        self.0.app.on_resize(bind!(resize, |inner, _cx, _, _| Dialogs(inner).layout_frame()));
     }
 
     /// Replaces the stack with one dialog, closing the ones open before (TS `replace`).

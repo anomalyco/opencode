@@ -4,6 +4,7 @@
 use std::rc::Rc;
 
 use opencode_api::generated::{PersistentPtyInfo, SessionID};
+use opencode_ui::bind;
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
@@ -43,14 +44,15 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
 
 pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
     let command = |id: &str, title: &str, run: fn(&Rc<Inner>, &Tui)| {
-        let weak = Rc::downgrade(inner);
-        TuiCommand::new(id, move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
-            run(&inner, &tui);
-        })
+        TuiCommand::new(
+            id,
+            bind!(inner, |inner, _, _| {
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                run(&inner, &tui);
+            }),
+        )
         .title(title)
         .group("Composer")
     };
@@ -113,33 +115,27 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
             None => "+ New terminal".to_owned(),
         };
         let hover = {
-            let weak = Rc::downgrade(inner);
-            move || {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(inner, |inner| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 if inner.terminals.borrow_mut().selected.replace(index) != Some(index) {
                     inner.redraw_later(&tui);
                 }
-            }
+            })
         };
         let click = {
-            let weak = Rc::downgrade(inner);
-            move || {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(inner, |inner| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 inner.terminals.borrow_mut().selected = Some(index);
-                let weak = Rc::downgrade(&inner);
-                tui.app.defer(move |_| {
-                    let Some(inner) = weak.upgrade() else { return };
+                tui.app.defer(bind!(inner, |inner, _| {
                     if let Some(tui) = inner.tui.upgrade() {
                         select(&inner, &tui);
                     }
-                });
-            }
+                }));
+            })
         };
         inner.body.add(&row(tui, theme, state, Label { text: label, status: None, truncate: true }, hover, click));
     }

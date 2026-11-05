@@ -10,6 +10,7 @@ use std::rc::Rc;
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
 };
+use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::{canonical_tool_name, tool_display_content, tool_display_metadata};
@@ -348,17 +349,13 @@ impl InlineTool {
             painted: RefCell::new(Painted::None),
             click: RefCell::default(),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.root.on_hover(bind!(inner, |inner, _, hovered| {
             let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable || state.failed());
             inner.root.mouse_pointer(opencode_ui::click_pointer(clickable));
             inner.hover.set(hovered && clickable);
             inner.recolor();
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_click(move |cx, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        }));
+        inner.root.on_click(bind!(inner, |inner, cx, _| {
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
@@ -373,7 +370,7 @@ impl InlineTool {
             if let Some(click) = click {
                 click();
             }
-        });
+        }));
         Self(inner)
     }
 
@@ -573,19 +570,15 @@ impl BlockTool {
             hover: Cell::new(false),
             click: RefCell::default(),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.root.on_hover(bind!(inner, |inner, _, hovered| {
             let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable);
             inner.root.mouse_pointer(opencode_ui::click_pointer(clickable));
             inner.hover.set(hovered && clickable);
             // `decrease` finds the token by reference, so it takes the theme's own field.
             let raised = &inner.theme.background.raised.base;
             inner.root.bg(if inner.hover.get() { inner.theme.decrease(raised, 1) } else { *raised });
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_click(move |cx, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        }));
+        inner.root.on_click(bind!(inner, |inner, cx, _| {
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
@@ -594,7 +587,7 @@ impl BlockTool {
             if let (true, Some(click)) = (clickable, click) {
                 click();
             }
-        });
+        }));
         Self(inner)
     }
 

@@ -18,6 +18,7 @@ use opencode_api::generated::{
     WorktreeDirectory, WorktreeListInput, WorktreeRefreshInput, WorktreeRemoveInput,
 };
 use opencode_store::Location;
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::motion::Spinner;
 use opencode_ui::path::abbreviate_home;
@@ -163,7 +164,6 @@ impl Workspaces {
         let directory = info.map_or_else(|| tui.directory.clone(), |info| info.directory.0);
         let client = tui.data.client().clone();
         let project = self.props.project_id.clone();
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
                 let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
@@ -174,17 +174,14 @@ impl Workspaces {
                     .filter(|result| result.project.id == project)
                     .map(|result| result.project.directory.0)
             },
-            move |_, directory| {
-                let Some(workspaces) = weak.upgrade() else {
-                    return;
-                };
+            bind!(self, |workspaces, _, directory| {
                 {
                     let mut state = workspaces.state.borrow_mut();
                     state.project_loading = false;
                     state.loaded_project = directory;
                 }
                 workspaces.rebuild();
-            },
+            }),
         );
     }
 
@@ -195,13 +192,9 @@ impl Workspaces {
         self.state.borrow_mut().loading = true;
         let client = tui.data.client().clone();
         let input = WorktreeListInput { project_id: self.props.project_id.clone() };
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move { client.worktree_list(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(workspaces) = weak.upgrade() else {
-                    return;
-                };
+            bind!(self, |workspaces, _, result| {
                 let refresh = {
                     let mut state = workspaces.state.borrow_mut();
                     state.loading = false;
@@ -223,7 +216,7 @@ impl Workspaces {
                     Some(then) => then(&workspaces),
                     None => workspaces.rebuild(),
                 }
-            },
+            }),
         );
     }
 
@@ -509,34 +502,17 @@ impl Workspaces {
                                 .as_any()
                         }
                     }));
-                    props.on_select = Some(Rc::new({
-                        let weak = weak.clone();
-                        move |option: &SelectOption<Selection>| {
-                            let Some(workspaces) = weak.upgrade() else {
-                                return;
-                            };
-                            let Some(tui) = workspaces.tui() else { return };
-                            let value = option.value.clone();
-                            let run = workspaces.props.on_select.clone();
-                            let weak = tui.weak();
-                            tui.app.defer(move |_| {
-                                if let Some(tui) = weak.upgrade() {
-                                    run(&tui, value);
-                                }
-                            });
+                    props.on_select = Some(Rc::new(bind!(weak, |workspaces, option: &SelectOption<Selection>| {
+                        let Some(tui) = workspaces.tui() else { return };
+                        let value = option.value.clone();
+                        let run = workspaces.props.on_select.clone();
+                        tui.app.defer(bind!(tui, |tui, _| run(&tui, value)));
+                    })));
+                    props.on_move = Some(Rc::new(bind!(weak, |workspaces, _: &SelectOption<Selection>| {
+                        if workspaces.state.borrow_mut().to_delete.take().is_some() {
+                            workspaces.refresh_later();
                         }
-                    }));
-                    props.on_move = Some(Rc::new({
-                        let weak = weak.clone();
-                        move |_: &SelectOption<Selection>| {
-                            let Some(workspaces) = weak.upgrade() else {
-                                return;
-                            };
-                            if workspaces.state.borrow_mut().to_delete.take().is_some() {
-                                workspaces.refresh_later();
-                            }
-                        }
-                    }));
+                    })));
                     if !show_error {
                         props.actions = actions(&weak, session);
                     }
@@ -564,16 +540,12 @@ impl Workspaces {
 
     fn refresh_later(self: &Rc<Self>) {
         let Some(tui) = self.tui() else { return };
-        let weak = Rc::downgrade(self);
-        tui.app.defer(move |_| {
-            let Some(workspaces) = weak.upgrade() else {
-                return;
-            };
+        tui.app.defer(bind!(self, |workspaces, _| {
             let select = workspaces.select.borrow().clone();
             if let Some(select) = select {
                 select.set_options(workspaces.options());
             }
-        });
+        }));
     }
 
     /// `remove`: the first press marks the worktree, the second deletes it.
@@ -753,8 +725,7 @@ impl Workspaces {
         let Some(tui) = self.tui() else { return };
         let workspaces = self.clone();
         let weak = tui.weak();
-        tui.app.defer(move |_| {
-            let Some(tui) = weak.upgrade() else { return };
+        tui.app.defer(bind!(weak, |tui, _| {
             let run = workspaces.props.on_select.clone();
             let weak = tui.weak();
             super::worktree_name::show(
@@ -765,7 +736,7 @@ impl Workspaces {
                     }
                 }),
             );
-        });
+        }));
     }
 
     /// `move`: moves the open session to the selected directory.
@@ -792,23 +763,15 @@ impl Workspaces {
 /// The footer actions: move (in a session), new, delete, and refresh.
 fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection>> {
     let selected = |command: &str, title: &str, run: fn(&Rc<Workspaces>, &SelectOption<Selection>)| {
-        let weak = weak.clone();
-        SelectAction::new(command, title, move |option: &SelectOption<Selection>| {
-            if let Some(workspaces) = weak.upgrade() {
-                run(&workspaces, option);
-            }
-        })
+        SelectAction::new(
+            command,
+            title,
+            bind!(weak, |workspaces, option: &SelectOption<Selection>| run(&workspaces, option)),
+        )
     };
-    let dialog = |command: &str, title: &str, run: fn(&Rc<Workspaces>)| {
-        let weak = weak.clone();
-        SelectAction {
-            run: ActionRun::Dialog(Rc::new(move || {
-                if let Some(workspaces) = weak.upgrade() {
-                    run(&workspaces);
-                }
-            })),
-            ..SelectAction::new(command, title, |_: &SelectOption<Selection>| {})
-        }
+    let dialog = |command: &str, title: &str, run: fn(&Rc<Workspaces>)| SelectAction {
+        run: ActionRun::Dialog(Rc::new(bind!(weak, |workspaces| run(&workspaces)))),
+        ..SelectAction::new(command, title, |_: &SelectOption<Selection>| {})
     };
     let mut actions = Vec::new();
     if session {
@@ -817,20 +780,14 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
     }
     actions.push(dialog("dialog.move_session.new", "new", Workspaces::create));
     actions.push(SelectAction {
-        disabled: Some(Rc::new({
-            let weak = weak.clone();
-            move |option: Option<&SelectOption<Selection>>| {
-                let Some(workspaces) = weak.upgrade() else {
-                    return true;
-                };
+        disabled: Some(Rc::new(bind!(weak, |workspaces, option: Option<&SelectOption<Selection>>| {
                 match option.map(|option| &option.value) {
                     Some(Selection::Directory { directory, subdirectory: false }) => {
                         !workspaces.has_strategy(directory)
                     }
                     _ => true,
                 }
-            }
-        })),
+            }, else true))),
         ..selected("dialog.move_session.delete", "delete", Workspaces::remove)
     });
     actions.push(dialog("dialog.move_session.refresh", "refresh", |workspaces| workspaces.refresh_worktrees(true)));

@@ -5,6 +5,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
 
@@ -26,19 +27,14 @@ pub(crate) fn show(tui: &Tui, view: &Rc<queued::Inner>) {
             let mut props = SelectProps::new("Queued prompts", options.clone());
             props.search_in_title = true;
             props.title_placeholder = Some("Search queued prompts".to_owned());
-            let weak = Rc::downgrade(&this);
-            props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {
-                if let Some(list) = weak.upgrade() {
-                    list.steer(&option.value);
-                }
-            }));
+            props.on_select =
+                Some(Rc::new(bind!(this, |list, option: &SelectOption<String>| list.steer(&option.value))));
             let action = |command: &str, title: &str, run: fn(&List, &str)| {
-                let weak = Rc::downgrade(&this);
-                SelectAction::new(command, title, move |option: &SelectOption<String>| {
-                    if let Some(list) = weak.upgrade() {
-                        run(&list, &option.value);
-                    }
-                })
+                SelectAction::new(
+                    command,
+                    title,
+                    bind!(this, |list, option: &SelectOption<String>| run(&list, &option.value)),
+                )
             };
             props.actions = vec![
                 action("queued_prompt.delete", "delete", List::delete),

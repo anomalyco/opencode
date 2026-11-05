@@ -20,6 +20,7 @@ use opencode_api::generated::{
 };
 use opencode_api::pty::{Connector, Tungstenite};
 use opencode_local::serial::Serial;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use serde_json::{Value, json};
@@ -176,9 +177,7 @@ pub fn install(tui: &Rc<Tui>) {
 /// or part of a leader sequence (`keymap.intercept` at priority 100). `app::install_keys` calls it before the
 /// keymap's own handler.
 pub fn install_keys(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    tui.app.on_key_capture(move |cx, key| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_key_capture(bind!(tui, |tui, cx, key| {
         let Some(pane) = crate::frame::terminal(&tui) else {
             return;
         };
@@ -189,7 +188,7 @@ pub fn install_keys(tui: &Rc<Tui>) {
         cx.prevent_default();
         cx.stop_propagation();
         pane.key(&view, key);
-    });
+    }));
 }
 
 /// Server events: support on every `server.connected`, and fresh lists when a session's terminals change.
@@ -216,32 +215,35 @@ pub fn session_mounted(tui: &Tui, session: &SessionID) {
 /// Reads whether the server offers terminals; servers that predate the field do.
 fn check(tui: &Tui) {
     let client = tui.data.client().clone();
-    let weak = tui.weak();
-    tui.app.spawn(async move { client.server_info(&RequestOptions::default()).await }, move |_, result| {
-        let Some(tui) = weak.upgrade() else { return };
-        let available = match &result {
-            Ok(info) => info.capabilities.as_ref().and_then(|capabilities| capabilities.persistent_pty) != Some(false),
-            Err(error) => {
-                log::error!("Failed to read server terminal support: {error}");
-                false
+    tui.app.spawn(
+        async move { client.server_info(&RequestOptions::default()).await },
+        bind!(tui, |tui, _, result| {
+            let available = match &result {
+                Ok(info) => {
+                    info.capabilities.as_ref().and_then(|capabilities| capabilities.persistent_pty) != Some(false)
+                }
+                Err(error) => {
+                    log::error!("Failed to read server terminal support: {error}");
+                    false
+                }
+            };
+            tui.terminals.available.set(available);
+            update_layer(&tui);
+            crate::frame::refresh(&tui);
+            if !available {
+                return;
             }
-        };
-        tui.terminals.available.set(available);
-        update_layer(&tui);
-        crate::frame::refresh(&tui);
-        if !available {
-            return;
-        }
-        let mut sessions: Vec<String> = tui.terminals.lists.borrow().keys().cloned().collect();
-        if let crate::routes::Route::Session { id } = tui.route()
-            && !sessions.contains(&id.0)
-        {
-            sessions.push(id.0);
-        }
-        for session in sessions {
-            refresh(&tui, &SessionID(session), false, |_| {});
-        }
-    });
+            let mut sessions: Vec<String> = tui.terminals.lists.borrow().keys().cloned().collect();
+            if let crate::routes::Route::Session { id } = tui.route()
+                && !sessions.contains(&id.0)
+            {
+                sessions.push(id.0);
+            }
+            for session in sessions {
+                refresh(&tui, &SessionID(session), false, |_| {});
+            }
+        }),
+    );
 }
 
 /// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after. A failure
@@ -250,12 +252,10 @@ pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl Fn
     tui.terminals.lists.borrow_mut().entry(session.0.clone()).or_default();
     let client = tui.data.client().clone();
     let input = ExperimentalPersistentPtyListInput { session_id: session.clone() };
-    let weak = tui.weak();
     let session = session.0.clone();
     tui.app.spawn(
         async move { client.experimental_persistent_pty_list(&input, &RequestOptions::default()).await },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, result| {
             let list = match result {
                 Ok(list) => list,
                 Err(error) => {
@@ -278,7 +278,7 @@ pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl Fn
             update_layer(&tui);
             tui.terminals.changed(&tui);
             then(&tui);
-        },
+        }),
     );
 }
 
@@ -327,12 +327,10 @@ pub(crate) fn create(tui: &Tui, session: &SessionID, focus: bool, then: impl FnO
         env: IndexMap::new(),
         size: None,
     };
-    let weak = tui.weak();
     let session = session.clone();
     tui.app.spawn(
         async move { client.experimental_persistent_pty_create(&input, &RequestOptions::default()).await },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, result| {
             match result {
                 Ok(terminal) => {
                     let id = session.0.clone();
@@ -347,7 +345,7 @@ pub(crate) fn create(tui: &Tui, session: &SessionID, focus: bool, then: impl FnO
                     then(&tui, None);
                 }
             }
-        },
+        }),
     );
 }
 
@@ -407,12 +405,7 @@ fn new_terminal(tui: &Tui) {
 /// Registers the commands again, after the running command returns, when their titles or `terminal.close`'s enabled
 /// state would change.
 fn update_layer(tui: &Tui) {
-    let weak = tui.weak();
-    tui.app.defer(move |_| {
-        if let Some(tui) = weak.upgrade() {
-            apply_layer(&tui);
-        }
-    });
+    tui.app.defer(bind!(tui, |tui, _| apply_layer(&tui)));
 }
 
 /// The command layer, which exists while the server offers terminals, as the TS commands do.
@@ -430,16 +423,8 @@ fn apply_layer(tui: &Tui) {
         return;
     }
     let weak = tui.weak();
-    let command = |id: &str, run: fn(&Tui)| {
-        let weak = weak.clone();
-        TuiCommand::new(id, move |_, _| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui);
-            }
-        })
-        .group("Session")
-        .palette()
-    };
+    let command =
+        |id: &str, run: fn(&Tui)| TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui))).group("Session").palette();
     let in_session = {
         let weak = weak.clone();
         Condition::when(move || weak.upgrade().is_some_and(|tui| session(&tui).is_some()))
