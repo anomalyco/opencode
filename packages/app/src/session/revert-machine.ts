@@ -13,6 +13,13 @@ export type RevertDraftSnapshot = {
 /** The revert boundary our last settled request left on the server, until the event stream reports it. */
 export type KnownRevert = { readonly boundary: string | undefined }
 
+/**
+ * The boundary the event stream reports for a revert request this machine sent: the staged message, or `undefined` for
+ * a clear. Echoes stay in send order until the stream reports them, so a late echo of an earlier request is not taken
+ * for a change made elsewhere.
+ */
+export type RevertEcho = string | undefined
+
 export type SessionRevertOperation =
   /** An undelivered prompt has no history to rewind, so it is withdrawn from the inbox instead. */
   | { readonly type: "withdraw"; readonly message: SessionMessageUser }
@@ -24,10 +31,16 @@ export type SessionRevertOperation =
 // One Session's rewind, undo and redo. `attempt` advances whenever an operation starts, so a late request result or a
 // click on an older Rewound toast is ignored.
 export type SessionRevertState =
-  | { readonly status: "idle"; readonly attempt: number; readonly known?: KnownRevert }
+  | {
+      readonly status: "idle"
+      readonly attempt: number
+      readonly echoes: readonly RevertEcho[]
+      readonly known?: KnownRevert
+    }
   | {
       readonly status: "running"
       readonly attempt: number
+      readonly echoes: readonly RevertEcho[]
       readonly operation: SessionRevertOperation
       readonly known?: KnownRevert
     }
@@ -35,6 +48,7 @@ export type SessionRevertState =
   | {
       readonly status: "restored"
       readonly attempt: number
+      readonly echoes: readonly RevertEcho[]
       readonly boundary: string
       readonly prior: string | undefined
       readonly draft: RevertDraftSnapshot
@@ -88,7 +102,7 @@ export type SessionRevertTransition = {
 }
 
 export function createSessionRevertState(): SessionRevertState {
-  return { status: "idle", attempt: 0 }
+  return { status: "idle", attempt: 0, echoes: [] }
 }
 
 export function transitionSessionRevert(state: SessionRevertState, event: SessionRevertEvent): SessionRevertTransition {
@@ -131,7 +145,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
       return unchanged(state)
     const message = state.operation.message
 
-    return changed(idle(state.attempt, state.known), [
+    return changed(idle(state.attempt, state.echoes, state.known), [
       { type: "draft.restoreMessage", message, prompt: event.prompt },
       { type: "cursor.select", messageID: selectCursorAfterRevert(event, message.id) },
     ])
@@ -146,6 +160,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
       {
         status: "restored",
         attempt: state.attempt,
+        echoes: state.echoes,
         boundary: message.id,
         prior: state.operation.prior,
         draft: event.draft,
@@ -162,7 +177,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
     if (state.status !== "running" || state.attempt !== event.attempt || state.operation.type !== "redo")
       return unchanged(state)
 
-    return changed(idle(state.attempt, { boundary: undefined }), [
+    return changed(idle(state.attempt, state.echoes, { boundary: undefined }), [
       { type: "cursor.select", messageID: selectCursorAfterRevert(event, undefined) },
     ])
   }
@@ -172,7 +187,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
       return unchanged(state)
     const operation = state.operation
 
-    return changed(idle(state.attempt, { boundary: operation.prior }), [
+    return changed(idle(state.attempt, state.echoes, { boundary: operation.prior }), [
       { type: "draft.restoreSnapshot", draft: operation.draft },
       { type: "cursor.select", messageID: selectCursorAfterRevert(event, operation.prior) },
     ])
@@ -181,34 +196,54 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   if (event.type === "operation.failed") {
     if (state.status !== "running" || state.attempt !== event.attempt) return unchanged(state)
 
-    return changed(idle(state.attempt, state.known), [{ type: "toast.fail", error: event.error }])
+    return changed(idle(state.attempt, withoutEcho(state.echoes, state.operation), state.known), [
+      { type: "toast.fail", error: event.error },
+    ])
   }
 
+  // A request that timed out may still land; its echo then arrives as a change from elsewhere and the store follows it.
   if (event.type === "operation.timed-out") {
     if (state.status !== "running" || state.attempt !== event.attempt) return unchanged(state)
 
-    return changed(idle(state.attempt, state.known), [{ type: "operation.abort" }, { type: "toast.fail" }])
+    return changed(idle(state.attempt, withoutEcho(state.echoes, state.operation), state.known), [
+      { type: "operation.abort" },
+      { type: "toast.fail" },
+    ])
   }
 
   if (event.type === "disposed") {
     if (state.status === "idle") return unchanged(state)
 
-    return changed(idle(state.attempt), [{ type: state.status === "running" ? "operation.abort" : "toast.dismiss" }])
+    return changed(idle(state.attempt, []), [
+      { type: state.status === "running" ? "operation.abort" : "toast.dismiss" },
+    ])
   }
 
-  // The event stream caught up with the server, so it is the source of truth again.
-  if (state.status === "restored") {
-    if (event.type === "revert.staged" && event.messageID === state.boundary) return unchanged(state)
+  const echo =
+    event.type === "revert.committed"
+      ? -1
+      : state.echoes.indexOf(event.type === "revert.staged" ? event.messageID : undefined)
 
-    // Another stage, a redo elsewhere or a sent prompt replaced this rewind, so its Undo would restore a stale draft.
-    return changed(idle(state.attempt), [{ type: "toast.dismiss" }])
+  // The stream reported a request this machine sent, so a restored rewind keeps its toast. The store lags until the
+  // echo of the last request arrives, so the known boundary stays until then.
+  if (echo >= 0) {
+    const echoes = state.echoes.slice(echo + 1)
+
+    if (state.status === "restored" || echoes.length > 0) return changed({ ...state, echoes })
+
+    return changed(forget(state, echoes))
   }
 
-  if (!state.known) return unchanged(state)
+  // A stage or clear from elsewhere, or a sent prompt committing the revert: the stream is the source of truth again.
+  // A commit lands after every request sent before it.
+  const echoes = event.type === "revert.committed" ? [] : state.echoes
 
-  if (state.status === "idle") return changed(idle(state.attempt))
+  // A newer boundary replaced this rewind, so its Undo would restore a stale draft.
+  if (state.status === "restored") return changed(idle(state.attempt, echoes), [{ type: "toast.dismiss" }])
 
-  return changed({ status: "running", attempt: state.attempt, operation: state.operation })
+  if (!state.known && echoes === state.echoes) return unchanged(state)
+
+  return changed(forget(state, echoes))
 }
 
 /** The revert boundary the Session has, counting requests that settled before the event stream reported them. */
@@ -254,16 +289,45 @@ function rewindOrWithdraw(
 function start(state: SessionRevertState, operation: SessionRevertOperation): SessionRevertTransition {
   const attempt = state.attempt + 1
   const known = state.status === "restored" ? { boundary: state.boundary } : state.known
+  // The echo is expected from the moment the request is sent: the stream can report it before the response lands.
+  const echoes = operation.type === "withdraw" ? state.echoes : [...state.echoes, echoOf(operation)]
   const run: SessionRevertEffect = { type: "operation.run", attempt, operation }
 
   return changed(
-    known ? { status: "running", attempt, operation, known } : { status: "running", attempt, operation },
+    known
+      ? { status: "running", attempt, echoes, operation, known }
+      : { status: "running", attempt, echoes, operation },
     state.status === "restored" ? [{ type: "toast.dismiss" }, run] : [run],
   )
 }
 
-function idle(attempt: number, known?: KnownRevert): SessionRevertState {
-  return known ? { status: "idle", attempt, known } : { status: "idle", attempt }
+function echoOf(operation: Exclude<SessionRevertOperation, { type: "withdraw" }>): RevertEcho {
+  if (operation.type === "rewind") return operation.message.id
+
+  if (operation.type === "undo-rewind") return operation.prior
+
+  return undefined
+}
+
+// A request that failed sends no echo.
+function withoutEcho(echoes: readonly RevertEcho[], operation: SessionRevertOperation) {
+  if (operation.type === "withdraw") return echoes
+  const index = echoes.lastIndexOf(echoOf(operation))
+
+  return index < 0 ? echoes : echoes.filter((_, at) => at !== index)
+}
+
+function forget(
+  state: Exclude<SessionRevertState, { status: "restored" }>,
+  echoes: readonly RevertEcho[],
+): SessionRevertState {
+  if (state.status === "idle") return idle(state.attempt, echoes)
+
+  return { status: "running", attempt: state.attempt, echoes, operation: state.operation }
+}
+
+function idle(attempt: number, echoes: readonly RevertEcho[], known?: KnownRevert): SessionRevertState {
+  return known ? { status: "idle", attempt, echoes, known } : { status: "idle", attempt, echoes }
 }
 
 function changed(state: SessionRevertState, effects: readonly SessionRevertEffect[] = []): SessionRevertTransition {
