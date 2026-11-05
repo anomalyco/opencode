@@ -137,20 +137,37 @@ test("a rejected load reports a failure, not an empty result, and a reload or ne
   })
 })
 
-test("a load that never settles times out into a failure and ignores its late result", () => {
+test("a load that never settles times out into a failure", () => {
   const typed = run(loaded(), { type: "query.change", value: "al" })
   expect(selectListEmptyState(typed.state)).toEqual({ type: "loading" })
 
   const timedOut = transitionList(typed.state, { type: "load.timed-out", attempt: 2 }, config)
   expect(timedOut.state).toMatchObject({ status: "failed", epoch: 2, rows: [] })
   expect(timedOut.effects).toEqual([{ type: "cancel.load" }])
-  expect(transitionList(timedOut.state, { type: "load.resolved", attempt: 2, items }, config).state).toBe(
-    timedOut.state,
-  )
 
   // A superseded attempt's timeout does not fail the attempt that replaced it.
   const retyped = run(typed.state, { type: "query.change", value: "alp" }).state
   expect(transitionList(retyped, { type: "load.timed-out", attempt: 2 }, config).state).toBe(retyped)
+})
+
+test("a slow search that timed out still shows its results, unless a newer attempt started", () => {
+  const timedOut = transitionList(
+    run(loaded(), { type: "query.change", value: "al" }).state,
+    { type: "load.timed-out", attempt: 2 },
+    config,
+  ).state
+
+  const late = transitionList(timedOut, { type: "load.resolved", attempt: 2, items }, config)
+  expect(late.state).toMatchObject({ status: "ready", epoch: 2, rows: ["Alpha"], highlight: { activeKey: "Alpha" } })
+  expect(late.effects).toEqual([])
+  expect(transitionList(timedOut, { type: "load.failed", attempt: 2 }, config).state).toBe(timedOut)
+  expect(transitionList(timedOut, { type: "load.resolved", attempt: 1, items }, config).state).toBe(timedOut)
+
+  const reloading = run(timedOut, { type: "items.reload" }).state
+  expect(transitionList(reloading, { type: "load.resolved", attempt: 2, items }, config).state).toBe(reloading)
+
+  const reloaded = settle(run(timedOut, { type: "items.reload" }))
+  expect(transitionList(reloaded, { type: "load.resolved", attempt: 2, items }, config).state).toBe(reloaded)
 })
 
 test("disposing stops an in-flight load and ignores every later event", () => {

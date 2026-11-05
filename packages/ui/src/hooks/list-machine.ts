@@ -134,7 +134,11 @@ export function transitionList<T>(state: ListState<T>, event: ListEvent<T>, conf
   if (event.type === "items.reload") return load(state, state.filter)
 
   if (event.type === "load.resolved" || event.type === "load.failed" || event.type === "load.timed-out") {
-    if (state.status !== "loading" || event.attempt !== state.attempt) return unchanged(state)
+    const current = state.status === "loading" ? state.attempt : state.epoch
+    // A slow search that timed out still shows its results when they arrive, until a newer attempt starts.
+    const late = state.status === "failed" && event.type === "load.resolved"
+
+    if ((state.status !== "loading" && !late) || event.attempt !== current) return unchanged(state)
     const groups = event.type === "load.resolved" ? filterItems(event.items, state.filter.query, config) : []
     const rows = groups.flatMap((group) => group.items)
     const keys = rows.map(config.key)
@@ -142,7 +146,7 @@ export function transitionList<T>(state: ListState<T>, event: ListEvent<T>, conf
     return changed(
       {
         status: event.type === "load.resolved" ? "ready" : "failed",
-        epoch: state.attempt,
+        epoch: current,
         filter: state.filter,
         groups,
         rows,
@@ -150,7 +154,7 @@ export function transitionList<T>(state: ListState<T>, event: ListEvent<T>, conf
         // Each result set opens on its first row; `current` only marks the selected item.
         highlight: { mode: state.highlight.mode, activeKey: keys[0] ?? null },
       },
-      [{ type: "cancel.load" }],
+      late ? [] : [{ type: "cancel.load" }],
     )
   }
 
