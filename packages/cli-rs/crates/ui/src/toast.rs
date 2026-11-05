@@ -261,15 +261,22 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
     )
     .shrink(0.0)
     .margin_edge(Edge::Left, 2)
-    .wrap(WrapMode::None)
-    .fg(if hovered {
-        theme.text.action.primary.base
-    } else {
-        theme.text.muted
-    });
-    if hovered && toast.action.is_some() {
-        affordance.bold();
-    }
+    .wrap(WrapMode::None);
+    let has_action = toast.action.is_some();
+    let restyle = move |affordance: &Text, theme: &Theme, hovered: bool| {
+        affordance
+            .fg(if hovered {
+                theme.text.action.primary.base
+            } else {
+                theme.text.muted
+            })
+            .attributes(if hovered && has_action {
+                Attributes::BOLD
+            } else {
+                Attributes::NONE
+            });
+    };
+    restyle(&affordance, &theme, hovered);
     let body = View::new(app)
         .width(Length::percent(100.0))
         .padding_x(2)
@@ -328,22 +335,17 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
         .border_color(border)
         .child(&body);
     let weak: Weak<Inner> = Rc::downgrade(&toasts.0);
+    // Restyled in place: a new surface would drop a text selection that a press on the toast has started.
     surface.on_hover(move |_cx, over| {
         let Some(inner) = weak.upgrade() else { return };
         inner.hovered.set(over);
+        restyle(&affordance, &inner.theme.borrow(), over);
         let toasts = Toasts(inner);
         if over {
             toasts.pause();
         } else {
             toasts.resume();
         }
-        // Repaint after the event, since this handler belongs to the surface being replaced.
-        let weak = Rc::downgrade(&toasts.0);
-        toasts.0.app.defer(move |_cx| {
-            if let Some(inner) = weak.upgrade() {
-                Toasts(inner).paint();
-            }
-        });
     });
     let weak: Weak<Inner> = Rc::downgrade(&toasts.0);
     surface.on_mouse(move |_cx, event| {
