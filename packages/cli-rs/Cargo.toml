@@ -61,7 +61,6 @@ tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 tokio-util = { version = "0.7", features = ["io", "codec"] }
 unicode-width = "0.2"
 url = "2"
-uuid = { version = "1", features = ["v4"] }
 
 # Tree-sitter grammars for opencode-ui's `grammars` and `grammars-all` features (crates/ui/src/grammars), pinned to
 # the WASM releases packages/tui/src/parsers-config.ts loads where crates.io has them. The five opentui bundles take

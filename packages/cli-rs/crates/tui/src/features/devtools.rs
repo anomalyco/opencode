@@ -702,7 +702,7 @@ async fn session_events(client: &opencode_api::client::Client, id: &opencode_api
 /// Creates a new 0600 file in the temporary directory (`open(file, "wx", 0o600)`).
 fn write_private(output: &Value) -> Result<String, String> {
     use std::io::Write;
-    let path = std::env::temp_dir().join(format!("opencode-debug-{}.json", uuid::Uuid::new_v4()));
+    let path = std::env::temp_dir().join(format!("opencode-debug-{}.json", opencode_local::id::v4()));
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]

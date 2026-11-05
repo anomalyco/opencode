@@ -16,7 +16,6 @@ opentui.workspace = true
 indexmap.workspace = true
 regex.workspace = true
 unicode-width.workspace = true
-fancy-regex = "0.18"
 html-escape = "0.3"
 unicode-segmentation = "1"
 

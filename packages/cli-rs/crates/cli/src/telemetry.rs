@@ -136,7 +136,7 @@ pub fn file_name(channel: &str) -> String {
 /// The 8-character run ID shared by every record of this process (`observability/shared.ts`).
 pub fn run_id() -> &'static str {
     static RUN: OnceLock<String> = OnceLock::new();
-    RUN.get_or_init(|| uuid::Uuid::new_v4().simple().to_string()[..8].to_owned())
+    RUN.get_or_init(|| opencode_local::id::v4()[..8].to_owned())
 }
 
 struct Logger {

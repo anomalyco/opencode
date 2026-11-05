@@ -351,8 +351,8 @@ impl Inner {
                             export::Action::Copy => tui.app.copy_to_clipboard(&content).then_some(None).ok_or(()),
                             export::Action::Export => {
                                 let extension = if json { "json" } else { "md" };
-                                let path =
-                                    std::env::temp_dir().join(format!("session-{}.{extension}", uuid::Uuid::new_v4()));
+                                let path = std::env::temp_dir()
+                                    .join(format!("session-{}.{extension}", opencode_local::id::v4()));
                                 std::fs::write(&path, content).map(|_| Some(path.display().to_string())).map_err(drop)
                             }
                         });
