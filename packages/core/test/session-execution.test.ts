@@ -614,6 +614,126 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
+  for (const exited of [false, true])
+    it.live(
+      `reattaches once a ${exited ? "finished" : "running"} shell a killed server backgrounded without settling its call`,
+      () =>
+        Effect.gen(function* () {
+          const database = yield* Database.Service
+          const store = yield* SessionStore.Service
+          const bus = yield* Bus.Service
+          const jobs = yield* Job.Service
+          const parent = Session.ID.make(`ses_background_shell_unsettled_${exited}`)
+          yield* seedSessions(database, [parent], { time_suspended: Date.now() })
+          const assistantMessageID = yield* seedShellCall(bus, parent, "call-shell")
+          const daemon = yield* daemonShells()
+          const info = yield* daemon.withShell("/project", (shell) =>
+            shell.create({
+              shell: "/bin/sh",
+              command: "work",
+              cwd: "/tmp",
+              toolCall: { sessionID: parent, assistantMessageID, callID: "call-shell" },
+            }),
+          )
+          // The old server persisted the background job, then died before the step recorded the call's result.
+          yield* seedBackground(jobs, parent, [{ id: info.id, shellID: info.id, command: "work" }])
+          const [row] = yield* jobs.pendingBackground
+          if (exited) {
+            daemon.daemon.output(1, "finished output\n")
+            daemon.daemon.exit(1, 0)
+          }
+
+          const scope = yield* Scope.make()
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+          const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+          const shell = yield* daemon.openShell("/project").pipe(Effect.provideService(Scope.Scope, scope))
+          const context = yield* buildExecution(
+            scope,
+            ({ sessionID }) => SessionInbox.promote(database.db, bus, sessionID, "steer").pipe(Effect.asVoid),
+            undefined,
+            restarted,
+            shell,
+          )
+          yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+          expect(yield* shellCallState(store, parent)).toMatchObject({ status: "completed" })
+          const notices = shellNotices(store, parent)
+          // A finished command's result is admitted during recovery, before any session resumes.
+          if (exited)
+            expect((yield* SessionInbox.list(database.db, parent)).length + (yield* notices).length).toBeGreaterThan(0)
+          if (!exited) {
+            expect((yield* restarted.pendingBackground).map((item) => item.notificationID)).toEqual([
+              row?.notificationID,
+            ])
+            daemon.daemon.exit(1, 0)
+          }
+          while ((yield* notices).length < 1) yield* Effect.sleep(5)
+          yield* Effect.sleep(50)
+          expect(yield* notices).toMatchObject([{ id: row?.notificationID, metadata: { shellID: info.id } }])
+          if (exited) expect(yield* notices).toMatchObject([{ text: expect.stringContaining("finished output") }])
+          expect(yield* restarted.pendingBackground).toEqual([])
+        }),
+    )
+
+  it.live("settles a recovered child's unsettled shell call before the child resumes", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
+      const jobs = yield* Job.Service
+      const parent = Session.ID.make("ses_background_shell_child_parent")
+      const child = Session.ID.make("ses_background_shell_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Inspect recovery",
+        },
+        run: Effect.never,
+      })
+      yield* jobs.background(child)
+      const assistantMessageID = yield* seedShellCall(bus, child, "call-child-shell")
+      const daemon = yield* daemonShells()
+      const info = yield* daemon.withShell("/project", (shell) =>
+        shell.create({
+          shell: "/bin/sh",
+          command: "child work",
+          cwd: "/tmp",
+          toolCall: { sessionID: child, assistantMessageID, callID: "call-child-shell" },
+        }),
+      )
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const shell = yield* daemon.openShell("/project").pipe(Effect.provideService(Scope.Scope, scope))
+      const seen = yield* Deferred.make<unknown>()
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) =>
+          sessionID === child
+            ? shellCallState(store, child).pipe(Effect.flatMap((state) => Deferred.succeed(seen, state)))
+            : Effect.void,
+        undefined,
+        restarted,
+        shell,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      expect(yield* Deferred.await(seen).pipe(Effect.timeout("2 seconds"))).toMatchObject({ status: "completed" })
+      expect((yield* restarted.get(info.id))?.status).toBe("running")
+      // Cancelling a reattached job stops its command.
+      yield* restarted.cancel(info.id)
+      while (daemon.signals(1).length === 0) yield* Effect.sleep(5)
+      expect(daemon.signals(1)).toEqual(["SIGTERM"])
+    }),
+  )
+
   it.effect("preserves locally running background work", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -1583,4 +1703,50 @@ function buildExecution(
       scope,
     )
   })
+}
+
+/** Records a shell call the model made that is still running, as a killed server leaves it. */
+function seedShellCall(bus: Bus.Interface, sessionID: Session.ID, callID: string) {
+  return Effect.gen(function* () {
+    const assistantMessageID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID,
+      agent: Agent.ID.make("build"),
+      model: { id: ID.make("fake-model"), providerID: Provider.ID.make("fake") },
+      started: 0,
+    })
+    yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: callID, name: "shell" })
+    yield* bus.publish(SessionEvent.Tool.Called, {
+      sessionID,
+      assistantMessageID,
+      id: callID,
+      input: { command: "work" },
+      executed: false,
+    })
+    return assistantMessageID
+  })
+}
+
+function shellCallState(store: SessionStore.Interface, sessionID: Session.ID) {
+  return store.context(sessionID).pipe(
+    Effect.map((messages) =>
+      messages.flatMap((message) =>
+        message.type === "assistant"
+          ? message.content.flatMap((part) => (part.type === "tool" ? [part.state] : []))
+          : [],
+      ),
+    ),
+    Effect.map((states) => states[0]),
+  )
+}
+
+function shellNotices(store: SessionStore.Interface, sessionID: Session.ID) {
+  return store
+    .context(sessionID)
+    .pipe(
+      Effect.map((messages) =>
+        messages.filter((message) => message.type === "synthetic" && message.metadata?.source === "shell"),
+      ),
+    )
 }
