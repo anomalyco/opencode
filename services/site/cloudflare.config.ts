@@ -20,7 +20,12 @@ export default defineConfig(({ mode }) => {
       compatibilityDate: "2026-07-25",
       // The Nitro server is built with node compatibility (vite.config.ts).
       compatibilityFlags: ["nodejs_compat"],
-      assets: { htmlHandling: "drop-trailing-slash" },
+      assets: {
+        htmlHandling: "drop-trailing-slash",
+        // Docs pages answer with HTML or Markdown from one URL, so the Worker picks the asset
+        // (src/docs/middleware.ts). Search's files are plain assets.
+        runWorkerFirst: ["/v2/docs", "/v2/docs/*", "!/v2/docs/pagefind/*"],
+      },
       env: {
         ASSETS: bindings.assets(),
         STAGE: bindings.text(dev ? "dev" : "production"),

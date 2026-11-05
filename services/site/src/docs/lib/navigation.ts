@@ -1,3 +1,5 @@
+import { base } from "../config"
+
 export interface DocsNavItem {
   title: string
   slug: string
@@ -177,12 +179,23 @@ export const docsSections: DocsSection[] = [
   },
 ]
 
-// Prerendered pages are served as static assets, which redirect the trailing-slash form.
+// Pages whose URL has no trailing slash. The slash form redirects to them (middleware.ts).
 const assetSlugs = new Set(["api"])
 
 export function docsHref(slug: string, anchor?: string) {
   const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}${assetSlugs.has(slug) ? "" : "/"}`
-  return `${import.meta.env.BASE_URL}docs/${path}${anchor ? `#${anchor}` : ""}`
+  return `${base}docs/${path}${anchor ? `#${anchor}` : ""}`
+}
+
+/** The Markdown twin of a docs page: its URL without the trailing slash, plus `.md`. */
+export function docsMarkdownHref(slug: string) {
+  return `${docsHref(slug).replace(/\/$/, "")}.md`
+}
+
+/** A content file's slug: its path under content/ without `.mdx` or a trailing `/index`. */
+export function docsSlug(file: string) {
+  const slug = file.replace(/\.mdx$/, "")
+  return slug === "index" ? slug : slug.replace(/\/index$/, "")
 }
 
 export function getDocsSection(slug: string) {

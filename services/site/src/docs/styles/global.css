@@ -90,6 +90,11 @@
   background: var(--border);
 }
 
+/* Pages are separate documents: the old page stays on screen until the next one can paint. */
+@view-transition {
+  navigation: auto;
+}
+
 ::view-transition-group(*),
 ::view-transition-old(*),
 ::view-transition-new(*) {

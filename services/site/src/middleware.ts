@@ -24,11 +24,13 @@ import { legacyRedirect } from "~/lib/legacy"
 import { metaResponse } from "~/lib/meta"
 import { securityHeaders } from "~/lib/security-headers"
 import { v1DocsOrigin } from "~/lib/docs"
+import { docsMiddleware } from "~/docs/middleware"
 
-// The page middleware, then the HTML cache headers and edge cache (lib/html-cache.ts), which see
-// the request without its locale, then one stylesheet per page (lib/one-stylesheet.ts), inside the
-// cache so cached pages carry it too.
+// The V2 docs (everything under /v2, docs/middleware.ts), then the page middleware, then the HTML
+// cache headers and edge cache (lib/html-cache.ts), which see the request without its locale, then
+// one stylesheet per page (lib/one-stylesheet.ts), inside the cache so cached pages carry it too.
 export default [
+  ...docsMiddleware,
   ...createMiddleware({
     async onRequest(event) {
       // The OAuth client document and the Apple app association, before anything else (lib/meta.ts).

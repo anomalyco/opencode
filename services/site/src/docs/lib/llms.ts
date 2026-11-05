@@ -1,7 +1,8 @@
+import { base } from "../config"
 import { docsSections } from "./navigation"
 
 export function renderLlmsTxt(site: URL) {
-  const base = new URL(import.meta.env.BASE_URL, site)
+  const root = new URL(base, site)
   const sections = docsSections.flatMap((section) => [
     `## ${section.title}`,
     "",
@@ -9,7 +10,7 @@ export function renderLlmsTxt(site: URL) {
       ...(group.title && group.title !== section.title ? [`### ${group.title}`, ""] : []),
       ...group.items.map((item) => {
         const path = item.slug === "index" ? "" : `${item.slug.replace(/\/index$/, "")}/`
-        return `- [${item.title}](${new URL(`docs/${path}`, base)})`
+        return `- [${item.title}](${new URL(`docs/${path}`, root)})`
       }),
       "",
     ]),
