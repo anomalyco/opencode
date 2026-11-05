@@ -477,6 +477,19 @@ fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
     );
     kit.app.press("return");
     assert_eq!(*kit.opened.borrow(), ["https://github.com/login/device"]);
+    // A plain click on the link opens it too (`Link`'s `onMouseUp`), and the dialog stays open.
+    let screen = kit.app.text();
+    let (y, x) = screen
+        .lines()
+        .enumerate()
+        .find_map(|(y, line)| {
+            let x = line.find("https://github.com/login/device")?;
+            Some((y, line[..x].chars().count()))
+        })
+        .unwrap();
+    kit.app.click(x as u16 + 2, y as u16);
+    assert_eq!(kit.opened.borrow().len(), 2);
+    assert!(kit.app.text().contains("Waiting for authorization"));
     // `TestApp` has no terminal, so the copy fails with a toast (the live run copies).
     kit.app.press("c");
     kit.wait_for("Failed to copy to clipboard");

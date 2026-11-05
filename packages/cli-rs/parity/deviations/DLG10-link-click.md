@@ -1,13 +1,11 @@
-# DLG10: authorization links open with Enter, not a mouse click
+# DLG10: a failed open from a link click shows a toast
 
 TypeScript: the OAuth views draw the authorization URL with `Link` (`packages/tui/src/ui/link.tsx:18-34`), whose
-`onMouseUp` calls `openUrl`. A plain click on the URL opens the browser.
+`onMouseUp` calls `openUrl(...).catch(() => {})`. A click that cannot start the browser does nothing.
 
-Rust: the URL is a terminal hyperlink (OSC 8) in the link color, and has no click handler
-(`crates/tui/src/dialogs/integration/mod.rs`, `link`). Enter ("open link enter") opens it through
-`Local::open_url`, as in TS, and terminals that support OSC 8 open it on their own modified click. The cells
-are the same.
+Rust: a plain click on the URL runs the same open action as Enter ("open link enter",
+`crates/tui/src/dialogs/integration/mod.rs`, `link`). It opens through `Local::open_url`, and a failure shows the
+Enter action's "Could not open the browser" toast. A click that ends a text selection does not open the link.
 
-Reason: a click handler would start a browser from the dialog's own mouse handling, which tests cannot
-replace. Every opener goes through `Local::open_url`, which tests swap for a sink. Adding the click is a
-small follow-up once a shared link widget exists (E.20 owns `features/links.rs`).
+Reason: one open path for the click and Enter, which tests replace through `Local::open_url`. The toast tells the
+user to copy the URL instead of failing silently.
