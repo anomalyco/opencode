@@ -4,16 +4,14 @@
 //! (`EmbeddedTerminal.forwardMouse`), and a panel's host (`panel-host.tsx:34`) take it, and a click on the session
 //! pane while the right pane has it gives it back to the prompt (`session-frame.tsx:300-322`).
 
-use std::rc::Rc;
+use crate::support;
+
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::pty::{self, Incoming, Remote};
-use opencode_local::cli_config::{self, Resolved};
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::{Args, Deps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::AppOptions;
 use opentui::prelude::*;
@@ -81,51 +79,35 @@ fn routes() -> Vec<MemoryRoute> {
     routes
 }
 
-struct Harness {
-    app: TestApp,
-    tui: Rc<Tui>,
+struct Focus {
+    harness: support::Harness,
     remotes: Arc<Mutex<Vec<Remote>>>,
 }
 
-fn mount() -> Harness {
-    let memory = Memory::new(routes());
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory)).unwrap();
+support::deref_harness!(Focus);
+
+fn mount() -> Focus {
+    let deps = Deps {
+        config: support::config(support::decode(r#"{"animations":false}"#)),
+        events: true,
+        ..support::deps(Arc::new(Memory::new(routes())))
+    };
     // The TUI's own options, as `app::run` builds the app.
     let options = AppOptions { capture_stderr: false, ..opencode_tui::app::options() };
-    let app = TestApp::with_options(160, 30, options);
-    let info = cli_config::decode_text(r#"{"animations":false}"#).unwrap();
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID("ses_a".into()) },
-            continue_: false,
-            events: true,
-        },
-    );
+    let harness = support::mount_on(TestApp::with_options(160, 30, options), deps, Args::default());
     let remotes: Arc<Mutex<Vec<Remote>>> = Arc::default();
     let opened = remotes.clone();
-    tui.terminals.set_connector(Arc::new(move |_| {
+    harness.tui.terminals.set_connector(Arc::new(move |_| {
         let (socket, remote) = pty::pair();
         opened.lock().unwrap().push(remote);
         Ok(socket)
     }));
-    let harness = Harness { app, tui, remotes };
+    let harness = Focus { harness, remotes };
     harness.wait_for("Fix the parser");
     harness
 }
 
-impl Harness {
-    fn wait_for(&self, what: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(what));
-        let screen = self.app.text();
-        assert!(found, "{what:?} never showed:\n{screen}");
-        screen
-    }
-
+impl Focus {
     /// The cell of the `nth` line that contains `what`, at its first character.
     fn find(&self, what: &str, nth: usize) -> (u16, u16) {
         let screen = self.wait_for(what);
@@ -165,12 +147,12 @@ impl Harness {
     /// Opens the session's terminal and attaches its socket, so the pane shows the embedded terminal.
     fn open_terminal(&self) -> (u16, u16) {
         assert!(
-            self.app.wait_until(Duration::from_secs(5), || self.tui.terminals.available()),
+            self.app.wait_until(support::WAIT, || self.tui.terminals.available()),
             "the server never reported terminals"
         );
         self.tui.keymap.dispatch("terminal.toggle", None);
         assert!(
-            self.app.wait_until(Duration::from_secs(5), || { !self.remotes.lock().unwrap().is_empty() }),
+            self.app.wait_until(support::WAIT, || { !self.remotes.lock().unwrap().is_empty() }),
             "no socket opened"
         );
         let deliver = self.remotes.lock().unwrap()[0].deliver.clone();
