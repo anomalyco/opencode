@@ -261,6 +261,115 @@ test("the details follow the routed session when it moves to another worktree", 
   await expect(location("feature")).toHaveCount(0)
 })
 
+test("a new worktree that does not receive the session offers Retry and Delete worktree after the menu closes", async ({
+  page,
+}) => {
+  const created = "C:/OpenCode/worktrees/quiet-river"
+  const creates: unknown[] = []
+  const removes: unknown[] = []
+  const moves: unknown[] = []
+  const answers = ["fail", "ok", "fail"]
+
+  const view = await openSession(page, {
+    name: "WorktreeRecovery",
+    onWorktreeCreate: (input) => {
+      creates.push(input)
+
+      return { status: 200, body: { directory: created } }
+    },
+    onWorktreeRemove: (input) => void removes.push(input),
+  })
+
+  await page.route(`**/api/session/${view.session.id}/move`, (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    moves.push(route.request().postDataJSON())
+
+    if (answers.shift() === "fail")
+      return route.fulfill({ status: 400, headers: cors, json: { message: "Session is locked" } })
+
+    return route.fulfill({ status: 204, headers: cors })
+  })
+  const dialog = page.getByRole("dialog", { name: "Session not moved", exact: true })
+  const retry = dialog.getByRole("button", { name: "Retry", exact: true })
+
+  // The location menu closes as the item is picked; the move and its recovery outlive it.
+  await moveToNewWorktree(page)
+  await expect(dialog).toContainText("The new worktree quiet-river is ready")
+  await expect(page.locator('[data-slot="session-location-card"]')).toBeHidden()
+  await expect(retry).toBeFocused()
+  expect(moves).toEqual([{ directory: created }])
+  await page.screenshot({ path: test.info().outputPath("worktree-recovery.png"), animations: "disabled" })
+
+  // Retry moves into the worktree already created, without creating another.
+  await retry.click()
+  await expect(dialog).toBeHidden()
+  expect(moves).toEqual([{ directory: created }, { directory: created }])
+  expect(creates).toHaveLength(1)
+
+  await moveToNewWorktree(page)
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole("button", { name: "Delete worktree", exact: true }).click()
+  await expect(dialog).toBeHidden()
+  expect(creates).toHaveLength(2)
+  expect(removes).toEqual([expect.objectContaining({ directory: created, force: true })])
+})
+
+test("a session that starts running while its new worktree is created stays put until Retry", async ({ page }) => {
+  const created = "C:/OpenCode/worktrees/calm-lake"
+  const moves: unknown[] = []
+
+  const view = await openSession(page, {
+    name: "WorktreeRunning",
+    onWorktreeCreate: () => ({ status: 200, body: { directory: created } }),
+  })
+
+  await page.route(`**/api/session/${view.session.id}/move`, (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    moves.push(route.request().postDataJSON())
+
+    return route.fulfill({ status: 204, headers: cors })
+  })
+  const create = await holdRoute(page, /\/api\/worktree(?:\?|$)/, { method: "POST" })
+  const dialog = page.getByRole("dialog", { name: "Session not moved", exact: true })
+  const retry = dialog.getByRole("button", { name: "Retry", exact: true })
+  const composer = page.locator('[data-component="session-composer-dock"]')
+
+  await moveToNewWorktree(page)
+  await create.arrived
+  await view.push([
+    {
+      id: "evt_worktree_running",
+      created: 1700000002000,
+      type: "session.execution.started",
+      durable: { aggregateID: view.session.id, seq: 1, version: 1 },
+      data: { sessionID: view.session.id },
+    },
+  ])
+  await expect(composer.getByRole("button", { name: "Stop", exact: true })).toBeEnabled()
+  create.release()
+
+  // The run keeps its checkout: nothing moves, and Retry waits for the run to end.
+  await expect(dialog).toContainText("The session is running. Try again once it finishes.")
+  await expect(retry).toBeDisabled()
+  await expect(dialog.getByRole("button", { name: "Keep worktree", exact: true })).toBeFocused()
+  expect(moves).toEqual([])
+  await page.screenshot({ path: test.info().outputPath("worktree-running.png"), animations: "disabled" })
+
+  await view.push([
+    {
+      id: "evt_worktree_idle",
+      created: 1700000003000,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: view.session.id, seq: 2, version: 1 },
+      data: { sessionID: view.session.id },
+    },
+  ])
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(dialog).toBeHidden()
+  expect(moves).toEqual([{ directory: created }])
+})
+
 for (const direction of ["ltr", "rtl"] as const) {
   test(`summary overlays the view and submenus follow ${direction}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -322,7 +431,6 @@ for (const direction of ["ltr", "rtl"] as const) {
     for (const [name, empty] of [
       ["Plugins", "No plugins configured"],
       ["Skills", "No skills configured"],
-      ["LSP", "No LSP servers configured"],
     ]) {
       await summary.getByRole("button", { name, exact: true }).click()
       await expect(page.getByRole("group", { name, exact: true }).getByText(empty, { exact: true })).toBeVisible()
@@ -330,7 +438,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     }
 
     await page.keyboard.press("Escape")
-    await expect(page.getByRole("group", { name: "LSP", exact: true })).toBeHidden()
+    await expect(page.getByRole("group", { name: "Skills", exact: true })).toBeHidden()
     await page.keyboard.press("Escape")
     await expect(summary).toBeHidden()
 
@@ -344,19 +452,6 @@ for (const direction of ["ltr", "rtl"] as const) {
 test("summary catalogs load, refresh while cached, and tell errors from empty", async ({ page }) => {
   const state = { fail: true, extra: false, empty: false }
   const pluginDirectories: string[] = []
-
-  const lsp = [
-    {
-      type: "document",
-      info: {
-        lsp: {
-          typescript: { command: ["typescript-language-server", "--stdio"] },
-          rust: { command: ["rust-analyzer"] },
-        },
-      },
-    },
-    { type: "document", info: { lsp: { rust: { disabled: true } } } },
-  ]
 
   await mockStressTimeline(page, {
     mcp: () => (state.empty ? [] : [{ name: "summary-mcp", status: { status: "connected" } }]),
@@ -395,7 +490,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
             { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
             { id: "review-animations", name: "review-animations", path: "/skills/review/SKILL.md", content: "Review" },
           ],
-    configEntries: lsp,
   })
   await page.route(
     (url) => url.pathname === "/api/plugin",
@@ -449,10 +543,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   await expect(menu("Skills").getByText("find-skills", { exact: true })).toBeVisible()
   await expect(menu("Skills").getByText("review-animations", { exact: true })).toBeVisible()
   await expect(menu("Plugins")).toBeHidden()
-  await open("LSP")
-  await expect(menu("LSP").getByText("typescript", { exact: true })).toBeVisible()
-  await expect(menu("LSP").getByText("rust", { exact: true })).toHaveCount(0)
-  await expect(menu("LSP").locator(".session-service-dot")).toHaveCount(0)
   await open("MCP")
   await expect(
     menu("MCP").locator('[data-slot="truncated-text-label"]').filter({ hasText: "summary-mcp" }),
@@ -462,23 +552,40 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     { name: "MCP", path: "/api/mcp", item: "summary-mcp" },
     { name: "Plugins", path: "/api/plugin", item: "supermemory" },
     { name: "Skills", path: "/api/skill", item: "find-skills" },
-    { name: "LSP", path: "/api/config", item: "typescript" },
   ]) {
     await expectRefreshKeeps(page, service.name, service.path, service.item)
   }
+
+  // A refresh that fails keeps the list it had, with its footer and its row's count.
+  state.fail = true
+
+  const failed = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/plugin" && response.status() === 500,
+  )
+
+  await page.keyboard.press("Escape")
+  await expect(menu("Skills")).toBeHidden()
+  await open("Plugins")
+  await failed
+  await expect(menu("Plugins")).toHaveAttribute("aria-busy", "false")
+  await expect(menu("Plugins").getByText("supermemory", { exact: true })).toBeVisible()
+  await expect(menu("Plugins").getByText("Configuration file")).toBeVisible()
+  await expect(menu("Plugins").getByRole("alert")).toHaveCount(0)
+  await expect(
+    summary.getByRole("button", { name: "Plugins", exact: true }).locator(".session-service-count"),
+  ).toHaveText("2")
+  state.fail = false
 
   state.extra = true
   await expectRefreshKeeps(page, "Plugins", "/api/plugin", "supermemory")
   await expect(menu("Plugins").getByText("daytona", { exact: true })).toBeVisible()
 
   state.empty = true
-  lsp.length = 0
 
   for (const service of [
     { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured" },
     { name: "Plugins", path: "/api/plugin", empty: "No plugins configured" },
     { name: "Skills", path: "/api/skill", empty: "No skills configured" },
-    { name: "LSP", path: "/api/config", empty: "No LSP servers configured" },
   ]) {
     await open(service.name)
     await expectRefreshKeeps(page, service.name, service.path, service.empty)
@@ -585,6 +692,8 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
     if (pending) {
       await pending.arrived
       await expect(connected).toBeDisabled()
+      // Each row toggles its own server: the others stay free meanwhile.
+      await expect(disabled).toBeEnabled()
       pending.release()
     }
 
@@ -781,7 +890,6 @@ test.describe("remote configuration", () => {
       { type: "document", path: `${home}/mcp.jsonc`, info: { mcp: { servers: {} } } },
       { type: "document", path: `${home}/plugins.json`, info: { plugins: [] } },
       { type: "document", path: `${home}/skills.jsonc`, info: { skills: [] } },
-      { type: "document", path: `${home}/lsp.json`, info: { lsp: false } },
       { type: "document", path: `${fixture.directory}/opencode.json`, info: {} },
       { type: "document", path: `${fixture.directory}/.opencode/agents/review.md`, info: {} },
     ]
@@ -806,7 +914,6 @@ test.describe("remote configuration", () => {
       { name: "MCP", path: `${home}/mcp.jsonc` },
       { name: "Plugins", path: `${home}/plugins.json` },
       { name: "Skills", path: `${home}/skills.jsonc` },
-      { name: "LSP", path: `${home}/lsp.json` },
     ].entries()) {
       await trigger.click()
       const item = summary.getByRole("button", { name: service.name, exact: true })
@@ -888,6 +995,21 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   await page.keyboard.press("Escape")
   await expect(menu).toBeHidden()
 })
+
+// Picks New worktree from the location menu of a session in its project's root checkout.
+async function moveToNewWorktree(page: Page) {
+  const location = page.locator('[data-slot="session-location-card"]').getByRole("menuitem", {
+    name: "Local repository",
+    exact: true,
+  })
+
+  await page.locator('[data-slot="session-location-trigger"]').click()
+  await location.click()
+  await page
+    .getByRole("menu", { name: "Local repository", exact: true })
+    .getByRole("menuitem", { name: "New worktree", exact: true })
+    .click()
+}
 
 // Moves the pointer straight across from a submenu's trigger into the open submenu, so it never crosses sibling items.
 async function enter(page: Page, trigger: Locator, menu: Locator) {

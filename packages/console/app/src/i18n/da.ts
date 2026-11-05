@@ -204,7 +204,7 @@ export const dict = {
     "Alle modeller i OpenCode Models er hostet i USA og EU. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
-  "go.promo.kimiK31Pro": "Kimi K3.1 Pro er nu tilgængelig i Go.",
+  "go.promo.hy4": "Hy4 er nu tilgængelig i Go.",
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",

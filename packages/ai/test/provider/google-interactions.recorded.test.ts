@@ -23,7 +23,7 @@ describe("Google Interactions recorded", () => {
         ai.request({
           model,
           prompt: "Reply with exactly one word: hello",
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: { thinkingLevel: "low" },
         }),
       )
@@ -47,7 +47,7 @@ describe("Google Interactions recorded", () => {
             model,
             prompt:
               "Find the smallest positive integer that leaves remainder 1 modulo 7, 2 modulo 9, and 3 modulo 11. Explain briefly.",
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
             providerOptions: { thinkingLevel: "high", thinkingSummaries: "auto" },
           }),
         )
@@ -77,7 +77,7 @@ describe("Google Interactions recorded", () => {
           prompt: "What is the weather in Paris?",
           tools: [weatherTool],
           toolChoice: { type: "tool", name: weatherTool.name },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto" },
         })
         const first = yield* LLMClient.generate(request)
@@ -96,7 +96,7 @@ describe("Google Interactions recorded", () => {
             system: request.system,
             tools: [weatherTool],
             toolChoice: "none",
-            generation: { maxTokens: 2048 },
+            maxTokens: 2048,
             providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto" },
             messages: [
               ...request.messages,
@@ -124,7 +124,7 @@ describe("Google Interactions recorded", () => {
           prompt: "What is the weather in Paris?",
           tools: [weatherTool],
           toolChoice: "required",
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: { thinkingLevel: "low", store: true },
         })
         const first = yield* LLMClient.generate(request)
@@ -150,7 +150,7 @@ describe("Google Interactions recorded", () => {
               system: request.system,
               tools: [weatherTool],
               toolChoice: "none",
-              generation: { maxTokens: 2048 },
+              maxTokens: 2048,
               providerOptions: { thinkingLevel: "low", previousInteractionId: metadata.interactionId, store: false },
               messages: [
                 Message.tool({ id: call.id, name: call.name, result: { temperature: 22, condition: "sunny" } }),

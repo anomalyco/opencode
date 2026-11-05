@@ -3,6 +3,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Command, createKeyed, type PanelTab, type Plugin } from "@opencode/plugin/gui"
 import { BuiltinPanel, onIdle } from "@opencode/plugin/gui/builtin"
 import type Btw from "./index"
+import type { BtwTabView } from "./machine"
 import { createBtw } from "./model"
 
 const setup: Plugin.Setup<typeof Btw> = (ctx) => {
@@ -16,15 +17,22 @@ const setup: Plugin.Setup<typeof Btw> = (ctx) => {
 
   // Tab objects per session, reused so strip updates and session switches do not rebuild a trigger.
   const tabs = new Map<string, Map<string, PanelTab>>()
+  const title = (view: BtwTabView) => (view.status === "ready" ? view.question : ctx.t("tab.title"))
 
-  // Drops the tab objects of sessions whose shell tab closed.
+  // Drops the tab objects and chats of sessions whose shell tab closed.
   createKeyed(
     () => [...sessions.list().map((session) => session.key), sessions.current()?.key].join("\u0000"),
     () => {
-      const keep = new Set([...sessions.list().map((session) => session.key), sessions.current()?.key])
+      const keep = new Set(
+        [...sessions.list().map((session) => session.key), sessions.current()?.key].filter(
+          (key): key is string => key !== undefined,
+        ),
+      )
+
       tabs.forEach((_cache, key) => {
         if (!keep.has(key)) tabs.delete(key)
       })
+      btw.prune(keep)
     },
   )
 
@@ -50,17 +58,17 @@ const setup: Plugin.Setup<typeof Btw> = (ctx) => {
     transient: true,
     // Layouts saved before plugins store the tab as "btw"; as a panel key it leaves like any unlisted transient tab.
     legacy: { btw: "main" },
-    // One tab per stored question. Until the session's store loads, its tabs stay listed but hidden so restore keeps
-    // them; afterwards a tab without a stored question leaves the strip.
+    // One tab per question. A restored tab stays listed but hidden until the session's store loads so restore keeps
+    // it; afterwards a tab without a stored question leaves the strip. A question asked here shows at once.
     list: (input) => {
       if (input.open.length === 0) return []
 
-      const saved = btw.saved(input.session)
-      const cache = tabs.get(input.session.key) ?? new Map<string, PanelTab>()
-      tabs.set(input.session.key, cache)
+      const session = input.session
+      const cache = tabs.get(session.key) ?? new Map<string, PanelTab>()
+      tabs.set(session.key, cache)
 
       return input.open.flatMap((id) => {
-        if (saved.ready() && !saved.value?.chats.some((item) => item.id === id)) return []
+        if (btw.tab(session, id).status === "missing") return []
 
         const existing = cache.get(id)
 
@@ -69,15 +77,15 @@ const setup: Plugin.Setup<typeof Btw> = (ctx) => {
         const tab: PanelTab = {
           id,
           get title() {
-            return saved.value?.chats.find((item) => item.id === id)?.question ?? ctx.t("tab.title")
+            return title(btw.tab(session, id))
           },
           get hidden() {
-            return !saved.ready()
+            return btw.tab(session, id).status === "loading"
           },
           label: (state) => (
             <div class="flex min-w-0 items-center gap-1.5">
               <Icon name="comment" class="shrink-0" />
-              <span class="truncate">{btw.question(state.session, id) ?? ctx.t("tab.title")}</span>
+              <span class="truncate">{title(btw.tab(state.session, id))}</span>
             </div>
           ),
         }

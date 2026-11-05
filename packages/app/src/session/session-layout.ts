@@ -6,7 +6,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { base64Encode } from "@opencode/util/encode"
 import { ServerConnection } from "@/runtime/server/registry"
-import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
+import { tabKey, useTabs } from "@/shell/tabs/tabs"
 
 const useSessionKey = () => {
   const params = useParams()
@@ -29,7 +29,7 @@ export const useSessionLayout = () => {
   const currentTab = createMemo(() => {
     if (!params.id) return
 
-    return findSessionTab(tabs.store, ServerConnection.key(serverSDK.server), params.id)
+    return tabs.sessionTab(ServerConnection.key(serverSDK.server), params.id)
   })
 
   const regions = {

@@ -29,7 +29,6 @@ export function showWhatsNew(
 
       if (feed.status === "unavailable") {
         console.warn("[whats-new] changelog has no readable release; leaving What's New for the next start")
-
         return
       }
 
@@ -47,7 +46,7 @@ export function showWhatsNew(
     .catch(() => undefined)
 }
 
-function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHandle }) {
+function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
   const ctx = usePlugin<typeof definition>()
   const [index, setIndex] = createSignal(0)
 
@@ -60,7 +59,6 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
 
   function handleNext() {
     if (isLast()) return
-
     setIndex(index() + 1)
   }
 
@@ -79,17 +77,13 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
     if (e.key === "Escape") {
       e.preventDefault()
       handleClose()
-
       return
     }
-
     if (!paged()) return
-
     if (e.key === "ArrowLeft" && !isFirst()) {
       e.preventDefault()
       setIndex(index() - 1)
     }
-
     if (e.key === "ArrowRight" && !isLast()) {
       e.preventDefault()
       setIndex(index() + 1)
@@ -105,18 +99,13 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
       <div class="flex flex-1 min-w-0 min-h-0" tabIndex={0} autofocus onKeyDown={handleKeyDown}>
         {/* Left side - Text content */}
         <div class="flex flex-col flex-1 min-w-0 p-8">
-          {/* Top section - feature content (fixed position from top) */}
           <div class="flex flex-col gap-2 pt-22">
             <div class="flex items-center gap-2">
               <h1 class="text-16-medium text-text-strong">{feature()?.title ?? ""}</h1>
             </div>
             <p class="text-14-regular text-text-base">{feature()?.description ?? ""}</p>
           </div>
-
-          {/* Spacer to push buttons to bottom */}
           <div class="flex-1" />
-
-          {/* Bottom section - buttons and indicators (fixed position) */}
           <div class="flex flex-col gap-12">
             <div class="flex flex-col items-start gap-3">
               <Show
@@ -131,12 +120,10 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
                   {ctx.t("releaseNotes.action.getStarted")}
                 </Button>
               </Show>
-
               <Button variant="ghost" size="small" onClick={handleDisable}>
                 {ctx.t("releaseNotes.action.hideFuture")}
               </Button>
             </div>
-
             <Show when={paged()}>
               <div class="flex items-center gap-1.5 -my-2.5">
                 <Index each={props.highlights}>
@@ -164,8 +151,7 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
             </Show>
           </div>
         </div>
-
-        {/* Right side - Media content (edge to edge) */}
+        {/* Right side - Media content */}
         <Show when={feature()?.media}>
           {(media) => (
             <div class="flex-1 min-w-0 bg-surface-base overflow-hidden rounded-r-xl">

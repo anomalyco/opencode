@@ -318,6 +318,21 @@ test("disposes a detached view once its transcript is evicted, but never the sel
   }
 })
 
+test("a view whose transcript was evicted while selected goes once another session is selected", () => {
+  const input = setup()
+
+  try {
+    input.cache()
+    input.setState("messages", "ses_a", [])
+    expect(input.disposed).toEqual([])
+    input.setState("id", "ses_b")
+    input.cache()
+    expect(input.disposed).toEqual(["ses_a"])
+  } finally {
+    input.dispose()
+  }
+})
+
 test("a detached view goes before its effects can reload its evicted transcript", () => {
   const input = setup()
 
