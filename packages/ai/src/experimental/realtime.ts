@@ -23,6 +23,10 @@ export type RealtimeSession = Readonly<Record<string, unknown>>
 export interface RealtimeConnectInput {
   readonly model: string
   readonly apiKey: Redacted.Redacted
+  /** Where a GPT-Live session starts, OpenAI by default: another host of its API, such as OpenCode's. */
+  readonly baseURL?: string
+  /** Headers that host needs besides the API key, such as OpenCode's workspace. */
+  readonly headers?: Readonly<Record<string, string>>
   readonly session?: RealtimeSession
   readonly transport: RealtimeTransportInput
 }
@@ -61,10 +65,11 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
     case "openai-live": {
       const data = yield* post(
         resolved.id,
-        `${OPENAI_BASE_URL}/live/sessions`,
+        `${input.baseURL ?? OPENAI_BASE_URL}/live/sessions`,
         input.apiKey,
         { session, transport: input.transport },
         LiveSessionResponse,
+        { headers: input.headers },
       )
       return { type: "webrtc" as const, sdp: data.transport.sdp }
     }
@@ -105,7 +110,7 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
           bidiGenerateContentSetup: { ...input.session, model: `models/${input.model}` },
         },
         AuthTokenResponse,
-        "x-goog-api-key",
+        { authHeader: "x-goog-api-key" },
       )
       return {
         type: "websocket" as const,
@@ -153,14 +158,15 @@ const post = <A>(
   apiKey: Redacted.Redacted,
   body: Record<string, unknown> | FormData,
   response: Schema.Codec<A, string>,
-  authHeader?: string,
+  options: { readonly authHeader?: string; readonly headers?: Readonly<Record<string, string>> } = {},
 ) =>
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const res = yield* executor.execute(
       HttpClientRequest.post(url).pipe(
-        authHeader
-          ? HttpClientRequest.setHeader(authHeader, Redacted.value(apiKey))
+        HttpClientRequest.setHeaders(options.headers ?? {}),
+        options.authHeader
+          ? HttpClientRequest.setHeader(options.authHeader, Redacted.value(apiKey))
           : HttpClientRequest.bearerToken(apiKey),
         body instanceof FormData
           ? HttpClientRequest.bodyFormData(body)

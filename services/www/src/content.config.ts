@@ -11,6 +11,7 @@ export const collections = {
     schema: z.object({
       title: z.string(),
       description: z.string().optional(),
+      noindex: z.boolean().optional(),
       tableOfContents: z
         .union([
           z.boolean(),

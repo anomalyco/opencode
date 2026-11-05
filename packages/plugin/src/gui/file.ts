@@ -1,0 +1,132 @@
+import type { Component, JSX } from "solid-js"
+import type { ArtifactKind } from "@opencode/util/artifact"
+import type { ChangeKind } from "./review.js"
+import { Contract, Registry } from "./core.js"
+import type { MountedSession, SessionScreen } from "./host-apis.js"
+
+/** What `FileTree.Tree` renders: a tree of only the allowed workspace files. */
+export interface FileTreeProps {
+  /** The session screen that owns the rendered files. */
+  readonly screen: SessionScreen
+  /** The session whose workspace the files belong to. */
+  readonly session: MountedSession
+  /** The files to show, as a tree of only these paths. */
+  readonly allowed: readonly string[]
+  /** Change markers by normalized path, such as `Changes.kinds(session)`; omit it to show none. */
+  readonly kinds?: ReadonlyMap<string, ChangeKind>
+  /** Text after a folder row's name, such as how many entries it has. */
+  readonly labels?: ReadonlyMap<string, string>
+  /** The selected file's path, if any. */
+  readonly active?: string
+  /**
+   * Runs when the user picks a file.
+   *
+   * @param path - The picked file's path.
+   */
+  onFileClick(path: string): void
+}
+
+/** What `FileTree.List` renders: a flat list of workspace files. */
+export interface FileListProps {
+  /** The session screen that owns the rendered files. */
+  readonly screen: SessionScreen
+  /** The session whose workspace the files belong to. */
+  readonly session: MountedSession
+  /** The files to list, in order. */
+  readonly files: readonly string[]
+  /** Change markers by normalized path; omit it to show none. */
+  readonly kinds?: ReadonlyMap<string, ChangeKind>
+  /** The selected file's path, if any. */
+  readonly active?: string
+  /** Keyboard highlight of search results; takes over the selected row while set. */
+  readonly highlighted?: string
+  /**
+   * Runs when the user picks a file.
+   *
+   * @param path - The picked file's path.
+   */
+  onFileClick(path: string): void
+}
+
+/** The file browser's virtualized tree and flat list, for other panels that list workspace files. */
+export interface FileTree {
+  /**
+   * Renders the files as a tree.
+   *
+   * @param props - What to show.
+   * @returns The tree.
+   */
+  Tree(props: FileTreeProps): JSX.Element
+  /**
+   * Renders the files as a flat list.
+   *
+   * @param props - What to list.
+   * @returns The list.
+   */
+  List(props: FileListProps): JSX.Element
+}
+
+/** The file plugin provides this. */
+export const FileTree = Contract.define<FileTree, "file.tree">("file.tree")
+
+/** What `OpenInApp.Button` opens. */
+export interface OpenInAppProps {
+  /** The session screen whose workspace opens. */
+  readonly screen: SessionScreen
+  /** The session whose workspace opens. */
+  readonly session: MountedSession
+}
+
+/** The desktop "Open in" button, for a panel header that shows it in place of the tab strip's. */
+export interface OpenInApp {
+  /**
+   * Renders nothing on the web or for a remote server. While it is mounted, the tab strip leaves out its own.
+   *
+   * @param props - The workspace to open.
+   * @returns The button.
+   */
+  Button(props: OpenInAppProps): JSX.Element
+}
+
+/** The file plugin provides this. */
+export const OpenInApp = Contract.define<OpenInApp, "file.openInApp">("file.openInApp")
+
+/** What a `FileViewer`'s `View` receives. */
+export interface FileViewerProps {
+  /**
+   * The file's bytes, which this view owns: it may move their buffer elsewhere, such as to a worker, instead of copying
+   * it. A new array is a reloaded file.
+   */
+  readonly bytes: Uint8Array
+  /**
+   * Shows facts about the file, such as "3 sheets", in the toolbar before its size.
+   *
+   * @param details - The facts, in order.
+   */
+  onDetails(details: readonly string[]): void
+  /**
+   * The file could not be opened; the file view shows its binary placeholder instead, with `reason` when given.
+   *
+   * @param reason - Why, for the placeholder.
+   */
+  onError(reason?: string): void
+}
+
+/** A viewer for a kind of file the file view does not render itself, such as an Office document. */
+export interface FileViewer {
+  /** The kinds it renders. A file the first matching viewer cannot open, or no viewer lists, shows as binary. */
+  readonly kinds: readonly ArtifactKind[]
+  /**
+   * Why these bytes cannot be shown, checked before `View` or its engine loads, such as a file that is not in the
+   * format its name says. Returns undefined for bytes `View` should open.
+   *
+   * @param bytes - The file's bytes.
+   * @returns The reason, or undefined.
+   */
+  problem?(bytes: Uint8Array): string | undefined
+  /** Renders one file in the file view's stage. Bind it with `bindPlugin` in setup. A thrown error shows as binary. */
+  readonly View: Component<FileViewerProps>
+}
+
+/** Viewers for file kinds the file view does not render itself. Contribute one with `ctx.add(FileViewer, viewer)`. */
+export const FileViewer = Registry.define<FileViewer>("file.viewer")

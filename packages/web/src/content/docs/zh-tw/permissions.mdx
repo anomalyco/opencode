@@ -28,7 +28,7 @@ OpenCode 使用 `permission` 設定來決定某個操作是否應自動執行、
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ OpenCode 使用 `permission` 設定來決定某個操作是否應自動執行、
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ OpenCode 使用 `permission` 設定來決定某個操作是否應自動執行、
 
 ### 外部目錄
 
-使用 `external_directory` 允許工具呼叫存取 OpenCode 啟動時工作目錄之外的路徑。這適用於任何接受路徑作為輸入的工具（例如 `read`、`edit`、`glob`、`grep` 以及許多 `shell` 指令）。
+使用 `external_directory` 允許工具呼叫存取 OpenCode 啟動時工作目錄之外的路徑。這適用於任何接受路徑作為輸入的工具（例如 `read`、`edit`、`glob`、`grep` 以及許多 `bash` 指令）。
 
 主目錄展開（如 `~/...`）僅影響模式的書寫方式。它不會將外部路徑納入當前工作空間，因此工作目錄之外的路徑仍然必須透過 `external_directory` 來允許。
 
@@ -121,7 +121,7 @@ OpenCode 使用 `permission` 設定來決定某個操作是否應自動執行、
 }
 ```
 
-請將列表限定在受信任的路徑上，並根據需要為其他工具（例如 `shell`）疊加額外的允許或拒絕規則。
+請將列表限定在受信任的路徑上，並根據需要為其他工具（例如 `bash`）疊加額外的允許或拒絕規則。
 
 ---
 
@@ -133,7 +133,7 @@ OpenCode 的權限以工具名稱為鍵，外加幾個安全防護項：
 - `edit` — 所有檔案修改（涵蓋 `edit`、`write`、`patch`）
 - `glob` — 檔案萬用字元比對（比對萬用字元模式）
 - `grep` — 內容搜尋（比對正規表示式模式）
-- `shell` — 執行 shell 指令（比對解析後的指令，如 `git status --porcelain`）
+- `bash` — 執行 shell 指令（比對解析後的指令，如 `git status --porcelain`）
 - `task` — 啟動子代理（比對子代理類型）
 - `skill` — 載入技能（比對技能名稱）
 - `lsp` — 執行 LSP 查詢（目前不支援細粒度設定）
@@ -175,7 +175,7 @@ OpenCode 的權限以工具名稱為鍵，外加幾個安全防護項：
 - `always` — 批准與建議模式比對的後續請求（在當前 OpenCode 工作階段的剩餘時間內有效）
 - `reject` — 拒絕請求
 
-`always` 所批准的模式集合由工具提供（例如，shell 審批通常會將安全的指令前綴如 `git status*` 加入白名單）。
+`always` 所批准的模式集合由工具提供（例如，bash 審批通常會將安全的指令前綴如 `git status*` 加入白名單）。
 
 ---
 
@@ -191,7 +191,7 @@ OpenCode 的權限以工具名稱為鍵，外加幾個安全防護項：
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ OpenCode 的權限以工具名稱為鍵，外加幾個安全防護項：
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

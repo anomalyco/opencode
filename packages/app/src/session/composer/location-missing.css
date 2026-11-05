@@ -1,0 +1,73 @@
+[data-component="session-location-missing"] {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--v2-font-family-sans);
+
+  [data-slot="location-body"] {
+    padding: 8px;
+    background-color: var(--v2-background-bg-base);
+    border-radius: 10px;
+    box-shadow: var(--v2-elevation-raised);
+  }
+
+  [data-slot="location-status"] {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px;
+
+    > [data-slot="icon-svg"] {
+      flex-shrink: 0;
+      color: light-dark(var(--v2-yellow-800), var(--v2-yellow-700));
+    }
+  }
+
+  [data-slot="location-details"] {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-inline-size: 0;
+  }
+
+  [data-slot="location-title"] {
+    font-size: 13px;
+    font-weight: 530;
+    line-height: var(--line-height-base);
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="location-path"] {
+    font-family: var(--v2-font-family-code);
+    font-size: 12px;
+    line-height: var(--line-height-base);
+    color: var(--v2-text-text-faint);
+    overflow-wrap: anywhere;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  [data-slot="location-description"] {
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="location-footer"] {
+    display: flex;
+    flex-wrap: wrap;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-block: 16px 8px;
+    padding-inline: 12px;
+    margin-block-start: -9px;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+    border-end-start-radius: 10px;
+    border-end-end-radius: 10px;
+    background-color: var(--v2-background-bg-layer-01);
+  }
+}

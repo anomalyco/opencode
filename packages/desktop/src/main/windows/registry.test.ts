@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import type { Schema } from "effect"
 import { createWindowRegistry } from "./registry"
 
-function setup(initial: unknown = []) {
+// What the settings file can hold under the window list's key, garbage included.
+function setup(initial: Schema.Json = []) {
   const state = { stored: initial }
 
   const registry = createWindowRegistry<{ name: string }>({
@@ -50,7 +52,7 @@ describe("window registry", () => {
     expect(quitting.registry.closed("b")).toBe(false)
     expect(quitting.state.stored).toEqual(["a", "b"])
 
-    // A cancelled quit (such as a failed extension restart) resumes forgetting closed windows.
+    // A cancelled quit (such as a failed plugin restart) resumes forgetting closed windows.
     const resumed = opened("a", "b")
     resumed.registry.setQuitting()
     resumed.registry.setQuitting(false)

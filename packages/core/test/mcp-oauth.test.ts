@@ -37,6 +37,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
   const rows = new Map(initial.map((row) => [row.id, row]))
   const unused = () => Effect.die("unused credential method")
   const service = Credential.Service.of({
+    lock: unused,
     all: unused,
     create: unused,
     activate: unused,
@@ -54,7 +55,9 @@ const memoryCredentials = (initial: Credential.Info[]) => {
 
 const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
   Effect.runPromise(
-    McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
+    McpOAuth.connectProvider({ config, credential: Array.from(store.rows.values()).at(-1) }).pipe(
+      Effect.provideService(Credential.Service, store.service),
+    ),
   )
 
 // Serves authorization server metadata with the given capabilities and records DCR + token requests.
@@ -160,6 +163,72 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("resource")).toBe(server.url.href)
   })
 
+  test("keeps waiting for the redirect after callback requests without OAuth parameters", async () => {
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
+          return new Response(null, { status: 404 })
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "refresh", expires_in: 3600 })
+      },
+    })
+
+    const credential = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
+          const redirectValue = authorizationUrl.searchParams.get("redirect_uri")
+          const state = authorizationUrl.searchParams.get("state")
+          if (!redirectValue || !state) throw new Error("Missing OAuth redirect parameters")
+          const callback = new URL(redirectValue)
+          expect((yield* Effect.promise(() => fetch(callback, { method: "OPTIONS" }))).status).toBe(400)
+          expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
+          callback.searchParams.set("code", "accepted")
+          callback.searchParams.set("state", state)
+          expect((yield* Effect.promise(() => fetch(callback))).status).toBe(200)
+          return yield* authorization.callback
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(credential.access).toBe("access")
+  })
+
+  test("completes from a pasted redirect URL and keeps waiting after a wrong paste", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
+          return new Response(null, { status: 404 })
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "refresh", expires_in: 3600 })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
+          const redirect = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "pasted")
+          redirect.searchParams.set("state", "another-sign-in")
+          const rejected = yield* Effect.flip(authorization.submit(redirect.href))
+          const notURL = yield* Effect.flip(authorization.submit("pasted"))
+          redirect.searchParams.set("state", authorizationUrl.searchParams.get("state") ?? "")
+          yield* authorization.submit(` ${redirect.href}\n`)
+          return { rejected, notURL, credential: yield* authorization.callback }
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(result.rejected.message).toBe("This URL belongs to a different sign-in")
+    expect(result.notURL.message).toBe("Paste the full URL from the browser's address bar")
+    expect(result.credential.access).toBe("access")
+    expect(tokenRequests).toHaveLength(1)
+    expect(tokenRequests[0]?.get("code")).toBe("pasted")
+  })
+
   test("reports a rejected token exchange on the callback page", async () => {
     const server = Bun.serve({
       port: 0,
@@ -220,6 +289,57 @@ describe("MCP OAuth", () => {
     expect(stored?.type === "oauth" && stored.metadata?.issuer).toBe(server.url.href)
   })
 
+  test("refreshes the credential it was made with, not the one signed in since", async () => {
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
+        const refresh = new URLSearchParams(await request.text()).get("refresh_token")
+        return Response.json({ access_token: `next-for-${refresh}`, token_type: "Bearer" })
+      },
+    })
+    const selected = credential({ access: "expired", refresh: "refresh", url: server.url.href })
+    const newer = new Credential.Info({
+      ...credential({
+        access: "other",
+        refresh: "other-refresh",
+        url: server.url.href,
+        expires: Date.now() + 3_600_000,
+      }),
+      id: Credential.ID.make("cred_newer"),
+    })
+    const store = memoryCredentials([selected, newer])
+    const oauthProvider = await Effect.runPromise(
+      McpOAuth.connectProvider({ config: remote(server.url.href), credential: selected }).pipe(
+        Effect.provideService(Credential.Service, store.service),
+      ),
+    )
+
+    const result = await auth(oauthProvider, { serverUrl: server.url.href }).finally(() => server.stop(true))
+
+    expect(result).toBe("AUTHORIZED")
+    expect((await oauthProvider.tokens())?.access_token).toBe("next-for-refresh")
+    const stored = store.rows.get(selected.id)?.value
+    expect(stored?.type === "oauth" && stored.access).toBe("next-for-refresh")
+    const untouched = store.rows.get(newer.id)?.value
+    expect(untouched?.type === "oauth" && untouched.access).toBe("other")
+  })
+
+  test("stays anonymous when made without a credential, even after one is signed in", async () => {
+    const store = memoryCredentials([])
+    const oauthProvider = await Effect.runPromise(
+      McpOAuth.connectProvider({ config: remote(authServer.url.href), credential: undefined }).pipe(
+        Effect.provideService(Credential.Service, store.service),
+      ),
+    )
+    store.rows.set(
+      Credential.ID.make("cred_test"),
+      credential({ access: "late", refresh: "late", url: authServer.url.href }),
+    )
+    expect(await oauthProvider.tokens()).toBeUndefined()
+  })
+
   test("reports needs_auth for an unauthorized server without registering a client", async () => {
     let registrations = 0
     const server = Bun.serve({
@@ -235,10 +355,9 @@ describe("MCP OAuth", () => {
     const oauthProvider = await connectProvider(config, memoryCredentials([]))
 
     const exit = await Effect.runPromise(
-      Effect.scoped(McpClient.connect("test", config, import.meta.dir, oauthProvider)).pipe(
-        Effect.provide(hostEnvironmentLayer),
-        Effect.exit,
-      ),
+      Effect.scoped(
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: oauthProvider }),
+      ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
     ).finally(() => server.stop(true))
 
     const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
@@ -527,6 +646,11 @@ describe("MCP OAuth", () => {
       const { url } = await Effect.runPromise(Effect.scoped(start(server))).finally(() => server.stop(true))
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
+      expect(registrations[0]).toMatchObject({
+        client_name: "opencode",
+        client_uri: "https://opencode.ai",
+        logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
+      })
     })
 
     test("reuses the client registered by an earlier login", async () => {

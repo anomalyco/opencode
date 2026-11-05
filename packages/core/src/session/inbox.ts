@@ -9,6 +9,9 @@ import {
   Delivery,
   Info,
   Item,
+  MediaInfo,
+  MediaUser,
+  MediaUserPayload,
   Move,
   MovePayload,
   Synthetic,
@@ -20,8 +23,10 @@ import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { SessionEvent } from "./event.js"
+import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
+import { SessionStored } from "./stored.js"
 import { SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
@@ -33,6 +38,9 @@ export {
   Delivery,
   Info,
   Item,
+  MediaInfo,
+  MediaUser,
+  MediaUserPayload,
   Move,
   MovePayload,
   Synthetic,
@@ -49,7 +57,9 @@ export {
 export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
-const encodeUser = Schema.encodeSync(UserPayload)
+const decodeMediaUser = Schema.decodeUnknownSync(MediaUserPayload)
+const decodeStoredUser = Schema.decodeUnknownSync(SessionStored.UserPayload)
+const encodeStoredUser = Schema.encodeSync(SessionStored.UserPayload)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticPayload)
 const encodeSynthetic = Schema.encodeSync(SyntheticPayload)
 const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
@@ -75,8 +85,8 @@ function matches<Type extends Item["type"]>(
 
 const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
   const base = {
-    id: SessionMessage.ID.make(row.id),
-    sessionID: SessionSchema.ID.make(row.session_id),
+    id: row.id,
+    sessionID: row.session_id,
     time: { created: DateTime.makeUnsafe(row.time_created) },
   }
   if (row.type === "compaction")
@@ -107,7 +117,9 @@ const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
 
 export const find = Effect.fn("SessionInbox.find")(function* (db: DatabaseService, id: SessionMessage.ID) {
   const row = yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie)
-  return row === undefined ? undefined : fromRow(row)
+  if (row === undefined) return undefined
+  const [hydrated] = yield* SessionBlob.hydrateInbox(db, [row])
+  return hydrated && fromRow(hydrated)
 })
 
 const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(function* (
@@ -125,7 +137,8 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   if (row === undefined) return undefined
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* new LifecycleConflict({ id })
-  const message = SessionHistory.decodeMessageRowSync(row)
+  const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
+  if (!message) return undefined
   const base = { id, sessionID, time: { created: message.time.created }, delivery }
   if (message.type === "user")
     return User.make({
@@ -230,7 +243,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         return yield* admit({
           id: input.id,
           sessionID: input.sessionID,
-          item: { type: "compaction", payload: {}, delivery: Delivery.make(input.delivery) },
+          item: { type: "compaction", payload: {}, delivery: input.delivery },
         })
       }),
     )
@@ -300,20 +313,21 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  const payload =
+    request.item.type === "user"
+      ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, request.item.payload))
+      : request.item.type === "synthetic"
+        ? encodeSynthetic(request.item.payload)
+        : request.item.type === "compaction"
+          ? encodeCompaction(request.item.payload)
+          : encodeMove(request.item.payload)
   const stored = yield* db
     .insert(SessionInboxTable)
     .values({
       id: request.id,
       session_id: request.sessionID,
       type: request.item.type,
-      payload:
-        request.item.type === "user"
-          ? encodeUser(request.item.payload)
-          : request.item.type === "synthetic"
-            ? encodeSynthetic(request.item.payload)
-            : request.item.type === "compaction"
-              ? encodeCompaction(request.item.payload)
-              : encodeMove(request.item.payload),
+      payload,
       delivery: request.item.delivery,
       enqueued_seq: request.enqueuedSeq,
       time_created: request.timeCreated,
@@ -323,6 +337,11 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  yield* SessionBlob.recordRefs(
+    db,
+    { sessionID: request.sessionID, messageID: request.id, seq: request.enqueuedSeq },
+    payload,
+  )
 })
 
 /**
@@ -341,8 +360,20 @@ export const projectDelivered = Effect.fn("SessionInbox.projectDelivered")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-  return fromRow(deleted)
+  return delivered(deleted)
 })
+
+/** A consumed row with its payload as stored, so user file refs reach the message without their blobs. */
+export type Delivered =
+  | { readonly id: SessionMessage.ID; readonly type: "user"; readonly payload: SessionStored.UserPayload }
+  | { readonly id: SessionMessage.ID; readonly type: "synthetic"; readonly payload: SyntheticPayload }
+  | { readonly id: SessionMessage.ID; readonly type: "compaction" | "move" }
+
+const delivered = (row: typeof SessionInboxTable.$inferSelect): Delivered => {
+  if (row.type === "user") return { id: row.id, type: "user", payload: decodeStoredUser(row.payload) }
+  if (row.type === "synthetic") return { id: row.id, type: "synthetic", payload: decodeSynthetic(row.payload) }
+  return { id: row.id, type: row.type }
+}
 
 export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(function* (
   db: DatabaseService,
@@ -361,6 +392,7 @@ export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  yield* SessionBlob.releaseMessage(db, input.sessionID, input.id)
 })
 
 const projectDelivery = Effect.fn("SessionInbox.projectDelivery")(function* (
@@ -392,15 +424,37 @@ export const projectDeliveryChanged = Effect.fn("SessionInbox.projectDeliveryCha
     }),
 )
 
-export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const rows = yield* db
+const listRows = (db: DatabaseService, sessionID: SessionSchema.ID) =>
+  db
     .select()
     .from(SessionInboxTable)
     .where(eq(SessionInboxTable.session_id, sessionID))
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
     .pipe(Effect.orDie)
-  return rows.map(fromRow)
+
+export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  return (yield* SessionBlob.hydrateInbox(db, yield* listRows(db, sessionID))).map(fromRow)
+})
+
+/** {@link list} for clients that fetch media themselves: files stored in `blob` stay `media:` refs. */
+export const listWithRefs = Effect.fn("SessionInbox.listWithRefs")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const kept = yield* SessionBlob.keepInboxRefs(db, yield* listRows(db, sessionID))
+  return kept.rows.map((row): MediaInfo => {
+    if (row.type !== "user") return fromRow(row)
+    const payload = decodeMediaUser(row.payload)
+    return MediaUser.make({
+      id: row.id,
+      sessionID: row.session_id,
+      time: { created: DateTime.makeUnsafe(row.time_created) },
+      type: "user",
+      payload: payload.files ? { ...payload, files: SessionBlob.describe(payload.files, kept.meta) } : payload,
+      delivery: row.delivery,
+    })
+  })
 })
 
 export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
@@ -419,18 +473,26 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   promotable: Promotable,
 ) {
   const steer = (yield* pendingSteers(db, sessionID))[0]
-  if (steer) return fromRow(steer)
+  if (steer) return promotion(steer)
   if (promotable !== "input") return undefined
-  const queued = yield* db
-    .select()
-    .from(SessionInboxTable)
-    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
-    .orderBy(asc(SessionInboxTable.enqueued_seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
-  return queued ? fromRow(queued) : undefined
+  const queued = yield* firstQueued(db, sessionID)
+  return queued ? promotion(queued) : undefined
 })
+
+/** What a boundary decides on: prompts are promoted by id, so only a move's payload is read. */
+export type Promotion =
+  | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic" | "compaction"; readonly delivery: Delivery }
+  | {
+      readonly id: SessionMessage.ID
+      readonly type: "move"
+      readonly delivery: Delivery
+      readonly payload: MovePayload
+    }
+
+const promotion = (row: typeof SessionInboxTable.$inferSelect): Promotion =>
+  row.type === "move"
+    ? { id: row.id, type: "move", delivery: row.delivery, payload: decodeMove(row.payload) }
+    : { id: row.id, type: row.type, delivery: row.delivery }
 
 /** Which pending rows count: "input" means any item in either delivery mode. */
 export type Scope = "input" | Delivery
@@ -473,17 +535,17 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
   yield* Effect.forEach(
     rows,
     (row) => {
-      const entry = fromRow(row)
-      if (entry.type === "compaction") return Effect.die(new LifecycleConflict({ id: entry.id }))
+      if (row.type !== "move" && row.type !== "user" && row.type !== "synthetic")
+        return Effect.die(new LifecycleConflict({ id: row.id }))
       return bus
         .publish(SessionEvent.InboxDelivered, {
           sessionID,
-          inboxID: entry.id,
+          inboxID: row.id,
         })
         .pipe(
           Effect.catchDefect((defect) =>
             defect instanceof LifecycleConflict
-              ? promotedFromMessage(db, sessionID, entry.id, entry.delivery).pipe(
+              ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
                   Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
                   Effect.orDie,
                 )
@@ -513,31 +575,35 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
     Effect.gen(function* () {
       const steers = yield* pendingSteers(db, sessionID)
       if (steers.length > 0 || scope === "steer") {
-        const control = steers.findIndex((row) => row.type === "compaction" || row.type === "move")
-        if (control === 0) return undefined
-        return yield* publish(db, bus, sessionID, control === -1 ? steers : steers.slice(0, control))
+        if (steers.length > 0 && isControl(steers[0])) return undefined
+        return yield* publish(db, bus, sessionID, beforeControl(steers))
       }
 
-      const queued = yield* db
-        .select()
-        .from(SessionInboxTable)
-        .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
-        .orderBy(asc(SessionInboxTable.enqueued_seq))
-        .limit(1)
-        .get()
-        .pipe(Effect.orDie)
+      const queued = yield* firstQueued(db, sessionID)
       if (!queued) return 0
-      if (queued.type === "compaction" || queued.type === "move") return undefined
+      if (isControl(queued)) return undefined
       const promoted = yield* publish(db, bus, sessionID, [queued])
-      const arrivedSteers = yield* pendingSteers(db, sessionID)
-      const control = arrivedSteers.findIndex((row) => row.type === "compaction" || row.type === "move")
-      return (
-        promoted +
-        (yield* publish(db, bus, sessionID, control === -1 ? arrivedSteers : arrivedSteers.slice(0, control)))
-      )
+      return promoted + (yield* publish(db, bus, sessionID, beforeControl(yield* pendingSteers(db, sessionID))))
     }),
   )
 })
+
+const isControl = (row: typeof SessionInboxTable.$inferSelect) => row.type === "compaction" || row.type === "move"
+
+const beforeControl = (rows: Array<typeof SessionInboxTable.$inferSelect>) => {
+  const control = rows.findIndex(isControl)
+  return control === -1 ? rows : rows.slice(0, control)
+}
+
+const firstQueued = (db: DatabaseService, sessionID: SessionSchema.ID) =>
+  db
+    .select()
+    .from(SessionInboxTable)
+    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
 
 const pendingSteers = (db: DatabaseService, sessionID: SessionSchema.ID) =>
   db
@@ -552,7 +618,7 @@ const pendingSteers = (db: DatabaseService, sessionID: SessionSchema.ID) =>
         // A move changes the context's Location: never pull compaction across it.
         // Within that boundary, compact before promoting even earlier steers so
         // their text stays verbatim after the checkpoint, not inside its summary.
-        const control = rows.findIndex((row) => row.type === "compaction" || row.type === "move")
+        const control = rows.findIndex(isControl)
         if (control > 0 && rows[control].type === "compaction") rows.unshift(...rows.splice(control, 1))
         return rows
       }),

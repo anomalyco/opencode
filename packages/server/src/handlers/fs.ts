@@ -1,14 +1,18 @@
 import { FileSystem } from "@opencode/core/filesystem"
+import { FileWatch } from "@opencode/core/filesystem/file-watch"
+import { Location } from "@opencode/core/location"
 import { RelativePath } from "@opencode/core/schema"
-import { FileNotFoundError } from "@opencode/protocol/errors"
+import { FileNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect, Option, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
+import path from "path"
 import { Api } from "../api"
 import { response } from "../location"
 
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>
   Effect.gen(function* () {
+    const fileWatch = yield* FileWatch.Service
     return handlers
       .handleRaw("fs.read", (ctx) =>
         Effect.gen(function* () {
@@ -53,6 +57,39 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
             return yield* fs.write({ path: ctx.query.path, data: ctx.payload })
           }),
         ),
+      )
+      .handle("fs.watch", (ctx) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.Service
+          const location = yield* Location.Service
+          // Same confinement as read: the file must exist inside the location.
+          yield* fs
+            .read({ path: RelativePath.make(ctx.payload.path) })
+            .pipe(
+              Effect.mapError(
+                (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
+              ),
+            )
+          yield* fileWatch
+            .watch({
+              location: { directory: location.directory, workspaceID: location.workspaceID },
+              file: path.resolve(location.directory, ctx.payload.path),
+            })
+            .pipe(
+              Effect.mapError(
+                (error) => new ServiceUnavailableError({ message: error.message, service: "filewatcher" }),
+              ),
+            )
+        }),
+      )
+      .handle("fs.unwatch", (ctx) =>
+        Effect.gen(function* () {
+          const location = yield* Location.Service
+          yield* fileWatch.unwatch({
+            location: { directory: location.directory, workspaceID: location.workspaceID },
+            file: path.resolve(location.directory, ctx.payload.path),
+          })
+        }),
       )
   }),
 )

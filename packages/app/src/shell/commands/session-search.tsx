@@ -1,0 +1,118 @@
+import { useDialog } from "@opencode/ui/context/dialog"
+import { startTransition } from "solid-js"
+import { useGlobal } from "@/runtime/server/runtime"
+import { useLanguage } from "@/runtime/i18n/language"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
+import { useTabs } from "@/shell/tabs/tabs"
+import { createKnownServerSessions, createServerSessionEntries, type CommandPaletteEntry } from "./palette"
+import { CommandPaletteView } from "./dialog"
+import { errorMessage } from "@/shell/layout/helpers"
+import { showToast } from "@/shell/notifications/toast"
+
+const RECENT_LIMIT = 10
+
+export function DialogSessionSearch(props: { archived?: boolean }) {
+  const dialog = useDialog()
+  const global = useGlobal()
+  const language = useLanguage()
+  const tabs = useTabs()
+  const registry = useServers()
+
+  const servers = registry.visible.filter((conn) => !isServerFailed(global.servers.health[ServerConnection.key(conn)]))
+
+  const loaders = servers.flatMap((conn) => {
+    const ctx = global.serverCtx(ServerConnection.key(conn))
+
+    if (!ctx) return []
+
+    const load = createServerSessionEntries({
+      server: ServerConnection.key(conn),
+      archived: props.archived,
+      known: props.archived
+        ? () => ctx.data.session.list().filter((session) => !session.parentID)
+        : createKnownServerSessions(() => ctx),
+      apply: ctx.data.session.apply,
+      projects: ctx.projects.list,
+      load: (search, signal) =>
+        ctx.sdk.api.session.list({ parentID: null, search, archived: !!props.archived, limit: 50 }, { signal }),
+      get: (sessionID, signal) => ctx.sdk.api.session.get({ sessionID }, { signal }),
+      untitled: () => language.t("command.session.new"),
+      category: () => language.t(props.archived ? "sidebar.inbox.archived.title" : "command.category.session"),
+      recentCategory: () =>
+        language.t(props.archived ? "sidebar.inbox.archived.title" : "palette.group.recentSessions"),
+      recentLimit: RECENT_LIMIT,
+    })
+
+    const tag = registry.tag(conn)
+
+    const format = (entries: CommandPaletteEntry[]) =>
+      servers.length < 2 || !tag
+        ? entries
+        : entries.map((entry) => ({
+            ...entry,
+            description: language.t("palette.session.location", { project: entry.description ?? "", server: tag }),
+          }))
+
+    return [
+      {
+        items: (query: string) => format(load.items(query)),
+        search: (query: string, signal: AbortSignal) => load.search(query, signal).then(format),
+      },
+    ]
+  })
+
+  const items = (query: string) => {
+    const entries = loaders
+      .flatMap((loader) => loader.items(query))
+      .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
+
+    return query ? entries : entries.slice(0, RECENT_LIMIT)
+  }
+
+  const select = (item: CommandPaletteEntry | undefined) => {
+    if (!item?.sessionID || !item.server) return
+    const sessionId = item.sessionID
+    const server = item.server
+    const directory = item.project?.worktree ?? item.directory
+    const conn = servers.find((conn) => ServerConnection.key(conn) === server)
+
+    const open = () => {
+      dialog.close()
+
+      if (conn && directory) global.serverCtx(server)?.projects.touch(directory)
+      void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId })))
+    }
+
+    if (!props.archived) return open()
+
+    const ctx = conn ? global.serverCtx(server) : undefined
+
+    if (!ctx) return
+
+    void ctx.sdk.api.session
+      .update({ sessionID: sessionId, archived: false })
+      .then(async () => {
+        ctx.data.session.remember(await ctx.sdk.api.session.get({ sessionID: sessionId }))
+        open()
+      })
+      .catch((cause) =>
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(cause, language.t("common.requestFailed")),
+        }),
+      )
+  }
+
+  // Each server is its own source, so a slow or failing server never holds back or hides another's sessions.
+  return (
+    <CommandPaletteView
+      placeholder={language.t("home.sessions.search.placeholder")}
+      items={items}
+      sources={loaders.map((loader) => loader.search)}
+      highlight={() => {}}
+      select={select}
+      close={() => dialog.close()}
+    />
+  )
+}

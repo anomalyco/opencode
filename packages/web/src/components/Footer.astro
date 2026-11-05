@@ -7,6 +7,12 @@ const { lang, editUrl, lastUpdated, entry } = Astro.locals.starlightRoute
 const template = entry.data.template
 const issueLink = Astro.locals.t("app.footer.issueLink", "Found a bug? Open an issue")
 const discordLink = Astro.locals.t("app.footer.discordLink", "Join our Discord community")
+const statusLabels = {
+  operational: Astro.locals.t("app.footer.status.operational", "All systems operational"),
+  degraded: Astro.locals.t("app.footer.status.degraded", "Degraded performance"),
+  outage: Astro.locals.t("app.footer.status.outage", "Service disruption"),
+  unknown: Astro.locals.t("app.footer.status.unknown", "System status"),
+}
 
 const github = config.social?.find((item) => item.icon === "github")
 const discord = config.social?.find((item) => item.icon === "discord")
@@ -41,6 +47,14 @@ const discord = config.social?.find((item) => item.icon === "discord")
               </a>
             )
           }
+          <a
+            href="/status"
+            class="status sl-flex"
+            data-status="unknown"
+            data-labels={JSON.stringify(statusLabels)}
+          >
+            {statusLabels.unknown}
+          </a>
           <LanguageSelect />
         </div>
         <div>
@@ -62,6 +76,22 @@ const discord = config.social?.find((item) => item.icon === "discord")
     </footer>
   )
 }
+
+<script>
+  const link = document.querySelector<HTMLAnchorElement>("footer.doc a.status")
+  if (link) {
+    const labels = JSON.parse(link.dataset.labels ?? "{}") as Record<string, string>
+    fetch("/status/api/summary", { signal: AbortSignal.timeout(10_000) })
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((body: unknown) => {
+        const status = body && typeof body === "object" && "status" in body ? body.status : undefined
+        if (status !== "operational" && status !== "degraded" && status !== "outage") return
+        link.dataset.status = status
+        link.textContent = labels[status]
+      })
+      .catch(() => {})
+  }
+</script>
 
 <style>
   footer.doc {
@@ -98,6 +128,32 @@ const discord = config.social?.find((item) => item.icon === "discord")
 
   .doc a svg {
     opacity: 0.85;
+  }
+
+  .doc a.status {
+    --status-dot: var(--sl-color-gray-3);
+  }
+
+  /* Centre the dot in an icon-sized box so the label lines up with the icon links above it. */
+  .doc a.status::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 6px;
+    margin-inline: calc((1em - 6px) / 2);
+    background: var(--status-dot);
+  }
+
+  .doc a.status[data-status="operational"] {
+    --status-dot: #198b43;
+  }
+
+  .doc a.status[data-status="degraded"] {
+    --status-dot: #c48a00;
+  }
+
+  .doc a.status[data-status="outage"] {
+    --status-dot: #d93636;
   }
 
   .doc p {

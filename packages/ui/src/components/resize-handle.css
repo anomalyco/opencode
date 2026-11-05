@@ -2,16 +2,35 @@
   position: absolute;
   z-index: 10;
 
+  /* A pill centred on the handle. It waits a moment before showing on hover so crossing a boundary stays quiet. */
   &::after {
     content: "";
     position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    border-radius: 9999px;
+    background-color: var(--v2-icon-icon-muted);
     opacity: 0;
-    transition: opacity 0.15s ease-in-out;
+    pointer-events: none;
+    transition:
+      opacity 110ms cubic-bezier(0.4, 0, 1, 1),
+      background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
-  &:hover::after,
-  &:active::after {
+  &:hover::after {
     opacity: 1;
+    transition:
+      opacity 150ms cubic-bezier(0.2, 0.8, 0.2, 1) 200ms,
+      background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  &[data-dragging]::after {
+    opacity: 1;
+    background-color: var(--v2-icon-icon-base);
+    transition:
+      opacity 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   &:where([data-direction="horizontal"]) {
@@ -28,20 +47,14 @@
     }
 
     &::after {
-      width: 3px;
-      inset-block: 0;
-      inset-inline-start: 50%;
-      transform: translateX(-50%);
+      width: 4px;
+      height: 40px;
     }
 
     &:dir(rtl) {
       transform: translateX(-50%);
 
       &[data-edge="start"] {
-        transform: translateX(50%);
-      }
-
-      &::after {
         transform: translateX(50%);
       }
     }
@@ -61,10 +74,8 @@
     }
 
     &::after {
-      height: 3px;
-      inset-inline: 0;
-      inset-block-start: 50%;
-      transform: translateY(-50%);
+      width: 40px;
+      height: 4px;
     }
   }
 }

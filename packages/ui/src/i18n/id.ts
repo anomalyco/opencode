@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Perubahan sesi",
   "ui.sessionReview.title.git": "Perubahan Git",
   "ui.sessionReview.title.branch": "Perubahan cabang",
@@ -76,10 +76,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Berlangganan OpenCode Go seharga $10/bulan untuk akses andal ke model sumber terbuka terbaik.",
   "dialog.usageExceeded.freeTier.actionLabel": "Berlangganan",
-  "dialog.usageExceeded.accountRateLimit.title": "Batas Go tercapai",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Batas penggunaan tercapai. Untuk terus menggunakan model ini sekarang, aktifkan penggunaan dari saldo Anda yang tersedia",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Buka pengaturan",
 
   "ui.sessionTurn.status.delegating": "Mendelegasikan pekerjaan",
   "ui.sessionTurn.status.planning": "Merencanakan langkah selanjutnya",
@@ -217,7 +213,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(tidak ada jawaban)",
   "ui.question.review.notAnswered": "(belum dijawab)",
   "ui.question.multiHint": "Pilih semua jawaban yang sesuai",
-  "ui.question.singleHint": "Pilih satu jawaban",
   "ui.question.custom.placeholder": "Ketik jawaban Anda…",
   "ui.tool.loadedFile": "Memuat {{path}}",
   "ui.tool.loadedSkill": "Memuat keahlian {{name}}",

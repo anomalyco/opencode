@@ -1,16 +1,42 @@
 export * as ConfigExperimental from "./experimental.js"
 
-import { Schema } from "effect"
+import { Record, Schema } from "effect"
 import { NonNegativeInt, optional } from "../schema.js"
+import { ConfigFlag } from "./flag.js"
+import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
 
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable the experimental portable shell permission scanner. Defaults to false.",
+    description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
-  todo: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable the experimental todowrite tool. Defaults to false.",
+  all_flags: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
   }),
+  ...Record.map(ConfigFlag.registry, (description) =>
+    Schema.Boolean.pipe(optional).annotate({
+      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+    }),
+  ),
+  part_rows: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
+  }),
+  image_generate: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      model: ConfigModel.Selection.pipe(optional).annotate({
+        description:
+          "Default model for the experimental_image_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description:
+        "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
+    }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

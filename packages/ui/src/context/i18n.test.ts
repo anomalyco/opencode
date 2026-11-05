@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createUiI18n, localizedListSeparator, pluralCategory, type UiI18nSource } from "./i18n"
+import { createUiI18n, localizedListSeparator, pluralCategory, resolveTemplate, type UiI18nSource } from "./i18n"
 
 const i18n = (locale: string, translated: string) => {
   const source: UiI18nSource = {
@@ -61,5 +61,29 @@ describe("localizedListSeparator", () => {
     expect(i18n("en-US", "").list(["Read", "Search"])).toBe("Read, Search")
     expect(i18n("en", "").listSeparator(2, 3)).toBe(",")
     expect(i18n("de", "").list(["Lesen", "Suchen"])).toBe("Lesen und Suchen")
+  })
+})
+
+describe("resolveTemplate", () => {
+  test("fills params with optional inner spacing and repeats", () => {
+    expect(resolveTemplate("Hello {{name}}, {{ name }} and {{  other  }}", { name: "Ada", other: 2 })).toBe(
+      "Hello Ada, Ada and 2",
+    )
+  })
+
+  test("stringifies numbers and booleans, including zero and false", () => {
+    expect(resolveTemplate("{{count}} {{done}}", { count: 0, done: false })).toBe("0 false")
+  })
+
+  test("returns the text untouched without params", () => {
+    expect(resolveTemplate("Hello {{name}}")).toBe("Hello {{name}}")
+  })
+
+  test("does not treat $ in a value as a replacement pattern", () => {
+    expect(resolveTemplate("file {{name}}", { name: "a$&b$1" })).toBe("file a$&b$1")
+  })
+
+  test("blanks a placeholder whose param is missing", () => {
+    expect(resolveTemplate("a {{missing}} b", { other: "x" })).toBe("a  b")
   })
 })

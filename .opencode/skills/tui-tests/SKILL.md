@@ -5,7 +5,7 @@ description: Use when writing, fixing, or reviewing tests that render OpenTUI (t
 
 # TUI tests
 
-packages/tui runs about 170 test files in one `bun test` process. CI runs it next to up to two other suites on 4-vCPU runners (`bun turbo test --affected --concurrency=3` in `.github/workflows/test.yml`), where it has taken 136-146s on Linux and 147-171s on Windows, most of it idle on frame pacing, production timers and sleeps. Most flakes come from waiting on the wrong signal and then running out of frames on a busy runner.
+packages/tui runs about 170 test files in one `bun test` process. CI runs it next to up to two other suites on 4-vCPU runners (`bun turbo test --affected --concurrency=3` in `.github/workflows/check-test.yml`), where it has taken 136-146s on Linux and 147-171s on Windows, most of it idle on frame pacing, production timers and sleeps. Most flakes come from waiting on the wrong signal and then running out of frames on a busy runner.
 
 Read the root `AGENTS.md` Testing section (no `globalThis` mocks, run from the package directory) and its TUI Stories section. To drive the real TUI, use the `opencode-dev` skill. For CLI subprocesses, service deadlines, Effect `TestClock` and turbo test tasks, use the `unit-tests` skill.
 

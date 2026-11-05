@@ -14,7 +14,8 @@ The idea of code mode was originally introduced by Cloudflare. See
 ## How it differs from JavaScript
 
 - **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
-  globals the host adds through extensions. Timers, `process`, filesystem access, imports, and modules are unavailable.
+  globals the host adds through extensions. Timers, `process`, filesystem access, packages, and `export` are
+  unavailable.
 - **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
   anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.
 - **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
@@ -91,8 +92,10 @@ runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 The Effect environment is inferred from the supplied tools. `hooks` surround every call the program makes into the
 host: `tool.before`/`tool.after` receive `{ name, input }` with decoded input, `extension.before`/`extension.after`
 receive `{ extension, name, args }`. An `after` hook also receives how the call ended (`success` with its value,
-`failure` with its error, or `interrupted`). A failing `before` hook denies the call, and the program catches the
-failure as a thrown error.
+`failure` with its error, or `interrupted`). A `before` hook runs before the call reaches the host, and a failing one
+denies it: the host function is never called, and the program catches the failure as a thrown error. A denied call
+fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
+throws.
 
 ### `Extension.make`
 
@@ -100,13 +103,53 @@ Extensions are host functions a program calls directly as globals, such as `fetc
 catalog, not counted against `maxToolCalls`, and not described to the model; the host decides what they mean.
 
 ```ts
-const web = Extension.make({ name: "web", globals: { fetch: (url: string) => globalThis.fetch(url) } })
+const web = Extension.make({ name: "web", globals: { fetch: async (url: string) => globalThis.fetch(url) } })
 const runtime = CodeMode.make({ tools, extensions: [web] })
+```
+
+A global is synchronous unless it is an `async` function or is marked with `Extension.async`. Mark a plain function
+that returns a Promise or an Effect, so a denied call rejects its promise like any other failure:
+
+```ts
+Extension.make({ name: "web", globals: { fetch: Extension.async((url: string) => globalThis.fetch(url)) } })
+```
+
+A global may return a value, a Promise, or an Effect. An Effect's requirements join the runtime's environment the same
+way a tool's do, so the host can provide per-execution services such as the calling session:
+
+```ts
+const web = Extension.make({
+  name: "web",
+  globals: {
+    fetch: Extension.async((url: string) =>
+      Effect.gen(function* () {
+        const session = yield* Session
+        yield* session.authorize(url)
+        return yield* Effect.promise(() => globalThis.fetch(url))
+      }),
+    ),
+  },
+})
+const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))
 ```
 
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.
+
+A global can also be an object of functions, such as `fs`. Every function reachable from it is an entry point like a
+global, so calls fire the `extension` hooks with their path as the name (`fs.readFile`, `fs.promises.readFile`).
+
+Programs load globals the way Node code loads modules. `import` and `require` take a global by its Node module name,
+with or without `node:`; `fs/promises`, `url`, `util`, and `buffer` resolve to the globals that provide them. There are
+no packages, so anything else throws.
+
+```js
+import fs, { readFile } from "node:fs" // the `fs` global, if the host provides one
+import { URL } from "url"
+const crypto = require("crypto")
+const { default: same } = await import("fs")
+```
 
 ### OpenAPI tools
 
@@ -179,7 +222,8 @@ every visible tool. Hosts render their own model-facing instructions from these 
 and `CodeMode.toolExpression(path)` supply the exact callable forms.
 
 The synchronous `search(...)` built-in is always available. It supports exact-path lookup, namespace-scoped search,
-empty-query browsing, and pagination, and returns callable paths with full signatures. Search counts toward
+empty-query browsing, and pagination, and returns callable paths with full signatures. Its result can be used directly,
+awaited, or chained with `then`, `catch`, and `finally`, so programs work whichever way they treat it. Search counts toward
 `maxToolCalls`. Search also matches descriptions from enclosing `Namespace` values.
 
 ## Execution Limits

@@ -1,5 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
+import { Artifact } from "./artifact.js"
 import { AISDK } from "./aisdk.js"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
@@ -8,12 +9,14 @@ import { Config } from "./config.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { FileMutation } from "./file-mutation.js"
+import { FileWrite } from "./file-write.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
 import { Voice } from "./voice.js"
+import { UsageLimits } from "./usage-limits.js"
 import { Form } from "./form.js"
 import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
@@ -46,7 +49,6 @@ import { SkillInstructions } from "./skill/instructions.js"
 import { Snapshot } from "./snapshot.js"
 import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
-import { InstructionEntry } from "./session/instruction-entry.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { McpTool } from "./tool/mcp.js"
 import { ReadToolFileSystem } from "./tool/read-filesystem.js"
@@ -63,6 +65,7 @@ const nodes = [
   Environment.node,
   Config.node,
   Agent.node,
+  Artifact.node,
   Command.node,
   Reference.node,
   Rpc.node,
@@ -87,6 +90,7 @@ const nodes = [
   InstructionDiscovery.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
   Formatter.node,
   Mcp.node,
   Permission.node,
@@ -95,10 +99,10 @@ const nodes = [
   Image.node,
   SkillInstructions.node,
   ReferenceInstructions.node,
-  InstructionEntry.node,
   Form.node,
   Generate.node,
   Voice.node,
+  UsageLimits.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,

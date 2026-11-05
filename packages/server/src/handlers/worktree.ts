@@ -26,10 +26,9 @@ export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (han
 
 function badRequest<A, R>(effect: Effect.Effect<A, Worktree.Error, R>) {
   return effect.pipe(
-    Effect.catchTag("Project.NotFoundError", missingProject),
     Effect.mapError((error) =>
-      error instanceof ProjectNotFoundError
-        ? error
+      error._tag === "Project.NotFoundError"
+        ? missingProject(error)
         : new WorktreeError({
             name: "WorktreeError",
             data: {
@@ -45,15 +44,13 @@ function badRequest<A, R>(effect: Effect.Effect<A, Worktree.Error, R>) {
 }
 
 function missingProject(error: Project.NotFoundError) {
-  return Effect.fail(
-    new ProjectNotFoundError({ projectID: error.projectID, message: `Project not found: ${error.projectID}` }),
-  )
+  return new ProjectNotFoundError({ projectID: error.projectID, message: `Project not found: ${error.projectID}` })
 }
 
 function message(error: Exclude<Worktree.Error, Project.NotFoundError>) {
   if (error instanceof Worktree.SourceDirectoryNotFoundError)
     return error.directory
-      ? `Worktree source not found: ${error.directory}`
+      ? `Cannot create a worktree from ${error.directory}: it is not a checkout of this project that supports worktrees, such as a git repository`
       : `Worktree source not found for project: ${error.projectID}`
   if (error instanceof Worktree.DestinationExistsError) return `Worktree destination already exists: ${error.directory}`
   if (error instanceof Worktree.DirectoryUnavailableError) return `Worktree directory unavailable: ${error.directory}`

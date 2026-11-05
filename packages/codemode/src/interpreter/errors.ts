@@ -1,4 +1,3 @@
-import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
 import { ToolRuntimeError } from "../tool-runtime.js"
@@ -20,15 +19,36 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
+import type { Eval } from "./runner.js"
 import { toPrimitiveString } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 
+/**
+ * A host error's message as text. A host can store anything there; an object must not cross as itself, and turning it
+ * into text would run its own methods.
+ */
+export const errorMessage = (error: Error): string => {
+  const message: unknown = error.message
+  if (typeof message === "string") return message
+  if (message === undefined || typeof message === "function" || (typeof message === "object" && message !== null)) {
+    return ""
+  }
+  return String(message)
+}
+
+/** A host error's name as a program error type, read once so a getter cannot pass the check and then change. */
+export const errorType = (error: Error): ErrorType => {
+  const name: unknown = error.name
+  return typeof name === "string" && isErrorType(name) ? name : "Error"
+}
+
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof PendingThrow) {
+    const location = error.node?.loc ? sourceLocation(error.node) : undefined
     return {
       kind: error.kind,
-      message: `${error.type}: ${error.message}${formatLocation(error.node)}`,
-      ...(error.node?.loc ? { location: sourceLocation(error.node) } : {}),
+      message: `${error.type}: ${error.message}${formatLocation(location)}`,
+      ...(location ? { location } : {}),
       ...(error.suggestions ? { suggestions: error.suggestions } : {}),
     }
   }
@@ -62,7 +82,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
     return { kind: "ExecutionFailure", message: `Uncaught: ${message}` }
   }
 
-  if (error instanceof RangeError && /call stack|recursion/i.test(error.message)) {
+  if (error instanceof RangeError && /call stack|recursion/i.test(errorMessage(error))) {
     return {
       kind: "ExecutionFailure",
       message: "Execution exceeded the maximum nesting depth.",
@@ -72,7 +92,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof Error) {
     return {
       kind: error.name === "SyntaxError" ? "ParseError" : "ExecutionFailure",
-      message: error.message,
+      message: errorMessage(error),
     }
   }
 
@@ -92,7 +112,7 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
     return error
   }
   if (error instanceof Error && !(error instanceof ToolError) && !(error instanceof ToolRuntimeError)) {
-    return new PendingThrow(isErrorType(error.name) ? error.name : "Error", error.message, node)
+    return new PendingThrow(errorType(error), errorMessage(error), node)
   }
   return error
 }
@@ -108,8 +128,10 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
     }
     return thrown.value
   }
-  const type = thrown instanceof Error && isErrorType(thrown.name) ? thrown.name : "Error"
-  return createErrorValue(builtins[type], normalizeError(thrown).message)
+  return createErrorValue(
+    builtins[thrown instanceof Error ? errorType(thrown) : "Error"],
+    normalizeError(thrown).message,
+  )
 }
 
 /** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
@@ -134,44 +156,34 @@ export const createAggregateErrorValue = <R>(
   return value
 }
 
-const constructAggregateErrorValue = <R>(
-  ctx: Interpreter<R>,
-  args: Array<Value>,
-  proto: Obj,
-): Effect.Effect<ErrorObj, unknown, R> =>
-  Effect.gen(function* () {
-    const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
-    const cursor = yield* ctx.iterate(args[0])
-    if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
-    const errors: Array<Value> = []
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
-      errors.push(step.value)
-    }
-  })
+function* constructAggregateErrorValue<R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj): Eval<ErrorObj> {
+  const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
+  const cursor = yield* ctx.iterate(args[0])
+  if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
+  const errors: Array<Value> = []
+  while (true) {
+    const step = yield* cursor.next()
+    if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
+    errors.push(step.value)
+  }
+}
 
 /** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
 export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const prototype = builtins[type]
-  const construct = (args: Array<Value>, newTarget: Callable) => {
+  const construct = function* (args: Array<Value>, newTarget: Callable): Eval<Value> {
     const proto = prototypeFrom(newTarget, prototype)
     const created =
       type === "AggregateError"
-        ? constructAggregateErrorValue(ctx, args, proto)
-        : Effect.map(args[0] === undefined ? Effect.undefined : toPrimitiveString(ctx, args[0]), (message) =>
-            createErrorValue(proto, message),
-          )
+        ? yield* constructAggregateErrorValue(ctx, args, proto)
+        : createErrorValue(proto, args[0] === undefined ? undefined : yield* toPrimitiveString(ctx, args[0]))
     // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
     const options = args[type === "AggregateError" ? 2 : 1]
-    if (!(options instanceof Obj) || !has(options, "cause")) return created
-    return Effect.map(created, (value) => {
-      define(value, "cause", get(options, "cause"), hidden)
-      return value
-    })
+    if (options instanceof Obj && has(options, "cause")) define(created, "cause", get(options, "cause"), hidden)
+    return created
   }
-  const ctor: Native<R> = constructor<R>(builtins, prototype, {
+  const ctor: Native = constructor(builtins, prototype, {
     name: type,
     length: type === "AggregateError" ? 2 : 1,
     call: (_, args) => construct(args, ctor),

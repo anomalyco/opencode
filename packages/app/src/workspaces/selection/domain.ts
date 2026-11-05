@@ -123,39 +123,30 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
-export function currentPickerSuggestions<T>(result: { query: string; items: readonly T[] } | undefined, query: string) {
-  if (result?.query !== query) return []
+export type PickerPolicy = ReturnType<typeof pickerMode>
 
-  return result.items
+// The folder a typed or chosen path opens, or undefined when the mode does not allow it.
+export function resolvePickerTarget(policy: PickerPolicy, path: string, home: string, base: string) {
+  return policy.navigation(pickerAbsoluteInput(cleanPickerInput(path), home, base))
 }
 
-export function preloadTreeDirectories(
-  parent: string,
-  nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>,
-) {
-  return treeEntries(
-    parent,
-    nodes.filter((node) => node.type === "directory"),
-  )
+export function displayInputDirectory(path: string, home: string) {
+  const displayed = displayPickerPath(path, "", home)
+  const separator = displayed.includes("\\") ? "\\" : "/"
+
+  return displayed.endsWith(separator) ? displayed : displayed + separator
 }
 
-export function advanceTreePreload(advanced: Set<string>, path: string) {
-  if (advanced.has(path)) return false
-  advanced.add(path)
-
-  return true
-}
-
-export function activeTreeNavigation(request: number, current: number) {
-  return request === current
-}
-
+// `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that
+// never settles cannot keep its slot.
 export function createPriorityTaskQueue<T>(concurrency: number) {
   type Job = {
     key: string
     priority: "user" | "background"
-    promise: Promise<T>
+    promise: Promise<T | undefined>
+    controller: AbortController
     run: () => void
+    settle: (outcome: { value: T | undefined } | { error: unknown }) => void
   }
 
   const jobs = new Map<string, Job>()
@@ -173,7 +164,7 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     }
   }
 
-  const schedule = (key: string, priority: Job["priority"], task: () => Promise<T>) => {
+  const schedule = (key: string, priority: Job["priority"], task: (signal: AbortSignal) => Promise<T>) => {
     const existing = jobs.get(key)
 
     if (existing) {
@@ -182,31 +173,35 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
       return existing.promise
     }
 
-    const deferred = Promise.withResolvers<T>()
+    const deferred = Promise.withResolvers<T | undefined>()
+    const controller = new AbortController()
+    const state = { running: false, settled: false }
 
     const job: Job = {
       key,
       priority,
       promise: deferred.promise,
+      controller,
       run: () => {
-        const complete = () => {
-          active--
-          jobs.delete(key)
-          drain()
-        }
-
+        state.running = true
         Promise.resolve()
-          .then(task)
+          .then(() => (controller.signal.aborted ? undefined : task(controller.signal)))
           .then(
-            (value) => {
-              complete()
-              deferred.resolve(value)
-            },
-            (error) => {
-              complete()
-              deferred.reject(error)
-            },
+            (value) => job.settle({ value }),
+            (error) => job.settle({ error }),
           )
+      },
+      settle: (outcome) => {
+        if (state.settled) return
+        state.settled = true
+        jobs.delete(key)
+        dequeue(job)
+
+        if (state.running) active--
+
+        if ("error" in outcome) deferred.reject(outcome.error)
+        else deferred.resolve(outcome.value)
+        drain()
       },
     }
 
@@ -215,6 +210,21 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     drain()
 
     return job.promise
+  }
+
+  const dequeue = (job: Job) => {
+    const queue = job.priority === "user" ? user : background
+    const index = queue.indexOf(job)
+
+    if (index !== -1) queue.splice(index, 1)
+  }
+
+  const abort = (key: string) => {
+    const job = jobs.get(key)
+
+    if (!job) return
+    job.controller.abort()
+    job.settle({ value: undefined })
   }
 
   const promote = (key: string) => {
@@ -229,11 +239,12 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     user.push(job)
   }
 
-  return { schedule, promote }
-}
+  // Queued jobs go first, so aborting a running one never starts a job that is about to be dropped.
+  const clear = () => {
+    ;[...user, ...background, ...jobs.values()].forEach((job) => abort(job.key))
+  }
 
-export function nextTreeScrollTop(current: number, delta: number, scrollHeight: number, clientHeight: number) {
-  return Math.min(Math.max(0, scrollHeight - clientHeight), Math.max(0, current + delta))
+  return { schedule, promote, abort, clear }
 }
 
 export function nextSuggestionIndex(current: number, delta: -1 | 1, count: number) {
@@ -270,7 +281,7 @@ export function selectedTreePath(root: string, path: string, mode: "directory" |
   return directory ? nativePickerPath(absoluteTreePath(root, path)) : undefined
 }
 
-export function nativePickerPath(path: string) {
+function nativePickerPath(path: string) {
   const value = trimPickerPath(path)
 
   if (/^[A-Za-z]:\//.test(value) || value.startsWith("//")) return value.replaceAll("/", "\\")
@@ -288,7 +299,7 @@ export function cleanPickerInput(value: string) {
   return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
 }
 
-export function normalizePickerPath(input: string) {
+function normalizePickerPath(input: string) {
   const value = input.replaceAll("\\", "/")
 
   if (value.startsWith("//") && !value.startsWith("///")) return "//" + value.slice(2).replace(/\/+/g, "/")
@@ -296,7 +307,7 @@ export function normalizePickerPath(input: string) {
   return value.replace(/\/+/g, "/")
 }
 
-export function normalizePickerDrive(input: string) {
+function normalizePickerDrive(input: string) {
   const value = normalizePickerPath(input)
 
   if (/^[A-Za-z]:$/.test(value)) return value + "/"
@@ -304,7 +315,7 @@ export function normalizePickerDrive(input: string) {
   return value
 }
 
-export function trimPickerPath(input: string) {
+function trimPickerPath(input: string) {
   const value = normalizePickerDrive(input)
 
   if (value === "/" || value === "//" || /^[A-Za-z]:\/$/.test(value)) return value
@@ -312,7 +323,7 @@ export function trimPickerPath(input: string) {
   return value.replace(/\/+$/, "")
 }
 
-export function joinPickerPath(base: string | undefined, relative: string) {
+function joinPickerPath(base: string | undefined, relative: string) {
   const root = trimPickerPath(base ?? "")
   const path = trimPickerPath(relative).replace(/^\/+/, "")
 
@@ -384,12 +395,43 @@ export function displayPickerPath(path: string, input: string, home: string) {
   return pickerTilde(value, home) || value
 }
 
+export function shortenPickerRecentPath(path: string, home: string) {
+  const display = displayPickerPath(path, "", home)
+
+  if (display.startsWith("~/")) {
+    const parts = display.slice(2).split("/").filter(Boolean)
+
+    if (parts.length <= 2) return display
+
+    return `~/…/${parts.slice(-2).join("/")}`
+  }
+
+  if (display.startsWith("/") && !display.startsWith("//")) {
+    const parts = display.slice(1).split("/").filter(Boolean)
+
+    if (parts.length <= 2) return display
+
+    return `/${parts[0]}/…/${parts.slice(-2).join("/")}`
+  }
+
+  if (/^[A-Za-z]:\\/.test(display)) {
+    const parts = display.split("\\").filter(Boolean)
+
+    if (parts.length <= 3) return display
+
+    return `${parts[0]}\\…\\${parts.slice(-2).join("\\")}`
+  }
+
+  return display
+}
+
 export async function listPickerDirectory(
   sdk: ServerSDK,
   location: { directory: string; workspace?: string },
   directory: string,
+  signal?: AbortSignal,
 ) {
-  const result = await sdk.api.file.list({ location, path: directory })
+  const result = await sdk.api.file.list({ location, path: directory }, { signal })
 
   return result.data.map((entry) => {
     const absolute = pickerAbsolutePath(entry.path, result.location.directory)
@@ -405,7 +447,6 @@ export function createDirectorySearch(args: {
   home: () => string
 }) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
-  let current = 0
 
   const scoped = (value: string) => {
     const raw = normalizePickerDrive(value)
@@ -452,14 +493,13 @@ export function createDirectorySearch(args: {
     return fuzzysort.go(query, items, { key: "name", limit }).map((item) => item.obj.absolute)
   }
 
-  return async (filter: string) => {
-    const token = ++current
-    const active = () => token === current
+  return async (filter: string, options?: { signal?: AbortSignal }): Promise<string[]> => {
+    const active = () => !options?.signal?.aborted
     const value = cleanPickerInput(filter)
     const input = scoped(value)
     const location = args.location()
 
-    if (!input || !location) return [] as string[]
+    if (!input || !location) return []
     const raw = normalizePickerDrive(value)
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)

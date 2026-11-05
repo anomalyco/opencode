@@ -9,18 +9,25 @@ import { showToast } from "@/shell/notifications/toast"
 import { popularProviders, useProviders } from "@/providers/catalog/providers"
 import { consoleProviderGroup } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
-import { createEffect, createMemo, type Component, For, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, untrack, type Component, For, type JSX, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
-import { CONSOLE_INTEGRATION, CONSOLE_PROVIDERS } from "@/providers/connect/controller"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/dialog-machine"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { SettingsList } from "@/settings/list"
 import { activeProviderAccount, providerAccounts, type ProviderAccount } from "./accounts"
 import { AccountNameInput } from "./account-name"
 import { useProviderAccountActions } from "./account-actions"
+import {
+  connectedProviders,
+  createProviderDisconnectState,
+  transitionProviderDisconnect,
+  type ProviderDisconnectEffect,
+  type ProviderDisconnectEvent,
+} from "./machine"
 import "@/settings/settings.css"
 
 type ProviderSource = "env" | "api" | "account" | "config" | "custom"
@@ -31,6 +38,7 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
+  { match: (id: string) => id === "claude-agent", key: "dialog.provider.claudeAgent.note" },
   { match: (id: string) => id.startsWith("github-copilot"), key: "dialog.provider.copilot.note" },
   { match: (id: string) => id === "openai", key: "dialog.provider.openai.note" },
   { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
@@ -41,6 +49,7 @@ const PROVIDER_NOTES = [
 export const SettingsProviders: Component<{
   directory: string | undefined
   onSelectProvider?: (providerID: string) => void
+  headerAction?: JSX.Element
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
@@ -51,21 +60,76 @@ export const SettingsProviders: Component<{
   const accountActions = useProviderAccountActions(() => props.directory)
 
   const [state, setState] = createStore<{
-    disconnecting: Record<string, "removing" | "removed" | "absent" | undefined>
     consoleExpanded: boolean
     credentialID?: string
     renaming?: string
     held?: ProviderItem[]
   }>({
-    disconnecting: {},
     consoleExpanded: false,
   })
 
-  const updateDisconnecting = (ids: string[], status: "removing" | "removed" | "absent" | undefined) =>
-    setState("disconnecting", (current) => ({
-      ...current,
-      ...Object.fromEntries(ids.map((id) => [id, status])),
-    }))
+  const [disconnects, setDisconnects] = createSignal(createProviderDisconnectState())
+
+  const dispatch = (event: ProviderDisconnectEvent) => {
+    const result = transitionProviderDisconnect(untrack(disconnects), event)
+    setDisconnects(result.state)
+    result.effects.forEach(run)
+  }
+
+  // Results that arrive after Settings closes still report through a toast, as the user asked for the change.
+  const run = (effect: ProviderDisconnectEffect) => {
+    if (effect.type === "disconnect.run") {
+      void serverSdk.api.integration
+        .get({
+          integrationID: effect.integrationID,
+          location: props.directory ? { directory: props.directory } : undefined,
+        })
+        .then(async (integration) => {
+          const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+
+          if (credentials.length === 0) {
+            dispatch({ type: "disconnect.failed", attempt: effect.attempt, reason: { kind: "no-credentials" } })
+
+            return
+          }
+
+          await Promise.all(
+            credentials.map((credential) => serverSdk.api.credential.remove({ credentialID: credential.id })),
+          )
+          dispatch({ type: "disconnect.succeeded", attempt: effect.attempt })
+        })
+        .catch((error) =>
+          dispatch({ type: "disconnect.failed", attempt: effect.attempt, reason: { kind: "request", error } }),
+        )
+
+      return
+    }
+
+    if (effect.type === "toast.disconnected") {
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("provider.disconnect.toast.disconnected.title", { provider: effect.providerName }),
+        description: language.t("provider.disconnect.toast.disconnected.description", {
+          provider: effect.providerName,
+        }),
+      })
+
+      return
+    }
+
+    showToast({
+      title: language.t("common.requestFailed"),
+      description:
+        effect.reason.kind === "no-credentials"
+          ? language.t("provider.disconnect.toast.noCredentials.description", { provider: effect.providerName })
+          : language.tDynamic(
+              "provider.disconnect.toast.failed.description",
+              formatServerError(effect.reason.error, language.t),
+              { provider: effect.providerName },
+            ),
+    })
+  }
 
   // Console-managed providers (`opencode-go`, `console-*`) connect through the `opencode`
   // integration, so the lookup must follow `integrationID` rather than the provider id.
@@ -86,18 +150,11 @@ export const SettingsProviders: Component<{
           directory={props.directory}
           defaultLocation={props.directory === undefined}
           controller={providerConnect}
-          onConnected={(providerID) => {
-            if (CONSOLE_PROVIDERS.has(providerID)) {
-              setState("disconnecting", reconcile({}))
-
-              return
-            }
-
-            setState("disconnecting", providerID, undefined)
-          }}
+          onConnected={(providerID) => dispatch({ type: "provider.reconnected", providerID })}
         />
       ),
-      () => void accountActions
+      () =>
+        void accountActions
           .refresh()
           .catch(() => undefined)
           .finally(() => setState("held", undefined)),
@@ -125,20 +182,16 @@ export const SettingsProviders: Component<{
       .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })
 
-  createEffect(() => {
-    const ids = new Set(available().map((item) => item.id))
-    Object.entries(state.disconnecting).forEach(([id, status]) => {
-      if ((status === "removing" || status === "removed") && !ids.has(id)) {
-        setState("disconnecting", id, "absent")
+  // Tells the machine which providers the server catalog lists, so a confirmed removal stops hiding a
+  // provider once the server drops it and shows it again if it is later reconnected.
+  createEffect(
+    on(
+      () => available().map((item) => item.id),
+      (providerIDs) => dispatch({ type: "catalog.synced", providerIDs }),
+    ),
+  )
 
-        return
-      }
-
-      if (status === "absent" && ids.has(id)) setState("disconnecting", id, undefined)
-    })
-  })
-
-  const connected = createMemo(() => available().filter((item) => !state.disconnecting[item.id]))
+  const connected = createMemo(() => connectedProviders(disconnects(), available()))
 
   const consoleGroup = createMemo(() => consoleProviderGroup(available()))
 
@@ -174,13 +227,13 @@ export const SettingsProviders: Component<{
   })
 
   // Connection state comes from the integration list like the TUI: credential
-  // connections mean an API key or OAuth grant, env connections mean detected
+  // connections mean an API key or an account login, env connections mean detected
   // environment variables, and a connectionless integration is config-provided.
   const source = (item: ProviderItem): ProviderSource | undefined => {
     const current = integration(item)
     const credential = current?.connections.find((connection) => connection.type === "credential")
 
-    if (credential) return credential.method === "oauth" ? "account" : "api"
+    if (credential) return credential.method === "key" ? "api" : "account"
 
     if (current?.connections.some((connection) => connection.type === "env")) return "env"
 
@@ -223,45 +276,14 @@ export const SettingsProviders: Component<{
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
-  const disconnect = async (item: ProviderItem, name: string) => {
-    if (state.disconnecting[item.id]) return
+  const disconnect = (item: ProviderItem, name: string) => {
     const group = consoleGroup()
-    const ids = group?.root.id === item.id ? group.providers.map((provider) => provider.id) : [item.id]
-    updateDisconnecting(ids, "removing")
-    const location = props.directory ? { directory: props.directory } : undefined
-    await serverSdk.api.integration
-      .get({ integrationID: item.integrationID ?? item.id, location })
-      .then(async (integration) => {
-        const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
-
-        if (credentials.length === 0) {
-          showToast({
-            title: language.t("common.requestFailed"),
-            description: language.t("provider.disconnect.toast.noCredentials.description", { provider: name }),
-          })
-
-          return
-        }
-
-        await Promise.all(
-          credentials.map((credential) => serverSdk.api.credential.remove({ credentialID: credential.id })),
-        )
-        updateDisconnecting(ids, "removed")
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
-          description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
-        })
-      })
-      .catch((err) => {
-        updateDisconnecting(ids, undefined)
-        const message = formatServerError(err, language.t)
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: language.tDynamic("provider.disconnect.toast.failed.description", message, { provider: name }),
-        })
-      })
+    dispatch({
+      type: "disconnect.requested",
+      providerIDs: group?.root.id === item.id ? group.providers.map((provider) => provider.id) : [item.id],
+      integrationID: item.integrationID ?? item.id,
+      providerName: name,
+    })
   }
 
   const activate = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
@@ -394,10 +416,11 @@ export const SettingsProviders: Component<{
     <>
       <div class="settings-tab-header">
         <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.providers.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.providers.description")}</span>
           </div>
+          <div class="settings-tab-header-actions">{props.headerAction}</div>
         </div>
       </div>
 
@@ -439,16 +462,25 @@ export const SettingsProviders: Component<{
                                   </span>
                                 }
                               >
-                                <Button
-                                  size="normal"
-                                  variant="ghost-muted"
-                                  onClick={() => void disconnect(item, item.name)}
-                                >
+                                <Button size="normal" variant="ghost-muted" onClick={() => disconnect(item, item.name)}>
                                   {language.t("common.disconnect")}
                                 </Button>
                               </Show>
                             }
                           >
+                            <Show when={activeProviderAccount(integration(item))?.status}>
+                              {(status) => (
+                                <Button
+                                  size="normal"
+                                  variant="ghost-muted"
+                                  class="text-[var(--v2-state-fg-warning)]"
+                                  title={status().message}
+                                  onClick={() => connect(item.id)}
+                                >
+                                  {language.t("dialog.provider.needsSignIn")}
+                                </Button>
+                              )}
+                            </Show>
                             <AccountMenu provider={item} />
                           </Show>
                         </div>
@@ -498,7 +530,7 @@ export const SettingsProviders: Component<{
                                 <Button
                                   size="normal"
                                   variant="ghost-muted"
-                                  onClick={() => void disconnect(item, language.t("provider.connect.opencode.name"))}
+                                  onClick={() => disconnect(item, language.t("provider.connect.opencode.name"))}
                                 >
                                   {language.t("common.disconnect")}
                                 </Button>

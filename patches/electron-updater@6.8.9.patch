@@ -1,0 +1,15 @@
+diff --git a/out/NsisUpdater.js b/out/NsisUpdater.js
+index 6fb70b4275a59741d28aecc389c2736909130a3e..498e59ebbeb5e8648a6363b782d1a9d3ef63a8e7 100644
+--- a/out/NsisUpdater.js
++++ b/out/NsisUpdater.js
+@@ -104,7 +104,9 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
+             this.dispatchError(new Error("No update filepath provided, can't quit and install"));
+             return false;
+         }
+-        const args = ["--updated"];
++        // OpenCode: skip NSIS's CRC check of the whole installer, about 0.5 s for 230 MB. The updater already verified
++        // the download's SHA-512; manual installs keep the check. Must come before /D=.
++        const args = ["--updated", "/NCRC"];
+         if (options.isSilent) {
+             args.push("/S");
+         }

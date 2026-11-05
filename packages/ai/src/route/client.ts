@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { Auth } from "./auth.js"
 import { Endpoint, type EndpointPatch } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -13,23 +13,28 @@ import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
 import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
+import type { LLMRequestInput } from "../llm.js"
 import {
   AIError,
   CompactionResponse,
   CompactionCheckpointResponse,
   AIErrorReason,
-  GenerationOptions,
-  HttpOptions,
-  LLMRequest,
   LLMResponse,
+  ResponseFold,
   LanguageModel,
+  Message,
   LLMEvent,
   InvalidProviderOutputError,
   ProviderConfigurationError,
   ProviderID,
-  mergeGenerationOptions,
-  mergeHttpOptions,
+  ToolChoice,
+  ToolEntry,
+  type LLMRequest,
+  mergeGeneration,
   mergeProviderOptions,
+  mergeTransport,
+  type LanguageModelDefaults,
+  withPartial,
 } from "../schema/index.js"
 
 export interface RouteBody<Body> {
@@ -94,25 +99,13 @@ export type AnyRoute<Compact extends CompactionOperations | undefined = Compacti
   Compact
 >
 
-export type HttpOptionsInput = HttpOptions.Input
-
 export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "route">
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
-export interface RouteDefaults {
-  readonly headers?: Record<string, string>
-  readonly generation?: GenerationOptions
-  readonly providerOptions?: ProviderOptions
-  readonly http?: HttpOptions
-}
+export type RouteDefaults = LanguageModelDefaults
 
-export interface RouteDefaultsInput {
-  readonly headers?: Record<string, string>
-  readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: ProviderOptions
-  readonly http?: HttpOptions.Input
-}
+export type RouteDefaultsInput = LanguageModelDefaults
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly compact?: CompactionOperations
@@ -144,32 +137,13 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
   })
 }
 
-const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaultsInput): RouteDefaults => {
-  const headers = mergeHeaders(base?.headers, patch.headers)
-  return {
-    ...base,
-    ...patch,
-    headers,
-    generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
-    providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
-    http: mergeHttpOptions(
-      base?.http,
-      HttpOptions.make(patch.http),
-      headers === undefined ? undefined : new HttpOptions({ headers }),
-    ),
-  }
-}
-
-const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined>) => {
-  const entries = items.flatMap((item) =>
-    item === undefined ? [] : Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  )
-  if (entries.length === 0) return undefined
-  return Object.fromEntries(entries)
-}
-
-export const generationOptions = (input: GenerationOptions.Input | undefined) =>
-  input === undefined ? undefined : GenerationOptions.make(input)
+const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaultsInput): RouteDefaults => ({
+  ...base,
+  ...patch,
+  ...mergeTransport(base, patch),
+  ...mergeGeneration(base, patch),
+  providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
+})
 
 export interface Interface {
   readonly compact: CompactMethod
@@ -217,41 +191,60 @@ export interface TriggerCompactOptions extends StreamOptions {
   readonly mechanism: "trigger"
 }
 
-// Keep the required route shape explicit: the schema class's self type erases its model parameter in assignability.
-export type CompactionRequest = LLMRequest & {
-  readonly model: LanguageModel<ProviderOptions, { readonly endpoint: CompactOperation }>
-}
-export type CheckpointRequest = LLMRequest & {
-  readonly model: LanguageModel<ProviderOptions, { readonly trigger: TriggerCompactOperation }>
-}
+type EndpointModel = LanguageModel<ProviderOptions, { readonly endpoint: CompactOperation }>
+type TriggerModel = LanguageModel<ProviderOptions, { readonly trigger: TriggerCompactOperation }>
+
+/** A text request whose model supports explicit compaction. */
+export type CompactionRequest = LLMRequestInput & { readonly model: EndpointModel }
+/** A text request whose model supports trigger compaction checkpoints. */
+export type CheckpointRequest = LLMRequestInput & { readonly model: TriggerModel }
 
 export interface CompactMethod<R = never> {
-  (request: CheckpointRequest, options: TriggerCompactOptions): Effect.Effect<CompactionCheckpointResponse, AIError, R>
-  (request: CompactionRequest, options?: EndpointCompactOptions): Effect.Effect<CompactionResponse, AIError, R>
+  (
+    request: LLMRequest & { readonly model: TriggerModel },
+    options: TriggerCompactOptions,
+  ): Effect.Effect<CompactionCheckpointResponse, AIError, R>
+  (
+    request: LLMRequest & { readonly model: EndpointModel },
+    options?: EndpointCompactOptions,
+  ): Effect.Effect<CompactionResponse, AIError, R>
 }
 
-export function canCompact(
-  request: LLMRequest,
-  options?: { readonly mechanism?: "endpoint" },
-): request is CompactionRequest
-export function canCompact(
-  request: LLMRequest,
+/** Whether a model, or a text request's model, supports compaction through the given mechanism. */
+export function canCompact<Model extends LanguageModel>(
+  model: Model,
   options: { readonly mechanism: "trigger" },
-): request is CheckpointRequest
-export function canCompact(request: LLMRequest, options?: { readonly mechanism?: string }) {
-  if (options?.mechanism === "trigger") return request.model.route.compact?.trigger !== undefined
+): model is Model & TriggerModel
+export function canCompact<Request extends { readonly model: LanguageModel }>(
+  request: Request,
+  options: { readonly mechanism: "trigger" },
+): request is Request & { readonly model: TriggerModel }
+export function canCompact<Model extends LanguageModel>(
+  model: Model,
+  options?: { readonly mechanism?: "endpoint" },
+): model is Model & EndpointModel
+export function canCompact<Request extends { readonly model: LanguageModel }>(
+  request: Request,
+  options?: { readonly mechanism?: "endpoint" },
+): request is Request & { readonly model: EndpointModel }
+export function canCompact(
+  target: LanguageModel | { readonly model: LanguageModel },
+  options?: { readonly mechanism?: string },
+) {
+  const model = target instanceof LanguageModel ? target : target.model
+  if (options?.mechanism === "trigger") return model.route.compact?.trigger !== undefined
   if (options?.mechanism !== undefined && options.mechanism !== "endpoint") return false
-  return request.model.route.compact?.endpoint !== undefined
+  return model.route.compact?.endpoint !== undefined
 }
 
-const unsupportedCompaction = (request: LLMRequest, mechanism: string | undefined) => {
+const unsupportedCompaction = (model: LanguageModel, mechanism: string | undefined) => {
   if (mechanism !== undefined && mechanism !== "endpoint" && mechanism !== "trigger")
     return ProviderShared.invalidRequest(`Unknown compaction mechanism: ${mechanism}`)
   return ProviderShared.unsupportedOperation({
     operation: mechanism === "trigger" ? "compact.trigger" : "compact",
-    provider: request.model.provider,
-    route: request.model.route.id,
-    message: `${request.model.provider}/${request.model.route.id} does not support ${mechanism === "trigger" ? "trigger" : "explicit"} compaction`,
+    provider: model.provider,
+    route: model.route.id,
+    message: `${model.provider}/${model.route.id} does not support ${mechanism === "trigger" ? "trigger" : "explicit"} compaction`,
   })
 }
 
@@ -259,21 +252,21 @@ export class LLMClientService extends Context.Service<LLMClientService, Interfac
 export const Service = LLMClientService
 export type Service = LLMClientService
 
-const resolveRequestOptions = (request: LLMRequest) => {
+const resolveRequestOptions = (request: LLMRequest): LLMRequest => {
   const messages = normalizeToolHistory(request.messages)
-  const normalized = messages === request.messages ? request : LLMRequest.update(request, { messages })
+  const normalized = messages === request.messages ? request : { ...request, messages }
   const routeDefaults = normalized.model.route.defaults
   const modelDefaults = normalized.model.defaults
-  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized.generation)
-  return LLMRequest.update(normalized, {
-    generation: generation ?? new GenerationOptions({}),
+  return {
+    ...normalized,
+    ...mergeGeneration(routeDefaults, modelDefaults, normalized),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
       modelDefaults?.providerOptions,
       normalized.providerOptions,
     ),
-    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, normalized.http),
-  })
+    ...mergeTransport(routeDefaults, modelDefaults, normalized),
+  }
 }
 
 export interface MakeInput<Body, Frame, Event, State> {
@@ -340,16 +333,30 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
     let terminal = false
     return events.pipe(
       Stream.mapEffect((event) => {
-        if (terminal)
+        // Raw events carry provider frames that may trail the terminal event.
+        if (terminal && !LLMEvent.is.raw(event))
           return Effect.fail(
             ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
           )
-        if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
+        if (LLMEvent.is.finish(event)) terminal = true
         return Effect.succeed(event)
       }),
       Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
     )
   })
+
+const decodeJsonOption = Schema.decodeUnknownOption(ProviderShared.Json)
+
+// JSON text frames are parsed; non-JSON sentinels such as `[DONE]` stay strings.
+const rawFrame = (frame: unknown) =>
+  typeof frame === "string" ? Option.getOrElse(decodeJsonOption(frame), () => frame) : frame
+
+// Transports may interleave their own marker objects with provider frames, e.g. Gemini's continuation boundary.
+const isProviderFrame = (frame: unknown) =>
+  typeof frame !== "object" ||
+  frame === null ||
+  Array.isArray(frame) ||
+  Object.getPrototypeOf(frame) === Object.prototype
 
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
@@ -396,9 +403,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           provider: provider ?? routeInput.provider,
           providerMetadataKey:
             providerMetadataKey ??
-            (provider !== undefined && String(provider) !== String(routeInput.provider)
-              ? String(provider)
-              : routeInput.providerMetadataKey),
+            (provider !== undefined && provider !== routeInput.provider ? provider : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
@@ -414,7 +419,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           endpoint: routeInput.endpoint,
           auth: routeInput.auth ?? Auth.none,
           encodeBody: ProviderShared.encodeJson,
-          middleware: options?.http,
+          middleware: RequestExecutor.withFetch(request.fetch, options?.http),
           webSocket: options?.webSocket,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime, options?: StreamOptions) => {
@@ -461,7 +466,9 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                       ),
                       Effect.map(([next, output]) => {
                         state = next
-                        return output
+                        return request.includeRaw && isProviderFrame(frame)
+                          ? [LLMEvent.raw({ data: execution.raw?.(frame) ?? rawFrame(frame) }), ...output]
+                          : output
                       }),
                       Effect.mapError(frameError(frame, event)),
                     ),
@@ -549,26 +556,44 @@ export function make<Body, Prepared, Frame, Event, State>(
   })
 }
 
-const prepareRequest = (request: LLMRequest) => {
+const prepareRequest = (request: LLMRequest): LLMRequest => {
   const original = resolveRequestOptions(request)
-  const sanitized = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
+  const sanitized = restoreClasses({ ...sanitizeSurrogates({ ...original, model: undefined }), model: original.model })
   // Deduplicate per sibling level; a tool and a namespace may share a name.
   const dedupe = (tools: LLMRequest["tools"]): LLMRequest["tools"] =>
     [...new Map(tools.map((tool) => [`${tool.type}:${tool.name}`, tool])).values()].map((tool) =>
       tool.type === "tool" ? tool : { ...tool, tools: dedupe(tool.tools) },
     )
   const resolved = applyCachePolicy(
-    applyEffortUpdates(
-      LLMRequest.update(sanitized, { tools: ToolSchemaProjection.tools(dedupe(sanitized.tools), sanitized.model) }),
-    ),
+    applyEffortUpdates({ ...sanitized, tools: ToolSchemaProjection.tools(dedupe(sanitized.tools), sanitized.model) }),
   )
   const headers = resolved.model.route.headers?.({ request: resolved })
-  return headers === undefined
-    ? resolved
-    : LLMRequest.update(resolved, { http: mergeHttpOptions(new HttpOptions({ headers }), resolved.http) })
+  return headers === undefined ? resolved : { ...resolved, headers: { ...headers, ...resolved.headers } }
 }
 
+// Sanitizing copies changed class instances into plain records; rebuild them so protocols see the canonical classes.
+const restoreClasses = (request: LLMRequest): LLMRequest => ({
+  ...request,
+  messages: request.messages.map(Message.make),
+  tools: request.tools.map(ToolEntry.make),
+  toolChoice: request.toolChoice === undefined ? undefined : ToolChoice.make(request.toolChoice),
+})
+
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+  const references = request.messages.flatMap((message) =>
+    message.content.flatMap((part) => {
+      if (part.type === "media") {
+        const source = part.media.source
+        return source.type === "url" ? [source.url] : source.type === "ref" ? [source.id] : []
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return []
+      return part.result.value.flatMap((item) => (item.type === "file" ? [item.uri] : []))
+    }),
+  )
+  if (references.some((reference) => /^\s*file:/i.test(reference)))
+    return yield* ProviderShared.invalidRequest(
+      "Local file references must be read with Media.file(path) before sending",
+    )
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
@@ -583,7 +608,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   }
 })
 
-/** @internal Test-only projection of the execution compiler; not exported from package barrels. */
+/** Test-only projection of the execution compiler; exported from `@opencode/ai/testing`. */
 export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request: LLMRequest) {
   const compiled = yield* compile(request)
   return {
@@ -604,12 +629,19 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
     }),
   )
 
-const generateWith = (stream: Interface["stream"]) =>
+export const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
-    const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
-    const response = LLMResponse.complete(state)
+    let state = ResponseFold.empty()
+    yield* stream(request, options).pipe(
+      Stream.runForEach((event) => Effect.sync(() => (state = ResponseFold.reduce(state, event)))),
+      Effect.mapError((error) => withPartial(error, ResponseFold.partial(state))),
+    )
+    const response = ResponseFold.complete(state)
     if (response) return response
-    return yield* incompleteStreamError(`${request.model.provider}/${request.model.route.id}`)
+    return yield* withPartial(
+      incompleteStreamError(`${request.model.provider}/${request.model.route.id}`),
+      ResponseFold.partial(state),
+    )
   })
 
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {
@@ -626,21 +658,17 @@ export function generate(request: LLMRequest, options?: StreamOptions): Effect.E
   })
 }
 
-export function compact(
-  request: CheckpointRequest,
-  options: TriggerCompactOptions,
-): Effect.Effect<CompactionCheckpointResponse, AIError, Service>
-export function compact(
-  request: CompactionRequest,
-  options?: EndpointCompactOptions,
-): Effect.Effect<CompactionResponse, AIError, Service>
-export function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
+/** Compact through the client for `options.mechanism`, failing typed when the request's route does not support it. */
+export function compactRequest(
+  request: LLMRequest,
+  options?: EndpointCompactOptions | TriggerCompactOptions,
+): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError, Service> {
   return Effect.gen(function* () {
     const client = yield* Service
     if (options?.mechanism === "trigger" && canCompact(request, options)) return yield* client.compact(request, options)
     if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
       return yield* client.compact(request, options)
-    return yield* unsupportedCompaction(request, options?.mechanism)
+    return yield* unsupportedCompaction(request.model, options?.mechanism)
   })
 }
 
@@ -650,20 +678,20 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     const executor = yield* RequestExecutor.Service
     const stream = streamRequestWith({ http: executor })
     function compact(
-      request: CompactionRequest,
-      options?: EndpointCompactOptions,
-    ): Effect.Effect<CompactionResponse, AIError>
-    function compact(
-      request: CheckpointRequest,
+      request: LLMRequest & { readonly model: TriggerModel },
       options: TriggerCompactOptions,
     ): Effect.Effect<CompactionCheckpointResponse, AIError>
+    function compact(
+      request: LLMRequest & { readonly model: EndpointModel },
+      options?: EndpointCompactOptions,
+    ): Effect.Effect<CompactionResponse, AIError>
     function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
       return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
         if (options?.mechanism === "trigger" && canCompact(request, options))
           return request.model.route.compact.trigger(prepareRequest(request), executor, options)
         if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
           return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
-        return unsupportedCompaction(request, options?.mechanism)
+        return unsupportedCompaction(request.model, options?.mechanism)
       })
     }
     return Service.of({
@@ -677,8 +705,6 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
 export const Route = { make } as const
 
 export const LLMClient = {
-  canCompact,
-  compact,
   Service,
   layer,
   stream,

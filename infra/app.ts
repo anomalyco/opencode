@@ -13,13 +13,6 @@ export const api = new sst.cloudflare.Worker("Api", {
   transform: {
     worker: (args) => {
       args.logpush = true
-      if ($app.stage === "vimtor" || $app.stage === "adam") return
-      // Deleting the class erases every SyncServer Durable Object and its stored share data.
-      args.migrations = {
-        oldTag: $app.stage === "production" || $app.stage === "thdxr" ? undefined : "v1",
-        newTag: "v2",
-        deletedClasses: ["SyncServer"],
-      }
     },
   },
 })

@@ -1,5 +1,5 @@
 import type { ElectronAPI } from "./api-types"
-import { invoke, listen, send } from "./ipc-client"
+import { cancellable, invoke, listen, send } from "./ipc-client"
 
 type Mutable<Value> =
   Value extends ReadonlyArray<unknown>
@@ -22,8 +22,10 @@ const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object
 
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
-  reconnectService: () => invoke("AppReconnectService"),
-  consumeInitialDeepLinks: () => invoke("AppConsumeInitialDeepLinks").then(mutable),
+  reconnectService: (signal) => cancellable("AppReconnectService", undefined, signal),
+  onSidecarChanged: (cb) => listen("SidecarChanged", (event) => cb({ url: event.url })),
+  readyDeepLinks: () => send("AppReadyDeepLinks"),
+  acknowledgeDeepLinks: (attempt) => send("AppAcknowledgeDeepLinks", { attempt }),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
@@ -54,7 +56,7 @@ export const api: ElectronAPI = {
   getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
-  onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
+  onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb({ attempt: event.attempt, urls: mutable(event.urls) })),
 
   openDirectoryPicker: (opts) => invoke("FilesOpenDirectoryPicker", { options: opts }).then(mutable),
   openFilePicker: (opts) => invoke("FilesOpenFilePicker", { options: opts }).then(mutable),
@@ -73,6 +75,8 @@ export const api: ElectronAPI = {
     ),
   writeClipboardText: (text) => invoke("FilesWriteClipboardText", { text }),
   getWindowFocused: () => invoke("WindowGetFocused"),
+  requestMicrophone: () => invoke("WindowRequestMicrophone"),
+  setVoiceCallActive: (active) => invoke("WindowSetVoiceCallActive", { active }),
   getWindowFullscreen: () => invoke("WindowGetFullscreen"),
   onWindowFullscreenChanged: (cb) => listen("WindowFullscreenChanged", (event) => cb(event.fullscreen)),
   setWindowFocus: () => invoke("WindowSetFocus"),
@@ -83,12 +87,17 @@ export const api: ElectronAPI = {
   getPinchZoomEnabled: () => invoke("WindowGetPinchZoomEnabled"),
   setPinchZoomEnabled: (enabled) => invoke("WindowSetPinchZoomEnabled", { enabled }),
   onPinchZoomEnabledChanged: (cb) => listen("WindowPinchZoomChanged", (event) => cb(event.enabled)),
-  onZoomFactorChanged: (cb) => listen("WindowZoomChanged", (event) => cb(event.factor)),
+  getZoomLevel: () => invoke("WindowGetZoomLevel"),
+  setZoomLevel: (level) => invoke("WindowSetZoomLevel", { level }),
+  onZoomChanged: (cb) => listen("WindowZoomChanged", (event) => cb({ factor: event.factor, level: event.level })),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
+  setTrafficLightsPosition: (position) => invoke("WindowSetTrafficLightsPosition", position),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
+  getSpellcheckEnabled: () => invoke("AppGetSpellcheckEnabled"),
+  setSpellcheckEnabled: (enabled) => invoke("AppSetSpellcheckEnabled", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
 }
