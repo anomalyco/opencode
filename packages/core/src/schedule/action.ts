@@ -43,7 +43,7 @@ export const authorize = Effect.fnUntraced(function* (
 
 /**
  * Runs one shell action under narrow unattended permissions. Never fails: every outcome becomes a run result. Without a
- * Session it runs in the global config Location and asks for nothing, because the caller that created it is trusted.
+ * Session it runs in the global config Location, held to its default agent's rules with nothing asked.
  * A check's `message` arrives on stdin with a trailing newline and in `OPENCODE_SCHEDULE_MESSAGE`.
  */
 export const run = Effect.fnUntraced(function* (

@@ -367,14 +367,15 @@ export const scanShell = Effect.fnUntraced(function* (command: string, cwd?: str
 
 /**
  * Asks once for the shell and `external_directory` permissions a shell check or action needs. Without a Session nothing
- * is asked: a session-less schedule was created by a trusted API caller. This is the only place that trust rule lives.
+ * is asked, because there is no sessionID to attach a request to: the global default agent's rules decide, and anything
+ * they do not allow is denied.
  */
 export const assertShellPermissions = Effect.fnUntraced(function* (
   session: SessionSchema.Info | undefined,
   scanned: { readonly external: ReadonlyArray<string>; readonly commands: ReadonlyArray<string> },
   metadata?: Record<string, unknown>,
 ) {
-  if (session === undefined) return
+  if (session === undefined) return yield* assertGlobalShellPermissions(scanned)
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
@@ -394,6 +395,35 @@ export const assertShellPermissions = Effect.fnUntraced(function* (
       ...(metadata === undefined ? {} : { metadata }),
       sessionID: session.id,
       agent: agent.id,
+    })
+  }
+})
+
+/** Rules for a location with no global default agent: everything is denied. */
+const denyAll: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
+
+/**
+ * Holds a session-less run to the global config Location's rules, from its default agent. A run without a Session runs
+ * inside that Location, so `agents.select(undefined)` reads the agent the config there would pick. The pure
+ * `Permission.evaluate` is used instead of `Permission.assert`, because nobody is present and a request that would ask
+ * has no sessionID to belong to: anything other than an allow is denied.
+ */
+const assertGlobalShellPermissions = Effect.fnUntraced(function* (scanned: {
+  readonly external: ReadonlyArray<string>
+  readonly commands: ReadonlyArray<string>
+}) {
+  const agents = yield* Agent.Service
+  const agent = yield* agents.select(undefined)
+  const rules = agent.info?.permissions ?? denyAll
+  for (const action of ["external_directory", "shell"] as const) {
+    const resources = action === "external_directory" ? scanned.external : scanned.commands
+    const blocked = resources.filter((resource) => Permission.evaluate(action, resource, rules).effect !== "allow")
+    if (blocked.length === 0) continue
+    return yield* new Permission.BlockedError({
+      rules,
+      permission: action,
+      resources: blocked,
+      reason: `Permission ${action} (${blocked.join(", ")}) is not allowed by the global config, and nobody is present to ask`,
     })
   }
 })

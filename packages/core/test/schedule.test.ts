@@ -741,12 +741,49 @@ describe("Schedule", () => {
     }),
   )
 
-  it.effect("runs a session-less shell action without asking for permissions", () =>
+  it.effect("denies a session-less shell action its global config does not allow", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
       globalFlag.on = true
       agentRules = [{ action: "*", resource: "*", effect: "deny" }]
-      // Boots the global location with the deny rules, so an asserted permission would stop the run.
+      // Boots the global location with the deny rules, so the run is held to them.
+      expect(yield* schedules.enabled()).toBe(true)
+
+      const bus = yield* Bus.Service
+      const asks: Permission.Request[] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Permission.Event.Asked.type
+          ? Effect.sync(() => {
+              asks.push(event.data as Permission.Request)
+            })
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const schedule = yield* schedules.create({
+        when: { type: "in", in: "1 minute" },
+        action: { type: "shell", run: "echo hi" },
+      })
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(shellState.runs).toEqual([])
+      expect((yield* schedules.get(schedule.id)).lastRun?.error).toContain(
+        "Permission shell (echo hi) is not allowed by the global config",
+      )
+      // A session-less run has no sessionID to attach a request to, so a rule that would ask is a denial.
+      expect(asks).toEqual([])
+    }),
+  )
+
+  it.effect("runs a session-less shell action its global config allows", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      shellState.stdout = "hi"
+      agentRules = [
+        { action: "external_directory", resource: "*", effect: "allow" },
+        { action: "shell", resource: "*", effect: "allow" },
+      ]
       expect(yield* schedules.enabled()).toBe(true)
 
       const schedule = yield* schedules.create({
@@ -757,6 +794,29 @@ describe("Schedule", () => {
       yield* schedules.tick
       expect(shellState.runs).toEqual(["echo hi"])
       expect((yield* schedules.get(schedule.id)).lastRun?.error).toBeUndefined()
+    }),
+  )
+
+  it.effect("holds a session-less shell check to its global config", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      agentRules = [{ action: "*", resource: "*", effect: "deny" }]
+      expect(yield* schedules.enabled()).toBe(true)
+
+      const schedule = yield* schedules.create({
+        when: { type: "every", every: "1 minute" },
+        if: { type: "shell", run: "probe" },
+        action: { type: "shell", run: "echo hi" },
+      })
+      for (let index = 0; index < 3; index++) {
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+      }
+      expect(shellState.runs).toEqual([])
+      const info = yield* schedules.get(schedule.id)
+      expect(info).toMatchObject({ status: "paused", lastOutcome: "failed" })
+      expect(info.lastRun?.error).toContain("Permission shell (probe) is not allowed by the global config")
     }),
   )
 
