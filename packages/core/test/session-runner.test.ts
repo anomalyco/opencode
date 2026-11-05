@@ -1791,7 +1791,7 @@ describe("SessionRunnerLLM", () => {
       expect(
         s.requests
           .at(-1)
-          ?.messages.flatMap((message) => message.content)
+          ?.messages.flatMap((message) => [...message.content])
           .some((part) => part.type === "compaction"),
       ).toBe(false)
       expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
@@ -1905,9 +1905,17 @@ describe("SessionRunnerLLM", () => {
 
     for (const field of [
       "model",
-      "generation",
+      "maxTokens",
+      "temperature",
+      "topP",
+      "topK",
+      "frequencyPenalty",
+      "presencePenalty",
+      "seed",
+      "stop",
       "providerOptions",
       "http",
+      "headers",
       "toolChoice",
       "cache",
       "tools",
@@ -2809,12 +2817,20 @@ describe("SessionRunnerLLM", () => {
           "model",
           "system",
           "tools",
-          "generation",
+          "maxTokens",
+          "temperature",
+          "topP",
+          "topK",
+          "frequencyPenalty",
+          "presencePenalty",
+          "seed",
+          "stop",
           "providerOptions",
           "toolChoice",
           "cache",
           "promptCacheKey",
           "http",
+          "headers",
         ] as const)
           expect(compact[field]).toEqual(normal[field])
         expect(compact.toolChoice).toBeUndefined()
@@ -3604,7 +3620,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* Effect.exit(s.resume)).toMatchObject({ _tag: "Failure" })
 
     expect(s.requests).toHaveLength(1)
-    expect(s.requests[0]?.generation?.maxTokens).toBe(50)
+    expect(s.requests[0]?.maxTokens).toBe(50)
     expect(yield* s.context).toContainEqual(
       expect.objectContaining({
         type: "compaction",
@@ -3817,10 +3833,10 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Continued", "text-fitted-final"))
     yield* s.runPrompt("Continue")
 
-    expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
+    expect(s.requests[0]?.maxTokens).toBe(64_000)
     // 1% of the window stays unused, since strict providers reject a request that overshoots it by a few tokens.
-    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(99_000 - 50_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(99_000 - 50_000 - 200)
+    expect(s.requests[1]?.maxTokens).toBeLessThan(99_000 - 50_000)
+    expect(s.requests[1]?.maxTokens).toBeGreaterThan(99_000 - 50_000 - 200)
   })
 
   scenario("caps the output limit a large model advertises", function* (s) {
@@ -3828,7 +3844,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Answer", "text-large-output"))
     yield* s.runPrompt("Question")
 
-    expect(s.requests[0]?.generation?.maxTokens).toBe(256_000)
+    expect(s.requests[0]?.maxTokens).toBe(256_000)
   })
 
   scenario("gives the summary its full output limit when the conversation overshot the threshold", function* (s) {
@@ -3846,8 +3862,8 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
     // The summary may use the whole 30k reserve of a 200k window.
-    expect(s.requests[0]?.generation?.maxTokens).toBe(30_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBe(32_000)
+    expect(s.requests[0]?.maxTokens).toBe(30_000)
+    expect(s.requests[1]?.maxTokens).toBe(32_000)
   })
 
   scenario("keeps the summary its room on a small window", function* (s) {
@@ -3864,8 +3880,8 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
-    expect(s.requests[0]?.generation?.maxTokens).toBe(16_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBe(16_000)
+    expect(s.requests[0]?.maxTokens).toBe(16_000)
+    expect(s.requests[1]?.maxTokens).toBe(16_000)
   })
 
   scenario("publishes the original overflow when recovery summarization fails", function* (s) {
@@ -5176,7 +5192,7 @@ describe("SessionRunnerLLM", () => {
   scenario("adds session correlation headers to model requests", function* (s) {
     yield* s.runPrompt("Run correlated request")
 
-    expect(s.requests[0]?.http?.headers).toEqual({
+    expect(s.requests[0]?.headers).toEqual({
       "x-opencode-session-id": sessionID,
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
@@ -5198,7 +5214,7 @@ describe("SessionRunnerLLM", () => {
       .pipe(Effect.orDie)
     yield* s.runPrompt("Run child request")
 
-    expect(s.requests[0]?.http?.headers).toMatchObject({
+    expect(s.requests[0]?.headers).toMatchObject({
       "x-opencode-session-id": sessionID,
       "x-opencode-parent-session-id": parentID,
       "x-session-affinity": parentID,

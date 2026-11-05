@@ -1,7 +1,8 @@
-import { onCleanup, Show } from "solid-js"
+import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Loader } from "@opencode/ui/loader"
-import { createKeyed, usePlugin } from "@opencode/plugin/gui"
+import { usePlugin } from "@opencode/plugin/gui"
+import { createOfficeWorker, type WorkerClient } from "./office-worker"
 import { OfficePages, type PaintPage } from "./pages"
 import { paper } from "./paper"
 import {
@@ -12,12 +13,13 @@ import {
   type VectorBitmap,
   type VectorRequest,
 } from "./slide-protocol"
-import { createWorkerClient, movableBuffer, SupersededError, WorkerClosedError } from "./worker-rpc"
+import { SupersededError, WorkerClosedError } from "./worker-rpc"
 import type { FileViewerProps } from "@opencode/plugin/gui/file"
 
-type Opened = { readonly slides: readonly SlideSummary[]; readonly paint: PaintPage }
+type Client = WorkerClient<SlideMethods>
 
-type Client = ReturnType<typeof createWorkerClient<SlideMethods>>
+/** An opened deck: its worker and its slides. */
+type Opened = { readonly client: Client; readonly slides: readonly SlideSummary[] }
 
 /**
  * A read-only PowerPoint deck: every slide fitted to the pane and painted as it scrolls into view, with its speaker
@@ -27,120 +29,95 @@ type Client = ReturnType<typeof createWorkerClient<SlideMethods>>
 export default function OfficePresentation(props: FileViewerProps) {
   const ctx = usePlugin()
 
-  const [state, setState] = createStore<{ opened: Opened | undefined; failed: boolean[] }>({
-    opened: undefined,
-    failed: [],
-  })
+  // A worker that stops, such as one out of memory, takes the deck with it.
+  const viewer = createOfficeWorker<SlideMethods, Opened>({
+    bytes: () => props.bytes,
+    createWorker: () =>
+      new Worker(new URL("./presentation.worker.ts", import.meta.url), { type: "module", name: "PowerPoint preview" }),
+    open: async (client, buffer, signal) => {
+      const slides = await client.call("open", { bytes: buffer }, { transfer: [buffer], signal })
 
-  // Syncs one deck's worker with the loaded bytes. Terminating the worker frees the engine's memory.
-  createKeyed(
-    () => props.bytes,
-    (bytes) => {
-      const controller = new AbortController()
-      const status = { failed: false }
-
-      const worker = new Worker(new URL("./presentation.worker.ts", import.meta.url), {
-        type: "module",
-        name: "PowerPoint preview",
-      })
-
-      const client = createWorkerClient<SlideMethods>(worker)
-
-      onCleanup(() => {
-        controller.abort()
-        client.close()
-        setState({ opened: undefined, failed: [] })
-      })
-
-      const fail = () => {
-        if (controller.signal.aborted || status.failed) return
-
-        status.failed = true
-        props.onError()
-      }
-
-      // A worker that stops, such as one out of memory, takes the deck with it.
-      worker.addEventListener("error", fail)
-      worker.addEventListener("messageerror", fail)
-
-      const painted = (index: number, failed: boolean) => {
-        if (!controller.signal.aborted) setState("failed", index, failed)
-      }
-
-      // The view owns its bytes, so they move to the worker rather than being copied.
-      const buffer = movableBuffer(bytes)
-
-      void client.call("open", { bytes: buffer }, { transfer: [buffer], signal: controller.signal }).then((slides) => {
-        if (controller.signal.aborted) return
-
-        setState({ opened: { slides, paint: createPaint(client, painted) } })
-        props.onDetails([ctx.plural("slides", slides.length)])
-      }, fail)
+      return { value: { client, slides }, details: [ctx.plural("slides", slides.length)] }
     },
-  )
+    onDetails: (details) => props.onDetails(details),
+    onError: () => props.onError(),
+  })
 
   return (
     <Show
-      when={state.opened}
+      when={viewer.opened()}
+      keyed
       fallback={
-        <div class="flex min-h-0 flex-1 items-center justify-center">
-          <Loader />
-        </div>
+        <Show when={viewer.loading()}>
+          <div class="flex min-h-0 flex-1 items-center justify-center">
+            <Loader />
+          </div>
+        </Show>
       }
     >
-      {(opened) => (
-        <OfficePages
-          pages={opened().slides}
-          paint={opened().paint}
-          label={(index) => ctx.t("slide", { number: index + 1 })}
-          overlay={(input) => (
-            <>
-              <Show when={opened().slides[input.index]?.hidden}>
-                {/* Paper-coloured, like the slide itself, so a hidden slide fades the same way in every theme. */}
-                <div class="pointer-events-none absolute inset-0 opacity-50" style={{ background: paper }} />
-              </Show>
-              <Show when={state.failed[input.index]}>
-                <div class="absolute inset-0 flex items-center justify-center p-4">
-                  <p
-                    role="status"
-                    class="rounded-md bg-v2-background-bg-base px-3 py-1.5 text-12-regular text-v2-text-text-muted shadow-[var(--v2-elevation-raised)]"
-                  >
-                    {ctx.t("slideFailed")}
-                  </p>
-                </div>
-              </Show>
-            </>
-          )}
-          footer={(index) => (
-            <Show when={opened().slides[index]}>
-              {(slide) => (
-                <Show when={slide().hidden || slide().notes}>
-                  {/* Zero width and full minimum width: the slide sets the column's width, and long notes wrap to it. */}
-                  <div class="flex w-0 min-w-full flex-col items-start gap-1.5">
-                    <Show when={slide().hidden}>
-                      <span class="rounded-[4px] border border-v2-border-border-base px-1.5 text-11-regular text-v2-text-text-muted">
-                        {ctx.t("hiddenSlide")}
-                      </span>
-                    </Show>
-                    <Show when={slide().notes}>
-                      {(notes) => (
-                        <p
-                          role="note"
-                          aria-label={ctx.t("speakerNotes")}
-                          class="w-full select-text whitespace-pre-wrap [overflow-wrap:anywhere] text-12-regular text-v2-text-text-muted"
-                        >
-                          {notes()}
-                        </p>
-                      )}
-                    </Show>
-                  </div>
+      {(opened) => <PresentationDeck opened={opened.value} />}
+    </Show>
+  )
+}
+
+/** One opened deck's slides. A reloaded file mounts a new one, with no slide failed. */
+function PresentationDeck(props: { opened: Opened }) {
+  const ctx = usePlugin()
+  const [failed, setFailed] = createStore<boolean[]>([])
+  const slides = () => props.opened.slides
+  const paint = createPaint(props.opened.client, (index, value) => setFailed(index, value))
+
+  return (
+    <OfficePages
+      pages={slides()}
+      paint={paint}
+      label={(index) => ctx.t("slide", { number: index + 1 })}
+      overlay={(input) => (
+        <>
+          <Show when={slides()[input.index]?.hidden}>
+            {/* Paper-coloured, like the slide itself, so a hidden slide fades the same way in every theme. */}
+            <div class="pointer-events-none absolute inset-0 opacity-50" style={{ background: paper }} />
+          </Show>
+          <Show when={failed[input.index]}>
+            <div class="absolute inset-0 flex items-center justify-center p-4">
+              <p
+                role="status"
+                class="rounded-md bg-v2-background-bg-base px-3 py-1.5 text-12-regular text-v2-text-text-muted shadow-[var(--v2-elevation-raised)]"
+              >
+                {ctx.t("slideFailed")}
+              </p>
+            </div>
+          </Show>
+        </>
+      )}
+      footer={(index) => (
+        <Show when={slides()[index]}>
+          {(slide) => (
+            <Show when={slide().hidden || slide().notes}>
+              {/* Zero width and full minimum width: the slide sets the column's width, and long notes wrap to it. */}
+              <div class="flex w-0 min-w-full flex-col items-start gap-1.5">
+                <Show when={slide().hidden}>
+                  <span class="rounded-[4px] border border-v2-border-border-base px-1.5 text-11-regular text-v2-text-text-muted">
+                    {ctx.t("hiddenSlide")}
+                  </span>
                 </Show>
-              )}
+                <Show when={slide().notes}>
+                  {(notes) => (
+                    <p
+                      role="note"
+                      aria-label={ctx.t("speakerNotes")}
+                      class="w-full select-text whitespace-pre-wrap [overflow-wrap:anywhere] text-12-regular text-v2-text-text-muted"
+                    >
+                      {notes()}
+                    </p>
+                  )}
+                </Show>
+              </div>
             </Show>
           )}
-        />
+        </Show>
       )}
-    </Show>
+    />
   )
 }
 

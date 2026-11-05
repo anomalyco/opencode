@@ -53,6 +53,12 @@ export function SideRegion(props: {
   sidebar: PanelSidebar
   present?: boolean
   size: Sizing
+  /**
+   * The width the contents keep, the side region's open width, which a close keeps as the far end of its travel. Set
+   * on the content box alone: an inherited custom property on an ancestor restyled every element in the region, the
+   * review's diffs included, on every frame of a resize drag.
+   */
+  contentWidth: Accessor<string>
   drag: PaneDrag
 }) {
   const layout = useLayout()
@@ -67,20 +73,23 @@ export function SideRegion(props: {
   const panelWidth = createMemo(() => (tabsVisible() ? "auto" : "0px"))
 
   // Opening the side region with no tabs shows a new tab view, once per opening and session. Keyed by the session, not
-  // the item, whose object changes with every routed session.
+  // the item, whose object changes with every routed session. A view left from an earlier opening is shown again
+  // rather than joined by another.
   const starting = createMemo(() =>
     tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined,
   )
 
-  createEffect(on(starting, (key) => key && props.region.openNewTab("side")))
+  createEffect(on(starting, (key) => key && !props.region.newTab("side") && props.region.openNewTab("side")))
 
-  // The split pane shows while it holds tabs; when the side pane has none, the split pane takes the whole height.
+  // The split pane shows while it holds tabs; when the side pane has none, New tabs included, the split pane takes the
+  // whole height.
   const panes = createMemo(() => {
     const split = props.region.pane("split").keys().length > 0
 
     if (!split) return ["side"] as const
 
-    if (props.region.pane("side").keys().length === 0) return ["split"] as const
+    if (props.region.pane("side").keys().length === 0 && props.region.newTabs("side").length === 0)
+      return ["split"] as const
 
     return ["side", "split"] as const
   })
@@ -122,7 +131,7 @@ export function SideRegion(props: {
           <div
             data-slot="session-review-content"
             class="h-full flex shrink-0 contain-strict"
-            style={{ width: "var(--panel-hold-width, var(--session-side-content-width, 100%))" }}
+            style={{ width: `var(--panel-hold-width, ${props.contentWidth()})` }}
           >
             <div
               ref={stack}
@@ -141,7 +150,7 @@ export function SideRegion(props: {
                     style={index() > 0 ? { height: `${lowerHeight()}px` } : undefined}
                   >
                     <Show when={index() > 0}>
-                      <div onPointerDown={() => props.size.start()}>
+                      <div onPointerDown={(event) => props.size.start(event)}>
                         <ResizeHandle
                           direction="vertical"
                           edge="start"
@@ -245,21 +254,19 @@ export function PaneTabs(props: {
       data-pane-content={props.pane.id}
       value={current()?.id ?? props.pane.active() ?? "empty"}
       onChange={(value) => {
+        // Kobalte selects the first tab while triggers register, including while the "+" click is still dispatching.
+        // Only input on a tab selects one; the region owns fallback selection.
+        if (
+          !selectionEvent ||
+          selectionEvent.eventPhase === Event.NONE ||
+          !(selectionEvent.target instanceof Element) ||
+          !selectionEvent.target.closest('[role="tab"]')
+        )
+          return
+
         if (props.region.newTabs(props.pane.id).some((entry) => entry.id === value))
           return props.region.selectNewTab(props.pane.id, value)
-
-        // Kobalte selects the first tab while triggers register, including while the "+" menu's click is still
-        // dispatching. Persist input events on a tab only; the region owns fallback selection.
-        if (
-          selectionEvent &&
-          selectionEvent.eventPhase !== Event.NONE &&
-          selectionEvent.target instanceof Element &&
-          selectionEvent.target.closest('[role="tab"]')
-        ) {
-          // Select first: dismissing the only New tab with nothing selected lets Kobalte pick the first tab meanwhile.
-          props.region.select(value)
-          props.region.newTabs(props.pane.id).forEach((entry) => props.region.dismissNewTab(entry.id))
-        }
+        props.region.select(value)
       }}
     >
       <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">

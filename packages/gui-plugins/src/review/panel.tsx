@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
+import { createMemo, createResource, createSignal, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
@@ -32,6 +32,7 @@ import {
   sortReviewPaths,
   type RenderDiff,
 } from "./kinds"
+import type { ReviewDiffView } from "./machine"
 import type { ReviewModel } from "./model"
 import { ReviewPanelEmpty, ReviewTitle } from "./parts"
 
@@ -54,7 +55,7 @@ type ReviewPanelProps = {
   kinds: ReturnType<typeof reviewDiffKinds>
   /** Labels for opened untracked folders in the change tree. */
   folderLabels?: ReadonlyMap<string, string>
-  diffsReady: boolean
+  status: ReviewDiffView["status"]
   diffVersion?: number
   loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
   readFile: ReviewModel["readFile"]
@@ -92,7 +93,7 @@ export default function ReviewPanelContent(props: {
       diffs={props.review.renderable()}
       kinds={props.review.kinds()}
       folderLabels={props.review.folderLabels()}
-      diffsReady={props.review.ready()}
+      status={props.review.diff().status}
       diffVersion={props.review.diffVersion()}
       loadDiff={props.review.loadDiff}
       readFile={props.review.readFile}
@@ -219,7 +220,7 @@ function ReviewPanel(props: ReviewPanelProps) {
           session={props.session}
           title={props.title}
           state={props.state}
-          diffsReady={props.diffsReady}
+          status={props.status}
           onSelectFile={props.onSelectFile}
           diffs={diffs()}
           filteredFiles={filteredFiles()}
@@ -272,7 +273,7 @@ function ReviewPanelSidebar(props: {
   session: MountedSession
   title?: JSX.Element
   state: ReviewPanelState
-  diffsReady: boolean
+  status: ReviewDiffView["status"]
   onSelectFile: (path: string) => void
   diffs: RenderDiff[]
   filteredFiles: string[]
@@ -326,58 +327,64 @@ function ReviewPanelSidebar(props: {
       minWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN}
       maxWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX}
     >
-      <Show
-        when={props.diffsReady}
-        fallback={
+      <Switch>
+        <Match when={props.status === "loading"}>
           <div class="px-2 py-2 text-12-regular text-text-weak">
             {ctx.t("common.loading")}
             {ctx.t("common.loading.ellipsis")}
           </div>
-        }
-      >
-        <Show
-          when={props.searching}
-          fallback={
-            <Show when={views()}>
-              {(views) => (
-                <Dynamic
-                  component={views().Tree}
-                  screen={props.screen}
-                  session={props.session}
-                  allowed={props.filteredFiles}
-                  kinds={props.kinds}
-                  labels={props.folderLabels}
-                  active={props.activeDiff}
-                  onFileClick={props.onSelectFile}
-                />
-              )}
-            </Show>
-          }
-        >
+        </Match>
+        <Match when={props.status === "offline"}>
+          <div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("offline")}</div>
+        </Match>
+        <Match when={props.status === "error"}>
+          <div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("load.failed")}</div>
+        </Match>
+        <Match when={true}>
           <Show
-            when={props.filteredFiles.length > 0}
-            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("palette.empty")}</div>}
+            when={props.searching}
+            fallback={
+              <Show when={views()}>
+                {(views) => (
+                  <Dynamic
+                    component={views().Tree}
+                    screen={props.screen}
+                    session={props.session}
+                    allowed={props.filteredFiles}
+                    kinds={props.kinds}
+                    labels={props.folderLabels}
+                    active={props.activeDiff}
+                    onFileClick={props.onSelectFile}
+                  />
+                )}
+              </Show>
+            }
           >
-            <Show when={views()}>
-              {(views) => (
-                <Dynamic
-                  component={views().List}
-                  screen={props.screen}
-                  session={props.session}
-                  files={props.filteredFiles}
-                  kinds={props.kinds}
-                  active={props.activeDiff}
-                  highlighted={highlightedPath()}
-                  onFileClick={(path: string) => {
-                    setExplicitHighlight(path)
-                    props.onSelectFile(path)
-                  }}
-                />
-              )}
+            <Show
+              when={props.filteredFiles.length > 0}
+              fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("palette.empty")}</div>}
+            >
+              <Show when={views()}>
+                {(views) => (
+                  <Dynamic
+                    component={views().List}
+                    screen={props.screen}
+                    session={props.session}
+                    files={props.filteredFiles}
+                    kinds={props.kinds}
+                    active={props.activeDiff}
+                    highlighted={highlightedPath()}
+                    onFileClick={(path: string) => {
+                      setExplicitHighlight(path)
+                      props.onSelectFile(path)
+                    }}
+                  />
+                )}
+              </Show>
             </Show>
           </Show>
-        </Show>
-      </Show>
+        </Match>
+      </Switch>
     </SessionReviewV2Sidebar>
   )
 }

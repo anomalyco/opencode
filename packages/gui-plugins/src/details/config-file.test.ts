@@ -18,14 +18,13 @@ test("a project file that sets a service without entries does not hide the globa
     {
       type: "document" as const,
       path: project,
-      info: { mcp: {}, plugins: [], lsp: { zephyr: { command: ["zephyr"] } } },
+      info: { mcp: {}, plugins: [] },
     },
     { type: "document" as const, path: "/work/acme/.opencode/agents/review.md", info: {} },
   ]
 
   expect(serviceConfigFile(entries, "mcp")).toBe(global)
   expect(serviceConfigFile(entries, "plugins")).toBe(global)
-  expect(serviceConfigFile(entries, "lsp")).toBe(project)
   // Nothing lists skills, so the first file, the global one, is where they would go.
   expect(serviceConfigFile(entries, "skills")).toBe(global)
 })
@@ -33,11 +32,11 @@ test("a project file that sets a service without entries does not hide the globa
 test("a file that only sets a service still wins over one that never mentions it", () => {
   const entries = [
     { type: "document" as const, path: global, info: {} },
-    { type: "document" as const, path: project, info: { lsp: false } },
+    { type: "document" as const, path: project, info: { mcp: {} } },
   ]
 
-  expect(serviceConfigFile(entries, "lsp")).toBe(project)
-  expect(serviceConfigFile([], "lsp")).toBeUndefined()
+  expect(serviceConfigFile(entries, "mcp")).toBe(project)
+  expect(serviceConfigFile([], "mcp")).toBeUndefined()
 })
 
 test("setup sessions run in the global configuration's directory, never an ancestor project's", () => {

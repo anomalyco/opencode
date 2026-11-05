@@ -5,7 +5,6 @@ import {
   ai,
   AIError,
   HttpContext,
-  HttpOptions,
   LanguageModel,
   LLMEvent,
   Media,
@@ -103,7 +102,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
@@ -1039,6 +1039,7 @@ describe("OpenAI Responses route", () => {
         ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
+          headers: { "x-request": "request" },
           http: {
             body: {
               model: "overlaid-model",
@@ -1046,7 +1047,6 @@ describe("OpenAI Responses route", () => {
               stream_options: { include_usage: true },
               background: true,
             },
-            headers: { "x-request": "request" },
             query: { mode: "test" },
           },
         }),
@@ -1282,7 +1282,7 @@ describe("OpenAI Responses route", () => {
   it.effect("uses exactly one HTTP request when no WebSocket executor is supplied", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      yield* LLMClient.generate({ ...request, http: new HttpOptions({ body: { input: "raw-http-input" } }) }).pipe(
+      yield* LLMClient.generate({ ...request, http: { body: { input: "raw-http-input" } } }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1456,6 +1456,28 @@ describe("OpenAI Responses route", () => {
 
       expect(error.message).toContain("closed before opening")
       expect(error.reason).toMatchObject({ _tag: "Transport", phase: "connect", delivery: "not-sent" })
+    }),
+  )
+
+  it.effect("keeps the system code when a WebSocket fails to connect", () =>
+    Effect.gen(function* () {
+      const socket = Object.assign(new EventTarget(), { readyState: globalThis.WebSocket.CONNECTING, close: () => {} })
+      const failed = Object.assign(new Event("error"), {
+        error: Object.assign(new Error("Failed to connect"), { code: "ENOTFOUND" }),
+      })
+      queueMicrotask(() => socket.dispatchEvent(failed))
+      const error = yield* WebSocketTransport.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- waitOpen only listens for events on this branch.
+        socket as unknown as globalThis.WebSocket,
+        { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
+      ).pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        code: "ENOTFOUND",
+        phase: "connect",
+        delivery: "not-sent",
+      })
     }),
   )
 
@@ -2010,7 +2032,8 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
           promptCacheKey: "session_123",
-          generation: { presencePenalty: 0.25, frequencyPenalty: -0.25 },
+          presencePenalty: 0.25,
+          frequencyPenalty: -0.25,
           tools: [
             ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
             ToolDefinition.make({ name: "grep", description: "Search files", inputSchema: { type: "object" } }),

@@ -71,8 +71,8 @@ testEffect(
       model: route.model({ id: "fixture" }),
       prompt: "hello",
       system: "system instructions",
+      headers: { "x-override": "request" },
       http: {
-        headers: { "x-override": "request" },
         query: { trace: "request" },
         body: {
           model: "overlaid",
@@ -293,7 +293,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           include: ["reasoning.encrypted_content"],
           parallelToolCalls: false,
         },
-        generation: { maxTokens: 100 },
+        maxTokens: 100,
         tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
         http: {
           body: {
