@@ -3,7 +3,9 @@ export const DIALOG_EXIT_MS = 100
 
 /**
  * `attempt` identifies one mount, so a reused caller `id` never collides with a layer that is still closing. `focus` is
- * where focus returns: where it was before this dialog opened, or before the dialogs it replaced opened.
+ * where focus returns: where it was before this dialog opened, or before the dialogs it replaced opened. `replaced`
+ * holds the attempts of the open dialogs this one replaced through `show`, and theirs in turn, so a close from inside
+ * one of them closes this dialog.
  */
 export type DialogOpenEntry<F = unknown> = {
   readonly status: "open"
@@ -12,6 +14,7 @@ export type DialogOpenEntry<F = unknown> = {
   readonly exitMs: number
   readonly backdropDismiss: boolean
   readonly focus: F | undefined
+  readonly replaced: readonly number[]
 }
 
 /** Waits for its exit animation. It keeps `focus` so a `show` that replaces it still returns focus to the origin. */
@@ -20,6 +23,7 @@ export type DialogClosingEntry<F = unknown> = {
   readonly attempt: number
   readonly id: string
   readonly focus: F | undefined
+  readonly replaced: readonly number[]
 }
 
 export type DialogEntry<F = unknown> = DialogOpenEntry<F> | DialogClosingEntry<F>
@@ -40,9 +44,10 @@ export type DialogStackEvent<F = unknown, R = unknown> =
     }
   /**
    * With `id`, closes the newest open dialog with that id. Without one, `layer` is the attempt of the dialog that asked:
-   * that dialog closes itself, even under a dialog that is still exiting. A close from outside every dialog, or from one
-   * a `show` replaced, closes the newest dialog. Both close one at a time: while the target plays its exit animation, a
-   * second close (a double click, a callback closing again) closes nothing below it.
+   * that dialog closes itself, even under a dialog that is still exiting, or the dialog that replaced it through `show`.
+   * Once that dialog is gone, a late close (after an await) closes nothing. A close from outside every dialog closes the
+   * newest dialog. Both close one at a time: while the target plays its exit animation, a second close (a double click,
+   * a callback closing again) closes nothing below it.
    */
   | { readonly type: "close"; readonly id?: string; readonly layer?: number }
   /** Escape, or a dismissal that applies only while `id` is the top open dialog. */
@@ -169,6 +174,10 @@ function open<F, R>(
     backdropDismiss: true,
     // A replacement returns focus to where the dialogs it replaces would have, not to their now-removed content.
     focus: replace && first ? first.focus : event.focus,
+    // A dialog that had already started closing was not replaced: a late close from inside it still closes nothing.
+    replaced: replace
+      ? state.entries.flatMap((item) => (item.status === "open" ? [item.attempt, ...item.replaced] : []))
+      : [],
   }
 
   const mount: DialogStackEffect<F, R> = { type: "mount", attempt, id: event.id, request: event.request }
@@ -197,8 +206,12 @@ function closeTarget<F>(
       )
     }
 
-    const own = state.entries.find((entry) => entry.attempt === event.layer)
-    const target = own ?? state.entries.at(-1)
+    const layer = event.layer
+
+    const target =
+      layer === undefined
+        ? state.entries.at(-1)
+        : state.entries.find((entry) => entry.attempt === layer || entry.replaced.includes(layer))
 
     return target?.status === "open" ? target : undefined
   }
@@ -226,6 +239,7 @@ function beginClose<F, R>(
     attempt: target.attempt,
     id: target.id,
     focus: target.focus,
+    replaced: target.replaced,
   }
 
   return {

@@ -341,7 +341,8 @@ export function useDialog() {
     },
     /**
      * Programmatic close. With an id it closes that dialog at once. Without one, called inside a dialog, it closes that
-     * dialog; outside every dialog it closes the top one. Either way one at a time, so a double click closes one dialog.
+     * dialog, or the dialog that replaced it through `show`, and nothing once it is gone; outside every dialog it closes
+     * the top one. Either way one at a time, so a double click closes one dialog.
      */
     close(id?: string) {
       ctx.dispatch({ type: "close", id, layer: layer?.attempt })

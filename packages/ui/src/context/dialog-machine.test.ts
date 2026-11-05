@@ -138,11 +138,27 @@ describe("a close without an id from inside a dialog", () => {
     expect(second.effects).toEqual([])
   })
 
-  test("from a dialog a show replaced, closes the newest dialog as a close from outside does", () => {
+  test("from a dialog a show replaced, closes the replacement, along a chain of replacements", () => {
     const replaced = run(stacked.state, show("c"))
-    const next = transitionDialogStack(replaced.state, { type: "close", layer: 1 })
 
-    expect(next.effects).toEqual(closed(3, 100, "before a"))
+    expect(transitionDialogStack(replaced.state, { type: "close", layer: 1 }).effects).toEqual(closed(3, 100, "before a"))
+
+    const again = run(replaced.state, show("d"))
+
+    expect(transitionDialogStack(again.state, { type: "close", layer: 1 }).effects).toEqual(closed(4, 100, "before a"))
+    expect(transitionDialogStack(again.state, { type: "close", layer: 3 }).effects).toEqual(closed(4, 100, "before a"))
+  })
+
+  test.each<[string, Event[]]>([
+    // Escape closed it, its exit ended, and another dialog opened before its async work called close().
+    ["closed and gone", [push("a"), { type: "dismiss" }, { type: "exit.completed", attempt: 1 }, push("b")]],
+    ["closed, then torn down by a show", [push("a"), push("x"), { type: "close", id: "a" }, show("b")]],
+  ])("from a dialog already %s, closes nothing", (_, events) => {
+    const before = run(createDialogStackState(), ...events)
+    const next = transitionDialogStack(before.state, { type: "close", layer: 1 })
+
+    expect(next.state).toBe(before.state)
+    expect(next.effects).toEqual([])
   })
 })
 
