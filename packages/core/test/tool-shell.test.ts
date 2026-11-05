@@ -1251,8 +1251,57 @@ describe("ShellTool", () => {
           Effect.sync(() => {
             expect(settled.status).toBe("completed")
             expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
-            expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
+            expect(settled.content).toEqual([
+              { type: "text", text: "[exit 7]" },
+              { type: "text", text: "body" },
+            ])
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live(
+    "leads with the exit status when overflowing output is truncated",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(
+            registry,
+            call(
+              { command: `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}` },
+              "call-overflow-nonzero",
+            ),
+          ),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.metadata).toMatchObject({ exit: 3, truncated: true })
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "[exit 3]" })
+              expect(settled.content?.[1]).toMatchObject(
+                Expected.text(expect.stringContaining("full output saved to ")),
+              )
+            }),
+          ),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live("leads with the timeout when a foreground command times out", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: idleCommand, timeout: 50 }, "call-foreground-timeout")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.metadata).toMatchObject({ timeout: true })
+            expect(settled.content?.[0]).toEqual({
+              type: "text",
+              text: "[timed out after 0.05s] Retry with a larger timeout if the command is expected to take longer.",
+            })
           }),
         ),
       )
@@ -1387,7 +1436,7 @@ describe("ShellTool", () => {
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
           expect((yield* shell.wait(id)).status).toBe("timeout")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Timed out before completion"),
+            text: expect.stringContaining("\n[timed out after 0.05s]"),
             description: idleCommand,
             metadata: {
               source: "shell",
@@ -1420,7 +1469,7 @@ describe("ShellTool", () => {
           const shellID = settled.metadata?.shellID
           expect(typeof shellID).toBe("string")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Exited with code 7"),
+            text: expect.stringContaining("\n[exit 7]\n\nbody\n"),
             description: bodyExitCommand,
             metadata: {
               source: "shell",
@@ -1466,7 +1515,7 @@ describe("ShellTool", () => {
             {
               id: settled.metadata?.shellID,
               status: "completed",
-              output: "(no output)\n\nExited with code 7",
+              output: "[exit 7]\n\n(no output)",
             },
           ])
         }),

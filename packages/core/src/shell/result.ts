@@ -33,6 +33,14 @@ export function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
   if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`
 }
 
+// A one-line status for a command that did not succeed, placed before the output so a long or cut log can't hide it.
+export function status(output: Pick<Output, "exit" | "signal" | "timeout">, timeout?: number) {
+  if (output.timeout)
+    return `[timed out${timeout ? ` after ${timeout / 1_000}s` : ""}] Retry with a larger timeout if the command is expected to take longer.`
+  if (output.signal !== undefined) return `[killed by ${output.signal}]`
+  if (output.exit !== undefined && output.exit !== 0) return `[exit ${output.exit}]`
+}
+
 export function metadata(output: Output) {
   return {
     truncated: output.truncated,
