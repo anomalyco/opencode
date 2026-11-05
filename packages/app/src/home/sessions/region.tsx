@@ -22,6 +22,7 @@ export function HomeSessions(props: {
           onRevealLocations={props.sessions.location.sync}
           showProjectName={props.sessions.session.showProjectName()}
           server={server()}
+          directory={props.sessions.session.directory()}
           canCreateSession={props.sessions.session.canCreate()}
           searchValue={props.search.query.value()}
           searchPlaceholder={props.search.query.placeholder()}

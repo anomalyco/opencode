@@ -53,6 +53,7 @@ import { LanguageProvider } from "../src/runtime/i18n/language"
 import { ExtensionPlugins } from "../src/runtime/plugin/extension-plugins"
 import { SessionPluginPills } from "../src/session/composer/plugin-pills"
 import { ui } from "../src/runtime/plugin/ui"
+import { HomePluginSlot } from "../src/home/plugin-slot"
 
 export {
   bindPlugin,
@@ -695,6 +696,63 @@ export function mountSessionRegion(input: {
     /** The session each composer attachment reached, in order. */
     attached,
     status: (id: string) => hosts[0]?.status(id),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and Home's plugin slot, 600px wide, for the server and project Home shows. `show(server,
+ * directory)` changes them as the user's picks on Home do. `height()` is the slot's height.
+ */
+export function mountHomeSlot(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.style.width = "600px"
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+
+  const [shown, setShown] = createStore<{ server: string; directory: string | undefined }>({
+    server: "local",
+    directory: undefined,
+  })
+
+  function Home() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <HomePluginSlot server={shown.server} directory={shown.directory} />
+      </Show>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <DialogProvider>
+          <PluginHostProvider
+            definitions={() => input.definitions}
+            disabled={() => new Set<string>()}
+            apis={fakeApis(unused)}
+            whenMounted={mounted}
+          >
+            <Home />
+          </PluginHostProvider>
+        </DialogProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    container,
+    show: (server: string, directory: string | undefined) => setShown({ server, directory }),
+    height: () => container.firstElementChild?.getBoundingClientRect().height,
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
       dispose()
       container.remove()
