@@ -15,6 +15,7 @@ import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
 import { ToolOutput } from "../../tool-output.js"
+import { ToolInterrupted } from "../../tool/interrupted.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
 import { StepFailedError } from "../error.js"
 import { SessionEvent } from "../event.js"
@@ -117,10 +118,17 @@ export const make = Effect.gen(function* () {
           if (firstOutputAt === undefined && publisher.record().outputStarted)
             firstOutputAt = yield* Clock.currentTimeMillis
           if (event.type !== "tool-call" || event.providerExecuted) return
+          const interrupted: ToolInterrupted.Slot = {}
           toolRuns.push({
             call: event,
             fiber: yield* Effect.uninterruptibleMask((restore) =>
-              restore(executeTool(event)).pipe(
+              restore(executeTool(event).pipe(Effect.provideService(ToolInterrupted.Slot, interrupted))).pipe(
+                // A tool can settle its call even when interrupted; the fiber still exits interrupted.
+                Effect.catchCause((cause) =>
+                  interrupted.result && Cause.hasInterruptsOnly(cause)
+                    ? Effect.succeed(interrupted.result)
+                    : Effect.failCause(cause),
+                ),
                 Effect.flatMap(toolOutput.truncate),
                 Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
                 Effect.catchTag("Tool.Error", (error) =>
