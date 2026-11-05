@@ -5,11 +5,10 @@ import { FileIcon } from "@opencode/ui/file-icon"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
-import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
+import { previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
 import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { normalize, text, type ViewDiff } from "../../components/session-diff"
 import type {
@@ -107,12 +106,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   let scrollRef: HTMLDivElement | undefined
   let focusToken = 0
 
-  const [store, setStore] = createStore({
-    selection: null as SelectedLineRange | null,
-    commenting: null as SelectedLineRange | null,
-    opened: null as string | null,
-  })
-
   const view = createMemo(() => ({
     ...normalize(props.diff),
     preloaded: "preloaded" in props.diff ? props.diff.preloaded : undefined,
@@ -128,14 +121,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     comments,
     label: i18n.t("ui.lineComment.submit"),
     draftKey: () => props.file,
-    state: {
-      opened: () => store.opened,
-      setOpened: (id) => setStore("opened", id),
-      selected: () => store.selection,
-      setSelected: (range) => setStore("selection", range),
-      commenting: () => store.commenting,
-      setCommenting: (range) => setStore("commenting", range),
-    },
     getSide: selectionSide,
     onSubmit: ({ comment, selection }) => {
       props.onLineComment?.({
@@ -193,11 +178,9 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     }
 
     untrack(() => {
-      setStore("opened", focus.id)
-
       const comment = (props.comments ?? []).find((item) => item.file === focus.file && item.id === focus.id)
 
-      if (comment) setStore("selection", cloneSelectedLineRange(comment.selection))
+      if (comment) commentsUi.focusComment(comment.id, comment.selection)
 
       // The diff renders asynchronously, so poll for the comment anchor before
       // scrolling; clear the focus once handled so revisiting the file does not
@@ -252,11 +235,10 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         if (!lineCommentsEnabled()) return
         commentsUi.onLineSelectionEnd(range)
       }}
-      onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
       annotations={commentsUi.annotations()}
       renderAnnotation={commentsUi.renderAnnotation}
       renderGutterUtility={lineCommentsEnabled() ? commentsUi.renderGutterUtility : undefined}
-      selectedLines={store.selection}
+      selectedLines={commentsUi.selected()}
       commentedLines={commentedLines()}
       media={{
         mode: "auto",

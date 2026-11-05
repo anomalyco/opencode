@@ -49,7 +49,7 @@ export const UnifiedDark = {
 }
 
 function InteractiveCommentsStory() {
-  const [state, setState] = createStore({ comments: [] as SessionReviewComment[] })
+  const [state, setState] = createStore<{ comments: SessionReviewComment[]; next: number }>({ comments: [], next: 1 })
   const file = "src/review.ts"
 
   const diffs = [
@@ -71,9 +71,22 @@ function InteractiveCommentsStory() {
           diffs={diffs}
           open={[file]}
           comments={state.comments}
-          onLineComment={(comment) =>
-            setState("comments", (comments) => [...comments, { id: `comment-${comments.length + 1}`, ...comment }])
+          onLineComment={(comment) => {
+            setState("comments", (comments) => [...comments, { id: `comment-${state.next}`, ...comment }])
+            setState("next", (next) => next + 1)
+          }}
+          onLineCommentUpdate={(update) =>
+            setState("comments", (comment) => comment.id === update.id, "comment", update.comment)
           }
+          onLineCommentDelete={(target) =>
+            setState("comments", (comments) => comments.filter((comment) => comment.id !== target.id))
+          }
+          lineCommentActions={{
+            moreLabel: "More options",
+            editLabel: "Edit",
+            deleteLabel: "Delete",
+            saveLabel: "Save",
+          }}
         />
       </div>
     </CurrentSessionProviders>
