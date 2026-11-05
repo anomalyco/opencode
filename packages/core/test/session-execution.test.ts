@@ -292,6 +292,45 @@ describe("SessionExecution lifecycle", () => {
     )
   }
 
+  it.effect("an interrupt after report admission cannot strand the durable hold", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const inbox = yield* SessionInbox.make()
+      const jobs = yield* Job.Service
+      const scope = yield* Scope.Scope
+      const parent = Session.ID.make("ses_admitted_parent")
+      const child = Session.ID.make("ses_admitted_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      const hold = { notificationID: SessionMessage.ID.create(), since: undefined }
+      yield* store.holdReport(child, hold)
+      const admitted = yield* Deferred.make<void>()
+      const resume = yield* Deferred.make<void>()
+      const reports = SubagentReport.make({
+        store,
+        inbox,
+        jobs,
+        scope,
+        pending: (sessionID) => SessionBackground.unsettled(jobs, store, database.db, sessionID),
+        wake: () => Deferred.succeed(admitted, undefined).pipe(Effect.andThen(Deferred.await(resume))),
+      })
+      yield* reports.started(child)
+      const report = yield* reports
+        .report(child, { type: "failed", error: { message: "Child failed" } }, yield* reports.snapshot(child))
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(admitted)
+      expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([{ id: hold.notificationID }])
+      expect(yield* store.heldReport(child)).toEqual(hold)
+      // Queue interruption while delivery is inside the parent's wake, before release executes.
+      const interrupt = yield* Fiber.interrupt(report).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.succeed(resume, undefined)
+      yield* Fiber.join(interrupt)
+      expect(yield* store.heldReport(child)).toBeUndefined()
+      expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
+    }),
+  )
+
   for (const reason of ["no answer", "silent", "missing parent"] as const) {
     it.effect(`releases a durable hold when there is ${reason}`, () =>
       Effect.gen(function* () {
