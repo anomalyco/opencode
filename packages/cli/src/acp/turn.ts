@@ -41,11 +41,20 @@ export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/c
   defaultValue: () => "5 seconds",
 })
 
+/** How often a running shell tool's output is read once caught up, matching the TUI. */
+export const ShellOutputInterval = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/ShellOutputInterval", {
+  defaultValue: () => "1 second",
+})
+
+// Matches the running output V1 streamed, so a noisy command cannot flood the client.
+const ShellPreviewLength = 30_000
+
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
   readonly askQueue: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
   readonly settled: Map<string, Deferred.Deferred<void>>
+  readonly shells: FiberMap.FiberMap<string>
 }
 
 type Turn = {
@@ -77,6 +86,7 @@ export const make = Effect.fnUntraced(function* (input: {
         .pipe(Stream.toQueue({ capacity: "unbounded" }), Scope.provide(subscriptionScope)),
       askQueue: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       settled: new Map(),
+      shells: yield* FiberMap.make<string>().pipe(Scope.provide(subscriptionScope)),
     }
     yield* Queue.take(subscription.askQueue).pipe(
       Effect.flatten,
@@ -190,8 +200,48 @@ export const make = Effect.fnUntraced(function* (input: {
           turn.subscription.settled.delete(output.id)
           return settled ? Deferred.succeed(settled, undefined) : Effect.void
         })
+      case "ShellFollow":
+        return FiberMap.run(turn.subscription.shells, output.shell.key, followShell(turn, output.shell)).pipe(
+          Effect.asVoid,
+        )
+      // Waits for an in-flight output update, so none follows the tool's terminal update.
+      case "ShellStop":
+        return FiberMap.remove(turn.subscription.shells, output.key)
     }
   }
+
+  const followShell: (turn: Turn, shell: ACPTranslate.FollowedShell) => Effect.Effect<void> = Effect.fnUntraced(
+    function* (turn: Turn, shell: ACPTranslate.FollowedShell) {
+      const interval = yield* ShellOutputInterval
+      const state = { cursor: 0, text: "", truncated: false }
+      while (true) {
+        const page = (yield* input.client.shell.output({
+          id: shell.shellID,
+          cursor: state.cursor,
+          location: { directory: turn.ctx.cwd },
+        })).data
+        // Far behind a noisy command, skip to the output that the preview can still show.
+        const skip = page.size - page.cursor > ShellPreviewLength
+        const text = skip ? "" : state.text + page.output
+        state.truncated ||= skip || text.length > ShellPreviewLength
+        state.text = text.slice(-ShellPreviewLength)
+        state.cursor = skip ? page.size - ShellPreviewLength : page.cursor
+        if (!skip && page.output) {
+          const preview = state.truncated ? `...\n\n${state.text}` : state.text
+          yield* Effect.forEach(
+            ACPTranslate.shellOutput(turn.ctx, shell, preview),
+            (output) => interpret(turn, output),
+            { discard: true },
+          ).pipe(Effect.uninterruptible)
+        }
+        if (!page.output || state.cursor >= page.size) yield* Effect.sleep(interval)
+      }
+    },
+    // The terminal update still carries the full output, so a failed read only stops the live view.
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP shell output failed", cause),
+    ),
+  )
 
   const advance = Effect.fnUntraced(function* (turn: Turn) {
     const event = yield* take(turn.subscription)

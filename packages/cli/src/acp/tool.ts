@@ -85,6 +85,7 @@ export function runningToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: { readonly input: ToolInput }
+  readonly output?: string
   readonly cwd: string
 }): ToolCallUpdate {
   return {
@@ -94,6 +95,7 @@ export function runningToolUpdate(input: {
     title: toolTitle(input.toolName, input.state.input),
     locations: toLocations(input.toolName, input.state.input, input.cwd),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
+    ...(input.output ? { content: [{ type: "content", content: { type: "text", text: input.output } }] } : {}),
   }
 }
 
