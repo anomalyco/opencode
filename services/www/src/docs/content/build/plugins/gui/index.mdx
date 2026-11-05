@@ -996,7 +996,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of the window's slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -1013,6 +1013,7 @@ ctx.add(Slot, {
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
+- `home.main` is Home's main column, between the session search and the session list. It takes no room while empty.
 - `order` sorts the items in one slot.
 
 `session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data
@@ -1035,6 +1036,16 @@ ctx.add(Slot, {
 })
 ```
 
+`home.main` shows content before a session is open, such as onboarding or a dashboard card. It receives the `server`
+Home shows, as a `ServerRef.id`, and the project `directory` it filters to, or `undefined` for every project:
+
+```tsx
+ctx.add(Slot, {
+  at: "home.main",
+  render: (input) => <TodayCard server={ctx.servers.get(input.server)} directory={input.directory} />,
+})
+```
+
 #### Reference
 
 ```ts
@@ -1047,6 +1058,7 @@ interface SlotMap {
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
+  "home.main": { server: string; directory: string | undefined }
 }
 ```
 

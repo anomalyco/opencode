@@ -501,6 +501,7 @@ export function createHomeSessionsController(home: HomeController) {
     session: {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
+      directory: () => home.selection.value().directory,
       canCreate: () => !!home.project.newSession(),
       lookup: async (sessionID: string, signal?: AbortSignal) => {
         const ctx = home.server.focusedContext()

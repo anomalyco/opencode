@@ -897,6 +897,21 @@ export interface SlotMap {
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
+  /**
+   * Home's main column, between the session search and the session list, before any session is open: onboarding, a
+   * dashboard card, help or a status summary. It renders while Home shows a server's sessions, whether they load, fail
+   * or are empty. It spans the column's width at every window size and scrolls away with the list. Contributions stack in `order` with a small gap, and the slot takes no room while none renders anything.
+   * The fields are reactive getters: read them where you use them.
+   */
+  readonly "home.main": {
+    /**
+     * The `ServerRef.id` of the server Home shows; read its ref with `ctx.servers.get`. Changes without a remount when
+     * the user picks another server.
+     */
+    readonly server: string
+    /** The root directory of the project Home filters its sessions to; undefined while Home lists every project. */
+    readonly directory: string | undefined
+  }
 }
 
 /** Content for one of the host's slots, typed by `at`. */

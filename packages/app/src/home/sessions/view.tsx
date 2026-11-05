@@ -18,6 +18,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { sessionLabel } from "@/session/title"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
+import { HomePluginSlot } from "../plugin-slot"
 import "./view.css"
 import {
   HomeSessionStatusController,
@@ -76,6 +77,7 @@ export type HomeSessionsViewProps = {
   onRevealLocations: (record?: HomeSessionRecord) => void
   showProjectName: boolean
   server: ServerConnection.Key
+  directory: string | undefined
   canCreateSession: boolean
   searchValue: string
   searchPlaceholder: string
@@ -228,20 +230,6 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           hoveredSession={hover.sessionID}
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
-        <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
-            <Button
-              data-action="home-new-session"
-              variant="ghost-muted"
-              size="normal"
-              icon="edit"
-              class="pointer-events-auto h-7 px-2 [font-weight:530]"
-              onClick={props.onCreateSession}
-            >
-              {props.language.t("command.session.new")}
-            </Button>
-          </div>
-        </Show>
       </div>
       <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[84px] lg:top-[108px]">
         <div
@@ -250,6 +238,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
         />
       </div>
+      <HomePluginSlot server={props.server} directory={props.directory} />
       <div
         data-slot="home-sessions-list"
         data-reveal={skeleton() || undefined}
@@ -293,6 +282,23 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </Match>
           <Match when={props.listView.status === "ready"}>
             <div ref={props.onSetContent} class="flex flex-col pt-1 pr-3 pb-16 md:pt-3">
+              {/* Pinned beside the group header row, so content above the list never covers it. */}
+              <Show when={props.canCreateSession}>
+                <div class="pointer-events-none sticky top-[68px] z-20 h-0 md:top-[84px] lg:top-[108px]">
+                  <div class="absolute right-0 top-0 flex">
+                    <Button
+                      data-action="home-new-session"
+                      variant="ghost-muted"
+                      size="normal"
+                      icon="edit"
+                      class="pointer-events-auto h-7 px-2 [font-weight:530]"
+                      onClick={props.onCreateSession}
+                    >
+                      {props.language.t("command.session.new")}
+                    </Button>
+                  </div>
+                </div>
+              </Show>
               {/* Index keeps group subtrees mounted when the group arrays are
                   rebuilt, so store updates cannot recreate rows mid-gesture. */}
               <Index each={props.groups}>

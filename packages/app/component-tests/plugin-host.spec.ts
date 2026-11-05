@@ -9,6 +9,7 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SlotMap,
 } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
@@ -983,6 +984,122 @@ story("a contribution that throws renders nothing and records the error; the oth
     status: ["active", "active"],
     failure: { phase: "render", named: true },
   })
+})
+
+story(
+  "Home's slot renders in order, follows the shown server and project without a remount, and isolates a throw",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountHomeSlot, until, Slot } = await import(fixture)
+      const mounts = { count: 0 }
+
+      const host = mountHomeSlot({
+        definitions: [
+          {
+            id: "fixture",
+            windowEntry: async () => ({
+              default: (ctx: Context) => {
+                ctx.add(Slot, {
+                  at: "home.main",
+                  render: () => {
+                    throw new Error("broken home card")
+                  },
+                })
+                ctx.add(Slot, {
+                  at: "home.main",
+                  render: (input: SlotMap["home.main"]) => {
+                    mounts.count++
+
+                    // A render runs once; its own reactivity follows the input's getters.
+                    return () => `[${input.server} ${input.directory ?? "all"}]`
+                  },
+                })
+              },
+            }),
+          },
+          {
+            id: "other",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Slot, {
+                  at: "home.main",
+                  order: -1,
+                  render: () => "[first]",
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(
+        () => !!host.failure("fixture") && mounts.count > 0 && !!host.container.textContent?.includes("first"),
+      )
+      const seen = () => host.container.textContent
+      const before = seen()
+      host.show("http://remote:4096", "/repo")
+      const after = seen()
+      const failure = host.failure("fixture")
+
+      const outcome = {
+        before,
+        after,
+        mounts: mounts.count,
+        status: [host.status("fixture"), host.status("other")],
+        failure: { phase: failure?.phase, named: !!failure?.error.includes("broken home card") },
+      }
+
+      host.unmount()
+
+      return outcome
+    }, fixture)
+
+    expect(result).toEqual({
+      before: "[first][local all]",
+      after: "[first][http://remote:4096 /repo]",
+      mounts: 1,
+      status: ["active", "active"],
+      failure: { phase: "render", named: true },
+    })
+  },
+)
+
+story("Home's slot takes no room until a contribution renders something", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountHomeSlot, until, Slot, createSignal } = await import(fixture)
+    const [loaded, setLoaded] = createSignal(false)
+    const rendered = { count: 0 }
+
+    const host = mountHomeSlot({
+      definitions: [
+        {
+          id: "fixture",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Slot, {
+                at: "home.main",
+                // Nothing until its data loads, as a card that fetches does.
+                render: () => {
+                  rendered.count++
+
+                  return () => (loaded() ? Object.assign(document.createElement("p"), { textContent: "card" }) : null)
+                },
+              }),
+          }),
+        },
+      ],
+    })
+
+    await until(() => rendered.count > 0)
+    const empty = host.height()
+    setLoaded(true)
+    await until(() => !!host.container.textContent?.includes("card"))
+    const filled = host.height()
+    host.unmount()
+
+    return { empty, filled: (filled ?? 0) > 0 }
+  }, fixture)
+
+  expect(result).toEqual({ empty: 0, filled: true })
 })
 
 story(
